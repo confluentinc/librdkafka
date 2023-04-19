@@ -83,18 +83,20 @@ void rd_kafka_q_destroy_final(rd_kafka_q_t *rkq) {
  */
 void rd_kafka_q_init0(rd_kafka_q_t *rkq,
                       rd_kafka_t *rk,
-                      int is_consume,
+                      rd_bool_t for_consume,
                       const char *func,
                       int line) {
         rd_kafka_q_reset(rkq);
-        rkq->rkq_fwdq         = NULL;
-        rkq->rkq_refcnt       = 1;
-        rkq->rkq_flags        = RD_KAFKA_Q_F_READY;
-        rkq->rkq_rk           = rk;
-        rkq->rkq_consumer_cnt = is_consume > 0;
-        rkq->rkq_qio          = NULL;
-        rkq->rkq_serve        = NULL;
-        rkq->rkq_opaque       = NULL;
+        rkq->rkq_fwdq   = NULL;
+        rkq->rkq_refcnt = 1;
+        rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
+        if (for_consume) {
+                rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
+        }
+        rkq->rkq_rk     = rk;
+        rkq->rkq_qio    = NULL;
+        rkq->rkq_serve  = NULL;
+        rkq->rkq_opaque = NULL;
         mtx_init(&rkq->rkq_lock, mtx_plain);
         cnd_init(&rkq->rkq_cond);
 #if ENABLE_DEVEL
@@ -108,13 +110,15 @@ void rd_kafka_q_init0(rd_kafka_q_t *rkq,
 /**
  * Allocate a new queue and initialize it.
  */
-rd_kafka_q_t *
-rd_kafka_q_new0(rd_kafka_t *rk, int is_consume, const char *func, int line) {
+rd_kafka_q_t *rd_kafka_q_new0(rd_kafka_t *rk,
+                              rd_bool_t for_consume,
+                              const char *func,
+                              int line) {
         rd_kafka_q_t *rkq = rd_malloc(sizeof(*rkq));
-        if (!is_consume)
+        if (!for_consume)
                 rd_kafka_q_init(rkq, rk);
         else
-                rd_kafka_q_init_consume(rkq, rk);
+                rd_kafka_consume_q_init(rkq, rk);
         rkq->rkq_flags |= RD_KAFKA_Q_F_ALLOCATED;
 #if ENABLE_DEVEL
         rd_snprintf(rkq->rkq_name, sizeof(rkq->rkq_name), "%s:%d", func, line);
@@ -125,29 +129,29 @@ rd_kafka_q_new0(rd_kafka_t *rk, int is_consume, const char *func, int line) {
 }
 
 /*
- * Handles the logic for increment/decrement of rkq_consumer_cnt.
- * Only used internally when forwarding queues.
+ * Sets the flag RD_KAFKA_Q_F_CONSUMER for rkq, any queues it's being forwarded
+ * to, recursively.
+ * Setting this flag indicates that polling this queue is equivalent to calling
+ * consumer poll, and will reset the max.poll.interval.ms timer. Only used
+ * internally when forwarding queues.
  * @locks rd_kafka_q_lock(rkq)
  */
-static void rd_kafka_q_consumer_cnt_propagate(rd_kafka_q_t *rkq,
-                                              int cnt_delta) {
-        rd_assert(rkq);
-        if (cnt_delta == 0)
-                return;
-
+static void rd_kafka_q_consumer_propagate(rd_kafka_q_t *rkq) {
         mtx_lock(&rkq->rkq_lock);
-        rkq->rkq_consumer_cnt += cnt_delta;
-        rd_assert(rkq->rkq_consumer_cnt >= 0);
+        rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
 
         if (!rkq->rkq_fwdq) {
                 mtx_unlock(&rkq->rkq_lock);
                 return;
         }
 
-        /* Recursively propagate the change in the count. There is a chance of a
-         * deadlock here but only if the user is forwarding queues in a circular
-         * manner, which already is an incorrect mode of operation.*/
-        rd_kafka_q_consumer_cnt_propagate(rkq->rkq_fwdq, cnt_delta);
+        /* Recursively propagate the flag to any queues rkq is already
+         * forwarding to. There will be a deadlock here if the queues are being
+         * forwarded circularly, but that is a user error. We can't resolve this
+         * deadlock by unlocking before the recursive call, because that leads
+         * to incorrectness if the rkq_fwdq is forwarded elsewhere and the old
+         * one destroyed between recursive calls. */
+        rd_kafka_q_consumer_propagate(rkq->rkq_fwdq);
         mtx_unlock(&rkq->rkq_lock);
 }
 
@@ -171,8 +175,6 @@ void rd_kafka_q_fwd_set0(rd_kafka_q_t *srcq,
         if (fwd_app)
                 srcq->rkq_flags |= RD_KAFKA_Q_F_FWD_APP;
         if (srcq->rkq_fwdq) {
-                rd_kafka_q_consumer_cnt_propagate(srcq->rkq_fwdq,
-                                                  -1 * srcq->rkq_consumer_cnt);
                 rd_kafka_q_destroy(srcq->rkq_fwdq);
                 srcq->rkq_fwdq = NULL;
         }
@@ -187,8 +189,9 @@ void rd_kafka_q_fwd_set0(rd_kafka_q_t *srcq,
                 }
 
                 srcq->rkq_fwdq = destq;
-                rd_kafka_q_consumer_cnt_propagate(destq,
-                                                  srcq->rkq_consumer_cnt);
+
+                if (srcq->rkq_flags & RD_KAFKA_Q_F_CONSUMER)
+                        rd_kafka_q_consumer_propagate(destq);
         }
         if (do_lock)
                 mtx_unlock(&srcq->rkq_lock);
@@ -636,7 +639,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         rd_kafka_q_t *fwdq;
         struct timespec timeout_tspec;
         int i;
-        int does_q_contain_consumer_msgs;
+        rd_bool_t can_q_contain_fetched_msgs;
 
         mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
@@ -649,10 +652,11 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 return cnt;
         }
 
-        does_q_contain_consumer_msgs = rd_kafka_q_consumer_cnt(rkq, 0);
+        can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
         mtx_unlock(&rkq->rkq_lock);
 
-        if (timeout_ms && does_q_contain_consumer_msgs)
+        if (timeout_ms && can_q_contain_fetched_msgs)
                 rd_kafka_app_poll_blocking(rk);
 
         rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
@@ -759,7 +763,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rd_kafka_op_destroy(rko);
         }
 
-        if (does_q_contain_consumer_msgs)
+        if (can_q_contain_fetched_msgs)
                 rd_kafka_app_polled(rk);
 
         return cnt;

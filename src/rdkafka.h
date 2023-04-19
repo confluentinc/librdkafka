@@ -3427,10 +3427,16 @@ rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
  * @returns a reference to the librdkafka consumer queue.
  * This is the queue served by rd_kafka_consumer_poll().
  *
- * Use rd_kafka_queue_destroy() to loose the reference.
+ * Use rd_kafka_queue_destroy() to lose the reference.
  *
  * @remark rd_kafka_queue_destroy() MUST be called on this queue
  *         prior to calling rd_kafka_consumer_close().
+ * @remark Polling the returned queue counts as a consumer poll, and will reset
+ *         the timer for max.poll.interval.ms. If this queue is forwarded to a
+ *         "destq", polling destq also counts as a consumer poll (this works
+ *         for any number of forwards). However, even if this queue is
+ *         unforwarded or forwarded elsewhere, polling destq will continue
+ *         to count as a consumer poll.
  */
 RD_EXPORT
 rd_kafka_queue_t *rd_kafka_queue_get_consumer(rd_kafka_t *rk);

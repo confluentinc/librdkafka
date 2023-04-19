@@ -11,7 +11,7 @@ librdkafka v2.1.1 is a maintenance release:
  * Fix CMake pkg-config cURL require and use
    pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
  * Fixes certain cases where polling would not rejoin the consumer group
-   when the cause of leaving the group was exceeding `max.poll.interval.ms`
+   when the cause of leaving the group was exceeding `max.poll.interval.ms`.
    (#4256).
 
 ## Fixes

@@ -10,6 +10,8 @@ librdkafka v2.1.1 is a maintenance release:
    expires while waiting for the result of a list offsets operation (#4254).
  * Fix documentation for request timeout, incorrectly stating -1 for infinte
    timeout. Request timeout can't be infinite.
+ * Fix CMake pkg-config cURL require and use
+   pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
 
 ## Fixes
 

@@ -364,7 +364,6 @@ static void
 do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         rd_kafka_conf_t *conf;
-        int i;
         char groupid[64];
         rd_kafka_t *rk                   = NULL;
         rd_kafka_queue_t *consumer_queue = NULL;

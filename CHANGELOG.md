@@ -9,7 +9,7 @@ librdkafka v2.1.1 is a maintenance release:
  * Fix a segmentation fault when fetching from follower and the partition lease
    expires while waiting for the result of a list offsets operation (#4254).
  * Fix documentation for the admin request timeout, incorrectly stating -1 for infinite
-   timeout. Request timeout can't be infinite.
+   timeout. That timeout can't be infinite.
  * Fix CMake pkg-config cURL require and use
    pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
 

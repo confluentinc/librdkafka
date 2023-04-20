@@ -357,8 +357,11 @@ done:
  * leaving due to a max.poll.interval.ms timeout. The poll does not need to
  * go through any special function, any queue containing consumer messages
  * should suffice.
+ * We test with the result of rd_kafka_queue_get_consumer, and an arbitrary
+ * queue that is forwarded to by the result of rd_kafka_queue_get_consumer.
  */
-static void do_test_rejoin_after_interval_expire(void) {
+static void
+do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         rd_kafka_conf_t *conf;
         int i;
@@ -366,8 +369,10 @@ static void do_test_rejoin_after_interval_expire(void) {
         rd_kafka_t *rk                   = NULL;
         rd_kafka_queue_t *consumer_queue = NULL;
         rd_kafka_event_t *event          = NULL;
+        rd_kafka_queue_t *polling_queue  = NULL;
 
-        SUB_TEST();
+        SUB_TEST("Testing with forward_to_another_q = %d",
+                 forward_to_another_q);
 
         test_create_topic(NULL, topic, 1, 1);
 
@@ -382,9 +387,16 @@ static void do_test_rejoin_after_interval_expire(void) {
         rk = test_create_consumer(groupid, test_rebalance_cb, conf, NULL);
 
         consumer_queue = rd_kafka_queue_get_consumer(rk);
+
         test_consumer_subscribe(rk, topic);
 
-        event = test_wait_event(consumer_queue, RD_KAFKA_EVENT_REBALANCE,
+        if (forward_to_another_q) {
+                polling_queue = rd_kafka_queue_new(rk);
+                rd_kafka_queue_forward(consumer_queue, polling_queue);
+        } else
+                polling_queue = consumer_queue;
+
+        event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
                                 (int)(test_timeout_multiplier * 10000));
         TEST_ASSERT(event,
                     "Did not get a rebalance event for initial group join");
@@ -398,7 +410,7 @@ static void do_test_rejoin_after_interval_expire(void) {
 
         /* Note that by polling for the group leave, we're also polling the
          * consumer queue, and hence it should trigger a rejoin. */
-        event = test_wait_event(consumer_queue, RD_KAFKA_EVENT_REBALANCE,
+        event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
                                 (int)(test_timeout_multiplier * 10000));
         TEST_ASSERT(event, "Did not get a rebalance event for the group leave");
         TEST_ASSERT(rd_kafka_event_error(event) ==
@@ -407,7 +419,7 @@ static void do_test_rejoin_after_interval_expire(void) {
         rd_kafka_assign(rk, NULL);
         rd_kafka_event_destroy(event);
 
-        event = test_wait_event(consumer_queue, RD_KAFKA_EVENT_REBALANCE,
+        event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
                                 (int)(test_timeout_multiplier * 10000));
         TEST_ASSERT(event, "Should get a rebalance event for the group rejoin");
         TEST_ASSERT(rd_kafka_event_error(event) ==
@@ -416,6 +428,8 @@ static void do_test_rejoin_after_interval_expire(void) {
         rd_kafka_assign(rk, rd_kafka_event_topic_partition_list(event));
         rd_kafka_event_destroy(event);
 
+        if (forward_to_another_q)
+                rd_kafka_queue_destroy(polling_queue);
         rd_kafka_queue_destroy(consumer_queue);
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
@@ -426,6 +440,7 @@ static void do_test_rejoin_after_interval_expire(void) {
 int main_0089_max_poll_interval(int argc, char **argv) {
         do_test();
         do_test_with_log_queue();
-        do_test_rejoin_after_interval_expire();
+        do_test_rejoin_after_interval_expire(rd_false);
+        do_test_rejoin_after_interval_expire(rd_true);
         return 0;
 }

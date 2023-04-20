@@ -90,9 +90,8 @@ void rd_kafka_q_init0(rd_kafka_q_t *rkq,
         rkq->rkq_fwdq   = NULL;
         rkq->rkq_refcnt = 1;
         rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
-        if (for_consume) {
+        if (for_consume)
                 rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
-        }
         rkq->rkq_rk     = rk;
         rkq->rkq_qio    = NULL;
         rkq->rkq_serve  = NULL;

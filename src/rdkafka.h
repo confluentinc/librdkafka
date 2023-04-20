@@ -3427,7 +3427,7 @@ rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
  * @returns a reference to the librdkafka consumer queue.
  * This is the queue served by rd_kafka_consumer_poll().
  *
- * Use rd_kafka_queue_destroy() to lose the reference.
+ * Use rd_kafka_queue_destroy() to loose the reference.
  *
  * @remark rd_kafka_queue_destroy() MUST be called on this queue
  *         prior to calling rd_kafka_consumer_close().

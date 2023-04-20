@@ -2,16 +2,20 @@
 
 librdkafka v2.1.1 is a maintenance release:
 
+ * Avoid duplicate messages when a fetch response is received
+   in the middle of an offset validation request (#4261).
  * Fix segmentation fault when subscribing to a non-existent topic and
    calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
  * Fix a segmentation fault when fetching from follower and the partition lease
    expires while waiting for the result of a list offsets operation (#4254).
 
-
 ## Fixes
 
 ### Consumer fixes
 
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request. Solved by discarding
+   the fetch if the state is not `ACTIVE`.
  * When fetching from follower, if the partition lease expires after 5 minutes,
    and a list offsets operation was requested to retrieve the earliest
    or latest offset, it resulted in segmentation fault. This was fixed by
@@ -88,8 +92,11 @@ librdkafka v2.1.0 is a feature release:
    interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
 
 ### Consume API
-  * Segmentation fault when subscribing to a non-existent topic and
-    calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage`.
+
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request.
+ * Segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage`.
 
 
 

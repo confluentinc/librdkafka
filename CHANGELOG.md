@@ -8,6 +8,8 @@ librdkafka v2.1.1 is a maintenance release:
    calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
  * Fix a segmentation fault when fetching from follower and the partition lease
    expires while waiting for the result of a list offsets operation (#4254).
+ * Fix CMake pkg-config cURL require and use
+   pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
 
 ## Fixes
 

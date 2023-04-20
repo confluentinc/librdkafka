@@ -359,9 +359,6 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
  * @locks_required rd_kafka_toppar_lock() MUST be held.
  */
 void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state) {
-        rd_kafka_assert(NULL,
-                        thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread));
-
         if ((int)rktp->rktp_fetch_state == fetch_state)
                 return;
 

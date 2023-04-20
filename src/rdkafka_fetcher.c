@@ -508,6 +508,21 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
+        /* Make sure toppar is in ACTIVE state. */
+        if (unlikely(rktp->rktp_fetch_state != RD_KAFKA_TOPPAR_FETCH_ACTIVE)) {
+                rd_kafka_toppar_unlock(rktp);
+                rd_rkb_dbg(rkb, MSG, "FETCH",
+                           "%.*s [%" PRId32
+                           "]: partition not in state ACTIVE: "
+                           "discarding fetch response",
+                           RD_KAFKAP_STR_PR(topic), hdr.Partition);
+                rd_kafka_toppar_destroy(rktp); /* from get */
+                rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
+                if (aborted_txns)
+                        rd_kafka_aborted_txns_destroy(aborted_txns);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
         fetch_version = rktp->rktp_fetch_version;
         rd_kafka_toppar_unlock(rktp);
 

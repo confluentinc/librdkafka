@@ -249,6 +249,7 @@ _TEST_DECL(0138_admin_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
+_TEST_DECL(8001_fetch_from_follower_mock_manual);
 
 
 /* Define test resource usage thresholds if the default limits
@@ -493,6 +494,7 @@ struct test tests[] = {
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
+    _TEST(8001_fetch_from_follower_mock_manual, TEST_F_MANUAL),
 
     {NULL}};
 

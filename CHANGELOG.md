@@ -10,7 +10,6 @@ librdkafka v2.1.1 is a maintenance release:
    expires while waiting for the result of a list offsets operation (#4254).
  * Fix CMake pkg-config cURL require and use
    pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
- * Fixes certain cases where polling would not rejoin the consumer group
  * Fixes certain cases where polling would not keep the consumer
    in the group or make it rejoin it (#4256).
 
@@ -31,7 +30,7 @@ librdkafka v2.1.1 is a maintenance release:
    `max.poll.interval.ms`. Only certain functions were made to reset the timer,
    but it is possible for the user to obtain the queue with messages from
    the broker, skipping these functions. This was fixed by encoding information
-   in a queue itself, that whether polling it should reset the timer.
+   in a queue itself, that, whether polling, resets the timer.
 
 
 # librdkafka v2.1.0

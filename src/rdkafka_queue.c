@@ -638,7 +638,6 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         rd_kafka_q_t *fwdq;
         struct timespec timeout_tspec;
         int i;
-        rd_bool_t can_q_contain_fetched_msgs;
 
         mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
@@ -651,11 +650,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 return cnt;
         }
 
-        can_q_contain_fetched_msgs =
-            rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
         mtx_unlock(&rkq->rkq_lock);
 
-        if (timeout_ms && can_q_contain_fetched_msgs)
+        if (timeout_ms)
                 rd_kafka_app_poll_blocking(rk);
 
         rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
@@ -762,8 +759,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rd_kafka_op_destroy(rko);
         }
 
-        if (can_q_contain_fetched_msgs)
-                rd_kafka_app_polled(rk);
+        rd_kafka_app_polled(rk);
 
         return cnt;
 }

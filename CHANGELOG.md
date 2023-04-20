@@ -33,6 +33,7 @@ librdkafka v2.1.1 is a maintenance release:
    the broker, skipping these functions. This was fixed by encoding information
    in a queue itself, that whether polling it should reset the timer.
 
+
 # librdkafka v2.1.0
 
 librdkafka v2.1.0 is a feature release:

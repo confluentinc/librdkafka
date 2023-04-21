@@ -4003,9 +4003,17 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
 int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
         int r;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rk->rk_rep, RD_DO_LOCK);
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
+                rd_kafka_app_poll_blocking(rk);
 
         r = rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0, RD_KAFKA_Q_CB_CALLBACK,
                              rd_kafka_poll_cb, NULL);
+
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rk);
 
         return r;
 }
@@ -4013,9 +4021,18 @@ int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
 
 rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
         rd_kafka_op_t *rko;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
+
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
+                rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, rd_timeout_us(timeout_ms), 0,
                                    RD_KAFKA_Q_CB_EVENT, rd_kafka_poll_cb, NULL);
+
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rkqu->rkqu_rk);
 
         if (!rko)
                 return NULL;
@@ -4025,9 +4042,17 @@ rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
 
 int rd_kafka_queue_poll_callback(rd_kafka_queue_t *rkqu, int timeout_ms) {
         int r;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
+                rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         r = rd_kafka_q_serve(rkqu->rkqu_q, timeout_ms, 0,
                              RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
+
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rkqu->rkqu_rk);
 
         return r;
 }

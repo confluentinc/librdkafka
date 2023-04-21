@@ -252,7 +252,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         mtx_init(&rktp->rktp_lock, mtx_plain);
 
         rd_refcnt_init(&rktp->rktp_refcnt, 0);
-        rktp->rktp_fetchq          = rd_kafka_q_new(rkt->rkt_rk);
+        rktp->rktp_fetchq          = rd_kafka_consume_q_new(rkt->rkt_rk);
         rktp->rktp_ops             = rd_kafka_q_new(rkt->rkt_rk);
         rktp->rktp_ops->rkq_serve  = rd_kafka_toppar_op_serve;
         rktp->rktp_ops->rkq_opaque = rktp;

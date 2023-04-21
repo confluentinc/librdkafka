@@ -6765,8 +6765,7 @@ RD_EXPORT void rd_kafka_AdminOptions_destroy(rd_kafka_AdminOptions_t *options);
  *        request transmission, operation time on broker, and response.
  *
  * @param options Admin options.
- * @param timeout_ms Timeout in milliseconds, use -1 for indefinite timeout.
- *                   Defaults to `socket.timeout.ms`.
+ * @param timeout_ms Timeout in milliseconds. Defaults to `socket.timeout.ms`.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
  *               The \p errstr is only written in case of error.

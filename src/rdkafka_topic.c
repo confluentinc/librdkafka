@@ -39,6 +39,7 @@
 #include "rdsysqueue.h"
 #include "rdtime.h"
 #include "rdregex.h"
+#include "rdkafka_fetcher.h"
 
 #if WITH_ZSTD
 #include <zstd.h>
@@ -725,11 +726,16 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
         }
 
         if (need_epoch_validation) {
-                /* Update next fetch position, that could be stale since last
-                 * fetch start. Only if the app pos is real. */
-                if (rktp->rktp_app_pos.offset > 0) {
-                        rd_kafka_toppar_set_next_fetch_position(
-                            rktp, rktp->rktp_app_pos);
+                /* Set offset validation position,
+                 * depending it if should continue with current position or
+                 * with next fetch start position. */
+                if (rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
+                        rktp)) {
+                        rd_kafka_toppar_set_offset_validation_position(
+                            rktp, rktp->rktp_next_fetch_start);
+                } else {
+                        rd_kafka_toppar_set_offset_validation_position(
+                            rktp, rktp->rktp_offsets.fetch_pos);
                 }
                 rd_kafka_offset_validate(rktp, "epoch updated from metadata");
         }

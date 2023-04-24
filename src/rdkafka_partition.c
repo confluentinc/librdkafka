@@ -243,6 +243,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         rd_kafka_fetch_pos_init(&rktp->rktp_query_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_next_fetch_start);
         rd_kafka_fetch_pos_init(&rktp->rktp_last_next_fetch_start);
+        rd_kafka_fetch_pos_init(&rktp->rktp_offset_validation_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_app_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_stored_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_committing_pos);
@@ -1795,6 +1796,7 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
                 rd_kafka_toppar_set_fetch_state(
                     rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
                 rd_kafka_toppar_set_next_fetch_position(rktp, pos);
+                rd_kafka_toppar_set_offset_validation_position(rktp, pos);
                 rd_kafka_offset_validate(rktp, "seek");
         }
 

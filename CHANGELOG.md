@@ -22,8 +22,8 @@ librdkafka v2.1.1 is a maintenance release:
 ### Consumer fixes
 
  * Duplicate messages can be emitted when a fetch response is received
-   in the middle of an offset validation request. Solved by discarding
-   the fetch if the state is not `ACTIVE`.
+   in the middle of an offset validation request. Solved by avoiding
+   a restart from last application offset when offset validation succeeds.
  * When fetching from follower, if the partition lease expires after 5 minutes,
    and a list offsets operation was requested to retrieve the earliest
    or latest offset, it resulted in segmentation fault. This was fixed by

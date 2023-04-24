@@ -14,6 +14,8 @@ librdkafka v2.1.1 is a maintenance release:
    pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
  * Fixes certain cases where polling would not keep the consumer
    in the group or make it rejoin it (#4256).
+ * Fix to the C++ set_leader_epoch method of TopicPartitionImpl,
+   that wasn't storing the passed value (@pavel-pimenov, #4267).
 
 ## Fixes
 

@@ -643,7 +643,8 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *app_rkt,
         rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
         rd_kafka_toppar_t *rktp;
         rd_kafka_resp_err_t err;
-        rd_kafka_fetch_pos_t pos = {offset + 1, -1 /*no leader epoch known*/};
+        rd_kafka_fetch_pos_t pos =
+            RD_KAFKA_FETCH_POS(offset + 1, -1 /*no leader epoch known*/);
 
         /* Find toppar */
         rd_kafka_topic_rdlock(rkt);
@@ -675,7 +676,8 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
         for (i = 0; i < offsets->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
                 rd_kafka_toppar_t *rktp;
-                rd_kafka_fetch_pos_t pos = {rktpar->offset, -1};
+                rd_kafka_fetch_pos_t pos =
+                    RD_KAFKA_FETCH_POS(rktpar->offset, -1);
 
                 rktp =
                     rd_kafka_topic_partition_get_toppar(rk, rktpar, rd_false);
@@ -721,8 +723,8 @@ rd_kafka_error_t *rd_kafka_offset_store_message(rd_kafka_message_t *rkmessage) {
                                           "Invalid message object, "
                                           "not a consumed message");
 
-        pos.offset       = rkmessage->offset + 1;
-        pos.leader_epoch = rkm->rkm_u.consumer.leader_epoch;
+        pos = RD_KAFKA_FETCH_POS(rkmessage->offset + 1,
+                                 rkm->rkm_u.consumer.leader_epoch);
         err = rd_kafka_offset_store0(rktp, pos, rd_false /* Don't force */,
                                      RD_DO_LOCK);
 

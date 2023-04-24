@@ -1289,7 +1289,7 @@ class TopicPartitionImpl : public TopicPartition {
   }
 
   void set_leader_epoch(int32_t leader_epoch) {
-    leader_epoch_ = leader_epoch_;
+    leader_epoch_ = leader_epoch;
   }
 
   std::ostream &operator<<(std::ostream &ostrm) const {

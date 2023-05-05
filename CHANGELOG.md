@@ -3,7 +3,7 @@
 librdkafka v2.1.2 is a maintenance release:
 
  * Fix segmentation fault when subscribing to a non-existent topic and
-   using the consume batch functions (#todo).
+   using the consume batch functions (#4273).
 
 
 # librdkafka v2.1.1

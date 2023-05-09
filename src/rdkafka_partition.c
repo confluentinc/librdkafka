@@ -1956,7 +1956,6 @@ rd_ts_t rd_kafka_broker_consumer_toppar_serve(rd_kafka_broker_t *rkb,
 }
 
 
-
 /**
  * @brief Serve a toppar op
  *

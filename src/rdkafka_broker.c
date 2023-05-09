@@ -4163,7 +4163,80 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
                 if (rd_kafka_broker_ops_io_serve(rkb, next_wakeup))
                         return; /* Wakeup */
 
-                rd_kafka_broker_lock(rkb);
+		rd_kafka_broker_lock(rkb);
+	}
+
+	rd_kafka_broker_unlock(rkb);
+}
+
+
+
+
+
+
+
+/**
+ * Backoff the next Fetch request (due to error).
+ */
+static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb,
+                                           rd_kafka_resp_err_t err) {
+        int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+        rkb->rkb_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
+        rd_rkb_dbg(rkb, FETCH, "BACKOFF",
+                   "Fetch backoff for %dms: %s",
+                   backoff_ms, rd_kafka_err2str(err));
+}
+
+
+/**
+ * @brief Handle preferred replica in fetch response.
+ *
+ * @locks rd_kafka_toppar_lock(rktp) and
+ *        rd_kafka_rdlock(rk) must NOT be held.
+ *
+ * @locality broker thread
+ */
+static void
+rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
+                                         rd_kafka_buf_t *rkbuf,
+                                         rd_kafka_broker_t *rkb,
+                                         int32_t preferred_id) {
+        const rd_ts_t one_minute = 60*1000*1000;
+        const rd_ts_t five_seconds = 5*1000*1000;
+        rd_kafka_broker_t *preferred_rkb;
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+        rd_ts_t new_intvl = rd_interval_immediate(&rktp->rktp_new_lease_intvl,
+                                                  one_minute, 0);
+
+        if (new_intvl < 0) {
+                /* In lieu of KIP-320, the toppar is delegated back to
+                 * the leader in the event of an offset out-of-range
+                 * error (KIP-392 error case #4) because this scenario
+                 * implies the preferred replica is out-of-sync.
+                 *
+                 * If program execution reaches here, the leader has
+                 * relatively quickly instructed the client back to
+                 * a preferred replica, quite possibly the same one
+                 * as before (possibly resulting from stale metadata),
+                 * so we back off the toppar to slow down potential
+                 * back-and-forth.
+                 */
+
+                if (rd_interval_immediate(&rktp->rktp_new_lease_log_intvl,
+                                          one_minute, 0) > 0)
+                        rd_rkb_log(rkb, LOG_NOTICE, "FETCH",
+                                   "%.*s [%"PRId32"]: preferred replica "
+                                   "(%"PRId32") lease changing too quickly "
+                                   "(%"PRId64"s < 60s): possibly due to "
+                                   "unavailable replica or stale cluster "
+                                   "state: backing off next fetch",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
+                                   preferred_id,
+                                   (one_minute - -new_intvl)/(1000*1000));
+
+                rd_kafka_toppar_fetch_backoff(rkb,
+                                              rktp, RD_KAFKA_RESP_ERR_NO_ERROR);
         }
 
         rd_kafka_broker_unlock(rkb);

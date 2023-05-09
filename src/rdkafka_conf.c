@@ -1197,6 +1197,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Maximum time the broker may wait to fill the Fetch response "
      "with fetch.min.bytes of messages.",
      0, 300 * 1000, 500},
+    { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "fetch.queue.backoff.ms", _RK_C_INT,
+      _RK(fetch_queue_backoff_ms),
+      "How long to postpone the next fetch request for a "
+      "topic+partition in case the current fetch queue thresholds "
+      "(queued.min.messages or queued.max.messages.kbytes) have "
+      "been exceded. "
+      "This property may need to be decreased if the queue thresholds are "
+      "set low and the application is experiencing long (~1s) delays "
+      "between messages. Low values may increase CPU utilization.",
+      0, 300*1000, 1000 },
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.message.max.bytes", _RK_C_INT,
      _RK(fetch_msg_max_bytes),
      "Initial maximum number of bytes per topic+partition to request when "

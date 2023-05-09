@@ -173,6 +173,9 @@ typedef RD_MAP_TYPE(const ConsumerPair_t *,
 typedef RD_MAP_TYPE(const char *,
                     map_cpair_toppar_list_t *) map_str_map_cpair_toppar_list_t;
 
+typedef RD_MAP_TYPE(const char *, rd_kafkap_str_t *) map_str_kafkap_str_t;
+
+typedef RD_MAP_TYPE(const char *, const char *) map_str_str_t;
 
 
 /** Glue type helpers */
@@ -193,6 +196,131 @@ static void map_cpair_toppar_list_t_free(void *ptr) {
 }
 
 
+/** @struct Convenience struct for storing consumer/rack and toppar/rack
+ * mappings. */
+typedef struct {
+        /** A map of member_id -> rack_id pairs. */
+        map_str_str_t member_id_to_rack_id;
+        /* A map of topic partition to rd_list_t* of racks (ie
+         * char*). Each list is sorted and deduplicated. */
+        map_toppar_list_t toppar_to_racks;
+} rd_kafka_rack_info_t;
+
+/**
+ * @brief Initialize a rd_kafka_rack_info_t.
+ *
+ * @param topics
+ * @param topic_cnt
+ * @param mdi
+ *
+ * This struct is for convenience/easy grouping, and as a consequence, we avoid
+ * copying values. Thus, it is intended to be used within the lifetime of this
+ * function's arguments.
+ *
+ * @return rd_kafka_rack_info_t*
+ */
+static rd_kafka_rack_info_t *
+rd_kafka_rack_info_new(rd_kafka_assignor_topic_t **topics,
+                       size_t topic_cnt,
+                       const rd_kafka_metadata_internal_t *mdi) {
+        int i;
+        size_t t;
+        rd_kafka_group_member_t *rkgm;
+        rd_kafka_rack_info_t *rkri = rd_calloc(1, sizeof(rd_kafka_rack_info_t));
+
+        if (!rd_kafka_use_rack_aware_assignment(topics, topic_cnt, mdi)) {
+                /* Free everything immediately, we aren't using rack aware
+                assignment, this struct is not applicable. */
+                rd_free(rkri);
+                return NULL;
+        }
+
+        rkri->member_id_to_rack_id = (map_str_str_t)RD_MAP_INITIALIZER(
+            0, rd_map_str_cmp, rd_map_str_hash,
+            NULL /* refs members.rkgm_member_id */,
+            NULL /* refs members.rkgm_rack_id */);
+        rkri->toppar_to_racks = (map_toppar_list_t)RD_MAP_INITIALIZER(
+            0, rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
+            rd_kafka_topic_partition_destroy_free, rd_list_destroy_free);
+
+        for (t = 0; t < topic_cnt; t++) {
+                RD_LIST_FOREACH(rkgm, &topics[t]->members, i) {
+                        RD_MAP_SET(&rkri->member_id_to_rack_id,
+                                   rkgm->rkgm_member_id->str,
+                                   rkgm->rkgm_rack_id->str);
+                }
+
+                for (i = 0; i < topics[t]->metadata->partition_cnt; i++) {
+                        int j;
+                        rd_kafka_metadata_partition_t *partition =
+                            &topics[t]->metadata->partitions[i];
+                        rd_kafka_topic_partition_t *rkpart =
+                            rd_kafka_topic_partition_new(
+                                topics[t]->metadata->topic, i);
+                        rd_list_t *curr_toppar_racks =
+                            rd_list_new(0, NULL /* reference based */);
+
+                        for (j = 0; j < partition->replica_cnt; j++) {
+
+                                int replica_id = topics[t]
+                                                     ->metadata->partitions[i]
+                                                     .replicas[j];
+                                rd_kafka_metadata_broker_internal_t key = {
+                                    .id = replica_id};
+                                rd_kafka_metadata_broker_internal_t *broker =
+                                    bsearch(
+                                        &key, mdi->brokers,
+                                        mdi->metadata.broker_cnt,
+                                        sizeof(
+                                            rd_kafka_metadata_broker_internal_t),
+                                        rd_kafka_metadata_broker_internal_cmp);
+
+                                if (broker && broker->rack_id &&
+                                    strlen(broker->rack_id)) {
+                                        rd_list_add(curr_toppar_racks,
+                                                    broker->rack_id);
+                                }
+                        }
+
+                        rd_list_deduplicate(&curr_toppar_racks, rd_strcmp2);
+                        RD_MAP_SET(&rkri->toppar_to_racks, rkpart,
+                                   curr_toppar_racks);
+                }
+        }
+
+        return rkri;
+}
+
+/* Destroy a rd_kafka_rack_info_t. */
+static void rd_kafka_rack_info_destroy(rd_kafka_rack_info_t *rkri) {
+        if (!rkri)
+                return;
+
+        RD_MAP_DESTROY(&rkri->member_id_to_rack_id);
+        RD_MAP_DESTROY(&rkri->toppar_to_racks);
+
+        rd_free(rkri);
+}
+
+/* Computes whether there is a rack mismatch between the rack of the consumer
+ * and the topic partition/any of its replicas. */
+static rd_bool_t
+rd_kafka_racks_mismatch(rd_kafka_rack_info_t *rkri,
+                        const char *consumer,
+                        const rd_kafka_topic_partition_t *topic_partition) {
+        if (rkri == NULL) /* Not using rack aware assignment */
+                return rd_false;
+
+        const char *consumer_rack =
+            RD_MAP_GET(&rkri->member_id_to_rack_id, consumer);
+
+        rd_list_t *replica_racks =
+            RD_MAP_GET(&rkri->toppar_to_racks, topic_partition);
+
+        return consumer_rack != NULL &&
+               (replica_racks == NULL ||
+                !rd_list_find(replica_racks, consumer_rack, rd_strcmp2));
+}
 
 /**
  * @struct Provides current state of partition movements between consumers
@@ -399,13 +527,15 @@ static int sort_by_map_elem_val_toppar_list_cnt(const void *_a,
  *
  * The assignment should improve the overall balance of the partition
  * assignments to consumers.
+ * @returns true if partition was assigned, false otherwise.
  */
-static void
-assignPartition(const rd_kafka_topic_partition_t *partition,
-                rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
-                map_str_toppar_list_t *currentAssignment,
-                map_str_toppar_list_t *consumer2AllPotentialPartitions,
-                map_toppar_str_t *currentPartitionConsumer) {
+static rd_bool_t
+maybeAssignPartition(const rd_kafka_topic_partition_t *partition,
+                     rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
+                     map_str_toppar_list_t *currentAssignment,
+                     map_str_toppar_list_t *consumer2AllPotentialPartitions,
+                     map_toppar_str_t *currentPartitionConsumer,
+                     rd_kafka_rack_info_t *rkri) {
         const rd_map_elem_t *elem;
         int i;
 
@@ -417,6 +547,9 @@ assignPartition(const rd_kafka_topic_partition_t *partition,
                     RD_MAP_GET(consumer2AllPotentialPartitions, consumer);
                 if (!rd_kafka_topic_partition_list_find(
                         partitions, partition->topic, partition->partition))
+                        continue;
+                if (rkri != NULL &&
+                    rd_kafka_racks_mismatch(rkri, consumer, partition))
                         continue;
 
                 rd_kafka_topic_partition_list_add(
@@ -431,8 +564,9 @@ assignPartition(const rd_kafka_topic_partition_t *partition,
                  * This is an O(N) operation since it is a single shuffle. */
                 rd_list_sort(sortedCurrentSubscriptions,
                              sort_by_map_elem_val_toppar_list_cnt);
-                return;
+                return rd_true;
         }
+        return rd_false;
 }
 
 /**
@@ -764,7 +898,8 @@ performReassignments(rd_kafka_t *rk,
                      rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
                      map_str_toppar_list_t *consumer2AllPotentialPartitions,
                      map_toppar_list_t *partition2AllPotentialConsumers,
-                     map_toppar_str_t *currentPartitionConsumer) {
+                     map_toppar_str_t *currentPartitionConsumer,
+                     rd_kafka_rack_info_t *rkri) {
         rd_bool_t reassignmentPerformed = rd_false;
         rd_bool_t modified, saveIsBalanced = rd_false;
         int iterations = 0;
@@ -796,6 +931,9 @@ performReassignments(rd_kafka_t *rk,
                         const ConsumerGenerationPair_t *prevcgp;
                         const rd_kafka_topic_partition_list_t *currAssignment;
                         int j;
+                        rd_bool_t found_rack;
+                        const char *consumer_rack  = NULL;
+                        rd_list_t *partition_racks = NULL;
 
                         /* FIXME: Is this a local error/bug? If so, assert */
                         if (rd_list_cnt(consumers) <= 1)
@@ -832,7 +970,60 @@ performReassignments(rd_kafka_t *rk,
                         }
 
                         /* Check if a better-suited consumer exists for the
-                         * partition; if so, reassign it. */
+                         * partition; if so, reassign it. Use consumer within
+                         * rack if possible. */
+                        if (rkri) {
+                                consumer_rack = RD_MAP_GET(
+                                    &rkri->member_id_to_rack_id, consumer);
+                                partition_racks = RD_MAP_GET(
+                                    &rkri->toppar_to_racks, partition);
+                        }
+                        found_rack = rd_false;
+
+                        if (consumer_rack != NULL && partition_racks != NULL &&
+                            rd_list_cnt(partition_racks) > 0 &&
+                            rd_list_find(partition_racks, consumer_rack,
+                                         rd_strcmp2)) {
+                                RD_LIST_FOREACH(otherConsumer, consumers, j) {
+                                        /* No need for rkri == NULL check, that
+                                         * is guaranteed if we're inside this if
+                                         * block. */
+                                        const char *other_consumer_rack =
+                                            RD_MAP_GET(
+                                                &rkri->member_id_to_rack_id,
+                                                otherConsumer);
+
+                                        if (other_consumer_rack == NULL ||
+                                            !rd_list_find(partition_racks,
+                                                          other_consumer_rack,
+                                                          rd_strcmp2))
+                                                continue;
+
+                                        if (currAssignment->cnt <=
+                                            RD_MAP_GET(currentAssignment,
+                                                       otherConsumer)
+                                                    ->cnt +
+                                                1)
+                                                continue;
+
+                                        reassignPartition(
+                                            rk, partitionMovements, partition,
+                                            currentAssignment,
+                                            sortedCurrentSubscriptions,
+                                            currentPartitionConsumer,
+                                            consumer2AllPotentialPartitions);
+
+                                        reassignmentPerformed = rd_true;
+                                        modified              = rd_true;
+                                        found_rack            = rd_true;
+                                        break;
+                                }
+                        }
+
+                        if (found_rack) {
+                                continue;
+                        }
+
                         RD_LIST_FOREACH(otherConsumer, consumers, j) {
                                 if (consumer == otherConsumer)
                                         continue;
@@ -911,7 +1102,43 @@ static int getBalanceScore(map_str_toppar_list_t *assignment) {
         return score;
 }
 
+static void maybeAssign(rd_kafka_topic_partition_list_t *unassignedPartitions,
+                        map_toppar_list_t *partition2AllPotentialConsumers,
+                        rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
+                        map_str_toppar_list_t *currentAssignment,
+                        map_str_toppar_list_t *consumer2AllPotentialPartitions,
+                        map_toppar_str_t *currentPartitionConsumer,
+                        rd_bool_t removeAssigned,
+                        rd_kafka_rack_info_t *rkri) {
+        int i;
+        const rd_kafka_topic_partition_t *partition;
 
+        for (i = 0; i < unassignedPartitions->cnt; i++) {
+                partition = &unassignedPartitions->elems[i];
+                rd_bool_t assigned;
+
+                /* Skip if there is no potential consumer for the partition.
+                 * FIXME: How could this be? */
+                if (rd_list_empty(RD_MAP_GET(partition2AllPotentialConsumers,
+                                             partition))) {
+                        rd_dassert(!*"sticky assignor bug");
+                        continue;
+                }
+
+                assigned = maybeAssignPartition(
+                    partition, sortedCurrentSubscriptions, currentAssignment,
+                    consumer2AllPotentialPartitions, currentPartitionConsumer,
+                    rkri);
+                if (assigned && removeAssigned) {
+                        rd_kafka_topic_partition_list_del_by_idx(
+                            unassignedPartitions, i);
+                        i--; /* Since the current element was
+                              * removed we need the next for
+                              * loop iteration to stay at the
+                              * same index. */
+                }
+        }
+}
 
 /**
  * @brief Balance the current assignment using the data structures
@@ -926,7 +1153,8 @@ static void balance(rd_kafka_t *rk,
                     map_str_toppar_list_t *consumer2AllPotentialPartitions,
                     map_toppar_list_t *partition2AllPotentialConsumers,
                     map_toppar_str_t *currentPartitionConsumer,
-                    rd_bool_t revocationRequired) {
+                    rd_bool_t revocationRequired,
+                    rd_kafka_rack_info_t *rkri) {
 
         /* If the consumer with most assignments (thus the last element
          * in the ascendingly ordered sortedCurrentSubscriptions list) has
@@ -964,23 +1192,34 @@ static void balance(rd_kafka_t *rk,
         const void *ignore;
         const rd_map_elem_t *elem;
         int i;
+        rd_kafka_topic_partition_list_t *leftoverUnassignedPartitions;
+        rd_bool_t leftoverUnassignedPartitions_allocated = rd_false;
 
-        /* Assign all unassigned partitions */
-        for (i = 0; i < unassignedPartitions->cnt; i++) {
-                partition = &unassignedPartitions->elems[i];
+        leftoverUnassignedPartitions =
+            unassignedPartitions; /* copy on write. */
 
-                /* Skip if there is no potential consumer for the partition.
-                 * FIXME: How could this be? */
-                if (rd_list_empty(RD_MAP_GET(partition2AllPotentialConsumers,
-                                             partition))) {
-                        rd_dassert(!*"sticky assignor bug");
-                        continue;
-                }
-
-                assignPartition(
-                    partition, sortedCurrentSubscriptions, currentAssignment,
-                    consumer2AllPotentialPartitions, currentPartitionConsumer);
+        if (rkri != NULL && RD_MAP_CNT(&rkri->member_id_to_rack_id) != 0) {
+                leftoverUnassignedPartitions_allocated = rd_true;
+                /* Since maybeAssign is called twice, we keep track of those
+                 * partitions which the first call has taken care of already,
+                 * but we don't want to modify the original
+                 * unassignedPartitions. */
+                leftoverUnassignedPartitions =
+                    rd_kafka_topic_partition_list_copy(unassignedPartitions);
+                maybeAssign(leftoverUnassignedPartitions,
+                            partition2AllPotentialConsumers,
+                            sortedCurrentSubscriptions, currentAssignment,
+                            consumer2AllPotentialPartitions,
+                            currentPartitionConsumer, rd_true, rkri);
         }
+        maybeAssign(leftoverUnassignedPartitions,
+                    partition2AllPotentialConsumers, sortedCurrentSubscriptions,
+                    currentAssignment, consumer2AllPotentialPartitions,
+                    currentPartitionConsumer, rd_false, NULL);
+
+        if (leftoverUnassignedPartitions_allocated)
+                rd_kafka_topic_partition_list_destroy(
+                    leftoverUnassignedPartitions);
 
 
         /* Narrow down the reassignment scope to only those partitions that can
@@ -1050,17 +1289,18 @@ static void balance(rd_kafka_t *rk,
          * changes, first try to balance by only moving newly added partitions.
          */
         if (!revocationRequired && unassignedPartitions->cnt > 0)
-                performReassignments(
-                    rk, partitionMovements, unassignedPartitions,
-                    currentAssignment, prevAssignment,
-                    sortedCurrentSubscriptions, consumer2AllPotentialPartitions,
-                    partition2AllPotentialConsumers, currentPartitionConsumer);
+                performReassignments(rk, partitionMovements,
+                                     unassignedPartitions, currentAssignment,
+                                     prevAssignment, sortedCurrentSubscriptions,
+                                     consumer2AllPotentialPartitions,
+                                     partition2AllPotentialConsumers,
+                                     currentPartitionConsumer, rkri);
 
         reassignmentPerformed = performReassignments(
             rk, partitionMovements, sortedPartitions, currentAssignment,
             prevAssignment, sortedCurrentSubscriptions,
             consumer2AllPotentialPartitions, partition2AllPotentialConsumers,
-            currentPartitionConsumer);
+            currentPartitionConsumer, rkri);
 
         /* If we are not preserving existing assignments and we have made
          * changes to the current assignment make sure we are getting a more
@@ -1175,14 +1415,34 @@ static void prepopulateCurrentAssignments(
 
                 for (j = 0; j < (int)consumer->rkgm_owned->cnt; j++) {
                         partition = &consumer->rkgm_owned->elems[j];
+                        /* ConsumerGenerationPair_t search_pair = {
+                            .generation = consumer->rkgm_generation}; */
 
                         consumers = RD_MAP_GET_OR_SET(
                             &sortedPartitionConsumersByGeneration, partition,
                             rd_list_new(10, ConsumerGenerationPair_destroy));
 
+                        /*
+                         * NOTE(milind) for reviewers: I will remove this after
+                        the first round of review. Leaving it here for now, so
+                        the reasoning for removing it is more clear.
+                         * There were several things wrong with the pre-existing
+                        code, for example, the search term was wrong, it was
+                        rkgm_generation rather than ConsumerGenerationPair_t
+                        containing rkgm_generation, so this if block never
+                        really worked.
+                         * Secondly, I don't think we should skip the CONSUMER
+                          here, rather, we should add it and let the skip be
+                        done later, and skip the PARTITION. Reason: partition in
+                        this disputed state should not be added to ANY
+                        consumer's prev assignments. The proposed behaviour is
+                        consistent with the Java Assignor, and the current
+                        behaviour is not (checked by adding a new Java Unit test
+                        in AbstractStickyAssignorTest.java).
+
                         if (consumer->rkgm_generation != -1 &&
                             rd_list_find(
-                                consumers, &consumer->rkgm_generation,
+                                consumers, &search_pair,
                                 ConsumerGenerationPair_cmp_generation)) {
                                 rd_kafka_log(
                                     rk, LOG_WARNING, "STICKY",
@@ -1197,6 +1457,7 @@ static void prepopulateCurrentAssignments(
                                     RD_KAFKAP_STR_PR(consumer->rkgm_member_id));
                                 continue;
                         }
+                        */
 
                         rd_list_add(consumers,
                                     ConsumerGenerationPair_new(
@@ -1215,24 +1476,60 @@ static void prepopulateCurrentAssignments(
         RD_MAP_FOREACH(partition, consumers,
                        &sortedPartitionConsumersByGeneration) {
                 /* current and previous are the last two consumers
-                 * of each partition. */
-                ConsumerGenerationPair_t *current, *previous;
+                 * of each partition, and found is used to check for duplicate
+                 * consumers of same generation. */
+                ConsumerGenerationPair_t *current, *previous, *found;
                 rd_kafka_topic_partition_list_t *partitions;
 
                 /* Sort the per-partition consumers list by generation */
                 rd_list_sort(consumers, ConsumerGenerationPair_cmp_generation);
 
+                /* In case a partition is claimed by multiple consumers with the
+                 * same generation, invalidate it for all such consumers, and
+                 * log an error for this situation. */
+                if ((found = rd_list_find_duplicate(
+                         consumers, ConsumerGenerationPair_cmp_generation))) {
+                        const char *consumer1, *consumer2;
+                        int idx = rd_list_index(
+                            consumers, found,
+                            ConsumerGenerationPair_cmp_generation);
+                        consumer1 = ((ConsumerGenerationPair_t *)rd_list_elem(
+                                         consumers, idx))
+                                        ->consumer;
+                        consumer2 = ((ConsumerGenerationPair_t *)rd_list_elem(
+                                         consumers, idx + 1))
+                                        ->consumer;
+                        rd_kafka_log(
+                            rk, LOG_ERR, "STICKY",
+                            "Sticky assignor: Found multiple consumers %s and "
+                            "%s claiming the same topic partition %s:%d in the "
+                            "same generation %d, this will be invalidated and "
+                            "removed from their previous assignment.",
+                            consumer1, consumer2, partition->topic,
+                            partition->partition, found->generation);
+                        continue;
+                }
+
                 /* Add current (highest generation) consumer
                  * to currentAssignment. */
-                current    = rd_list_elem(consumers, 0);
+                /* NOTE(milind) - (will remove this note after review, writing
+                 here to give rationale.).
+                 I think this was a pre-existing bug. The sort above sorts it
+                 in the ascending order of generation, and the current
+                 generation is actually the LAST element of this list. So, I've
+                 changed it. There weren't enough tests messing around with the
+                 generation to catch the bug.
+               */
+                current    = rd_list_last(consumers);
                 partitions = RD_MAP_GET(currentAssignment, current->consumer);
                 rd_kafka_topic_partition_list_add(partitions, partition->topic,
                                                   partition->partition);
 
                 /* Add previous (next highest generation) consumer, if any,
                  * to prevAssignment. */
-                previous = rd_list_elem(consumers, 1);
-                if (previous)
+                if (rd_list_cnt(consumers) >= 2 &&
+                    (previous =
+                         rd_list_elem(consumers, rd_list_cnt(consumers) - 2)))
                         RD_MAP_SET(
                             prevAssignment,
                             rd_kafka_topic_partition_copy(partition),
@@ -1590,6 +1887,11 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
                                    void *opaque) {
         /* FIXME: Let the cgrp pass the actual eligible partition count */
         size_t partition_cnt = member_cnt * 10; /* FIXME */
+        const rd_kafka_metadata_internal_t *mdi =
+            rd_kafka_metadata_get_internal(metadata);
+
+        rd_kafka_rack_info_t *rkri =
+            rd_kafka_rack_info_new(eligible_topics, eligible_topic_cnt, mdi);
 
         /* Map of subscriptions. This is \p member turned into a map. */
         map_str_toppar_list_t subscriptions =
@@ -1680,6 +1982,10 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
         unassignedPartitions =
             rd_kafka_topic_partition_list_copy(sortedPartitions);
 
+        if (rkri)
+                rd_kafka_dbg(rk, CGRP, "STICKY",
+                             "Sticky assignor: using rack aware assignment.");
+
         RD_MAP_FOREACH(consumer, partitions, &currentAssignment) {
                 if (!RD_MAP_GET(&subscriptions, consumer)) {
                         /* If a consumer that existed before
@@ -1726,13 +2032,16 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
                                                RD_MAP_GET(&subscriptions,
                                                           consumer),
                                                partition->topic,
-                                               RD_KAFKA_PARTITION_UA)) {
+                                               RD_KAFKA_PARTITION_UA) ||
+                                           rd_kafka_racks_mismatch(
+                                               rkri, consumer, partition)) {
                                         /* If this partition cannot remain
                                          * assigned to its current consumer
                                          * because the consumer is no longer
-                                         * subscribed to its topic, remove it
-                                         * from the currentAssignment of the
-                                         * consumer. */
+                                         * subscribed to its topic, or racks
+                                         * don't match for rack-aware
+                                         * assignment, remove it from the
+                                         * currentAssignment of the consumer. */
                                         remove_part        = rd_true;
                                         revocationRequired = rd_true;
                                 } else {
@@ -1785,7 +2094,7 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
                 sortedPartitions, unassignedPartitions,
                 &sortedCurrentSubscriptions, &consumer2AllPotentialPartitions,
                 &partition2AllPotentialConsumers, &currentPartitionConsumer,
-                revocationRequired);
+                revocationRequired, rkri);
 
         /* Transfer currentAssignment (now updated) to each member's
          * assignment. */
@@ -1798,6 +2107,7 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
 
         rd_kafka_topic_partition_list_destroy(unassignedPartitions);
         rd_kafka_topic_partition_list_destroy(sortedPartitions);
+        rd_kafka_rack_info_destroy(rkri);
 
         RD_MAP_DESTROY(&currentPartitionConsumer);
         RD_MAP_DESTROY(&consumer2AllPotentialPartitions);
@@ -1917,16 +2227,97 @@ static void rd_kafka_sticky_assignor_state_destroy(void *assignor_state) {
  *
  */
 
+/* All possible racks used in tests, as well as several common rack configs used
+ * by consumers */
+static rd_kafkap_str_t
+    *ALL_RACKS[7]; /* initialized before starting the unit tests. */
+static int RACKS_INITIAL[]  = {0, 1, 2};
+static int RACKS_NULL[]     = {6, 6, 6};
+static int RACKS_FINAL[]    = {4, 5, 6};
+static int RACKS_ONE_NULL[] = {6, 4, 5};
 
-static int ut_testOneConsumerNoTopic(rd_kafka_t *rk,
-                                     const rd_kafka_assignor_t *rkas) {
+/* Helper to get consumer rack based on the index of the consumer. */
+static rd_kafkap_str_t *
+ut_get_consumer_rack(int idx,
+                     rd_kafka_assignor_ut_rack_config_t parametrization) {
+        const int cycle_size =
+            (parametrization == RD_KAFKA_RANGE_ASSIGNOR_UT_NO_BROKER_RACK
+                 ? RD_ARRAYSIZE(ALL_RACKS)
+                 : 3);
+        return (ALL_RACKS[idx % cycle_size]);
+}
+
+/* Helper to populate a member's owned partitions (accepted as variadic), and
+ * generation. */
+static void
+ut_populate_member_owned_partitions_generation(rd_kafka_group_member_t *rkgm,
+                                               int generation,
+                                               size_t partition_cnt,
+                                               ...) {
+        va_list ap;
+        size_t i;
+
+        if (rkgm->rkgm_owned)
+                rd_kafka_topic_partition_list_destroy(rkgm->rkgm_owned);
+        rkgm->rkgm_owned = rd_kafka_topic_partition_list_new(partition_cnt);
+
+        va_start(ap, partition_cnt);
+        for (i = 0; i < partition_cnt; i++) {
+                char *topic   = va_arg(ap, char *);
+                int partition = va_arg(ap, int);
+                rd_kafka_topic_partition_list_add(rkgm->rkgm_owned, topic,
+                                                  partition);
+        }
+        va_end(ap);
+
+        rkgm->rkgm_generation = generation;
+}
+
+/* Helper to create topic partition list from a variadic list of topic,
+ * partition pairs. */
+static rd_kafka_topic_partition_list_t **
+ut_create_topic_partition_lists(size_t list_cnt, ...) {
+        va_list ap;
+        size_t i;
+        rd_kafka_topic_partition_list_t **lists =
+            rd_calloc(list_cnt, sizeof(rd_kafka_topic_partition_list_t *));
+
+        va_start(ap, list_cnt);
+        for (i = 0; i < list_cnt; i++) {
+                const char *topic;
+                lists[i] = rd_kafka_topic_partition_list_new(0);
+                while ((topic = va_arg(ap, const char *))) {
+                        int partition = va_arg(ap, int);
+                        rd_kafka_topic_partition_list_add(lists[i], topic,
+                                                          partition);
+                }
+        }
+        va_end(ap);
+
+        return lists;
+}
+
+static int
+ut_testOneConsumerNoTopic(rd_kafka_t *rk,
+                          const rd_kafka_assignor_t *rkas,
+                          rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        metadata = rd_kafka_metadata_new_topic_mock(NULL, 0, -1, 0);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
+        if (parametrization == RD_KAFKA_RANGE_ASSIGNOR_UT_NO_BROKER_RACK) {
+                RD_UT_PASS();
+        }
+
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       0);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -1944,15 +2335,26 @@ static int ut_testOneConsumerNoTopic(rd_kafka_t *rk,
 }
 
 
-static int ut_testOneConsumerNonexistentTopic(rd_kafka_t *rk,
-                                              const rd_kafka_assignor_t *rkas) {
+static int ut_testOneConsumerNonexistentTopic(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 0);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
+        if (parametrization == RD_KAFKA_RANGE_ASSIGNOR_UT_NO_BROKER_RACK) {
+                RD_UT_PASS();
+        }
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 0);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -1971,15 +2373,22 @@ static int ut_testOneConsumerNonexistentTopic(rd_kafka_t *rk,
 
 
 
-static int ut_testOneConsumerOneTopic(rd_kafka_t *rk,
-                                      const rd_kafka_assignor_t *rkas) {
+static int
+ut_testOneConsumerOneTopic(rd_kafka_t *rk,
+                           const rd_kafka_assignor_t *rkas,
+                           rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2004,16 +2413,20 @@ static int ut_testOneConsumerOneTopic(rd_kafka_t *rk,
 
 static int ut_testOnlyAssignsPartitionsFromSubscribedTopics(
     rd_kafka_t *rk,
-    const rd_kafka_assignor_t *rkas) {
-
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        metadata =
-            rd_kafka_metadata_new_topic_mockv(2, "topic1", 3, "topic2", 3);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 3, "topic2", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2033,16 +2446,22 @@ static int ut_testOnlyAssignsPartitionsFromSubscribedTopics(
 }
 
 
-static int ut_testOneConsumerMultipleTopics(rd_kafka_t *rk,
-                                            const rd_kafka_assignor_t *rkas) {
+static int ut_testOneConsumerMultipleTopics(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        metadata =
-            rd_kafka_metadata_new_topic_mockv(2, "topic1", 1, "topic2", 2);
-        ut_init_member(&members[0], "consumer1", "topic1", "topic2", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 1, "topic2", 2);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2061,17 +2480,25 @@ static int ut_testOneConsumerMultipleTopics(rd_kafka_t *rk,
         RD_UT_PASS();
 }
 
-static int
-ut_testTwoConsumersOneTopicOnePartition(rd_kafka_t *rk,
-                                        const rd_kafka_assignor_t *rkas) {
+static int ut_testTwoConsumersOneTopicOnePartition(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 1);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", NULL);
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 1);
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2092,17 +2519,25 @@ ut_testTwoConsumersOneTopicOnePartition(rd_kafka_t *rk,
 }
 
 
-static int
-ut_testTwoConsumersOneTopicTwoPartitions(rd_kafka_t *rk,
-                                         const rd_kafka_assignor_t *rkas) {
+static int ut_testTwoConsumersOneTopicTwoPartitions(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 2);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 2);
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
+
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2125,18 +2560,27 @@ ut_testTwoConsumersOneTopicTwoPartitions(rd_kafka_t *rk,
 
 static int ut_testMultipleConsumersMixedTopicSubscriptions(
     rd_kafka_t *rk,
-    const rd_kafka_assignor_t *rkas) {
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
 
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[3];
 
-        metadata =
-            rd_kafka_metadata_new_topic_mockv(2, "topic1", 3, "topic2", 2);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", "topic2", NULL);
-        ut_init_member(&members[2], "consumer3", "topic1", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 3, "topic2", 2);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2159,18 +2603,25 @@ static int ut_testMultipleConsumersMixedTopicSubscriptions(
 }
 
 
-static int
-ut_testTwoConsumersTwoTopicsSixPartitions(rd_kafka_t *rk,
-                                          const rd_kafka_assignor_t *rkas) {
+static int ut_testTwoConsumersTwoTopicsSixPartitions(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        metadata =
-            rd_kafka_metadata_new_topic_mockv(2, "topic1", 3, "topic2", 3);
-        ut_init_member(&members[0], "consumer1", "topic1", "topic2", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", "topic2", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 3, "topic2", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2193,15 +2644,23 @@ ut_testTwoConsumersTwoTopicsSixPartitions(rd_kafka_t *rk,
 }
 
 
-static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
-                                            const rd_kafka_assignor_t *rkas) {
+static int ut_testAddRemoveConsumerOneTopic(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members, 1,
                                     errstr, sizeof(errstr));
@@ -2214,7 +2673,9 @@ static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
         isFullyBalanced(members, 1);
 
         /* Add consumer2 */
-        ut_init_member(&members[1], "consumer2", "topic1", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2269,25 +2730,35 @@ static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
  *  - consumer3: topic1-1, topic5-0
  *  - consumer4: topic4-0, topic5-1
  */
-static int
-ut_testPoorRoundRobinAssignmentScenario(rd_kafka_t *rk,
-                                        const rd_kafka_assignor_t *rkas) {
+static int ut_testPoorRoundRobinAssignmentScenario(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[4];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(
-            5, "topic1", 2, "topic2", 1, "topic3", 2, "topic4", 1, "topic5", 2);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       5, "topic1", 2, "topic2", 1, "topic3", 2,
+                                       "topic4", 1, "topic5", 2);
 
-        ut_init_member(&members[0], "consumer1", "topic1", "topic2", "topic3",
-                       "topic4", "topic5", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", "topic3", "topic5",
-                       NULL);
-        ut_init_member(&members[2], "consumer3", "topic1", "topic3", "topic5",
-                       NULL);
-        ut_init_member(&members[3], "consumer4", "topic1", "topic2", "topic3",
-                       "topic4", "topic5", NULL);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2",
+                                     "topic3", "topic4", "topic5", NULL);
+        ut_initMemberConditionalRack(
+            &members[1], "consumer2", ut_get_consumer_rack(1, parametrization),
+            parametrization, "topic1", "topic3", "topic5", NULL);
+        ut_initMemberConditionalRack(
+            &members[2], "consumer3", ut_get_consumer_rack(2, parametrization),
+            parametrization, "topic1", "topic3", "topic5", NULL);
+        ut_initMemberConditionalRack(&members[3], "consumer4",
+                                     ut_get_consumer_rack(3, parametrization),
+                                     parametrization, "topic1", "topic2",
+                                     "topic3", "topic4", "topic5", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2313,16 +2784,25 @@ ut_testPoorRoundRobinAssignmentScenario(rd_kafka_t *rk,
 
 
 
-static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
-                                             const rd_kafka_assignor_t *rkas) {
+static int ut_testAddRemoveTopicTwoConsumers(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
-        ut_init_member(&members[0], "consumer1", "topic1", "topic2", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", "topic2", NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2340,8 +2820,10 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
          */
         RD_UT_SAY("Adding topic2");
         rd_kafka_metadata_destroy(metadata);
-        metadata =
-            rd_kafka_metadata_new_topic_mockv(2, "topic1", 3, "topic2", 3);
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 3, "topic2", 3);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2363,7 +2845,10 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
          */
         RD_UT_SAY("Removing topic1");
         rd_kafka_metadata_destroy(metadata);
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic2", 3);
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic2", 3);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2385,9 +2870,10 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
 }
 
 
-static int
-ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
-                                          const rd_kafka_assignor_t *rkas) {
+static int ut_testReassignmentAfterOneConsumerLeaves(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2404,8 +2890,9 @@ ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
                 mt[i].partition_cnt = i + 1;
         }
 
-        metadata = rd_kafka_metadata_new_topic_mock(mt, topic_cnt, -1, 0);
-
+        ut_initMetadataConditionalRack0(&metadata, 3, 3, ALL_RACKS,
+                                        RD_ARRAYSIZE(ALL_RACKS),
+                                        parametrization, mt, topic_cnt);
 
         for (i = 1; i <= member_cnt; i++) {
                 char name[20];
@@ -2419,7 +2906,12 @@ ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
                             subscription, topic, RD_KAFKA_PARTITION_UA);
                 }
                 rd_snprintf(name, sizeof(name), "consumer%d", i);
-                ut_init_member(&members[i - 1], name, NULL);
+
+                ut_initMemberConditionalRack(
+                    &members[i - 1], name,
+                    ut_get_consumer_rack(i, parametrization), parametrization,
+                    NULL);
+
                 rd_kafka_topic_partition_list_destroy(
                     members[i - 1].rkgm_subscription);
                 members[i - 1].rkgm_subscription = subscription;
@@ -2455,9 +2947,10 @@ ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
 }
 
 
-static int
-ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
-                                         const rd_kafka_assignor_t *rkas) {
+static int ut_testReassignmentAfterOneConsumerAdded(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2465,7 +2958,9 @@ ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 20);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 20);
 
         for (i = 1; i <= member_cnt; i++) {
                 char name[20];
@@ -2474,7 +2969,10 @@ ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
                 rd_kafka_topic_partition_list_add(subscription, "topic1",
                                                   RD_KAFKA_PARTITION_UA);
                 rd_snprintf(name, sizeof(name), "consumer%d", i);
-                ut_init_member(&members[i - 1], name, NULL);
+                ut_initMemberConditionalRack(
+                    &members[i - 1], name,
+                    ut_get_consumer_rack(i, parametrization), parametrization,
+                    NULL);
                 rd_kafka_topic_partition_list_destroy(
                     members[i - 1].rkgm_subscription);
                 members[i - 1].rkgm_subscription = subscription;
@@ -2508,8 +3006,10 @@ ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
 }
 
 
-static int ut_testSameSubscriptions(rd_kafka_t *rk,
-                                    const rd_kafka_assignor_t *rkas) {
+static int
+ut_testSameSubscriptions(rd_kafka_t *rk,
+                         const rd_kafka_assignor_t *rkas,
+                         rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2530,12 +3030,17 @@ static int ut_testSameSubscriptions(rd_kafka_t *rk,
                                                   RD_KAFKA_PARTITION_UA);
         }
 
-        metadata = rd_kafka_metadata_new_topic_mock(mt, topic_cnt, -1, 0);
+        ut_initMetadataConditionalRack0(&metadata, 3, 3, ALL_RACKS,
+                                        RD_ARRAYSIZE(ALL_RACKS),
+                                        parametrization, mt, topic_cnt);
 
         for (i = 1; i <= member_cnt; i++) {
                 char name[16];
                 rd_snprintf(name, sizeof(name), "consumer%d", i);
-                ut_init_member(&members[i - 1], name, NULL);
+                ut_initMemberConditionalRack(
+                    &members[i - 1], name,
+                    ut_get_consumer_rack(i, parametrization), parametrization,
+                    NULL);
                 rd_kafka_topic_partition_list_destroy(
                     members[i - 1].rkgm_subscription);
                 members[i - 1].rkgm_subscription =
@@ -2573,8 +3078,8 @@ static int ut_testSameSubscriptions(rd_kafka_t *rk,
 
 static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
     rd_kafka_t *rk,
-    const rd_kafka_assignor_t *rkas) {
-
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2591,7 +3096,9 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
                 mt[i].partition_cnt = i + 1;
         }
 
-        metadata = rd_kafka_metadata_new_topic_mock(mt, topic_cnt, -1, 0);
+        ut_initMetadataConditionalRack0(&metadata, 3, 3, ALL_RACKS,
+                                        RD_ARRAYSIZE(ALL_RACKS),
+                                        parametrization, mt, topic_cnt);
 
         for (i = 0; i < member_cnt; i++) {
                 /* Java tests use a random set, this is more deterministic. */
@@ -2608,7 +3115,10 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
                             RD_KAFKA_PARTITION_UA);
 
                 rd_snprintf(name, sizeof(name), "consumer%d", i + 1);
-                ut_init_member(&members[i], name, NULL);
+                ut_initMemberConditionalRack(
+                    &members[i], name, ut_get_consumer_rack(i, parametrization),
+                    parametrization, NULL);
+
                 rd_kafka_topic_partition_list_destroy(
                     members[i].rkgm_subscription);
                 members[i].rkgm_subscription = subscription;
@@ -2645,8 +3155,10 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
 }
 
 
-static int ut_testNewSubscription(rd_kafka_t *rk,
-                                  const rd_kafka_assignor_t *rkas) {
+static int
+ut_testNewSubscription(rd_kafka_t *rk,
+                       const rd_kafka_assignor_t *rkas,
+                       rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2654,15 +3166,19 @@ static int ut_testNewSubscription(rd_kafka_t *rk,
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
 
-        metadata = rd_kafka_metadata_new_topic_mockv(
-            5, "topic1", 1, "topic2", 2, "topic3", 3, "topic4", 4, "topic5", 5);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       5, "topic1", 1, "topic2", 2, "topic3", 3,
+                                       "topic4", 4, "topic5", 5);
 
         for (i = 0; i < member_cnt; i++) {
                 char name[16];
                 int j;
 
                 rd_snprintf(name, sizeof(name), "consumer%d", i);
-                ut_init_member(&members[i], name, NULL);
+                ut_initMemberConditionalRack(
+                    &members[i], name, ut_get_consumer_rack(i, parametrization),
+                    parametrization, NULL);
 
                 rd_kafka_topic_partition_list_destroy(
                     members[i].rkgm_subscription);
@@ -2707,8 +3223,10 @@ static int ut_testNewSubscription(rd_kafka_t *rk,
 }
 
 
-static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
-                                          const rd_kafka_assignor_t *rkas) {
+static int ut_testMoveExistingAssignments(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2718,12 +3236,22 @@ static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
         int i;
         int fails = 0;
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
 
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", NULL);
-        ut_init_member(&members[2], "consumer3", "topic1", NULL);
-        ut_init_member(&members[3], "consumer4", "topic1", NULL);
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[3], "consumer4",
+                                     ut_get_consumer_rack(3, parametrization),
+                                     parametrization, "topic1", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     member_cnt, errstr, sizeof(errstr));
@@ -2790,8 +3318,69 @@ static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
 }
 
 
+/* The original version of this test diverged from the Java implementaion in
+ * what it was testing. It's not certain whether it was by mistake, or by
+ * design, but the new version matches the Java implementation, and the old one
+ * is retained as well, since it provides extra coverage.
+ */
+static int ut_testMoveExistingAssignments_j(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[3];
+        int member_cnt                                  = RD_ARRAYSIZE(members);
+        rd_kafka_topic_partition_list_t *assignments[4] = RD_ZERO_INIT;
+        int i;
 
-static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       6, "topic1", 1, "topic2", 1, "topic3", 1,
+                                       "topic4", 1, "topic5", 1, "topic6", 1);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], 1 /* generation */, 1, "topic1", 0);
+
+        ut_initMemberConditionalRack(
+            &members[1], "consumer2", ut_get_consumer_rack(1, parametrization),
+            parametrization, "topic1", "topic2", "topic3", "topic4", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], 1 /* generation */, 2, "topic2", 0, "topic3", 0);
+
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic2", "topic3",
+                                     "topic4", "topic5", "topic6", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[2], 1 /* generation */, 3, "topic4", 0, "topic5", 0,
+            "topic6", 0);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, member_cnt, metadata);
+
+        for (i = 0; i < member_cnt; i++) {
+                rd_kafka_group_member_clear(&members[i]);
+                if (assignments[i])
+                        rd_kafka_topic_partition_list_destroy(assignments[i]);
+        }
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+
+static int
+ut_testStickiness(rd_kafka_t *rk,
+                  const rd_kafka_assignor_t *rkas,
+                  rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2799,18 +3388,22 @@ static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
 
-        metadata = rd_kafka_metadata_new_topic_mockv(
-            6, "topic1", 1, "topic2", 1, "topic3", 1, "topic4", 1, "topic5", 1,
-            "topic6", 1);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       6, "topic1", 1, "topic2", 1, "topic3", 1,
+                                       "topic4", 1, "topic5", 1, "topic6", 1);
 
-        ut_init_member(&members[0], "consumer1", "topic1", "topic2", NULL);
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
         rd_kafka_topic_partition_list_destroy(members[0].rkgm_assignment);
         members[0].rkgm_assignment = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(members[0].rkgm_assignment, "topic1",
                                           0);
 
-        ut_init_member(&members[1], "consumer2", "topic1", "topic2", "topic3",
-                       "topic4", NULL);
+        ut_initMemberConditionalRack(
+            &members[1], "consumer2", ut_get_consumer_rack(1, parametrization),
+            parametrization, "topic1", "topic2", "topic3", "topic4", NULL);
         rd_kafka_topic_partition_list_destroy(members[1].rkgm_assignment);
         members[1].rkgm_assignment = rd_kafka_topic_partition_list_new(2);
         rd_kafka_topic_partition_list_add(members[1].rkgm_assignment, "topic2",
@@ -2818,8 +3411,9 @@ static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         rd_kafka_topic_partition_list_add(members[1].rkgm_assignment, "topic3",
                                           0);
 
-        ut_init_member(&members[2], "consumer3", "topic4", "topic5", "topic6",
-                       NULL);
+        ut_initMemberConditionalRack(
+            &members[2], "consumer3", ut_get_consumer_rack(1, parametrization),
+            parametrization, "topic4", "topic5", "topic6", NULL);
         rd_kafka_topic_partition_list_destroy(members[2].rkgm_assignment);
         members[2].rkgm_assignment = rd_kafka_topic_partition_list_new(3);
         rd_kafka_topic_partition_list_add(members[2].rkgm_assignment, "topic4",
@@ -2836,9 +3430,112 @@ static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
 
         verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
 
-
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+
+/* The original version of this test diverged from the Java implementaion in
+ * what it was testing. It's not certain whether it was by mistake, or by
+ * design, but the new version matches the Java implementation, and the old one
+ * is retained as well, for extra coverage.
+ */
+static int
+ut_testStickiness_j(rd_kafka_t *rk,
+                    const rd_kafka_assignor_t *rkas,
+                    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[4];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+        rd_kafka_topic_partition_list_t *assignments[4] = RD_ZERO_INIT;
+        int fails                                       = 0;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[3], "consumer4",
+                                     ut_get_consumer_rack(3, parametrization),
+                                     parametrization, "topic1", NULL);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, member_cnt, metadata);
+
+        for (i = 0; i < member_cnt; i++) {
+                if (members[i].rkgm_assignment->cnt > 1) {
+                        RD_UT_WARN("%s assigned %d partitions, expected <= 1",
+                                   members[i].rkgm_member_id->str,
+                                   members[i].rkgm_assignment->cnt);
+                        fails++;
+                } else if (members[i].rkgm_assignment->cnt == 1) {
+                        assignments[i] = rd_kafka_topic_partition_list_copy(
+                            members[i].rkgm_assignment);
+                }
+        }
+
+        /*
+         * Remove potential group leader consumer1, by starting members at
+         * index 1.
+         * Owned partitions of the members are already set to the assignment by
+         * verifyValidityAndBalance above to simulate the fact that the assignor
+         * has already run once.
+         */
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, &members[1],
+                                    member_cnt - 1, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(&members[1], member_cnt - 1, metadata);
+        // FIXME: isSticky()
+
+        for (i = 1; i < member_cnt; i++) {
+                if (members[i].rkgm_assignment->cnt != 1) {
+                        RD_UT_WARN("%s assigned %d partitions, expected 1",
+                                   members[i].rkgm_member_id->str,
+                                   members[i].rkgm_assignment->cnt);
+                        fails++;
+                } else if (assignments[i] &&
+                           !rd_kafka_topic_partition_list_find(
+                               assignments[i],
+                               members[i].rkgm_assignment->elems[0].topic,
+                               members[i]
+                                   .rkgm_assignment->elems[0]
+                                   .partition)) {
+                        RD_UT_WARN(
+                            "Stickiness was not honored for %s, "
+                            "%s [%" PRId32 "] not in previous assignment",
+                            members[i].rkgm_member_id->str,
+                            members[i].rkgm_assignment->elems[0].topic,
+                            members[i].rkgm_assignment->elems[0].partition);
+                        fails++;
+                }
+        }
+
+        RD_UT_ASSERT(!fails, "See previous errors");
+
+
+        for (i = 0; i < member_cnt; i++) {
+                rd_kafka_group_member_clear(&members[i]);
+                if (assignments[i])
+                        rd_kafka_topic_partition_list_destroy(assignments[i]);
+        }
         rd_kafka_metadata_destroy(metadata);
 
         RD_UT_PASS();
@@ -2848,7 +3545,10 @@ static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
 /**
  * @brief Verify stickiness across three rebalances.
  */
-static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
+static int
+ut_testStickiness2(rd_kafka_t *rk,
+                   const rd_kafka_assignor_t *rkas,
+                   rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -2856,11 +3556,19 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 6);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 6);
 
-        ut_init_member(&members[0], "consumer1", "topic1", NULL);
-        ut_init_member(&members[1], "consumer2", "topic1", NULL);
-        ut_init_member(&members[2], "consumer3", "topic1", NULL);
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic1", NULL);
 
         /* Just consumer1 */
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members, 1,
@@ -2928,18 +3636,22 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
 }
 
 
-static int
-ut_testAssignmentUpdatedForDeletedTopic(rd_kafka_t *rk,
-                                        const rd_kafka_assignor_t *rkas) {
+static int ut_testAssignmentUpdatedForDeletedTopic(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        metadata =
-            rd_kafka_metadata_new_topic_mockv(2, "topic1", 1, "topic3", 100);
-        ut_init_member(&members[0], "consumer1", "topic1", "topic2", "topic3",
-                       NULL);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 1, "topic3", 100);
+
+        ut_initMemberConditionalRack(
+            &members[0], "consumer1", ut_get_consumer_rack(0, parametrization),
+            parametrization, "topic1", "topic2", "topic3", NULL);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -2962,16 +3674,21 @@ ut_testAssignmentUpdatedForDeletedTopic(rd_kafka_t *rk,
 
 static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
     rd_kafka_t *rk,
-    const rd_kafka_assignor_t *rkas) {
-
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
 
-        ut_init_member(&members[0], "consumer1", "topic", NULL);
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
                                     RD_ARRAYSIZE(members), errstr,
@@ -3002,9 +3719,10 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
 }
 
 
-static int
-ut_testConflictingPreviousAssignments(rd_kafka_t *rk,
-                                      const rd_kafka_assignor_t *rkas) {
+static int ut_testConflictingPreviousAssignments(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
@@ -3013,6 +3731,8 @@ ut_testConflictingPreviousAssignments(rd_kafka_t *rk,
         int i;
 
         // FIXME: removed from Java test suite, and fails for us, why, why?
+        // NOTE: rack-awareness changes aren't made to this test because of
+        // the FIXME above.
         RD_UT_PASS();
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 2);
@@ -3066,13 +3786,882 @@ ut_testConflictingPreviousAssignments(rd_kafka_t *rk,
  * from Java since random tests don't provide meaningful test coverage. */
 
 
+static int ut_testAllConsumersReachExpectedQuotaAndAreConsideredFilled(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[3];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 4);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], 1 /* generation */, 2, "topic1", 0, "topic1", 1);
+
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], 1 /* generation */, 1, "topic1", 2);
+
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic1", NULL);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
+        verifyAssignment(&members[0], "topic1", 0, "topic1", 1, NULL);
+        verifyAssignment(&members[1], "topic1", 2, NULL);
+        verifyAssignment(&members[2], "topic1", 3, NULL);
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+
+static int ut_testOwnedPartitionsAreInvalidatedForConsumerWithStaleGeneration(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[2];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+        int current_generation = 10;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 3, "topic2", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], current_generation, 3, "topic1", 0, "topic1", 2,
+            "topic2", 1);
+
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], current_generation - 1, 3, "topic1", 0, "topic1", 2,
+            "topic2", 1);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
+        verifyAssignment(&members[0], "topic1", 0, "topic1", 2, "topic2", 1,
+                         NULL);
+        verifyAssignment(&members[1], "topic1", 1, "topic2", 0, "topic2", 2,
+                         NULL);
+
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+static int ut_testOwnedPartitionsAreInvalidatedForConsumerWithNoGeneration(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[2];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+        int current_generation = 10;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 3, "topic2", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], current_generation, 3, "topic1", 0, "topic1", 2,
+            "topic2", 1);
+
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], -1 /* default generation*/, 3, "topic1", 0, "topic1",
+            2, "topic2", 1);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
+        verifyAssignment(&members[0], "topic1", 0, "topic1", 2, "topic2", 1,
+                         NULL);
+        verifyAssignment(&members[1], "topic1", 1, "topic2", 0, "topic2", 2,
+                         NULL);
+
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+static int
+ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsumersInSameGeneration(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[3];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
+
+        // partition topic-0 is owned by multiple consumers
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], 1 /* generation */, 2, "topic1", 0, "topic1", 1);
+
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], 1 /* generation */, 2, "topic1", 0, "topic1", 2);
+
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic1", NULL);
+
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
+        verifyAssignment(&members[0], "topic1", 1, NULL);
+        verifyAssignment(&members[1], "topic1", 2, NULL);
+        verifyAssignment(&members[2], "topic1", 0, NULL);
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+
+/* In Java, there is a way to check what partition transferred ownership.
+ * We don't have anything like that for our UTs, so in lieue of that, this
+ * test is added along with the previous test to make sure that we move the
+ * right partition. Our solution in case of two consumers owning the same
+ * partitions with the same generation id was differing from the Java
+ * implementation earlier. (Check #PR. TODO: - add PR number once present.) */
+static int
+ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsumersInSameGeneration2(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[3];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "topic1", 3);
+
+        // partition topic-0 is owned by multiple consumers
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], 1 /* generation */, 2, "topic1", 0, "topic1", 1);
+
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], 1 /* generation */, 2, "topic1", 1, "topic1", 2);
+
+        ut_initMemberConditionalRack(&members[2], "consumer3",
+                                     ut_get_consumer_rack(2, parametrization),
+                                     parametrization, "topic1", NULL);
+
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
+        verifyAssignment(&members[0], "topic1", 0, NULL);
+        verifyAssignment(&members[1], "topic1", 2, NULL);
+        verifyAssignment(&members[2], "topic1", 1, NULL);
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+
+static int ut_testEnsurePartitionsAssignedToHighestGeneration(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[3];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+        int currentGeneration = 10;
+
+        ut_initMetadataConditionalRack(
+            &metadata, 3, 3, ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS),
+            parametrization, 3, "topic1", 3, "topic2", 3, "topic3", 3);
+
+        ut_initMemberConditionalRack(
+            &members[0], "consumer1", ut_get_consumer_rack(0, parametrization),
+            parametrization, "topic1", "topic2", "topic3", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], currentGeneration, 3, "topic1", 0, "topic2", 0,
+            "topic3", 0);
+
+
+        ut_initMemberConditionalRack(
+            &members[1], "consumer2", ut_get_consumer_rack(1, parametrization),
+            parametrization, "topic1", "topic2", "topic3", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], currentGeneration - 1, 3, "topic1", 1, "topic2", 1,
+            "topic3", 1);
+
+
+        ut_initMemberConditionalRack(
+            &members[2], "consumer3", ut_get_consumer_rack(2, parametrization),
+            parametrization, "topic1", "topic2", "topic3", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[2], currentGeneration - 2, 3, "topic2", 1, "topic3", 0,
+            "topic3", 2);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+        verifyAssignment(&members[0], "topic1", 0, "topic2", 0, "topic3", 0,
+                         NULL);
+        verifyAssignment(&members[1], "topic1", 1, "topic2", 1, "topic3", 1,
+                         NULL);
+        verifyAssignment(&members[2], "topic1", 2, "topic2", 2, "topic3", 2,
+                         NULL);
+
+        verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+
+static int ut_testNoReassignmentOnCurrentMembers(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[4];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+        int currentGeneration = 10;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       4, "topic0", 3, "topic1", 3, "topic2", 3,
+                                       "topic3", 3);
+
+        ut_initMemberConditionalRack(
+            &members[0], "consumer1", ut_get_consumer_rack(0, parametrization),
+            parametrization, "topic0", "topic1", "topic2", "topic3", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], -1 /* default generation */, 0);
+
+        ut_initMemberConditionalRack(
+            &members[1], "consumer2", ut_get_consumer_rack(1, parametrization),
+            parametrization, "topic0", "topic1", "topic2", "topic3", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], currentGeneration - 1, 3, "topic0", 0, "topic2", 0,
+            "topic1", 0);
+
+        ut_initMemberConditionalRack(
+            &members[2], "consumer3", ut_get_consumer_rack(2, parametrization),
+            parametrization, "topic0", "topic1", "topic2", "topic3", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[2], currentGeneration - 2, 3, "topic3", 2, "topic2", 2,
+            "topic1", 1);
+
+        ut_initMemberConditionalRack(
+            &members[3], "consumer4", ut_get_consumer_rack(3, parametrization),
+            parametrization, "topic0", "topic1", "topic2", "topic3", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[3], currentGeneration - 3, 3, "topic3", 1, "topic0", 1,
+            "topic0", 2);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, member_cnt, metadata);
+        verifyAssignment(&members[0], "topic1", 2, "topic2", 1, "topic3", 0,
+                         NULL);
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+
+static int
+ut_testOwnedPartitionsAreInvalidatedForConsumerWithMultipleGeneration(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        rd_kafka_group_member_t members[2];
+        int member_cnt = RD_ARRAYSIZE(members);
+        int i;
+        int currentGeneration = 10;
+
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "topic1", 3, "topic2", 3);
+
+        ut_initMemberConditionalRack(&members[0], "consumer1",
+                                     ut_get_consumer_rack(0, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[0], currentGeneration, 3, "topic1", 0, "topic2", 1,
+            "topic1", 1);
+
+        ut_initMemberConditionalRack(&members[1], "consumer2",
+                                     ut_get_consumer_rack(1, parametrization),
+                                     parametrization, "topic1", "topic2", NULL);
+        ut_populate_member_owned_partitions_generation(
+            &members[1], currentGeneration - 2, 3, "topic1", 0, "topic2", 1,
+            "topic2", 2);
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        verifyValidityAndBalance(members, member_cnt, metadata);
+        verifyAssignment(&members[0], "topic1", 0, "topic2", 1, "topic1", 1,
+                         NULL);
+        verifyAssignment(&members[1], "topic1", 2, "topic2", 2, "topic2", 0,
+                         NULL);
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_group_member_clear(&members[i]);
+        rd_kafka_metadata_destroy(metadata);
+
+        RD_UT_PASS();
+}
+
+/* Helper for setting up metadata and members, and running the assignor, and
+ * verifying validity and balance of the assignment. Does not check the results
+ * of the assignment on a per member basis..
+ *
+ * FIXME: This does not contain the check for numPartitionsWithRackMismatch
+ * unlike the AbstractStickyAssignorTest.java. */
+static int
+setupRackAwareAssignment(rd_kafka_t *rk,
+                         const rd_kafka_assignor_t *rkas,
+                         rd_kafka_group_member_t *members,
+                         size_t member_cnt,
+                         int replication_factor,
+                         int num_broker_racks,
+                         size_t topic_cnt,
+                         char *topics[],
+                         int *partitions,
+                         int *subscriptions_count,
+                         char **subscriptions[],
+                         int *consumer_racks,
+                         rd_kafka_topic_partition_list_t **owned_tp_list,
+                         rd_bool_t initialize_members) {
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_metadata_t *metadata;
+        size_t i              = 0;
+        const int num_brokers = num_broker_racks > 0
+                                    ? replication_factor * num_broker_racks
+                                    : replication_factor;
+
+        /* The member naming for tests is consumerN where N is a single
+         * character. */
+        rd_assert(member_cnt <= 9);
+
+        metadata = rd_kafka_metadata_new_topic_with_partition_replicas_mock(
+            replication_factor, num_brokers, topics, partitions, topic_cnt);
+        ut_populate_internal_broker_metadata(
+            (rd_kafka_metadata_internal_t *)metadata, num_broker_racks,
+            ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS));
+
+        for (i = 0; initialize_members && i < member_cnt; i++) {
+                char member_id[10];
+                snprintf(member_id, 10, "consumer%d", (int)(i + 1));
+                ut_init_member_with_rack(
+                    &members[i], member_id, ALL_RACKS[consumer_racks[i]],
+                    subscriptions[i], subscriptions_count[i]);
+
+                if (!owned_tp_list || !owned_tp_list[i])
+                        continue;
+
+                if (members[i].rkgm_owned)
+                        rd_kafka_topic_partition_list_destroy(
+                            members[i].rkgm_owned);
+
+                members[i].rkgm_owned =
+                    rd_kafka_topic_partition_list_copy(owned_tp_list[i]);
+        }
+
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
+        RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
+
+        /* Note that verifyValidityAndBalance also sets rkgm_owned for each
+         * member to rkgm_assignment, so if the members are used without
+         * clearing, in another assignor_run, the result should be stable. */
+        verifyValidityAndBalance(members, member_cnt, metadata);
+        rd_kafka_metadata_destroy(metadata);
+        return 0;
+}
+
+/* Helper for testing cases where rack-aware assignment should not be triggered,
+ * and assignment should be the same as the pre-rack-aware assignor. Each case
+ * is run twice, once with owned partitions set to empty, and in the second
+ * case, with owned partitions set to the result of the previous run, to check
+ * that the assignment is stable. */
+#define verifyNonRackAwareAssignment(rk, rkas, members, member_cnt, topic_cnt, \
+                                     topics, partitions, subscriptions_count,  \
+                                     subscriptions, ...)                       \
+        do {                                                                   \
+                size_t idx       = 0;                                          \
+                int init_members = 1;                                          \
+                                                                               \
+                /* num_broker_racks = 0, implies that brokers have no          \
+                 * configured racks. */                                        \
+                for (init_members = 1; init_members >= 0; init_members--) {    \
+                        setupRackAwareAssignment(                              \
+                            rk, rkas, members, member_cnt, 3, 0, topic_cnt,    \
+                            topics, partitions, subscriptions_count,           \
+                            subscriptions, RACKS_INITIAL, NULL, init_members); \
+                        verifyMultipleAssignment(members, member_cnt,          \
+                                                 __VA_ARGS__);                 \
+                }                                                              \
+                for (idx = 0; idx < member_cnt; idx++)                         \
+                        rd_kafka_group_member_clear(&members[idx]);            \
+                /* consumer_racks = RACKS_NULL implies that consumers have no  \
+                 * racks. */                                                   \
+                for (init_members = 1; init_members >= 0; init_members--) {    \
+                        setupRackAwareAssignment(                              \
+                            rk, rkas, members, member_cnt, 3, 3, topic_cnt,    \
+                            topics, partitions, subscriptions_count,           \
+                            subscriptions, RACKS_NULL, NULL, init_members);    \
+                        verifyMultipleAssignment(members, member_cnt,          \
+                                                 __VA_ARGS__);                 \
+                }                                                              \
+                for (idx = 0; idx < member_cnt; idx++)                         \
+                        rd_kafka_group_member_clear(&members[idx]);            \
+                /* replication_factor = 3 and num_broker_racks = 3 means that  \
+                 * all partitions are replicated on all racks.*/               \
+                for (init_members = 1; init_members >= 0; init_members--) {    \
+                        setupRackAwareAssignment(                              \
+                            rk, rkas, members, member_cnt, 3, 3, topic_cnt,    \
+                            topics, partitions, subscriptions_count,           \
+                            subscriptions, RACKS_INITIAL, NULL, init_members); \
+                        verifyMultipleAssignment(members, member_cnt,          \
+                                                 __VA_ARGS__);                 \
+                }                                                              \
+                for (idx = 0; idx < member_cnt; idx++)                         \
+                        rd_kafka_group_member_clear(&members[idx]);            \
+                /* replication_factor = 4 and num_broker_racks = 4 means that  \
+                 * all partitions are replicated on all racks. */              \
+                for (init_members = 1; init_members >= 0; init_members--) {    \
+                        setupRackAwareAssignment(                              \
+                            rk, rkas, members, member_cnt, 4, 4, topic_cnt,    \
+                            topics, partitions, subscriptions_count,           \
+                            subscriptions, RACKS_INITIAL, NULL, init_members); \
+                        verifyMultipleAssignment(members, member_cnt,          \
+                                                 __VA_ARGS__);                 \
+                }                                                              \
+                for (idx = 0; idx < member_cnt; idx++)                         \
+                        rd_kafka_group_member_clear(&members[idx]);            \
+                /* There's no overap between broker racks and consumer racks,  \
+                 * since num_broker_racks = 3, they'll be picked from a,b,c    \
+                 * and consumer racks are d,e,f. */                            \
+                for (init_members = 1; init_members >= 0; init_members--) {    \
+                        setupRackAwareAssignment(                              \
+                            rk, rkas, members, member_cnt, 3, 3, topic_cnt,    \
+                            topics, partitions, subscriptions_count,           \
+                            subscriptions, RACKS_FINAL, NULL, init_members);   \
+                        verifyMultipleAssignment(members, member_cnt,          \
+                                                 __VA_ARGS__);                 \
+                }                                                              \
+                for (idx = 0; idx < member_cnt; idx++)                         \
+                        rd_kafka_group_member_clear(&members[idx]);            \
+                /* There's no overap between broker racks and consumer racks,  \
+                 * since num_broker_racks = 3, they'll be picked from a,b,c    \
+                 * and consumer racks are d,e,NULL. */                         \
+                for (init_members = 1; init_members >= 0; init_members--) {    \
+                        setupRackAwareAssignment(                              \
+                            rk, rkas, members, member_cnt, 3, 3, topic_cnt,    \
+                            topics, partitions, subscriptions_count,           \
+                            subscriptions, RACKS_ONE_NULL, NULL,               \
+                            init_members);                                     \
+                        verifyMultipleAssignment(members, member_cnt,          \
+                                                 __VA_ARGS__);                 \
+                }                                                              \
+                for (idx = 0; idx < member_cnt; idx++)                         \
+                        rd_kafka_group_member_clear(&members[idx]);            \
+        } while (0)
+
+
+static int ut_testRackAwareAssignmentWithUniformSubscription(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        char *topics[]   = {"t1", "t2", "t3"};
+        int partitions[] = {6, 7, 2};
+        rd_kafka_group_member_t members[3];
+        size_t member_cnt         = RD_ARRAYSIZE(members);
+        size_t i                  = 0;
+        int subscriptions_count[] = {3, 3, 3};
+        char **subscriptions[]    = {topics, topics, topics};
+        int init_members          = 0;
+        rd_kafka_topic_partition_list_t **owned;
+
+        if (parametrization !=
+            RD_KAFKA_RANGE_ASSIGNOR_UT_BROKER_AND_CONSUMER_RACK) {
+                RD_UT_PASS();
+        }
+
+        verifyNonRackAwareAssignment(
+            rk, rkas, members, RD_ARRAYSIZE(members), RD_ARRAYSIZE(topics),
+            topics, partitions, subscriptions_count, subscriptions,
+            /* consumer1 */
+            "t1", 0, "t1", 3, "t2", 0, "t2", 3, "t2", 6, NULL,
+            /* consumer2 */
+            "t1", 1, "t1", 4, "t2", 1, "t2", 4, "t3", 0, NULL,
+            /* consumer3 */
+            "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
+
+        /* Verify assignment is rack-aligned for lower replication factor where
+         * brokers have a subset of partitions */
+        for (init_members = 1; init_members >= 0; init_members--) {
+                setupRackAwareAssignment(
+                    rk, rkas, members, RD_ARRAYSIZE(members), 1, 3,
+                    RD_ARRAYSIZE(topics), topics, partitions,
+                    subscriptions_count, subscriptions, RACKS_INITIAL, NULL,
+                    init_members);
+                verifyMultipleAssignment(
+                    members, RD_ARRAYSIZE(members),
+                    /* consumer1 */
+                    "t1", 0, "t1", 3, "t2", 0, "t2", 3, "t2", 6, NULL,
+                    /* consumer2 */
+                    "t1", 1, "t1", 4, "t2", 1, "t2", 4, "t3", 0, NULL,
+                    /* consumer3 */
+                    "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
+        }
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+
+
+        for (init_members = 1; init_members >= 0; init_members--) {
+                setupRackAwareAssignment(
+                    rk, rkas, members, RD_ARRAYSIZE(members), 2, 3,
+                    RD_ARRAYSIZE(topics), topics, partitions,
+                    subscriptions_count, subscriptions, RACKS_INITIAL, NULL,
+                    init_members);
+                verifyMultipleAssignment(
+                    members, RD_ARRAYSIZE(members),
+                    /* consumer1 */
+                    "t1", 0, "t1", 3, "t2", 0, "t2", 3, "t2", 6, NULL,
+                    /* consumer2 */
+                    "t1", 1, "t1", 4, "t2", 1, "t2", 4, "t3", 0, NULL,
+                    /* consumer3 */
+                    "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
+        }
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+
+        /* One consumer on a rack with no partitions. We allocate with
+         * misaligned rack to this consumer to maintain balance. */
+        for (init_members = 1; init_members >= 0; init_members--) {
+                setupRackAwareAssignment(
+                    rk, rkas, members, RD_ARRAYSIZE(members), 3, 2,
+                    RD_ARRAYSIZE(topics), topics, partitions,
+                    subscriptions_count, subscriptions, RACKS_INITIAL, NULL,
+                    init_members);
+                verifyMultipleAssignment(
+                    members, RD_ARRAYSIZE(members),
+                    /* consumer1 */
+                    "t1", 0, "t1", 3, "t2", 0, "t2", 3, "t2", 6, NULL,
+                    /* consumer2 */
+                    "t1", 1, "t1", 4, "t2", 1, "t2", 4, "t3", 0, NULL,
+                    /* consumer3 */
+                    "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
+        }
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+
+        /* Verify that rack-awareness is improved if already owned partitions
+         * are misaligned */
+        owned = ut_create_topic_partition_lists(
+            3,
+            /* consumer1 */
+            "t1", 0, "t1", 1, "t1", 2, "t1", 3, "t1", 4, NULL,
+            /* consumer2 */
+            "t1", 5, "t2", 0, "t2", 1, "t2", 2, "t2", 3, NULL,
+            /* consumer3 */
+            "t2", 4, "t2", 5, "t2", 6, "t3", 0, "t3", 1, NULL);
+
+        setupRackAwareAssignment(rk, rkas, members, RD_ARRAYSIZE(members), 1, 3,
+                                 RD_ARRAYSIZE(topics), topics, partitions,
+                                 subscriptions_count, subscriptions,
+                                 RACKS_INITIAL, owned, rd_true);
+        verifyMultipleAssignment(
+            members, RD_ARRAYSIZE(members),
+            /* consumer1 */
+            "t1", 0, "t1", 3, "t2", 0, "t2", 3, "t2", 6, NULL,
+            /* consumer2 */
+            "t1", 1, "t1", 4, "t2", 1, "t2", 4, "t3", 0, NULL,
+            /* consumer3 */
+            "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
+
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_topic_partition_list_destroy(owned[i]);
+        rd_free(owned);
+
+
+        /* Verify that stickiness is retained when racks match */
+        owned = ut_create_topic_partition_lists(
+            3,
+            /* consumer1 */
+            "t1", 0, "t1", 3, "t2", 0, "t2", 3, "t2", 6, NULL,
+            /* consumer2 */
+            "t1", 1, "t1", 4, "t2", 1, "t2", 4, "t3", 0, NULL,
+            /* consumer3 */
+            "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
+
+        /* This test deviates slightly from Java, in that we test with two
+         * additional replication factors, 1 and 2, which are not tested in
+         * Java. This is because in Java, there is a way to turn rack aware
+         * logic on or off for tests. We don't have that, and to test with rack
+         * aware logic, we need to change something, in this case, the
+         * replication factor. */
+        for (i = 1; i <= 3; i++) {
+                setupRackAwareAssignment(
+                    rk, rkas, members, RD_ARRAYSIZE(members),
+                    i /* replication factor */, 3, RD_ARRAYSIZE(topics), topics,
+                    partitions, subscriptions_count, subscriptions,
+                    RACKS_INITIAL, owned, rd_true);
+                verifyMultipleAssignment(
+                    members, RD_ARRAYSIZE(members),
+                    /* consumer1 */
+                    "t1", 0, "t1", 3, "t2", 0, "t2", 3, "t2", 6, NULL,
+                    /* consumer2 */
+                    "t1", 1, "t1", 4, "t2", 1, "t2", 4, "t3", 0, NULL,
+                    /* consumer3 */
+                    "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
+
+                for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                        rd_kafka_group_member_clear(&members[i]);
+        }
+
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_topic_partition_list_destroy(owned[i]);
+        rd_free(owned);
+
+        RD_UT_PASS();
+}
+
+
+static int ut_testRackAwareAssignmentWithNonEqualSubscription(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    rd_kafka_assignor_ut_rack_config_t parametrization) {
+        char *topics[]   = {"t1", "t2", "t3"};
+        char *topics0[]  = {"t1", "t3"};
+        int partitions[] = {6, 7, 2};
+        rd_kafka_group_member_t members[3];
+        size_t member_cnt         = RD_ARRAYSIZE(members);
+        size_t i                  = 0;
+        int subscriptions_count[] = {3, 3, 2};
+        char **subscriptions[]    = {topics, topics, topics0};
+        int with_owned            = 0;
+        rd_kafka_topic_partition_list_t **owned;
+
+        if (parametrization !=
+            RD_KAFKA_RANGE_ASSIGNOR_UT_BROKER_AND_CONSUMER_RACK) {
+                RD_UT_PASS();
+        }
+
+        verifyNonRackAwareAssignment(
+            rk, rkas, members, RD_ARRAYSIZE(members), RD_ARRAYSIZE(topics),
+            topics, partitions, subscriptions_count, subscriptions, "t1", 5,
+            "t2", 0, "t2", 2, "t2", 4, "t2", 6, NULL,
+            /* consumer2 */
+            "t1", 3, "t2", 1, "t2", 3, "t2", 5, "t3", 0, NULL,
+            /* consumer3 */
+            "t1", 0, "t1", 1, "t1", 2, "t1", 4, "t3", 1, NULL);
+
+        // Verify assignment is rack-aligned for lower replication factor where
+        // brokers have a subset of partitions
+        for (with_owned = 0; with_owned <= 1; with_owned++) {
+                setupRackAwareAssignment(
+                    rk, rkas, members, RD_ARRAYSIZE(members), 1, 3,
+                    RD_ARRAYSIZE(topics), topics, partitions,
+                    subscriptions_count, subscriptions, RACKS_INITIAL, NULL,
+                    !with_owned);
+                verifyMultipleAssignment(
+                    members, RD_ARRAYSIZE(members),
+                    /* consumer1 */
+                    "t1", 3, "t2", 0, "t2", 2, "t2", 3, "t2", 6, NULL,
+                    /* consumer2 */
+                    "t1", 4, "t2", 1, "t2", 4, "t2", 5, "t3", 0, NULL,
+                    /* consumer3 */
+                    "t1", 0, "t1", 1, "t1", 2, "t1", 5, "t3", 1, NULL);
+        }
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+
+
+
+        for (with_owned = 0; with_owned <= 1; with_owned++) {
+                setupRackAwareAssignment(
+                    rk, rkas, members, RD_ARRAYSIZE(members), 2, 3,
+                    RD_ARRAYSIZE(topics), topics, partitions,
+                    subscriptions_count, subscriptions, RACKS_INITIAL, NULL,
+                    !with_owned);
+                verifyMultipleAssignment(
+                    members, RD_ARRAYSIZE(members),
+                    /* consumer1 */
+                    "t1", 3, "t2", 0, "t2", 2, "t2", 5, "t2", 6, NULL,
+                    /* consumer2 */
+                    "t1", 0, "t2", 1, "t2", 3, "t2", 4, "t3", 0, NULL,
+                    /* consumer3 */
+                    "t1", 1, "t1", 2, "t1", 4, "t1", 5, "t3", 1, NULL);
+        }
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+
+        /* One consumer on a rack with no partitions. We allocate with
+         * misaligned rack to this consumer to maintain balance. */
+        for (with_owned = 0; with_owned <= 1; with_owned++) {
+                setupRackAwareAssignment(
+                    rk, rkas, members, RD_ARRAYSIZE(members), 3, 2,
+                    RD_ARRAYSIZE(topics), topics, partitions,
+                    subscriptions_count, subscriptions, RACKS_INITIAL, NULL,
+                    !with_owned);
+                verifyMultipleAssignment(
+                    members, RD_ARRAYSIZE(members),
+                    /* consumer1 */
+                    "t1", 5, "t2", 0, "t2", 2, "t2", 4, "t2", 6, NULL,
+                    /* consumer2 */
+                    "t1", 3, "t2", 1, "t2", 3, "t2", 5, "t3", 0, NULL,
+                    /* consumer3 */
+                    "t1", 0, "t1", 1, "t1", 2, "t1", 4, "t3", 1, NULL);
+        }
+
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+
+        /* Verify that rack-awareness is improved if already owned partitions
+         * are misaligned. */
+        owned = ut_create_topic_partition_lists(
+            3,
+            /* consumer1 */
+            "t1", 0, "t1", 1, "t1", 2, "t1", 3, "t1", 4, NULL,
+            /* consumer2 */
+            "t1", 5, "t2", 0, "t2", 1, "t2", 2, "t2", 3, NULL,
+            /* consumer3 */
+            "t2", 4, "t2", 5, "t2", 6, "t3", 0, "t3", 1, NULL);
+
+        setupRackAwareAssignment(rk, rkas, members, RD_ARRAYSIZE(members), 1, 3,
+                                 RD_ARRAYSIZE(topics), topics, partitions,
+                                 subscriptions_count, subscriptions,
+                                 RACKS_INITIAL, owned, rd_true);
+        verifyMultipleAssignment(
+            members, RD_ARRAYSIZE(members),
+            /* consumer1 */
+            "t1", 3, "t2", 0, "t2", 2, "t2", 3, "t2", 6, NULL,
+            /* consumer2 */
+            "t1", 4, "t2", 1, "t2", 4, "t2", 5, "t3", 0, NULL,
+            /* consumer3 */
+            "t1", 0, "t1", 1, "t1", 2, "t1", 5, "t3", 1, NULL);
+
+        for (i = 0; i < RD_ARRAYSIZE(members); i++)
+                rd_kafka_group_member_clear(&members[i]);
+        for (i = 0; i < member_cnt; i++)
+                rd_kafka_topic_partition_list_destroy(owned[i]);
+        rd_free(owned);
+
+        /* One of the Java tests is skipped here, which tests if the rack-aware
+         * logic assigns the same partitions as non-rack aware logic. This is
+         * because we don't have a way to force rack-aware logic like the Java
+         * assignor. */
+        RD_UT_PASS();
+}
+
 static int rd_kafka_sticky_assignor_unittest(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         int fails = 0;
         char errstr[256];
         rd_kafka_assignor_t *rkas;
-        static int (*tests[])(rd_kafka_t *, const rd_kafka_assignor_t *) = {
+        static int (*tests[])(
+            rd_kafka_t *, const rd_kafka_assignor_t *,
+            rd_kafka_assignor_ut_rack_config_t parametrization) = {
             ut_testOneConsumerNoTopic,
             ut_testOneConsumerNonexistentTopic,
             ut_testOneConsumerOneTopic,
@@ -3091,14 +4680,26 @@ static int rd_kafka_sticky_assignor_unittest(void) {
             ut_testLargeAssignmentWithMultipleConsumersLeaving,
             ut_testNewSubscription,
             ut_testMoveExistingAssignments,
+            ut_testMoveExistingAssignments_j,
             ut_testStickiness,
+            ut_testStickiness_j,
             ut_testStickiness2,
             ut_testAssignmentUpdatedForDeletedTopic,
             ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted,
             ut_testConflictingPreviousAssignments,
+            ut_testAllConsumersReachExpectedQuotaAndAreConsideredFilled,
+            ut_testOwnedPartitionsAreInvalidatedForConsumerWithStaleGeneration,
+            ut_testOwnedPartitionsAreInvalidatedForConsumerWithNoGeneration,
+            ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsumersInSameGeneration,
+            ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsumersInSameGeneration2,
+            ut_testEnsurePartitionsAssignedToHighestGeneration,
+            ut_testNoReassignmentOnCurrentMembers,
+            ut_testOwnedPartitionsAreInvalidatedForConsumerWithMultipleGeneration,
+            ut_testRackAwareAssignmentWithUniformSubscription,
+            ut_testRackAwareAssignmentWithNonEqualSubscription,
             NULL,
         };
-        int i;
+        size_t i;
 
 
         conf = rd_kafka_conf_new();
@@ -3118,18 +4719,34 @@ static int rd_kafka_sticky_assignor_unittest(void) {
         rkas = rd_kafka_assignor_find(rk, "cooperative-sticky");
         RD_UT_ASSERT(rkas, "sticky assignor not found");
 
+        for (i = 0; i < RD_ARRAY_SIZE(ALL_RACKS) - 1; i++) {
+                char c       = 'a' + i;
+                ALL_RACKS[i] = rd_kafkap_str_new(&c, 1);
+        }
+        ALL_RACKS[i] = NULL;
+
         for (i = 0; tests[i]; i++) {
                 rd_ts_t ts = rd_clock();
-                int r;
+                int r      = 0;
+                rd_kafka_assignor_ut_rack_config_t j;
 
-                RD_UT_SAY("[ Test #%d ]", i);
-                r = tests[i](rk, rkas);
-                RD_UT_SAY("[ Test #%d ran for %.3fms ]", i,
+                RD_UT_SAY("[ Test #%" PRIusz " ]", i);
+                for (j = RD_KAFKA_RANGE_ASSIGNOR_UT_NO_BROKER_RACK;
+                     j != RD_KAFKA_RANGE_ASSIGNOR_UT_CONFIG_CNT; j++) {
+                        RD_UT_SAY("[ Test #%" PRIusz ", RackConfig = %d ]", i,
+                                  j);
+                        r += tests[i](rk, rkas, j);
+                }
+                RD_UT_SAY("[ Test #%" PRIusz " ran for %.3fms ]", i,
                           (double)(rd_clock() - ts) / 1000.0);
 
                 RD_UT_ASSERT(!r, "^ failed");
 
                 fails += r;
+        }
+
+        for (i = 0; i < RD_ARRAY_SIZE(ALL_RACKS) - 1; i++) {
+                rd_kafkap_str_destroy(ALL_RACKS[i]);
         }
 
         rd_kafka_destroy(rk);

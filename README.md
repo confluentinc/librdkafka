@@ -59,6 +59,8 @@ On Mac OSX, install librdkafka with homebrew:
 $ brew install librdkafka
 ```
 
+<sub><sup>If you have trouble on Apple Silicone, please read [this](https://github.com/confluentinc/confluent-kafka-python/issues/1025#issuecomment-827675182)</sup></sub>
+
 On Debian and Ubuntu, install librdkafka from the Confluent APT repositories,
 see instructions [here](https://docs.confluent.io/current/installation/installing_cp/deb-ubuntu.html#get-the-software) and then install librdkafka:
 

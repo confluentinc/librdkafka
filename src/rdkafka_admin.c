@@ -6349,7 +6349,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                               char *errstr,
                                               size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
-        int nodeid;
+        int32_t nodeid;
         uint16_t port;
         int16_t api_version;
         int32_t cnt;

@@ -111,7 +111,7 @@ typedef struct rd_kafka_Node_s {
 } rd_kafka_Node_t;
 
 rd_kafka_Node_t *
-rd_kafka_Node_new(int id, const char *host, uint16_t port, const char *rack_id);
+rd_kafka_Node_new(int32_t id, const char *host, uint16_t port, const char *rack_id);
 
 rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
 

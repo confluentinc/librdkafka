@@ -1,3 +1,11 @@
+# librdkafka v2.2.0
+
+librdkafka v2.2.0 is a feature release.
+
+ * Allows setting debug contexts without recompilation by setting the
+   environment variable `RD_KAFKA_DEBUG`. It works only if no debug
+   contexts are set in the code.
+
 # librdkafka v2.1.1
 
 librdkafka v2.1.1 is a maintenance release:

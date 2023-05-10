@@ -243,6 +243,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         rd_kafka_fetch_pos_init(&rktp->rktp_query_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_next_fetch_start);
         rd_kafka_fetch_pos_init(&rktp->rktp_last_next_fetch_start);
+        rd_kafka_fetch_pos_init(&rktp->rktp_offset_validation_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_app_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_stored_pos);
         rd_kafka_fetch_pos_init(&rktp->rktp_committing_pos);
@@ -252,7 +253,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         mtx_init(&rktp->rktp_lock, mtx_plain);
 
         rd_refcnt_init(&rktp->rktp_refcnt, 0);
-        rktp->rktp_fetchq          = rd_kafka_q_new(rkt->rkt_rk);
+        rktp->rktp_fetchq          = rd_kafka_consume_q_new(rkt->rkt_rk);
         rktp->rktp_ops             = rd_kafka_q_new(rkt->rkt_rk);
         rktp->rktp_ops->rkq_serve  = rd_kafka_toppar_op_serve;
         rktp->rktp_ops->rkq_opaque = rktp;
@@ -359,9 +360,6 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
  * @locks_required rd_kafka_toppar_lock() MUST be held.
  */
 void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state) {
-        rd_kafka_assert(NULL,
-                        thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread));
-
         if ((int)rktp->rktp_fetch_state == fetch_state)
                 return;
 
@@ -1798,6 +1796,7 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
                 rd_kafka_toppar_set_fetch_state(
                     rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
                 rd_kafka_toppar_set_next_fetch_position(rktp, pos);
+                rd_kafka_toppar_set_offset_validation_position(rktp, pos);
                 rd_kafka_offset_validate(rktp, "seek");
         }
 

@@ -174,6 +174,13 @@ static void consumer_poll_once(rd_kafka_t *rk) {
                          rkmessage->partition, rkmessage->offset);
 
         } else if (rkmessage->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+                /* Test segfault associated with this call is solved */
+                int32_t leader_epoch = rd_kafka_message_leader_epoch(rkmessage);
+                TEST_ASSERT(leader_epoch == -1,
+                            "rd_kafka_message_leader_epoch should be -1"
+                            ", got %" PRId32,
+                            leader_epoch);
+
                 if (strstr(rd_kafka_topic_name(rkmessage->rkt), "NONEXIST"))
                         TEST_SAY("%s: %s: error is expected for this topic\n",
                                  rd_kafka_topic_name(rkmessage->rkt),

@@ -83,12 +83,15 @@ void rd_kafka_q_destroy_final(rd_kafka_q_t *rkq) {
  */
 void rd_kafka_q_init0(rd_kafka_q_t *rkq,
                       rd_kafka_t *rk,
+                      rd_bool_t for_consume,
                       const char *func,
                       int line) {
         rd_kafka_q_reset(rkq);
         rkq->rkq_fwdq   = NULL;
         rkq->rkq_refcnt = 1;
         rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
+        if (for_consume)
+                rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
         rkq->rkq_rk     = rk;
         rkq->rkq_qio    = NULL;
         rkq->rkq_serve  = NULL;
@@ -106,9 +109,15 @@ void rd_kafka_q_init0(rd_kafka_q_t *rkq,
 /**
  * Allocate a new queue and initialize it.
  */
-rd_kafka_q_t *rd_kafka_q_new0(rd_kafka_t *rk, const char *func, int line) {
+rd_kafka_q_t *rd_kafka_q_new0(rd_kafka_t *rk,
+                              rd_bool_t for_consume,
+                              const char *func,
+                              int line) {
         rd_kafka_q_t *rkq = rd_malloc(sizeof(*rkq));
-        rd_kafka_q_init(rkq, rk);
+        if (!for_consume)
+                rd_kafka_q_init(rkq, rk);
+        else
+                rd_kafka_consume_q_init(rkq, rk);
         rkq->rkq_flags |= RD_KAFKA_Q_F_ALLOCATED;
 #if ENABLE_DEVEL
         rd_snprintf(rkq->rkq_name, sizeof(rkq->rkq_name), "%s:%d", func, line);
@@ -116,6 +125,33 @@ rd_kafka_q_t *rd_kafka_q_new0(rd_kafka_t *rk, const char *func, int line) {
         rkq->rkq_name = func;
 #endif
         return rkq;
+}
+
+/*
+ * Sets the flag RD_KAFKA_Q_F_CONSUMER for rkq, any queues it's being forwarded
+ * to, recursively.
+ * Setting this flag indicates that polling this queue is equivalent to calling
+ * consumer poll, and will reset the max.poll.interval.ms timer. Only used
+ * internally when forwarding queues.
+ * @locks rd_kafka_q_lock(rkq)
+ */
+static void rd_kafka_q_consumer_propagate(rd_kafka_q_t *rkq) {
+        mtx_lock(&rkq->rkq_lock);
+        rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
+
+        if (!rkq->rkq_fwdq) {
+                mtx_unlock(&rkq->rkq_lock);
+                return;
+        }
+
+        /* Recursively propagate the flag to any queues rkq is already
+         * forwarding to. There will be a deadlock here if the queues are being
+         * forwarded circularly, but that is a user error. We can't resolve this
+         * deadlock by unlocking before the recursive call, because that leads
+         * to incorrectness if the rkq_fwdq is forwarded elsewhere and the old
+         * one destroyed between recursive calls. */
+        rd_kafka_q_consumer_propagate(rkq->rkq_fwdq);
+        mtx_unlock(&rkq->rkq_lock);
 }
 
 /**
@@ -152,6 +188,9 @@ void rd_kafka_q_fwd_set0(rd_kafka_q_t *srcq,
                 }
 
                 srcq->rkq_fwdq = destq;
+
+                if (srcq->rkq_flags & RD_KAFKA_Q_F_CONSUMER)
+                        rd_kafka_q_consumer_propagate(destq);
         }
         if (do_lock)
                 mtx_unlock(&srcq->rkq_lock);
@@ -610,6 +649,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rd_kafka_q_destroy(fwdq);
                 return cnt;
         }
+
         mtx_unlock(&rkq->rkq_lock);
 
         if (timeout_ms)

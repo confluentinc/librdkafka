@@ -219,7 +219,9 @@
     <ClCompile Include="..\..\tests\0136-resolve_cb.c" />
     <ClCompile Include="..\..\tests\0137-barrier_batch_consume.c" />
     <ClCompile Include="..\..\tests\0138-admin_mock.c" />
+    <ClCompile Include="..\..\tests\0139-offset_validation_mock.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
+    <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />
     <ClCompile Include="..\..\tests\rusage.c" />

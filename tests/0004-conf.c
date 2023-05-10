@@ -568,16 +568,13 @@ static void do_test_rd_kafka_debug_env_variable(void) {
         SUB_TEST_QUICK();
 
 #ifdef _WIN32
-        /* No setenv() support on windows. */
-        SUB_TEST_SKIP();
+        SUB_TEST_SKIP("No setenv() support on windows\n");
 #else
         for (i = 0; i < RD_ARRAYSIZE(values); i++) {
-                int use_non_env_value;
-                for (use_non_env_value = 0; use_non_env_value <= 1;
-                     use_non_env_value++) {
-                        testcase_rd_kafka_debug_env_variable(
-                            values[i], expect_fail[i], use_non_env_value);
-                }
+                testcase_rd_kafka_debug_env_variable(values[i], expect_fail[i],
+                                                     rd_false);
+                testcase_rd_kafka_debug_env_variable(values[i], expect_fail[i],
+                                                     rd_true);
         }
 
         /* Cleanup. */

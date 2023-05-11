@@ -1,3 +1,21 @@
+# librdkafka v2.1.2
+
+librdkafka v2.1.2 is a maintenance release:
+
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse (#4278).
+
+## Fixes
+
+### General fixes
+
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse. This is triggered since RPC version 9 (v2.1.0),
+   when using Confluent Platform, only when racks are set,
+   observers are activated and there is more than one partition.
+   Fixed by skipping the correct amount of bytes when tags are received.
+
+
 # librdkafka v2.1.1
 
 librdkafka v2.1.1 is a maintenance release:

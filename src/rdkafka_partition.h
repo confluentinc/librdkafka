@@ -897,6 +897,10 @@ void rd_kafka_topic_partition_set_from_fetch_pos(
     rd_kafka_topic_partition_t *rktpar,
     const rd_kafka_fetch_pos_t fetchpos);
 
+void rd_kafka_topic_partition_set_metadata_from_rktp_stored(
+    rd_kafka_topic_partition_t *rktpar,
+    const rd_kafka_toppar_t *rktp);
+
 static RD_UNUSED rd_kafka_fetch_pos_t rd_kafka_topic_partition_get_fetch_pos(
     const rd_kafka_topic_partition_t *rktpar) {
         rd_kafka_fetch_pos_t fetchpos = {

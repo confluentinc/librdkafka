@@ -341,13 +341,8 @@ static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
                  * so it will be committed below. */
                 rd_kafka_topic_partition_set_from_fetch_pos(
                     rktpar, rktp->rktp_stored_pos);
-                rktpar->metadata_size = rktp->rktp_stored_metadata_size;
-                if (rktp->rktp_stored_metadata) {
-                        rktpar->metadata =
-                            rd_malloc(rktp->rktp_stored_metadata_size);
-                        memcpy(rktpar->metadata, rktp->rktp_stored_metadata,
-                               rktp->rktp_stored_metadata_size);
-                }
+                rd_kafka_topic_partition_set_metadata_from_rktp_stored(rktpar,
+                                                                       rktp);
                 valid_offsets += !RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset);
 
                 /* Reset the stored offset to invalid so that

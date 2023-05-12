@@ -560,12 +560,7 @@ rd_kafka_offset_broker_commit(rd_kafka_toppar_t *rktp, const char *reason) {
 
         rd_kafka_topic_partition_set_from_fetch_pos(rktpar,
                                                     rktp->rktp_committing_pos);
-        rktpar->metadata_size = rktp->rktp_stored_metadata_size;
-        if (rktp->rktp_stored_metadata) {
-                rktpar->metadata = rd_malloc(rktp->rktp_stored_metadata_size);
-                memcpy(rktpar->metadata, rktp->rktp_stored_metadata,
-                       rktpar->metadata_size);
-        }
+        rd_kafka_topic_partition_set_metadata_from_rktp_stored(rktpar, rktp);
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSETCMT",
                      "%.*s [%" PRId32 "]: committing %s: %s",

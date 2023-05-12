@@ -415,7 +415,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_wait_coord_q             = rd_kafka_q_new(rk);
         rkcg->rkcg_wait_coord_q->rkq_serve  = rkcg->rkcg_ops->rkq_serve;
         rkcg->rkcg_wait_coord_q->rkq_opaque = rkcg->rkcg_ops->rkq_opaque;
-        rkcg->rkcg_q                        = rd_kafka_q_new(rk);
+        rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
 
@@ -1505,8 +1505,11 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
                 rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rkcg->rkcg_rk);
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
-        if (!(assignment = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, rd_false, rd_false)))
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        if (!(assignment =
+                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
                 goto err_parse;
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
 
@@ -1799,9 +1802,12 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
         rkgm->rkgm_userdata = rd_kafkap_bytes_copy(&UserData);
 
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         if (Version >= 1 &&
-            !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, rd_false, rd_false)))
+            !(rkgm->rkgm_owned =
+                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
                 goto err;
 
         rd_kafka_buf_destroy(rkbuf);
@@ -2726,6 +2732,10 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
  */
 static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
                                         rd_kafka_toppar_t *rktp) {
+        int cnt = 0, barrier_cnt = 0, message_cnt = 0, other_cnt = 0;
+        rd_kafka_op_t *rko;
+        rd_kafka_q_t *rkq;
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
                      "Group \"%s\": delete %s [%" PRId32 "]",
                      rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
@@ -2734,6 +2744,56 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
         rd_kafka_toppar_lock(rktp);
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
+
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE) {
+                /* Partition is being removed from the cluster and it's stopped,
+                 * so rktp->rktp_fetchq->rkq_fwdq is NULL.
+                 * Purge remaining operations in rktp->rktp_fetchq->rkq_q,
+                 * while holding lock, to avoid circular references */
+                rkq = rktp->rktp_fetchq;
+                mtx_lock(&rkq->rkq_lock);
+                rd_assert(!rkq->rkq_fwdq);
+
+                rko = TAILQ_FIRST(&rkq->rkq_q);
+                while (rko) {
+                        if (rko->rko_type != RD_KAFKA_OP_BARRIER &&
+                            rko->rko_type != RD_KAFKA_OP_FETCH) {
+                                rd_kafka_log(
+                                    rkcg->rkcg_rk, LOG_WARNING, "PARTDEL",
+                                    "Purging toppar fetch queue buffer op"
+                                    "with unexpected type: %s",
+                                    rd_kafka_op2str(rko->rko_type));
+                        }
+
+                        if (rko->rko_type == RD_KAFKA_OP_BARRIER)
+                                barrier_cnt++;
+                        else if (rko->rko_type == RD_KAFKA_OP_FETCH)
+                                message_cnt++;
+                        else
+                                other_cnt++;
+
+                        rko = TAILQ_NEXT(rko, rko_link);
+                        cnt++;
+                }
+
+                mtx_unlock(&rkq->rkq_lock);
+
+                if (cnt) {
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
+                                     "Purge toppar fetch queue buffer "
+                                     "containing %d op(s) "
+                                     "(%d barrier(s), %d message(s), %d other)"
+                                     " to avoid "
+                                     "circular references",
+                                     cnt, barrier_cnt, message_cnt, other_cnt);
+                        rd_kafka_q_purge(rktp->rktp_fetchq);
+                } else {
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
+                                     "Not purging toppar fetch queue buffer."
+                                     " No ops present in the buffer.");
+                }
+        }
+
         rd_kafka_toppar_unlock(rktp);
 
         rd_list_remove(&rkcg->rkcg_toppars, rktp);
@@ -2832,7 +2892,8 @@ static int rd_kafka_cgrp_update_committed_offsets(
                         continue;
 
                 rd_kafka_toppar_lock(rktp);
-                rktp->rktp_committed_offset = rktpar->offset;
+                rktp->rktp_committed_pos =
+                    rd_kafka_topic_partition_get_fetch_pos(rktpar);
                 rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_toppar_destroy(rktp); /* from get_toppar() */
@@ -3076,8 +3137,9 @@ static size_t rd_kafka_topic_partition_has_absolute_offset(
  *
  * \p rko...silent_empty: if there are no offsets to commit bail out
  *                        silently without posting an op on the reply queue.
- * \p set_offsets: set offsets in rko->rko_u.offset_commit.partitions from
- *                 the rktp's stored offset.
+ * \p set_offsets: set offsets and epochs in
+ *                 rko->rko_u.offset_commit.partitions from the rktp's
+ *                 stored offset.
  *
  * Locality: cgrp thread
  */
@@ -5300,9 +5362,7 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
                         result = rd_kafka_topic_partition_list_new(
                             rkcg->rkcg_group_assignment->cnt);
 
-                rd_kafka_topic_partition_list_add0(
-                    __FUNCTION__, __LINE__, result, curr->topic,
-                    curr->partition, curr->_private);
+                rd_kafka_topic_partition_list_add_copy(result, curr);
         }
 
         return result;

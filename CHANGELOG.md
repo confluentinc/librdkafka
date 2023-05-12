@@ -1,14 +1,126 @@
-# librdkafka v2.1.0
+# librdkafka v2.1.2
+
+librdkafka v2.1.2 is a maintenance release:
+
+ * Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
+
+# librdkafka v2.1.1
+
+librdkafka v2.1.1 is a maintenance release:
+
+ * Avoid duplicate messages when a fetch response is received
+   in the middle of an offset validation request (#4261).
+ * Fix segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
+ * Fix a segmentation fault when fetching from follower and the partition lease
+   expires while waiting for the result of a list offsets operation (#4254).
+ * Fix documentation for the admin request timeout, incorrectly stating -1 for infinite
+   timeout. That timeout can't be infinite.
+ * Fix CMake pkg-config cURL require and use
+   pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
+ * Fixes certain cases where polling would not keep the consumer
+   in the group or make it rejoin it (#4256).
+ * Fix to the C++ set_leader_epoch method of TopicPartitionImpl,
+   that wasn't storing the passed value (@pavel-pimenov, #4267).
+
+## Fixes
 
 ### Consumer fixes
 
-* Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request. Solved by avoiding
+   a restart from last application offset when offset validation succeeds.
+ * When fetching from follower, if the partition lease expires after 5 minutes,
+   and a list offsets operation was requested to retrieve the earliest
+   or latest offset, it resulted in segmentation fault. This was fixed by
+   allowing threads different from the main one to call
+   the `rd_kafka_toppar_set_fetch_state` function, given they hold
+   the lock on the `rktp`.
+ * In v2.1.0, a bug was fixed which caused polling any queue to reset the
+   `max.poll.interval.ms`. Only certain functions were made to reset the timer,
+   but it is possible for the user to obtain the queue with messages from
+   the broker, skipping these functions. This was fixed by encoding information
+   in a queue itself, that, whether polling, resets the timer.
+
+
+# librdkafka v2.1.0
+
+librdkafka v2.1.0 is a feature release:
+
+* [KIP-320](https://cwiki.apache.org/confluence/display/KAFKA/KIP-320%3A+Allow+fetchers+to+detect+and+handle+log+truncation)
+  Allow fetchers to detect and handle log truncation (#4122).
+* Fix a reference count issue blocking the consumer from closing (#4187).
+* Fix a protocol issue with ListGroups API, where an extra
+  field was appended for API Versions greater than or equal to 3 (#4207).
+* Fix an issue with `max.poll.interval.ms`, where polling any queue would cause
+  the timeout to be reset (#4176).
+* Fix seek partition timeout, was one thousand times lower than the passed
+  value (#4230).
+* Fix multiple inconsistent behaviour in batch APIs during **pause** or **resume** operations (#4208).
+  See **Consumer fixes** section below for more information.
+* Update lz4.c from upstream. Fixes [CVE-2021-3520](https://github.com/advisories/GHSA-gmc7-pqv9-966m)
+  (by @filimonov, #4232).
+* Upgrade OpenSSL to v3.0.8 with various security fixes,
+  check the [release notes](https://www.openssl.org/news/cl30.txt) (#4215).
+
+## Enhancements
+
+ * Added `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`).
+ * Added partition leader epoch APIs:
+   - `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`)
+   - `rd_kafka_message_leader_epoch()`
+   - `rd_kafka_*assign()` and `rd_kafka_seek_partitions()` now supports
+     partitions with a leader epoch set.
+   - `rd_kafka_offsets_for_times()` will return per-partition leader-epochs.
+   - `leader_epoch`, `stored_leader_epoch`, and `committed_leader_epoch`
+     added to per-partition statistics.
+
+
+## Fixes
+
+### OpenSSL fixes
+
+ * Fixed OpenSSL static build not able to use external modules like FIPS
+   provider module.
+
+### Consumer fixes
+
+ * A reference count issue was blocking the consumer from closing.
+   The problem would happen when a partition is lost, because forcibly
+   unassigned from the consumer or if the corresponding topic is deleted.
+ * When using `rd_kafka_seek_partitions`, the remaining timeout was
+   converted from microseconds to milliseconds but the expected unit
+   for that parameter is microseconds.
+ * Fixed known issues related to Batch Consume APIs mentioned in v2.0.0
+   release notes.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently updating `app_offset` and `store_offset` incorrectly when
+   **pause** or **resume** was being used for a partition.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently skipping offsets when **pause** or **resume** was being
+   used for a partition.
+
+
+## Known Issues
+
+### Consume Batch API
+
+ * When `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` APIs are used with
+   any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
+   interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
+
+### Consume API
+
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request.
+ * Segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage`.
 
 
 
 # librdkafka v2.0.2
 
-librdkafka v2.0.2 is a bugfix release:
+librdkafka v2.0.2 is a maintenance release:
 
 * Fix OpenSSL version in Win32 nuget package (#4152).
 
@@ -16,7 +128,7 @@ librdkafka v2.0.2 is a bugfix release:
 
 # librdkafka v2.0.1
 
-librdkafka v2.0.1 is a bugfix release:
+librdkafka v2.0.1 is a maintenance release:
 
 * Fixed nuget package for Linux ARM64 release (#4150).
 

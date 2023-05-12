@@ -39,16 +39,17 @@ extern const char *rd_kafka_fetch_states[];
  * @brief Offset statistics
  */
 struct offset_stats {
-        int64_t fetch_offset; /**< Next offset to fetch */
-        int64_t eof_offset;   /**< Last offset we reported EOF for */
+        rd_kafka_fetch_pos_t fetch_pos; /**< Next offset to fetch */
+        int64_t eof_offset;             /**< Last offset we reported EOF for */
 };
 
 /**
  * @brief Reset offset_stats struct to default values
  */
 static RD_UNUSED void rd_kafka_offset_stats_reset(struct offset_stats *offs) {
-        offs->fetch_offset = 0;
-        offs->eof_offset   = RD_KAFKA_OFFSET_INVALID;
+        offs->fetch_pos.offset       = 0;
+        offs->fetch_pos.leader_epoch = -1;
+        offs->eof_offset             = RD_KAFKA_OFFSET_INVALID;
 }
 
 
@@ -65,6 +66,59 @@ struct rd_kafka_toppar_err {
         int32_t last_seq;        /**< Idempotent Producer:
                                   *   last msg sequence */
 };
+
+
+
+/**
+ * @brief Fetchpos comparator, leader epoch has precedence.
+ */
+static RD_UNUSED RD_INLINE int
+rd_kafka_fetch_pos_cmp(const rd_kafka_fetch_pos_t *a,
+                       const rd_kafka_fetch_pos_t *b) {
+        if (a->leader_epoch < b->leader_epoch)
+                return -1;
+        else if (a->leader_epoch > b->leader_epoch)
+                return 1;
+        else if (a->offset < b->offset)
+                return -1;
+        else if (a->offset > b->offset)
+                return 1;
+        else
+                return 0;
+}
+
+
+static RD_UNUSED RD_INLINE void
+rd_kafka_fetch_pos_init(rd_kafka_fetch_pos_t *fetchpos) {
+        fetchpos->offset       = RD_KAFKA_OFFSET_INVALID;
+        fetchpos->leader_epoch = -1;
+}
+
+const char *rd_kafka_fetch_pos2str(const rd_kafka_fetch_pos_t fetchpos);
+
+static RD_UNUSED RD_INLINE rd_kafka_fetch_pos_t
+rd_kafka_fetch_pos_make(int64_t offset,
+                        int32_t leader_epoch,
+                        rd_bool_t validated) {
+        rd_kafka_fetch_pos_t fetchpos = {offset, leader_epoch, validated};
+        return fetchpos;
+}
+
+#ifdef RD_HAS_STATEMENT_EXPRESSIONS
+#define RD_KAFKA_FETCH_POS0(offset, leader_epoch, validated)                   \
+        ({                                                                     \
+                rd_kafka_fetch_pos_t _fetchpos = {offset, leader_epoch,        \
+                                                  validated};                  \
+                _fetchpos;                                                     \
+        })
+#else
+#define RD_KAFKA_FETCH_POS0(offset, leader_epoch, validated)                   \
+        rd_kafka_fetch_pos_make(offset, leader_epoch, validated)
+#endif
+
+#define RD_KAFKA_FETCH_POS(offset, leader_epoch)                               \
+        RD_KAFKA_FETCH_POS0(offset, leader_epoch, rd_false)
+
 
 
 typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
@@ -236,11 +290,15 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                RD_KAFKA_TOPPAR_FETCH_STOPPED,
                RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
                RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
+               RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
                RD_KAFKA_TOPPAR_FETCH_ACTIVE,
         } rktp_fetch_state; /* Broker thread's state */
 
 #define RD_KAFKA_TOPPAR_FETCH_IS_STARTED(fetch_state)                          \
         ((fetch_state) >= RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
+
+        int32_t rktp_leader_epoch; /**< Last known partition leader epoch,
+                                    *   or -1. */
 
         int32_t rktp_fetch_msg_max_bytes; /* Max number of bytes to
                                            * fetch.
@@ -252,28 +310,46 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                         * absolute timestamp
                                         * expires. */
 
-        int64_t rktp_query_offset;     /* Offset to query broker for*/
-        int64_t rktp_next_offset;      /* Next offset to start
-                                        * fetching from.
-                                        * Locality: toppar thread */
-        int64_t rktp_last_next_offset; /* Last next_offset handled
-                                        * by fetch_decide().
-                                        * Locality: broker thread */
-        int64_t rktp_app_offset;       /* Last offset delivered to
-                                        * application + 1.
-                                        * Is reset to INVALID_OFFSET
-                                        * when partition is
-                                        * unassigned/stopped/seeked. */
-        int64_t rktp_stored_offset;    /* Last stored offset, but
-                                        * maybe not committed yet. */
+        /** Offset to query broker for. */
+        rd_kafka_fetch_pos_t rktp_query_pos;
+
+        /** Next fetch start position.
+         *  This is set up start, seek, resume, etc, to tell
+         *  the fetcher where to start fetching.
+         *  It is not updated for each fetch, see
+         *  rktp_offsets.fetch_pos for that.
+         *  @locality toppar thread */
+        rd_kafka_fetch_pos_t rktp_next_fetch_start;
+
+        /** The previous next fetch position.
+         *  @locality toppar thread */
+        rd_kafka_fetch_pos_t rktp_last_next_fetch_start;
+
+        /** The offset to verify.
+         *  @locality toppar thread */
+        rd_kafka_fetch_pos_t rktp_offset_validation_pos;
+
+        /** Application's position.
+         *  This is the latest offset delivered to application + 1.
+         *  It is reset to INVALID_OFFSET when partition is
+         *  unassigned/stopped/seeked. */
+        rd_kafka_fetch_pos_t rktp_app_pos;
+
+        /** Last stored offset, but maybe not yet committed. */
+        rd_kafka_fetch_pos_t rktp_stored_pos;
+
+        /* Last stored metadata, but
+         * maybe not committed yet. */
         void *rktp_stored_metadata;
-        size_t rktp_stored_metadata_size; /* Last stored metadata, but
-                                           * maybe not committed yet. */
-        int64_t rktp_committing_offset;   /* Offset currently being
-                                           * committed */
-        int64_t rktp_committed_offset;    /* Last committed offset */
-        rd_ts_t rktp_ts_committed_offset; /* Timestamp of last
-                                           * commit */
+        size_t rktp_stored_metadata_size;
+
+        /** Offset currently being committed */
+        rd_kafka_fetch_pos_t rktp_committing_pos;
+
+        /** Last (known) committed offset */
+        rd_kafka_fetch_pos_t rktp_committed_pos;
+
+        rd_ts_t rktp_ts_committed_offset; /**< Timestamp of last commit */
 
         struct offset_stats rktp_offsets;     /* Current offsets.
                                                * Locality: broker thread*/
@@ -359,6 +435,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         rd_kafka_timer_t rktp_offset_sync_tmr;   /* Offset file sync timer */
         rd_kafka_timer_t rktp_consumer_lag_tmr;  /* Consumer lag monitoring
                                                   * timer */
+        rd_kafka_timer_t rktp_validate_tmr;      /**< Offset and epoch
+                                                  *   validation retry timer */
 
         rd_interval_t rktp_lease_intvl;         /**< Preferred replica lease
                                                  *   period */
@@ -391,6 +469,26 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                                   *             drops. */
         } rktp_c;
 };
+
+/**
+ * @struct This is a separately allocated glue object used in
+ *         rd_kafka_topic_partition_t._private to allow referencing both
+ *         an rktp and/or a leader epoch. Both are optional.
+ *         The rktp, if non-NULL, owns a refcount.
+ *
+ * This glue object is not always set in ._private, but allocated on demand
+ * as necessary.
+ */
+typedef struct rd_kafka_topic_partition_private_s {
+        /** Reference to a toppar. Optional, may be NULL. */
+        rd_kafka_toppar_t *rktp;
+        /** Current Leader epoch, if known, else -1.
+         *  this is set when the API needs to send the last epoch known
+         *  by the client. */
+        int32_t current_leader_epoch;
+        /** Leader epoch if known, else -1. */
+        int32_t leader_epoch;
+} rd_kafka_topic_partition_private_t;
 
 
 /**
@@ -501,14 +599,14 @@ void rd_kafka_toppar_desired_unlink(rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_desired_del(rd_kafka_toppar_t *rktp);
 
 void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
-                                        int64_t Offset);
+                                        rd_kafka_fetch_pos_t next_pos);
 
 void rd_kafka_toppar_broker_delegate(rd_kafka_toppar_t *rktp,
                                      rd_kafka_broker_t *rkb);
 
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_t *rktp,
-                                                   int64_t offset,
+                                                   rd_kafka_fetch_pos_t pos,
                                                    rd_kafka_q_t *fwdq,
                                                    rd_kafka_replyq_t replyq);
 
@@ -516,7 +614,7 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_stop(rd_kafka_toppar_t *rktp,
                                                   rd_kafka_replyq_t replyq);
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_seek(rd_kafka_toppar_t *rktp,
-                                            int64_t offset,
+                                            rd_kafka_fetch_pos_t pos,
                                             rd_kafka_replyq_t replyq);
 
 rd_kafka_resp_err_t
@@ -535,7 +633,7 @@ void rd_kafka_toppar_offset_fetch(rd_kafka_toppar_t *rktp,
                                   rd_kafka_replyq_t replyq);
 
 void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
-                                    int64_t query_offset,
+                                    rd_kafka_fetch_pos_t query_pos,
                                     int backoff_ms);
 
 int rd_kafka_toppar_purge_queues(rd_kafka_toppar_t *rktp,
@@ -581,13 +679,14 @@ void rd_kafka_topic_partition_list_destroy_free(void *ptr);
 void rd_kafka_topic_partition_list_clear(
     rd_kafka_topic_partition_list_t *rktparlist);
 
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add0(const char *func,
-                                   int line,
-                                   rd_kafka_topic_partition_list_t *rktparlist,
-                                   const char *topic,
-                                   int32_t partition,
-                                   rd_kafka_toppar_t *_private);
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
+    const char *func,
+    int line,
+    rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition,
+    rd_kafka_toppar_t *rktp,
+    const rd_kafka_topic_partition_private_t *parpriv);
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     rd_kafka_topic_partition_list_t *rktparlist,
@@ -661,15 +760,87 @@ int rd_kafka_topic_partition_list_cmp(const void *_a,
                                       const void *_b,
                                       int (*cmp)(const void *, const void *));
 
+/**
+ * @returns (and creates if necessary) the ._private glue object.
+ */
+static RD_UNUSED RD_INLINE rd_kafka_topic_partition_private_t *
+rd_kafka_topic_partition_get_private(rd_kafka_topic_partition_t *rktpar) {
+        rd_kafka_topic_partition_private_t *parpriv;
+
+        if (!(parpriv = rktpar->_private)) {
+                parpriv               = rd_calloc(1, sizeof(*parpriv));
+                parpriv->leader_epoch = -1;
+                rktpar->_private      = parpriv;
+        }
+
+        return parpriv;
+}
+
+
+/**
+ * @returns the partition leader current epoch, if relevant and known,
+ *          else -1.
+ *
+ * @param rktpar Partition object.
+ *
+ * @remark See KIP-320 for more information.
+ */
+int32_t rd_kafka_topic_partition_get_current_leader_epoch(
+    const rd_kafka_topic_partition_t *rktpar);
+
+
+/**
+ * @brief Sets the partition leader current epoch (use -1 to clear).
+ *
+ * @param rktpar Partition object.
+ * @param leader_epoch Partition leader current epoch, use -1 to reset.
+ *
+ * @remark See KIP-320 for more information.
+ */
+void rd_kafka_topic_partition_set_current_leader_epoch(
+    rd_kafka_topic_partition_t *rktpar,
+    int32_t leader_epoch);
+
+
+/**
+ * @returns the partition's rktp if set (no refcnt increase), else NULL.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_toppar_t *
+rd_kafka_topic_partition_toppar(rd_kafka_t *rk,
+                                const rd_kafka_topic_partition_t *rktpar) {
+        const rd_kafka_topic_partition_private_t *parpriv;
+
+        if ((parpriv = rktpar->_private))
+                return parpriv->rktp;
+
+        return NULL;
+}
+
 rd_kafka_toppar_t *
 rd_kafka_topic_partition_ensure_toppar(rd_kafka_t *rk,
                                        rd_kafka_topic_partition_t *rktpar,
                                        rd_bool_t create_on_miss);
 
-rd_kafka_toppar_t *rd_kafka_topic_partition_get_toppar(
-    rd_kafka_t *rk,
-    rd_kafka_topic_partition_t *rktpar,
-    rd_bool_t create_on_miss) RD_WARN_UNUSED_RESULT;
+/**
+ * @returns (and sets if necessary) the \p rktpar's ._private.
+ * @remark a new reference is returned.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_toppar_t *
+rd_kafka_topic_partition_get_toppar(rd_kafka_t *rk,
+                                    rd_kafka_topic_partition_t *rktpar,
+                                    rd_bool_t create_on_miss) {
+        rd_kafka_toppar_t *rktp;
+
+        rktp =
+            rd_kafka_topic_partition_ensure_toppar(rk, rktpar, create_on_miss);
+
+        if (rktp)
+                rd_kafka_toppar_keep(rktp);
+
+        return rktp;
+}
+
+
 
 void rd_kafka_topic_partition_list_update_toppars(
     rd_kafka_t *rk,
@@ -721,6 +892,19 @@ void rd_kafka_topic_partition_list_update(
     const rd_kafka_topic_partition_list_t *src);
 
 int rd_kafka_topic_partition_leader_cmp(const void *_a, const void *_b);
+
+void rd_kafka_topic_partition_set_from_fetch_pos(
+    rd_kafka_topic_partition_t *rktpar,
+    const rd_kafka_fetch_pos_t fetchpos);
+
+static RD_UNUSED rd_kafka_fetch_pos_t rd_kafka_topic_partition_get_fetch_pos(
+    const rd_kafka_topic_partition_t *rktpar) {
+        rd_kafka_fetch_pos_t fetchpos = {
+            rktpar->offset, rd_kafka_topic_partition_get_leader_epoch(rktpar)};
+
+        return fetchpos;
+}
+
 
 /**
  * @brief Match function that returns true if partition has a valid offset.
@@ -867,5 +1051,28 @@ static RD_UNUSED int rd_kafka_toppar_topic_cmp(const void *_a, const void *_b) {
         return strcmp(a->rktp_rkt->rkt_topic->str, b->rktp_rkt->rkt_topic->str);
 }
 
+
+/**
+ * @brief Set's the partitions next fetch position, i.e., the next offset
+ *        to start fetching from.
+ *
+ * @locks rd_kafka_toppar_lock(rktp) MUST be held.
+ */
+static RD_UNUSED RD_INLINE void
+rd_kafka_toppar_set_next_fetch_position(rd_kafka_toppar_t *rktp,
+                                        rd_kafka_fetch_pos_t next_pos) {
+        rktp->rktp_next_fetch_start = next_pos;
+}
+
+/**
+ * @brief Sets the offset validation position.
+ *
+ * @locks rd_kafka_toppar_lock(rktp) MUST be held.
+ */
+static RD_UNUSED RD_INLINE void rd_kafka_toppar_set_offset_validation_position(
+    rd_kafka_toppar_t *rktp,
+    rd_kafka_fetch_pos_t offset_validation_pos) {
+        rktp->rktp_offset_validation_pos = offset_validation_pos;
+}
 
 #endif /* _RDKAFKA_PARTITION_H_ */

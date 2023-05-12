@@ -39,11 +39,7 @@
 #include <stdarg.h>
 
 /**
- * @brief TODO: write
- *
- * @param _a
- * @param _b
- * @return int
+ * @brief Id comparator for rd_kafka_metadata_broker_internal_t
  */
 static int rd_kafka_metadata_broker_internal_cmp(const void *_a,
                                                  const void *_b) {
@@ -53,53 +49,13 @@ static int rd_kafka_metadata_broker_internal_cmp(const void *_a,
 }
 
 /**
- * @brief TODO: write
- *
- * @param _a
- * @param _b
- * @return int
+ * @brief Id comparator for rd_kafka_metadata_partition_internal_t
  */
 static int rd_kafka_metadata_partition_internal_cmp(const void *_a,
                                                     const void *_b) {
         const rd_kafka_metadata_partition_internal_t *a = _a;
         const rd_kafka_metadata_partition_internal_t *b = _b;
         return RD_CMP(a->id, b->id);
-}
-
-/**
- * @brief TODO: write
- *
- * @param metadata
- * @return const rd_kafka_metadata_t*
- */
-const rd_kafka_metadata_t *
-rd_kafka_metadata_internal_metadata(rd_kafka_metadata_internal_t *mdi) {
-        return &mdi->metadata;
-}
-
-/**
- * @brief TODO: write
- *
- * @param metadata
- * @param i
- * @return const rd_kafka_metadata_topic_internal_t*
- */
-const rd_kafka_metadata_topic_internal_t *
-rd_kafka_metadata_internal_topic(rd_kafka_metadata_internal_t *metadata,
-                                 int i) {
-        return &metadata->topics[i];
-}
-
-/**
- * @brief TODO: write
- *
- * @param metadata
- * @param leader_epoch
- */
-void rd_kafka_metadata_internal_partition_set_leader_epoch(
-    rd_kafka_metadata_partition_internal_t *metadata_partition,
-    int32_t leader_epoch) {
-        metadata_partition->leader_epoch = leader_epoch;
 }
 
 

@@ -104,22 +104,6 @@ int rd_kafka_group_member_find_subscription(rd_kafka_t *rk,
         return 0;
 }
 
-void rd_kafka_broker_rack_pair_destroy_cnt(
-    rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
-    size_t cnt) {
-        size_t i;
-        for (i = 0; i < cnt; i++)
-                RD_IF_FREE(broker_rack_pair[i].rack, rd_kafkap_str_destroy);
-
-        rd_free(broker_rack_pair);
-}
-
-int rd_kafka_broker_id_rack_pair_cmp(const void *_a, const void *_b) {
-        const rd_kafka_broker_id_rack_pair_t *a = _a;
-        const rd_kafka_broker_id_rack_pair_t *b = _b;
-        return RD_CMP(a->broker_id, b->broker_id);
-}
-
 
 rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
     const rd_list_t *topics,
@@ -332,10 +316,9 @@ rd_kafka_resp_err_t
 rd_kafka_assignor_run(rd_kafka_cgrp_t *rkcg,
                       const rd_kafka_assignor_t *rkas,
                       rd_kafka_metadata_t *metadata,
+                      rd_kafka_metadata_internal_t *metadata_internal,
                       rd_kafka_group_member_t *members,
                       int member_cnt,
-                      rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
-                      size_t broker_rack_pair_cnt,
                       char *errstr,
                       size_t errstr_size) {
         rd_kafka_resp_err_t err;
@@ -389,10 +372,10 @@ rd_kafka_assignor_run(rd_kafka_cgrp_t *rkcg,
 
         /* Call assignors assign callback */
         err = rkas->rkas_assign_cb(
-            rkcg->rkcg_rk, rkas, rkcg->rkcg_member_id->str, metadata, members,
-            member_cnt, (rd_kafka_assignor_topic_t **)eligible_topics.rl_elems,
-            eligible_topics.rl_cnt, broker_rack_pair, broker_rack_pair_cnt,
-            errstr, errstr_size, rkas->rkas_opaque);
+            rkcg->rkcg_rk, rkas, rkcg->rkcg_member_id->str, metadata,
+            metadata_internal, members, member_cnt,
+            (rd_kafka_assignor_topic_t **)eligible_topics.rl_elems,
+            eligible_topics.rl_cnt, errstr, errstr_size, rkas->rkas_opaque);
 
         if (err) {
                 rd_kafka_dbg(
@@ -511,12 +494,11 @@ rd_kafka_resp_err_t rd_kafka_assignor_add(
         const struct rd_kafka_assignor_s *rkas,
         const char *member_id,
         const rd_kafka_metadata_t *metadata,
+        const rd_kafka_metadata_internal_t *metadata_internal,
         rd_kafka_group_member_t *members,
         size_t member_cnt,
         rd_kafka_assignor_topic_t **eligible_topics,
         size_t eligible_topic_cnt,
-        rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
-        size_t broker_rack_pair_cnt,
         char *errstr,
         size_t errstr_size,
         void *opaque),
@@ -986,10 +968,9 @@ static int ut_assignors(void) {
                         }
 
                         /* Run assignor */
-                        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas,
-                                                    &metadata, members,
-                                                    tests[i].member_cnt, NULL,
-                                                    0, errstr, sizeof(errstr));
+                        err = rd_kafka_assignor_run(
+                            rk->rk_cgrp, rkas, &metadata, NULL, members,
+                            tests[i].member_cnt, errstr, sizeof(errstr));
 
                         RD_UT_ASSERT(!err, "Assignor case %s for %s failed: %s",
                                      tests[i].name,

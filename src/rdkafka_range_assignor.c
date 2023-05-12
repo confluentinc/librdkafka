@@ -55,12 +55,11 @@ rd_kafka_resp_err_t rd_kafka_range_assignor_assign_cb(
     const rd_kafka_assignor_t *rkas,
     const char *member_id,
     const rd_kafka_metadata_t *metadata,
+    const rd_kafka_metadata_internal_t *metadata_internal,
     rd_kafka_group_member_t *members,
     size_t member_cnt,
     rd_kafka_assignor_topic_t **eligible_topics,
     size_t eligible_topic_cnt,
-    rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
-    size_t broker_rack_pair_cnt,
     char *errstr,
     size_t errstr_size,
     void *opaque) {

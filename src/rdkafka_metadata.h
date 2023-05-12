@@ -46,7 +46,8 @@ typedef struct rd_kafka_metadata_partition_internal_s {
  */
 typedef struct rd_kafka_metadata_topic_internal_s {
         /** Internal metadata partition structs.
-         *  same count as metadata.topics[i].partition_cnt. */
+         *  same count as metadata.topics[i].partition_cnt.
+         *  Sorted by Partition Id. */
         rd_kafka_metadata_partition_internal_t *partitions;
 } rd_kafka_metadata_topic_internal_t;
 
@@ -65,7 +66,8 @@ typedef struct rd_kafka_metadata_internal_s {
                            be kept the first field so the pointer
                            can be cast to *rd_kafka_metadata_internal_t
                            when needed */
-        /* Internal metadata brokers. Same count as metadata.broker_cnt. */
+        /* Internal metadata brokers. Same count as metadata.broker_cnt.
+         * Sorted by broker id. */
         rd_kafka_metadata_broker_internal_t *brokers;
         /* Internal metadata topics. Same count as metadata.topic_cnt. */
         rd_kafka_metadata_topic_internal_t *topics;

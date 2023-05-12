@@ -1581,12 +1581,11 @@ rd_kafka_resp_err_t rd_kafka_sticky_assignor_assign_cb(
     const rd_kafka_assignor_t *rkas,
     const char *member_id,
     const rd_kafka_metadata_t *metadata,
+    const rd_kafka_metadata_internal_t *metadata_internal,
     rd_kafka_group_member_t *members,
     size_t member_cnt,
     rd_kafka_assignor_topic_t **eligible_topics,
     size_t eligible_topic_cnt,
-    rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
-    size_t broker_rack_pair_cnt,
     char *errstr,
     size_t errstr_size,
     void *opaque) {
@@ -2210,8 +2209,8 @@ static int ut_testOneConsumerNoTopic(rd_kafka_t *rk,
         metadata = rd_kafka_metadata_new_topic_mock(NULL, 0);
         ut_init_member(&members[0], "consumer1", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2236,8 +2235,8 @@ static int ut_testOneConsumerNonexistentTopic(rd_kafka_t *rk,
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 0);
         ut_init_member(&members[0], "consumer1", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2263,8 +2262,8 @@ static int ut_testOneConsumerOneTopic(rd_kafka_t *rk,
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
         ut_init_member(&members[0], "consumer1", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2297,8 +2296,8 @@ static int ut_testOnlyAssignsPartitionsFromSubscribedTopics(
             rd_kafka_metadata_new_topic_mockv(2, "topic1", 3, "topic2", 3);
         ut_init_member(&members[0], "consumer1", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2326,8 +2325,8 @@ static int ut_testOneConsumerMultipleTopics(rd_kafka_t *rk,
             rd_kafka_metadata_new_topic_mockv(2, "topic1", 1, "topic2", 2);
         ut_init_member(&members[0], "consumer1", "topic1", "topic2", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2355,8 +2354,8 @@ ut_testTwoConsumersOneTopicOnePartition(rd_kafka_t *rk,
         ut_init_member(&members[0], "consumer1", "topic1", NULL);
         ut_init_member(&members[1], "consumer2", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2386,8 +2385,8 @@ ut_testTwoConsumersOneTopicTwoPartitions(rd_kafka_t *rk,
         ut_init_member(&members[0], "consumer1", "topic1", NULL);
         ut_init_member(&members[1], "consumer2", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2420,8 +2419,8 @@ static int ut_testMultipleConsumersMixedTopicSubscriptions(
         ut_init_member(&members[1], "consumer2", "topic1", "topic2", NULL);
         ut_init_member(&members[2], "consumer3", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2454,8 +2453,8 @@ ut_testTwoConsumersTwoTopicsSixPartitions(rd_kafka_t *rk,
         ut_init_member(&members[0], "consumer1", "topic1", "topic2", NULL);
         ut_init_member(&members[1], "consumer2", "topic1", "topic2", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2485,8 +2484,8 @@ static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
         ut_init_member(&members[0], "consumer1", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members, 1,
-                                    NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    1, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyAssignment(&members[0], "topic1", 0, "topic1", 1, "topic1", 2,
@@ -2498,8 +2497,8 @@ static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
         /* Add consumer2 */
         ut_init_member(&members[1], "consumer2", "topic1", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2512,8 +2511,8 @@ static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
 
 
         /* Remove consumer1 */
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, &members[1], 1,
-                                    NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL,
+                                    &members[1], 1, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyAssignment(&members[1], "topic1", 0, "topic1", 1, "topic1", 2,
@@ -2571,8 +2570,8 @@ ut_testPoorRoundRobinAssignmentScenario(rd_kafka_t *rk,
         ut_init_member(&members[3], "consumer4", "topic1", "topic2", "topic3",
                        "topic4", "topic5", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2606,8 +2605,8 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
         ut_init_member(&members[0], "consumer1", "topic1", "topic2", NULL);
         ut_init_member(&members[1], "consumer2", "topic1", "topic2", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2625,8 +2624,8 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
         metadata =
             rd_kafka_metadata_new_topic_mockv(2, "topic1", 3, "topic2", 3);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2647,8 +2646,8 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
         rd_kafka_metadata_destroy(metadata);
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic2", 3);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2707,9 +2706,8 @@ ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
                 members[i - 1].rkgm_subscription = subscription;
         }
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2723,9 +2721,8 @@ ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
                 sizeof(*members) * (member_cnt - 10));
         member_cnt--;
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2765,9 +2762,8 @@ ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
         }
 
         member_cnt--; /* Skip one consumer */
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2778,9 +2774,8 @@ ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
          */
         member_cnt++;
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2828,9 +2823,8 @@ static int ut_testSameSubscriptions(rd_kafka_t *rk,
                     rd_kafka_topic_partition_list_copy(subscription);
         }
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2842,9 +2836,8 @@ static int ut_testSameSubscriptions(rd_kafka_t *rk,
         memmove(&members[5], &members[6], sizeof(*members) * (member_cnt - 6));
         member_cnt--;
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2902,9 +2895,8 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
                 members[i].rkgm_subscription = subscription;
         }
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2919,9 +2911,8 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
                 member_cnt--;
         }
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -2965,8 +2956,8 @@ static int ut_testNewSubscription(rd_kafka_t *rk,
                             metadata->topics[j].topic, RD_KAFKA_PARTITION_UA);
         }
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -2980,8 +2971,8 @@ static int ut_testNewSubscription(rd_kafka_t *rk,
         rd_kafka_topic_partition_list_add(members[0].rkgm_subscription,
                                           "topic1", RD_KAFKA_PARTITION_UA);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -3015,9 +3006,8 @@ static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
         ut_init_member(&members[2], "consumer3", "topic1", NULL);
         ut_init_member(&members[3], "consumer4", "topic1", NULL);
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, member_cnt, metadata);
@@ -3037,8 +3027,8 @@ static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
         /*
          * Remove potential group leader consumer1
          */
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, &members[1],
-                                    member_cnt - 1, NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL,
+                                    &members[1], member_cnt - 1, errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -3122,9 +3112,8 @@ static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
                                           0);
 
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
@@ -3156,8 +3145,8 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         ut_init_member(&members[2], "consumer3", "topic1", NULL);
 
         /* Just consumer1 */
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members, 1,
-                                    NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    1, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, 1, metadata);
@@ -3166,8 +3155,8 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
                          "topic1", 3, "topic1", 4, "topic1", 5, NULL);
 
         /* consumer1 and consumer2 */
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members, 2,
-                                    NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    2, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(members, 2, metadata);
@@ -3180,9 +3169,8 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         /* Run it twice, should be stable. */
         for (i = 0; i < 2; i++) {
                 /* consumer1, consumer2, and consumer3 */
-                err =
-                    rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                          3, NULL, 0, errstr, sizeof(errstr));
+                err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL,
+                                            members, 3, errstr, sizeof(errstr));
                 RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
                 verifyValidityAndBalance(members, 3, metadata);
@@ -3193,8 +3181,8 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         }
 
         /* Remove consumer1 */
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, &members[1], 2,
-                                    NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL,
+                                    &members[1], 2, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(&members[1], 2, metadata);
@@ -3205,8 +3193,8 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
                          NULL);
 
         /* Remove consumer2 */
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, &members[2], 1,
-                                    NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL,
+                                    &members[2], 1, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         verifyValidityAndBalance(&members[2], 1, metadata);
@@ -3235,8 +3223,8 @@ ut_testAssignmentUpdatedForDeletedTopic(rd_kafka_t *rk,
         ut_init_member(&members[0], "consumer1", "topic1", "topic2", "topic3",
                        NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -3267,8 +3255,8 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
 
         ut_init_member(&members[0], "consumer1", "topic", NULL);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -3281,8 +3269,8 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
         rd_kafka_metadata_destroy(metadata);
         metadata = rd_kafka_metadata_new_topic_mock(NULL, 0);
 
-        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                    RD_ARRAYSIZE(members), NULL, 0, errstr,
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
@@ -3329,9 +3317,8 @@ ut_testConflictingPreviousAssignments(rd_kafka_t *rk,
                                           1);
 
 
-        err =
-            rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
-                                  member_cnt, NULL, 0, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, NULL, members,
+                                    member_cnt, errstr, sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
         RD_UT_ASSERT(members[0].rkgm_assignment->cnt == 1 &&

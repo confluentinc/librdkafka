@@ -78,7 +78,8 @@ struct rd_kafka_topic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
 struct rd_kafka_toppar_s;
-
+typedef struct rd_kafka_metadata_internal_s rd_kafka_metadata_internal_t;
+typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 

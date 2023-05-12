@@ -177,8 +177,9 @@ rd_kafka_metadata(rd_kafka_t *rk,
 
         /* Reply: pass metadata pointer to application who now owns it*/
         rd_kafka_assert(rk, rko->rko_u.metadata.md);
-        *metadatap             = rko->rko_u.metadata.md;
-        rko->rko_u.metadata.md = NULL;
+        *metadatap              = rko->rko_u.metadata.md;
+        rko->rko_u.metadata.md  = NULL;
+        rko->rko_u.metadata.mdi = NULL;
         rd_kafka_op_destroy(rko);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -348,13 +349,9 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
  *
  * @param topics are the requested topics (may be NULL)
  *
- * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
+ * The metadata will be marshalled into 'rd_kafka_metadata_internal_t *'.
  *
- * The marshalled metadata is returned in \p *mdp, (NULL on error).
- *
- * Information about the racks-per-broker is returned in \p *broker_rack_pair_p
- * if it's not NULL. The count of racks-per-broker is equal to mdp->broker_cnt,
- * and the pairs are sorted by broker id.
+ * The marshalled metadata is returned in \p *mdip, (NULL on error).
  *
  * @returns an error code on parse failure, else NO_ERRRO.
  *

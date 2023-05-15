@@ -83,7 +83,7 @@ typedef struct rd_kafka_metadata_internal_s {
  *        public one.
  */
 #define rd_kafka_metadata_get_internal(md)                                     \
-        (const rd_kafka_metadata_internal_t *)md
+        ((const rd_kafka_metadata_internal_t *)md)
 
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 

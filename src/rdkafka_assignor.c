@@ -312,15 +312,13 @@ rd_kafka_member_subscriptions_map(rd_kafka_cgrp_t *rkcg,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_assignor_run(rd_kafka_cgrp_t *rkcg,
-                      const rd_kafka_assignor_t *rkas,
-                      rd_kafka_metadata_t *metadata,
-                      rd_kafka_metadata_internal_t *metadata_internal,
-                      rd_kafka_group_member_t *members,
-                      int member_cnt,
-                      char *errstr,
-                      size_t errstr_size) {
+rd_kafka_resp_err_t rd_kafka_assignor_run(rd_kafka_cgrp_t *rkcg,
+                                          const rd_kafka_assignor_t *rkas,
+                                          rd_kafka_metadata_t *metadata,
+                                          rd_kafka_group_member_t *members,
+                                          int member_cnt,
+                                          char *errstr,
+                                          size_t errstr_size) {
         rd_kafka_resp_err_t err;
         rd_ts_t ts_start = rd_clock();
         int i;
@@ -372,9 +370,8 @@ rd_kafka_assignor_run(rd_kafka_cgrp_t *rkcg,
 
         /* Call assignors assign callback */
         err = rkas->rkas_assign_cb(
-            rkcg->rkcg_rk, rkas, rkcg->rkcg_member_id->str, metadata,
-            metadata_internal, members, member_cnt,
-            (rd_kafka_assignor_topic_t **)eligible_topics.rl_elems,
+            rkcg->rkcg_rk, rkas, rkcg->rkcg_member_id->str, metadata, members,
+            member_cnt, (rd_kafka_assignor_topic_t **)eligible_topics.rl_elems,
             eligible_topics.rl_cnt, errstr, errstr_size, rkas->rkas_opaque);
 
         if (err) {
@@ -494,7 +491,6 @@ rd_kafka_resp_err_t rd_kafka_assignor_add(
         const struct rd_kafka_assignor_s *rkas,
         const char *member_id,
         const rd_kafka_metadata_t *metadata,
-        const rd_kafka_metadata_internal_t *metadata_internal,
         rd_kafka_group_member_t *members,
         size_t member_cnt,
         rd_kafka_assignor_topic_t **eligible_topics,
@@ -969,7 +965,7 @@ static int ut_assignors(void) {
 
                         /* Run assignor */
                         err = rd_kafka_assignor_run(
-                            rk->rk_cgrp, rkas, &metadata, NULL, members,
+                            rk->rk_cgrp, rkas, &metadata, members,
                             tests[i].member_cnt, errstr, sizeof(errstr));
 
                         RD_UT_ASSERT(!err, "Assignor case %s for %s failed: %s",

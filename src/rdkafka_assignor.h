@@ -109,8 +109,6 @@ typedef struct rd_kafka_assignor_s {
             const struct rd_kafka_assignor_s *rkas,
             const char *member_id,
             const rd_kafka_metadata_t *metadata,
-            /* Optional internal metadata structure */
-            const rd_kafka_metadata_internal_t *metadata_internal,
             rd_kafka_group_member_t *members,
             size_t member_cnt,
             rd_kafka_assignor_topic_t **eligible_topics,
@@ -151,7 +149,6 @@ rd_kafka_resp_err_t rd_kafka_assignor_add(
         const struct rd_kafka_assignor_s *rkas,
         const char *member_id,
         const rd_kafka_metadata_t *metadata,
-        const rd_kafka_metadata_internal_t *metadata_internal,
         rd_kafka_group_member_t *members,
         size_t member_cnt,
         rd_kafka_assignor_topic_t **eligible_topics,
@@ -195,15 +192,13 @@ void rd_kafka_assignor_update_subscription(
     const rd_kafka_topic_partition_list_t *subscription);
 
 
-rd_kafka_resp_err_t
-rd_kafka_assignor_run(struct rd_kafka_cgrp_s *rkcg,
-                      const rd_kafka_assignor_t *rkas,
-                      rd_kafka_metadata_t *metadata,
-                      rd_kafka_metadata_internal_t *metadata_internal,
-                      rd_kafka_group_member_t *members,
-                      int member_cnt,
-                      char *errstr,
-                      size_t errstr_size);
+rd_kafka_resp_err_t rd_kafka_assignor_run(struct rd_kafka_cgrp_s *rkcg,
+                                          const rd_kafka_assignor_t *rkas,
+                                          rd_kafka_metadata_t *metadata,
+                                          rd_kafka_group_member_t *members,
+                                          int member_cnt,
+                                          char *errstr,
+                                          size_t errstr_size);
 
 rd_kafka_assignor_t *rd_kafka_assignor_find(rd_kafka_t *rk,
                                             const char *protocol);

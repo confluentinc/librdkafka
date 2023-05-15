@@ -243,6 +243,20 @@ rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *src_internal,
 
 
 /**
+ * @brief Returns the internal metadata type corresponding to the
+ *        public one.
+ *
+ * @param md  Public metadata type pointer.
+ * @return The internal metadata type.
+ */
+const rd_kafka_metadata_internal_t *
+rd_kafka_metadata_get_internal(const rd_kafka_metadata_t *md) {
+        /* Implementation is just a cast because the public one
+         * is at the beginning of the internal one. */
+        return (const rd_kafka_metadata_internal_t *)md;
+}
+
+/**
  * @brief Update topic state and information based on topic metadata.
  *
  * @param mdt Topic metadata.
@@ -1410,6 +1424,7 @@ void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
 rd_kafka_metadata_t *
 rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
                                  size_t topic_cnt) {
+        rd_kafka_metadata_internal_t *mdi;
         rd_kafka_metadata_t *md;
         rd_tmpabuf_t tbuf;
         size_t topic_names_size = 0;
@@ -1428,17 +1443,22 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
          * needed by the final metadata_t object */
         rd_tmpabuf_new(
             &tbuf,
-            sizeof(*md) + (sizeof(*md->topics) * topic_cnt) + topic_names_size +
-                (64 /*topic name size..*/ * topic_cnt) +
-                (sizeof(*md->topics[0].partitions) * total_partition_cnt),
+            sizeof(*mdi) + (sizeof(*md->topics) * topic_cnt) +
+                topic_names_size + (64 /*topic name size..*/ * topic_cnt) +
+                (sizeof(*md->topics[0].partitions) * total_partition_cnt) +
+                (sizeof(*mdi->topics) * topic_cnt) +
+                (sizeof(*mdi->topics[0].partitions) * total_partition_cnt),
             1 /*assert on fail*/);
 
-        md = rd_tmpabuf_alloc(&tbuf, sizeof(*md));
-        memset(md, 0, sizeof(*md));
+        mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi));
+        memset(mdi, 0, sizeof(*mdi));
+        md = &mdi->metadata;
 
         md->topic_cnt = (int)topic_cnt;
         md->topics =
             rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics));
+        mdi->topics =
+            rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*mdi->topics));
 
         for (i = 0; i < (size_t)md->topic_cnt; i++) {
                 int j;
@@ -1451,11 +1471,18 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
                 md->topics[i].partitions = rd_tmpabuf_alloc(
                     &tbuf, md->topics[i].partition_cnt *
                                sizeof(*md->topics[i].partitions));
+                mdi->topics[i].partitions = rd_tmpabuf_alloc(
+                    &tbuf, md->topics[i].partition_cnt *
+                               sizeof(*mdi->topics[i].partitions));
 
                 for (j = 0; j < md->topics[i].partition_cnt; j++) {
                         memset(&md->topics[i].partitions[j], 0,
                                sizeof(md->topics[i].partitions[j]));
-                        md->topics[i].partitions[j].id = j;
+                        memset(&mdi->topics[i].partitions[j], 0,
+                               sizeof(mdi->topics[i].partitions[j]));
+                        md->topics[i].partitions[j].id            = j;
+                        mdi->topics[i].partitions[j].id           = j;
+                        mdi->topics[i].partitions[j].leader_epoch = -1;
                 }
         }
 

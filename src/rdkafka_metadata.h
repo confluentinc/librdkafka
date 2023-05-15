@@ -52,8 +52,13 @@ typedef struct rd_kafka_metadata_topic_internal_s {
 } rd_kafka_metadata_topic_internal_t;
 
 
+/**
+ * @brief Metadata broker internal container
+ */
 typedef struct rd_kafka_metadata_broker_internal_s {
+        /** Broker Id. */
         int32_t id;
+        /** Rack Id (optional). */
         char *rack_id;
 } rd_kafka_metadata_broker_internal_t;
 
@@ -83,6 +88,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
 rd_kafka_metadata_internal_t *
 rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *mdi, size_t size);
+
+const rd_kafka_metadata_internal_t *
+rd_kafka_metadata_get_internal(const rd_kafka_metadata_t *md);
 
 size_t
 rd_kafka_metadata_topic_match(rd_kafka_t *rk,

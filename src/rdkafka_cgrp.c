@@ -1677,9 +1677,8 @@ static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
         *errstr = '\0';
 
         /* Run assignor */
-        err =
-            rd_kafka_assignor_run(rkcg, rkas, &metadata->metadata, metadata,
-                                  members, member_cnt, errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rkcg, rkas, &metadata->metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
 
         if (err) {
                 if (!*errstr)

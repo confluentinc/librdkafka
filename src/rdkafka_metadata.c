@@ -241,21 +241,6 @@ rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *src_internal,
         return mdi;
 }
 
-
-/**
- * @brief Returns the internal metadata type corresponding to the
- *        public one.
- *
- * @param md  Public metadata type pointer.
- * @return The internal metadata type.
- */
-const rd_kafka_metadata_internal_t *
-rd_kafka_metadata_get_internal(const rd_kafka_metadata_t *md) {
-        /* Implementation is just a cast because the public one
-         * is at the beginning of the internal one. */
-        return (const rd_kafka_metadata_internal_t *)md;
-}
-
 /**
  * @brief Update topic state and information based on topic metadata.
  *

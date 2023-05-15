@@ -78,6 +78,12 @@ typedef struct rd_kafka_metadata_internal_s {
         rd_kafka_metadata_topic_internal_t *topics;
 } rd_kafka_metadata_internal_t;
 
+/**
+ * @brief The internal metadata type corresponding to the
+ *        public one.
+ */
+#define rd_kafka_metadata_get_internal(md)                                     \
+        (const rd_kafka_metadata_internal_t *)md
 
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 
@@ -88,9 +94,6 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
 rd_kafka_metadata_internal_t *
 rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *mdi, size_t size);
-
-const rd_kafka_metadata_internal_t *
-rd_kafka_metadata_get_internal(const rd_kafka_metadata_t *md);
 
 size_t
 rd_kafka_metadata_topic_match(rd_kafka_t *rk,

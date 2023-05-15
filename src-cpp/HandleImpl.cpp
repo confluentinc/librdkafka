@@ -391,6 +391,12 @@ rd_kafka_topic_partition_list_t *partitions_to_c_parts(
     rd_kafka_topic_partition_t *rktpar = rd_kafka_topic_partition_list_add(
         c_parts, tpi->topic_.c_str(), tpi->partition_);
     rktpar->offset = tpi->offset_;
+    if (tpi->metadata_.size()) {
+      void *metadata_p = mem_malloc(tpi->metadata_.size());
+      memcpy(metadata_p, tpi->metadata_.data(), tpi->metadata_.size());
+      rktpar->metadata      = metadata_p;
+      rktpar->metadata_size = tpi->metadata_.size();
+    }
     if (tpi->leader_epoch_ != -1)
       rd_kafka_topic_partition_set_leader_epoch(rktpar, tpi->leader_epoch_);
   }
@@ -417,6 +423,10 @@ void update_partitions_from_c_parts(
         pp->offset_       = p->offset;
         pp->err_          = static_cast<RdKafka::ErrorCode>(p->err);
         pp->leader_epoch_ = rd_kafka_topic_partition_get_leader_epoch(p);
+        if (p->metadata_size) {
+          unsigned char *metadata = (unsigned char *)p->metadata;
+          pp->metadata_.assign(metadata, metadata + p->metadata_size);
+        }
       }
     }
   }

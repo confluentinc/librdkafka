@@ -1260,7 +1260,10 @@ class TopicPartitionImpl : public TopicPartition {
     offset_       = c_part->offset;
     err_          = static_cast<ErrorCode>(c_part->err);
     leader_epoch_ = rd_kafka_topic_partition_get_leader_epoch(c_part);
-    // FIXME: metadata
+    if (c_part->metadata_size > 0) {
+      unsigned char *metadata = (unsigned char *)c_part->metadata;
+      metadata_.assign(metadata, metadata + c_part->metadata_size);
+    }
   }
 
   static void destroy(std::vector<TopicPartition *> &partitions);
@@ -1292,6 +1295,14 @@ class TopicPartitionImpl : public TopicPartition {
     leader_epoch_ = leader_epoch;
   }
 
+  std::vector<unsigned char> get_metadata() {
+    return metadata_;
+  }
+
+  void set_metadata(std::vector<unsigned char> &metadata) {
+    metadata_ = metadata;
+  }
+
   std::ostream &operator<<(std::ostream &ostrm) const {
     return ostrm << topic_ << " [" << partition_ << "]";
   }
@@ -1301,6 +1312,7 @@ class TopicPartitionImpl : public TopicPartition {
   int64_t offset_;
   ErrorCode err_;
   int32_t leader_epoch_;
+  std::vector<unsigned char> metadata_;
 };
 
 

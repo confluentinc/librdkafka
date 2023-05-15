@@ -682,6 +682,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 size_t _slen;                                                  \
                 char *_dst;                                                    \
                 rd_kafka_buf_read_str(rkbuf, &_kstr);                          \
+                if (RD_KAFKAP_STR_IS_NULL(&_kstr)) {                           \
+                        dst = NULL;                                            \
+                        break;                                                 \
+                }                                                              \
                 _slen = RD_KAFKAP_STR_LEN(&_kstr);                             \
                 if (!(_dst = rd_tmpabuf_write(tmpabuf, _kstr.str, _slen + 1))) \
                         rd_kafka_buf_parse_fail(                               \

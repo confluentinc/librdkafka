@@ -2085,11 +2085,10 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
                                      void *opaque) {
-        rd_kafka_op_t *rko           = opaque; /* Possibly NULL */
-        struct rd_kafka_metadata *md = NULL;
-        const rd_list_t *topics      = request->rkbuf_u.Metadata.topics;
+        rd_kafka_op_t *rko                = opaque; /* Possibly NULL */
+        rd_kafka_metadata_internal_t *mdi = NULL;
+        const rd_list_t *topics           = request->rkbuf_u.Metadata.topics;
         int actions;
-        rd_kafka_broker_id_rack_pair_t *broker_rack_pair = NULL;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
                                   thrd_is_current(rk->rk_thread));
@@ -2115,33 +2114,21 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                            rd_list_cnt(topics),
                            request->rkbuf_u.Metadata.reason);
 
-        if (rko && rko->rko_replyq.q)
-                err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &md,
-                                              &broker_rack_pair);
-        else
-                err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &md, NULL);
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi);
         if (err)
                 goto err;
 
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
-                rko->rko_err                         = err;
-                rko->rko_u.metadata.md               = md;
-                rko->rko_u.metadata.broker_rack_pair = broker_rack_pair;
-                if (broker_rack_pair) {
-                        rd_assert(md); /* rd_kafka_parse_Metadata guarantees
-                                          that md will not be NULL if
-                                          broker_rack_pair isn't. */
-                        rko->rko_u.metadata.broker_rack_pair_cnt =
-                            (size_t)md->broker_cnt;
-                }
-
+                rko->rko_err            = err;
+                rko->rko_u.metadata.md  = &mdi->metadata;
+                rko->rko_u.metadata.mdi = mdi;
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                 rko = NULL;
         } else {
-                if (md)
-                        rd_free(md);
+                if (mdi)
+                        rd_free(mdi);
         }
 
         goto done;
@@ -2167,8 +2154,9 @@ err:
                            rd_kafka_actions2str(actions));
                 /* Respond back to caller on non-retriable errors */
                 if (rko && rko->rko_replyq.q) {
-                        rko->rko_err           = err;
-                        rko->rko_u.metadata.md = NULL;
+                        rko->rko_err            = err;
+                        rko->rko_u.metadata.md  = NULL;
+                        rko->rko_u.metadata.mdi = NULL;
                         rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                         rko = NULL;
                 }

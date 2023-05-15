@@ -1659,15 +1659,12 @@ err_parse:
 /**
  * @brief Run group assignment.
  */
-static void
-rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
-                           rd_kafka_assignor_t *rkas,
-                           rd_kafka_resp_err_t err,
-                           rd_kafka_metadata_t *metadata,
-                           rd_kafka_group_member_t *members,
-                           int member_cnt,
-                           rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
-                           size_t broker_rack_pair_cnt) {
+static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
+                                       rd_kafka_assignor_t *rkas,
+                                       rd_kafka_resp_err_t err,
+                                       rd_kafka_metadata_internal_t *metadata,
+                                       rd_kafka_group_member_t *members,
+                                       int member_cnt) {
         char errstr[512];
 
         if (err) {
@@ -1680,9 +1677,8 @@ rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
         *errstr = '\0';
 
         /* Run assignor */
-        err = rd_kafka_assignor_run(rkcg, rkas, metadata, members, member_cnt,
-                                    broker_rack_pair, broker_rack_pair_cnt,
-                                    errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rkcg, rkas, &metadata->metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
 
         if (err) {
                 if (!*errstr)
@@ -1748,11 +1744,10 @@ rd_kafka_cgrp_assignor_handle_Metadata_op(rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
-        rd_kafka_cgrp_assignor_run(
-            rkcg, rkcg->rkcg_assignor, rko->rko_err, rko->rko_u.metadata.md,
-            rkcg->rkcg_group_leader.members, rkcg->rkcg_group_leader.member_cnt,
-            rko->rko_u.metadata.broker_rack_pair,
-            rko->rko_u.metadata.broker_rack_pair_cnt);
+        rd_kafka_cgrp_assignor_run(rkcg, rkcg->rkcg_assignor, rko->rko_err,
+                                   rko->rko_u.metadata.mdi,
+                                   rkcg->rkcg_group_leader.members,
+                                   rkcg->rkcg_group_leader.member_cnt);
 
         return RD_KAFKA_OP_RES_HANDLED;
 }

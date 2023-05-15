@@ -2950,7 +2950,6 @@ rd_kafka_anyconf_get0(const void *conf,
         const char *val = NULL;
         size_t val_len  = 0;
         int j;
-
         switch (prop->type) {
         case _RK_C_STR:
                 val = *_RK_PTR(const char **, conf, prop->offset);
@@ -3918,6 +3917,24 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         conf->allow_auto_create_topics = rd_false;
                 else if (cltype == RD_KAFKA_PRODUCER)
                         conf->allow_auto_create_topics = rd_true;
+        }
+
+        if (!rd_kafka_conf_is_modified(conf, "debug")) {
+                /* If the user has already specified a debug configuration,
+                 * ignore the environment variable to maintain compatibility
+                 * with existing behaviour. */
+                const char *debug_env = rd_getenv("RD_KAFKA_DEBUG", NULL);
+                if (debug_env &&
+                    rd_kafka_conf_set(conf, "debug", debug_env, NULL, 0) !=
+                        RD_KAFKA_CONF_OK) {
+                        /* Ignore the errstr from rd_kafka_conf_set, we can't
+                         * use sprintf to include it in the returned string,
+                         * because there's no way to free the returned string
+                         * afterward. */
+                        return "RD_KAFKA_DEBUG environment variable is in the "
+                               "wrong format, should be the same as property "
+                               "'debug'.";
+                }
         }
 
         /* Finalize and verify the default.topic.config */

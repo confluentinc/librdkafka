@@ -498,6 +498,93 @@ static void do_message_timeout_linger_checks(void) {
         SUB_TEST_PASS();
 }
 
+static void testcase_debug_env_variable(const char *env_var_value,
+                                        rd_bool_t expect_fail,
+                                        rd_bool_t debug_conf_exists) {
+#ifndef _WIN32
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const rd_kafka_conf_t *rk_conf;
+        size_t stored_value_size = 512;
+        char stored_value[stored_value_size];
+        const char *debug_conf_value = "broker,fetch";
+        const char *expected_value =
+            debug_conf_exists ? debug_conf_value : env_var_value;
+        expect_fail =
+            expect_fail &&
+            !debug_conf_exists; /* If user has set value for debug, no value of
+                              env variable should make it fail, since the above
+                              `debug_conf_value` is a valid value. */
+
+        TEST_SAY(
+            "Starting debug env variable testcase with RD_KAFKA_DEBUG=%s, and "
+            "user set 'debug' = %s\n",
+            env_var_value, debug_conf_exists ? debug_conf_value : NULL);
+        TEST_ASSERT(setenv("RD_KAFKA_DEBUG", env_var_value,
+                           1 /* overwrite existing value */) != -1,
+                    "setenv() failed: %s", strerror(errno));
+
+        conf = rd_kafka_conf_new();
+        if (debug_conf_exists)
+                test_conf_set(conf, "debug", debug_conf_value);
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, NULL, 0);
+
+        if (expect_fail)
+                TEST_ASSERT(!rk,
+                            "Expected `rk` creation to fail, but it succeed.");
+        else
+                TEST_ASSERT(
+                    rk, "Expected `rk` creation to succeed, but it failed.");
+
+        if (!rk) {
+                rd_kafka_conf_destroy(conf);
+                return;
+        }
+
+        rk_conf = rd_kafka_conf(rk);
+        TEST_ASSERT(rd_kafka_conf_get(rk_conf, "debug", stored_value,
+                                      &stored_value_size) == RD_KAFKA_CONF_OK,
+                    "rd_kafka_conf_get failed.");
+
+        if (strcmp(expected_value, "all") ==
+            0) /* 'all', while being stored, is expanded. */
+                expected_value =
+                    "generic,broker,topic,metadata,feature,queue,msg,protocol,"
+                    "cgrp,security,fetch,interceptor,plugin,consumer,admin,eos,"
+                    "mock,assignor,conf,all";
+
+        TEST_ASSERT(strcmp(expected_value, stored_value) == 0,
+                    "Expected %s, got %s", expected_value, stored_value);
+
+        rd_kafka_destroy(rk);
+#endif  //_WIN32
+}
+
+static void do_test_debug_env_variable(void) {
+        const char *values[]    = {"msg,protocol", "all", "xprotocol",
+                                "msg, t, metadata"};
+        rd_bool_t expect_fail[] = {rd_false, rd_false, rd_true, rd_true};
+        size_t i;
+
+        SUB_TEST_QUICK();
+
+#ifdef _WIN32
+        SUB_TEST_SKIP("No setenv() support on windows\n");
+#else
+        for (i = 0; i < RD_ARRAYSIZE(values); i++) {
+                testcase_debug_env_variable(values[i], expect_fail[i],
+                                            rd_false);
+                testcase_debug_env_variable(values[i], expect_fail[i], rd_true);
+        }
+
+        /* Cleanup. */
+        TEST_ASSERT(unsetenv("RD_KAFKA_DEBUG") != -1, "unsetenv() failed: %s",
+                    strerror(errno));
+
+        SUB_TEST_PASS();
+#endif  // _WIN32
+}
+
 
 int main_0004_conf(int argc, char **argv) {
         rd_kafka_t *rk;
@@ -860,6 +947,8 @@ int main_0004_conf(int argc, char **argv) {
         do_test_default_topic_conf();
 
         do_message_timeout_linger_checks();
+
+        do_test_debug_env_variable();
 
         return 0;
 }

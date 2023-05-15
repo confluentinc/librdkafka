@@ -86,8 +86,8 @@ esac
 
 
 if [[ $1 != clean ]]; then
-    # enable strict C99, C++98 checks.
-    export CFLAGS="$CFLAGS -std=c99"
+    # enable strict GNU90, C++98 checks.
+    export CFLAGS="$CFLAGS -std=gnu90"
     export CXXFLAGS="$CXXFLAGS -std=c++98"
 fi
 

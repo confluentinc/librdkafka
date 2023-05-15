@@ -1273,6 +1273,9 @@ conf          | *        | Display set configuration properties on startup.
 all           | *        | All of the above.
 
 
+In case `debug` is not set, debug contexts can be enabled without recompilation using the `RD_KAFKA_DEBUG`
+environment variable, set to a CSV string of debug contexts.
+
 Suggested debugging settings for troubleshooting:
 
 Problem space          | Type     | Debug setting

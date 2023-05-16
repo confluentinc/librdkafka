@@ -2,7 +2,7 @@
 
 librdkafka v2.2.0 is a feature release:
 
- * Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
+ * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
  * Fix a bug that happens when skipping tags, causing buffer underflow in
    MetadataResponse (#4278).
 

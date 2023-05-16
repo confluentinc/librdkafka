@@ -338,6 +338,11 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         /** Last stored offset, but maybe not yet committed. */
         rd_kafka_fetch_pos_t rktp_stored_pos;
 
+        /* Last stored metadata, but
+         * maybe not committed yet. */
+        void *rktp_stored_metadata;
+        size_t rktp_stored_metadata_size;
+
         /** Offset currently being committed */
         rd_kafka_fetch_pos_t rktp_committing_pos;
 
@@ -891,6 +896,10 @@ int rd_kafka_topic_partition_leader_cmp(const void *_a, const void *_b);
 void rd_kafka_topic_partition_set_from_fetch_pos(
     rd_kafka_topic_partition_t *rktpar,
     const rd_kafka_fetch_pos_t fetchpos);
+
+void rd_kafka_topic_partition_set_metadata_from_rktp_stored(
+    rd_kafka_topic_partition_t *rktpar,
+    const rd_kafka_toppar_t *rktp);
 
 static RD_UNUSED rd_kafka_fetch_pos_t rd_kafka_topic_partition_get_fetch_pos(
     const rd_kafka_topic_partition_t *rktpar) {

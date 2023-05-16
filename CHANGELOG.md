@@ -1,8 +1,21 @@
-# librdkafka v2.1.2
+# librdkafka v2.2.0
 
-librdkafka v2.1.2 is a maintenance release:
+librdkafka v2.2.0 is a feature release:
 
  * Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse (#4278).
+
+## Fixes
+
+### General fixes
+
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse. This is triggered since RPC version 9 (v2.1.0),
+   when using Confluent Platform, only when racks are set,
+   observers are activated and there is more than one partition.
+   Fixed by skipping the correct amount of bytes when tags are received.
+
 
 # librdkafka v2.1.1
 

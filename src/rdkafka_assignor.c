@@ -1264,6 +1264,7 @@ static int ut_assignors(void) {
         /* Run through test cases */
         for (i = 0; tests[i].name; i++) {
                 int ie, it, im;
+                rd_kafka_metadata_internal_t metadata_internal;
                 rd_kafka_metadata_t metadata;
                 rd_kafka_group_member_t *members;
 
@@ -1338,9 +1339,12 @@ static int ut_assignors(void) {
                         }
 
                         /* Run assignor */
-                        err = rd_kafka_assignor_run(
-                            rk->rk_cgrp, rkas, &metadata, members,
-                            tests[i].member_cnt, errstr, sizeof(errstr));
+                        metadata_internal.metadata = metadata;
+                        err                        = rd_kafka_assignor_run(
+                            rk->rk_cgrp, rkas,
+                            (rd_kafka_metadata_t *)(&metadata_internal),
+                            members, tests[i].member_cnt, errstr,
+                            sizeof(errstr));
 
                         RD_UT_ASSERT(!err, "Assignor case %s for %s failed: %s",
                                      tests[i].name,

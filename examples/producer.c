@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
 
                 if (len == 0) {
                         /* Empty line: only serve delivery reports */
-                        rd_kafka_poll(rk, 0 /*non-blocking */);
+                        rd_kafka_poll(rk, 1000);
                         continue;
                 }
 
@@ -228,7 +228,7 @@ int main(int argc, char **argv) {
                  * to make sure previously produced messages have their
                  * delivery report callback served (and any other callbacks
                  * you register). */
-                rd_kafka_poll(rk, 0 /*non-blocking*/);
+                rd_kafka_poll(rk, 1000);
         }
 
 

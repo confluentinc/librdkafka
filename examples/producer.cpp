@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
 
   for (std::string line; run && std::getline(std::cin, line);) {
     if (line.empty()) {
-      producer->poll(0);
+      producer->poll(1000);
       continue;
     }
 
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
      * to make sure previously produced messages have their
      * delivery report callback served (and any other callbacks
      * you register). */
-    producer->poll(0);
+    producer->poll(1000);
   }
 
   /* Wait for final messages to be delivered or fail.

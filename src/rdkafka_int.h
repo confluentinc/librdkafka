@@ -78,7 +78,8 @@ struct rd_kafka_topic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
 struct rd_kafka_toppar_s;
-
+typedef struct rd_kafka_metadata_internal_s rd_kafka_metadata_internal_t;
+typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 
@@ -350,8 +351,9 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        struct rd_kafka_metadata *rk_full_metadata; /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata;                /* Timesstamp of .. */
+        rd_kafka_metadata_internal_t
+            *rk_full_metadata;       /* Last full metadata. */
+        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */

@@ -50,11 +50,11 @@ const char *rd_kafka_topic_state_names[] = {"unknown", "exists", "notexists",
                                             "error"};
 
 
-static int rd_kafka_topic_metadata_update(
-    rd_kafka_topic_t *rkt,
-    const struct rd_kafka_metadata_topic *mdt,
-    const rd_kafka_partition_leader_epoch_t *leader_epochs,
-    rd_ts_t ts_age);
+static int
+rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
+                               const struct rd_kafka_metadata_topic *mdt,
+                               const rd_kafka_metadata_topic_internal_t *mdit,
+                               rd_ts_t ts_age);
 
 
 /**
@@ -479,8 +479,10 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
                 if (existing)
                         *existing = 1;
 
-                rd_kafka_topic_metadata_update(rkt, &rkmce->rkmce_mtopic, NULL,
-                                               rkmce->rkmce_ts_insert);
+                rd_kafka_topic_metadata_update(
+                    rkt, &rkmce->rkmce_mtopic,
+                    &rkmce->rkmce_metadata_internal_topic,
+                    rkmce->rkmce_ts_insert);
         }
 
         if (do_lock)
@@ -1238,9 +1240,7 @@ rd_bool_t rd_kafka_topic_set_error(rd_kafka_topic_t *rkt,
  * @brief Update a topic from metadata.
  *
  * @param mdt Topic metadata.
- * @param leader_epochs Array of per-partition leader epochs, or NULL.
- *                      The array size is identical to the partition count in
- *                      \p mdt.
+ * @param mdit Topic internal metadata.
  * @param ts_age absolute age (timestamp) of metadata.
  * @returns 1 if the number of partitions changed, 0 if not, and -1 if the
  *          topic is unknown.
@@ -1248,11 +1248,11 @@ rd_bool_t rd_kafka_topic_set_error(rd_kafka_topic_t *rkt,
  *
  * @locks_required rd_kafka_*lock() MUST be held.
  */
-static int rd_kafka_topic_metadata_update(
-    rd_kafka_topic_t *rkt,
-    const struct rd_kafka_metadata_topic *mdt,
-    const rd_kafka_partition_leader_epoch_t *leader_epochs,
-    rd_ts_t ts_age) {
+static int
+rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
+                               const struct rd_kafka_metadata_topic *mdt,
+                               const rd_kafka_metadata_topic_internal_t *mdit,
+                               rd_ts_t ts_age) {
         rd_kafka_t *rk = rkt->rkt_rk;
         int upd        = 0;
         int j;
@@ -1323,8 +1323,7 @@ static int rd_kafka_topic_metadata_update(
         for (j = 0; j < mdt->partition_cnt; j++) {
                 int r;
                 rd_kafka_broker_t *leader;
-                int32_t leader_epoch =
-                    leader_epochs ? leader_epochs[j].leader_epoch : -1;
+                int32_t leader_epoch = mdit->partitions[j].leader_epoch;
 
                 rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
                              "  Topic %s partition %i Leader %" PRId32
@@ -1397,7 +1396,7 @@ static int rd_kafka_topic_metadata_update(
 int rd_kafka_topic_metadata_update2(
     rd_kafka_broker_t *rkb,
     const struct rd_kafka_metadata_topic *mdt,
-    const rd_kafka_partition_leader_epoch_t *leader_epochs) {
+    const rd_kafka_metadata_topic_internal_t *mdit) {
         rd_kafka_topic_t *rkt;
         int r;
 
@@ -1408,7 +1407,7 @@ int rd_kafka_topic_metadata_update2(
                 return -1; /* Ignore topics that we dont have locally. */
         }
 
-        r = rd_kafka_topic_metadata_update(rkt, mdt, leader_epochs, rd_clock());
+        r = rd_kafka_topic_metadata_update(rkt, mdt, mdit, rd_clock());
 
         rd_kafka_wrunlock(rkb->rkb_rk);
 
@@ -1886,9 +1885,12 @@ void rd_kafka_local_topics_to_list(rd_kafka_t *rk,
 void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
                                         int partition_cnt,
                                         int32_t leader_id) {
-        struct rd_kafka_metadata_topic mdt = {.topic =
+        rd_kafka_metadata_partition_internal_t *partitions =
+            rd_calloc(partition_cnt, sizeof(*partitions));
+        struct rd_kafka_metadata_topic mdt      = {.topic =
                                                   (char *)rkt->rkt_topic->str,
                                               .partition_cnt = partition_cnt};
+        rd_kafka_metadata_topic_internal_t mdit = {.partitions = partitions};
         int i;
 
         mdt.partitions = rd_alloca(sizeof(*mdt.partitions) * partition_cnt);
@@ -1900,7 +1902,8 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
         }
 
         rd_kafka_wrlock(rkt->rkt_rk);
-        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, rd_true);
-        rd_kafka_topic_metadata_update(rkt, &mdt, NULL, rd_clock());
+        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, &mdit, rd_true);
+        rd_kafka_topic_metadata_update(rkt, &mdt, &mdit, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
+        rd_free(partitions);
 }

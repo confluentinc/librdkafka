@@ -1765,7 +1765,8 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
                 member_metadata = rkas->rkas_get_metadata_cb(
                     rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
-                    rk->rk_cgrp->rkcg_group_assignment);
+                    rk->rk_cgrp->rkcg_group_assignment,
+                    rk->rk_conf.client_rack);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
@@ -2084,9 +2085,9 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
                                      void *opaque) {
-        rd_kafka_op_t *rko           = opaque; /* Possibly NULL */
-        struct rd_kafka_metadata *md = NULL;
-        const rd_list_t *topics      = request->rkbuf_u.Metadata.topics;
+        rd_kafka_op_t *rko                = opaque; /* Possibly NULL */
+        rd_kafka_metadata_internal_t *mdi = NULL;
+        const rd_list_t *topics           = request->rkbuf_u.Metadata.topics;
         int actions;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
@@ -2113,21 +2114,21 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                            rd_list_cnt(topics),
                            request->rkbuf_u.Metadata.reason);
 
-        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &md);
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi);
         if (err)
                 goto err;
 
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
-                rko->rko_err           = err;
-                rko->rko_u.metadata.md = md;
-
+                rko->rko_err            = err;
+                rko->rko_u.metadata.md  = &mdi->metadata;
+                rko->rko_u.metadata.mdi = mdi;
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                 rko = NULL;
         } else {
-                if (md)
-                        rd_free(md);
+                if (mdi)
+                        rd_free(mdi);
         }
 
         goto done;
@@ -2153,8 +2154,9 @@ err:
                            rd_kafka_actions2str(actions));
                 /* Respond back to caller on non-retriable errors */
                 if (rko && rko->rko_replyq.q) {
-                        rko->rko_err           = err;
-                        rko->rko_u.metadata.md = NULL;
+                        rko->rko_err            = err;
+                        rko->rko_u.metadata.md  = NULL;
+                        rko->rko_u.metadata.mdi = NULL;
                         rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                         rko = NULL;
                 }

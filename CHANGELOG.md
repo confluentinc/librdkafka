@@ -1,9 +1,36 @@
-# librdkafka v2.1.2 (UNRELEASED)
+# librdkafka v2.2.0
+
+librdkafka v2.2.0 is a feature release:
+
+ * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse (#4278).
  * Added `fetch.queue.backoff.ms` to the consumer to control how long
-   the consumer backs off the next fetch attempt when the pre-fetch queue
-   has exceeded its queuing thresholds.
-   This allows latency sensitive applications to tune message
-   consumption latency. (#2879)
+   the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
+
+
+## Enhancements
+
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off next fetch attempt. When the pre-fetch queue
+   has exceeded its queuing thresholds: `queued.min.messages` and
+   `queued.max.messages.kbytes` it backs off for 1 seconds.
+   If those parameters have to be set too high to hold 1 s of data,
+   this new parameter allows to back off the fetch earlier, reducing memory
+   requirements.
+
+
+## Fixes
+
+### General fixes
+
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse. This is triggered since RPC version 9 (v2.1.0),
+   when using Confluent Platform, only when racks are set,
+   observers are activated and there is more than one partition.
+   Fixed by skipping the correct amount of bytes when tags are received.
+
+
 
 # librdkafka v2.1.1
 
@@ -42,6 +69,7 @@ librdkafka v2.1.1 is a maintenance release:
    but it is possible for the user to obtain the queue with messages from
    the broker, skipping these functions. This was fixed by encoding information
    in a queue itself, that, whether polling, resets the timer.
+
 
 
 # librdkafka v2.1.0

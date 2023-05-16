@@ -258,7 +258,7 @@ rd_kafka_topic_get_error(rd_kafka_topic_t *rkt) {
 int rd_kafka_topic_metadata_update2(
     rd_kafka_broker_t *rkb,
     const struct rd_kafka_metadata_topic *mdt,
-    const rd_kafka_partition_leader_epoch_t *leader_epochs);
+    const rd_kafka_metadata_topic_internal_t *mdit);
 
 void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now);
 

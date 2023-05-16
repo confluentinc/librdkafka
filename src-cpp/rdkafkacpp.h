@@ -1986,6 +1986,12 @@ class RD_EXPORT TopicPartition {
 
   /** @brief Set partition leader epoch. */
   virtual void set_leader_epoch(int32_t leader_epoch) = 0;
+
+  /** @brief Get partition metadata. */
+  virtual std::vector<unsigned char> get_metadata() = 0;
+
+  /** @brief Set partition metadata. */
+  virtual void set_metadata(std::vector<unsigned char> &metadata) = 0;
 };
 
 

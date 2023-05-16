@@ -370,6 +370,7 @@ struct rd_kafka_op_s {
                 /* RD_KAFKA_OP_METADATA */
                 struct {
                         rd_kafka_metadata_t *md;
+                        rd_kafka_metadata_internal_t *mdi;
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
                 } metadata;

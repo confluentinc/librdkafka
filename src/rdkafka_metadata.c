@@ -41,8 +41,7 @@
 /**
  * @brief Id comparator for rd_kafka_metadata_broker_internal_t
  */
-int rd_kafka_metadata_broker_internal_cmp(const void *_a,
-                                                 const void *_b) {
+int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b) {
         const rd_kafka_metadata_broker_internal_t *a = _a;
         const rd_kafka_metadata_broker_internal_t *b = _b;
         return RD_CMP(a->id, b->id);
@@ -1453,6 +1452,8 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
         memset(mdi, 0, sizeof(*mdi));
         md = &mdi->metadata;
 
+        md->broker_cnt = num_brokers;
+
         md->topic_cnt = (int)topic_cnt;
         md->topics =
             rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics));
@@ -1483,7 +1484,7 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
                         md->topics[i].partitions[j].id            = j;
                         mdi->topics[i].partitions[j].id           = j;
                         mdi->topics[i].partitions[j].leader_epoch = -1;
-                        md->topics[i].partitions[j].id = j;
+                        md->topics[i].partitions[j].id            = j;
 
                         /* In case replication_factor is not given, don't set
                          * replicas. */

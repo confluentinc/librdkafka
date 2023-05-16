@@ -80,6 +80,8 @@ unsigned int rd_string_hash(const char *str, ssize_t len);
 
 int rd_strcmp(const char *a, const char *b);
 
+int rd_strcmp2(const void *a, const void *b);
+
 char *_rd_strcasestr(const char *haystack, const char *needle);
 
 char **rd_string_split(const char *input,

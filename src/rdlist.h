@@ -138,6 +138,15 @@ void *rd_list_add(rd_list_t *rl, void *elem);
 
 
 /**
+ * @brief Append const pointer element to list
+ *
+ * @returns \p elem. If \p elem is NULL the default element for that index
+ *          will be returned (for use with set_elems).
+ */
+void *rd_list_add_const(rd_list_t *rl, const void *elem);
+
+
+/**
  * @brief Set element at \p idx to \p ptr.
  *
  * @remark MUST NOT overwrite an existing element.

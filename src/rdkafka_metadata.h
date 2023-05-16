@@ -149,8 +149,7 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
 
 int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
-int rd_kafka_metadata_broker_internal_cmp(const void *_a,
-                                                 const void *_b);
+int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
 
 
 rd_kafka_metadata_t *

@@ -557,8 +557,10 @@ rd_kafka_offset_broker_commit(rd_kafka_toppar_t *rktp, const char *reason) {
         offsets = rd_kafka_topic_partition_list_new(1);
         rktpar  = rd_kafka_topic_partition_list_add(
             offsets, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
         rd_kafka_topic_partition_set_from_fetch_pos(rktpar,
                                                     rktp->rktp_committing_pos);
+        rd_kafka_topic_partition_set_metadata_from_rktp_stored(rktpar, rktp);
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSETCMT",
                      "%.*s [%" PRId32 "]: committing %s: %s",
@@ -654,8 +656,8 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *app_rkt,
         }
         rd_kafka_topic_rdunlock(rkt);
 
-        err = rd_kafka_offset_store0(rktp, pos, rd_false /* Don't force */,
-                                     RD_DO_LOCK);
+        err = rd_kafka_offset_store0(rktp, pos, NULL, 0,
+                                     rd_false /* Don't force */, RD_DO_LOCK);
 
         rd_kafka_toppar_destroy(rktp);
 
@@ -691,7 +693,8 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
                     rd_kafka_topic_partition_get_leader_epoch(rktpar);
 
                 rktpar->err = rd_kafka_offset_store0(
-                    rktp, pos, rd_false /* don't force */, RD_DO_LOCK);
+                    rktp, pos, rktpar->metadata, rktpar->metadata_size,
+                    rd_false /* don't force */, RD_DO_LOCK);
                 rd_kafka_toppar_destroy(rktp);
 
                 if (rktpar->err)
@@ -725,8 +728,8 @@ rd_kafka_error_t *rd_kafka_offset_store_message(rd_kafka_message_t *rkmessage) {
 
         pos = RD_KAFKA_FETCH_POS(rkmessage->offset + 1,
                                  rkm->rkm_u.consumer.leader_epoch);
-        err = rd_kafka_offset_store0(rktp, pos, rd_false /* Don't force */,
-                                     RD_DO_LOCK);
+        err = rd_kafka_offset_store0(rktp, pos, NULL, 0,
+                                     rd_false /* Don't force */, RD_DO_LOCK);
 
         if (err == RD_KAFKA_RESP_ERR__STATE)
                 return rd_kafka_error_new(err, "Partition is not assigned");
@@ -1440,7 +1443,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop(rd_kafka_toppar_t *rktp) {
                     rktp,
                     RD_KAFKA_FETCH_POS(rktp->rktp_offsets_fin.eof_offset,
                                        rktp->rktp_leader_epoch),
-                    rd_true /* force */, RD_DONT_LOCK);
+                    NULL, 0, rd_true /* force */, RD_DONT_LOCK);
 
         /* Commit offset to backing store.
          * This might be an async operation. */
@@ -1538,7 +1541,7 @@ void rd_kafka_update_app_pos(rd_kafka_t *rk,
 
         rktp->rktp_app_pos = pos;
         if (rk->rk_conf.enable_auto_offset_store)
-                rd_kafka_offset_store0(rktp, pos,
+                rd_kafka_offset_store0(rktp, pos, NULL, 0,
                                        /* force: ignore assignment state */
                                        rd_true, RD_DONT_LOCK);
 

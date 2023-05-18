@@ -788,9 +788,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         uint64_t _tagtype, _taglen;                            \
                         rd_kafka_buf_read_uvarint(rkbuf, &_tagtype);           \
                         rd_kafka_buf_read_uvarint(rkbuf, &_taglen);            \
-                        if (_taglen > 1)                                       \
-                                rd_kafka_buf_skip(rkbuf,                       \
-                                                  (size_t)(_taglen - 1));      \
+                        if (_taglen > 0)                                       \
+                                rd_kafka_buf_skip(rkbuf, (size_t)(_taglen));   \
                 }                                                              \
         } while (0)
 

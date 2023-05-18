@@ -220,7 +220,8 @@
     <ClCompile Include="..\..\tests\0137-barrier_batch_consume.c" />
     <ClCompile Include="..\..\tests\0138-admin_mock.c" />
     <ClCompile Include="..\..\tests\0139-offset_validation_mock.c" />
-    <ClCompile Include="..\..\tests\0140-cooperative_commit_rebalance.c" />
+    <ClCompile Include="..\..\tests\0140-commit_metadata.cpp" />
+    <ClCompile Include="..\..\tests\0141-cooperative_commit_rebalance.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

@@ -349,6 +349,7 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
 
         rd_refcnt_destroy(&rktp->rktp_refcnt);
 
+        rd_free(rktp->rktp_stored_metadata);
         rd_free(rktp);
 }
 
@@ -2698,6 +2699,21 @@ void rd_kafka_topic_partition_set_from_fetch_pos(
 }
 
 /**
+ * @brief Set partition metadata from rktp stored one.
+ */
+void rd_kafka_topic_partition_set_metadata_from_rktp_stored(
+    rd_kafka_topic_partition_t *rktpar,
+    const rd_kafka_toppar_t *rktp) {
+        rktpar->metadata_size = rktp->rktp_stored_metadata_size;
+        if (rktp->rktp_stored_metadata) {
+                rktpar->metadata = rd_malloc(rktp->rktp_stored_metadata_size);
+                memcpy(rktpar->metadata, rktp->rktp_stored_metadata,
+                       rktpar->metadata_size);
+        }
+}
+
+
+/**
  * @brief Destroy all partitions in list.
  *
  * @remark The allocated size of the list will not shrink.
@@ -3212,6 +3228,8 @@ int rd_kafka_topic_partition_list_set_offsets(
                                 verb = "setting stored";
                                 rd_kafka_topic_partition_set_from_fetch_pos(
                                     rktpar, rktp->rktp_stored_pos);
+                                rd_kafka_topic_partition_set_metadata_from_rktp_stored(
+                                    rktpar, rktp);
                         } else {
                                 rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                         }

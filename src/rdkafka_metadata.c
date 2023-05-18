@@ -1534,22 +1534,25 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
                 (sizeof(*md->topics[0].partitions) * total_partition_cnt) +
                 (sizeof(*mdi->topics) * topic_cnt) +
                 (sizeof(*mdi->topics[0].partitions) * total_partition_cnt) +
-                (replication_factor > 0
-                     ? replication_factor * total_partition_cnt * sizeof(int)
-                     : 0),
+                (sizeof(*mdi->brokers) * RD_ROUNDUP(num_brokers, 8)) +
+                (replication_factor > 0 ? RD_ROUNDUP(replication_factor, 8) *
+                                              total_partition_cnt * sizeof(int)
+                                        : 0),
             1 /*assert on fail*/);
 
         mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi));
         memset(mdi, 0, sizeof(*mdi));
         md = &mdi->metadata;
 
-        md->broker_cnt = num_brokers;
-
         md->topic_cnt = (int)topic_cnt;
         md->topics =
             rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics));
         mdi->topics =
             rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*mdi->topics));
+
+        md->broker_cnt = num_brokers;
+        mdi->brokers =
+            rd_tmpabuf_alloc(&tbuf, md->broker_cnt * sizeof(*mdi->brokers));
 
         for (i = 0; i < (size_t)md->topic_cnt; i++) {
                 int j;

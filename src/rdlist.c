@@ -148,14 +148,6 @@ void *rd_list_add(rd_list_t *rl, void *elem) {
         return rl->rl_elems[rl->rl_cnt++];
 }
 
-void *rd_list_add_const(rd_list_t *rl, const void *elem) {
-        if (rl->rl_cnt == rl->rl_size)
-                rd_list_grow(rl, rl->rl_size ? rl->rl_size * 2 : 16);
-        rl->rl_flags &= ~RD_LIST_F_SORTED;
-        if (elem)
-                rl->rl_elems[rl->rl_cnt] = elem;
-        return rl->rl_elems[rl->rl_cnt++];
-}
 
 void rd_list_set(rd_list_t *rl, int idx, void *ptr) {
         if (idx >= rl->rl_size)

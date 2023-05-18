@@ -678,9 +678,9 @@ static int ut_testOneConsumerNonexistentTopic(
                 RD_UT_PASS();
         }
 
-        ut_initMetadataConditionalRack(
-            &metadata, 3, 3,
-            ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS), parametrization, 1, "t1", 0);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "t1", 0);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", NULL);
@@ -702,16 +702,15 @@ static int ut_testOneConsumerNonexistentTopic(
 static int
 ut_testOneConsumerOneTopic(rd_kafka_t *rk,
                            const rd_kafka_assignor_t *rkas,
-                           rd_kafka_assignor_ut_rack_config_t
-                           parametrization) {
+                           rd_kafka_assignor_ut_rack_config_t parametrization) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        ut_initMetadataConditionalRack(
-            &metadata,  3, 3,
-            ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS), parametrization, 1, "t1", 3);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "t1", 3);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", NULL);
@@ -720,7 +719,9 @@ ut_testOneConsumerOneTopic(rd_kafka_t *rk,
                                     RD_ARRAYSIZE(members), errstr,
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
-        RD_UT_ASSERT(members[0].rkgm_assignment->cnt == 3, "expected assignment of 3 partitions, got %d partition(s)",  members[0].rkgm_assignment->cnt);
+        RD_UT_ASSERT(members[0].rkgm_assignment->cnt == 3,
+                     "expected assignment of 3 partitions, got %d partition(s)",
+                     members[0].rkgm_assignment->cnt);
 
         verifyAssignment(&members[0], "t1", 0, "t1", 1, "t1", 2, NULL);
 
@@ -740,9 +741,9 @@ static int ut_testOnlyAssignsPartitionsFromSubscribedTopics(
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        ut_initMetadataConditionalRack(&metadata,  3, 3,
-                                       ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS),
-                                       parametrization, 2, "t1", 3, "t2", 3);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "t1", 3, "t2", 3);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", NULL);
@@ -769,9 +770,9 @@ static int ut_testOneConsumerMultipleTopics(
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[1];
 
-        ut_initMetadataConditionalRack(&metadata,  3, 3,
-                                       ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS),
-                                       parametrization, 2, "t1", 1, "t2", 2);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "t1", 1, "t2", 2);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", "t2", NULL);
@@ -798,9 +799,9 @@ static int ut_testTwoConsumersOneTopicOnePartition(
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        ut_initMetadataConditionalRack(
-            &metadata,  3, 3,
-            ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS), parametrization, 1, "t1", 1);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "t1", 1);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", NULL);
@@ -831,9 +832,9 @@ static int ut_testTwoConsumersOneTopicTwoPartitions(
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        ut_initMetadataConditionalRack(
-            &metadata,  3, 3,
-            ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS), parametrization, 1, "t1", 2);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       1, "t1", 2);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", NULL);
@@ -864,9 +865,9 @@ static int ut_testMultipleConsumersMixedTopicSubscriptions(
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[3];
 
-        ut_initMetadataConditionalRack(&metadata,  3, 3,
-                                       ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS),
-                                       parametrization, 2, "t1", 3, "t2", 2);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "t1", 3, "t2", 2);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", NULL);
@@ -901,9 +902,9 @@ static int ut_testTwoConsumersTwoTopicsSixPartitions(
         rd_kafka_metadata_t *metadata;
         rd_kafka_group_member_t members[2];
 
-        ut_initMetadataConditionalRack(&metadata,  3, 3,
-                                       ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS),
-                                       parametrization, 2, "t1", 3, "t2", 3);
+        ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
+                                       RD_ARRAYSIZE(ALL_RACKS), parametrization,
+                                       2, "t1", 3, "t2", 3);
 
         ut_initMemberConditionalRack(&members[0], "consumer1", ALL_RACKS[0],
                                      parametrization, "t1", "t2", NULL);
@@ -915,8 +916,8 @@ static int ut_testTwoConsumersTwoTopicsSixPartitions(
                                     sizeof(errstr));
         RD_UT_ASSERT(!err, "assignor run failed: %s", errstr);
 
-        verifyAssignment(&members[0], "t1", 0, "t1", 1, "t2", 0, "t2", 1,
-        NULL); verifyAssignment(&members[1], "t1", 2, "t2", 2, NULL);
+        verifyAssignment(&members[0], "t1", 0, "t1", 1, "t2", 0, "t2", 1, NULL);
+        verifyAssignment(&members[1], "t1", 2, "t2", 2, NULL);
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
@@ -1575,14 +1576,14 @@ static int rd_kafka_range_assignor_unittest(void) {
             rd_kafka_t *, const rd_kafka_assignor_t *,
             rd_kafka_assignor_ut_rack_config_t parametrization) = {
             ut_testOneConsumerNoTopic,
-                ut_testOneConsumerNonexistentTopic,
-                ut_testOneConsumerOneTopic,
-                ut_testOnlyAssignsPartitionsFromSubscribedTopics,
-                ut_testOneConsumerMultipleTopics,
-                ut_testTwoConsumersOneTopicOnePartition,
-                ut_testTwoConsumersOneTopicTwoPartitions,
-                ut_testMultipleConsumersMixedTopicSubscriptions,
-                ut_testTwoConsumersTwoTopicsSixPartitions,
+            ut_testOneConsumerNonexistentTopic,
+            ut_testOneConsumerOneTopic,
+            ut_testOnlyAssignsPartitionsFromSubscribedTopics,
+            ut_testOneConsumerMultipleTopics,
+            ut_testTwoConsumersOneTopicOnePartition,
+            ut_testTwoConsumersOneTopicTwoPartitions,
+            ut_testMultipleConsumersMixedTopicSubscriptions,
+            ut_testTwoConsumersTwoTopicsSixPartitions,
             ut_testRackAwareAssignmentWithUniformSubscription,
             ut_testRackAwareAssignmentWithNonEqualSubscription,
             ut_testRackAwareAssignmentWithUniformPartitions,

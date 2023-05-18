@@ -3118,7 +3118,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
         errcnt = rd_kafka_cgrp_update_committed_offsets(rkcg, err, offsets);
 
         if (err != RD_KAFKA_RESP_ERR__DESTROY &&
-            !((err == RD_KAFKA_RESP_ERR__NO_OFFSET || err == RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS) &&
+            !((err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
+               err == RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS) &&
               rko_orig->rko_u.offset_commit.silent_empty)) {
                 /* Propagate commit results (success or permanent error)
                  * unless we're shutting down or commit was empty. */

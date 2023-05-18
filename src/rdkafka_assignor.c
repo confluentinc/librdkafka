@@ -694,8 +694,13 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
                             RD_KAFKAP_STR_LEN(member->rkgm_rack_id)) {
                                 /* Repetitions are fine, we will dedup it later.
                                  */
-                                rd_list_add_const(all_consumer_racks,
-                                                  member->rkgm_rack_id->str);
+                                rd_list_add(
+                                    all_consumer_racks,
+                                    /* The const qualifier has to be discarded
+                                       because of how rd_list_t and
+                                       rd_kafkap_str_t are, but we never modify
+                                       items in all_consumer_racks. */
+                                    (char *)member->rkgm_rack_id->str);
                         }
                 }
         }

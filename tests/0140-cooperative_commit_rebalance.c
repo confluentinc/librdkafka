@@ -114,8 +114,8 @@ int main_0140_cooperative_commit_rebalance(int argc, char **argv) {
         /* Create two consumers to consume from the topic */
         c1 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
                                   NULL);
-        c2 = test_create_consumer(topic, rebalance_cb, conf /* pass ownership. */,
-                                  NULL);
+        c2 = test_create_consumer(topic, rebalance_cb,
+                                  conf /* pass ownership. */, NULL);
 
         /* Have the first consumer subscribe to the topic and consume messages
          */

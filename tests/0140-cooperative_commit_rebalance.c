@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2022, Magnus Edenhill
+ * Copyright (c) 2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,7 +79,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 }
 
 
-int main_0139_cooperative_commit_rebalance(int argc, char **argv) {
+int main_0140_cooperative_commit_rebalance(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
         rd_kafka_t *p;
@@ -114,7 +114,7 @@ int main_0139_cooperative_commit_rebalance(int argc, char **argv) {
         /* Create two consumers to consume from the topic */
         c1 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
                                   NULL);
-        c2 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
+        c2 = test_create_consumer(topic, rebalance_cb, conf /* pass ownership. */,
                                   NULL);
 
         /* Have the first consumer subscribe to the topic and consume messages

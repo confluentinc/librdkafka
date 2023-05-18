@@ -173,8 +173,6 @@ typedef RD_MAP_TYPE(const ConsumerPair_t *,
 typedef RD_MAP_TYPE(const char *,
                     map_cpair_toppar_list_t *) map_str_map_cpair_toppar_list_t;
 
-typedef RD_MAP_TYPE(const char *, rd_kafkap_str_t *) map_str_kafkap_str_t;
-
 typedef RD_MAP_TYPE(const char *, const char *) map_str_str_t;
 
 

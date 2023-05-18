@@ -138,15 +138,6 @@ void *rd_list_add(rd_list_t *rl, void *elem);
 
 
 /**
- * @brief Append const pointer element to list
- *
- * @returns \p elem. If \p elem is NULL the default element for that index
- *          will be returned (for use with set_elems).
- */
-void *rd_list_add_const(rd_list_t *rl, const void *elem);
-
-
-/**
  * @brief Set element at \p idx to \p ptr.
  *
  * @remark MUST NOT overwrite an existing element.
@@ -309,6 +300,17 @@ void *rd_list_last(const rd_list_t *rl);
 void *rd_list_find_duplicate(const rd_list_t *rl,
                              int (*cmp)(const void *, const void *));
 
+
+/**
+ * @brief Deduplicates a list.
+ *
+ * @param rl is a ptrptr since a new list is created and assigned to *rl, for
+ * efficiency.
+ * @returns a deduplicated and sorted version of \p *rl.
+ * @warning the original \p *rl is destroyed.
+ */
+void rd_list_deduplicate(rd_list_t **rl,
+                         int (*cmp)(const void *, const void *));
 
 /**
  * @brief Compare list \p a to \p b.

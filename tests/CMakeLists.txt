@@ -130,6 +130,7 @@ set(
     0137-barrier_batch_consume.c
     0138-admin_mock.c
     0139-offset_validation_mock.c
+    0140_cooperative_commit_rebalance.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

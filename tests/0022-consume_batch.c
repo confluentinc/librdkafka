@@ -247,6 +247,8 @@ static void do_test_consume_batch_non_existent_topic(void) {
 
         TEST_SAY("Stopping consumer\n");
 
+        rd_kafka_message_destroy(rkms[0]);
+
         rd_kafka_queue_destroy(rkq);
 
         rd_kafka_destroy(rk);

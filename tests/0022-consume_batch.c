@@ -203,7 +203,7 @@ static void do_test_consume_batch_oauthbearer_cb(void) {
  */
 static void do_test_consume_batch_non_existent_topic(void) {
 
-        char *topic = "non-existent2";
+        char *topic = "non-existent";
         rd_kafka_t *rk;
         rd_kafka_topic_partition_list_t *rktpars;
         rd_kafka_queue_t *rkq;

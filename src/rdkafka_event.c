@@ -84,6 +84,10 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "ListConsumerGroupOffsetsResult";
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
                 return "SaslOAuthBearerTokenRefresh";
+        case RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT:
+                return "DescribeUserScramCredentials";
+        case RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT:
+                return "AlterUserScramCredentials";
         default:
                 return "?unknown?";
         }
@@ -416,6 +420,25 @@ rd_kafka_event_AlterConsumerGroupOffsets_result(rd_kafka_event_t *rkev) {
                     const rd_kafka_AlterConsumerGroupOffsets_result_t *)rkev;
 }
 
+const rd_kafka_DescribeUserScramCredentials_result_t *
+rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev){
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT)
+                return NULL;
+        else
+                return (
+                    const rd_kafka_DescribeUserScramCredentials_result_t *)rkev;
+}
+
+const rd_kafka_AlterUserScramCredentials_result_t *
+rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev){
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT)
+                return NULL;
+        else
+                return (
+                    const rd_kafka_AlterUserScramCredentials_result_t *)rkev;
+}
 const rd_kafka_ListConsumerGroupOffsets_result_t *
 rd_kafka_event_ListConsumerGroupOffsets_result(rd_kafka_event_t *rkev) {
         if (!rkev ||

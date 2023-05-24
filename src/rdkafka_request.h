@@ -417,7 +417,6 @@ rd_kafka_resp_err_t rd_kafka_EndTxnRequest(rd_kafka_broker_t *rkb,
 
 int unittest_request(void);
 
-
 rd_kafka_resp_err_t
 rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
                               /*(rd_topic_partition_list_t*)*/

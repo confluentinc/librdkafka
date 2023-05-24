@@ -699,7 +699,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE,
               "Broker: Request principal deserialization failed during "
               "forwarding"),
-
+    _ERR_DESC(RD_KAFKA_RESP_ERR_OPENSSL_COMPILATION_MISSING,
+              "Local: The Librdkafka has not been compiled with OpenSSL which "
+              "is needed for hashing of password for AlterUserScramCredentials:UPSERT Type"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 

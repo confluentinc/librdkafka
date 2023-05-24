@@ -255,20 +255,12 @@ static int rd_kafka_sasl_scram_HMAC(rd_kafka_transport_t *rktrans,
 }
 
 
-
-/**
- * @brief Perform \p itcnt iterations of HMAC() on the given buffer \p in
- *        using \p salt, writing the output into \p out which must be
- *        at least EVP_MAX_MD_SIZE. Actual size is updated in \p *outsize.
- * @returns 0 on success, else -1
- */
-static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
-                                  const rd_chariov_t *in,
-                                  const rd_chariov_t *salt,
-                                  int itcnt,
-                                  rd_chariov_t *out) {
-        const EVP_MD *evp =
-            rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.scram_evp;
+int rd_kafka_sasl_scram_Hi0(rd_kafka_broker_t *rkb,
+                                    const EVP_MD *evp,
+                                    const rd_chariov_t *in,
+                                    const rd_chariov_t *salt,
+                                    int itcnt,
+                                    rd_chariov_t *out){
         unsigned int ressize = 0;
         unsigned char tempres[EVP_MAX_MD_SIZE];
         unsigned char *saltplus;
@@ -285,7 +277,7 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
         /* U1   := HMAC(str, salt + INT(1)) */
         if (!HMAC(evp, (const unsigned char *)in->ptr, (int)in->size, saltplus,
                   salt->size + 4, tempres, &ressize)) {
-                rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SCRAM",
+                rd_rkb_dbg(rkb, SECURITY, "SCRAM",
                            "HMAC priming failed");
                 return -1;
         }
@@ -300,7 +292,7 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
                 if (unlikely(!HMAC(evp, (const unsigned char *)in->ptr,
                                    (int)in->size, tempres, ressize, tempdest,
                                    NULL))) {
-                        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SCRAM",
+                        rd_rkb_dbg(rkb, SECURITY, "SCRAM",
                                    "Hi() HMAC #%d/%d failed", i, itcnt);
                         return -1;
                 }
@@ -316,6 +308,25 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
 
         return 0;
 }
+
+/**
+ * @brief Perform \p itcnt iterations of HMAC() on the given buffer \p in
+ *        using \p salt, writing the output into \p out which must be
+ *        at least EVP_MAX_MD_SIZE. Actual size is updated in \p *outsize.
+ * @returns 0 on success, else -1
+ */
+static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
+                                  const rd_chariov_t *in,
+                                  const rd_chariov_t *salt,
+                                  int itcnt,
+                                  rd_chariov_t *out) {
+        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
+        const EVP_MD *evp =
+            rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.scram_evp;
+        return rd_kafka_sasl_scram_Hi0(rkb,evp,in,salt,itcnt,out);
+        
+}
+
 
 
 /**

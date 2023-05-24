@@ -765,14 +765,6 @@ isBalanced(rd_kafka_t *rk,
                            ->value)
                           ->cnt;
 
-        /* Mapping from partitions to the consumer assigned to them */
-        // FIXME: don't create prior to min/max check below */
-        map_toppar_str_t allPartitions = RD_MAP_INITIALIZER(
-            RD_MAP_CNT(partition2AllPotentialConsumers),
-            rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
-            NULL /* references currentAssignment */,
-            NULL /* references currentAssignment */);
-
         /* Iterators */
         const rd_kafka_topic_partition_list_t *partitions;
         const char *consumer;
@@ -787,9 +779,15 @@ isBalanced(rd_kafka_t *rk,
                              "minimum %d and maximum %d partitions assigned "
                              "to each consumer",
                              minimum, maximum);
-                RD_MAP_DESTROY(&allPartitions);
                 return rd_true;
         }
+
+        /* Mapping from partitions to the consumer assigned to them */
+        map_toppar_str_t allPartitions = RD_MAP_INITIALIZER(
+            RD_MAP_CNT(partition2AllPotentialConsumers),
+            rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
+            NULL /* references currentAssignment */,
+            NULL /* references currentAssignment */);
 
         /* Create a mapping from partitions to the consumer assigned to them */
         RD_MAP_FOREACH(consumer, partitions, currentAssignment) {

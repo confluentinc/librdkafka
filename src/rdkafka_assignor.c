@@ -727,15 +727,9 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
                                 int replica_id = topics[t]
                                                      ->metadata->partitions[i]
                                                      .replicas[j];
-                                rd_kafka_metadata_broker_internal_t key = {
-                                    .id = replica_id};
-                                rd_kafka_metadata_broker_internal_t *broker =
-                                    bsearch(
-                                        &key, mdi->brokers,
-                                        mdi->metadata.broker_cnt,
-                                        sizeof(
-                                            rd_kafka_metadata_broker_internal_t),
-                                        rd_kafka_metadata_broker_internal_cmp);
+                                rd_kafka_metadata_broker_internal_t *broker;
+                                rd_kafka_metadata_broker_internal_find(
+                                    mdi, replica_id, broker);
 
                                 if (broker && broker->rack_id &&
                                     strlen(broker->rack_id)) {
@@ -1051,6 +1045,75 @@ int verifyMultipleAssignment0(const char *function,
 
         return 0;
 }
+
+
+#define verifyNumPartitionsWithRackMismatchPartition(rktpar, metadata,         \
+                                                     increase)                 \
+        do {                                                                   \
+                if (!rktpar)                                                   \
+                        break;                                                 \
+                int i;                                                         \
+                rd_bool_t noneMatch = rd_true;                                 \
+                rd_kafka_metadata_internal_t *metadata_internal =              \
+                    rd_kafka_metadata_get_internal(metadata);                  \
+                                                                               \
+                for (i = 0; i < metadata->topics[j].partitions[k].replica_cnt; \
+                     i++) {                                                    \
+                        int32_t replica_id =                                   \
+                            metadata->topics[j].partitions[k].replicas[i];     \
+                        rd_kafka_metadata_broker_internal_t *broker;           \
+                        rd_kafka_metadata_broker_internal_find(                \
+                            metadata_internal, replica_id, broker);            \
+                                                                               \
+                        if (broker && !strcmp(rack_id, broker->rack_id)) {     \
+                                noneMatch = rd_false;                          \
+                                break;                                         \
+                        }                                                      \
+                }                                                              \
+                                                                               \
+                if (noneMatch)                                                 \
+                        increase++;                                            \
+        } while (0);
+
+/**
+ * @brief Verify number of partitions with rack mismatch.
+ */
+int verifyNumPartitionsWithRackMismatch0(const char *function,
+                                         int line,
+                                         rd_kafka_metadata_t *metadata,
+                                         rd_kafka_group_member_t *rkgms,
+                                         size_t member_cnt,
+                                         int expectedNumMismatch) {
+        size_t i;
+        int j, k;
+
+        int numMismatched = 0;
+        for (i = 0; i < member_cnt; i++) {
+                rd_kafka_group_member_t *rkgm = &rkgms[i];
+                const char *rack_id           = rkgm->rkgm_rack_id->str;
+                if (rack_id) {
+                        for (j = 0; j < metadata->topic_cnt; j++) {
+                                for (k = 0;
+                                     k < metadata->topics[j].partition_cnt;
+                                     k++) {
+                                        rd_kafka_topic_partition_t *rktpar =
+                                            rd_kafka_topic_partition_list_find(
+                                                rkgm->rkgm_assignment,
+                                                metadata->topics[j].topic, k);
+                                        verifyNumPartitionsWithRackMismatchPartition(
+                                            rktpar, metadata, numMismatched);
+                                }
+                        }
+                }
+        }
+
+        RD_UT_ASSERT(expectedNumMismatch == numMismatched,
+                     "%s:%d: Expected %d mismatches, got %d", function, line,
+                     expectedNumMismatch, numMismatched);
+
+        return 0;
+}
+
 
 int verifyValidityAndBalance0(const char *func,
                               int line,

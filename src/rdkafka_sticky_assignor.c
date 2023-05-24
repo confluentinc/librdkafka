@@ -263,15 +263,9 @@ rd_kafka_rack_info_new(rd_kafka_assignor_topic_t **topics,
                                 int replica_id = topics[t]
                                                      ->metadata->partitions[i]
                                                      .replicas[j];
-                                rd_kafka_metadata_broker_internal_t key = {
-                                    .id = replica_id};
-                                rd_kafka_metadata_broker_internal_t *broker =
-                                    bsearch(
-                                        &key, mdi->brokers,
-                                        mdi->metadata.broker_cnt,
-                                        sizeof(
-                                            rd_kafka_metadata_broker_internal_t),
-                                        rd_kafka_metadata_broker_internal_cmp);
+                                rd_kafka_metadata_broker_internal_t *broker;
+                                rd_kafka_metadata_broker_internal_find(
+                                    mdi, replica_id, broker);
 
                                 if (broker && broker->rack_id &&
                                     strlen(broker->rack_id)) {
@@ -4239,7 +4233,7 @@ setupRackAwareAssignment(rd_kafka_t *rk,
         metadata = rd_kafka_metadata_new_topic_with_partition_replicas_mock(
             replication_factor, num_brokers, topics, partitions, topic_cnt);
         ut_populate_internal_broker_metadata(
-            (rd_kafka_metadata_internal_t *)metadata, num_broker_racks,
+            rd_kafka_metadata_get_internal(metadata), num_broker_racks,
             ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS));
 
         for (i = 0; initialize_members && i < member_cnt; i++) {

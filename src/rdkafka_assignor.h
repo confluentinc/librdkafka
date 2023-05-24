@@ -269,6 +269,13 @@ int verifyMultipleAssignment0(const char *function,
                               size_t member_cnt,
                               ...);
 
+int verifyNumPartitionsWithRackMismatch0(const char *function,
+                                         int line,
+                                         rd_kafka_metadata_t *metadata,
+                                         rd_kafka_group_member_t *rkgms,
+                                         size_t member_cnt,
+                                         int expectedNumMismatch);
+
 #define verifyAssignment(rkgm, ...)                                            \
         do {                                                                   \
                 if (verifyAssignment0(__FUNCTION__, __LINE__, rkgm,            \
@@ -280,6 +287,15 @@ int verifyMultipleAssignment0(const char *function,
         do {                                                                   \
                 if (verifyMultipleAssignment0(__FUNCTION__, __LINE__, rkgms,   \
                                               member_cnt, __VA_ARGS__))        \
+                        return 1;                                              \
+        } while (0)
+
+#define verifyNumPartitionsWithRackMismatch(metadata, rkgms, member_cnt,       \
+                                            expectedNumMismatch)               \
+        do {                                                                   \
+                if (verifyNumPartitionsWithRackMismatch0(                      \
+                        __FUNCTION__, __LINE__, metadata, rkgms, member_cnt,   \
+                        expectedNumMismatch))                                  \
                         return 1;                                              \
         } while (0)
 
@@ -341,7 +357,7 @@ int isFullyBalanced0(const char *function,
                             rd_kafka_metadata_new_topic_with_partition_replicas_mockv( \
                                 replication_factor, num_brokers, __VA_ARGS__);         \
                         ut_populate_internal_broker_metadata(                          \
-                            ((rd_kafka_metadata_internal_t *)*(metadataPtr)),          \
+                            rd_kafka_metadata_get_internal(*(metadataPtr)),            \
                             num_broker_racks, all_racks, all_racks_cnt);               \
                 }                                                                      \
         } while (0)
@@ -367,7 +383,7 @@ int isFullyBalanced0(const char *function,
                             topics, topic_cnt, replication_factor,             \
                             num_brokers);                                      \
                         ut_populate_internal_broker_metadata(                  \
-                            ((rd_kafka_metadata_internal_t *)*(metadataPtr)),  \
+                            rd_kafka_metadata_get_internal(*(metadataPtr)),    \
                             num_broker_racks, all_racks, all_racks_cnt);       \
                 }                                                              \
         } while (0)

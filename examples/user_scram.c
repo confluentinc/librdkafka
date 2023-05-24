@@ -80,6 +80,7 @@ int64_t parse_int(const char *what, const char *str) {
 static void Describe(rd_kafka_t *rk,char **users,size_t user_cnt){
         rd_kafka_event_t *event;
         char errstr[512];      /* librdkafka API error reporting buffer */
+        rd_kafka_resp_err_t api_error;
         
         rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);  
 
@@ -90,9 +91,12 @@ static void Describe(rd_kafka_t *rk,char **users,size_t user_cnt){
         }
         
         /* Null Argument gives us  the users*/
-        rd_kafka_DescribeUserScramCredentials(rk,users,user_cnt,options,queue);
+        api_error = rd_kafka_DescribeUserScramCredentials(rk,users,user_cnt,options,queue);
         rd_kafka_AdminOptions_destroy(options);
-
+        if(api_error){
+                printf("API Entry point error : %s\n\n",rd_kafka_err2str(api_error));
+                return;
+        }
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (!event) {

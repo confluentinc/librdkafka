@@ -49,6 +49,47 @@ static void rd_kafka_broker_fetch_backoff(rd_kafka_broker_t *rkb,
                    backoff_ms, rd_kafka_err2str(err));
 }
 
+/**
+ * @brief Backoff the next Fetch for specific partition
+ *
+ * @returns the absolute backoff time (the current time for no backoff).
+ */
+static rd_ts_t rd_kafka_toppar_fetch_backoff(rd_kafka_broker_t *rkb,
+                                             rd_kafka_toppar_t *rktp,
+                                             rd_kafka_resp_err_t err) {
+        int backoff_ms;
+
+        /* Don't back off on reaching end of partition */
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+                rktp->rktp_ts_fetch_backoff = 0;
+                return rd_clock(); /* Immediate: No practical backoff */
+        }
+
+        if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL)
+                backoff_ms = rkb->rkb_rk->rk_conf.fetch_queue_backoff_ms;
+        else
+                backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+
+        if (unlikely(!backoff_ms)) {
+                rktp->rktp_ts_fetch_backoff = 0;
+                return rd_clock(); /* Immediate: No practical backoff */
+        }
+
+        /* Certain errors that may require manual intervention should have
+         * a longer backoff time. */
+        if (err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
+                backoff_ms = RD_MAX(1000, backoff_ms * 10);
+
+        rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
+
+        rd_rkb_dbg(rkb, FETCH, "BACKOFF",
+                   "%s [%" PRId32 "]: Fetch backoff for %dms%s%s",
+                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                   backoff_ms, err ? ": " : "",
+                   err ? rd_kafka_err2str(err) : "");
+
+        return rktp->rktp_ts_fetch_backoff;
+}
 
 /**
  * @brief Handle preferred replica in fetch response.
@@ -1074,23 +1115,23 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                 should_fetch = 0;
                 reason       = "no concrete offset";
         } else if (rktp->rktp_ts_fetch_backoff > rd_clock()) {
-                reason = "fetch backed off";
-                ts_backoff = rktp->rktp_ts_fetch_backoff;
+                reason       = "fetch backed off";
+                ts_backoff   = rktp->rktp_ts_fetch_backoff;
                 should_fetch = 0;
         } else if (rd_kafka_q_len(rktp->rktp_fetchq) >=
                    rkb->rkb_rk->rk_conf.queued_min_msgs) {
                 /* Skip toppars who's local message queue is already above
                  * the lower threshold. */
-                reason       = "queued.min.messages exceeded";
-                ts_backoff   = rd_kafka_toppar_fetch_backoff(
-                        rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
+                reason     = "queued.min.messages exceeded";
+                ts_backoff = rd_kafka_toppar_fetch_backoff(
+                    rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
                 should_fetch = 0;
 
         } else if ((int64_t)rd_kafka_q_size(rktp->rktp_fetchq) >=
                    rkb->rkb_rk->rk_conf.queued_max_msg_bytes) {
-                reason       = "queued.max.messages.kbytes exceeded";
-                ts_backoff   = rd_kafka_toppar_fetch_backoff(
-                        rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
+                reason     = "queued.max.messages.kbytes exceeded";
+                ts_backoff = rd_kafka_toppar_fetch_backoff(
+                    rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
                 should_fetch = 0;
         }
 
@@ -1133,73 +1174,4 @@ done:
                 ts_backoff = RD_TS_MAX;
 
         return ts_backoff;
-}
-
-// /**
-//  * @brief Backoff the next Fetch for specific partition
-//  */
-// static void rd_kafka_toppar_fetch_backoff(rd_kafka_broker_t *rkb,
-//                                           rd_kafka_toppar_t *rktp,
-//                                           rd_kafka_resp_err_t err) {
-//         int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
-
-//         /* Don't back off on reaching end of partition */
-//         if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
-//                 return;
-
-//         /* Certain errors that may require manual intervention should have
-//          * a longer backoff time. */
-//         if (err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
-//                 backoff_ms = RD_MAX(1000, backoff_ms * 10);
-
-//         rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
-
-//         rd_rkb_dbg(rkb, FETCH, "BACKOFF",
-//                    "%s [%" PRId32 "]: Fetch backoff for %dms%s%s",
-//                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-//                    backoff_ms, err ? ": " : "",
-//                    err ? rd_kafka_err2str(err) : "");
-// }
-
-/**
- * @brief Backoff the next Fetch for specific partition
- *
- * @returns the absolute backoff time (the current time for no backoff).
- */
-rd_ts_t rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
-                                    rd_kafka_toppar_t *rktp,
-                                    rd_kafka_resp_err_t err) {
-        int backoff_ms;
-
-        /* Don't back off on reaching end of partition */
-        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
-                rktp->rktp_ts_fetch_backoff = 0;
-                return rd_clock(); /* Immediate: No practical backoff */
-        }
-
-        if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL)
-                backoff_ms = rkb->rkb_rk->rk_conf.fetch_queue_backoff_ms;
-        else
-                backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
-
-        if (unlikely(!backoff_ms)) {
-                rktp->rktp_ts_fetch_backoff = 0;
-                return rd_clock(); /* Immediate: No practical backoff */
-        }
-
-        /* Certain errors that may require manual intervention should have
-         * a longer backoff time. */
-        if (err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
-                backoff_ms = RD_MAX(1000, backoff_ms * 10);
-
-        rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
-
-        rd_rkb_dbg(rkb, FETCH, "BACKOFF",
-                   "%s [%"PRId32"]: Fetch backoff for %dms%s%s",
-                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                   backoff_ms,
-                   err ? ": " : "",
-                   err ? rd_kafka_err2str(err) : "");
-
-        return rktp->rktp_ts_fetch_backoff;
 }

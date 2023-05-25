@@ -45,9 +45,7 @@ extern "C" {
  */
 
 
-static void do_test_queue_backoff (const std::string &topic,
-                                   int backoff_ms) {
-
+static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
   SUB_TEST("backoff_ms = %d", backoff_ms);
 
   /* Create consumer */
@@ -72,20 +70,20 @@ static void do_test_queue_backoff (const std::string &topic,
 
   RdKafka::ErrorCode err;
   if ((err = c->assign(parts)))
-      Test::Fail("assigned failed: " + RdKafka::err2str(err));
+    Test::Fail("assigned failed: " + RdKafka::err2str(err));
 
-  int received = 0;
+  int received       = 0;
   int in_profile_cnt = 0;
-  int dmax = (int)(/*max overhead*/100.0 + (double)backoff_ms * 1.2);
+  int dmax           = (int)(/*max overhead*/ 100.0 + (double)backoff_ms * 1.2);
 
   int64_t ts_consume = test_clock();
 
   while (received < 10) {
     RdKafka::Message *msg = c->consume(3000 + backoff_ms);
 
-    rd_ts_t now = test_clock();
-    int latency = (test_clock() - ts_consume) / 1000;
-    ts_consume = now;
+    rd_ts_t now     = test_clock();
+    int latency     = (test_clock() - ts_consume) / 1000;
+    ts_consume      = now;
     bool in_profile = latency <= dmax;
 
     if (!msg)
@@ -93,10 +91,11 @@ static void do_test_queue_backoff (const std::string &topic,
     if (msg->err())
       Test::Fail("Unexpected consumer error: " + msg->errstr());
 
-    Test::Say(tostr() << "Message #" << received << " consumed in " <<
-              latency << "ms (expecting <= " << dmax << "ms)" <<
-              (received == 0 ? ": skipping first" : "") <<
-              (in_profile ? ": in profile" : ": OUT OF PROFILE") << "\n");
+    Test::Say(tostr() << "Message #" << received << " consumed in " << latency
+                      << "ms (expecting <= " << dmax << "ms)"
+                      << (received == 0 ? ": skipping first" : "")
+                      << (in_profile ? ": in profile" : ": OUT OF PROFILE")
+                      << "\n");
 
     if (received++ > 0 && in_profile)
       in_profile_cnt++;
@@ -104,13 +103,13 @@ static void do_test_queue_backoff (const std::string &topic,
     delete msg;
   }
 
-  Test::Say(tostr() << in_profile_cnt << "/" << received << " messages were " <<
-            "in profile (<= " << dmax << ") for backoff_ms=" <<
-            backoff_ms << "\n");
+  Test::Say(tostr() << in_profile_cnt << "/" << received << " messages were "
+                    << "in profile (<= " << dmax
+                    << ") for backoff_ms=" << backoff_ms << "\n");
 
-  TEST_ASSERT((double)in_profile_cnt / (double)received >=
-              (test_on_ci ? 0.1 : 0.9),
-              "Only %d/%d messages were in profile", in_profile_cnt, received);
+  TEST_ASSERT(
+      (double)in_profile_cnt / (double)received >= (test_on_ci ? 0.1 : 0.9),
+      "Only %d/%d messages were in profile", in_profile_cnt, received);
 
   delete c;
 
@@ -119,26 +118,26 @@ static void do_test_queue_backoff (const std::string &topic,
 
 
 extern "C" {
-  int main_0127_fetch_queue_backoff (int argc, char **argv) {
-    std::string topic = Test::mk_topic_name("0127_fetch_queue_backoff", 1);
+int main_0127_fetch_queue_backoff(int argc, char **argv) {
+  std::string topic = Test::mk_topic_name("0127_fetch_queue_backoff", 1);
 
-    /* Prime the topic with messages. */
-    RdKafka::Conf *conf;
-    Test::conf_init(&conf, NULL, 10);
-    Test::conf_set(conf, "batch.num.messages", "1");
-    std::string errstr;
-    RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
-    if (!p)
-      Test::Fail(tostr() << __FUNCTION__ << ": Failed to create producer: " <<
-                 errstr);
-    delete conf;
+  /* Prime the topic with messages. */
+  RdKafka::Conf *conf;
+  Test::conf_init(&conf, NULL, 10);
+  Test::conf_set(conf, "batch.num.messages", "1");
+  std::string errstr;
+  RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
+  if (!p)
+    Test::Fail(tostr() << __FUNCTION__
+                       << ": Failed to create producer: " << errstr);
+  delete conf;
 
-    Test::produce_msgs(p, topic, 0, 100, 10000, true/*flush*/);
-    delete p;
+  Test::produce_msgs(p, topic, 0, 100, 10000, true /*flush*/);
+  delete p;
 
-    do_test_queue_backoff(topic, 2000);
-    do_test_queue_backoff(topic, 10);
-    do_test_queue_backoff(topic, 0);
-    return 0;
-  }
+  do_test_queue_backoff(topic, 2000);
+  do_test_queue_backoff(topic, 10);
+  do_test_queue_backoff(topic, 0);
+  return 0;
+}
 }

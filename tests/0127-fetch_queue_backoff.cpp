@@ -38,6 +38,8 @@ extern "C" {
 /**
  * Test consumer fetch.queue.backoff.ms behaviour.
  *
+ * @param backoff_ms Backoff ms to configure, -1 to rely on default one.
+ *
  * 1. Produce N messages, 1 message per batch.
  * 2. Configure consumer with queued.min.messages=1 and
  *    fetch.queue.backoff.ms=A|B.
@@ -55,8 +57,14 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
   Test::conf_set(conf, "enable.auto.commit", "false");
   Test::conf_set(conf, "auto.offset.reset", "beginning");
   Test::conf_set(conf, "queued.min.messages", "1");
-  Test::conf_set(conf, "fetch.queue.backoff.ms", tostr() << backoff_ms);
+  if (backoff_ms >= 0) {
+    Test::conf_set(conf, "fetch.queue.backoff.ms", tostr() << backoff_ms);
+  }
   Test::conf_set(conf, "fetch.message.max.bytes", "12000");
+
+  if (backoff_ms < 0)
+    /* default */
+    backoff_ms = 1000;
 
   std::string errstr;
 
@@ -78,7 +86,7 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
 
   int64_t ts_consume = test_clock();
 
-  while (received < 10) {
+  while (received < 5) {
     RdKafka::Message *msg = c->consume(3000 + backoff_ms);
 
     rd_ts_t now     = test_clock();
@@ -107,9 +115,11 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
                     << "in profile (<= " << dmax
                     << ") for backoff_ms=" << backoff_ms << "\n");
 
-  TEST_ASSERT(
-      (double)in_profile_cnt / (double)received >= (test_on_ci ? 0.1 : 0.9),
-      "Only %d/%d messages were in profile", in_profile_cnt, received);
+  /* first message isn't counted*/
+  const int expected_in_profile = received - 1;
+  TEST_ASSERT(expected_in_profile - in_profile_cnt >= (test_on_ci ? 1 : 0),
+              "Only %d/%d messages were in profile", in_profile_cnt,
+              expected_in_profile);
 
   delete c;
 
@@ -135,7 +145,8 @@ int main_0127_fetch_queue_backoff(int argc, char **argv) {
   Test::produce_msgs(p, topic, 0, 100, 10000, true /*flush*/);
   delete p;
 
-  do_test_queue_backoff(topic, 2000);
+  do_test_queue_backoff(topic, -1);
+  do_test_queue_backoff(topic, 500);
   do_test_queue_backoff(topic, 10);
   do_test_queue_backoff(topic, 0);
   return 0;

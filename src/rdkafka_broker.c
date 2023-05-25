@@ -49,6 +49,7 @@
 #include <ctype.h>
 
 #include "rd.h"
+#include "rdaddr.h"
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_msgset.h"
@@ -5257,6 +5258,28 @@ static int rd_kafka_broker_name_parse(rd_kafka_t *rk,
 }
 
 /**
+ * @brief Add a broker from a string of type "[proto://]host[:port]" to the list of brokers.
+ * *cnt is increased by one if a broker was added, else not.
+ */
+void rd_kafka_find_or_add_broker(rd_kafka_t *rk, rd_kafka_secproto_t proto, const char *host, uint16_t port, int *cnt) {
+        rd_kafka_broker_t *rkb;
+
+        if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
+            rkb->rkb_source == RD_KAFKA_CONFIGURED) {
+                (*cnt)++;
+        } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto,
+                                       host, port,
+                                       RD_KAFKA_NODEID_UA) != NULL)
+                (*cnt)++;
+
+        /* If rd_kafka_broker_find returned a broker its
+         * reference needs to be released
+         * See issue #193 */
+        if (rkb)
+                rd_kafka_broker_destroy(rkb);
+}
+
+/**
  * @brief Adds a (csv list of) broker(s).
  * Returns the number of brokers succesfully added.
  *
@@ -5267,13 +5290,15 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
         char *s_copy = rd_strdup(brokerlist);
         char *s      = s_copy;
         int cnt      = 0;
-        rd_kafka_broker_t *rkb;
         int pre_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+        rd_sockaddr_inx_t *sinx;
+        rd_sockaddr_list_t *sockaddrList;
 
         /* Parse comma-separated list of brokers. */
         while (*s) {
                 uint16_t port;
                 const char *host;
+                const char *errstr;
                 rd_kafka_secproto_t proto;
 
                 if (*s == ',' || *s == ' ') {
@@ -5286,20 +5311,33 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
                         break;
 
                 rd_kafka_wrlock(rk);
+                if (rk->rk_conf.resolve_canonical_bootstrap_servers_only) {
+                        sockaddrList = rd_getaddrinfo(
+                            host, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
+                            rk->rk_conf.broker_addr_family, SOCK_STREAM,
+                            IPPROTO_TCP, rk->rk_conf.resolve_cb,
+                            rk->rk_conf.opaque, &errstr);
 
-                if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
-                    rkb->rkb_source == RD_KAFKA_CONFIGURED) {
-                        cnt++;
-                } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto,
-                                               host, port,
-                                               RD_KAFKA_NODEID_UA) != NULL)
-                        cnt++;
+                        if (!sockaddrList) {
+                                rd_kafka_log(rk, LOG_WARNING, "BROKER",
+                                             "Failed to resolve '%s': %s", host,
+                                             errstr);
+                                rd_kafka_wrunlock(rk);
+                                continue;
+                        }
 
-                /* If rd_kafka_broker_find returned a broker its
-                 * reference needs to be released
-                 * See issue #193 */
-                if (rkb)
-                        rd_kafka_broker_destroy(rkb);
+                        RD_SOCKADDR_LIST_FOREACH(sinx, sockaddrList) {
+                                const char *resolvedFQDN = rd_sockaddr2str(
+                                    sinx, RD_SOCKADDR2STR_F_RESOLVE);
+                                rd_kafka_find_or_add_broker(
+                                    rk, proto, resolvedFQDN, port, &cnt);
+                        };
+
+                        rd_sockaddr_list_destroy(sockaddrList);
+                } else {
+                        rd_kafka_find_or_add_broker(rk, proto, host, port,
+                                                    &cnt);
+                }
 
                 rd_kafka_wrunlock(rk);
         }

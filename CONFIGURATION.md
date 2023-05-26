@@ -181,4 +181,11 @@ offset.store.sync.interval.ms            |  C  | -1 .. 86400000  |            -1
 offset.store.method                      |  C  | file, broker    |        broker | low        | **DEPRECATED** Offset commit store method: 'file' - DEPRECATED: local file store (offset.store.path, et.al), 'broker' - broker commit store (requires "group.id" to be configured and Apache Kafka 0.8.2 or later on the broker.). <br>*Type: enum value*
 consume.callback.max.messages            |  C  | 0 .. 1000000    |             0 | low        | Maximum number of messages to dispatch in one `rd_kafka_consume_callback*()` call (0 = unlimited) <br>*Type: integer*
 
+
+## Global configuration properties
+
+Property                                 | C/P | Range           |       Default | Importance | Description              
+-----------------------------------------|-----|-----------------|--------------:|------------| --------------------------
+resolve.canonical.bootstrap.servers.only |  *  | true, false     |         false | low        | Resolve each bootstrap address into a list of canonical names.Default: false. <br>*Type: boolean*
+
 ### C/P legend: C = Consumer, P = Producer, * = both

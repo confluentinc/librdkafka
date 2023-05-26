@@ -724,7 +724,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rko = (rd_kafka_op_t *)rkmessages[i]->_private;
                 rd_kafka_toppar_t *rktp = rko->rko_rktp;
                 int64_t offset          = rkmessages[i]->offset + 1;
-                if (unlikely(rktp->rktp_app_pos.offset < offset))
+                if (unlikely(rktp && (rktp->rktp_app_pos.offset < offset)))
                         rd_kafka_update_app_pos(
                             rk, rktp,
                             RD_KAFKA_FETCH_POS(
@@ -748,7 +748,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 next                    = TAILQ_NEXT(next, rko_link);
                 rd_kafka_toppar_t *rktp = rko->rko_rktp;
                 int64_t offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
-                if (rktp->rktp_app_pos.offset < offset)
+                if (rktp && (rktp->rktp_app_pos.offset < offset))
                         rd_kafka_update_app_pos(
                             rk, rktp,
                             RD_KAFKA_FETCH_POS(

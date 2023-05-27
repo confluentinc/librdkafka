@@ -5345,6 +5345,7 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
                 rd_list_add(&rko->rko_u.admin_request.args,rd_kafka_UserScramCredentialAlteration_copy(alterations[i]));
         }
         rd_kafka_q_enq(rk->rk_ops, rko);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 /**

@@ -4830,6 +4830,7 @@ rd_kafka_UserScramCredentialsDescription_t *rd_kafka_UserScramCredentialsDescrip
         rd_kafka_UserScramCredentialsDescription_t *description;
         description = rd_calloc(1,sizeof(*description));
         description->user = rd_strdup(username);
+        description->error = NULL;
         description->credential_info_cnt = num_credentials;
         description->credential_infos = NULL;
         if(num_credentials > 0){

@@ -165,7 +165,7 @@ static void Describe(rd_kafka_t *rk,char **users,size_t user_cnt){
 static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alterations,size_t alteration_cnt){
         rd_kafka_event_t *event;
         char errstr[512];      /* librdkafka API error reporting buffer */
-
+        int api_error = 0;
         /* Set timeout (optional) */
         rd_kafka_AdminOptions_t *options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
@@ -177,8 +177,11 @@ static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alte
         }
 
         /* C the AlterUserScramCredentials Function*/
-        rd_kafka_AlterUserScramCredentials(rk,alterations,alteration_cnt,options,queue);
-        
+        api_error = rd_kafka_AlterUserScramCredentials(rk,alterations,alteration_cnt,options,queue);
+         if(api_error){
+                printf("API Entry point error : %s\n\n",rd_kafka_err2str(api_error));
+                return;
+        }
         rd_kafka_AdminOptions_destroy(options);
         
         /* Wait for results */
@@ -208,7 +211,7 @@ static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alte
                                 char *errstr = rd_kafka_error_string(error);
                                 printf("        Username : %s , errorcode : %d , error-message : %s\n",username,errorcode,errstr);
                         }else{
-                                printf("        Username : %s \n",username);
+                                printf("        Username : %s Success!!\n",username);
                         }
 
                 }

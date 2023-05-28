@@ -4916,6 +4916,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentialsRequest(rd_kafka_broker
                rd_kafka_buf_write_str(rkbuf,user->str,user->len);
                rd_kafka_buf_write_tags(rkbuf);
         }
+        rd_kafka_buf_ApiVersion_set(rkbuf,ApiVersion,0);
         /* Last Tag buffer included automatically*/
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -5237,6 +5238,7 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(rd_kafka_broker_t 
         }
         
         rd_kafka_buf_write_tags(rkbuf);
+        rd_kafka_buf_ApiVersion_set(rkbuf,ApiVersion,0);
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

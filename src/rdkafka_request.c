@@ -2213,11 +2213,12 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
         size_t of_TopicArrayCnt;
         int features;
-        int topic_cnt  = topics ? rd_list_cnt(topics) : 0;
-        int *full_incr = NULL;
+        int topic_cnt             = topics ? rd_list_cnt(topics) : 0;
+        int *full_incr            = NULL;
+        rd_kafka_uuid_t zero_uuid = RD_KAFKA_ZERO_UUID;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 12, &features);
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
                                                  4 + (50 * topic_cnt) + 1,
@@ -2313,6 +2314,12 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                     rd_list_copy(topics, rd_list_string_copy, NULL);
 
                 RD_LIST_FOREACH(topic, topics, i) {
+                        if (ApiVersion >= 10) {
+                                /* FIXME: Not supporting topic id in the request
+                                 * right now. Update this to correct topic
+                                 * id once KIP-516 is fully implemented. */
+                                rd_kafka_buf_write_uuid(rkbuf, &zero_uuid);
+                        }
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
                         /* Tags for previous topic */
                         rd_kafka_buf_write_tags(rkbuf);
@@ -2338,7 +2345,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                            "on broker auto.create.topics.enable configuration");
         }
 
-        if (ApiVersion >= 8 && ApiVersion < 10) {
+        if (ApiVersion >= 8 && ApiVersion <= 10) {
                 /* TODO: implement KIP-430 */
                 /* IncludeClusterAuthorizedOperations */
                 rd_kafka_buf_write_bool(rkbuf, rd_false);

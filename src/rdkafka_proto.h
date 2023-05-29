@@ -565,6 +565,26 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
         (8 + 4 + 4 + 1 + 4 + 2 + 4 + 8 + 8 + 8 + 2 + 4)
 
 
+/**
+ * @brief UUID
+ *
+ */
+typedef struct rd_kafka_uuid_s {
+        uint64_t most_significant_bits;
+        uint64_t least_significant_bits;
+        char base64str[23];
+} rd_kafka_uuid_t;
+
+#define RD_KAFKA_ZERO_UUID                                                     \
+        { 0, 0 }
+
+#define RD_KADKA_METADATA_TOPIC_ID                                             \
+        { 0, 1 }
+
+static RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid) {
+        free(uuid);
+}
+
 
 /**
  * @name Producer ID and Epoch for the Idempotent Producer

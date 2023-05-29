@@ -37,25 +37,7 @@
 #include <curl/curl.h>
 #include "rdhttp.h"
 #include "rdkafka_sasl_oauthbearer_oidc.h"
-
-
-/**
- * @brief Base64 encode binary input \p in, and write base64-encoded string
- *        and it's size to \p out
- */
-static void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
-        size_t max_len;
-
-        max_len  = (((in->size + 2) / 3) * 4) + 1;
-        out->ptr = rd_malloc(max_len);
-        rd_assert(out->ptr);
-
-        out->size = EVP_EncodeBlock((uint8_t *)out->ptr, (uint8_t *)in->ptr,
-                                    (int)in->size);
-
-        rd_assert(out->size <= max_len);
-        out->ptr[out->size] = 0;
-}
+#include "rdbase64.h"
 
 
 /**

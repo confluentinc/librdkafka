@@ -34,6 +34,7 @@
 #include "rdlist.h"
 #include "rdbuf.h"
 #include "rdkafka_msgbatch.h"
+#include "rdbase64.h"
 
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
@@ -1208,6 +1209,17 @@ rd_kafka_buf_update_i64(rd_kafka_buf_t *rkbuf, size_t of, int64_t v) {
 
 
 /**
+ * Write uint64_t to buffer.
+ * The value will be endian-swapped before write.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_u64(rd_kafka_buf_t *rkbuf,
+                                               uint64_t v) {
+        v = htobe64(v);
+        return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
+}
+
+
+/**
  * @brief Write standard (2-byte header) or KIP-482 COMPACT_STRING to buffer.
  *
  * @remark Copies the string.
@@ -1428,4 +1440,35 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
                             rd_kafka_make_req_cb_t *make_cb,
                             void *make_opaque,
                             void (*free_make_opaque_cb)(void *make_opaque));
+
+
+#define rd_kafka_buf_read_uuid(rkbuf, uuid)                                    \
+        do {                                                                   \
+                uint64_t _msb;                                                 \
+                uint64_t _lsb;                                                 \
+                rd_chariov_t in_base64;                                        \
+                char *out_base64_str;                                          \
+                char *uuid_bytes;                                              \
+                uint64_t input_uuid[2];                                        \
+                rd_kafka_buf_read(rkbuf, &_msb, sizeof(_msb));                 \
+                rd_kafka_buf_read(rkbuf, &_lsb, sizeof(_lsb));                 \
+                input_uuid[0]  = _msb;                                         \
+                input_uuid[1]  = _lsb;                                         \
+                uuid_bytes     = (char *)input_uuid;                           \
+                in_base64.ptr  = uuid_bytes;                                   \
+                in_base64.size = sizeof(_msb) + sizeof(_lsb);                  \
+                out_base64_str = rd_base64_encode_str(&in_base64);             \
+                (uuid)->most_significant_bits  = be64toh(_msb);                \
+                (uuid)->least_significant_bits = be64toh(_lsb);                \
+                rd_strlcpy((uuid)->base64str, out_base64_str, 23);             \
+                free(out_base64_str);                                          \
+        } while (0)
+
+
+static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
+                                              rd_kafka_uuid_t *uuid) {
+        rd_kafka_buf_write_u64(rkbuf, uuid->most_significant_bits);
+        rd_kafka_buf_write_u64(rkbuf, uuid->least_significant_bits);
+}
+
 #endif /* _RDKAFKA_BUF_H_ */

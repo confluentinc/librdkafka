@@ -146,7 +146,7 @@ static char *rd_kafka_sasl_scram_get_attr(const rd_chariov_t *inbuf,
  * @brief Base64 encode binary input \p in
  * @returns a newly allocated, base64-encoded string or NULL on error.
  */
-static char *rd_base64_encode(const rd_chariov_t *in) {
+static char *rd_base64_encode_scram(const rd_chariov_t *in) {
         char *ret;
         size_t ret_len, max_len;
 
@@ -443,7 +443,7 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         }
 
         /* Store the Base64 encoded ServerSignature for quick comparison */
-        state->ServerSignatureB64 = rd_base64_encode(&ServerSignature);
+        state->ServerSignatureB64 = rd_base64_encode_scram(&ServerSignature);
         if (state->ServerSignatureB64 == NULL) {
                 rd_free(client_final_msg_wo_proof.ptr);
                 return -1;
@@ -468,7 +468,7 @@ static int rd_kafka_sasl_scram_build_client_final_message(
 
 
         /* Base64 encoded ClientProof */
-        ClientProofB64 = rd_base64_encode(&ClientProof);
+        ClientProofB64 = rd_base64_encode_scram(&ClientProof);
         if (ClientProofB64 == NULL) {
                 rd_free(client_final_msg_wo_proof.ptr);
                 return -1;

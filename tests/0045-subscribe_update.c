@@ -147,12 +147,14 @@ static void await_no_rebalance(const char *pfx,
 /**
  * Wait for REBALANCE event and perform assignment/unassignment.
  * For the first time and after each event, wait till for \p timeout before
- * stopping. Asserts if no rebalance event was processed.
+ * stopping. Terminates earlier if \p min_events were seen.
+ * Asserts that \p min_events were processed.
  */
 static void await_rebalance(const char *pfx,
                             rd_kafka_t *rk,
                             rd_kafka_queue_t *queue,
-                            int timeout_ms) {
+                            int timeout_ms,
+                            int min_events) {
         rd_kafka_event_t *rkev;
         int processed = 0;
 
@@ -180,10 +182,14 @@ static void await_rebalance(const char *pfx,
                 processed++;
 
                 rd_kafka_event_destroy(rkev);
+
+                if (processed >= min_events)
+                        break;
         }
         TEST_ASSERT(
-            processed,
-            "Expected to process at least 1 rebalance event, processed 0");
+            processed >= min_events,
+            "Expected to process at least %d rebalance event, processed %d",
+            min_events, processed);
 }
 
 static void do_test_non_exist_and_partchange(void) {
@@ -489,12 +495,11 @@ static void do_test_replica_rack_change_mock(const char *assignment_strategy,
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_queue_t *queue;
-        int i;
 
         SUB_TEST("Testing %s", test_name);
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
-        test_conf_init(&conf, NULL, 60 * 5);
+        test_conf_init(&conf, NULL, 60 * 4);
 
         if (use_replica_rack) {
                 rd_kafka_mock_broker_set_rack(mcluster, 1, "rack0");
@@ -507,7 +512,6 @@ static void do_test_replica_rack_change_mock(const char *assignment_strategy,
                                                    2 /* partition_cnt */,
                                                    1 /* replication_factor */));
 
-        test_conf_set(conf, "security.protocol", "plaintext");
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "partition.assignment.strategy",
                       assignment_strategy);
@@ -525,7 +529,7 @@ static void do_test_replica_rack_change_mock(const char *assignment_strategy,
         test_consumer_subscribe(rk, subscription);
 
         await_rebalance(tsprintf("%s: initial assignment", test_name), rk,
-                        queue, 10000);
+                        queue, 10000, 1);
 
         /* Avoid issues if the replica assignment algorithm for mock broker
          * changes, and change all the racks. */
@@ -538,7 +542,7 @@ static void do_test_replica_rack_change_mock(const char *assignment_strategy,
 
         if (use_client_rack && use_replica_rack)
                 await_rebalance(tsprintf("%s: rebalance", test_name), rk, queue,
-                                10000);
+                                10000, 1);
         else
                 await_no_rebalance(
                     tsprintf("%s: no rebalance without racks", test_name), rk,
@@ -591,7 +595,6 @@ int main_0045_subscribe_update_mock(int argc, char **argv) {
 
 
 int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
-        const char *assignor = "range";
         int use_replica_rack = 0;
         int use_client_rack  = 0;
 

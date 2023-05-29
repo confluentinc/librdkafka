@@ -1437,6 +1437,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "A higher value allows for more effective batching of these "
      "messages.",
      0, 900000, 10},
+    {_RK_GLOBAL, "resolve.canonical.bootstrap.servers.only", _RK_C_BOOL,
+     _RK(resolve_canonical_bootstrap_servers_only),
+     "Resolve each bootstrap address into a list of canonical names."
+     "Default: false.",
+     0, 1, 0},
 
 
     /*
@@ -1620,12 +1625,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Maximum number of messages to dispatch in "
      "one `rd_kafka_consume_callback*()` call (0 = unlimited)",
      0, 1000000, 0},
-
-    {_RK_GLOBAL, "resolve.canonical.bootstrap.servers.only", _RK_C_BOOL,
-     _RK(resolve_canonical_bootstrap_servers_only),
-     "Resolve each bootstrap address into a list of canonical names."
-     "Default: false.",
-     0, 1, 0},
 
     {0, /* End */}};
 

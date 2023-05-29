@@ -152,6 +152,7 @@ delivery.report.only.error               |  P  | true, false     |         false
 dr_cb                                    |  P  |                 |               | low        | Delivery report callback (set with rd_kafka_conf_set_dr_cb()) <br>*Type: see dedicated API*
 dr_msg_cb                                |  P  |                 |               | low        | Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb()) <br>*Type: see dedicated API*
 sticky.partitioning.linger.ms            |  P  | 0 .. 900000     |            10 | low        | Delay in milliseconds to wait to assign new sticky partitions for each topic. By default, set to double the time of linger.ms. To disable sticky behavior, set to 0. This behavior affects messages with the key NULL in all cases, and messages with key lengths of zero when the consistent_random partitioner is in use. These messages would otherwise be assigned randomly. A higher value allows for more effective batching of these messages. <br>*Type: integer*
+resolve.canonical.bootstrap.servers.only |  *  | true, false     |         false | low        | Resolve each bootstrap address into a list of canonical names.Default: false. <br>*Type: boolean*
 
 
 ## Topic configuration properties
@@ -180,12 +181,5 @@ offset.store.path                        |  C  |                 |             .
 offset.store.sync.interval.ms            |  C  | -1 .. 86400000  |            -1 | low        | **DEPRECATED** fsync() interval for the offset file, in milliseconds. Use -1 to disable syncing, and 0 for immediate sync after each write. File-based offset storage will be removed in a future version. <br>*Type: integer*
 offset.store.method                      |  C  | file, broker    |        broker | low        | **DEPRECATED** Offset commit store method: 'file' - DEPRECATED: local file store (offset.store.path, et.al), 'broker' - broker commit store (requires "group.id" to be configured and Apache Kafka 0.8.2 or later on the broker.). <br>*Type: enum value*
 consume.callback.max.messages            |  C  | 0 .. 1000000    |             0 | low        | Maximum number of messages to dispatch in one `rd_kafka_consume_callback*()` call (0 = unlimited) <br>*Type: integer*
-
-
-## Global configuration properties
-
-Property                                 | C/P | Range           |       Default | Importance | Description              
------------------------------------------|-----|-----------------|--------------:|------------| --------------------------
-resolve.canonical.bootstrap.servers.only |  *  | true, false     |         false | low        | Resolve each bootstrap address into a list of canonical names.Default: false. <br>*Type: boolean*
 
 ### C/P legend: C = Consumer, P = Producer, * = both

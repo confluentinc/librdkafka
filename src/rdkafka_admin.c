@@ -2920,7 +2920,7 @@ rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_delete_config(
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         return rd_kafka_admin_incremental_add_config0(
-            &config->config, name, NULL, RD_KAFKA_INCREMENTAL_ALTER_OP_REMOVE);
+            &config->config, name, NULL, RD_KAFKA_INCREMENTAL_ALTER_OP_DELETE);
 }
 
 rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_subtract_config(

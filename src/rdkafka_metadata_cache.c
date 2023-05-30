@@ -449,7 +449,7 @@ void rd_kafka_metadata_cache_topic_update(
     const rd_kafka_metadata_topic_t *mdt,
     const rd_kafka_metadata_topic_internal_t *mdit,
     rd_bool_t propagate,
-    rd_bool_t include_metadata,
+    rd_bool_t include_racks,
     rd_kafka_metadata_broker_internal_t *brokers,
     size_t broker_cnt) {
         rd_ts_t now        = rd_clock();
@@ -465,7 +465,7 @@ void rd_kafka_metadata_cache_topic_update(
             mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
                 rd_kafka_metadata_cache_insert(rk, mdt, mdit, now, ts_expires,
-                                               include_metadata, brokers,
+                                               include_racks, brokers,
                                                broker_cnt);
         else
                 changed =

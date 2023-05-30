@@ -429,9 +429,10 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
         rd_kafka_mock_cluster_t *mcluster = mpart->topic->cluster;
         int replica_cnt = RD_MIN(replication_factor, mcluster->broker_cnt);
         rd_kafka_mock_broker_t *mrkb;
-        int i             = 0;
-        int first_replica = mpart->id * replication_factor;
-        int skipped       = 0;
+        int i = 0;
+        int first_replica =
+            (mpart->id * replication_factor) % mcluster->broker_cnt;
+        int skipped = 0;
 
         if (mpart->replicas)
                 rd_free(mpart->replicas);
@@ -439,10 +440,8 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
         mpart->replicas    = rd_calloc(replica_cnt, sizeof(*mpart->replicas));
         mpart->replica_cnt = replica_cnt;
 
-        /* TODO: investigate using something randomized, perhaps reservoir
-         * sampling. */
-        /* For now, use a predictable, determininistic order on a per-topic
-         * basis.
+
+        /* Use a predictable, determininistic order on a per-topic basis.
          *
          * Two loops are needed for wraparound. */
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
@@ -459,7 +458,6 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
                         break;
                 mpart->replicas[i++] = mrkb;
         }
-
 
         /* Select a random leader */
         rd_kafka_mock_partition_set_leader0(

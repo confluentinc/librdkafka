@@ -383,7 +383,9 @@ void rd_list_deduplicate(rd_list_t **rl,
         void *prev_elem = NULL;
         int i;
 
-        rd_list_sort(*rl, cmp);
+        if (!((*rl)->rl_flags & RD_LIST_F_SORTED))
+                rd_list_sort(*rl, cmp);
+
         RD_LIST_FOREACH(elem, *rl, i) {
                 if (prev_elem && cmp(elem, prev_elem) == 0) {
                         /* Skip this element, and destroy it */

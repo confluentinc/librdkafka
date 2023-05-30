@@ -1988,20 +1988,48 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 }
 
 static void do_test_ScramConfigAdmin(rd_kafka_t *rk, rd_kafka_queue_t *rkqu){
+        char errstr[512];
+        rd_kafka_AdminOptions_t *options;
         if(!WITH_SSL){
                 /* Need to test if upsertion is passed in alterations we do get an error */
-                char errstr[512];
                 rd_kafka_UserScramCredentialAlteration_t *alterations[1];
                 alterations[0] = rd_kafka_UserScramCredentialUpsertion_new("broker","salt","password",RD_KAFKA_SCRAM_MECHANISM_SHA_256,10000);
-                rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+                options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
                 if (rd_kafka_AdminOptions_set_request_timeout(
                         options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
                         fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                         return;
                 }
                 rd_kafka_resp_err_t err = rd_kafka_AlterUserScramCredentials(rk,alterations,1,options,rkqu);
+                rd_kafka_AdminOptions_destroy(options);
                 TEST_ASSERT(err==RD_KAFKA_RESP_ERR_OPENSSL_COMPILATION_MISSING,"Whenever an upsertion is passed and the librdkafka is not compiled with OPENSSL, the request should fails with error code RD_KAFKA_RESP_ERR_OPENSSL_COMPILATION_MISSING");
         }
+        char *users[2];
+        users[0] = "Sam";
+        users[1] = "Sam";
+        options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
+        if (rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
+                        fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
+                        return;
+        }
+        rd_kafka_resp_err_t err = rd_kafka_DescribeUserScramCredentials(rk,users,1,options,rkqu);
+        rd_kafka_AdminOptions_destroy(options);
+        TEST_ASSERT(err==RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE,"Whenever a duplicate resource is passed in form of username, the request should fails with error code RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE");
+
+        rd_kafka_UserScramCredentialAlteration_t *alterations[2];
+        alterations[0] = rd_kafka_UserScramCredentialDeletion_new("Sam",RD_KAFKA_SCRAM_MECHANISM_SHA_256);
+        alterations[1] = rd_kafka_UserScramCredentialDeletion_new("Sam",RD_KAFKA_SCRAM_MECHANISM_SHA_512);
+        options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+        if (rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
+                        fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
+                        return;
+        }
+        rd_kafka_resp_err_t err = rd_kafka_AlterUserScramCredentials(rk,alterations,2,options,rkqu);
+        rd_kafka_AdminOptions_destroy(options);
+        TEST_ASSERT(err==RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE,"Whenever a duplicate resource is passed in form of username, the request should fails with error code RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE");
+
 }
 /**
  * @brief Test a mix of APIs using the same replyq.

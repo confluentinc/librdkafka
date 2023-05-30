@@ -234,7 +234,7 @@ void rd_kafka_acl_result_free(void *ptr) {
  * @return A new allocated Node object.
  *         Use rd_kafka_Node_destroy() to free when done.
  */
-rd_kafka_Node_t *rd_kafka_Node_new(int id,
+rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
                                    const char *host,
                                    uint16_t port,
                                    const char *rack_id) {

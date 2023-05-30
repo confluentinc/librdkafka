@@ -489,6 +489,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR__NOOP, "Local: No operation performed"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET,
               "Local: No offset to automatically reset to"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
+              "Local: Partition log truncation detected"),
 
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN, "Unknown broker error"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_NO_ERROR, "Success"),
@@ -988,7 +990,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         mtx_destroy(&rk->rk_init_lock);
 
         if (rk->rk_full_metadata)
-                rd_kafka_metadata_destroy(rk->rk_full_metadata);
+                rd_kafka_metadata_destroy(&rk->rk_full_metadata->metadata);
         rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
         rd_kafkap_str_destroy(rk->rk_eos.transactional_id);
@@ -1419,13 +1421,14 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
          * offsets are not (yet) committed.
          */
         if (end_offset != RD_KAFKA_OFFSET_INVALID) {
-                if (rktp->rktp_stored_offset >= 0 &&
-                    rktp->rktp_stored_offset <= end_offset)
+                if (rktp->rktp_stored_pos.offset >= 0 &&
+                    rktp->rktp_stored_pos.offset <= end_offset)
                         consumer_lag_stored =
-                            end_offset - rktp->rktp_stored_offset;
-                if (rktp->rktp_committed_offset >= 0 &&
-                    rktp->rktp_committed_offset <= end_offset)
-                        consumer_lag = end_offset - rktp->rktp_committed_offset;
+                            end_offset - rktp->rktp_stored_pos.offset;
+                if (rktp->rktp_committed_pos.offset >= 0 &&
+                    rktp->rktp_committed_pos.offset <= end_offset)
+                        consumer_lag =
+                            end_offset - rktp->rktp_committed_pos.offset;
         }
 
         _st_printf(
@@ -1457,9 +1460,13 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
             ", "
             "\"stored_offset\":%" PRId64
             ", "
+            "\"stored_leader_epoch\":%" PRId32
+            ", "
             "\"commited_offset\":%" PRId64
             ", " /*FIXME: issue #80 */
             "\"committed_offset\":%" PRId64
+            ", "
+            "\"committed_leader_epoch\":%" PRId32
             ", "
             "\"eof_offset\":%" PRId64
             ", "
@@ -1472,6 +1479,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
             "\"consumer_lag\":%" PRId64
             ", "
             "\"consumer_lag_stored\":%" PRId64
+            ", "
+            "\"leader_epoch\":%" PRId32
             ", "
             "\"txmsgs\":%" PRIu64
             ", "
@@ -1502,12 +1511,15 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
             0, (size_t)0, rd_kafka_q_len(rktp->rktp_fetchq),
             rd_kafka_q_size(rktp->rktp_fetchq),
             rd_kafka_fetch_states[rktp->rktp_fetch_state],
-            rktp->rktp_query_offset, offs.fetch_offset, rktp->rktp_app_offset,
-            rktp->rktp_stored_offset,
-            rktp->rktp_committed_offset, /* FIXME: issue #80 */
-            rktp->rktp_committed_offset, offs.eof_offset, rktp->rktp_lo_offset,
-            rktp->rktp_hi_offset, rktp->rktp_ls_offset, consumer_lag,
-            consumer_lag_stored, rd_atomic64_get(&rktp->rktp_c.tx_msgs),
+            rktp->rktp_query_pos.offset, offs.fetch_pos.offset,
+            rktp->rktp_app_pos.offset, rktp->rktp_stored_pos.offset,
+            rktp->rktp_stored_pos.leader_epoch,
+            rktp->rktp_committed_pos.offset, /* FIXME: issue #80 */
+            rktp->rktp_committed_pos.offset,
+            rktp->rktp_committed_pos.leader_epoch, offs.eof_offset,
+            rktp->rktp_lo_offset, rktp->rktp_hi_offset, rktp->rktp_ls_offset,
+            consumer_lag, consumer_lag_stored, rktp->rktp_leader_epoch,
+            rd_atomic64_get(&rktp->rktp_c.tx_msgs),
             rd_atomic64_get(&rktp->rktp_c.tx_msg_bytes),
             rd_atomic64_get(&rktp->rktp_c.rx_msgs),
             rd_atomic64_get(&rktp->rktp_c.rx_msg_bytes),
@@ -1569,8 +1581,6 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                     [RD_KAFKAP_AlterReplicaLogDirs] = rd_true,
                     [RD_KAFKAP_DescribeLogDirs]     = rd_true,
 
-                    [RD_KAFKAP_SaslAuthenticate] = rd_false,
-
                     [RD_KAFKAP_CreateDelegationToken]       = rd_true,
                     [RD_KAFKAP_RenewDelegationToken]        = rd_true,
                     [RD_KAFKAP_ExpireDelegationToken]       = rd_true,
@@ -1587,22 +1597,35 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                     [RD_KAFKAP_AlterIsr]                    = rd_true,
                     [RD_KAFKAP_UpdateFeatures]              = rd_true,
                     [RD_KAFKAP_Envelope]                    = rd_true,
+                    [RD_KAFKAP_FetchSnapshot]               = rd_true,
+                    [RD_KAFKAP_BrokerHeartbeat]             = rd_true,
+                    [RD_KAFKAP_UnregisterBroker]            = rd_true,
+                    [RD_KAFKAP_AllocateProducerIds]         = rd_true,
                 },
             [3 /*hide-unless-non-zero*/] = {
                 /* Hide Admin requests unless they've been used */
-                [RD_KAFKAP_CreateTopics]            = rd_true,
-                [RD_KAFKAP_DeleteTopics]            = rd_true,
-                [RD_KAFKAP_DeleteRecords]           = rd_true,
-                [RD_KAFKAP_CreatePartitions]        = rd_true,
-                [RD_KAFKAP_DescribeAcls]            = rd_true,
-                [RD_KAFKAP_CreateAcls]              = rd_true,
-                [RD_KAFKAP_DeleteAcls]              = rd_true,
-                [RD_KAFKAP_DescribeConfigs]         = rd_true,
-                [RD_KAFKAP_AlterConfigs]            = rd_true,
-                [RD_KAFKAP_IncrementalAlterConfigs] = rd_true,
-                [RD_KAFKAP_DeleteGroups]            = rd_true,
-                [RD_KAFKAP_ListGroups]              = rd_true,
-                [RD_KAFKAP_DescribeGroups]          = rd_true}};
+                [RD_KAFKAP_CreateTopics]                 = rd_true,
+                [RD_KAFKAP_DeleteTopics]                 = rd_true,
+                [RD_KAFKAP_DeleteRecords]                = rd_true,
+                [RD_KAFKAP_CreatePartitions]             = rd_true,
+                [RD_KAFKAP_DescribeAcls]                 = rd_true,
+                [RD_KAFKAP_CreateAcls]                   = rd_true,
+                [RD_KAFKAP_DeleteAcls]                   = rd_true,
+                [RD_KAFKAP_DescribeConfigs]              = rd_true,
+                [RD_KAFKAP_AlterConfigs]                 = rd_true,
+                [RD_KAFKAP_DeleteGroups]                 = rd_true,
+                [RD_KAFKAP_ListGroups]                   = rd_true,
+                [RD_KAFKAP_DescribeGroups]               = rd_true,
+                [RD_KAFKAP_DescribeLogDirs]              = rd_true,
+                [RD_KAFKAP_IncrementalAlterConfigs]      = rd_true,
+                [RD_KAFKAP_AlterPartitionReassignments]  = rd_true,
+                [RD_KAFKAP_ListPartitionReassignments]   = rd_true,
+                [RD_KAFKAP_OffsetDelete]                 = rd_true,
+                [RD_KAFKAP_DescribeClientQuotas]         = rd_true,
+                [RD_KAFKAP_AlterClientQuotas]            = rd_true,
+                [RD_KAFKAP_DescribeUserScramCredentials] = rd_true,
+                [RD_KAFKAP_AlterUserScramCredentials]    = rd_true,
+            }};
         int i;
         int cnt = 0;
 
@@ -2702,7 +2725,8 @@ static RD_UNUSED int rd_kafka_consume_start0(rd_kafka_topic_t *rkt,
                 return -1;
         }
 
-        rd_kafka_toppar_op_fetch_start(rktp, offset, rkq, RD_KAFKA_NO_REPLYQ);
+        rd_kafka_toppar_op_fetch_start(rktp, RD_KAFKA_FETCH_POS(offset, -1),
+                                       rkq, RD_KAFKA_NO_REPLYQ);
 
         rd_kafka_toppar_destroy(rktp);
 
@@ -2814,7 +2838,8 @@ rd_kafka_resp_err_t rd_kafka_seek(rd_kafka_topic_t *app_rkt,
                 replyq = RD_KAFKA_REPLYQ(tmpq, 0);
         }
 
-        if ((err = rd_kafka_toppar_op_seek(rktp, offset, replyq))) {
+        if ((err = rd_kafka_toppar_op_seek(rktp, RD_KAFKA_FETCH_POS(offset, -1),
+                                           replyq))) {
                 if (tmpq)
                         rd_kafka_q_destroy_owner(tmpq);
                 rd_kafka_toppar_destroy(rktp);
@@ -2866,8 +2891,9 @@ rd_kafka_seek_partitions(rd_kafka_t *rk,
                         continue;
                 }
 
-                err = rd_kafka_toppar_op_seek(rktp, rktpar->offset,
-                                              RD_KAFKA_REPLYQ(tmpq, 0));
+                err = rd_kafka_toppar_op_seek(
+                    rktp, rd_kafka_topic_partition_get_fetch_pos(rktpar),
+                    RD_KAFKA_REPLYQ(tmpq, 0));
                 if (err) {
                         rktpar->err = err;
                 } else {
@@ -2885,7 +2911,8 @@ rd_kafka_seek_partitions(rd_kafka_t *rk,
         while (cnt > 0) {
                 rd_kafka_op_t *rko;
 
-                rko = rd_kafka_q_pop(tmpq, rd_timeout_remains(abs_timeout), 0);
+                rko =
+                    rd_kafka_q_pop(tmpq, rd_timeout_remains_us(abs_timeout), 0);
                 if (!rko) {
                         rd_kafka_q_destroy_owner(tmpq);
 
@@ -3420,10 +3447,12 @@ rd_kafka_position(rd_kafka_t *rk, rd_kafka_topic_partition_list_t *partitions) {
                 }
 
                 rd_kafka_toppar_lock(rktp);
-                rktpar->offset = rktp->rktp_app_offset;
-                rktpar->err    = RD_KAFKA_RESP_ERR_NO_ERROR;
+                rd_kafka_topic_partition_set_from_fetch_pos(rktpar,
+                                                            rktp->rktp_app_pos);
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_destroy(rktp);
+
+                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -3975,14 +4004,17 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
 int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
         int r;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rk->rk_rep, RD_DO_LOCK);
 
-        if (timeout_ms)
+        if (timeout_ms && can_q_contain_fetched_msgs)
                 rd_kafka_app_poll_blocking(rk);
 
         r = rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0, RD_KAFKA_Q_CB_CALLBACK,
                              rd_kafka_poll_cb, NULL);
 
-        rd_kafka_app_polled(rk);
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rk);
 
         return r;
 }
@@ -3990,14 +4022,18 @@ int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
 
 rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
         rd_kafka_op_t *rko;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
 
-        if (timeout_ms)
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
                 rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, rd_timeout_us(timeout_ms), 0,
                                    RD_KAFKA_Q_CB_EVENT, rd_kafka_poll_cb, NULL);
 
-        rd_kafka_app_polled(rkqu->rkqu_rk);
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rkqu->rkqu_rk);
 
         if (!rko)
                 return NULL;
@@ -4007,14 +4043,17 @@ rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
 
 int rd_kafka_queue_poll_callback(rd_kafka_queue_t *rkqu, int timeout_ms) {
         int r;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
 
-        if (timeout_ms)
+        if (timeout_ms && can_q_contain_fetched_msgs)
                 rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         r = rd_kafka_q_serve(rkqu->rkqu_q, timeout_ms, 0,
                              RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 
-        rd_kafka_app_polled(rkqu->rkqu_rk);
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rkqu->rkqu_rk);
 
         return r;
 }

@@ -131,6 +131,8 @@ typedef struct rd_kafka_msg_s {
                         rd_kafkap_bytes_t binhdrs; /**< Unparsed
                                                     *   binary headers in
                                                     *   protocol msg */
+                        int32_t leader_epoch;      /**< Leader epoch at the time
+                                                    *   the message was fetched. */
                 } consumer;
         } rkm_u;
 } rd_kafka_msg_t;

@@ -246,9 +246,13 @@ _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
 _TEST_DECL(0137_barrier_batch_consume);
 _TEST_DECL(0138_admin_mock);
+_TEST_DECL(0139_offset_validation_mock);
+_TEST_DECL(0140_commit_metadata);
+
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
+_TEST_DECL(8001_fetch_from_follower_mock_manual);
 
 
 /* Define test resource usage thresholds if the default limits
@@ -490,9 +494,12 @@ struct test tests[] = {
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
+    _TEST(0139_offset_validation_mock, 0),
+    _TEST(0140_commit_metadata, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
+    _TEST(8001_fetch_from_follower_mock_manual, TEST_F_MANUAL),
 
     {NULL}};
 
@@ -3587,6 +3594,38 @@ static int test_mv_mvec_verify_dup(test_msgver_t *mv,
         return fails;
 }
 
+/**
+ * @brief Verify that all messages are from the correct broker.
+ */
+static int test_mv_mvec_verify_broker(test_msgver_t *mv,
+                                      int flags,
+                                      struct test_mv_p *p,
+                                      struct test_mv_mvec *mvec,
+                                      struct test_mv_vs *vs) {
+        int mi;
+        int fails = 0;
+
+        /* Assume that the correct flag has been checked already. */
+
+
+        rd_assert(flags & TEST_MSGVER_BY_BROKER_ID);
+        for (mi = 0; mi < mvec->cnt; mi++) {
+                struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+                if (this->broker_id != vs->broker_id) {
+                        TEST_MV_WARN(
+                            mv,
+                            " %s [%" PRId32
+                            "] broker_id check: "
+                            "msgid #%d (at mi %d): "
+                            "broker_id %" PRId32
+                            " is not the expected broker_id %" PRId32 "\n",
+                            p ? p->topic : "*", p ? p->partition : -1,
+                            this->msgid, mi, this->broker_id, vs->broker_id);
+                        fails++;
+                }
+        }
+        return fails;
+}
 
 
 /**
@@ -3896,6 +3935,10 @@ int test_msgver_verify0(const char *func,
                 fails +=
                     test_mv_p_verify_f(mv, flags, test_mv_mvec_verify_dup, &vs);
 
+        if (flags & TEST_MSGVER_BY_BROKER_ID)
+                fails += test_mv_p_verify_f(mv, flags,
+                                            test_mv_mvec_verify_broker, &vs);
+
         /* Checks across all partitions */
         if ((flags & TEST_MSGVER_RANGE) && vs.exp_cnt > 0) {
                 vs.msgid_min = vs.msg_base;
@@ -4180,19 +4223,21 @@ int test_consumer_poll_once(rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms) {
         return 1;
 }
 
-
 /**
  * @param exact Require exact exp_eof_cnt (unless -1) and exp_cnt (unless -1).
  *              If false: poll until either one is reached.
+ * @param timeout_ms Each call to poll has a timeout set by this argument. The
+ *                   test fails if any poll times out.
  */
-int test_consumer_poll_exact(const char *what,
-                             rd_kafka_t *rk,
-                             uint64_t testid,
-                             int exp_eof_cnt,
-                             int exp_msg_base,
-                             int exp_cnt,
-                             rd_bool_t exact,
-                             test_msgver_t *mv) {
+int test_consumer_poll_exact_timeout(const char *what,
+                                     rd_kafka_t *rk,
+                                     uint64_t testid,
+                                     int exp_eof_cnt,
+                                     int exp_msg_base,
+                                     int exp_cnt,
+                                     rd_bool_t exact,
+                                     test_msgver_t *mv,
+                                     int timeout_ms) {
         int eof_cnt = 0;
         int cnt     = 0;
         test_timing_t t_cons;
@@ -4207,7 +4252,8 @@ int test_consumer_poll_exact(const char *what,
                (exact && (eof_cnt < exp_eof_cnt || cnt < exp_cnt))) {
                 rd_kafka_message_t *rkmessage;
 
-                rkmessage = rd_kafka_consumer_poll(rk, tmout_multip(10 * 1000));
+                rkmessage =
+                    rd_kafka_consumer_poll(rk, tmout_multip(timeout_ms));
                 if (!rkmessage) /* Shouldn't take this long to get a msg */
                         TEST_FAIL(
                             "%s: consumer_poll() timeout "
@@ -4238,9 +4284,11 @@ int test_consumer_poll_exact(const char *what,
                         TEST_SAYL(4,
                                   "%s: consumed message on %s [%" PRId32
                                   "] "
-                                  "at offset %" PRId64 "\n",
+                                  "at offset %" PRId64 " (leader epoch %" PRId32
+                                  ")\n",
                                   what, rd_kafka_topic_name(rkmessage->rkt),
-                                  rkmessage->partition, rkmessage->offset);
+                                  rkmessage->partition, rkmessage->offset,
+                                  rd_kafka_message_leader_epoch(rkmessage));
 
                         if (!mv || test_msgver_add_msg(rk, mv, rkmessage))
                                 cnt++;
@@ -4269,6 +4317,23 @@ int test_consumer_poll_exact(const char *what,
 }
 
 
+/**
+ * @param exact Require exact exp_eof_cnt (unless -1) and exp_cnt (unless -1).
+ *              If false: poll until either one is reached.
+ */
+int test_consumer_poll_exact(const char *what,
+                             rd_kafka_t *rk,
+                             uint64_t testid,
+                             int exp_eof_cnt,
+                             int exp_msg_base,
+                             int exp_cnt,
+                             rd_bool_t exact,
+                             test_msgver_t *mv) {
+        return test_consumer_poll_exact_timeout(what, rk, testid, exp_eof_cnt,
+                                                exp_msg_base, exp_cnt, exact,
+                                                mv, 10 * 1000);
+}
+
 int test_consumer_poll(const char *what,
                        rd_kafka_t *rk,
                        uint64_t testid,
@@ -4279,6 +4344,19 @@ int test_consumer_poll(const char *what,
         return test_consumer_poll_exact(what, rk, testid, exp_eof_cnt,
                                         exp_msg_base, exp_cnt,
                                         rd_false /*not exact */, mv);
+}
+
+int test_consumer_poll_timeout(const char *what,
+                               rd_kafka_t *rk,
+                               uint64_t testid,
+                               int exp_eof_cnt,
+                               int exp_msg_base,
+                               int exp_cnt,
+                               test_msgver_t *mv,
+                               int timeout_ms) {
+        return test_consumer_poll_exact_timeout(
+            what, rk, testid, exp_eof_cnt, exp_msg_base, exp_cnt,
+            rd_false /*not exact */, mv, timeout_ms);
 }
 
 void test_consumer_close(rd_kafka_t *rk) {
@@ -4434,10 +4512,13 @@ void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions) {
         int i;
         for (i = 0; i < partitions->cnt; i++) {
-                TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 "%s%s\n",
+                TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
+                         ") %s%s\n",
                          partitions->elems[i].topic,
                          partitions->elems[i].partition,
                          partitions->elems[i].offset,
+                         rd_kafka_topic_partition_get_leader_epoch(
+                             &partitions->elems[i]),
                          partitions->elems[i].err ? ": " : "",
                          partitions->elems[i].err
                              ? rd_kafka_err2str(partitions->elems[i].err)
@@ -4497,7 +4578,9 @@ int test_partition_list_and_offsets_cmp(rd_kafka_topic_partition_list_t *al,
                 const rd_kafka_topic_partition_t *a = &al->elems[i];
                 const rd_kafka_topic_partition_t *b = &bl->elems[i];
                 if (a->partition != b->partition ||
-                    strcmp(a->topic, b->topic) || a->offset != b->offset)
+                    strcmp(a->topic, b->topic) || a->offset != b->offset ||
+                    rd_kafka_topic_partition_get_leader_epoch(a) !=
+                        rd_kafka_topic_partition_get_leader_epoch(b))
                         return -1;
         }
 
@@ -6362,13 +6445,31 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
         /* Apply all existing configuration entries to resource object that
          * will later be passed to AlterConfigs. */
         for (i = 0; i < configent_cnt; i++) {
+                const char *entry_name =
+                    rd_kafka_ConfigEntry_name(configents[i]);
+
+                if (test_broker_version >= TEST_BRKVER(3, 2, 0, 0)) {
+                        /* Skip entries that are overwritten to
+                         * avoid duplicates, that cause an error since
+                         * this broker version. */
+                        size_t j;
+                        for (j = 0; j < config_cnt; j += 2) {
+                                if (!strcmp(configs[j], entry_name)) {
+                                        break;
+                                }
+                        }
+
+                        if (j < config_cnt)
+                                continue;
+                }
+
                 err = rd_kafka_ConfigResource_set_config(
-                    confres, rd_kafka_ConfigEntry_name(configents[i]),
+                    confres, entry_name,
                     rd_kafka_ConfigEntry_value(configents[i]));
                 TEST_ASSERT(!err,
                             "Failed to set read-back config %s=%s "
                             "on local resource object",
-                            rd_kafka_ConfigEntry_name(configents[i]),
+                            entry_name,
                             rd_kafka_ConfigEntry_value(configents[i]));
         }
 

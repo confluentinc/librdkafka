@@ -378,6 +378,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
 
         case RD_KAFKA_OP_METADATA:
                 RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
+                /* It's not needed to free metadata.mdi because they
+                   are the in the same memory allocation. */
                 break;
 
         case RD_KAFKA_OP_LOG:
@@ -916,7 +918,7 @@ rd_kafka_op_res_t rd_kafka_op_handle(rd_kafka_t *rk,
  */
 void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         rd_kafka_toppar_t *rktp;
-        int64_t offset;
+        rd_kafka_fetch_pos_t pos;
 
         if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH || rko->rko_err))
                 return;
@@ -926,13 +928,8 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         if (unlikely(!rk))
                 rk = rktp->rktp_rkt->rkt_rk;
 
-        offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+        pos.offset       = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+        pos.leader_epoch = rko->rko_u.fetch.rkm.rkm_u.consumer.leader_epoch;
 
-        rd_kafka_toppar_lock(rktp);
-        rktp->rktp_app_offset = offset;
-        if (rk->rk_conf.enable_auto_offset_store)
-                rd_kafka_offset_store0(rktp, offset,
-                                       /* force: ignore assignment state */
-                                       rd_true, RD_DONT_LOCK);
-        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_update_app_pos(rk, rktp, pos, RD_DO_LOCK);
 }

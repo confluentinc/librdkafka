@@ -180,6 +180,15 @@ create_txn_producer(rd_kafka_mock_cluster_t **mclusterp,
         if (mclusterp) {
                 *mclusterp = rd_kafka_handle_mock_cluster(rk);
                 TEST_ASSERT(*mclusterp, "failed to create mock cluster");
+
+                /* Create some of the common consumer "input" topics
+                 * that we must be able to commit to with
+                 * send_offsets_to_transaction().
+                 * The number depicts the number of partitions in the topic. */
+                TEST_CALL_ERR__(
+                    rd_kafka_mock_topic_create(*mclusterp, "srctopic4", 4, 1));
+                TEST_CALL_ERR__(rd_kafka_mock_topic_create(
+                    *mclusterp, "srctopic64", 64, 1));
         }
 
         return rk;
@@ -256,11 +265,12 @@ static void do_test_txn_recoverable_errors(void) {
          * succeed.
          */
         offsets = rd_kafka_topic_partition_list_new(4);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 99)->offset =
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic64", 39)->offset =
             999999111;
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 0)->offset = 999;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 3499)->offset =
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 0)->offset =
+            999;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic64", 19)->offset =
             123456789;
 
         rd_kafka_mock_push_request_errors(
@@ -775,11 +785,11 @@ static void do_test_txn_endtxn_errors(void) {
                          * Send some arbitrary offsets.
                          */
                         offsets = rd_kafka_topic_partition_list_new(4);
-                        rd_kafka_topic_partition_list_add(offsets, "srctopic",
+                        rd_kafka_topic_partition_list_add(offsets, "srctopic4",
                                                           3)
                             ->offset = 12;
-                        rd_kafka_topic_partition_list_add(offsets, "srctop2",
-                                                          99)
+                        rd_kafka_topic_partition_list_add(offsets, "srctopic64",
+                                                          60)
                             ->offset = 99999;
 
                         cgmetadata =
@@ -1174,8 +1184,8 @@ static void do_test_txn_req_cnt(void) {
          * succeed.
          */
         offsets = rd_kafka_topic_partition_list_new(2);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 99)->offset =
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic64", 40)->offset =
             999999111;
 
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_AddOffsetsToTxn,
@@ -1247,7 +1257,7 @@ static void do_test_txn_requires_abort_errors(void) {
 
         /* Any other transactional API should now raise an error */
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
@@ -1310,7 +1320,7 @@ static void do_test_txn_requires_abort_errors(void) {
             RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED);
 
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
         error =
@@ -1543,8 +1553,8 @@ static void do_test_txn_switch_coordinator_refresh(void) {
          * Send some arbitrary offsets.
          */
         offsets = rd_kafka_topic_partition_list_new(4);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 99)->offset =
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic64", 29)->offset =
             99999;
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
@@ -1671,7 +1681,7 @@ static void do_test_txns_send_offsets_concurrent_is_retried(void) {
             RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
 
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
@@ -1781,7 +1791,7 @@ static void do_test_txns_no_timeout_crash(void) {
 
         /* send_offsets..() should now time out */
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
         error =
@@ -1944,11 +1954,12 @@ retry:
          * Send some arbitrary offsets.
          */
         offsets = rd_kafka_topic_partition_list_new(4);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 99)->offset =
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic64", 49)->offset =
             999999111;
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 0)->offset = 999;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 3499)->offset =
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 0)->offset =
+            999;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic64", 34)->offset =
             123456789;
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
@@ -2079,7 +2090,7 @@ static void do_test_txn_coord_req_destroy(void) {
                  */
 
                 offsets = rd_kafka_topic_partition_list_new(1);
-                rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)
+                rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)
                     ->offset = 12;
 
                 cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
@@ -2262,7 +2273,7 @@ static void do_test_txn_coord_req_multi_find(void) {
          */
 
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 12;
 
         cgmetadata = rd_kafka_consumer_group_metadata_new(groupid);
 
@@ -2455,7 +2466,7 @@ static void do_test_unstable_offset_commit(void) {
         rd_kafka_conf_t *c_conf;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_topic_partition_list_t *offsets;
-        const char *topic              = "mytopic";
+        const char *topic              = "srctopic4";
         const int msgcnt               = 100;
         const int64_t offset_to_commit = msgcnt / 2;
         int i;
@@ -2983,7 +2994,7 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
 
         TEST_SAY("Calling send_offsets_to_transaction()\n");
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, topic, 0)->offset = 1;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 0)->offset = 1;
         cgmetadata = rd_kafka_consumer_group_metadata_new(grpid);
 
         TIMING_START(&timing, "send_offsets_to_transaction(-1)");
@@ -3267,7 +3278,7 @@ static void do_test_txn_resumable_calls_timeout(rd_bool_t do_commit) {
             mcluster, coord_id, RD_KAFKAP_AddOffsetsToTxn, 1,
             RD_KAFKA_RESP_ERR_NO_ERROR, 400);
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 0)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 0)->offset = 12;
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
         /* This is not a resumable call on timeout */
@@ -3468,8 +3479,8 @@ static int txn_concurrent_thread_main(void *arg) {
                                 rd_kafka_consumer_group_metadata_t *cgmetadata =
                                     rd_kafka_consumer_group_metadata_new(
                                         "mygroupid");
-                                rd_kafka_topic_partition_list_add(offsets,
-                                                                  "srctopic", 0)
+                                rd_kafka_topic_partition_list_add(
+                                    offsets, "srctopic4", 0)
                                     ->offset = 12;
 
                                 error = rd_kafka_send_offsets_to_transaction(
@@ -3533,11 +3544,20 @@ static void do_test_txn_concurrent_operations(rd_bool_t do_commit) {
 
         test_timeout_set(90);
 
-        rk = create_txn_producer(&mcluster, transactional_id, 1, NULL);
+        /* We need to override the value of socket.connection.setup.timeout.ms
+         * to be at least 2*RTT of the mock broker. This is because the first
+         * ApiVersion request will fail, since we make the request with v3, and
+         * the mock broker's MaxVersion is 2, so the request is retried with v0.
+         * We use the value 3*RTT to add some buffer.
+         */
+        rk = create_txn_producer(&mcluster, transactional_id, 1,
+                                 "socket.connection.setup.timeout.ms", "15000",
+                                 NULL);
 
-        /* Set broker RTT to 5s so that the background thread has ample
-         * time to call its conflicting APIs. */
-        rd_kafka_mock_broker_set_rtt(mcluster, coord_id, 5000);
+        /* Set broker RTT to 3.5s so that the background thread has ample
+         * time to call its conflicting APIs.
+         * This value must be less than socket.connection.setup.timeout.ms/2. */
+        rd_kafka_mock_broker_set_rtt(mcluster, coord_id, 3500);
 
         err = rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
         TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str(err));
@@ -3574,7 +3594,7 @@ static void do_test_txn_concurrent_operations(rd_bool_t do_commit) {
 
         _start_call("send_offsets_to_transaction");
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 0)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 0)->offset = 12;
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
         TEST_CALL_ERROR__(
@@ -3767,7 +3787,7 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
             RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE);
 
         offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 1;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 3)->offset = 1;
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 

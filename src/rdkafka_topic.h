@@ -98,6 +98,17 @@ typedef struct rd_kafka_partition_msgid_s {
 } rd_kafka_partition_msgid_t;
 
 
+/**
+ * @struct Aux struct that holds a partition id and a leader epoch.
+ *         Used as temporary holding space for per-partition leader epochs
+ *         while parsing MetadataResponse.
+ */
+typedef struct rd_kafka_partition_leader_epoch_s {
+        int32_t partition_id;
+        int32_t leader_epoch;
+} rd_kafka_partition_leader_epoch_t;
+
+
 /*
  * @struct Internal representation of a topic.
  *
@@ -244,8 +255,10 @@ rd_kafka_topic_get_error(rd_kafka_topic_t *rkt) {
         return err;
 }
 
-int rd_kafka_topic_metadata_update2(rd_kafka_broker_t *rkb,
-                                    const struct rd_kafka_metadata_topic *mdt);
+int rd_kafka_topic_metadata_update2(
+    rd_kafka_broker_t *rkb,
+    const struct rd_kafka_metadata_topic *mdt,
+    const rd_kafka_metadata_topic_internal_t *mdit);
 
 void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now);
 
@@ -278,9 +291,11 @@ rd_kafka_resp_err_t rd_kafka_topics_leader_query_sync(rd_kafka_t *rk,
                                                       int timeout_ms);
 void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
                                   rd_kafka_topic_t *rkt,
-                                  int do_rk_lock);
+                                  int do_rk_lock,
+                                  rd_bool_t force);
 #define rd_kafka_topic_leader_query(rk, rkt)                                   \
-        rd_kafka_topic_leader_query0(rk, rkt, 1 /*lock*/)
+        rd_kafka_topic_leader_query0(rk, rkt, 1 /*lock*/,                      \
+                                     rd_false /*dont force*/)
 
 #define rd_kafka_topic_fast_leader_query(rk)                                   \
         rd_kafka_metadata_fast_leader_query(rk)

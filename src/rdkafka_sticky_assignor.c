@@ -1837,7 +1837,8 @@ static rd_kafkap_bytes_t *rd_kafka_sticky_assignor_get_metadata(
     const rd_kafka_assignor_t *rkas,
     void *assignor_state,
     const rd_list_t *topics,
-    const rd_kafka_topic_partition_list_t *owned_partitions) {
+    const rd_kafka_topic_partition_list_t *owned_partitions,
+    const rd_kafkap_str_t *rack_id) {
         rd_kafka_sticky_assignor_state_t *state;
         rd_kafka_buf_t *rkbuf;
         rd_kafkap_bytes_t *metadata;
@@ -1855,19 +1856,23 @@ static rd_kafkap_bytes_t *rd_kafka_sticky_assignor_get_metadata(
          * If there is no previous assignment, UserData is NULL.
          */
 
+
         if (!assignor_state) {
                 return rd_kafka_consumer_protocol_member_metadata_new(
-                    topics, NULL, 0, owned_partitions);
+                    topics, NULL, 0, owned_partitions, -1 /* generation */,
+                    rack_id);
         }
 
         state = (rd_kafka_sticky_assignor_state_t *)assignor_state;
 
         rkbuf = rd_kafka_buf_new(1, 100);
         rd_assert(state->prev_assignment != NULL);
-        rd_kafka_buf_write_topic_partitions(
-            rkbuf, state->prev_assignment, rd_false /*skip invalid offsets*/,
-            rd_false /*any offset*/, rd_false /*write offsets*/,
-            rd_false /*write epoch*/, rd_false /*write metadata*/);
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        rd_kafka_buf_write_topic_partitions(rkbuf, state->prev_assignment,
+                                            rd_false /*skip invalid offsets*/,
+                                            rd_false /*any offset*/, fields);
         rd_kafka_buf_write_i32(rkbuf, state->generation_id);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
@@ -1878,7 +1883,8 @@ static rd_kafkap_bytes_t *rd_kafka_sticky_assignor_get_metadata(
         rd_kafka_buf_destroy(rkbuf);
 
         metadata = rd_kafka_consumer_protocol_member_metadata_new(
-            topics, kbytes->data, kbytes->len, owned_partitions);
+            topics, kbytes->data, kbytes->len, owned_partitions,
+            state->generation_id, rack_id);
 
         rd_kafkap_bytes_destroy(kbytes);
 

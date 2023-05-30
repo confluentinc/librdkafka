@@ -3162,7 +3162,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
 
-        if (test_partition_list_cmp(committed, orig_offsets)) {
+        if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
                 test_print_partition_list(orig_offsets);
                 TEST_SAY("committed() list:\n");
@@ -3176,18 +3176,21 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         offsets   = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
         to_delete = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
         for (i = 0; i < orig_offsets->cnt; i++) {
-                if (i < orig_offsets->cnt / 2)
-                        rd_kafka_topic_partition_list_add(
+                rd_kafka_topic_partition_t *rktpar;
+                if (i < orig_offsets->cnt / 2) {
+                        rktpar = rd_kafka_topic_partition_list_add(
                             offsets, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
-                else {
-                        rd_kafka_topic_partition_list_add(
+                        rktpar->offset = orig_offsets->elems[i].offset;
+                } else {
+                        rktpar = rd_kafka_topic_partition_list_add(
                             to_delete, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
-                        rd_kafka_topic_partition_list_add(
+                        rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+                        rktpar         = rd_kafka_topic_partition_list_add(
                             offsets, orig_offsets->elems[i].topic,
-                            orig_offsets->elems[i].partition)
-                            ->offset = RD_KAFKA_OFFSET_INVALID;
+                            orig_offsets->elems[i].partition);
+                        rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                 }
         }
 
@@ -3246,7 +3249,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         deleted = rd_kafka_topic_partition_list_copy(
             rd_kafka_group_result_partitions(gres[0]));
 
-        if (test_partition_list_cmp(deleted, to_delete)) {
+        if (test_partition_list_and_offsets_cmp(deleted, to_delete)) {
                 TEST_SAY("Result list:\n");
                 test_print_partition_list(deleted);
                 TEST_SAY("Partitions passed to DeleteConsumerGroupOffsets:\n");
@@ -3285,9 +3288,13 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         TEST_SAY("Committed offsets after delete:\n");
         test_print_partition_list(committed);
 
-        if (test_partition_list_cmp(committed, offsets)) {
+        rd_kafka_topic_partition_list_t *expected = offsets;
+        if (sub_consumer)
+                expected = orig_offsets;
+
+        if (test_partition_list_and_offsets_cmp(committed, expected)) {
                 TEST_SAY("expected list:\n");
-                test_print_partition_list(offsets);
+                test_print_partition_list(expected);
                 TEST_SAY("committed() list:\n");
                 test_print_partition_list(committed);
                 TEST_FAIL("committed offsets don't match");
@@ -3424,11 +3431,14 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
             TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * partitions_cnt);
         for (i = 0;
              i < TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * partitions_cnt;
-             i++)
-                rd_kafka_topic_partition_list_add(orig_offsets,
-                                                  topics[i / partitions_cnt],
-                                                  i % partitions_cnt)
-                    ->offset = (i + 1) * 10;
+             i++) {
+                rd_kafka_topic_partition_t *rktpar;
+                rktpar = rd_kafka_topic_partition_list_add(
+                    orig_offsets, topics[i / partitions_cnt],
+                    i % partitions_cnt);
+                rktpar->offset = (i + 1) * 10;
+                rd_kafka_topic_partition_set_leader_epoch(rktpar, 1);
+        }
 
         /* Commit some offsets, if topics exists */
         if (create_topics) {
@@ -3440,7 +3450,8 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
                                                    tmout_multip(5 * 1000)));
 
-                if (test_partition_list_cmp(committed, orig_offsets)) {
+                if (test_partition_list_and_offsets_cmp(committed,
+                                                        orig_offsets)) {
                         TEST_SAY("commit() list:\n");
                         test_print_partition_list(orig_offsets);
                         TEST_SAY("committed() list:\n");
@@ -3454,19 +3465,26 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         offsets  = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
         to_alter = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
         for (i = 0; i < orig_offsets->cnt; i++) {
-                if (i < orig_offsets->cnt / 2)
-                        rd_kafka_topic_partition_list_add(
+                rd_kafka_topic_partition_t *rktpar;
+                if (i < orig_offsets->cnt / 2) {
+                        rktpar = rd_kafka_topic_partition_list_add(
                             offsets, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
-                else {
-                        rd_kafka_topic_partition_list_add(
+                        rktpar->offset = orig_offsets->elems[i].offset;
+                        rd_kafka_topic_partition_set_leader_epoch(
+                            rktpar, rd_kafka_topic_partition_get_leader_epoch(
+                                        &orig_offsets->elems[i]));
+                } else {
+                        rktpar = rd_kafka_topic_partition_list_add(
                             to_alter, orig_offsets->elems[i].topic,
-                            orig_offsets->elems[i].partition)
-                            ->offset = 5;
-                        rd_kafka_topic_partition_list_add(
+                            orig_offsets->elems[i].partition);
+                        rktpar->offset = 5;
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                        rktpar = rd_kafka_topic_partition_list_add(
                             offsets, orig_offsets->elems[i].topic,
-                            orig_offsets->elems[i].partition)
-                            ->offset = 5;
+                            orig_offsets->elems[i].partition);
+                        rktpar->offset = 5;
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
                 }
         }
 
@@ -3524,7 +3542,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         alterd = rd_kafka_topic_partition_list_copy(
             rd_kafka_group_result_partitions(gres[0]));
 
-        if (test_partition_list_cmp(alterd, to_alter)) {
+        if (test_partition_list_and_offsets_cmp(alterd, to_alter)) {
                 TEST_SAY("Result list:\n");
                 test_print_partition_list(alterd);
                 TEST_SAY("Partitions passed to AlterConsumerGroupOffsets:\n");
@@ -3558,15 +3576,20 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
                                                    tmout_multip(5 * 1000)));
 
+                rd_kafka_topic_partition_list_t *expected = offsets;
+                if (sub_consumer) {
+                        /* Alter fails with an active consumer */
+                        expected = orig_offsets;
+                }
                 TEST_SAY("Original committed offsets:\n");
                 test_print_partition_list(orig_offsets);
 
                 TEST_SAY("Committed offsets after alter:\n");
                 test_print_partition_list(committed);
 
-                if (test_partition_list_cmp(committed, offsets)) {
+                if (test_partition_list_and_offsets_cmp(committed, expected)) {
                         TEST_SAY("expected list:\n");
-                        test_print_partition_list(offsets);
+                        test_print_partition_list(expected);
                         TEST_SAY("committed() list:\n");
                         test_print_partition_list(committed);
                         TEST_FAIL("committed offsets don't match");
@@ -3689,11 +3712,14 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         /* Commit some offsets */
         orig_offsets = rd_kafka_topic_partition_list_new(
             TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * 2);
-        for (i = 0; i < TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * 2; i++)
-                rd_kafka_topic_partition_list_add(
+        for (i = 0; i < TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * 2; i++) {
+                rd_kafka_topic_partition_t *rktpar;
+                rktpar = rd_kafka_topic_partition_list_add(
                     orig_offsets, topics[i / 2],
-                    i % TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT)
-                    ->offset = (i + 1) * 10;
+                    i % TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT);
+                rktpar->offset = (i + 1) * 10;
+                rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+        }
 
         TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/));
 
@@ -3702,7 +3728,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
 
-        if (test_partition_list_cmp(committed, orig_offsets)) {
+        if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
                 test_print_partition_list(orig_offsets);
                 TEST_SAY("committed() list:\n");

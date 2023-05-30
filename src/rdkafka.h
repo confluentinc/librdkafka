@@ -7512,7 +7512,7 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
  *
  * This will overwrite the current value.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was set,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_set_config(
@@ -7523,7 +7523,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_set_config(
 
 /**
  * @brief (For list-type configuration entries only) Add the specified
- *        values to the current value of the configuration entry.
+ *        values to the current configuration entry list.
  *
  * @param config ConfigResource to append config properties on.
  * @param name Configuration name, depends on resource type.
@@ -7542,7 +7542,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_append_config(
 
 /**
  * @brief (For list-type configuration entries only) Removes the specified
- * values from the current value of the configuration entry.
+ *        values from the current configuration entry list.
  *
  * @param config ConfigResource to set config property on.
  * @param name Configuration name, depends on resource type.
@@ -7566,7 +7566,7 @@ rd_kafka_ConfigResource_incremental_subtract_config(
  * @param config ConfigResource to set config property on.
  * @param name Configuration name, depends on resource type.
  *
- * This will set the value to default or NULL.
+ * This will set the value to default (possibly NULL).
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was deleted from resource,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
@@ -7676,7 +7676,7 @@ rd_kafka_AlterConfigs_result_resources(
 
 
 /*
- * IncrementalAlterConfigs - alter cluster configuration.
+ * IncrementalAlterConfigs - alter cluster configuration incrementally.
  *
  */
 
@@ -7685,8 +7685,8 @@ rd_kafka_AlterConfigs_result_resources(
  * @brief Incrementally update the configuration for the specified resources.
  *        Updates are not transactional so they may succeed for some resources
  *        while fail for others. The configs for a particular resource are
- *        updated atomically, replacing values using the provided ConfigEntrys
- *        and reverting unspecified ConfigEntrys to their default values.
+ *        updated atomically, executing the corresponding incremental operations
+ *        on the provided configurations.
  *
  * @remark Requires broker version >=2.3.0
  *

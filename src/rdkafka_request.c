@@ -4213,27 +4213,27 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                                                  rd_list_cnt(configs) * 200,
                                                  ApiVersion >= 2);
 
-        /* #resources */
+        /* #Resources */
         rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
 
         RD_LIST_FOREACH(config, configs, i) {
                 const rd_kafka_ConfigEntry_t *entry;
                 int ei;
 
-                /* resource_type */
+                /* ResourceType */
                 rd_kafka_buf_write_i8(rkbuf, config->restype);
 
-                /* resource_name */
+                /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
 
-                /* #config */
+                /* #Configs */
                 rd_kafka_buf_write_arraycnt(rkbuf,
                                             rd_list_cnt(&config->config));
 
                 RD_LIST_FOREACH(entry, &config->config, ei) {
-                        /* config_name */
+                        /* Name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
-                        /* config_value (nullable) */
+                        /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
                         if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {

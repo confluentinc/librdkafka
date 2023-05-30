@@ -5366,9 +5366,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT 0x8000
 /** AlterConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x10000
-
-#define RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT                          \
-        0x20000 /**< IncrementalAlterConfigs_result_t */
+/** IncrementalAlterConfigs_result_t */
+#define RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT 0x20000
 
 /**
  * @returns the event type for the given event.
@@ -6723,11 +6722,9 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DELETETOPICS,     /**< DeleteTopics */
         RD_KAFKA_ADMIN_OP_CREATEPARTITIONS, /**< CreatePartitions */
         RD_KAFKA_ADMIN_OP_ALTERCONFIGS,     /**< AlterConfigs */
-        RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS,
-        /**< IncrementalAlterConfigs */
-        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS, /**< DescribeConfigs */
-        RD_KAFKA_ADMIN_OP_DELETERECORDS,   /**< DeleteRecords */
-        RD_KAFKA_ADMIN_OP_DELETEGROUPS,    /**< DeleteGroups */
+        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
+        RD_KAFKA_ADMIN_OP_DELETERECORDS,    /**< DeleteRecords */
+        RD_KAFKA_ADMIN_OP_DELETEGROUPS,     /**< DeleteGroups */
         /** DeleteConsumerGroupOffsets */
         RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,
         RD_KAFKA_ADMIN_OP_CREATEACLS,             /**< CreateAcls */
@@ -6739,6 +6736,8 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS,
         /** AlterConsumerGroupOffsets */
         RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS,
+        /** IncrementalAlterConfigs */
+        RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS,
         RD_KAFKA_ADMIN_OP__CNT /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
@@ -6875,7 +6874,7 @@ rd_kafka_AdminOptions_set_validate_only(rd_kafka_AdminOptions_t *options,
  *   - AlterConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
  *   - IncrementalAlterConfigs with a BROKER resource are sent to the broker id
- * set as the resource name.
+ *     set as the resource name.
  *   - DescribeConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
  *
@@ -7686,14 +7685,10 @@ rd_kafka_AlterConfigs_result_resources(
  * @brief Incrementally update the configuration for the specified resources.
  *        Updates are not transactional so they may succeed for some resources
  *        while fail for others. The configs for a particular resource are
- * updated atomically, replacing values using the provided ConfigEntrys and
- * reverting unspecified ConfigEntrys to their default values.
+ *        updated atomically, replacing values using the provided ConfigEntrys
+ *        and reverting unspecified ConfigEntrys to their default values.
  *
  * @remark Requires broker version >=2.3.0
- *
- * @warning IncrementalAlterConfigs will replace all existing configuration for
- *          the provided resources with the new configuration given,
- *          reverting all other configuration to their default values.
  *
  * @remark Multiple resources and resource types may be set, but at most one
  *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call

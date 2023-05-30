@@ -2927,7 +2927,7 @@ rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_subtract_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     const char *value) {
-        if (!name || !*name)
+        if (!name || !*name || !value)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         return rd_kafka_admin_incremental_add_config0(

@@ -1041,6 +1041,7 @@ static void rd_kafka_sasl_oauthbearer_close(rd_kafka_transport_t *rktrans) {
         rd_free(state->md_principal_name);
         rd_list_destroy(&state->extensions);
         rd_free(state);
+        rktrans->rktrans_sasl.state = NULL;
 }
 
 

@@ -261,7 +261,8 @@ void do_test_txn_producer(int64_t reauth_time,
  * reauth times and token lifetimes. */
 void do_test_oauthbearer(int64_t reauth_time,
                          const char *topic,
-                         int64_t token_lifetime_ms) {
+                         int64_t token_lifetime_ms,
+                         rd_bool_t use_sasl_queue) {
         rd_kafka_topic_t *rkt = NULL;
         rd_kafka_conf_t *conf = NULL;
         rd_kafka_t *rk        = NULL;
@@ -279,6 +280,8 @@ void do_test_oauthbearer(int64_t reauth_time,
 
         test_conf_init(&conf, NULL, 30);
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
+        rd_kafka_conf_enable_sasl_queue(conf, use_sasl_queue);
+
         mechanism = test_conf_get(conf, "sasl.mechanism");
         if (rd_strcasecmp(mechanism, "oauthbearer")) {
                 rd_kafka_conf_destroy(conf);
@@ -292,7 +295,13 @@ void do_test_oauthbearer(int64_t reauth_time,
             tsprintf("principal=admin scope=requiredScope lifeSeconds=%d",
                      token_lifetime_s));
         test_conf_set(conf, "enable.sasl.oauthbearer.unsecure.jwt", "true");
-        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* Enable to background queue since we don't want to poll the SASL
+         * queue. */
+        if (use_sasl_queue)
+                rd_kafka_sasl_background_callbacks_enable(rk);
+
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         /* Create the topic to make sure connections are up and ready. */
@@ -456,7 +465,7 @@ int main_0142_reauthentication(int argc, char **argv) {
 
         /* Each test (7 of them) will take slightly more than 1 reauth_time
          * interval. Additional 30s provide a reasonable buffer. */
-        test_timeout_set(7 * reauth_time / 1000 + 30);
+        test_timeout_set(9 * reauth_time / 1000 + 30);
 
 
         do_test_consumer(reauth_time, topic);
@@ -470,13 +479,15 @@ int main_0142_reauthentication(int argc, char **argv) {
          * reauthentication based on the expiry provided in the token.
          * We should recreate the token and reauthenticate before this
          * reauth time. */
-        do_test_oauthbearer(reauth_time, topic, reauth_time / 2);
+        do_test_oauthbearer(reauth_time, topic, reauth_time / 2, rd_true);
+        do_test_oauthbearer(reauth_time, topic, reauth_time / 2, rd_false);
         /* Case when the token_lifetime is greater than the maximum reauth time
          * configured.
          * In this case, the broker returns the maximum reauth time configured.
          * We don't need to recreate the token, but we need to reauthenticate
          * using the same token. */
-        do_test_oauthbearer(reauth_time, topic, reauth_time * 2);
+        do_test_oauthbearer(reauth_time, topic, reauth_time * 2, rd_true);
+        do_test_oauthbearer(reauth_time, topic, reauth_time * 2, rd_false);
 
         do_test_reauth_failure(reauth_time, topic);
 

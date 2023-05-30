@@ -946,16 +946,16 @@ void rd_kafka_UserScramCredentialAlteration_destroy(rd_kafka_UserScramCredential
 
 /* Copies and returns the copied pointer of a UserScramCredentialAlteration */
 RD_EXPORT
-rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialAlteration_copy(rd_kafka_UserScramCredentialAlteration_t *alteration);
+rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialAlteration_copy(const rd_kafka_UserScramCredentialAlteration_t *alteration);
 
 typedef struct rd_kafka_UserScramCredentialAlterationResultElement_s rd_kafka_UserScramCredentialAlterationResultElement_t;
 
 /* Returns the username for a UserScramCredentialAlterationResultElement */
 RD_EXPORT
-char *rd_kafka_UserScramCredentialAlterationResultElement_get_user(rd_kafka_UserScramCredentialAlterationResultElement_t *element);
+const char *rd_kafka_UserScramCredentialAlterationResultElement_get_user(const rd_kafka_UserScramCredentialAlterationResultElement_t *element);
 /* Returns the rd_kafka_error_t for a UserScramCredentialAlterationResultElement */
 RD_EXPORT               
-rd_kafka_error_t *rd_kafka_UserScramCredentialAlterationResultElement_get_error(rd_kafka_UserScramCredentialAlterationResultElement_t *element);
+const rd_kafka_error_t *rd_kafka_UserScramCredentialAlterationResultElement_get_error(const rd_kafka_UserScramCredentialAlterationResultElement_t *element);
 
 /*
  * SCRAM API CONFIG Structures and Functionalities **END**
@@ -5907,19 +5907,19 @@ rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev);
 
 /* Returns the request level errorcode(rd_kafka_resp_err_t) of DescribeUserScramCredentials */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials_result_get_errorcode(rd_kafka_DescribeUserScramCredentials_result_t *result);
+rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials_result_get_errorcode(const rd_kafka_DescribeUserScramCredentials_result_t *result);
 
 /* Returns request level errormessage of DescribeUserScramCredentials */
 RD_EXPORT
-char *rd_kafka_DescribeUserScramCredentials_result_get_errormessage(rd_kafka_DescribeUserScramCredentials_result_t *result);
+char *rd_kafka_DescribeUserScramCredentials_result_get_errormessage(const rd_kafka_DescribeUserScramCredentials_result_t *result);
 
 /* Returns the number of Users/Descriptions of DescribeUserScramCredentials */
 RD_EXPORT
-size_t rd_kafka_DescribeUserScramCredentials_result_get_count(rd_kafka_DescribeUserScramCredentials_result_t *result);
+size_t rd_kafka_DescribeUserScramCredentials_result_get_count(const rd_kafka_DescribeUserScramCredentials_result_t *result);
 
 /* Returns a pointer to a Description at index idx of a DescribeUserScramCredentials Result */
 RD_EXPORT
-rd_kafka_UserScramCredentialsDescription_t *rd_kafka_DescribeUserScramCredentials_result_get_description(rd_kafka_DescribeUserScramCredentials_result_t *result,size_t idx);
+rd_kafka_UserScramCredentialsDescription_t *rd_kafka_DescribeUserScramCredentials_result_get_description(const rd_kafka_DescribeUserScramCredentials_result_t *result,size_t idx);
 
 /**
  * @brief Get AlterUserScramCredentials result.
@@ -5938,11 +5938,11 @@ rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
 
 /* Returns the number of Alterations in a AlterUserScramCredentials result */
 RD_EXPORT
-size_t rd_kafka_AlterUserScramCredentials_result_get_count(rd_kafka_AlterUserScramCredentials_result_t *result);
+size_t rd_kafka_AlterUserScramCredentials_result_get_count(const rd_kafka_AlterUserScramCredentials_result_t *result);
 
 /* Returns the pointer to rd_kafka_UserScramCredentialAlterationResultElement_t at index idx of a AlterUserScramCredentials result */
 RD_EXPORT
-rd_kafka_UserScramCredentialAlterationResultElement_t *rd_kafka_AlterUserScramCredentials_result_get_element(rd_kafka_AlterUserScramCredentials_result_t *result,size_t idx);
+const rd_kafka_UserScramCredentialAlterationResultElement_t *rd_kafka_AlterUserScramCredentials_result_get_element(const rd_kafka_AlterUserScramCredentials_result_t *result,size_t idx);
 
 /* Will Describe all the ScramCredentials for the listed users */
 

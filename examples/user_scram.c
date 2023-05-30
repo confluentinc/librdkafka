@@ -77,7 +77,7 @@ int64_t parse_int(const char *what, const char *str) {
         return (int64_t)n;
 }
 
-static void Describe(rd_kafka_t *rk,char **users,size_t user_cnt){
+static void Describe(rd_kafka_t *rk,const char **users,size_t user_cnt){
         rd_kafka_event_t *event;
         char errstr[512];      /* librdkafka API error reporting buffer */
         rd_kafka_resp_err_t api_error;
@@ -116,10 +116,10 @@ static void Describe(rd_kafka_t *rk,char **users,size_t user_cnt){
                 num_results = rd_kafka_DescribeUserScramCredentials_result_get_count(result);
                 rd_kafka_resp_err_t request_errorcode = rd_kafka_DescribeUserScramCredentials_result_get_errorcode(result);
                 if(request_errorcode){
-                        char *errormsg = rd_kafka_DescribeUserScramCredentials_result_get_errormessage(result);
+                        const char *errormsg = rd_kafka_DescribeUserScramCredentials_result_get_errormessage(result);
                         printf("Request Level Error Message : %s \n",errormsg);
                 }
-                printf("DescribeUserScramCredentials results[%d] [Error Code : %d]:\n",num_results,request_errorcode);
+                printf("DescribeUserScramCredentials results[%zu] [Error Code : %d]:\n",num_results,request_errorcode);
                 for (i = 0; i < num_results; i++){
                         rd_kafka_UserScramCredentialsDescription_t *description;
                         description = rd_kafka_DescribeUserScramCredentials_result_get_description(result,i);
@@ -130,7 +130,7 @@ static void Describe(rd_kafka_t *rk,char **users,size_t user_cnt){
                         rd_kafka_resp_err_t errorcode = rd_kafka_error_code(error);
                         printf("        Username : %s Error-code : %d\n",username,errorcode);
                         if(errorcode){
-                                char *errstr = rd_kafka_error_string(error);
+                                const char *errstr = rd_kafka_error_string(error);
                                 printf("                ErrorMessage : %s\n",errstr);
                         }
                         size_t num_credentials = rd_kafka_UserScramCredentialsDescription_get_scramcredentialinfo_cnt(description);
@@ -152,6 +152,9 @@ static void Describe(rd_kafka_t *rk,char **users,size_t user_cnt){
                                 case RD_KAFKA_SCRAM_MECHANISM_SHA_512:
                                         printf("                Mechanism is SCRAM-SHA-512\n");
                                         break;
+                                default:
+                                        printf("                Mechanism does not match enums\n");
+
                                 }
                                 printf("                Iterations are %d\n",iterations);
                         }
@@ -199,16 +202,16 @@ static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alte
                 const rd_kafka_AlterUserScramCredentials_result_t *result = rd_kafka_event_AlterUserScramCredentials_result(event);
                 size_t num_results = rd_kafka_AlterUserScramCredentials_result_get_count(result); 
                 size_t i;
-                printf("AlterUserScramCredentials results [%d]:\n",num_results);
+                printf("AlterUserScramCredentials results [%zu]:\n",num_results);
                 for (i = 0; i < num_results; i++){
-                        rd_kafka_UserScramCredentialAlterationResultElement_t *element = rd_kafka_AlterUserScramCredentials_result_get_element(result,i);
-                        char *username;
-                        rd_kafka_error_t *error;
+                        const rd_kafka_UserScramCredentialAlterationResultElement_t *element = rd_kafka_AlterUserScramCredentials_result_get_element(result,i);
+                        const char *username;
+                        const rd_kafka_error_t *error;
                         username = rd_kafka_UserScramCredentialAlterationResultElement_get_user(element);
                         error = rd_kafka_UserScramCredentialAlterationResultElement_get_error(element);
                         rd_kafka_resp_err_t errorcode = rd_kafka_error_code(error);
                         if(errorcode){
-                                char *errstr = rd_kafka_error_string(error);
+                                const char *errstr = rd_kafka_error_string(error);
                                 printf("        Username : %s , errorcode : %d , error-message : %s\n",username,errorcode,errstr);
                         }else{
                                 printf("        Username : %s Success!!\n",username);
@@ -263,7 +266,7 @@ int main(int argc, char **argv) {
 
         /* Signal handler for clean shutdown */
         signal(SIGINT, stop);
-        char *users[1];
+        const char *users[1];
         users[0] = "broker";
         size_t user_cnt = 1;
 

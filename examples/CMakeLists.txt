@@ -35,12 +35,6 @@ target_link_libraries(transactions PUBLIC rdkafka)
 add_executable(delete_records delete_records.c ${win32_sources})
 target_link_libraries(delete_records PUBLIC rdkafka)
 
-add_executable(transactions transactions.c ${win32_sources})
-target_link_libraries(transactions PUBLIC rdkafka)
-
-add_executable(openssl_engine_example_cpp openssl_engine_example.cpp ${win32_sources})
-target_link_libraries(transactions PUBLIC rdkafka++)
-
 add_executable(list_consumer_groups list_consumer_groups.c ${win32_sources})
 target_link_libraries(list_consumer_groups PUBLIC rdkafka)
 

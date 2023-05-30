@@ -3066,7 +3066,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
 
-        rd_kafka_buf_read_i32(reply, &res_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
         if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
                 rd_snprintf(errstr, errstr_size,
@@ -3099,6 +3099,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_i8(reply, &res_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+                rd_kafka_buf_skip_tags(reply);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
@@ -3258,7 +3259,7 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
 
-        rd_kafka_buf_read_i32(reply, &res_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
         if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
                 rd_snprintf(errstr, errstr_size,
@@ -3291,6 +3292,7 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_i8(reply, &res_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+                rd_kafka_buf_skip_tags(reply);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||

@@ -4190,7 +4190,7 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AlterConfigs, 0, 1, NULL);
+            rkb, RD_KAFKAP_AlterConfigs, 0, 2, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs (KIP-133) not supported "
@@ -4209,11 +4209,12 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_AlterConfigs, 1,
-                                         rd_list_cnt(configs) * 200);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_AlterConfigs, 1,
+                                                 rd_list_cnt(configs) * 200,
+                                                 ApiVersion >= 2);
 
         /* #resources */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
 
         RD_LIST_FOREACH(config, configs, i) {
                 const rd_kafka_ConfigEntry_t *entry;
@@ -4226,7 +4227,8 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
 
                 /* #config */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&config->config));
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&config->config));
 
                 RD_LIST_FOREACH(entry, &config->config, ei) {
                         /* config_name */
@@ -4244,7 +4246,11 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                                 rd_kafka_replyq_destroy(&replyq);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
                         }
+
+                        rd_kafka_buf_write_tags(rkbuf);
                 }
+
+                rd_kafka_buf_write_tags(rkbuf);
         }
 
         /* timeout */
@@ -4287,7 +4293,7 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_IncrementalAlterConfigs, 0, 0, NULL);
+            rkb, RD_KAFKAP_IncrementalAlterConfigs, 0, 1, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "IncrementalAlterConfigs (KIP-339) not supported "
@@ -4296,34 +4302,40 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_IncrementalAlterConfigs,
-                                         1, rd_list_cnt(configs) * 200);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_IncrementalAlterConfigs, 1,
+            rd_list_cnt(configs) * 200, ApiVersion >= 1);
 
-        /* #resources */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+        /* #Resources */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
 
         RD_LIST_FOREACH(config, configs, i) {
                 const rd_kafka_ConfigEntry_t *entry;
                 int ei;
 
-                /* resource_type */
+                /* ResourceType */
                 rd_kafka_buf_write_i8(rkbuf, config->restype);
 
-                /* resource_name */
+                /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
 
-                /* #config */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&config->config));
+                /* #Configs */
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&config->config));
 
                 RD_LIST_FOREACH(entry, &config->config, ei) {
-                        /* config_name */
+                        /* Name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
-                        /* config_operation */
+                        /* ConfigOperation */
                         rd_kafka_buf_write_i8(rkbuf,
                                               entry->a.incremental_operation);
-                        /* config_value (nullable) */
+                        /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+
+                        rd_kafka_buf_write_tags(rkbuf);
                 }
+
+                rd_kafka_buf_write_tags(rkbuf);
         }
 
         /* timeout */
@@ -4331,7 +4343,7 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
         if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
                 rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
 
-        /* validate_only */
+        /* ValidateOnly */
         rd_kafka_buf_write_i8(
             rkbuf, rd_kafka_confval_get_int(&options->validate_only));
 

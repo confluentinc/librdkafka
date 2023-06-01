@@ -629,8 +629,7 @@ typedef enum {
         RD_KAFKA_RESP_ERR_FEATURE_UPDATE_FAILED = 96,
         /** Request principal deserialization failed during forwarding */
         RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
-        /** Librdkafka not compiled with openssl*/
-        RD_KAFKA_RESP_ERR_OPENSSL_COMPILATION_MISSING = 98,
+
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 
@@ -954,7 +953,7 @@ typedef struct rd_kafka_UserScramCredentialAlterationResultElement_s rd_kafka_Us
 RD_EXPORT
 const char *rd_kafka_UserScramCredentialAlterationResultElement_get_user(const rd_kafka_UserScramCredentialAlterationResultElement_t *element);
 /* Returns the rd_kafka_error_t for a UserScramCredentialAlterationResultElement */
-RD_EXPORT               
+RD_EXPORT
 const rd_kafka_error_t *rd_kafka_UserScramCredentialAlterationResultElement_get_error(const rd_kafka_UserScramCredentialAlterationResultElement_t *element);
 
 /*

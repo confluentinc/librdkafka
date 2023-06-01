@@ -5016,7 +5016,7 @@ int strcmp_void(const void *a,const void *b){
 void rd_kafkap_str_destroy_free(void *str){
         rd_kafkap_str_destroy(str);
 }
-rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials(rd_kafka_t *rk,
+void rd_kafka_DescribeUserScramCredentials(rd_kafka_t *rk,
                            const char **users,
                            size_t user_cnt,
                            const rd_kafka_AdminOptions_t *options,
@@ -5024,19 +5024,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials(rd_kafka_t *rk,
 
         rd_kafka_op_t *rko;
         size_t i;
-         /* Check Duplicates */
-        if(user_cnt > 1){
-                rd_list_t *userlist = rd_list_new(user_cnt,rd_free);
-                for(i=0;i<user_cnt;i++){
-                        rd_list_add(userlist,rd_strdup(users[i]));
-                }
-                rd_list_sort(userlist, strcmp_void);
-                if(rd_list_find_duplicate(userlist,strcmp_void)){
-                        rd_list_destroy(userlist);
-                        return RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE;
-                }
-                rd_list_destroy(userlist);
-        }
+
         static const struct rd_kafka_admin_worker_cbs cbs = {
             rd_kafka_DescribeUserScramCredentialsRequest,
             rd_kafka_DescribeUserScramCredentialsResponse_parse,
@@ -5046,6 +5034,26 @@ rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials(rd_kafka_t *rk,
                                             RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT,
                                             &cbs, options, rkqu->rkqu_q);
 
+         /* Check Duplicates */
+        if(user_cnt > 1){
+                rd_list_t *userlist = rd_list_new(user_cnt,rd_free);
+                for(i=0;i<user_cnt;i++){
+                        rd_list_add(userlist,rd_strdup(users[i]));
+                }
+                rd_list_sort(userlist, strcmp_void);
+                if(rd_list_find_duplicate(userlist,strcmp_void)){
+                        rd_list_destroy(userlist);
+                        rd_kafka_admin_result_fail(rko,
+                                RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "Duplicate users aren't allowed "
+                                "in the same request");
+                        rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                             rd_true /*destroy*/);
+                        return;
+                }
+                rd_list_destroy(userlist);
+        }
+
         rd_list_init(&rko->rko_u.admin_request.args, user_cnt,
                      rd_kafkap_str_destroy_free);
         for(i =0;i<user_cnt;i++){
@@ -5053,7 +5061,6 @@ rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials(rd_kafka_t *rk,
                                 rd_kafkap_str_new(users[i],-1));
         }
         rd_kafka_q_enq(rk->rk_ops, rko);
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 struct rd_kafka_UserScramCredentialAlteration_s {
@@ -5105,18 +5112,20 @@ void rd_kafka_UserScramCredentialAlteration_destroy(rd_kafka_UserScramCredential
 void rd_kafka_UserScramCredentialAlteration_destroy_free(void *alteration){
         rd_kafka_UserScramCredentialAlteration_destroy(alteration);
 }
-rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialAlteration_copy(const rd_kafka_UserScramCredentialAlteration_t *alteration){
+static rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialAlteration_copy(const rd_kafka_UserScramCredentialAlteration_t *alteration){
         rd_kafka_UserScramCredentialAlteration_t *copied_alteration = rd_calloc(1,sizeof(*alteration));
         copied_alteration->user = rd_strdup(alteration->user);
         copied_alteration->alteration_type = alteration->alteration_type;
+
         if(alteration->alteration_type == RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT /*Upsert*/){
                 copied_alteration->alteration.upsertion.salt = rd_strdup(alteration->alteration.upsertion.salt);
                 copied_alteration->alteration.upsertion.password = rd_strdup(alteration->alteration.upsertion.password);
                 copied_alteration->alteration.upsertion.credential_info.mechanism = alteration->alteration.upsertion.credential_info.mechanism;
                 copied_alteration->alteration.upsertion.credential_info.iterations = alteration->alteration.upsertion.credential_info.iterations;
-        }else if(alteration->alteration_type == RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE /*Delete*/){
+        } else if(alteration->alteration_type == RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE /*Delete*/){
                 copied_alteration->alteration.deletion.mechanism = alteration->alteration.deletion.mechanism;
         }
+
         return copied_alteration;
 
 }
@@ -5237,11 +5246,13 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(rd_kafka_broker_t 
                         rd_chariov_t salt_chariov;
                         salt_chariov.ptr = salt;
                         salt_chariov.size = saltsize;
-                        const EVP_MD *evp;
+                        const EVP_MD *evp = NULL;
                         if(mechanism == RD_KAFKA_SCRAM_MECHANISM_SHA_256)
                                 evp = EVP_sha256();
                         else if (mechanism == RD_KAFKA_SCRAM_MECHANISM_SHA_512)
                                 evp = EVP_sha512();
+                        else
+                                rd_assert(evp != NULL);
 
                         rd_kafka_sasl_scram_Hi0(rkb,evp,&password_chariov,&salt_chariov,iterations,&saltedpassword_chariov);
 
@@ -5306,7 +5317,7 @@ err_parse:
 
         return reply->rkbuf_err;
 }
-rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
+void rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
                                         rd_kafka_UserScramCredentialAlteration_t **alterations,
                                         size_t alteration_cnt,
                                         const rd_kafka_AdminOptions_t *options,
@@ -5315,16 +5326,55 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
         rd_kafka_op_t *rko;
         size_t i;
 
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_AlterUserScramCredentialsRequest,
+            rd_kafka_AlterUserScramCredentialsResponse_parse,
+        };
+
+        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,
+                                            RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT,
+                                            &cbs, options, rkqu->rkqu_q);
+
         /* Check Duplicates */
         if(alteration_cnt > 1){
                 rd_list_t *users = rd_list_new(alteration_cnt,rd_free);
+                rd_bool_t mechanism_unknown = rd_false;
                 for(i=0;i<alteration_cnt;i++){
+                        mechanism_unknown |= alterations[i]->alteration_type ==
+                                RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT &&
+                                alterations[i]->alteration.upsertion.credential_info.mechanism ==
+                                RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
+                        mechanism_unknown |= alterations[i]->alteration_type ==
+                                RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE &&
+                                alterations[i]->alteration.deletion.mechanism ==
+                                RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
+                        if(mechanism_unknown) {
+                                break;
+                        }
                         rd_list_add(users,rd_strdup(alterations[i]->user));
                 }
+
+                if (mechanism_unknown) {
+                        rd_list_destroy(users);
+                        rd_kafka_admin_result_fail(rko,
+                                RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "SCRAM mechanism must be specified at index %" PRIusz,
+                                i);
+                        rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                             rd_true /*destroy*/);
+                        return;
+                }
+
                 rd_list_sort(users, strcmp_void);
                 if(rd_list_find_duplicate(users,strcmp_void)){
                         rd_list_destroy(users);
-                        return RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE;
+                        rd_kafka_admin_result_fail(rko,
+                                RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "Duplicate users aren't allowed "
+                                "in the same request");
+                        rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                             rd_true /*destroy*/);
+                        return;
                 }
                 rd_list_destroy(users);
         }
@@ -5337,19 +5387,17 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
                         break;
                 }
         }
+
         if(flag){
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                rd_kafka_admin_result_fail(rko,
+                        RD_KAFKA_RESP_ERR__INVALID_ARG,
+                        "librdkafka not built with OpenSSL support,"
+                        "needed for upsert alterations.");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                        rd_true /*destroy*/);
+                return;
         }
 #endif
-
-        static const struct rd_kafka_admin_worker_cbs cbs = {
-            rd_kafka_AlterUserScramCredentialsRequest,
-            rd_kafka_AlterUserScramCredentialsResponse_parse,
-        };
-
-        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,
-                                            RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT,
-                                            &cbs, options, rkqu->rkqu_q);
 
         rd_list_init(&rko->rko_u.admin_request.args, alteration_cnt,
                      rd_kafka_UserScramCredentialAlteration_destroy_free);
@@ -5358,7 +5406,7 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
                 rd_list_add(&rko->rko_u.admin_request.args,rd_kafka_UserScramCredentialAlteration_copy(alterations[i]));
         }
         rd_kafka_q_enq(rk->rk_ops, rko);
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return;
 }
 
 /**

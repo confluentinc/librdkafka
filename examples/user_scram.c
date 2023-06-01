@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2023, Adhitya Mahajan
+ * Copyright (c) 2023, Confluent Inc.
  *  rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,7 +28,7 @@
 
 /**
  * Example utility that shows how to use SCRAM APIs (AdminAPI)
- * DescribeUserScramCredentials -> Describe the scram mechanism for each user 
+ * DescribeUserScramCredentials -> Describe the scram mechanism for each user
  * AlterUserScramCredentials -> Changes the scram mechanism for the user
  */
 
@@ -81,15 +81,15 @@ static void Describe(rd_kafka_t *rk,const char **users,size_t user_cnt){
         rd_kafka_event_t *event;
         char errstr[512];      /* librdkafka API error reporting buffer */
         rd_kafka_resp_err_t api_error;
-        
-        rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);  
+
+        rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
                 options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 return ;
         }
-        
+
         /* Null Argument gives us  the users*/
         api_error = rd_kafka_DescribeUserScramCredentials(rk,users,user_cnt,options,queue);
         rd_kafka_AdminOptions_destroy(options);
@@ -186,7 +186,7 @@ static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alte
                 return;
         }
         rd_kafka_AdminOptions_destroy(options);
-        
+
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (!event) {
@@ -200,7 +200,7 @@ static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alte
 
         } else {
                 const rd_kafka_AlterUserScramCredentials_result_t *result = rd_kafka_event_AlterUserScramCredentials_result(event);
-                size_t num_results = rd_kafka_AlterUserScramCredentials_result_get_count(result); 
+                size_t num_results = rd_kafka_AlterUserScramCredentials_result_get_count(result);
                 size_t i;
                 printf("AlterUserScramCredentials results [%zu]:\n",num_results);
                 for (i = 0; i < num_results; i++){
@@ -221,7 +221,7 @@ static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alte
                 printf("AlterUserScramCredentials result END\n");
         }
         rd_kafka_event_destroy(event);
-       
+
 }
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /* Temporary configuration object */
@@ -279,14 +279,14 @@ int main(int argc, char **argv) {
         int32_t iterations = 10000;
         const char *salt = "salt";
         const char *password = "password";
-        
+
         rd_kafka_UserScramCredentialAlteration_t *alterations[1];
 
         alterations[0] = rd_kafka_UserScramCredentialUpsertion_new(username,salt,password,mechanism,iterations);
-        
+
         Alter(rk,alterations,1);
-        
-        
+
+
         rd_kafka_UserScramCredentialAlteration_destroy(alterations[0]);
         /* Describe the mechanisms */
         Describe(rk,users,user_cnt);
@@ -305,7 +305,7 @@ int main(int argc, char **argv) {
         rd_kafka_queue_destroy(queue);
 
 
-        
+
         /* Destroy the producer instance */
         rd_kafka_destroy(rk);
 

@@ -31,6 +31,7 @@
 
 
 #include "rdstring.h"
+#include "rdmap.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
 

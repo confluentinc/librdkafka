@@ -8604,16 +8604,6 @@ void rd_kafka_DescribeUserScramCredentials(rd_kafka_t *rk,
         rd_kafka_queue_t *rkqu);
 
 /**
- * @enum rd_kafka_UserScramCredentialAlteration_type_t
- * @brief Types of user SCRAM alterations.
- */
-typedef enum rd_kafka_UserScramCredentialAlteration_type_s {
-        RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT = 0,
-        RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE = 1,
-        RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE__CNT
-}rd_kafka_UserScramCredentialAlteration_type_t;
-
-/**
  * @brief A request to alter a user's SASL/SCRAM credentials.
  */
 typedef struct rd_kafka_UserScramCredentialAlteration_s rd_kafka_UserScramCredentialAlteration_t;

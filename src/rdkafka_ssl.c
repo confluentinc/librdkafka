@@ -1839,3 +1839,57 @@ void rd_kafka_ssl_init(void) {
         OpenSSL_add_all_algorithms();
 #endif
 }
+
+int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
+                      const EVP_MD *evp,
+                      const rd_chariov_t *in,
+                      const rd_chariov_t *salt,
+                      int itcnt,
+                      rd_chariov_t *out) {
+        unsigned int ressize = 0;
+        unsigned char tempres[EVP_MAX_MD_SIZE];
+        unsigned char *saltplus;
+        int i;
+
+        /* U1   := HMAC(str, salt + INT(1)) */
+        saltplus = rd_alloca(salt->size + 4);
+        memcpy(saltplus, salt->ptr, salt->size);
+        saltplus[salt->size]     = 0;
+        saltplus[salt->size + 1] = 0;
+        saltplus[salt->size + 2] = 0;
+        saltplus[salt->size + 3] = 1;
+
+        /* U1   := HMAC(str, salt + INT(1)) */
+        if (!HMAC(evp, (const unsigned char *)in->ptr, (int)in->size, saltplus,
+                  salt->size + 4, tempres, &ressize)) {
+                rd_rkb_dbg(rkb, SECURITY, "SSLHMAC",
+                           "HMAC priming failed");
+                return -1;
+        }
+
+        memcpy(out->ptr, tempres, ressize);
+
+        /* Ui-1 := HMAC(str, Ui-2) ..  */
+        for (i = 1; i < itcnt; i++) {
+                unsigned char tempdest[EVP_MAX_MD_SIZE];
+                int j;
+
+                if (unlikely(!HMAC(evp, (const unsigned char *)in->ptr,
+                                   (int)in->size, tempres, ressize, tempdest,
+                                   NULL))) {
+                        rd_rkb_dbg(rkb, SECURITY, "SSLHMAC",
+                                   "Hi() HMAC #%d/%d failed", i, itcnt);
+                        return -1;
+                }
+
+                /* U1 XOR U2 .. */
+                for (j = 0; j < (int)ressize; j++) {
+                        out->ptr[j] ^= tempdest[j];
+                        tempres[j] = tempdest[j];
+                }
+        }
+
+        out->size = ressize;
+
+        return 0;
+}

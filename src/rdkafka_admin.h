@@ -33,8 +33,15 @@
 #include "rdstring.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
-
-
+#if WITH_SSL
+typedef struct rd_kafka_broker_s rd_kafka_broker_t;
+extern int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
+        const EVP_MD *evp,
+        const rd_chariov_t *in,
+        const rd_chariov_t *salt,
+        int itcnt,
+        rd_chariov_t *out);
+#endif
 
 /**
  * @brief Common AdminOptions type used for all admin APIs.

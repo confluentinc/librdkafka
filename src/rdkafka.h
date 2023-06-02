@@ -8509,7 +8509,7 @@ typedef enum rd_kafka_ScramMechanism_s {
         RD_KAFKA_SCRAM_MECHANISM_SHA_256 = 1,
         RD_KAFKA_SCRAM_MECHANISM_SHA_512 = 2,
         RD_KAFKA_SCRAM_MECHANISM__CNT
-}rd_kafka_ScramMechanism_t;
+} rd_kafka_ScramMechanism_t;
 
 /**
  * @brief Scram credential info.
@@ -8599,7 +8599,7 @@ typedef struct rd_kafka_UserScramCredentialAlteration_s rd_kafka_UserScramCreden
  * @brief Allocates a new UserScramCredentialUpsertion with the mandatory fields.
  */
 RD_EXPORT
-rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialUpsertion_new(const char *username,const char *salt,const char *password,rd_kafka_ScramMechanism_t mechanism,int32_t iterations);
+rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialUpsertion_new(const char *username, const unsigned char *salt, size_t salt_size, const unsigned char *password, size_t password_size, rd_kafka_ScramMechanism_t mechanism,int32_t iterations);
 
 /**
  * @brief Allocates a new UserScramCredentialDeletion with the mandatory fields.

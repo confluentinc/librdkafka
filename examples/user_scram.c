@@ -28,20 +28,27 @@
 
 /**
  * Example utility that shows how to use SCRAM APIs (AdminAPI)
- * DescribeUserScramCredentials -> Describe the scram mechanism for each user
- * AlterUserScramCredentials -> Changes the scram mechanism for the user
+ * DescribeUserScramCredentials -> Describe user SCRAM credentials
+ * AlterUserScramCredentials -> Upset or delete user SCRAM credentials
  */
 
 #include <stdio.h>
 #include <signal.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
+#ifdef _WIN32
+#include "../win32/wingetopt.h"
+#else
+#include <getopt.h>
+#endif
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
+const char *argv0;
 
 static rd_kafka_queue_t *queue; /** Admin result queue.
                                  *  This is a global so we can
@@ -61,6 +68,58 @@ static void stop(int sig) {
 }
 
 
+static void usage(const char *reason, ...) {
+        fprintf(stderr,
+                "Describe/Alter user SCRAM credentials\n"
+                "\n"
+                "Usage: %s <options>\n"
+                "       DESCRIBE <user1> ... \n"
+                "       UPSERT <user1> <salt1> <password1> <mechanism1> <iterations1> ... \n"
+                "       DELETE <user1> <mechanism1> ... \n"
+                "\n"
+                "Options:\n"
+                "   -b <brokers>    Bootstrap server list to connect to.\n"
+                "   -X <prop=val>   Set librdkafka configuration property.\n"
+                "                   See CONFIGURATION.md for full list.\n"
+                "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
+                "\n",
+                argv0, rd_kafka_get_debug_contexts());
+
+        if (reason) {
+                va_list ap;
+                char reasonbuf[512];
+
+                va_start(ap, reason);
+                vsnprintf(reasonbuf, sizeof(reasonbuf), reason, ap);
+                va_end(ap);
+
+                fprintf(stderr, "ERROR: %s\n", reasonbuf);
+        }
+
+        exit(reason ? 1 : 0);
+}
+
+#define fatal(...)                                                             \
+        do {                                                                   \
+                fprintf(stderr, "ERROR: ");                                    \
+                fprintf(stderr, __VA_ARGS__);                                  \
+                fprintf(stderr, "\n");                                         \
+                exit(2);                                                       \
+        } while (0)
+
+
+/**
+ * @brief Set config property. Exit on failure.
+ */
+static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
+        char errstr[512];
+
+        if (rd_kafka_conf_set(conf, name, val, errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
+                fatal("Failed to set %s=%s: %s", name, val, errstr);
+}
+
+
 /**
  * @brief Parse an integer or fail.
  */
@@ -75,6 +134,12 @@ int64_t parse_int(const char *what, const char *str) {
         }
 
         return (int64_t)n;
+}
+
+rd_kafka_ScramMechanism_t parse_mechanism(const char *arg) {
+        return !strcmp(arg, "SHA-256") ? RD_KAFKA_SCRAM_MECHANISM_SHA_256 :
+               !strcmp(arg, "SHA-512") ? RD_KAFKA_SCRAM_MECHANISM_SHA_512 :
+               RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
 }
 
 static void Describe(rd_kafka_t *rk,const char **users,size_t user_cnt){
@@ -117,7 +182,7 @@ static void Describe(rd_kafka_t *rk,const char **users,size_t user_cnt){
 
                 result  = rd_kafka_event_DescribeUserScramCredentials_result(event);
                 descriptions = rd_kafka_DescribeUserScramCredentials_result_descriptions(result, &description_cnt);
-                printf("DescribeUserScramCredentials descriptions[%zu] [Error Code : %d]:\n",description_cnt, err);
+                printf("DescribeUserScramCredentials descriptions[%zu] [Error: %s]:\n",description_cnt, rd_kafka_err2str(err));
                 for (i = 0; i < description_cnt; i++){
                         const rd_kafka_UserScramCredentialsDescription_t *description;
                         description = descriptions[i];
@@ -125,11 +190,11 @@ static void Describe(rd_kafka_t *rk,const char **users,size_t user_cnt){
                         const rd_kafka_error_t *error;
                         username = rd_kafka_UserScramCredentialsDescription_user(description);
                         error = rd_kafka_UserScramCredentialsDescription_error(description);
-                        rd_kafka_resp_err_t errorcode = rd_kafka_error_code(error);
-                        printf("        Username : %s Error-code : %d\n",username,errorcode);
-                        if(errorcode){
+                        rd_kafka_resp_err_t err = rd_kafka_error_code(error);
+                        printf("        Username: \"%s\" Error: \"%s\"\n", username, rd_kafka_err2str(err));
+                        if(err){
                                 const char *errstr = rd_kafka_error_string(error);
-                                printf("                ErrorMessage : %s\n",errstr);
+                                printf("        ErrorMessage: \"%s\"\n",errstr);
                         }
                         size_t num_credentials = rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(description);
                         size_t itr;
@@ -158,7 +223,6 @@ static void Describe(rd_kafka_t *rk,const char **users,size_t user_cnt){
                         }
 
                 }
-                printf("DescribeUserScramCredentials result END\n");
         }
         rd_kafka_event_destroy(event);
 }
@@ -205,40 +269,54 @@ static void Alter(rd_kafka_t *rk,rd_kafka_UserScramCredentialAlteration_t **alte
                         const rd_kafka_error_t *error;
                         username = rd_kafka_AlterUserScramCredentials_result_response_user(response);
                         error = rd_kafka_AlterUserScramCredentials_result_response_error(response);
-                        rd_kafka_resp_err_t errorcode = rd_kafka_error_code(error);
-                        if(errorcode){
+                        rd_kafka_resp_err_t err = rd_kafka_error_code(error);
+                        if(err){
                                 const char *errstr = rd_kafka_error_string(error);
-                                printf("        Username : %s , errorcode : %d , error-message : %s\n",username,errorcode,errstr);
-                        }else{
-                                printf("        Username : %s Success!!\n",username);
+                                printf("        Username: \"%s\", Error: \"%s\"\n", username, rd_kafka_err2str(err));
+                                printf("        ErrorMessage: \"%s\"\n",errstr);
+                        } else {
+                                printf("        Username: \"%s\" Success\n",username);
                         }
 
                 }
-                printf("AlterUserScramCredentials result END\n");
         }
         rd_kafka_event_destroy(event);
 
 }
-int main(int argc, char **argv) {
-        rd_kafka_conf_t *conf; /* Temporary configuration object */
-        char errstr[512];      /* librdkafka API error reporting buffer */
-        const char *brokers = "localhost:9092";   /* Argument: broker list */
-        rd_kafka_t *rk;        /* Admin client instance */
-        /*
-         * Create Kafka client configuration place-holder
-         */
-        conf = rd_kafka_conf_new();
 
-        /* Set bootstrap broker(s) as a comma-separated list of
-         * host or host:port (default port 9092).
-         * librdkafka will use the bootstrap brokers to acquire the full
-         * set of brokers from the cluster. */
-        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                return 1;
-        }
-        rd_kafka_conf_set(conf, "debug", "", NULL, 0);
+static void
+cmd_user_scram(rd_kafka_conf_t *conf, int argc, const char **argv) {
+        char errstr[512]; /* librdkafka API error reporting buffer */
+        rd_kafka_t *rk;   /* Admin client instance */
+        size_t i;
+        const int min_argc = 1;
+        const int args_rest = argc - min_argc;
+
+        int is_describe = 0;
+        int is_upsert = 0;
+        int is_delete = 0;
+
+        /*
+         * Argument validation
+         */
+        int correct_argument_cnt = argc >= min_argc;
+
+        if (!correct_argument_cnt)
+                usage("Wrong number of arguments");
+
+        is_describe = !strcmp(argv[0],"DESCRIBE");
+        is_upsert = !strcmp(argv[0],"UPSERT");
+        is_delete = !strcmp(argv[0],"DELETE");
+
+        correct_argument_cnt =
+                 is_describe ||
+                 (is_upsert && (args_rest % 5) == 0) ||
+                 (is_delete && (args_rest % 2) == 0) ||
+                 0;
+
+        if (!correct_argument_cnt)
+                usage("Wrong number of arguments");
+
 
         /*
          * Create an admin client, it can be created using any client type,
@@ -247,13 +325,13 @@ int main(int argc, char **argv) {
          *
          * NOTE: rd_kafka_new() takes ownership of the conf object
          *       and the application must not reference it again after
-         *       this c.
+         *       this call.
          */
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         if (!rk) {
                 fprintf(stderr, "%% Failed to create new producer: %s\n",
                         errstr);
-                return 1;
+                exit(1);
         }
 
         /* The Admin API is completely asynchronous, results are emitted
@@ -262,48 +340,116 @@ int main(int argc, char **argv) {
 
         /* Signal handler for clean shutdown */
         signal(SIGINT, stop);
-        const char *users[1];
-        users[0] = "broker";
-        size_t user_cnt = 1;
 
-        /* Describe  the users */
-        Describe(rk,users,user_cnt);
+        if (is_describe) {
 
-        /* First Upsert a mechanism*/
-        const char *username = "broker";
-        rd_kafka_ScramMechanism_t mechanism = RD_KAFKA_SCRAM_MECHANISM_SHA_256;
-        int32_t iterations = 10000;
-        const char *salt = "salt";
-        const char *password = "password";
+                /* Describe  the users */
+                Describe(rk, &argv[min_argc], argc - min_argc);
 
-        rd_kafka_UserScramCredentialAlteration_t *alterations[1];
+        } else if (is_upsert) {
+                size_t upsert_cnt = args_rest / 5;
+                const char **upsert_args = &argv[min_argc];
+                rd_kafka_UserScramCredentialAlteration_t **upserts =
+                        calloc(upsert_cnt, sizeof(*upserts));
+                for (i = 0; i < upsert_cnt; i++) {
+                        const char **upsert_args_curr = &upsert_args[i*5];
+                        size_t salt_size = 0;
+                        rd_kafka_ScramMechanism_t mechanism =
+                                parse_mechanism(upsert_args_curr[3]);
+                        int iterations = parse_int("iterations", upsert_args_curr[4]);
+                        const char *username = upsert_args_curr[0];
+                        const char *salt = upsert_args_curr[1];
+                        const char *password = upsert_args_curr[2];
 
-        alterations[0] = rd_kafka_UserScramCredentialUpsertion_new(username,salt,password,mechanism,iterations);
+                        if (strlen(salt) == 0) salt = NULL;
+                        else salt_size = strlen(salt);
 
-        Alter(rk,alterations,1);
+                        upserts[i] =
+                                rd_kafka_UserScramCredentialUpsertion_new(
+                                        username,
+                                        (const unsigned char *) salt,
+                                        salt_size,
+                                        (const unsigned char *) password,
+                                        strlen(password),
+                                        mechanism,
+                                        iterations);
+                }
+                Alter(rk, upserts, upsert_cnt);
+                rd_kafka_UserScramCredentialAlteration_destroy_array(upserts, upsert_cnt);
+                free(upserts);
+        } else {
+                size_t deletion_cnt = args_rest / 2;
+                const char **delete_args = &argv[min_argc];
+                rd_kafka_UserScramCredentialAlteration_t **deletions =
+                        calloc(deletion_cnt, sizeof(*deletions));
+                for (i = 0; i < deletion_cnt; i++) {
+                        const char **delete_args_curr = &delete_args[i*2];
+                        rd_kafka_ScramMechanism_t mechanism =
+                                parse_mechanism(delete_args_curr[1]);
+                        const char *username = delete_args_curr[0];
 
-
-        rd_kafka_UserScramCredentialAlteration_destroy(alterations[0]);
-        /* Describe the mechanisms */
-        Describe(rk,users,user_cnt);
-
-        /* Delete the upserted mechanism*/
-        alterations[0] = rd_kafka_UserScramCredentialDeletion_new(username,mechanism);
-
-        Alter(rk,alterations,1);
-        rd_kafka_UserScramCredentialAlteration_destroy(alterations[0]);
-        /* Describe the mechanisms */
-        Describe(rk,users,user_cnt);
-
+                        deletions[i] =
+                                rd_kafka_UserScramCredentialDeletion_new(
+                                        username,
+                                        mechanism);
+                }
+                Alter(rk, deletions, deletion_cnt);
+                rd_kafka_UserScramCredentialAlteration_destroy_array(deletions, deletion_cnt);
+                free(deletions);
+        }
 
         signal(SIGINT, SIG_DFL);
+
         /* Destroy queue */
         rd_kafka_queue_destroy(queue);
 
 
-
         /* Destroy the producer instance */
         rd_kafka_destroy(rk);
+}
 
+int main(int argc, char **argv) {
+        rd_kafka_conf_t *conf; /**< Client configuration object */
+        int opt;
+        argv0 = argv[0];
+
+        /*
+         * Create Kafka client configuration place-holder
+         */
+        conf = rd_kafka_conf_new();
+
+
+        /*
+         * Parse common options
+         */
+        while ((opt = getopt(argc, argv, "b:X:d:")) != -1) {
+                switch (opt) {
+                case 'b':
+                        conf_set(conf, "bootstrap.servers", optarg);
+                        break;
+
+                case 'X': {
+                        char *name = optarg, *val;
+
+                        if (!(val = strchr(name, '=')))
+                                fatal("-X expects a name=value argument");
+
+                        *val = '\0';
+                        val++;
+
+                        conf_set(conf, name, val);
+                        break;
+                }
+
+                case 'd':
+                        conf_set(conf, "debug", optarg);
+                        break;
+
+                default:
+                        usage("Unknown option %c", (char)opt);
+                }
+        }
+
+        cmd_user_scram(conf, argc - optind, (const char **) &argv[optind]);
         return 0;
 }

@@ -2030,18 +2030,16 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
 
         SUB_TEST_QUICK();
 
-        const char *users[2];
-        users[0] = "Sam";
-        users[1] = "Sam";
-
 #if !WITH_SSL
         /* Whenever librdkafka wasn't built with OpenSSL,
          * the request should fail with error code
          * RD_KAFKA_RESP_ERR__INVALID_ARG */
-        rd_kafka_UserScramCredentialAlteration_t *alterations[1];
-        alterations[0] = rd_kafka_UserScramCredentialUpsertion_new(
-                "broker","salt","password",R
-                D_KAFKA_SCRAM_MECHANISM_SHA_256,10000);
+        rd_kafka_UserScramCredentialAlteration_t *alterations_ssl[1];
+        alterations_ssl[0] = rd_kafka_UserScramCredentialUpsertion_new(
+                "user",
+                (unsigned char *) "salt", 4,
+                (unsigned char *) "password", 8,
+                RD_KAFKA_SCRAM_MECHANISM_SHA_256,10000);
         options = rd_kafka_AdminOptions_new(rk,
                 RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
         if (rd_kafka_AdminOptions_set_request_timeout(
@@ -2049,7 +2047,8 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 return;
         }
-        rd_kafka_AlterUserScramCredentials(rk,alterations,1,options,rkqu);
+        rd_kafka_AlterUserScramCredentials(rk,alterations_ssl,1,options,rkqu);
+        rd_kafka_UserScramCredentialAlteration_destroy_array(alterations_ssl, RD_ARRAY_SIZE(alterations_ssl));
         rd_kafka_AdminOptions_destroy(options);
 
         rkev = test_wait_admin_result(
@@ -2062,12 +2061,11 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
         rd_kafka_event_destroy(rkev);
 #endif
 
-        /* Whenever a duplicate user is passed,
+        /* Whenever an empty user is passed,
          * the request should fail with error code
          * RD_KAFKA_RESP_ERR__INVALID_ARG */
-        rd_kafka_UserScramCredentialAlteration_t *alterations[2];
-        alterations[0] = rd_kafka_UserScramCredentialDeletion_new(users[0],RD_KAFKA_SCRAM_MECHANISM_SHA_256);
-        alterations[1] = rd_kafka_UserScramCredentialDeletion_new(users[1],RD_KAFKA_SCRAM_MECHANISM_SHA_512);
+        rd_kafka_UserScramCredentialAlteration_t *alterations[1];
+        alterations[0] = rd_kafka_UserScramCredentialDeletion_new("",RD_KAFKA_SCRAM_MECHANISM_SHA_256);
         options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
         if (rd_kafka_AdminOptions_set_request_timeout(
                         options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {

@@ -3714,7 +3714,10 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
         char *password = "password";
         rd_kafka_ScramMechanism_t mechanism = RD_KAFKA_SCRAM_MECHANISM_SHA_256;
         int32_t iterations = 10000;
-        alterations[0] = rd_kafka_UserScramCredentialUpsertion_new(users[0],salt,password,mechanism,iterations);
+        alterations[0] = rd_kafka_UserScramCredentialUpsertion_new(users[0],
+                (unsigned char *) salt, strlen(salt),
+                (unsigned char *) password, strlen(password),
+                mechanism,iterations);
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
 

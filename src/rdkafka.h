@@ -8522,12 +8522,12 @@ typedef struct rd_kafka_ScramCredentialInfo_s rd_kafka_ScramCredentialInfo_t;
  * @brief Returns the mechanism of a given ScramCredentialInfo.
  */
 RD_EXPORT
-rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_get_mechanism(const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
+rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_mechanism(const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
 
 /**
  * @brief Returns the iterations of a given ScramCredentialInfo.
  */
-int32_t rd_kafka_ScramCredentialInfo_get_iterations(const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
+int32_t rd_kafka_ScramCredentialInfo_iterations(const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
 
 /**
  * @brief Representation of all SASL/SCRAM credentials associated
@@ -8541,37 +8541,36 @@ typedef struct rd_kafka_UserScramCredentialsDescription_s rd_kafka_UserScramCred
  * @brief Returns the username of a UserScramCredentialsDescription.
  */
 RD_EXPORT
-const char *rd_kafka_UserScramCredentialsDescription_get_user(const rd_kafka_UserScramCredentialsDescription_t *description);
+const char *rd_kafka_UserScramCredentialsDescription_user(const rd_kafka_UserScramCredentialsDescription_t *description);
 
 /**
  * @brief Returns the error associated with a UserScramCredentialsDescription.
  */
 RD_EXPORT
-const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_get_error(const rd_kafka_UserScramCredentialsDescription_t *description);
+const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_error(const rd_kafka_UserScramCredentialsDescription_t *description);
 
 /**
  * @brief Returns the count of ScramCredentialInfos of a UserScramCredentialsDescription.
  */
 RD_EXPORT
-size_t rd_kafka_UserScramCredentialsDescription_get_scramcredentialinfo_cnt(const rd_kafka_UserScramCredentialsDescription_t *description);
+size_t rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(const rd_kafka_UserScramCredentialsDescription_t *description);
 
 /**
  * @brief Returns the ScramCredentialInfo at index idx of UserScramCredentialsDescription.
  */
 RD_EXPORT
-const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_get_scramcredentialinfo(const rd_kafka_UserScramCredentialsDescription_t *description,size_t idx);
+const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_scramcredentialinfo(const rd_kafka_UserScramCredentialsDescription_t *description,size_t idx);
 
 /**
- * @brief Returns the number of Users/Descriptions of DescribeUserScramCredentials.
+ * @brief Get an array of descriptions from a DescribeUserScramCredentials result.
+ *
+ * The returned value life-time is the same as the \p result object.
+ *
+ * @param result Result to get descriptions from.
+ * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT
-size_t rd_kafka_DescribeUserScramCredentials_result_get_count(const rd_kafka_DescribeUserScramCredentials_result_t *result);
-
-/**
- * @brief Returns the UserScramCredentialsDescription at index idx of a DescribeUserScramCredentials result.
- */
-RD_EXPORT
-const rd_kafka_UserScramCredentialsDescription_t *rd_kafka_DescribeUserScramCredentials_result_get_description(const rd_kafka_DescribeUserScramCredentials_result_t *result,size_t idx);
+const rd_kafka_UserScramCredentialsDescription_t **rd_kafka_DescribeUserScramCredentials_result_descriptions(const rd_kafka_DescribeUserScramCredentials_result_t *result, size_t *cntp);
 
 /**
  * @brief Describe SASL/SCRAM credentials.
@@ -8618,32 +8617,30 @@ void rd_kafka_UserScramCredentialAlteration_destroy(rd_kafka_UserScramCredential
 /**
  * @brief Result of a single user SCRAM alteration.
  */
-typedef struct rd_kafka_UserScramCredentialAlterationResultElement_s rd_kafka_UserScramCredentialAlterationResultElement_t;
+typedef struct rd_kafka_AlterUserScramCredentials_result_response_s rd_kafka_AlterUserScramCredentials_result_response_t;
 
 /**
- * @brief Returns the username for a UserScramCredentialAlterationResultElement.
+ * @brief Returns the username for a rd_kafka_AlterUserScramCredentials_result_response.
  */
 RD_EXPORT
-const char *rd_kafka_UserScramCredentialAlterationResultElement_get_user(const rd_kafka_UserScramCredentialAlterationResultElement_t *element);
+const char *rd_kafka_AlterUserScramCredentials_result_response_user(const rd_kafka_AlterUserScramCredentials_result_response_t *response);
 
 /**
- * @brief Returns the error of a UserScramCredentialAlterationResultElement.
+ * @brief Returns the error of a rd_kafka_AlterUserScramCredentials_result_response.
  */
 RD_EXPORT
-const rd_kafka_error_t *rd_kafka_UserScramCredentialAlterationResultElement_get_error(const rd_kafka_UserScramCredentialAlterationResultElement_t *element);
-
-
-/**
- * @brief Returns the number of Alterations in a AlterUserScramCredentials result.
- */
-RD_EXPORT
-size_t rd_kafka_AlterUserScramCredentials_result_get_count(const rd_kafka_AlterUserScramCredentials_result_t *result);
+const rd_kafka_error_t *rd_kafka_AlterUserScramCredentials_result_response_error(const rd_kafka_AlterUserScramCredentials_result_response_t *response);
 
 /**
- * @brief Returns the UserScramCredentialAlterationResultElement at index idx of a AlterUserScramCredentials result.
+ * @brief Get an array of responses from a AlterUserScramCredentials result.
+ *
+ * The returned value life-time is the same as the \p result object.
+ *
+ * @param result Result to get responses from.
+ * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT
-const rd_kafka_UserScramCredentialAlterationResultElement_t *rd_kafka_AlterUserScramCredentials_result_get_element(const rd_kafka_AlterUserScramCredentials_result_t *result,size_t idx);
+const rd_kafka_AlterUserScramCredentials_result_response_t **rd_kafka_AlterUserScramCredentials_result_responses(const rd_kafka_AlterUserScramCredentials_result_t *result, size_t *cntp);
 
 /**
  * @brief Alter SASL/SCRAM credentials.

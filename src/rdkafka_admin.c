@@ -4815,11 +4815,11 @@ struct rd_kafka_ScramCredentialInfo_s {
         int32_t iterations;
 };
 
-rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_get_mechanism(const rd_kafka_ScramCredentialInfo_t *scram_credential_info){
+rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_mechanism(const rd_kafka_ScramCredentialInfo_t *scram_credential_info){
         return scram_credential_info->mechanism;
 }
 
-int32_t rd_kafka_ScramCredentialInfo_get_iterations(const rd_kafka_ScramCredentialInfo_t *scram_credential_info){
+int32_t rd_kafka_ScramCredentialInfo_iterations(const rd_kafka_ScramCredentialInfo_t *scram_credential_info){
         return scram_credential_info->iterations;
 }
 
@@ -4863,28 +4863,25 @@ void rd_kafka_UserScramCredentailsDescription_set_error(rd_kafka_UserScramCreden
         description->error = rd_kafka_error_new(errorcode,"%s",err);
 }
 
-const char *rd_kafka_UserScramCredentialsDescription_get_user(const rd_kafka_UserScramCredentialsDescription_t *description){
+const char *rd_kafka_UserScramCredentialsDescription_user(const rd_kafka_UserScramCredentialsDescription_t *description){
         return description->user;
 }
 
-const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_get_error(const rd_kafka_UserScramCredentialsDescription_t *description){
+const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_error(const rd_kafka_UserScramCredentialsDescription_t *description){
         return description->error;
 }
 
-size_t rd_kafka_UserScramCredentialsDescription_get_scramcredentialinfo_cnt(const rd_kafka_UserScramCredentialsDescription_t *description){
+size_t rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(const rd_kafka_UserScramCredentialsDescription_t *description){
         return description->credential_info_cnt;
 }
 
-const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_get_scramcredentialinfo(const rd_kafka_UserScramCredentialsDescription_t *description,size_t idx){
+const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_scramcredentialinfo(const rd_kafka_UserScramCredentialsDescription_t *description,size_t idx){
         return &description->credential_infos[idx];
 }
 
-size_t rd_kafka_DescribeUserScramCredentials_result_get_count(const rd_kafka_DescribeUserScramCredentials_result_t *result){
-        return rd_list_cnt(&result->rko_u.admin_result.results);
-}
-
-const rd_kafka_UserScramCredentialsDescription_t *rd_kafka_DescribeUserScramCredentials_result_get_description(const rd_kafka_DescribeUserScramCredentials_result_t *result,size_t idx){
-        return rd_list_elem(&result->rko_u.admin_result.results,idx);
+const rd_kafka_UserScramCredentialsDescription_t **rd_kafka_DescribeUserScramCredentials_result_descriptions(const rd_kafka_DescribeUserScramCredentials_result_t *result, size_t *cntp){
+        *cntp = rd_list_cnt(&result->rko_u.admin_result.results);
+        return (const rd_kafka_UserScramCredentialsDescription_t **) result->rko_u.admin_result.results.rl_elems;
 }
 
 rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentialsRequest(rd_kafka_broker_t *rkb,
@@ -5146,48 +5143,45 @@ static rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialAlt
 
 }
 
-struct rd_kafka_UserScramCredentialAlterationResultElement_s {
+struct rd_kafka_AlterUserScramCredentials_result_response_s {
         char *user;
         rd_kafka_error_t *error;
 };
 
-rd_kafka_UserScramCredentialAlterationResultElement_t *rd_kafka_UserScramCredentialAlterationResultElement_new(const char *username){
-        rd_kafka_UserScramCredentialAlterationResultElement_t *element;
-        element = rd_calloc(1,sizeof(*element));
-        element->user = rd_strdup(username);
-        element->error = NULL;
-        return element;
+rd_kafka_AlterUserScramCredentials_result_response_t *rd_kafka_AlterUserScramCredentials_result_response_new(const char *username){
+        rd_kafka_AlterUserScramCredentials_result_response_t *response;
+        response = rd_calloc(1,sizeof(*response));
+        response->user = rd_strdup(username);
+        response->error = NULL;
+        return response;
 }
 
-void rd_kafka_UserScramCredentialAlterationResultElement_destroy(rd_kafka_UserScramCredentialAlterationResultElement_t *alteration_result_element){
-        if(alteration_result_element->user)
-                rd_free(alteration_result_element->user);
-        rd_kafka_error_destroy(alteration_result_element->error);
+void rd_kafka_AlterUserScramCredentials_result_response_destroy(rd_kafka_AlterUserScramCredentials_result_response_t *response){
+        if(response->user)
+                rd_free(response->user);
+        rd_kafka_error_destroy(response->error);
 }
 
-void rd_kafka_UserScramCredentialAlterationResultElement_destroy_free(void *element){
-        rd_kafka_UserScramCredentialAlterationResultElement_destroy(element);
+void rd_kafka_AlterUserScramCredentials_result_response_destroy_free(void *response){
+        rd_kafka_AlterUserScramCredentials_result_response_destroy(response);
 }
 
-void rd_kafka_UserScramCredentialAlterationResultElement_set_error(rd_kafka_UserScramCredentialAlterationResultElement_t *result_element,rd_kafka_resp_err_t errorcode,const char *errstr){
-        rd_kafka_error_destroy(result_element->error);
-        result_element->error = rd_kafka_error_new(errorcode, "%s", errstr);
+void rd_kafka_AlterUserScramCredentials_result_response_set_error(rd_kafka_AlterUserScramCredentials_result_response_t *response,rd_kafka_resp_err_t errorcode,const char *errstr){
+        rd_kafka_error_destroy(response->error);
+        response->error = rd_kafka_error_new(errorcode, "%s", errstr);
 }
 
-const char *rd_kafka_UserScramCredentialAlterationResultElement_get_user(const rd_kafka_UserScramCredentialAlterationResultElement_t *element){
-        return element->user;
+const char *rd_kafka_AlterUserScramCredentials_result_response_user(const rd_kafka_AlterUserScramCredentials_result_response_t *response){
+        return response->user;
 }
 
-const rd_kafka_error_t *rd_kafka_UserScramCredentialAlterationResultElement_get_error(const rd_kafka_UserScramCredentialAlterationResultElement_t *element){
-        return element->error;
+const rd_kafka_error_t *rd_kafka_AlterUserScramCredentials_result_response_error(const rd_kafka_AlterUserScramCredentials_result_response_t *response){
+        return response->error;
 }
 
-size_t rd_kafka_AlterUserScramCredentials_result_get_count(const rd_kafka_AlterUserScramCredentials_result_t *result){
-        return rd_list_cnt(&result->rko_u.admin_result.results);
-}
-
-const rd_kafka_UserScramCredentialAlterationResultElement_t *rd_kafka_AlterUserScramCredentials_result_get_element(const rd_kafka_AlterUserScramCredentials_result_t *result,size_t idx){
-        return rd_list_elem(&result->rko_u.admin_result.results,(int)idx);
+const rd_kafka_AlterUserScramCredentials_result_response_t **rd_kafka_AlterUserScramCredentials_result_responses(const rd_kafka_AlterUserScramCredentials_result_t *result, size_t *cntp){
+        *cntp = rd_list_cnt(&result->rko_u.admin_result.results);
+        return (const rd_kafka_AlterUserScramCredentials_result_response_t **) result->rko_u.admin_result.results.rl_elems;
 }
 
 rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(rd_kafka_broker_t *rkb,
@@ -5314,7 +5308,7 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsResponse_parse(rd_kafka_op
         rd_kafka_buf_read_throttle_time(reply);
         rd_kafka_buf_read_arraycnt(reply,&num_results,10000);
 
-        rd_list_init(&rko_result->rko_u.admin_result.results,num_results,rd_kafka_UserScramCredentialAlterationResultElement_destroy_free);
+        rd_list_init(&rko_result->rko_u.admin_result.results,num_results,rd_kafka_AlterUserScramCredentials_result_response_destroy_free);
         for(i=0;i<num_results;i++){
                 rd_kafkap_str_t username;
                 int16_t user_error_code;
@@ -5324,9 +5318,9 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsResponse_parse(rd_kafka_op
                 rd_kafka_buf_read_str(reply,&user_error_msg);
 
                 rd_kafka_buf_skip_tags(reply);
-                rd_kafka_UserScramCredentialAlterationResultElement_t *result_element = rd_kafka_UserScramCredentialAlterationResultElement_new(username.str);
-                rd_kafka_UserScramCredentialAlterationResultElement_set_error(result_element,user_error_code,user_error_msg.str);
-                rd_list_add(&rko_result->rko_u.admin_result.results,result_element);
+                rd_kafka_AlterUserScramCredentials_result_response_t *response = rd_kafka_AlterUserScramCredentials_result_response_new(username.str);
+                rd_kafka_AlterUserScramCredentials_result_response_set_error(response,user_error_code,user_error_msg.str);
+                rd_list_add(&rko_result->rko_u.admin_result.results,response);
         }
         *rko_resultp = rko_result;
 

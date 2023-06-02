@@ -3677,12 +3677,13 @@ static void do_test_ScramConfigAdmin(rd_kafka_t *rk,rd_kafka_queue_t *queue){
                 const rd_kafka_DescribeUserScramCredentials_result_t *result;
                 size_t num_results;
                 size_t i;
+                rd_kafka_resp_err_t err = rd_kafka_event_error(event);
+
                 result  = rd_kafka_event_DescribeUserScramCredentials_result(event);
                 num_results = rd_kafka_DescribeUserScramCredentials_result_get_count(result);
-                rd_kafka_resp_err_t request_errorcode = rd_kafka_DescribeUserScramCredentials_result_get_errorcode(result);
                 /* Assert num_results should be 1 , request level error code should be 0*/
                 TEST_ASSERT(num_results==1,"There should be only 1 Result for a User !");
-                TEST_ASSERT(request_errorcode == 0,"Even if we send a Wrong Username, The request level error code should be zero!");
+                TEST_ASSERT(err == 0,"Even if we send a Wrong Username, The request level error code should be zero!");
                 for (i = 0; i < num_results; i++){
                         const rd_kafka_UserScramCredentialsDescription_t *description;
                         const char *username;
@@ -3768,12 +3769,13 @@ static void do_test_ScramConfigAdmin(rd_kafka_t *rk,rd_kafka_queue_t *queue){
                 const rd_kafka_DescribeUserScramCredentials_result_t *result;
                 size_t num_results;
                 size_t i;
-                result  = rd_kafka_event_DescribeUserScramCredentials_result(event);
+                rd_kafka_resp_err_t err = rd_kafka_event_error(event);
+
+                result = rd_kafka_event_DescribeUserScramCredentials_result(event);
                 num_results = rd_kafka_DescribeUserScramCredentials_result_get_count(result);
-                rd_kafka_resp_err_t request_errorcode = rd_kafka_DescribeUserScramCredentials_result_get_errorcode(result);
                 /* Assert num_results should be 1 , request level error code should be 0*/
                 TEST_ASSERT(num_results==1,"There should be only 1 Result for a User !");
-                TEST_ASSERT(request_errorcode == 0,"Even if we send a Wrong Username, The request level error code should be zero!");
+                TEST_ASSERT(err == 0,"Even if we send a Wrong Username, The request level error code should be zero!");
                 for (i = 0; i < num_results; i++){
                         const rd_kafka_UserScramCredentialsDescription_t *description;
                         const char *username;
@@ -3863,12 +3865,13 @@ static void do_test_ScramConfigAdmin(rd_kafka_t *rk,rd_kafka_queue_t *queue){
                 const rd_kafka_DescribeUserScramCredentials_result_t *result;
                 size_t num_results;
                 size_t i;
+                rd_kafka_resp_err_t err = rd_kafka_event_error(event);
+
                 result  = rd_kafka_event_DescribeUserScramCredentials_result(event);
                 num_results = rd_kafka_DescribeUserScramCredentials_result_get_count(result);
-                rd_kafka_resp_err_t request_errorcode = rd_kafka_DescribeUserScramCredentials_result_get_errorcode(result);
                 /* Assert num_results should be 1 , request level error code should be 0*/
                 TEST_ASSERT(num_results==1,"There should be only 1 Result for a User !");
-                TEST_ASSERT(request_errorcode == 0,"Even if we send a Wrong Username, The request level error code should be zero!");
+                TEST_ASSERT(err == 0,"Even if we send a Wrong Username, The request level error code should be zero!");
                 for (i = 0; i < num_results; i++){
                         const rd_kafka_UserScramCredentialsDescription_t *description;
                         const char *username;

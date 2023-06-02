@@ -8562,18 +8562,6 @@ RD_EXPORT
 const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_get_scramcredentialinfo(const rd_kafka_UserScramCredentialsDescription_t *description,size_t idx);
 
 /**
- * @brief Returns the request level errorcode(rd_kafka_resp_err_t) of DescribeUserScramCredentials.
- */
-RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials_result_get_errorcode(const rd_kafka_DescribeUserScramCredentials_result_t *result);
-
-/**
- * @brief Returns request level errormessage of DescribeUserScramCredentials.
- */
-RD_EXPORT
-char *rd_kafka_DescribeUserScramCredentials_result_get_errormessage(const rd_kafka_DescribeUserScramCredentials_result_t *result);
-
-/**
  * @brief Returns the number of Users/Descriptions of DescribeUserScramCredentials.
  */
 RD_EXPORT

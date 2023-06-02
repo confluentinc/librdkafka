@@ -108,14 +108,15 @@ static void Describe(rd_kafka_t *rk,const char **users,size_t user_cnt){
                 const rd_kafka_DescribeUserScramCredentials_result_t *result;
                 size_t num_results;
                 size_t i;
+                rd_kafka_resp_err_t err = rd_kafka_event_error(event);
+                if(err){
+                        const char *errstr = rd_kafka_event_error_string(event);
+                        printf("Request Level Error Message : %s \n",errstr);
+                }
+
                 result  = rd_kafka_event_DescribeUserScramCredentials_result(event);
                 num_results = rd_kafka_DescribeUserScramCredentials_result_get_count(result);
-                rd_kafka_resp_err_t request_errorcode = rd_kafka_DescribeUserScramCredentials_result_get_errorcode(result);
-                if(request_errorcode){
-                        const char *errormsg = rd_kafka_DescribeUserScramCredentials_result_get_errormessage(result);
-                        printf("Request Level Error Message : %s \n",errormsg);
-                }
-                printf("DescribeUserScramCredentials results[%zu] [Error Code : %d]:\n",num_results,request_errorcode);
+                printf("DescribeUserScramCredentials results[%zu] [Error Code : %d]:\n",num_results, err);
                 for (i = 0; i < num_results; i++){
                         const rd_kafka_UserScramCredentialsDescription_t *description;
                         description = rd_kafka_DescribeUserScramCredentials_result_get_description(result,i);

@@ -4879,14 +4879,6 @@ const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_g
         return &description->credential_infos[idx];
 }
 
-rd_kafka_resp_err_t rd_kafka_DescribeUserScramCredentials_result_get_errorcode(const rd_kafka_DescribeUserScramCredentials_result_t *result){
-        return result->rko_err;
-}
-
-char *rd_kafka_DescribeUserScramCredentials_result_get_errormessage(const rd_kafka_DescribeUserScramCredentials_result_t *result){
-        return result->rko_u.admin_result.errstr;
-}
-
 size_t rd_kafka_DescribeUserScramCredentials_result_get_count(const rd_kafka_DescribeUserScramCredentials_result_t *result){
         return rd_list_cnt(&result->rko_u.admin_result.results);
 }

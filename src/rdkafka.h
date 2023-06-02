@@ -8615,6 +8615,12 @@ RD_EXPORT
 void rd_kafka_UserScramCredentialAlteration_destroy(rd_kafka_UserScramCredentialAlteration_t *alteration);
 
 /**
+ * @brief Destroys an array of UserScramCredentialAlteration
+ */
+RD_EXPORT
+void rd_kafka_UserScramCredentialAlteration_destroy_array(rd_kafka_UserScramCredentialAlteration_t **alterations, size_t alteration_cnt);
+
+/**
  * @brief Result of a single user SCRAM alteration.
  */
 typedef struct rd_kafka_AlterUserScramCredentials_result_response_s rd_kafka_AlterUserScramCredentials_result_response_t;

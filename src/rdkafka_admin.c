@@ -1619,14 +1619,12 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
         rd_kafka_confval_init_int(&options->request_timeout, "request_timeout",
                                   0, 3600 * 1000,
                                   rk->rk_conf.admin.request_timeout_ms);
-        /* TO DO FOR DESCRIBE AND ALTER USER SCRAM CREDENTIALS*/
+
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATETOPICS ||
             options->for_api == RD_KAFKA_ADMIN_OP_DELETETOPICS ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_DELETERECORDS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS)
+            options->for_api == RD_KAFKA_ADMIN_OP_DELETERECORDS)
                 rd_kafka_confval_init_int(&options->operation_timeout,
                                           "operation_timeout", -1, 3600 * 1000,
                                           rk->rk_conf.admin.request_timeout_ms);
@@ -5122,9 +5120,17 @@ void rd_kafka_UserScramCredentialAlteration_destroy(rd_kafka_UserScramCredential
         }
         rd_free(alteration);
 }
+
 void rd_kafka_UserScramCredentialAlteration_destroy_free(void *alteration){
         rd_kafka_UserScramCredentialAlteration_destroy(alteration);
 }
+
+void rd_kafka_UserScramCredentialAlteration_destroy_array(rd_kafka_UserScramCredentialAlteration_t **alterations, size_t alteration_cnt) {
+        size_t i;
+        for (i = 0; i < alteration_cnt; i++)
+                rd_kafka_UserScramCredentialAlteration_destroy(alterations[i]);
+}
+
 static rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialAlteration_copy(const rd_kafka_UserScramCredentialAlteration_t *alteration){
         rd_kafka_UserScramCredentialAlteration_t *copied_alteration = rd_calloc(1,sizeof(*alteration));
         copied_alteration->user = rd_strdup(alteration->user);
@@ -5160,6 +5166,7 @@ void rd_kafka_AlterUserScramCredentials_result_response_destroy(rd_kafka_AlterUs
         if(response->user)
                 rd_free(response->user);
         rd_kafka_error_destroy(response->error);
+        rd_free(response);
 }
 
 void rd_kafka_AlterUserScramCredentials_result_response_destroy_free(void *response){

@@ -1992,6 +1992,8 @@ static void do_test_DescribeUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
 
+        SUB_TEST_QUICK();
+
         const char *users[2];
         users[0] = "Sam";
         users[1] = "Sam";
@@ -2006,7 +2008,7 @@ static void do_test_DescribeUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_
                         return;
         }
 
-        rd_kafka_DescribeUserScramCredentials(rk,users,1,options,rkqu);
+        rd_kafka_DescribeUserScramCredentials(rk,users, RD_ARRAY_SIZE(users),options,rkqu);
         rd_kafka_AdminOptions_destroy(options);
 
         rkev = test_wait_admin_result(
@@ -2018,32 +2020,15 @@ static void do_test_DescribeUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_
 
         rd_kafka_event_destroy(rkev);
 
-        rd_kafka_UserScramCredentialAlteration_t *alterations[2];
-        alterations[0] = rd_kafka_UserScramCredentialDeletion_new(users[0],RD_KAFKA_SCRAM_MECHANISM_SHA_256);
-        alterations[1] = rd_kafka_UserScramCredentialDeletion_new(users[1],RD_KAFKA_SCRAM_MECHANISM_SHA_512);
-        options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                        options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                        fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                        return;
-        }
-        rd_kafka_AlterUserScramCredentials(rk,alterations,2,options,rkqu);
-        rd_kafka_AdminOptions_destroy(options);
-
-        rkev = test_wait_admin_result(
-            rkqu, RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT, 2000);
-
-        TEST_ASSERT(rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Expected \"Local: Invalid argument or configuration\", not %s",
-                    rd_kafka_err2str(rd_kafka_event_error(rkev)));
-
-        rd_kafka_event_destroy(rkev);
+        SUB_TEST_PASS();
 }
 
 static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *rkqu){
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
+
+        SUB_TEST_QUICK();
 
         const char *users[2];
         users[0] = "Sam";
@@ -2089,7 +2074,8 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
                         fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                         return;
         }
-        rd_kafka_AlterUserScramCredentials(rk,alterations,2,options,rkqu);
+        rd_kafka_AlterUserScramCredentials(rk,alterations, RD_ARRAY_SIZE(alterations),options,rkqu);
+        rd_kafka_UserScramCredentialAlteration_destroy_array(alterations, RD_ARRAY_SIZE(alterations));
         rd_kafka_AdminOptions_destroy(options);
 
         rkev = test_wait_admin_result(
@@ -2100,6 +2086,8 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
                     rd_kafka_err2str(rd_kafka_event_error(rkev)));
 
         rd_kafka_event_destroy(rkev);
+
+        SUB_TEST_PASS();
 }
 
 /**

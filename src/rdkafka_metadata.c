@@ -101,15 +101,15 @@ rd_kafka_metadata(rd_kafka_t *rk,
         rd_kafka_op_set_replyq(rko, rkq, 0);
         rko->rko_u.metadata.force = 1; /* Force metadata request regardless
                                         * of outstanding metadata requests. */
-        rd_kafka_MetadataRequest(rkb, &topics, "application requested",
-                                 allow_auto_create_topics,
-                                 /* cgrp_update:
-                                  * Only update consumer group state
-                                  * on response if this lists all
-                                  * topics in the cluster, since a
-                                  * partial request may make it seem
-                                  * like some subscribed topics are missing. */
-                                 all_topics ? rd_true : rd_false, rko);
+        rd_kafka_MetadataRequest(
+            rkb, &topics, "application requested", allow_auto_create_topics,
+            /* cgrp_update:
+             * Only update consumer group state
+             * on response if this lists all
+             * topics in the cluster, since a
+             * partial request may make it seem
+             * like some subscribed topics are missing. */
+            all_topics ? rd_true : rd_false, rd_false /* force_racks */, rko);
 
         rd_list_destroy(&topics);
         rd_kafka_broker_destroy(rkb);
@@ -238,6 +238,12 @@ static rd_kafka_metadata_internal_t *rd_kafka_metadata_copy_internal(
                         if (!populate_racks)
                                 continue;
 
+                        /* This is quite possibly a recomputation, because we've
+                         * already done this for the src_internal. However,
+                         * since the racks need to point inside the tmpbuf, we
+                         * make this calculation again. Since this is done only
+                         * in a case of a full metadata refresh, this will be
+                         * fairly rare. */
                         curr_list = rd_list_new(0, NULL);
                         for (k = 0; k < md->topics[i].partitions[j].replica_cnt;
                              k++) {
@@ -367,6 +373,68 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
         return ApiVersion >= 9;
 }
 
+/* Populates the topic partition to rack mapping for an `mdi`. It's assumed that
+ * the internal broker metadata is already populated. */
+static void
+rd_kafka_populate_metadata_racks(rd_tmpabuf_t *tbuf,
+                                 rd_kafka_metadata_internal_t *mdi) {
+        int ti;
+        rd_kafka_metadata_broker_internal_t *brokers_internal;
+        size_t broker_cnt;
+
+        rd_dassert(mdi->brokers);
+
+        brokers_internal = mdi->brokers;
+        broker_cnt       = mdi->metadata.broker_cnt;
+
+        for (ti = 0; ti < mdi->metadata.topic_cnt; ti++) {
+                int i;
+                rd_kafka_metadata_topic_t *mdt = &mdi->metadata.topics[ti];
+                rd_kafka_metadata_topic_internal_t *mdti = &mdi->topics[ti];
+
+                for (i = 0; i < mdt->partition_cnt; i++) {
+                        int j;
+                        rd_kafka_metadata_partition_t *mdp =
+                            &mdt->partitions[i];
+                        rd_kafka_metadata_partition_internal_t *mdpi =
+                            &mdti->partitions[i];
+
+                        rd_list_t *curr_list;
+                        char *rack;
+
+                        if (mdp->replica_cnt == 0)
+                                continue;
+
+                        curr_list = rd_list_new(
+                            0, NULL); /* use a list for de-duplication */
+                        for (j = 0; j < mdp->replica_cnt; j++) {
+                                rd_kafka_metadata_broker_internal_t key = {
+                                    .id = mdp->replicas[j]};
+                                rd_kafka_metadata_broker_internal_t *broker =
+                                    bsearch(
+                                        &key, brokers_internal, broker_cnt,
+                                        sizeof(
+                                            rd_kafka_metadata_broker_internal_t),
+                                        rd_kafka_metadata_broker_internal_cmp);
+                                if (!broker || !broker->rack_id)
+                                        continue;
+                                rd_list_add(curr_list, broker->rack_id);
+                        }
+                        rd_list_deduplicate(&curr_list, rd_strcmp2);
+
+                        mdpi->racks_cnt = rd_list_cnt(curr_list);
+                        mdpi->racks     = rd_tmpabuf_alloc(
+                            tbuf, sizeof(char *) * mdpi->racks_cnt);
+                        RD_LIST_FOREACH(rack, curr_list, j) {
+                                mdpi->racks[j] =
+                                    rack; /* Don't copy, rack points inside tbuf
+                                             already*/
+                        }
+                        rd_list_destroy(curr_list);
+                }
+        }
+}
+
 
 /**
  * @brief Handle a Metadata response message.
@@ -410,8 +478,15 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         int broker_changes         = 0;
         int cache_changes          = 0;
         rd_ts_t ts_start           = rd_clock();
-        rd_bool_t has_client_rack =
-            rk->rk_client_id && RD_KAFKAP_STR_LEN(rk->rk_client_id);
+        /* If client rack is present, the metadata cache (topic or full) needs
+         * to contain the partition to rack map. */
+        rd_bool_t has_client_rack = rk->rk_conf.client_rack &&
+                                    RD_KAFKAP_STR_LEN(rk->rk_conf.client_rack);
+        /* If force_racks is true, the outptr mdip has to contain the partition
+         * to rack map. */
+        rd_bool_t force_rack_computation =
+            request->rkbuf_u.Metadata.force_racks;
+        rd_bool_t compute_racks = has_client_rack || force_rack_computation;
 
         /* Ignore metadata updates when terminating */
         if (rd_kafka_terminating(rkb->rkb_rk)) {
@@ -429,9 +504,13 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         rd_kafka_broker_lock(rkb);
         rkb_namelen = strlen(rkb->rkb_name) + 1;
         /* We assume that the marshalled representation is
-         * no more than 4 times larger than the wire representation. */
+         * no more than 4 times larger than the wire representation.
+         * This is increased to 5 times in case if we want to compute partition
+         * to rack mapping. */
         rd_tmpabuf_new(&tbuf,
-                       sizeof(*mdi) + rkb_namelen + (rkbuf->rkbuf_totlen * 4),
+                       sizeof(*mdi) + rkb_namelen +
+                           (rkbuf->rkbuf_totlen * 4 +
+                            (compute_racks ? rkbuf->rkbuf_totlen : 0)),
                        0 /*dont assert on fail*/);
 
         if (!(mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi)))) {
@@ -564,6 +643,8 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         } else {
                                 mdi->topics[i].partitions[j].leader_epoch = -1;
                         }
+                        mdi->topics[i].partitions[j].racks_cnt = 0;
+                        mdi->topics[i].partitions[j].racks     = NULL;
 
                         /* Replicas */
                         rd_kafka_buf_read_arraycnt(
@@ -664,6 +745,9 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                       sizeof(*mdi->topics[i].partitions),
                       rd_kafka_metadata_partition_internal_cmp);
 
+                if (compute_racks)
+                        rd_kafka_populate_metadata_racks(&tbuf, mdi);
+
                 /* Update topic state based on the topic metadata */
                 rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
                                                      &mdi->topics[i]);
@@ -682,8 +766,14 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                 rd_kafka_metadata_cache_topic_update(
                                     rk, &md->topics[i], &mdi->topics[i],
                                     rd_false /*propagate later*/,
-                                    has_client_rack, mdi->brokers,
-                                    md->broker_cnt);
+                                    has_client_rack, /* use has_client_rack
+                                                       rather than
+                                                       compute_racks: it's
+                                                       possible that we only
+                                                       need the rack in the
+                                                       outptr mdip, rather than
+                                                       in the cache. */
+                                    mdi->brokers, md->broker_cnt);
                                 cache_changes++;
                                 rd_kafka_wrunlock(rk);
                         }
@@ -798,14 +888,12 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         rd_kafka_metadata_destroy(
                             &rkb->rkb_rk->rk_full_metadata->metadata);
 
+                /* use has_client_rack rather than compute_racks: it's possible
+                 * that we only need the rack in the outptr mdip, rather than in
+                 * the cache. */
                 if (has_client_rack)
                         rkb->rkb_rk->rk_full_metadata =
-                            rd_kafka_metadata_copy_add_racks(
-                                mdi,
-                                /* Allocate extra space for replica racks.
-                                   Assume it's no more than one whole buffer
-                                   size, since we won't copy the strings. */
-                                tbuf.of + rkbuf->rkbuf_totlen);
+                            rd_kafka_metadata_copy_add_racks(mdi, tbuf.of);
                 else
                         rkb->rkb_rk->rk_full_metadata =
                             rd_kafka_metadata_copy(mdi, tbuf.of);
@@ -1160,7 +1248,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                      rd_list_cnt(&q_topics), rd_list_cnt(topics), reason);
 
         rd_kafka_MetadataRequest(rkb, &q_topics, reason, allow_auto_create,
-                                 cgrp_update, NULL);
+                                 cgrp_update, rd_false /* force_racks */, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -1335,9 +1423,9 @@ rd_kafka_resp_err_t rd_kafka_metadata_refresh_all(rd_kafka_t *rk,
         }
 
         rd_list_init(&topics, 0, NULL); /* empty list = all topics */
-        rd_kafka_MetadataRequest(rkb, &topics, reason,
-                                 rd_false /*no auto create*/,
-                                 rd_true /*cgrp update*/, NULL);
+        rd_kafka_MetadataRequest(
+            rkb, &topics, reason, rd_false /*no auto create*/,
+            rd_true /*cgrp update*/, rd_false /* force_rack */, NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -1375,7 +1463,7 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
         }
 
         rd_kafka_MetadataRequest(rkb, topics, reason, allow_auto_create_topics,
-                                 cgrp_update, rko);
+                                 cgrp_update, rd_false /* force racks */, rko);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);
@@ -1578,6 +1666,8 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
                         md->topics[i].partitions[j].id            = j;
                         mdi->topics[i].partitions[j].id           = j;
                         mdi->topics[i].partitions[j].leader_epoch = -1;
+                        mdi->topics[i].partitions[j].racks_cnt    = 0;
+                        mdi->topics[i].partitions[j].racks        = NULL;
                         md->topics[i].partitions[j].id            = j;
 
                         /* In case replication_factor is not given, don't set

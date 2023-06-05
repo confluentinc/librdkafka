@@ -79,28 +79,11 @@ static RD_INLINE void
 rd_kafka_metadata_cache_delete(rd_kafka_t *rk,
                                struct rd_kafka_metadata_cache_entry *rkmce,
                                int unlink_avl) {
-        int i;
         if (unlink_avl)
                 RD_AVL_REMOVE_ELM(&rk->rk_metadata_cache.rkmc_avl, rkmce);
         TAILQ_REMOVE(&rk->rk_metadata_cache.rkmc_expiry, rkmce, rkmce_link);
         rd_kafka_assert(NULL, rk->rk_metadata_cache.rkmc_cnt > 0);
         rk->rk_metadata_cache.rkmc_cnt--;
-
-        /* The racks need to be freed since they're not contained in the
-         * tmpabuf. */
-        for (i = 0; i < rkmce->rkmce_mtopic.partition_cnt; i++) {
-                size_t j;
-                rd_kafka_metadata_partition_internal_t *partition_internal =
-                    &rkmce->rkmce_metadata_internal_topic.partitions[i];
-
-                if (partition_internal->racks_cnt == 0)
-                        continue;
-
-                for (j = 0; j < partition_internal->racks_cnt; j++) {
-                        rd_free(partition_internal->racks[j]);
-                }
-                rd_free(partition_internal->racks);
-        }
 
         rd_free(rkmce);
 }
@@ -266,6 +249,7 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
     size_t broker_cnt) {
         struct rd_kafka_metadata_cache_entry *rkmce, *old;
         size_t topic_len;
+        size_t racks_size = 0;
         rd_tmpabuf_t tbuf;
         int i;
 
@@ -275,18 +259,34 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
          * Because of this we copy all the structs verbatim but
          * any pointer fields needs to be copied explicitly to update
          * the pointer address.
-         * An exception to this are the racks stored inside
-         * rkmce->rkmce_metadata_internal_topic->partitions[i], because it's
-         * difficult to calculate the size beforehand. See also
-         * rd_kafka_metadata_cache_delete which frees this. */
+         * See also rd_kafka_metadata_cache_delete which frees this. */
         topic_len = strlen(mtopic->topic) + 1;
+
+        for (i = 0; include_racks && i < mtopic->partition_cnt; i++) {
+                size_t j;
+                racks_size += RD_ROUNDUP(
+                    metadata_internal_topic->partitions[i].racks_cnt *
+                        sizeof(char *),
+                    8);
+                for (j = 0;
+                     j < metadata_internal_topic->partitions[i].racks_cnt;
+                     j++) {
+                        racks_size += RD_ROUNDUP(
+                            strlen(metadata_internal_topic->partitions[i]
+                                       .racks[j]) +
+                                1,
+                            8);
+                }
+        }
+
         rd_tmpabuf_new(
             &tbuf,
             RD_ROUNDUP(sizeof(*rkmce), 8) + RD_ROUNDUP(topic_len, 8) +
                 (mtopic->partition_cnt *
                  RD_ROUNDUP(sizeof(*mtopic->partitions), 8)) +
                 (mtopic->partition_cnt *
-                 RD_ROUNDUP(sizeof(*metadata_internal_topic->partitions), 8)),
+                 RD_ROUNDUP(sizeof(*metadata_internal_topic->partitions), 8)) +
+                racks_size,
             1 /*assert on fail*/);
 
         rkmce = rd_tmpabuf_alloc(&tbuf, sizeof(*rkmce));
@@ -319,43 +319,22 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
 
         if (include_racks) {
                 for (i = 0; i < rkmce->rkmce_mtopic.partition_cnt; i++) {
-                        int j;
-                        rd_kafka_metadata_partition_t *partition =
+                        size_t j;
+                        rd_kafka_metadata_partition_t *mdp =
                             &rkmce->rkmce_mtopic.partitions[i];
-                        rd_kafka_metadata_partition_internal_t
-                            *partition_internal =
-                                &rkmce->rkmce_metadata_internal_topic
-                                     .partitions[i];
-                        rd_list_t *curr_list;
-                        char *rack;
+                        rd_kafka_metadata_partition_internal_t *mdpi =
+                            &rkmce->rkmce_metadata_internal_topic.partitions[i];
+                        rd_kafka_metadata_partition_internal_t *mdpi_orig =
+                            &metadata_internal_topic->partitions[i];
 
-                        if (partition->replica_cnt == 0)
+                        if (mdp->replica_cnt == 0 || mdpi->racks_cnt == 0)
                                 continue;
 
-                        curr_list = rd_list_new(
-                            0, NULL); /* use a list for de-duplication */
-                        for (j = 0; j < partition->replica_cnt; j++) {
-                                rd_kafka_metadata_broker_internal_t key = {
-                                    .id = partition->replicas[j]};
-                                rd_kafka_metadata_broker_internal_t *broker =
-                                    bsearch(
-                                        &key, brokers_internal, broker_cnt,
-                                        sizeof(
-                                            rd_kafka_metadata_broker_internal_t),
-                                        rd_kafka_metadata_broker_internal_cmp);
-                                if (!broker || !broker->rack_id)
-                                        continue;
-                                rd_list_add(curr_list, broker->rack_id);
-                        }
-                        rd_list_deduplicate(&curr_list, rd_strcmp2);
-
-                        partition_internal->racks_cnt = rd_list_cnt(curr_list);
-                        partition_internal->racks     = rd_malloc(
-                            sizeof(char *) * partition_internal->racks_cnt);
-                        RD_LIST_FOREACH(rack, curr_list, j) {
-                                partition_internal->racks[j] = rd_strdup(rack);
-                        }
-                        rd_list_destroy(curr_list);
+                        mdpi->racks = rd_tmpabuf_alloc(
+                            &tbuf, sizeof(char *) * mdpi->racks_cnt);
+                        for (j = 0; j < mdpi_orig->racks_cnt; j++)
+                                mdpi->racks[j] = rd_tmpabuf_write_str(
+                                    &tbuf, mdpi_orig->racks[j]);
                 }
         }
 

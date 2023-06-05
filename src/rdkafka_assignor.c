@@ -261,6 +261,8 @@ rd_kafka_member_subscriptions_map(rd_kafka_cgrp_t *rkcg,
                                   int member_cnt) {
         int ti;
         rd_kafka_assignor_topic_t *eligible_topic = NULL;
+        rd_kafka_metadata_internal_t *mdi =
+            rd_kafka_metadata_get_internal(metadata);
 
         rd_list_init(eligible_topics, RD_MIN(metadata->topic_cnt, 10),
                      (void *)rd_kafka_assignor_topic_destroy);
@@ -302,7 +304,8 @@ rd_kafka_member_subscriptions_map(rd_kafka_cgrp_t *rkcg,
                         continue;
                 }
 
-                eligible_topic->metadata = &metadata->topics[ti];
+                eligible_topic->metadata          = &metadata->topics[ti];
+                eligible_topic->metadata_internal = &mdi->topics[ti];
                 rd_list_add(eligible_topics, eligible_topic);
                 eligible_topic = NULL;
         }
@@ -677,11 +680,9 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
         int i;
         size_t t;
         rd_kafka_group_member_t *member;
-        rd_list_t *all_consumer_racks;  /* Contained Type: char* */
-        rd_list_t *all_partition_racks; /* Contained Type: char* */
-        char *rack_id = NULL;
-        rd_list_t *partition_racks; /* Contained Type: rd_list_t * containing
-                                       char* */
+        rd_list_t *all_consumer_racks  = NULL; /* Contained Type: char* */
+        rd_list_t *all_partition_racks = NULL; /* Contained Type: char* */
+        char *rack_id                  = NULL;
         rd_bool_t needs_rack_aware_assignment = rd_true; /* assume true */
 
         /* Criteria 1 */
@@ -704,49 +705,44 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
                         }
                 }
         }
-        if (rd_list_cnt(all_consumer_racks) == 0)
+        if (rd_list_cnt(all_consumer_racks) == 0) {
                 needs_rack_aware_assignment = rd_false;
+                goto done;
+        }
 
 
         /* Critera 2 */
         /* We don't copy racks, so the free function is NULL. */
         all_partition_racks = rd_list_new(0, NULL);
 
-        /* Not required for this Criteria, but initialize it in this loop for
-         * Criteria 3. */
-        partition_racks = rd_list_new(0, rd_list_destroy_free);
-
         for (t = 0; t < topic_cnt; t++) {
                 const int partition_cnt = topics[t]->metadata->partition_cnt;
                 for (i = 0; i < partition_cnt; i++) {
-                        int j;
-                        rd_list_t *curr_partition_racks = rd_list_new(0, NULL);
-                        for (j = 0;
-                             j < topics[t]->metadata->partitions[i].replica_cnt;
+                        size_t j;
+                        for (j = 0; j < topics[t]
+                                            ->metadata_internal->partitions[i]
+                                            .racks_cnt;
                              j++) {
-                                int replica_id = topics[t]
-                                                     ->metadata->partitions[i]
-                                                     .replicas[j];
-                                rd_kafka_metadata_broker_internal_t *broker;
-                                rd_kafka_metadata_broker_internal_find(
-                                    mdi, replica_id, broker);
-
-                                if (broker && broker->rack_id &&
-                                    strlen(broker->rack_id)) {
-                                        rd_list_add(all_partition_racks,
-                                                    broker->rack_id);
-                                        rd_list_add(curr_partition_racks,
-                                                    broker->rack_id);
-                                }
+                                char *rack =
+                                    topics[t]
+                                        ->metadata_internal->partitions[i]
+                                        .racks[j];
+                                rd_list_add(all_partition_racks, rack);
                         }
-                        rd_list_deduplicate(&curr_partition_racks, rd_strcmp2);
-                        rd_list_add(partition_racks, curr_partition_racks);
                 }
+        }
+
+        /* If there are no partition racks, Criteria 2 cannot possibly be met.
+         */
+        if (rd_list_cnt(all_partition_racks) == 0) {
+                needs_rack_aware_assignment = rd_false;
+                goto done;
         }
 
         /* Sort and dedup the racks. */
         rd_list_deduplicate(&all_consumer_racks, rd_strcmp2);
         rd_list_deduplicate(&all_partition_racks, rd_strcmp2);
+
 
         /* Iterate through each list in order, and see if there's anything in
          * common */
@@ -756,8 +752,10 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
                         break;
                 }
         }
-        if (i == rd_list_cnt(all_consumer_racks))
+        if (i == rd_list_cnt(all_consumer_racks)) {
                 needs_rack_aware_assignment = rd_false;
+                goto done;
+        }
 
         /* Criteria 3 */
         for (t = 0; t < topic_cnt && needs_rack_aware_assignment; t++) {
@@ -767,8 +765,10 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
                         /* Since partition_racks[i] is a subset of
                          * all_partition_racks, and both of them are deduped,
                          * the same size indicates that they're equal. */
-                        if (rd_list_cnt(all_partition_racks) !=
-                            rd_list_cnt(rd_list_elem(partition_racks, i))) {
+                        if ((size_t)(rd_list_cnt(all_partition_racks)) !=
+                            topics[t]
+                                ->metadata_internal->partitions[i]
+                                .racks_cnt) {
                                 break;
                         }
                 }
@@ -782,10 +782,9 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
         if (t == topic_cnt)
                 needs_rack_aware_assignment = rd_false;
 
-
-        rd_list_destroy(all_consumer_racks);
-        rd_list_destroy(all_partition_racks);
-        rd_list_destroy(partition_racks);
+done:
+        RD_IF_FREE(all_consumer_racks, rd_list_destroy);
+        RD_IF_FREE(all_partition_racks, rd_list_destroy);
 
         return needs_rack_aware_assignment;
 }
@@ -812,6 +811,85 @@ void ut_populate_internal_broker_metadata(rd_kafka_metadata_internal_t *mdi,
                                  ? all_racks[i % num_broker_racks]->str
                                  : NULL);
         }
+}
+
+/* Helper to populate the deduplicated racks inside each partition. It's assumed
+ * that `mdi->brokers` is set, maybe using
+ * `ut_populate_internal_broker_metadata`. */
+void ut_populate_internal_topic_metadata(rd_kafka_metadata_internal_t *mdi) {
+        int ti;
+        rd_kafka_metadata_broker_internal_t *brokers_internal;
+        size_t broker_cnt;
+
+        rd_assert(mdi->brokers);
+
+        brokers_internal = mdi->brokers;
+        broker_cnt       = mdi->metadata.broker_cnt;
+
+        for (ti = 0; ti < mdi->metadata.topic_cnt; ti++) {
+                int i;
+                rd_kafka_metadata_topic_t *mdt = &mdi->metadata.topics[ti];
+                rd_kafka_metadata_topic_internal_t *mdti = &mdi->topics[ti];
+
+                for (i = 0; i < mdt->partition_cnt; i++) {
+                        int j;
+                        rd_kafka_metadata_partition_t *partition =
+                            &mdt->partitions[i];
+                        rd_kafka_metadata_partition_internal_t
+                            *partition_internal = &mdti->partitions[i];
+
+                        rd_list_t *curr_list;
+                        char *rack;
+
+                        if (partition->replica_cnt == 0)
+                                continue;
+
+                        curr_list = rd_list_new(
+                            0, NULL); /* use a list for de-duplication */
+                        for (j = 0; j < partition->replica_cnt; j++) {
+                                rd_kafka_metadata_broker_internal_t key = {
+                                    .id = partition->replicas[j]};
+                                rd_kafka_metadata_broker_internal_t *broker =
+                                    bsearch(
+                                        &key, brokers_internal, broker_cnt,
+                                        sizeof(
+                                            rd_kafka_metadata_broker_internal_t),
+                                        rd_kafka_metadata_broker_internal_cmp);
+                                if (!broker || !broker->rack_id)
+                                        continue;
+                                rd_list_add(curr_list, broker->rack_id);
+                        }
+                        rd_list_deduplicate(&curr_list, rd_strcmp2);
+
+                        partition_internal->racks_cnt = rd_list_cnt(curr_list);
+                        partition_internal->racks     = rd_malloc(
+                            sizeof(char *) * partition_internal->racks_cnt);
+                        RD_LIST_FOREACH(rack, curr_list, j) {
+                                partition_internal->racks[j] =
+                                    rack; /* no duplication */
+                        }
+                        rd_list_destroy(curr_list);
+                }
+        }
+}
+
+/* Helper to destroy test metadata. Destroying the metadata has some additional
+ * steps in case of tests. */
+void ut_destroy_metadata(rd_kafka_metadata_t *md) {
+        int ti;
+        rd_kafka_metadata_internal_t *mdi = rd_kafka_metadata_get_internal(md);
+
+        for (ti = 0; ti < md->topic_cnt; ti++) {
+                int i;
+                rd_kafka_metadata_topic_t *mdt           = &md->topics[ti];
+                rd_kafka_metadata_topic_internal_t *mdti = &mdi->topics[ti];
+
+                for (i = 0; mdti && i < mdt->partition_cnt; i++) {
+                        rd_free(mdti->partitions[i].racks);
+                }
+        }
+
+        rd_kafka_metadata_destroy(md);
 }
 
 
@@ -1503,8 +1581,14 @@ static int ut_assignors(void) {
                 metadata.topic_cnt = tests[i].topic_cnt;
                 metadata.topics =
                     rd_alloca(sizeof(*metadata.topics) * metadata.topic_cnt);
+                metadata_internal.topics = rd_alloca(
+                    sizeof(*metadata_internal.topics) * metadata.topic_cnt);
+
                 memset(metadata.topics, 0,
                        sizeof(*metadata.topics) * metadata.topic_cnt);
+                memset(metadata_internal.topics, 0,
+                       sizeof(*metadata_internal.topics) * metadata.topic_cnt);
+
                 for (it = 0; it < metadata.topic_cnt; it++) {
                         int pt;
                         metadata.topics[it].topic =
@@ -1514,11 +1598,20 @@ static int ut_assignors(void) {
                         metadata.topics[it].partitions =
                             rd_alloca(metadata.topics[it].partition_cnt *
                                       sizeof(rd_kafka_metadata_partition_t));
+                        metadata_internal.topics[it].partitions = rd_alloca(
+                            metadata.topics[it].partition_cnt *
+                            sizeof(rd_kafka_metadata_partition_internal_t));
                         for (pt = 0; pt < metadata.topics[it].partition_cnt;
                              pt++) {
                                 metadata.topics[it].partitions[pt].id = pt;
                                 metadata.topics[it].partitions[pt].replica_cnt =
                                     0;
+                                metadata_internal.topics[it]
+                                    .partitions[pt]
+                                    .racks_cnt = 0;
+                                metadata_internal.topics[it]
+                                    .partitions[pt]
+                                    .racks = NULL;
                         }
                 }
 

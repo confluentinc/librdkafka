@@ -191,8 +191,8 @@ static void do_test_session_timeout(const char *use_commit_type) {
         /* Consume a couple of messages so that we have something to commit */
         test_consumer_poll("consume", c, 0, -1, 0, 10, NULL);
 
-        /* The commit in the rebalance callback should fail when the
-         * member has timed out from the group. */
+        /* The commit in the rebalance callback should fail because we're not
+         * allowed to commit while rebalancing. */
         commit_exp_err = RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS;
 
         expect_rebalance("session timeout revoke", c,

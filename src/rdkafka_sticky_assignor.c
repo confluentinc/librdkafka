@@ -161,6 +161,9 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
                     rd_list_t *) map_toppar_list_t;
 
 typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafka_metadata_partition_internal_t *) map_toppar_mdpi_t;
+
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
                     ConsumerGenerationPair_t *) map_toppar_cgpair_t;
 
 typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
@@ -199,9 +202,8 @@ static void map_cpair_toppar_list_t_free(void *ptr) {
 typedef struct {
         /** A map of member_id -> rack_id pairs. */
         map_str_str_t member_id_to_rack_id;
-        /* A map of topic partition to rd_list_t* of racks (ie
-         * char*). Each list is sorted and deduplicated. */
-        map_toppar_list_t toppar_to_racks;
+        /* A map of topic partition to rd_kafka_metadata_partition_internal_t */
+        map_toppar_mdpi_t toppar_to_mdpi;
 } rd_kafka_rack_info_t;
 
 /**
@@ -237,9 +239,9 @@ rd_kafka_rack_info_new(rd_kafka_assignor_topic_t **topics,
             0, rd_map_str_cmp, rd_map_str_hash,
             NULL /* refs members.rkgm_member_id */,
             NULL /* refs members.rkgm_rack_id */);
-        rkri->toppar_to_racks = (map_toppar_list_t)RD_MAP_INITIALIZER(
+        rkri->toppar_to_mdpi = (map_toppar_mdpi_t)RD_MAP_INITIALIZER(
             0, rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
-            rd_kafka_topic_partition_destroy_free, rd_list_destroy_free);
+            rd_kafka_topic_partition_destroy_free, NULL);
 
         for (t = 0; t < topic_cnt; t++) {
                 RD_LIST_FOREACH(rkgm, &topics[t]->members, i) {
@@ -249,34 +251,12 @@ rd_kafka_rack_info_new(rd_kafka_assignor_topic_t **topics,
                 }
 
                 for (i = 0; i < topics[t]->metadata->partition_cnt; i++) {
-                        int j;
-                        rd_kafka_metadata_partition_t *partition =
-                            &topics[t]->metadata->partitions[i];
                         rd_kafka_topic_partition_t *rkpart =
                             rd_kafka_topic_partition_new(
                                 topics[t]->metadata->topic, i);
-                        rd_list_t *curr_toppar_racks =
-                            rd_list_new(0, NULL /* reference based */);
-
-                        for (j = 0; j < partition->replica_cnt; j++) {
-
-                                int replica_id = topics[t]
-                                                     ->metadata->partitions[i]
-                                                     .replicas[j];
-                                rd_kafka_metadata_broker_internal_t *broker;
-                                rd_kafka_metadata_broker_internal_find(
-                                    mdi, replica_id, broker);
-
-                                if (broker && broker->rack_id &&
-                                    strlen(broker->rack_id)) {
-                                        rd_list_add(curr_toppar_racks,
-                                                    broker->rack_id);
-                                }
-                        }
-
-                        rd_list_deduplicate(&curr_toppar_racks, rd_strcmp2);
-                        RD_MAP_SET(&rkri->toppar_to_racks, rkpart,
-                                   curr_toppar_racks);
+                        RD_MAP_SET(
+                            &rkri->toppar_to_mdpi, rkpart,
+                            &topics[t]->metadata_internal->partitions[i]);
                 }
         }
 
@@ -289,10 +269,28 @@ static void rd_kafka_rack_info_destroy(rd_kafka_rack_info_t *rkri) {
                 return;
 
         RD_MAP_DESTROY(&rkri->member_id_to_rack_id);
-        RD_MAP_DESTROY(&rkri->toppar_to_racks);
+        RD_MAP_DESTROY(&rkri->toppar_to_mdpi);
 
         rd_free(rkri);
 }
+
+
+/* Convenience function to bsearch inside the racks of a
+ * rd_kafka_metadata_partition_internal_t. */
+static char *rd_kafka_partition_internal_find_rack(
+    rd_kafka_metadata_partition_internal_t *mdpi,
+    const char *rack) {
+        char **partition_racks = mdpi->racks;
+        size_t cnt             = mdpi->racks_cnt;
+
+        void *res =
+            bsearch(&rack, partition_racks, cnt, sizeof(char *), rd_strcmp3);
+
+        if (res)
+                return *(char **)res;
+        return NULL;
+}
+
 
 /* Computes whether there is a rack mismatch between the rack of the consumer
  * and the topic partition/any of its replicas. */
@@ -300,18 +298,19 @@ static rd_bool_t
 rd_kafka_racks_mismatch(rd_kafka_rack_info_t *rkri,
                         const char *consumer,
                         const rd_kafka_topic_partition_t *topic_partition) {
+        const char *consumer_rack;
+        rd_kafka_metadata_partition_internal_t *mdpi;
+
         if (rkri == NULL) /* Not using rack aware assignment */
                 return rd_false;
 
-        const char *consumer_rack =
-            RD_MAP_GET(&rkri->member_id_to_rack_id, consumer);
+        consumer_rack = RD_MAP_GET(&rkri->member_id_to_rack_id, consumer);
 
-        rd_list_t *replica_racks =
-            RD_MAP_GET(&rkri->toppar_to_racks, topic_partition);
+        mdpi = RD_MAP_GET(&rkri->toppar_to_mdpi, topic_partition);
 
         return consumer_rack != NULL &&
-               (replica_racks == NULL ||
-                !rd_list_find(replica_racks, consumer_rack, rd_strcmp2));
+               (mdpi == NULL ||
+                !rd_kafka_partition_internal_find_rack(mdpi, consumer_rack));
 }
 
 /**
@@ -922,8 +921,8 @@ performReassignments(rd_kafka_t *rk,
                         const rd_kafka_topic_partition_list_t *currAssignment;
                         int j;
                         rd_bool_t found_rack;
-                        const char *consumer_rack  = NULL;
-                        rd_list_t *partition_racks = NULL;
+                        const char *consumer_rack                    = NULL;
+                        rd_kafka_metadata_partition_internal_t *mdpi = NULL;
 
                         /* FIXME: Is this a local error/bug? If so, assert */
                         if (rd_list_cnt(consumers) <= 1)
@@ -965,15 +964,15 @@ performReassignments(rd_kafka_t *rk,
                         if (rkri) {
                                 consumer_rack = RD_MAP_GET(
                                     &rkri->member_id_to_rack_id, consumer);
-                                partition_racks = RD_MAP_GET(
-                                    &rkri->toppar_to_racks, partition);
+                                mdpi = RD_MAP_GET(&rkri->toppar_to_mdpi,
+                                                  partition);
                         }
                         found_rack = rd_false;
 
-                        if (consumer_rack != NULL && partition_racks != NULL &&
-                            rd_list_cnt(partition_racks) > 0 &&
-                            rd_list_find(partition_racks, consumer_rack,
-                                         rd_strcmp2)) {
+                        if (consumer_rack != NULL && mdpi != NULL &&
+                            mdpi->racks_cnt > 0 &&
+                            rd_kafka_partition_internal_find_rack(
+                                mdpi, consumer_rack)) {
                                 RD_LIST_FOREACH(otherConsumer, consumers, j) {
                                         /* No need for rkri == NULL check, that
                                          * is guaranteed if we're inside this if
@@ -984,9 +983,8 @@ performReassignments(rd_kafka_t *rk,
                                                 otherConsumer);
 
                                         if (other_consumer_rack == NULL ||
-                                            !rd_list_find(partition_racks,
-                                                          other_consumer_rack,
-                                                          rd_strcmp2))
+                                            !rd_kafka_partition_internal_find_rack(
+                                                mdpi, other_consumer_rack))
                                                 continue;
 
                                         if (currAssignment->cnt <=
@@ -2319,7 +2317,7 @@ ut_testOneConsumerNoTopic(rd_kafka_t *rk,
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2356,7 +2354,7 @@ static int ut_testOneConsumerNonexistentTopic(
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2395,7 +2393,7 @@ ut_testOneConsumerOneTopic(rd_kafka_t *rk,
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2430,7 +2428,7 @@ static int ut_testOnlyAssignsPartitionsFromSubscribedTopics(
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2465,7 +2463,7 @@ static int ut_testOneConsumerMultipleTopics(
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2503,7 +2501,7 @@ static int ut_testTwoConsumersOneTopicOnePartition(
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2542,7 +2540,7 @@ static int ut_testTwoConsumersOneTopicTwoPartitions(
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2587,7 +2585,7 @@ static int ut_testMultipleConsumersMixedTopicSubscriptions(
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
         rd_kafka_group_member_clear(&members[2]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2628,7 +2626,7 @@ static int ut_testTwoConsumersTwoTopicsSixPartitions(
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2694,7 +2692,7 @@ static int ut_testAddRemoveConsumerOneTopic(
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2767,7 +2765,7 @@ static int ut_testPoorRoundRobinAssignmentScenario(
         rd_kafka_group_member_clear(&members[1]);
         rd_kafka_group_member_clear(&members[2]);
         rd_kafka_group_member_clear(&members[3]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2809,7 +2807,7 @@ static int ut_testAddRemoveTopicTwoConsumers(
          * Add topic2
          */
         RD_UT_SAY("Adding topic2");
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
                                        RD_ARRAYSIZE(ALL_RACKS), parametrization,
@@ -2834,7 +2832,7 @@ static int ut_testAddRemoveTopicTwoConsumers(
          * Remove topic1
          */
         RD_UT_SAY("Removing topic1");
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         ut_initMetadataConditionalRack(&metadata, 3, 3, ALL_RACKS,
                                        RD_ARRAYSIZE(ALL_RACKS), parametrization,
@@ -2854,7 +2852,7 @@ static int ut_testAddRemoveTopicTwoConsumers(
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2931,7 +2929,7 @@ static int ut_testReassignmentAfterOneConsumerLeaves(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -2990,7 +2988,7 @@ static int ut_testReassignmentAfterOneConsumerAdded(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3059,7 +3057,7 @@ ut_testSameSubscriptions(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
         rd_kafka_topic_partition_list_destroy(subscription);
 
         RD_UT_PASS();
@@ -3139,7 +3137,7 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3207,7 +3205,7 @@ ut_testNewSubscription(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3302,7 +3300,7 @@ static int ut_testMoveExistingAssignments(
                 if (assignments[i])
                         rd_kafka_topic_partition_list_destroy(assignments[i]);
         }
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3361,7 +3359,7 @@ static int ut_testMoveExistingAssignments_j(
                 if (assignments[i])
                         rd_kafka_topic_partition_list_destroy(assignments[i]);
         }
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3422,7 +3420,7 @@ ut_testStickiness(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3526,7 +3524,7 @@ ut_testStickiness_j(rd_kafka_t *rk,
                 if (assignments[i])
                         rd_kafka_topic_partition_list_destroy(assignments[i]);
         }
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3620,7 +3618,7 @@ ut_testStickiness2(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3656,7 +3654,7 @@ static int ut_testAssignmentUpdatedForDeletedTopic(
                      members[0].rkgm_assignment->cnt);
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3691,7 +3689,7 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
         /*
          * Remove topic
          */
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
         metadata = rd_kafka_metadata_new_topic_mock(NULL, 0, -1, 0);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
@@ -3703,7 +3701,7 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3767,7 +3765,7 @@ static int ut_testConflictingPreviousAssignments(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3818,7 +3816,7 @@ static int ut_testAllConsumersReachExpectedQuotaAndAreConsideredFilled(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3867,7 +3865,7 @@ static int ut_testOwnedPartitionsAreInvalidatedForConsumerWithStaleGeneration(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3915,7 +3913,7 @@ static int ut_testOwnedPartitionsAreInvalidatedForConsumerWithNoGeneration(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3965,7 +3963,7 @@ ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsum
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -3976,7 +3974,7 @@ ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsum
  * test is added along with the previous test to make sure that we move the
  * right partition. Our solution in case of two consumers owning the same
  * partitions with the same generation id was differing from the Java
- * implementation earlier. (Check #PR. TODO: - add PR number once present.) */
+ * implementation earlier. (Check #4252.) */
 static int
 ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsumersInSameGeneration2(
     rd_kafka_t *rk,
@@ -4022,7 +4020,7 @@ ut_testPartitionsTransferringOwnershipIncludeThePartitionClaimedByMultipleConsum
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -4081,7 +4079,7 @@ static int ut_testEnsurePartitionsAssignedToHighestGeneration(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -4141,7 +4139,7 @@ static int ut_testNoReassignmentOnCurrentMembers(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -4190,7 +4188,7 @@ ut_testOwnedPartitionsAreInvalidatedForConsumerWithMultipleGeneration(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         RD_UT_PASS();
 }
@@ -4235,6 +4233,8 @@ setupRackAwareAssignment0(rd_kafka_t *rk,
         ut_populate_internal_broker_metadata(
             rd_kafka_metadata_get_internal(*metadata), num_broker_racks,
             ALL_RACKS, RD_ARRAYSIZE(ALL_RACKS));
+        ut_populate_internal_topic_metadata(
+            rd_kafka_metadata_get_internal(*metadata));
 
         for (i = 0; initialize_members && i < member_cnt; i++) {
                 char member_id[10];
@@ -4264,7 +4264,7 @@ setupRackAwareAssignment0(rd_kafka_t *rk,
         verifyValidityAndBalance(members, member_cnt, *metadata);
 
         if (metadata_local)
-                rd_kafka_metadata_destroy(metadata_local);
+                ut_destroy_metadata(metadata_local);
         return 0;
 }
 
@@ -4338,7 +4338,7 @@ setupRackAwareAssignment(rd_kafka_t *rk,
                                                  __VA_ARGS__);                 \
                         verifyNumPartitionsWithRackMismatch(                   \
                             metadata, members, RD_ARRAYSIZE(members), 0);      \
-                        rd_kafka_metadata_destroy(metadata);                   \
+                        ut_destroy_metadata(metadata);                         \
                 }                                                              \
                 for (idx = 0; idx < member_cnt; idx++)                         \
                         rd_kafka_group_member_clear(&members[idx]);            \
@@ -4354,7 +4354,7 @@ setupRackAwareAssignment(rd_kafka_t *rk,
                                                  __VA_ARGS__);                 \
                         verifyNumPartitionsWithRackMismatch(                   \
                             metadata, members, RD_ARRAYSIZE(members), 0);      \
-                        rd_kafka_metadata_destroy(metadata);                   \
+                        ut_destroy_metadata(metadata);                         \
                 }                                                              \
                 for (idx = 0; idx < member_cnt; idx++)                         \
                         rd_kafka_group_member_clear(&members[idx]);            \
@@ -4436,7 +4436,7 @@ static int ut_testRackAwareAssignmentWithUniformSubscription(
                     "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
                 verifyNumPartitionsWithRackMismatch(metadata, members,
                                                     RD_ARRAYSIZE(members), 0);
-                rd_kafka_metadata_destroy(metadata);
+                ut_destroy_metadata(metadata);
         }
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
                 rd_kafka_group_member_clear(&members[i]);
@@ -4458,7 +4458,7 @@ static int ut_testRackAwareAssignmentWithUniformSubscription(
                     "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
                 verifyNumPartitionsWithRackMismatch(metadata, members,
                                                     RD_ARRAYSIZE(members), 0);
-                rd_kafka_metadata_destroy(metadata);
+                ut_destroy_metadata(metadata);
         }
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
                 rd_kafka_group_member_clear(&members[i]);
@@ -4481,7 +4481,7 @@ static int ut_testRackAwareAssignmentWithUniformSubscription(
                     "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
                 verifyNumPartitionsWithRackMismatch(metadata, members,
                                                     RD_ARRAYSIZE(members), 5);
-                rd_kafka_metadata_destroy(metadata);
+                ut_destroy_metadata(metadata);
         }
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
                 rd_kafka_group_member_clear(&members[i]);
@@ -4511,7 +4511,7 @@ static int ut_testRackAwareAssignmentWithUniformSubscription(
             "t1", 2, "t1", 5, "t2", 2, "t2", 5, "t3", 1, NULL);
         verifyNumPartitionsWithRackMismatch(metadata, members,
                                             RD_ARRAYSIZE(members), 0);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
                 rd_kafka_group_member_clear(&members[i]);
@@ -4555,7 +4555,7 @@ static int ut_testRackAwareAssignmentWithUniformSubscription(
 
                 for (i = 0; i < RD_ARRAYSIZE(members); i++)
                         rd_kafka_group_member_clear(&members[i]);
-                rd_kafka_metadata_destroy(metadata);
+                ut_destroy_metadata(metadata);
         }
 
         for (i = 0; i < member_cnt; i++)
@@ -4614,7 +4614,7 @@ static int ut_testRackAwareAssignmentWithNonEqualSubscription(
                     "t1", 0, "t1", 1, "t1", 2, "t1", 5, "t3", 1, NULL);
                 verifyNumPartitionsWithRackMismatch(metadata, members,
                                                     RD_ARRAYSIZE(members), 4);
-                rd_kafka_metadata_destroy(metadata);
+                ut_destroy_metadata(metadata);
         }
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
                 rd_kafka_group_member_clear(&members[i]);
@@ -4637,7 +4637,7 @@ static int ut_testRackAwareAssignmentWithNonEqualSubscription(
                     "t1", 1, "t1", 2, "t1", 4, "t1", 5, "t3", 1, NULL);
                 verifyNumPartitionsWithRackMismatch(metadata, members,
                                                     RD_ARRAYSIZE(members), 0);
-                rd_kafka_metadata_destroy(metadata);
+                ut_destroy_metadata(metadata);
         }
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
                 rd_kafka_group_member_clear(&members[i]);
@@ -4660,7 +4660,7 @@ static int ut_testRackAwareAssignmentWithNonEqualSubscription(
                     "t1", 0, "t1", 1, "t1", 2, "t1", 4, "t3", 1, NULL);
                 verifyNumPartitionsWithRackMismatch(metadata, members,
                                                     RD_ARRAYSIZE(members), 5);
-                rd_kafka_metadata_destroy(metadata);
+                ut_destroy_metadata(metadata);
         }
 
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
@@ -4691,7 +4691,7 @@ static int ut_testRackAwareAssignmentWithNonEqualSubscription(
             "t1", 0, "t1", 1, "t1", 2, "t1", 5, "t3", 1, NULL);
         verifyNumPartitionsWithRackMismatch(metadata, members,
                                             RD_ARRAYSIZE(members), 4);
-        rd_kafka_metadata_destroy(metadata);
+        ut_destroy_metadata(metadata);
 
         for (i = 0; i < RD_ARRAYSIZE(members); i++)
                 rd_kafka_group_member_clear(&members[i]);

@@ -1957,6 +1957,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-654 - Aborted txns with non-flushed msgs should not be fatal         | 2.7.0                       | Supported                                                                                     |
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
+| KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0 (WIP)                 | Supported                                                                                     |
 
 
 

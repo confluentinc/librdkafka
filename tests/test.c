@@ -249,6 +249,7 @@ _TEST_DECL(0137_barrier_batch_consume);
 _TEST_DECL(0138_admin_mock);
 _TEST_DECL(0139_offset_validation_mock);
 _TEST_DECL(0140_commit_metadata);
+_TEST_DECL(0141_cooperative_commit_rebalance);
 
 
 /* Manual tests */
@@ -498,6 +499,7 @@ struct test tests[] = {
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0139_offset_validation_mock, 0),
     _TEST(0140_commit_metadata, 0),
+    _TEST(0141_cooperative_commit_rebalance, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

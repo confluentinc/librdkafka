@@ -79,7 +79,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 }
 
 
-int main_0140_cooperative_commit_rebalance(int argc, char **argv) {
+int main_0141_cooperative_commit_rebalance(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
         rd_kafka_t *p;

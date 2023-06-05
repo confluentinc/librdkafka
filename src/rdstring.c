@@ -296,6 +296,14 @@ int rd_strcmp2(const void *a, const void *b) {
         return rd_strcmp((const char *)a, (const char *)b);
 }
 
+/**
+ * @brief Same as rd_strcmp() but works with bsearch, which requires one more
+ * indirection.
+ */
+int rd_strcmp3(const void *a, const void *b) {
+        return rd_strcmp(*((const char **)a), *((const char **)b));
+}
+
 
 /**
  * @brief Case-insensitive strstr() for platforms where strcasestr()

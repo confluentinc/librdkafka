@@ -294,15 +294,25 @@ static void rd_kafka_mock_cgrp_elect_leader(rd_kafka_mock_cgrp_t *mcgrp) {
 
         mcgrp->generation_id++;
 
-        /* Elect a leader.
-         * FIXME: For now we'll use the first member */
-        mcgrp->leader = TAILQ_FIRST(&mcgrp->members);
+        /* Elect a leader deterministically if the group.instance.id is
+         * available. Or else use the first one joined. */
+        mcgrp->leader = NULL;
+        TAILQ_FOREACH(member, &mcgrp->members, link) {
+                if (!mcgrp->leader)
+                        mcgrp->leader = member;
+                else if (mcgrp->leader->group_instance_id &&
+                         member->group_instance_id &&
+                         (rd_strcmp(mcgrp->leader->group_instance_id,
+                                    member->group_instance_id) > 0))
+                        mcgrp->leader = member;
+        }
 
-        rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
-                     "Consumer group %s with %d member(s) is rebalancing: "
-                     "elected leader is %s, generation id %d",
-                     mcgrp->id, mcgrp->member_cnt, mcgrp->leader->id,
-                     mcgrp->generation_id);
+        rd_kafka_dbg(
+            mcgrp->cluster->rk, MOCK, "MOCK",
+            "Consumer group %s with %d member(s) is rebalancing: "
+            "elected leader is %s (group.instance.id = %s), generation id %d",
+            mcgrp->id, mcgrp->member_cnt, mcgrp->leader->id,
+            mcgrp->leader->group_instance_id, mcgrp->generation_id);
 
         /* Find the most commonly supported protocol name among the members.
          * FIXME: For now we'll blindly use the first protocol of the leader. */
@@ -525,6 +535,7 @@ rd_kafka_mock_cgrp_member_add(rd_kafka_mock_cgrp_t *mcgrp,
                               rd_kafka_buf_t *resp,
                               const rd_kafkap_str_t *MemberId,
                               const rd_kafkap_str_t *ProtocolType,
+                              const rd_kafkap_str_t *GroupInstanceId,
                               rd_kafka_mock_cgrp_proto_t *protos,
                               int proto_cnt,
                               int session_timeout_ms) {
@@ -548,6 +559,10 @@ rd_kafka_mock_cgrp_member_add(rd_kafka_mock_cgrp_t *mcgrp,
                         member->id = rd_strdup(memberid);
                 } else
                         member->id = RD_KAFKAP_STR_DUP(MemberId);
+
+                if (GroupInstanceId)
+                        member->group_instance_id =
+                            RD_KAFKAP_STR_DUP(GroupInstanceId);
 
                 TAILQ_INSERT_TAIL(&mcgrp->members, member, link);
                 mcgrp->member_cnt++;

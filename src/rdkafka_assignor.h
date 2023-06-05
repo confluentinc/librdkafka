@@ -86,6 +86,7 @@ int rd_kafka_group_member_find_subscription(rd_kafka_t *rk,
  */
 typedef struct rd_kafka_assignor_topic_s {
         const rd_kafka_metadata_topic_t *metadata;
+        const rd_kafka_metadata_topic_internal_t *metadata_internal;
         rd_list_t members; /* rd_kafka_group_member_t * */
 } rd_kafka_assignor_topic_t;
 
@@ -241,6 +242,10 @@ void ut_populate_internal_broker_metadata(rd_kafka_metadata_internal_t *mdi,
                                           rd_kafkap_str_t *all_racks[],
                                           size_t all_racks_cnt);
 
+void ut_populate_internal_topic_metadata(rd_kafka_metadata_internal_t *mdi);
+
+void ut_destroy_metadata(rd_kafka_metadata_t *md);
+
 void ut_set_owned(rd_kafka_group_member_t *rkgm);
 
 void ut_print_toppar_list(const rd_kafka_topic_partition_list_t *partitions);
@@ -359,6 +364,8 @@ int isFullyBalanced0(const char *function,
                         ut_populate_internal_broker_metadata(                          \
                             rd_kafka_metadata_get_internal(*(metadataPtr)),            \
                             num_broker_racks, all_racks, all_racks_cnt);               \
+                        ut_populate_internal_topic_metadata(                           \
+                            rd_kafka_metadata_get_internal(*(metadataPtr)));           \
                 }                                                                      \
         } while (0)
 
@@ -385,6 +392,8 @@ int isFullyBalanced0(const char *function,
                         ut_populate_internal_broker_metadata(                  \
                             rd_kafka_metadata_get_internal(*(metadataPtr)),    \
                             num_broker_racks, all_racks, all_racks_cnt);       \
+                        ut_populate_internal_topic_metadata(                   \
+                            rd_kafka_metadata_get_internal(*(metadataPtr)));   \
                 }                                                              \
         } while (0)
 

@@ -2002,11 +2002,8 @@ static void do_test_DescribeUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_
          * the request should fail with error code
          * RD_KAFKA_RESP_ERR__INVALID_ARG */
         options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                        options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                        fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                        return;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
 
         rd_kafka_DescribeUserScramCredentials(rk,users, RD_ARRAY_SIZE(users),options,rkqu);
         rd_kafka_AdminOptions_destroy(options);
@@ -2042,11 +2039,10 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
                 RD_KAFKA_SCRAM_MECHANISM_SHA_256,10000);
         options = rd_kafka_AdminOptions_new(rk,
                 RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                return;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */,
+                        errstr, sizeof(errstr)));
+
         rd_kafka_AlterUserScramCredentials(rk,alterations_ssl,1,options,rkqu);
         rd_kafka_UserScramCredentialAlteration_destroy_array(alterations_ssl, RD_ARRAY_SIZE(alterations_ssl));
         rd_kafka_AdminOptions_destroy(options);
@@ -2067,11 +2063,10 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
         rd_kafka_UserScramCredentialAlteration_t *alterations[1];
         alterations[0] = rd_kafka_UserScramCredentialDeletion_new("",RD_KAFKA_SCRAM_MECHANISM_SHA_256);
         options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                        options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                        fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                        return;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */,
+                        errstr, sizeof(errstr)));
+
         rd_kafka_AlterUserScramCredentials(rk,alterations, RD_ARRAY_SIZE(alterations),options,rkqu);
         rd_kafka_UserScramCredentialAlteration_destroy_array(alterations, RD_ARRAY_SIZE(alterations));
         rd_kafka_AdminOptions_destroy(options);

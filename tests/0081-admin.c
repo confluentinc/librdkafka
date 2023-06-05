@@ -3660,11 +3660,10 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
 
         rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
 
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                return ;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */,
+                        errstr, sizeof(errstr)));
+
         const char *users[1];
         users[0] = "testuserforscram";
 
@@ -3673,11 +3672,13 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
         rd_kafka_DescribeUserScramCredentials(rk,users,RD_ARRAY_SIZE(users),options,queue);
         rd_kafka_AdminOptions_destroy(options);
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+
+        TEST_CALL_ERR__(rd_kafka_event_error(event));
+
         if (rd_kafka_event_error(event)) {
                 /* Request failed */
-                TEST_FAIL("Event Errored : DescribeUserScramCredentials[ScramConfigAdmin]");
-                fprintf(stderr, "%% DescribeUserScramCredentials failed: %s\n",
-                        rd_kafka_event_error_string(event));
+                TEST_FAIL("Event error: DescribeUserScramCredentials[ScramConfigAdmin]: %s",
+                          rd_kafka_event_error_string(event));
         } else {
                 const rd_kafka_DescribeUserScramCredentials_result_t *result;
                 size_t i;
@@ -3721,11 +3722,9 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
 
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                return;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */,
+                        errstr, sizeof(errstr)));
 
         rd_kafka_AlterUserScramCredentials(rk,alterations,RD_ARRAY_SIZE(alterations),options,queue);
         rd_kafka_AdminOptions_destroy(options);
@@ -3735,9 +3734,8 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (rd_kafka_event_error(event)) {
                 /* Request failed */
-                TEST_FAIL("Event Errored : AlterUserScramCredentials[ScramConfigAdmin]");
-                fprintf(stderr, "%% AlterUserScramCredentials failed: %s\n",
-                        rd_kafka_event_error_string(event));
+                TEST_FAIL("Event error: AlterUserScramCredentials[ScramConfigAdmin]: %s",
+                          rd_kafka_event_error_string(event));
         } else {
                 const rd_kafka_AlterUserScramCredentials_result_t *result;
                 const rd_kafka_AlterUserScramCredentials_result_response_t **responses;
@@ -3766,11 +3764,10 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
 
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                return ;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */,
+                        errstr, sizeof(errstr)));
+
         rd_kafka_DescribeUserScramCredentials(rk,users,RD_ARRAY_SIZE(users),options,queue);
         rd_kafka_AdminOptions_destroy(options);
 
@@ -3778,9 +3775,8 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (rd_kafka_event_error(event)) {
                 /* Request failed */
-                TEST_FAIL("Event Errored: DescribeUserScramCredentials[ScramConfigAdmin]");
-                fprintf(stderr, "%% DescribeUserScramCredentials failed: %s\n",
-                        rd_kafka_event_error_string(event));
+                TEST_FAIL("Event error: DescribeUserScramCredentials[ScramConfigAdmin]: %s",
+                          rd_kafka_event_error_string(event));
         } else {
                 const rd_kafka_DescribeUserScramCredentials_result_t *result;
                 const rd_kafka_UserScramCredentialsDescription_t **descriptions;
@@ -3828,11 +3824,9 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
 
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                return;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */,
+                        errstr, sizeof(errstr)));
 
         rd_kafka_AlterUserScramCredentials(rk,alterations,RD_ARRAY_SIZE(alterations),options,queue);
         rd_kafka_AdminOptions_destroy(options);
@@ -3842,9 +3836,8 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (rd_kafka_event_error(event)) {
                 /* Request failed */
-                TEST_FAIL("Event Errored : AlterUserScramCredentials[ScramConfigAdmin]");
-                fprintf(stderr, "%% AlterUserScramCredentials failed: %s\n",
-                        rd_kafka_event_error_string(event));
+                TEST_FAIL("Event error: AlterUserScramCredentials[ScramConfigAdmin]: %s",
+                          rd_kafka_event_error_string(event));
         } else {
                 const rd_kafka_AlterUserScramCredentials_result_t *result;
                 const rd_kafka_AlterUserScramCredentials_result_response_t **responses;
@@ -3872,11 +3865,9 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
 
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                return ;
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                        options, 30 * 1000 /* 30s */,
+                        errstr, sizeof(errstr)));
 
         rd_kafka_DescribeUserScramCredentials(rk,users,RD_ARRAY_SIZE(users),options,queue);
         rd_kafka_AdminOptions_destroy(options);
@@ -3884,9 +3875,8 @@ static void do_test_UserScramCredentials(rd_kafka_t *rk,rd_kafka_queue_t *queue)
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (rd_kafka_event_error(event)) {
                 /* Request failed */
-                TEST_FAIL("Event Errored : DescribeUserScramCredentials[ScramConfigAdmin]");
-                fprintf(stderr, "%% DescribeUserScramCredentials failed: %s\n",
-                        rd_kafka_event_error_string(event));
+                TEST_FAIL("Event error: DescribeUserScramCredentials[ScramConfigAdmin]: %s",
+                          rd_kafka_event_error_string(event));
         } else {
                 const rd_kafka_DescribeUserScramCredentials_result_t *result;
                 const rd_kafka_UserScramCredentialsDescription_t **descriptions;

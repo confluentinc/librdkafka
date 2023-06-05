@@ -3126,12 +3126,11 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
         errcnt = rd_kafka_cgrp_update_committed_offsets(rkcg, err, offsets);
 
         if (err != RD_KAFKA_RESP_ERR__DESTROY &&
-            !((err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
-               err == RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS) &&
+            !(err == RD_KAFKA_RESP_ERR__NO_OFFSET &&
               rko_orig->rko_u.offset_commit.silent_empty)) {
                 /* Propagate commit results (success or permanent error)
-                 * unless we're shutting down or commit was empty, or if there
-                 * was a rebalance in progress. */
+                 * unless we're shutting down or commit was empty, or if
+                 * there was a rebalance in progress. */
                 rd_kafka_cgrp_propagate_commit_result(rkcg, rko_orig, err,
                                                       errcnt, offsets);
         }
@@ -3183,14 +3182,6 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
                 /* wait_commit_cnt has already been increased for
                  * reprocessed ops. */
                 rkcg->rkcg_rk->rk_consumer.wait_commit_cnt++;
-        }
-
-        /* Don't attempt commit when rebalancing or initializing since
-         * the rkcg_generation_id is most likely in flux. */
-        if (rkcg->rkcg_subscription &&
-            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
-                err = RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS;
-                goto err;
         }
 
         /* If offsets is NULL we shall use the current assignment
@@ -3355,6 +3346,12 @@ void rd_kafka_cgrp_assigned_offsets_commit(
 static void rd_kafka_cgrp_offset_commit_tmr_cb(rd_kafka_timers_t *rkts,
                                                void *arg) {
         rd_kafka_cgrp_t *rkcg = arg;
+
+        /* Don't attempt auto commit when rebalancing or initializing since
+         * the rkcg_generation_id is most likely in flux. */
+        if (rkcg->rkcg_subscription &&
+            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
+                return;
 
         rd_kafka_cgrp_assigned_offsets_commit(
             rkcg, NULL, rd_true /*set offsets*/, "cgrp auto commit timer");

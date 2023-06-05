@@ -352,8 +352,8 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                         if (mset && partsize < (size_t)PartMaxBytes &&
                             totsize < (size_t)MaxBytes) {
                                 /* Response: Records */
-                                size_t written =
-                                        rd_kafka_buf_write_kbytes(resp, &mset->bytes);
+                                size_t written = rd_kafka_buf_write_kbytes(
+                                    resp, &mset->bytes);
                                 partsize += written;
                                 totsize += written;
 

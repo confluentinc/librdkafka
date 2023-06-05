@@ -1987,7 +1987,8 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         SUB_TEST_PASS();
 }
 
-static void do_test_DescribeUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *rkqu){
+static void do_test_DescribeUserScramCredentials(rd_kafka_t *rk,
+                                                 rd_kafka_queue_t *rkqu) {
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
@@ -2001,26 +2002,30 @@ static void do_test_DescribeUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_
         /* Whenever a duplicate user is passed,
          * the request should fail with error code
          * RD_KAFKA_RESP_ERR__INVALID_ARG */
-        options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
-                        options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
 
-        rd_kafka_DescribeUserScramCredentials(rk,users, RD_ARRAY_SIZE(users),options,rkqu);
+        rd_kafka_DescribeUserScramCredentials(rk, users, RD_ARRAY_SIZE(users),
+                                              options, rkqu);
         rd_kafka_AdminOptions_destroy(options);
 
         rkev = test_wait_admin_result(
             rkqu, RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT, 2000);
 
-        TEST_ASSERT(rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Expected \"Local: Invalid argument or configuration\", not %s",
-                    rd_kafka_err2str(rd_kafka_event_error(rkev)));
+        TEST_ASSERT(
+            rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+            "Expected \"Local: Invalid argument or configuration\", not %s",
+            rd_kafka_err2str(rd_kafka_event_error(rkev)));
 
         rd_kafka_event_destroy(rkev);
 
         SUB_TEST_PASS();
 }
 
-static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *rkqu){
+static void do_test_AlterUserScramCredentials(rd_kafka_t *rk,
+                                              rd_kafka_queue_t *rkqu) {
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
@@ -2033,26 +2038,26 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
          * RD_KAFKA_RESP_ERR__INVALID_ARG */
         rd_kafka_UserScramCredentialAlteration_t *alterations_ssl[1];
         alterations_ssl[0] = rd_kafka_UserScramCredentialUpsertion_new(
-                "user",
-                (unsigned char *) "salt", 4,
-                (unsigned char *) "password", 8,
-                RD_KAFKA_SCRAM_MECHANISM_SHA_256,10000);
-        options = rd_kafka_AdminOptions_new(rk,
-                RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+            "user", (unsigned char *)"salt", 4, (unsigned char *)"password", 8,
+            RD_KAFKA_SCRAM_MECHANISM_SHA_256, 10000);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
-                        options, 30 * 1000 /* 30s */,
-                        errstr, sizeof(errstr)));
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
 
-        rd_kafka_AlterUserScramCredentials(rk,alterations_ssl,1,options,rkqu);
-        rd_kafka_UserScramCredentialAlteration_destroy_array(alterations_ssl, RD_ARRAY_SIZE(alterations_ssl));
+        rd_kafka_AlterUserScramCredentials(rk, alterations_ssl, 1, options,
+                                           rkqu);
+        rd_kafka_UserScramCredentialAlteration_destroy_array(
+            alterations_ssl, RD_ARRAY_SIZE(alterations_ssl));
         rd_kafka_AdminOptions_destroy(options);
 
         rkev = test_wait_admin_result(
             rkqu, RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT, 2000);
 
-        TEST_ASSERT(rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Expected \"Local: Invalid argument or configuration\", not %s",
-                    rd_kafka_err2str(rd_kafka_event_error(rkev)));
+        TEST_ASSERT(
+            rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+            "Expected \"Local: Invalid argument or configuration\", not %s",
+            rd_kafka_err2str(rd_kafka_event_error(rkev)));
 
         rd_kafka_event_destroy(rkev);
 #endif
@@ -2061,22 +2066,26 @@ static void do_test_AlterUserScramCredentials(rd_kafka_t *rk, rd_kafka_queue_t *
          * the request should fail with error code
          * RD_KAFKA_RESP_ERR__INVALID_ARG */
         rd_kafka_UserScramCredentialAlteration_t *alterations[1];
-        alterations[0] = rd_kafka_UserScramCredentialDeletion_new("",RD_KAFKA_SCRAM_MECHANISM_SHA_256);
-        options = rd_kafka_AdminOptions_new(rk,RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+        alterations[0] = rd_kafka_UserScramCredentialDeletion_new(
+            "", RD_KAFKA_SCRAM_MECHANISM_SHA_256);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
-                        options, 30 * 1000 /* 30s */,
-                        errstr, sizeof(errstr)));
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
 
-        rd_kafka_AlterUserScramCredentials(rk,alterations, RD_ARRAY_SIZE(alterations),options,rkqu);
-        rd_kafka_UserScramCredentialAlteration_destroy_array(alterations, RD_ARRAY_SIZE(alterations));
+        rd_kafka_AlterUserScramCredentials(
+            rk, alterations, RD_ARRAY_SIZE(alterations), options, rkqu);
+        rd_kafka_UserScramCredentialAlteration_destroy_array(
+            alterations, RD_ARRAY_SIZE(alterations));
         rd_kafka_AdminOptions_destroy(options);
 
         rkev = test_wait_admin_result(
             rkqu, RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT, 2000);
 
-        TEST_ASSERT(rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Expected \"Local: Invalid argument or configuration\", not %s",
-                    rd_kafka_err2str(rd_kafka_event_error(rkev)));
+        TEST_ASSERT(
+            rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+            "Expected \"Local: Invalid argument or configuration\", not %s",
+            rd_kafka_err2str(rd_kafka_event_error(rkev)));
 
         rd_kafka_event_destroy(rkev);
 
@@ -2590,9 +2599,9 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_ListConsumerGroupOffsets("main queue, options", rk, mainq, 1,
                                          rd_true);
 
-        do_test_DescribeUserScramCredentials(rk,mainq);
+        do_test_DescribeUserScramCredentials(rk, mainq);
 
-        do_test_AlterUserScramCredentials(rk,mainq);
+        do_test_AlterUserScramCredentials(rk, mainq);
 
         do_test_mix(rk, mainq);
 

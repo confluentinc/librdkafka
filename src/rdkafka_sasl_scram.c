@@ -268,8 +268,7 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
         rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
         const EVP_MD *evp =
             rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.scram_evp;
-        return rd_kafka_ssl_hmac(rkb,evp,in,salt,itcnt,out);
-
+        return rd_kafka_ssl_hmac(rkb, evp, in, salt, itcnt, out);
 }
 
 

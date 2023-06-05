@@ -1862,8 +1862,7 @@ int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
         /* U1   := HMAC(str, salt + INT(1)) */
         if (!HMAC(evp, (const unsigned char *)in->ptr, (int)in->size, saltplus,
                   salt->size + 4, tempres, &ressize)) {
-                rd_rkb_dbg(rkb, SECURITY, "SSLHMAC",
-                           "HMAC priming failed");
+                rd_rkb_dbg(rkb, SECURITY, "SSLHMAC", "HMAC priming failed");
                 return -1;
         }
 

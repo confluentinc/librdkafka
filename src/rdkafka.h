@@ -5834,7 +5834,7 @@ rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev);
  * Event types:
  *   RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT
  */
-RD_EXPORT   const rd_kafka_AlterUserScramCredentials_result_t *
+RD_EXPORT const rd_kafka_AlterUserScramCredentials_result_t *
 rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
 
 /**
@@ -8522,12 +8522,14 @@ typedef struct rd_kafka_ScramCredentialInfo_s rd_kafka_ScramCredentialInfo_t;
  * @brief Returns the mechanism of a given ScramCredentialInfo.
  */
 RD_EXPORT
-rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_mechanism(const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
+rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_mechanism(
+    const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
 
 /**
  * @brief Returns the iterations of a given ScramCredentialInfo.
  */
-int32_t rd_kafka_ScramCredentialInfo_iterations(const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
+int32_t rd_kafka_ScramCredentialInfo_iterations(
+    const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
 
 /**
  * @brief Representation of all SASL/SCRAM credentials associated
@@ -8535,34 +8537,44 @@ int32_t rd_kafka_ScramCredentialInfo_iterations(const rd_kafka_ScramCredentialIn
  *        or an error indicating why credentials
  *        could not be retrieved.
  */
-typedef struct rd_kafka_UserScramCredentialsDescription_s rd_kafka_UserScramCredentialsDescription_t;
+typedef struct rd_kafka_UserScramCredentialsDescription_s
+    rd_kafka_UserScramCredentialsDescription_t;
 
 /**
  * @brief Returns the username of a UserScramCredentialsDescription.
  */
 RD_EXPORT
-const char *rd_kafka_UserScramCredentialsDescription_user(const rd_kafka_UserScramCredentialsDescription_t *description);
+const char *rd_kafka_UserScramCredentialsDescription_user(
+    const rd_kafka_UserScramCredentialsDescription_t *description);
 
 /**
  * @brief Returns the error associated with a UserScramCredentialsDescription.
  */
 RD_EXPORT
-const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_error(const rd_kafka_UserScramCredentialsDescription_t *description);
+const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_error(
+    const rd_kafka_UserScramCredentialsDescription_t *description);
 
 /**
- * @brief Returns the count of ScramCredentialInfos of a UserScramCredentialsDescription.
+ * @brief Returns the count of ScramCredentialInfos of a
+ * UserScramCredentialsDescription.
  */
 RD_EXPORT
-size_t rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(const rd_kafka_UserScramCredentialsDescription_t *description);
+size_t rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(
+    const rd_kafka_UserScramCredentialsDescription_t *description);
 
 /**
- * @brief Returns the ScramCredentialInfo at index idx of UserScramCredentialsDescription.
+ * @brief Returns the ScramCredentialInfo at index idx of
+ * UserScramCredentialsDescription.
  */
 RD_EXPORT
-const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_scramcredentialinfo(const rd_kafka_UserScramCredentialsDescription_t *description,size_t idx);
+const rd_kafka_ScramCredentialInfo_t *
+rd_kafka_UserScramCredentialsDescription_scramcredentialinfo(
+    const rd_kafka_UserScramCredentialsDescription_t *description,
+    size_t idx);
 
 /**
- * @brief Get an array of descriptions from a DescribeUserScramCredentials result.
+ * @brief Get an array of descriptions from a DescribeUserScramCredentials
+ * result.
  *
  * The returned value life-time is the same as the \p result object.
  *
@@ -8570,7 +8582,10 @@ const rd_kafka_ScramCredentialInfo_t *rd_kafka_UserScramCredentialsDescription_s
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT
-const rd_kafka_UserScramCredentialsDescription_t **rd_kafka_DescribeUserScramCredentials_result_descriptions(const rd_kafka_DescribeUserScramCredentials_result_t *result, size_t *cntp);
+const rd_kafka_UserScramCredentialsDescription_t **
+rd_kafka_DescribeUserScramCredentials_result_descriptions(
+    const rd_kafka_DescribeUserScramCredentials_result_t *result,
+    size_t *cntp);
 
 /**
  * @brief Describe SASL/SCRAM credentials.
@@ -8584,58 +8599,79 @@ const rd_kafka_UserScramCredentialsDescription_t **rd_kafka_DescribeUserScramCre
  * @param rkqu Queue to emit result on.
  */
 RD_EXPORT
-void rd_kafka_DescribeUserScramCredentials(rd_kafka_t *rk,
-        const char **users,
-        size_t user_cnt,
-        const rd_kafka_AdminOptions_t *options,
-        rd_kafka_queue_t *rkqu);
+void rd_kafka_DescribeUserScramCredentials(
+    rd_kafka_t *rk,
+    const char **users,
+    size_t user_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
 
 /**
  * @brief A request to alter a user's SASL/SCRAM credentials.
  */
-typedef struct rd_kafka_UserScramCredentialAlteration_s rd_kafka_UserScramCredentialAlteration_t;
+typedef struct rd_kafka_UserScramCredentialAlteration_s
+    rd_kafka_UserScramCredentialAlteration_t;
 
 /**
- * @brief Allocates a new UserScramCredentialUpsertion with the mandatory fields.
+ * @brief Allocates a new UserScramCredentialUpsertion with the mandatory
+ * fields.
  */
 RD_EXPORT
-rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialUpsertion_new(const char *username, const unsigned char *salt, size_t salt_size, const unsigned char *password, size_t password_size, rd_kafka_ScramMechanism_t mechanism,int32_t iterations);
+rd_kafka_UserScramCredentialAlteration_t *
+rd_kafka_UserScramCredentialUpsertion_new(const char *username,
+                                          const unsigned char *salt,
+                                          size_t salt_size,
+                                          const unsigned char *password,
+                                          size_t password_size,
+                                          rd_kafka_ScramMechanism_t mechanism,
+                                          int32_t iterations);
 
 /**
  * @brief Allocates a new UserScramCredentialDeletion with the mandatory fields.
  */
 RD_EXPORT
-rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialDeletion_new(const char *username,rd_kafka_ScramMechanism_t mechanism);
+rd_kafka_UserScramCredentialAlteration_t *
+rd_kafka_UserScramCredentialDeletion_new(const char *username,
+                                         rd_kafka_ScramMechanism_t mechanism);
 
 
 /**
  * @brief Destroys a UserScramCredentialAlteration given its pointer
  */
 RD_EXPORT
-void rd_kafka_UserScramCredentialAlteration_destroy(rd_kafka_UserScramCredentialAlteration_t *alteration);
+void rd_kafka_UserScramCredentialAlteration_destroy(
+    rd_kafka_UserScramCredentialAlteration_t *alteration);
 
 /**
  * @brief Destroys an array of UserScramCredentialAlteration
  */
 RD_EXPORT
-void rd_kafka_UserScramCredentialAlteration_destroy_array(rd_kafka_UserScramCredentialAlteration_t **alterations, size_t alteration_cnt);
+void rd_kafka_UserScramCredentialAlteration_destroy_array(
+    rd_kafka_UserScramCredentialAlteration_t **alterations,
+    size_t alteration_cnt);
 
 /**
  * @brief Result of a single user SCRAM alteration.
  */
-typedef struct rd_kafka_AlterUserScramCredentials_result_response_s rd_kafka_AlterUserScramCredentials_result_response_t;
+typedef struct rd_kafka_AlterUserScramCredentials_result_response_s
+    rd_kafka_AlterUserScramCredentials_result_response_t;
 
 /**
- * @brief Returns the username for a rd_kafka_AlterUserScramCredentials_result_response.
+ * @brief Returns the username for a
+ * rd_kafka_AlterUserScramCredentials_result_response.
  */
 RD_EXPORT
-const char *rd_kafka_AlterUserScramCredentials_result_response_user(const rd_kafka_AlterUserScramCredentials_result_response_t *response);
+const char *rd_kafka_AlterUserScramCredentials_result_response_user(
+    const rd_kafka_AlterUserScramCredentials_result_response_t *response);
 
 /**
- * @brief Returns the error of a rd_kafka_AlterUserScramCredentials_result_response.
+ * @brief Returns the error of a
+ * rd_kafka_AlterUserScramCredentials_result_response.
  */
 RD_EXPORT
-const rd_kafka_error_t *rd_kafka_AlterUserScramCredentials_result_response_error(const rd_kafka_AlterUserScramCredentials_result_response_t *response);
+const rd_kafka_error_t *
+rd_kafka_AlterUserScramCredentials_result_response_error(
+    const rd_kafka_AlterUserScramCredentials_result_response_t *response);
 
 /**
  * @brief Get an array of responses from a AlterUserScramCredentials result.
@@ -8646,7 +8682,10 @@ const rd_kafka_error_t *rd_kafka_AlterUserScramCredentials_result_response_error
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT
-const rd_kafka_AlterUserScramCredentials_result_response_t **rd_kafka_AlterUserScramCredentials_result_responses(const rd_kafka_AlterUserScramCredentials_result_t *result, size_t *cntp);
+const rd_kafka_AlterUserScramCredentials_result_response_t **
+rd_kafka_AlterUserScramCredentials_result_responses(
+    const rd_kafka_AlterUserScramCredentials_result_t *result,
+    size_t *cntp);
 
 /**
  * @brief Alter SASL/SCRAM credentials.
@@ -8659,11 +8698,12 @@ const rd_kafka_AlterUserScramCredentials_result_response_t **rd_kafka_AlterUserS
  * @param rkqu Queue to emit result on.
  */
 RD_EXPORT
-void rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
-        rd_kafka_UserScramCredentialAlteration_t **alterations,
-        size_t alteration_cnt,
-        const rd_kafka_AdminOptions_t *options,
-        rd_kafka_queue_t *rkqu);
+void rd_kafka_AlterUserScramCredentials(
+    rd_kafka_t *rk,
+    rd_kafka_UserScramCredentialAlteration_t **alterations,
+    size_t alteration_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
 
 /**@}*/
 

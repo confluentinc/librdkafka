@@ -1307,7 +1307,8 @@ rd_kafka_buf_write_kbytes(rd_kafka_buf_t *rkbuf,
                         return rd_kafka_buf_write_i32(rkbuf, -1);
 
                 if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
-                        return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
+                        return rd_kafka_buf_write(rkbuf,
+                                                  RD_KAFKAP_BYTES_SER(kbytes),
                                                   RD_KAFKAP_BYTES_SIZE(kbytes));
 
                 len = RD_KAFKAP_BYTES_LEN(kbytes);

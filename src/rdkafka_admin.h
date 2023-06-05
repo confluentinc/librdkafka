@@ -36,11 +36,11 @@
 #if WITH_SSL
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 extern int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
-        const EVP_MD *evp,
-        const rd_chariov_t *in,
-        const rd_chariov_t *salt,
-        int itcnt,
-        rd_chariov_t *out);
+                             const EVP_MD *evp,
+                             const rd_chariov_t *in,
+                             const rd_chariov_t *salt,
+                             int itcnt,
+                             rd_chariov_t *out);
 #endif
 
 /**

@@ -8504,7 +8504,7 @@ rd_kafka_DeleteConsumerGroupOffsets_result_groups(
  * @enum rd_kafka_ScramMechanism_t
  * @brief Apache Kafka ScramMechanism values.
  */
-typedef enum rd_kafka_ScramMechanism_s {
+typedef enum rd_kafka_ScramMechanism_t {
         RD_KAFKA_SCRAM_MECHANISM_UNKNOWN = 0,
         RD_KAFKA_SCRAM_MECHANISM_SHA_256 = 1,
         RD_KAFKA_SCRAM_MECHANISM_SHA_512 = 2,
@@ -8528,6 +8528,7 @@ rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_mechanism(
 /**
  * @brief Returns the iterations of a given ScramCredentialInfo.
  */
+RD_EXPORT
 int32_t rd_kafka_ScramCredentialInfo_iterations(
     const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
 

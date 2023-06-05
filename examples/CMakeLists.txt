@@ -27,7 +27,7 @@ add_executable(misc misc.c ${win32_sources})
 target_link_libraries(misc PUBLIC rdkafka)
 
 add_executable(user_scram user_scram.c ${win32_sources})
-target_link_libraries(misc PUBLIC rdkafka)
+target_link_libraries(user_scram PUBLIC rdkafka)
 
 
 # The targets below has Unix include dirs and do not compile on Windows.

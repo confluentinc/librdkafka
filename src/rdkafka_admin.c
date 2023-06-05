@@ -5080,10 +5080,8 @@ struct rd_kafka_UserScramCredentialAlteration_s {
         union{
                 struct {
                         rd_kafka_ScramCredentialInfo_t credential_info;
-                        unsigned char *salt;
-                        size_t salt_size;
-                        unsigned char *password;
-                        size_t password_size;
+                        rd_kafkap_bytes_t *salt;
+                        rd_kafkap_bytes_t *password;
                 } upsertion;
                 struct {
                         rd_kafka_ScramMechanism_t mechanism;
@@ -5097,22 +5095,17 @@ rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialUpsertion_
         alteration->user = rd_strdup(username);
         alteration->alteration_type = RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT;
         if (salt_size != 0) {
-                alteration->alteration.upsertion.salt = rd_malloc(salt_size);
-                memcpy(alteration->alteration.upsertion.salt, salt, salt_size);
-                alteration->alteration.upsertion.salt_size = salt_size;
+                alteration->alteration.upsertion.salt = rd_kafkap_bytes_new(salt, salt_size);
         } else {
 #if !WITH_SSL
                 alteration->alteration.upsertion.salt = NULL;
-                alteration->alteration.upsertion.salt_size = 0;
 #else
-                alteration->alteration.upsertion.salt = rd_malloc(64);
-                alteration->alteration.upsertion.salt_size = 64;
-                RAND_bytes(alteration->alteration.upsertion.salt, 64);
+                unsigned char random_salt[64];
+                RAND_bytes(random_salt, sizeof(random_salt));
+                alteration->alteration.upsertion.salt = rd_kafkap_bytes_new(random_salt, sizeof(random_salt));
 #endif
         }
-        alteration->alteration.upsertion.password = rd_malloc(password_size);
-        memcpy(alteration->alteration.upsertion.password, password, password_size);
-        alteration->alteration.upsertion.password_size = password_size;
+        alteration->alteration.upsertion.password = rd_kafkap_bytes_new(password, password_size);
         alteration->alteration.upsertion.credential_info.mechanism = mechanism;
         alteration->alteration.upsertion.credential_info.iterations = iterations;
         return alteration;
@@ -5132,8 +5125,8 @@ void rd_kafka_UserScramCredentialAlteration_destroy(rd_kafka_UserScramCredential
                 return;
         rd_free(alteration->user);
         if(alteration->alteration_type == RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT){
-                rd_free(alteration->alteration.upsertion.salt);
-                rd_free(alteration->alteration.upsertion.password);
+                rd_kafkap_bytes_destroy(alteration->alteration.upsertion.salt);
+                rd_kafkap_bytes_destroy(alteration->alteration.upsertion.password);
         }
         rd_free(alteration);
 }
@@ -5154,14 +5147,8 @@ static rd_kafka_UserScramCredentialAlteration_t *rd_kafka_UserScramCredentialAlt
         copied_alteration->alteration_type = alteration->alteration_type;
 
         if(alteration->alteration_type == RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT /*Upsert*/){
-                copied_alteration->alteration.upsertion.salt = rd_malloc(alteration->alteration.upsertion.salt_size);
-                memcpy(copied_alteration->alteration.upsertion.salt, alteration->alteration.upsertion.salt, alteration->alteration.upsertion.salt_size);
-                copied_alteration->alteration.upsertion.salt_size = alteration->alteration.upsertion.salt_size;
-
-                copied_alteration->alteration.upsertion.password = rd_malloc(alteration->alteration.upsertion.password_size);
-                memcpy(copied_alteration->alteration.upsertion.password, alteration->alteration.upsertion.password, alteration->alteration.upsertion.password_size);
-                copied_alteration->alteration.upsertion.password_size = alteration->alteration.upsertion.password_size;
-
+                copied_alteration->alteration.upsertion.salt = rd_kafkap_bytes_copy(alteration->alteration.upsertion.salt);
+                copied_alteration->alteration.upsertion.password = rd_kafkap_bytes_copy(alteration->alteration.upsertion.password);
                 copied_alteration->alteration.upsertion.credential_info.mechanism = alteration->alteration.upsertion.credential_info.mechanism;
                 copied_alteration->alteration.upsertion.credential_info.iterations = alteration->alteration.upsertion.credential_info.iterations;
         } else if(alteration->alteration_type == RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE /*Delete*/){
@@ -5282,21 +5269,18 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(rd_kafka_broker_t 
                         size_t usersize = strlen(user);
                         rd_kafka_ScramMechanism_t mechanism = alteration->alteration.upsertion.credential_info.mechanism;
                         int32_t iterations = alteration->alteration.upsertion.credential_info.iterations;
-                        char *salt = (char *) alteration->alteration.upsertion.salt;
-                        size_t saltsize = alteration->alteration.upsertion.salt_size;
-                        char *password = (char *) alteration->alteration.upsertion.password;
-                        size_t passwordsize = alteration->alteration.upsertion.password_size;
                         rd_kafka_buf_write_str(rkbuf,user,usersize);
                         rd_kafka_buf_write_i8(rkbuf,mechanism);
                         rd_kafka_buf_write_i32(rkbuf,iterations);
-                        rd_kafka_buf_write_str(rkbuf,(char *) salt,saltsize);
+                        rd_kafka_buf_write_kbytes(rkbuf, alteration->alteration.upsertion.salt);
+
                         rd_chariov_t saltedpassword_chariov  = {.ptr = rd_alloca(EVP_MAX_MD_SIZE)}; /* Allocated in the Stack Only !*/
                         rd_chariov_t password_chariov;
-                        password_chariov.ptr = password;
-                        password_chariov.size = passwordsize;
+                        password_chariov.ptr = (char *) alteration->alteration.upsertion.password->data;
+                        password_chariov.size = RD_KAFKAP_BYTES_LEN(alteration->alteration.upsertion.password);
                         rd_chariov_t salt_chariov;
-                        salt_chariov.ptr = salt;
-                        salt_chariov.size = saltsize;
+                        salt_chariov.ptr = (char *) alteration->alteration.upsertion.salt->data;
+                        salt_chariov.size = RD_KAFKAP_BYTES_LEN(alteration->alteration.upsertion.salt);
                         const EVP_MD *evp = NULL;
                         if(mechanism == RD_KAFKA_SCRAM_MECHANISM_SHA_256)
                                 evp = EVP_sha256();
@@ -5305,7 +5289,9 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(rd_kafka_broker_t 
                         rd_assert(evp != NULL);
                         rd_kafka_ssl_hmac(rkb,evp,&password_chariov,&salt_chariov,iterations,&saltedpassword_chariov);
 
-                        rd_kafka_buf_write_str(rkbuf, saltedpassword_chariov.ptr,saltedpassword_chariov.size);
+                        rd_kafkap_bytes_t *password_bytes = rd_kafkap_bytes_new((const unsigned char *) saltedpassword_chariov.ptr, saltedpassword_chariov.size);
+                        rd_kafka_buf_write_kbytes(rkbuf, password_bytes);
+                        rd_kafkap_bytes_destroy(password_bytes);
                         rd_kafka_buf_write_tags(rkbuf);
 #endif
                 }
@@ -5410,8 +5396,9 @@ void rd_kafka_AlterUserScramCredentials(rd_kafka_t *rk,
                         empty_user = !alterations[i]->user || !*alterations[i]->user;
 
                         if (is_upsert) {
-                                empty_password = alterations[i]->alteration.upsertion.password_size == 0;
-                                empty_salt = alterations[i]->alteration.upsertion.salt_size == 0;
+                                empty_password = RD_KAFKAP_BYTES_LEN(alterations[i]->alteration.upsertion.password) == 0;
+                                empty_salt = !alterations[i]->alteration.upsertion.salt ||
+                                        RD_KAFKAP_BYTES_LEN(alterations[i]->alteration.upsertion.salt) == 0;
                                 non_positive_iterations = alterations[i]->alteration.upsertion.credential_info.iterations <= 0;
 #if !WITH_SSL
                                 no_openssl = rd_true;

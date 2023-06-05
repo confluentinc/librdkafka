@@ -1300,30 +1300,39 @@ static RD_INLINE void rd_kafka_buf_push_kstr(rd_kafka_buf_t *rkbuf,
 static RD_INLINE size_t
 rd_kafka_buf_write_kbytes(rd_kafka_buf_t *rkbuf,
                           const rd_kafkap_bytes_t *kbytes) {
-        size_t len;
+        size_t len, r;
 
-        if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
-                return rd_kafka_buf_write_i32(rkbuf, -1);
+        if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {
+                if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
+                        return rd_kafka_buf_write_i32(rkbuf, -1);
 
-        if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
-                return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                                          RD_KAFKAP_BYTES_SIZE(kbytes));
+                if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
+                        return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
+                                                  RD_KAFKAP_BYTES_SIZE(kbytes));
 
-        len = RD_KAFKAP_BYTES_LEN(kbytes);
-        rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
-        rd_kafka_buf_write(rkbuf, kbytes->data, len);
+                len = RD_KAFKAP_BYTES_LEN(kbytes);
+                rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
+                rd_kafka_buf_write(rkbuf, kbytes->data, len);
 
-        return 4 + len;
-}
+                return 4 + len;
+        }
 
-/**
- * Push (i.e., no copy) Kafka bytes to buffer iovec
- */
-static RD_INLINE void
-rd_kafka_buf_push_kbytes(rd_kafka_buf_t *rkbuf,
-                         const rd_kafkap_bytes_t *kbytes) {
-        rd_kafka_buf_push(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                          RD_KAFKAP_BYTES_SIZE(kbytes), NULL);
+        /* COMPACT_BYTES lengths are:
+         *  0   = NULL,
+         *  1   = empty
+         *  N.. = length + 1
+         */
+        if (!kbytes)
+                len = 0;
+        else
+                len = kbytes->len + 1;
+
+        r = rd_kafka_buf_write_uvarint(rkbuf, (uint64_t)len);
+        if (len > 1) {
+                rd_kafka_buf_write(rkbuf, kbytes->data, len - 1);
+                r += len - 1;
+        }
+        return r;
 }
 
 /**

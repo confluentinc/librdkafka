@@ -1102,7 +1102,8 @@ static int ut_testRackAwareAssignmentWithUniformSubscription(
             /* consumer3 */
             "t1", 4, "t1", 5, "t2", 5, "t2", 6, NULL);
 
-        /* Verify best-effort rack-aware assignment for lower replication factor where racks have a subset of partitions.*/
+        /* Verify best-effort rack-aware assignment for lower replication factor
+         * where racks have a subset of partitions.*/
         setupRackAwareAssignment0(rk, rkas, members, RD_ARRAYSIZE(members), 1,
                                   3, RD_ARRAYSIZE(topics), topics, partitions,
                                   subscriptions_count, subscriptions,
@@ -1193,7 +1194,8 @@ static int ut_testRackAwareAssignmentWithNonEqualSubscription(
             /* consumer3 */
             "t1", 4, "t1", 5, NULL);
 
-        /* Verify best-effort rack-aware assignment for lower replication factor where racks have a subset of partitions. */
+        /* Verify best-effort rack-aware assignment for lower replication factor
+         * where racks have a subset of partitions. */
         setupRackAwareAssignment0(rk, rkas, members, RD_ARRAYSIZE(members), 1,
                                   3, RD_ARRAYSIZE(topics), topics, partitions,
                                   subscriptions_count, subscriptions,
@@ -1284,7 +1286,8 @@ static int ut_testRackAwareAssignmentWithUniformPartitions(
             /* consumer3 */
             "t1", 4, "t2", 4, "t3", 4, NULL);
 
-        /* Verify that co-partitioning is prioritized over rack-alignment for topics with equal subscriptions */
+        /* Verify that co-partitioning is prioritized over rack-alignment for
+         * topics with equal subscriptions */
         for (replication_factor = 1; replication_factor <= 3;
              replication_factor++) {
                 rd_kafka_metadata_t *metadata = NULL;
@@ -1343,7 +1346,8 @@ static int ut_testRackAwareAssignmentWithUniformPartitionsNonEqualSubscription(
             /* consumer3 */
             "t1", 4, "t3", 4, NULL);
 
-        /* Verify that co-partitioning is prioritized over rack-alignment for topics with equal subscriptions */
+        /* Verify that co-partitioning is prioritized over rack-alignment for
+         * topics with equal subscriptions */
         setupRackAwareAssignment0(rk, rkas, members, RD_ARRAYSIZE(members), 1,
                                   3, RD_ARRAYSIZE(topics), topics, partitions,
                                   subscriptions_count, subscriptions,

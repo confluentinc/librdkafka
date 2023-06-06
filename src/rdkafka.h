@@ -7512,7 +7512,7 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
  *
  * This will overwrite the current value.
  *
- * @returns NULL on success, or an \see rd_kafka_error_t *
+ * @returns NULL on success, or an rd_kafka_error_t *
  *          with the corresponding error code and string.
  *          Error ownership belongs to the caller.
  *          Possible error codes:
@@ -7534,7 +7534,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_set_config(
  *
  * This will append to the current list.
  *
- * @returns NULL on success, or an \see rd_kafka_error_t *
+ * @returns NULL on success, or an rd_kafka_error_t *
  *          with the corresponding error code and string.
  *          Error ownership belongs to the caller.
  *          Possible error codes:
@@ -7556,7 +7556,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_append_config(
  *
  * This will subtract from the current list.
  *
- * @returns NULL on success, or an \see rd_kafka_error_t *
+ * @returns NULL on success, or an rd_kafka_error_t *
  *          with the corresponding error code and string.
  *          Error ownership belongs to the caller.
  *          Possible error codes:
@@ -7576,7 +7576,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_subtract_config(
  *
  * This will set the value to default (possibly NULL).
  *
- * @returns NULL on success, or an \see rd_kafka_error_t *
+ * @returns NULL on success, or an rd_kafka_error_t *
  *          with the corresponding error code and string.
  *          Error ownership belongs to the caller.
  *          Possible error codes:
@@ -7706,6 +7706,11 @@ rd_kafka_AlterConfigs_result_resources(
  *         since these resource requests must be sent to the broker specified
  *         in the resource.
  *
+ * @param rk Client instance.
+ * @param configs Array of config entries to alter.
+ * @param config_cnt Number of elements in \p configs array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
  */
 RD_EXPORT
 void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,

@@ -5793,6 +5793,21 @@ RD_EXPORT const rd_kafka_DeleteAcls_result_t *
 rd_kafka_event_DeleteAcls_result(rd_kafka_event_t *rkev);
 
 /**
+ * @brief Get ListConsumerGroupOffsets result.
+ *
+ * @returns the result of a ListConsumerGroupOffsets request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
+ */
+RD_EXPORT const rd_kafka_ListConsumerGroupOffsets_result_t *
+rd_kafka_event_ListConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
+
+/**
  * @brief Get AlterConsumerGroupOffsets result.
  *
  * @returns the result of a AlterConsumerGroupOffsets request, or NULL if
@@ -5836,21 +5851,6 @@ rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_AlterUserScramCredentials_result_t *
 rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
-
-/**
- * @brief Get ListConsumerGroupOffsets result.
- *
- * @returns the result of a ListConsumerGroupOffsets request, or NULL if
- *          event is of different type.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p rkev object.
- *
- * Event types:
- *   RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
- */
-RD_EXPORT const rd_kafka_ListConsumerGroupOffsets_result_t *
-rd_kafka_event_ListConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -8496,7 +8496,7 @@ rd_kafka_DeleteConsumerGroupOffsets_result_groups(
 
 
 /**
- * @name Admin API - User SCRAM
+ * @name Admin API - User SCRAM credentials
  * @{
  */
 

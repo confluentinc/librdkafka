@@ -157,10 +157,11 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *event = NULL;
-        int retval              = 0;
-        const char *prefix      = "    ";
-        int i                   = 0;
-        int resources           = 0;
+        rd_kafka_error_t *error;
+        int retval         = 0;
+        const char *prefix = "    ";
+        int i              = 0;
+        int resources      = 0;
         int config_cnt;
         rd_kafka_ResourceType_t prev_restype = RD_KAFKA_RESOURCE_UNKNOWN;
         char *prev_resname                   = NULL;
@@ -201,20 +202,30 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                 prev_resname = resname;
 
                 if (!strcmp(alter_op_type_s, "SET")) {
-                        rd_kafka_ConfigResource_incremental_set_config(
+                        error = rd_kafka_ConfigResource_incremental_set_config(
                             config, config_name, config_value);
                 } else if (!strcmp(alter_op_type_s, "APPEND")) {
-                        rd_kafka_ConfigResource_incremental_append_config(
-                            config, config_name, config_value);
+                        error =
+                            rd_kafka_ConfigResource_incremental_append_config(
+                                config, config_name, config_value);
                 } else if (!strcmp(alter_op_type_s, "SUBTRACT")) {
-                        rd_kafka_ConfigResource_incremental_subtract_config(
-                            config, config_name, config_value);
+                        error =
+                            rd_kafka_ConfigResource_incremental_subtract_config(
+                                config, config_name, config_value);
                 } else if (!strcmp(alter_op_type_s, "DELETE")) {
-                        rd_kafka_ConfigResource_incremental_delete_config(
-                            config, config_name);
+                        error =
+                            rd_kafka_ConfigResource_incremental_delete_config(
+                                config, config_name);
                 } else {
                         usage("Invalid alter config operation: %s",
                               alter_op_type_s);
+                }
+
+                if (error) {
+                        usage(
+                            "Error setting incremental config alteration %s"
+                            " at index %d: %s",
+                            alter_op_type_s, i, rd_kafka_error_string(error));
                 }
         }
 

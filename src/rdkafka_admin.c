@@ -1908,15 +1908,17 @@ rd_kafka_admin_add_config0(rd_list_t *rl,
  * @brief Generic constructor of ConfigEntry for Incremental Alter Operations
  * which is also added to \p rl
  */
-static rd_kafka_resp_err_t rd_kafka_admin_incremental_add_config0(
+static rd_kafka_error_t *rd_kafka_admin_incremental_add_config0(
     rd_list_t *rl,
     const char *name,
     const char *value,
     rd_kafka_IncrementalAlterOperation_t operation) {
         rd_kafka_ConfigEntry_t *entry;
 
-        if (!name)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (!name) {
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "Config name is required");
+        }
 
         entry                          = rd_calloc(1, sizeof(*entry));
         entry->kv                      = rd_strtup_new(name, value);
@@ -1924,7 +1926,7 @@ static rd_kafka_resp_err_t rd_kafka_admin_incremental_add_config0(
 
         rd_list_add(rl, entry);
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return NULL;
 }
 
 
@@ -2870,12 +2872,17 @@ rd_kafka_ConfigResource_add_config(rd_kafka_ConfigResource_t *config,
 }
 
 
-rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_append_config(
+rd_kafka_error_t *rd_kafka_ConfigResource_incremental_append_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     const char *value) {
-        if (!name || !*name || !value)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (!name || !*name || !value) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    !name ? "Config name is required"
+                          : !*name ? "Config name mustn't be empty"
+                                   : "Config value is required");
+        }
 
         return rd_kafka_admin_incremental_add_config0(
             &config->config, name, value, RD_KAFKA_INCREMENTAL_ALTER_OP_APPEND);
@@ -2892,12 +2899,17 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
                                           RD_KAFKA_ALTER_OP_SET);
 }
 
-rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_set_config(
+rd_kafka_error_t *rd_kafka_ConfigResource_incremental_set_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     const char *value) {
-        if (!name || !*name || !value)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (!name || !*name || !value) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    !name ? "Config name is required"
+                          : !*name ? "Config name mustn't be empty"
+                                   : "Config value is required");
+        }
 
         return rd_kafka_admin_incremental_add_config0(
             &config->config, name, value, RD_KAFKA_INCREMENTAL_ALTER_OP_SET);
@@ -2913,22 +2925,31 @@ rd_kafka_ConfigResource_delete_config(rd_kafka_ConfigResource_t *config,
                                           RD_KAFKA_ALTER_OP_DELETE);
 }
 
-rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_delete_config(
+rd_kafka_error_t *rd_kafka_ConfigResource_incremental_delete_config(
     rd_kafka_ConfigResource_t *config,
     const char *name) {
-        if (!name || !*name)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (!name || !*name) {
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          !name
+                                              ? "Config name is required"
+                                              : "Config name mustn't be empty");
+        }
 
         return rd_kafka_admin_incremental_add_config0(
             &config->config, name, NULL, RD_KAFKA_INCREMENTAL_ALTER_OP_DELETE);
 }
 
-rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_subtract_config(
+rd_kafka_error_t *rd_kafka_ConfigResource_incremental_subtract_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     const char *value) {
-        if (!name || !*name || !value)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (!name || !*name || !value) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    !name ? "Config name is required"
+                          : !*name ? "Config name mustn't be empty"
+                                   : "Config value is required");
+        }
 
         return rd_kafka_admin_incremental_add_config0(
             &config->config, name, value,

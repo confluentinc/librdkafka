@@ -908,6 +908,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         rd_kafka_resp_err_t exp_err[MY_CONFRES_CNT];
         rd_kafka_event_t *rkev;
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         const rd_kafka_IncrementalAlterConfigs_result_t *res;
         const rd_kafka_ConfigResource_t **rconfigs;
         size_t rconfig_cnt;
@@ -935,13 +936,13 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        err = rd_kafka_ConfigResource_incremental_set_config(
+        error = rd_kafka_ConfigResource_incremental_set_config(
             configs[ci], "compression.type", "gzip");
-        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
-        err = rd_kafka_ConfigResource_incremental_set_config(
+        error = rd_kafka_ConfigResource_incremental_set_config(
             configs[ci], "flush.ms", "12345678");
-        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
         exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         ci++;
@@ -955,10 +956,10 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                     RD_KAFKA_RESOURCE_BROKER,
                     tsprintf("%" PRId32, avail_brokers[0]));
 
-                err = rd_kafka_ConfigResource_incremental_set_config(
+                error = rd_kafka_ConfigResource_incremental_set_config(
                     configs[ci], "sasl.kerberos.min.time.before.relogin",
                     "58000");
-                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
                 ci++;
@@ -974,13 +975,13 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        err = rd_kafka_ConfigResource_incremental_set_config(
+        error = rd_kafka_ConfigResource_incremental_set_config(
             configs[ci], "compression.type", "lz4");
-        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
-        err = rd_kafka_ConfigResource_incremental_set_config(
+        error = rd_kafka_ConfigResource_incremental_set_config(
             configs[ci], "offset.metadata.max.bytes", "12345");
-        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
         if (test_broker_version >= TEST_BRKVER(2, 7, 0, 0))
                 exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;

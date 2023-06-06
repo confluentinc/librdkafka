@@ -7512,10 +7512,13 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
  *
  * This will overwrite the current value.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was set,
- *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ * @returns NULL on success, or an \see rd_kafka_error_t *
+ *          with the corresponding error code and string.
+ *          Error ownership belongs to the caller.
+ *          Possible error codes:
+ *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_set_config(
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_set_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     const char *value);
@@ -7531,10 +7534,13 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_set_config(
  *
  * This will append to the current list.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR if configs were added to resource,
- *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ * @returns NULL on success, or an \see rd_kafka_error_t *
+ *          with the corresponding error code and string.
+ *          Error ownership belongs to the caller.
+ *          Possible error codes:
+ *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_append_config(
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_append_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     const char *value);
@@ -7550,11 +7556,13 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_append_config(
  *
  * This will subtract from the current list.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR if configs were subtracted from resource,
- *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ * @returns NULL on success, or an \see rd_kafka_error_t *
+ *          with the corresponding error code and string.
+ *          Error ownership belongs to the caller.
+ *          Possible error codes:
+ *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_subtract_config(
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_subtract_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     const char *value);
@@ -7568,10 +7576,13 @@ rd_kafka_ConfigResource_incremental_subtract_config(
  *
  * This will set the value to default (possibly NULL).
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was deleted from resource,
- *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ * @returns NULL on success, or an \see rd_kafka_error_t *
+ *          with the corresponding error code and string.
+ *          Error ownership belongs to the caller.
+ *          Possible error codes:
+ *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_delete_config(
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_delete_config(
     rd_kafka_ConfigResource_t *config,
     const char *name);
 

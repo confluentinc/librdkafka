@@ -5258,18 +5258,21 @@ static int rd_kafka_broker_name_parse(rd_kafka_t *rk,
 }
 
 /**
- * @brief Add a broker from a string of type "[proto://]host[:port]" to the list of brokers.
- * *cnt is increased by one if a broker was added, else not.
+ * @brief Add a broker from a string of type "[proto://]host[:port]" to the list
+ * of brokers. *cnt is increased by one if a broker was added, else not.
  */
-void rd_kafka_find_or_add_broker(rd_kafka_t *rk, rd_kafka_secproto_t proto, const char *host, uint16_t port, int *cnt) {
-        rd_kafka_broker_t *rkb;
+static void rd_kafka_find_or_add_broker(rd_kafka_t *rk,
+                                        rd_kafka_secproto_t proto,
+                                        const char *host,
+                                        uint16_t port,
+                                        int *cnt) {
+        rd_kafka_broker_t *rkb = NULL;
 
         if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
             rkb->rkb_source == RD_KAFKA_CONFIGURED) {
                 (*cnt)++;
-        } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto,
-                                       host, port,
-                                       RD_KAFKA_NODEID_UA) != NULL)
+        } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto, host,
+                                       port, RD_KAFKA_NODEID_UA) != NULL)
                 (*cnt)++;
 
         /* If rd_kafka_broker_find returned a broker its
@@ -5290,7 +5293,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
         char *s_copy = rd_strdup(brokerlist);
         char *s      = s_copy;
         int cnt      = 0;
-        int pre_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+        int pre_cnt  = rd_atomic32_get(&rk->rk_broker_cnt);
         rd_sockaddr_inx_t *sinx;
         rd_sockaddr_list_t *sockaddrList;
 
@@ -5299,6 +5302,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
                 uint16_t port;
                 const char *host;
                 const char *errstr;
+                const char *resolvedFQDN;
                 rd_kafka_secproto_t proto;
 
                 if (*s == ',' || *s == ' ') {
@@ -5311,7 +5315,10 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
                         break;
 
                 rd_kafka_wrlock(rk);
-                if (rk->rk_conf.resolve_canonical_bootstrap_servers_only) {
+                if (rk->rk_conf.enable_bootstrap_servers_canonical_resolve) {
+                        rd_kafka_dbg(rk, ALL, "INIT",
+                                     "Canonicalizing bootstrap broker %s:%d",
+                                     host, port);
                         sockaddrList = rd_getaddrinfo(
                             host, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
                             rk->rk_conf.broker_addr_family, SOCK_STREAM,
@@ -5327,7 +5334,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
                         }
 
                         RD_SOCKADDR_LIST_FOREACH(sinx, sockaddrList) {
-                                const char *resolvedFQDN = rd_sockaddr2str(
+                                resolvedFQDN = rd_sockaddr2str(
                                     sinx, RD_SOCKADDR2STR_F_RESOLVE);
                                 rd_kafka_find_or_add_broker(
                                     rk, proto, resolvedFQDN, port, &cnt);

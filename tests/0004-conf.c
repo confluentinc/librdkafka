@@ -529,6 +529,8 @@ int main_0004_conf(int argc, char **argv) {
                 "ssl.ca.certificate.stores",
                 "Intermediate ,, Root ,",
 #endif
+                "enable.bootstrap.servers.canonical.resolve",
+                "true",
                 NULL
         };
         static const char *tconfs[] = {"request.required.acks",

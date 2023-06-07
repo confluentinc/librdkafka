@@ -224,7 +224,7 @@ struct rd_kafka_conf_s {
         int api_version_fallback_ms;
         char *broker_version_fallback;
         rd_kafka_secproto_t security_protocol;
-        int resolve_canonical_bootstrap_servers_only;
+        int enable_bootstrap_servers_canonical_resolve;
 
         struct {
 #if WITH_SSL

@@ -1437,9 +1437,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "A higher value allows for more effective batching of these "
      "messages.",
      0, 900000, 10},
-    {_RK_GLOBAL, "resolve.canonical.bootstrap.servers.only", _RK_C_BOOL,
-     _RK(resolve_canonical_bootstrap_servers_only),
-     "Resolve each bootstrap address into a list of canonical names."
+    {_RK_GLOBAL, "enable.bootstrap.servers.canonical.resolve", _RK_C_BOOL,
+     _RK(enable_bootstrap_servers_canonical_resolve),
+     "Resolve each bootstrap address into a list of canonical names. By "
+     "default client will not attempt to reverse lookup to find the FQDN."
      "Default: false.",
      0, 1, 0},
 

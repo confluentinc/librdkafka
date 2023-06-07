@@ -758,10 +758,9 @@ rd_kafka_use_rack_aware_assignment(rd_kafka_assignor_topic_t **topics,
         }
 
         /* Criteria 3 */
-        for (t = 0; t < topic_cnt && needs_rack_aware_assignment; t++) {
+        for (t = 0; t < topic_cnt; t++) {
                 const int partition_cnt = topics[t]->metadata->partition_cnt;
-                for (i = 0; i < partition_cnt && needs_rack_aware_assignment;
-                     i++) {
+                for (i = 0; i < partition_cnt; i++) {
                         /* Since partition_racks[i] is a subset of
                          * all_partition_racks, and both of them are deduped,
                          * the same size indicates that they're equal. */

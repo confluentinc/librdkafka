@@ -295,7 +295,12 @@ static void rd_kafka_mock_cgrp_elect_leader(rd_kafka_mock_cgrp_t *mcgrp) {
         mcgrp->generation_id++;
 
         /* Elect a leader deterministically if the group.instance.id is
-         * available. Or else use the first one joined. */
+         * available, using the lexicographic order of group.instance.ids.
+         * This is not how it's done on a real broker, which uses the first
+         * member joined. But we use a determinstic method for better testing,
+         * (in case we want to enforce a some consumer to be the group leader).
+         * If group.instance.id is not specified for any consumer, we use the
+         * first one joined, similar to the real broker. */
         mcgrp->leader = NULL;
         TAILQ_FOREACH(member, &mcgrp->members, link) {
                 if (!mcgrp->leader)

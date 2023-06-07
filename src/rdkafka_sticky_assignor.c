@@ -1403,49 +1403,10 @@ static void prepopulateCurrentAssignments(
 
                 for (j = 0; j < (int)consumer->rkgm_owned->cnt; j++) {
                         partition = &consumer->rkgm_owned->elems[j];
-                        /* ConsumerGenerationPair_t search_pair = {
-                            .generation = consumer->rkgm_generation}; */
 
                         consumers = RD_MAP_GET_OR_SET(
                             &sortedPartitionConsumersByGeneration, partition,
                             rd_list_new(10, ConsumerGenerationPair_destroy));
-
-                        /*
-                         * NOTE(milind) for reviewers: I will remove this after
-                        the first round of review. Leaving it here for now, so
-                        the reasoning for removing it is more clear.
-                         * There were several things wrong with the pre-existing
-                        code, for example, the search term was wrong, it was
-                        rkgm_generation rather than ConsumerGenerationPair_t
-                        containing rkgm_generation, so this if block never
-                        really worked.
-                         * Secondly, I don't think we should skip the CONSUMER
-                          here, rather, we should add it and let the skip be
-                        done later, and skip the PARTITION. Reason: partition in
-                        this disputed state should not be added to ANY
-                        consumer's prev assignments. The proposed behaviour is
-                        consistent with the Java Assignor, and the current
-                        behaviour is not (checked by adding a new Java Unit test
-                        in AbstractStickyAssignorTest.java).
-
-                        if (consumer->rkgm_generation != -1 &&
-                            rd_list_find(
-                                consumers, &search_pair,
-                                ConsumerGenerationPair_cmp_generation)) {
-                                rd_kafka_log(
-                                    rk, LOG_WARNING, "STICKY",
-                                    "Sticky assignor: "
-                                    "%s [%" PRId32
-                                    "] is assigned to "
-                                    "multiple consumers with same "
-                                    "generation %d: "
-                                    "skipping member %.*s",
-                                    partition->topic, partition->partition,
-                                    consumer->rkgm_generation,
-                                    RD_KAFKAP_STR_PR(consumer->rkgm_member_id));
-                                continue;
-                        }
-                        */
 
                         rd_list_add(consumers,
                                     ConsumerGenerationPair_new(
@@ -1500,14 +1461,6 @@ static void prepopulateCurrentAssignments(
 
                 /* Add current (highest generation) consumer
                  * to currentAssignment. */
-                /* NOTE(milind) - (will remove this note after review, writing
-                 here to give rationale.).
-                 I think this was a pre-existing bug. The sort above sorts it
-                 in the ascending order of generation, and the current
-                 generation is actually the LAST element of this list. So, I've
-                 changed it. There weren't enough tests messing around with the
-                 generation to catch the bug.
-               */
                 current    = rd_list_last(consumers);
                 partitions = RD_MAP_GET(currentAssignment, current->consumer);
                 rd_kafka_topic_partition_list_add(partitions, partition->topic,

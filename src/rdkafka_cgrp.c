@@ -1511,7 +1511,7 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
         if (!(assignment =
                   rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
                 goto err_parse;
-        rd_kafka_buf_read_bytes(rkbuf, &UserData);
+        rd_kafka_buf_read_kbytes(rkbuf, &UserData);
 
 done:
         rd_kafka_cgrp_update_session_timeout(rkcg, rd_true /*reset timeout*/);
@@ -1616,7 +1616,7 @@ static void rd_kafka_cgrp_handle_SyncGroup(rd_kafka_t *rk,
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-        rd_kafka_buf_read_bytes(rkbuf, &MemberState);
+        rd_kafka_buf_read_kbytes(rkbuf, &MemberState);
 
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, request,
@@ -1802,7 +1802,7 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
                     rkgm->rkgm_subscription, topic_name, RD_KAFKA_PARTITION_UA);
         }
 
-        rd_kafka_buf_read_bytes(rkbuf, &UserData);
+        rd_kafka_buf_read_kbytes(rkbuf, &UserData);
         rkgm->rkgm_userdata = rd_kafkap_bytes_copy(&UserData);
 
         const rd_kafka_topic_partition_field_t fields[] = {
@@ -1988,7 +1988,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                         rd_kafka_buf_read_str(rkbuf, &MemberId);
                         if (request->rkbuf_reqhdr.ApiVersion >= 5)
                                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
-                        rd_kafka_buf_read_bytes(rkbuf, &MemberMetadata);
+                        rd_kafka_buf_read_kbytes(rkbuf, &MemberMetadata);
 
                         rkgm                 = &members[sub_cnt];
                         rkgm->rkgm_member_id = rd_kafkap_str_copy(&MemberId);

@@ -96,7 +96,7 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                                 mpart = rd_kafka_mock_partition_find(mtopic,
                                                                      Partition);
 
-                        rd_kafka_buf_read_bytes(rkbuf, &records);
+                        rd_kafka_buf_read_kbytes(rkbuf, &records);
 
                         /* Response: Partition */
                         rd_kafka_buf_write_i32(resp, Partition);
@@ -1166,7 +1166,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
                 rd_kafkap_str_t ProtocolName;
                 rd_kafkap_bytes_t Metadata;
                 rd_kafka_buf_read_str(rkbuf, &ProtocolName);
-                rd_kafka_buf_read_bytes(rkbuf, &Metadata);
+                rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
                 protos[i].name     = rd_kafkap_str_copy(&ProtocolName);
                 protos[i].metadata = rd_kafkap_bytes_copy(&Metadata);
         }
@@ -1454,7 +1454,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_mock_cgrp_member_t *member2;
 
                 rd_kafka_buf_read_str(rkbuf, &MemberId2);
-                rd_kafka_buf_read_bytes(rkbuf, &Metadata);
+                rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
 
                 if (err)
                         continue;

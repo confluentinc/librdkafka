@@ -7200,8 +7200,8 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                         }
                         rd_kafka_buf_read_str(reply, &ClientId);
                         rd_kafka_buf_read_str(reply, &ClientHost);
-                        rd_kafka_buf_read_bytes(reply, &MemberMetadata);
-                        rd_kafka_buf_read_bytes(reply, &MemberAssignment);
+                        rd_kafka_buf_read_kbytes(reply, &MemberMetadata);
+                        rd_kafka_buf_read_kbytes(reply, &MemberAssignment);
                         if (error != NULL)
                                 continue;
 

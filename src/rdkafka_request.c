@@ -2604,7 +2604,7 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
                 goto err;
         }
 
-        rd_kafka_buf_read_bytes(rkbuf, &auth_data);
+        rd_kafka_buf_read_kbytes(rkbuf, &auth_data);
 
         /* Pass SASL auth frame to SASL handler */
         if (rd_kafka_sasl_recv(rkb->rkb_transport, auth_data.data,

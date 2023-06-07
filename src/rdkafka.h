@@ -8594,7 +8594,7 @@ rd_kafka_DescribeUserScramCredentials_result_descriptions(
  *
  * @param rk Client instance.
  * @param users The users for which credentials are to be described.
- *              all users' credentials are described if NULL.
+ *              All users' credentials are described if NULL.
  * @param user_cnt Number of elements in \p users array.
  * @param options Optional admin options, or NULL for defaults.
  * @param rkqu Queue to emit result on.
@@ -8614,8 +8614,20 @@ typedef struct rd_kafka_UserScramCredentialAlteration_s
     rd_kafka_UserScramCredentialAlteration_t;
 
 /**
- * @brief Allocates a new UserScramCredentialUpsertion with the mandatory
- * fields.
+ * @brief Allocates a new UserScramCredentialUpsertion given its fields.
+ *        If salt isn't given a 64 B salt is generated using OpenSSL
+ *        RAND_bytes, if available.
+ *
+ * @param username The username (not empty).
+ * @param salt Salt bytes (optional).
+ * @param salt_size Size of \p salt (optional).
+ * @param password Password bytes (not empty).
+ * @param password_size Size of \p password (greater than 0).
+ * @param mechanism SASL/SCRAM mechanism.
+ * @param iterations SASL/SCRAM iterations.
+ * @return A newly created instance of rd_kafka_UserScramCredentialAlteration_t.
+ *         Ownership belongs to the caller, use
+ *         rd_kafka_UserScramCredentialAlteration_destroy to destroy.
  */
 RD_EXPORT
 rd_kafka_UserScramCredentialAlteration_t *
@@ -8628,7 +8640,13 @@ rd_kafka_UserScramCredentialUpsertion_new(const char *username,
                                           int32_t iterations);
 
 /**
- * @brief Allocates a new UserScramCredentialDeletion with the mandatory fields.
+ * @brief Allocates a new UserScramCredentialDeletion given its fields.
+ *
+ * @param username The username (not empty).
+ * @param mechanism SASL/SCRAM mechanism.
+ * @return A newly created instance of rd_kafka_UserScramCredentialAlteration_t.
+ *         Ownership belongs to the caller, use
+ *         rd_kafka_UserScramCredentialAlteration_destroy to destroy.
  */
 RD_EXPORT
 rd_kafka_UserScramCredentialAlteration_t *
@@ -8691,6 +8709,9 @@ rd_kafka_AlterUserScramCredentials_result_responses(
 /**
  * @brief Alter SASL/SCRAM credentials.
  *        This operation is supported by brokers with version 2.7.0 or higher.
+ *
+ * @remark For upsertions to be processed, librdkfka must be build with
+ *         OpenSSL support. It's needed to calculate the HMAC.
  *
  * @param rk Client instance.
  * @param alterations The alterations to be applied.

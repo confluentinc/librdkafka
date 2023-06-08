@@ -158,6 +158,11 @@ typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, /**< RFC2818 */
 } rd_kafka_ssl_endpoint_id_t;
 
+typedef enum {
+        RD_KAFKA_USE_ALL_DNS_IPS,
+        RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
+} rd_kafka_client_dns_lookup_t;
+
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
 #define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
@@ -224,7 +229,7 @@ struct rd_kafka_conf_s {
         int api_version_fallback_ms;
         char *broker_version_fallback;
         rd_kafka_secproto_t security_protocol;
-        int enable_bootstrap_servers_canonical_resolve;
+        rd_kafka_client_dns_lookup_t client_dns_lookup;
 
         struct {
 #if WITH_SSL

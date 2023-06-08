@@ -5295,14 +5295,14 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
         int cnt      = 0;
         int pre_cnt  = rd_atomic32_get(&rk->rk_broker_cnt);
         rd_sockaddr_inx_t *sinx;
-        rd_sockaddr_list_t *sockaddrList;
+        rd_sockaddr_list_t *sockaddr_list;
 
         /* Parse comma-separated list of brokers. */
         while (*s) {
                 uint16_t port;
                 const char *host;
-                const char *errstr;
-                const char *resolvedFQDN;
+                const char *err_str;
+                const char *resolved_FQDN;
                 rd_kafka_secproto_t proto;
 
                 if (*s == ',' || *s == ' ') {
@@ -5315,32 +5315,38 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
                         break;
 
                 rd_kafka_wrlock(rk);
-                if (rk->rk_conf.enable_bootstrap_servers_canonical_resolve) {
+                if (rk->rk_conf.client_dns_lookup ==
+                    RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY) {
                         rd_kafka_dbg(rk, ALL, "INIT",
                                      "Canonicalizing bootstrap broker %s:%d",
                                      host, port);
-                        sockaddrList = rd_getaddrinfo(
+                        sockaddr_list = rd_getaddrinfo(
                             host, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
                             rk->rk_conf.broker_addr_family, SOCK_STREAM,
                             IPPROTO_TCP, rk->rk_conf.resolve_cb,
-                            rk->rk_conf.opaque, &errstr);
+                            rk->rk_conf.opaque, &err_str);
 
-                        if (!sockaddrList) {
+                        if (!sockaddr_list) {
                                 rd_kafka_log(rk, LOG_WARNING, "BROKER",
                                              "Failed to resolve '%s': %s", host,
-                                             errstr);
+                                             err_str);
                                 rd_kafka_wrunlock(rk);
                                 continue;
                         }
 
-                        RD_SOCKADDR_LIST_FOREACH(sinx, sockaddrList) {
-                                resolvedFQDN = rd_sockaddr2str(
+                        RD_SOCKADDR_LIST_FOREACH(sinx, sockaddr_list) {
+                                resolved_FQDN = rd_sockaddr2str(
                                     sinx, RD_SOCKADDR2STR_F_RESOLVE);
+                                rd_kafka_dbg(
+                                    rk, ALL, "INIT",
+                                    "Adding broker with resolved hostname %s",
+                                    resolved_FQDN);
+
                                 rd_kafka_find_or_add_broker(
-                                    rk, proto, resolvedFQDN, port, &cnt);
+                                    rk, proto, resolved_FQDN, port, &cnt);
                         };
 
-                        rd_sockaddr_list_destroy(sockaddrList);
+                        rd_sockaddr_list_destroy(sockaddr_list);
                 } else {
                         rd_kafka_find_or_add_broker(rk, proto, host, port,
                                                     &cnt);

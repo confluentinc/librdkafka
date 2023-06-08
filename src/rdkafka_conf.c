@@ -1437,12 +1437,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "A higher value allows for more effective batching of these "
      "messages.",
      0, 900000, 10},
-    {_RK_GLOBAL, "enable.bootstrap.servers.canonical.resolve", _RK_C_BOOL,
-     _RK(enable_bootstrap_servers_canonical_resolve),
-     "Resolve each bootstrap address into a list of canonical names. By "
-     "default client will not attempt to reverse lookup to find the FQDN."
-     "Default: false.",
-     0, 1, 0},
+    {_RK_GLOBAL, "client.dns.lookup", _RK_C_S2I, _RK(client_dns_lookup),
+     "Controls how the client uses DNS lookups. By default when the lookup "
+     "returns multiple IP addresses for a hostname they will all be attempted "
+     "to connect to before failing the connection. Applies to both bootstrap "
+     "and "
+     " advertised servers. If the value is set to "
+     "`resolve_canonical_bootstrap_servers_only` each entry will be "
+     "resolved and expanded into a list of canonical names",
+     .vdef = RD_KAFKA_USE_ALL_DNS_IPS,
+     .s2i  = {{RD_KAFKA_USE_ALL_DNS_IPS, "use_all_dns_ips"},
+              {RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
+               "resolve_canonical_bootstrap_servers_only"}}},
 
 
     /*

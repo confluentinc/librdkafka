@@ -1625,7 +1625,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Apache Kafka 0.8.2 or later on the broker.).",
      .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
      .s2i  = {{RD_KAFKA_OFFSET_METHOD_FILE, "file"},
-             {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
+              {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
 
     {_RK_TOPIC | _RK_CONSUMER, "consume.callback.max.messages", _RK_C_INT,
      _RKT(consume_callback_max_msgs),

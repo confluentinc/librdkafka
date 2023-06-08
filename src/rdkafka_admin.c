@@ -5139,9 +5139,13 @@ rd_kafka_UserScramCredentialUpsertion_new(const char *username,
                 alteration->alteration.upsertion.salt = NULL;
 #else
                 unsigned char random_salt[64];
-                RAND_bytes(random_salt, sizeof(random_salt));
-                alteration->alteration.upsertion.salt =
-                    rd_kafkap_bytes_new(random_salt, sizeof(random_salt));
+                if (RAND_priv_bytes(random_salt, sizeof(random_salt)) == 1) {
+                        alteration->alteration.upsertion.salt =
+                            rd_kafkap_bytes_new(random_salt,
+                                                sizeof(random_salt));
+                } else {
+                        alteration->alteration.upsertion.salt = NULL;
+                }
 #endif
         }
         alteration->alteration.upsertion.password =
@@ -5481,12 +5485,7 @@ void rd_kafka_AlterUserScramCredentials(
             rkqu->rkqu_q);
 
         if (alteration_cnt > 0) {
-                rd_bool_t mechanism_unknown       = rd_false;
-                rd_bool_t empty_user              = rd_false;
-                rd_bool_t empty_password          = rd_false;
-                rd_bool_t empty_salt              = rd_false;
-                rd_bool_t non_positive_iterations = rd_false;
-                rd_bool_t no_openssl              = rd_false;
+                const char *errstr = NULL;
                 for (i = 0; i < alteration_cnt; i++) {
                         rd_bool_t is_upsert =
                             alterations[i]->alteration_type ==
@@ -5494,71 +5493,63 @@ void rd_kafka_AlterUserScramCredentials(
                         rd_bool_t is_delete =
                             alterations[i]->alteration_type ==
                             RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE;
-                        mechanism_unknown |=
-                            is_upsert && alterations[i]
-                                                 ->alteration.upsertion
-                                                 .credential_info.mechanism ==
-                                             RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
-                        mechanism_unknown |=
-                            is_delete &&
-                            alterations[i]->alteration.deletion.mechanism ==
-                                RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
-                        empty_user =
-                            !alterations[i]->user || !*alterations[i]->user;
+
+                        if ((is_upsert || is_delete) &&
+                            alterations[i]
+                                    ->alteration.upsertion.credential_info
+                                    .mechanism ==
+                                RD_KAFKA_SCRAM_MECHANISM_UNKNOWN) {
+                                errstr =
+                                    "SCRAM mechanism must be specified at "
+                                    "index %" PRIusz;
+                                break;
+                        }
+
+
+                        if (!alterations[i]->user || !*alterations[i]->user) {
+                                errstr = "Empty user at index %" PRIusz;
+                                break;
+                        }
 
                         if (is_upsert) {
-                                empty_password =
-                                    RD_KAFKAP_BYTES_LEN(
+#if !WITH_SSL
+                                errstr =
+                                    "OpenSSL required for upsertion at index "
+                                    "%" PRIusz;
+                                break;
+#endif
+                                if (RD_KAFKAP_BYTES_LEN(
                                         alterations[i]
                                             ->alteration.upsertion.password) ==
-                                    0;
-                                empty_salt =
-                                    !alterations[i]
+                                    0) {
+                                        errstr =
+                                            "Empty password at index %" PRIusz;
+                                        break;
+                                }
+
+                                if (!alterations[i]
                                          ->alteration.upsertion.salt ||
                                     RD_KAFKAP_BYTES_LEN(
                                         alterations[i]
-                                            ->alteration.upsertion.salt) == 0;
-                                non_positive_iterations =
-                                    alterations[i]
-                                        ->alteration.upsertion.credential_info
-                                        .iterations <= 0;
-#if !WITH_SSL
-                                no_openssl = rd_true;
-#endif
-                        }
+                                            ->alteration.upsertion.salt) == 0) {
+                                        errstr = "Empty salt at index %" PRIusz;
+                                        break;
+                                }
 
-                        if (mechanism_unknown || empty_password ||
-                            non_positive_iterations || no_openssl ||
-                            empty_user) {
-                                break;
+                                if (alterations[i]
+                                        ->alteration.upsertion.credential_info
+                                        .iterations <= 0) {
+                                        errstr =
+                                            "Non-positive iterations at index "
+                                            "%" PRIusz;
+                                        break;
+                                }
                         }
                 }
 
-                if (mechanism_unknown || empty_password || empty_salt ||
-                    empty_user || non_positive_iterations || no_openssl) {
-                        const char *messages[] = {
-                            "SCRAM mechanism must be specified at index "
-                            "%" PRIusz,
-                            "Empty password at index %" PRIusz,
-                            "Empty salt at index %" PRIusz,
-                            "Empty user at index %" PRIusz,
-                            "Non-positive iterations at index %" PRIusz,
-                            "OpenSSL required for upsertion at index %" PRIusz};
-                        const char *message =
-                            mechanism_unknown
-                                ? messages[0]
-                                : empty_password
-                                      ? messages[1]
-                                      : empty_salt
-                                            ? messages[2]
-                                            : empty_user
-                                                  ? messages[3]
-                                                  : non_positive_iterations
-                                                        ? messages[4]
-                                                        : messages[5];
-
+                if (errstr) {
                         rd_kafka_admin_result_fail(
-                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG, message, i);
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG, errstr, i);
                         rd_kafka_admin_common_worker_destroy(
                             rk, rko, rd_true /*destroy*/);
                         return;

@@ -7,6 +7,7 @@ librdkafka v2.2.0 is a feature release:
  * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
  * Fix a bug that happens when skipping tags, causing buffer underflow in
    MetadataResponse (#4278).
+ * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
 
 ## Fixes
 

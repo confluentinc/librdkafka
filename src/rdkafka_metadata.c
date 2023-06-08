@@ -766,14 +766,13 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                 rd_kafka_metadata_cache_topic_update(
                                     rk, &md->topics[i], &mdi->topics[i],
                                     rd_false /*propagate later*/,
-                                    has_client_rack, /* use has_client_rack
-                                                       rather than
-                                                       compute_racks: it's
-                                                       possible that we only
-                                                       need the rack in the
-                                                       outptr mdip, rather than
-                                                       in the cache. */
-                                    mdi->brokers, md->broker_cnt);
+                                    /* use has_client_rack rather than
+                                       compute_racks. We need cached rack ids
+                                       only in case we need to rejoin the group
+                                       if they change and client.rack is set
+                                       (KIP-881). */
+                                    has_client_rack, mdi->brokers,
+                                    md->broker_cnt);
                                 cache_changes++;
                                 rd_kafka_wrunlock(rk);
                         }
@@ -888,9 +887,9 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         rd_kafka_metadata_destroy(
                             &rkb->rkb_rk->rk_full_metadata->metadata);
 
-                /* use has_client_rack rather than compute_racks: it's possible
-                 * that we only need the rack in the outptr mdip, rather than in
-                 * the cache. */
+                /* use has_client_rack rather than compute_racks. We need cached
+                 * rack ids only in case we need to rejoin the group if they
+                 * change and client.rack is set (KIP-881). */
                 if (has_client_rack)
                         rkb->rkb_rk->rk_full_metadata =
                             rd_kafka_metadata_copy_add_racks(mdi, tbuf.of);

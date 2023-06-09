@@ -1762,8 +1762,11 @@ int rd_kafka_topic_info_cmp(const void *_a, const void *_b) {
         if ((r = RD_CMP(a->partition_cnt, b->partition_cnt)))
                 return r;
 
-        rd_assert(a->partitions_internal);
-        rd_assert(b->partitions_internal);
+        if (a->partitions_internal == NULL && b->partitions_internal == NULL)
+                return 0;
+
+        if (a->partitions_internal == NULL || b->partitions_internal == NULL)
+                return (a->partitions_internal == NULL) ? 1 : -1;
 
         /* We're certain partitions_internal exist for a/b and have the same
          * count. */

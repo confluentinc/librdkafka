@@ -1448,6 +1448,9 @@ static void prepopulateCurrentAssignments(
                         consumer2 = ((ConsumerGenerationPair_t *)rd_list_elem(
                                          consumers, idx + 1))
                                         ->consumer;
+
+                        RD_MAP_DELETE(currentPartitionConsumer, partition);
+
                         rd_kafka_log(
                             rk, LOG_ERR, "STICKY",
                             "Sticky assignor: Found multiple consumers %s and "

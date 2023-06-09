@@ -373,65 +373,63 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
         return ApiVersion >= 9;
 }
 
-/* Populates the topic partition to rack mapping for an `mdi`. It's assumed that
- * the internal broker metadata is already populated. */
+/* Populates the topic partition to rack mapping for the the topic given by
+ * `topic_idx` in the `mdi`. It's assumed that the internal broker metadata is
+ * already populated. */
 static void
-rd_kafka_populate_metadata_racks(rd_tmpabuf_t *tbuf,
-                                 rd_kafka_metadata_internal_t *mdi) {
-        int ti;
+rd_kafka_populate_metadata_topic_racks(rd_tmpabuf_t *tbuf,
+                                       size_t topic_idx,
+                                       rd_kafka_metadata_internal_t *mdi) {
         rd_kafka_metadata_broker_internal_t *brokers_internal;
         size_t broker_cnt;
+        int i;
+        rd_kafka_metadata_topic_t *mdt;
+        rd_kafka_metadata_topic_internal_t *mdti;
 
         rd_dassert(mdi->brokers);
+        rd_dassert(mdi->metadata.topic_cnt > (int)topic_idx);
 
         brokers_internal = mdi->brokers;
         broker_cnt       = mdi->metadata.broker_cnt;
 
-        for (ti = 0; ti < mdi->metadata.topic_cnt; ti++) {
-                int i;
-                rd_kafka_metadata_topic_t *mdt = &mdi->metadata.topics[ti];
-                rd_kafka_metadata_topic_internal_t *mdti = &mdi->topics[ti];
+        mdt  = &mdi->metadata.topics[topic_idx];
+        mdti = &mdi->topics[topic_idx];
 
-                for (i = 0; i < mdt->partition_cnt; i++) {
-                        int j;
-                        rd_kafka_metadata_partition_t *mdp =
-                            &mdt->partitions[i];
-                        rd_kafka_metadata_partition_internal_t *mdpi =
-                            &mdti->partitions[i];
+        for (i = 0; i < mdt->partition_cnt; i++) {
+                int j;
+                rd_kafka_metadata_partition_t *mdp = &mdt->partitions[i];
+                rd_kafka_metadata_partition_internal_t *mdpi =
+                    &mdti->partitions[i];
 
-                        rd_list_t *curr_list;
-                        char *rack;
+                rd_list_t *curr_list;
+                char *rack;
 
-                        if (mdp->replica_cnt == 0)
+                if (mdp->replica_cnt == 0)
+                        continue;
+
+                curr_list =
+                    rd_list_new(0, NULL); /* use a list for de-duplication */
+                for (j = 0; j < mdp->replica_cnt; j++) {
+                        rd_kafka_metadata_broker_internal_t key = {
+                            .id = mdp->replicas[j]};
+                        rd_kafka_metadata_broker_internal_t *broker =
+                            bsearch(&key, brokers_internal, broker_cnt,
+                                    sizeof(rd_kafka_metadata_broker_internal_t),
+                                    rd_kafka_metadata_broker_internal_cmp);
+                        if (!broker || !broker->rack_id)
                                 continue;
-
-                        curr_list = rd_list_new(
-                            0, NULL); /* use a list for de-duplication */
-                        for (j = 0; j < mdp->replica_cnt; j++) {
-                                rd_kafka_metadata_broker_internal_t key = {
-                                    .id = mdp->replicas[j]};
-                                rd_kafka_metadata_broker_internal_t *broker =
-                                    bsearch(
-                                        &key, brokers_internal, broker_cnt,
-                                        sizeof(
-                                            rd_kafka_metadata_broker_internal_t),
-                                        rd_kafka_metadata_broker_internal_cmp);
-                                if (!broker || !broker->rack_id)
-                                        continue;
-                                rd_list_add(curr_list, broker->rack_id);
-                        }
-                        rd_list_deduplicate(&curr_list, rd_strcmp2);
-
-                        mdpi->racks_cnt = rd_list_cnt(curr_list);
-                        mdpi->racks     = rd_tmpabuf_alloc(
-                            tbuf, sizeof(char *) * mdpi->racks_cnt);
-                        RD_LIST_FOREACH(rack, curr_list, j) {
-                                mdpi->racks[j] =
-                                    rack; /* Don't copy, rack points inside tbuf
-                                             already*/
-                        }
-                        rd_list_destroy(curr_list);
+                        rd_list_add(curr_list, broker->rack_id);
                 }
+                rd_list_deduplicate(&curr_list, rd_strcmp2);
+
+                mdpi->racks_cnt = rd_list_cnt(curr_list);
+                mdpi->racks =
+                    rd_tmpabuf_alloc(tbuf, sizeof(char *) * mdpi->racks_cnt);
+                RD_LIST_FOREACH(rack, curr_list, j) {
+                        mdpi->racks[j] = rack; /* Don't copy, rack points inside
+                                                  tbuf already*/
+                }
+                rd_list_destroy(curr_list);
         }
 }
 
@@ -746,7 +744,7 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                       rd_kafka_metadata_partition_internal_cmp);
 
                 if (compute_racks)
-                        rd_kafka_populate_metadata_racks(&tbuf, mdi);
+                        rd_kafka_populate_metadata_topic_racks(&tbuf, i, mdi);
 
                 /* Update topic state based on the topic metadata */
                 rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],

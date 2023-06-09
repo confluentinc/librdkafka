@@ -21,6 +21,8 @@ librdkafka v2.2.0 is a feature release:
    closes as normal ones (#4294).
  * Added `fetch.queue.backoff.ms` to the consumer to control how long
    the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
+ * [KIP-235](https://cwiki.apache.org/confluence/display/KAFKA/KIP-235%3A+Add+DNS+alias+support+for+secured+connection): 
+   Add DNS alias support for secured connection (#4292).
 
 
 ## Enhancements

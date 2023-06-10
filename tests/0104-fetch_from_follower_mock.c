@@ -595,6 +595,8 @@ int main_0104_fetch_from_follower_mock(int argc, char **argv) {
                 return 0;
         }
 
+        test_timeout_set(50);
+
         do_test_offset_reset("earliest");
         do_test_offset_reset("latest");
 

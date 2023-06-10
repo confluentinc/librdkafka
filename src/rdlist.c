@@ -148,6 +148,7 @@ void *rd_list_add(rd_list_t *rl, void *elem) {
         return rl->rl_elems[rl->rl_cnt++];
 }
 
+
 void rd_list_set(rd_list_t *rl, int idx, void *ptr) {
         if (idx >= rl->rl_size)
                 rd_list_grow(rl, idx + 1);

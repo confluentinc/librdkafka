@@ -86,8 +86,7 @@ typedef struct rd_kafka_metadata_internal_s {
  * @brief The internal metadata type corresponding to the
  *        public one.
  */
-#define rd_kafka_metadata_get_internal(md)                                     \
-        ((const rd_kafka_metadata_internal_t *)md)
+#define rd_kafka_metadata_get_internal(md) ((rd_kafka_metadata_internal_t *)md)
 
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 
@@ -159,10 +158,34 @@ int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
 int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
 
+
+#define rd_kafka_metadata_broker_internal_find(mdi, broker_id, broker)         \
+        do {                                                                   \
+                rd_kafka_metadata_broker_internal_t __key = {.id = broker_id}; \
+                broker =                                                       \
+                    bsearch(&__key, mdi->brokers, mdi->metadata.broker_cnt,    \
+                            sizeof(rd_kafka_metadata_broker_internal_t),       \
+                            rd_kafka_metadata_broker_internal_cmp);            \
+        } while (0)
+
+
 rd_kafka_metadata_t *
 rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
-                                 size_t topic_cnt);
+                                 size_t topic_cnt,
+                                 int replication_factor,
+                                 int num_brokers);
 rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
+rd_kafka_metadata_t *rd_kafka_metadata_new_topic_with_partition_replicas_mockv(
+    int replication_factor,
+    int num_brokers,
+    size_t topic_cnt,
+    ...);
+rd_kafka_metadata_t *
+rd_kafka_metadata_new_topic_with_partition_replicas_mock(int replication_factor,
+                                                         int num_brokers,
+                                                         char *topic_names[],
+                                                         int *partition_cnts,
+                                                         size_t topic_cnt);
 
 /**
  * @{

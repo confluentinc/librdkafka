@@ -2187,6 +2187,8 @@ done:
  *                                   This is best-effort, depending on broker
  *                                   config and version.
  * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks - Force partition to rack mapping computation in
+ *                      parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
  *                    there is already a matching one in-transit.
@@ -2202,6 +2204,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
+                                             rd_bool_t force_racks,
                                              rd_kafka_op_t *rko) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
@@ -2222,6 +2225,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
 
         rkbuf->rkbuf_u.Metadata.reason      = rd_strdup(reason);
         rkbuf->rkbuf_u.Metadata.cgrp_update = cgrp_update;
+        rkbuf->rkbuf_u.Metadata.force_racks = force_racks;
 
         /* TopicArrayCnt */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);

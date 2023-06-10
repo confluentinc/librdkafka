@@ -1768,7 +1768,8 @@ int rd_kafka_topic_info_cmp(const void *_a, const void *_b) {
         if (a->partitions_internal == NULL || b->partitions_internal == NULL)
                 return (a->partitions_internal == NULL) ? 1 : -1;
 
-        /* We're certain partitions_internal and have the same count. */
+        /* We're certain partitions_internal exist for a/b and have the same
+         * count. */
         for (i = 0; i < a->partition_cnt; i++) {
                 size_t k;
                 if ((r = RD_CMP(a->partitions_internal[i].racks_cnt,

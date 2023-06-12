@@ -5289,7 +5289,9 @@ static void rd_kafka_find_or_add_broker(rd_kafka_t *rk,
  * @locality any thread
  * @locks none
  */
-int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
+int rd_kafka_brokers_add0(rd_kafka_t *rk,
+                          const char *brokerlist,
+                          rd_bool_t adding_bootstrap) {
         char *s_copy = rd_strdup(brokerlist);
         char *s      = s_copy;
         int cnt      = 0;
@@ -5315,8 +5317,9 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
                         break;
 
                 rd_kafka_wrlock(rk);
-                if (rk->rk_conf.client_dns_lookup ==
-                    RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY) {
+                if (adding_bootstrap &&
+                    rk->rk_conf.client_dns_lookup ==
+                        RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY) {
                         rd_kafka_dbg(rk, ALL, "INIT",
                                      "Canonicalizing bootstrap broker %s:%d",
                                      host, port);
@@ -5372,7 +5375,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
 
 
 int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist) {
-        return rd_kafka_brokers_add0(rk, brokerlist);
+        return rd_kafka_brokers_add0(rk, brokerlist, rd_false);
 }
 
 

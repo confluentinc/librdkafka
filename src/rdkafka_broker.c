@@ -5268,8 +5268,8 @@ static void rd_kafka_find_or_add_broker(rd_kafka_t *rk,
                                         int *cnt) {
         rd_kafka_broker_t *rkb = NULL;
 
-        if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
-            rkb->rkb_source == RD_KAFKA_CONFIGURED) {
+        if (rkb = rd_kafka_broker_find(rk, proto, host, port) &&
+                  rkb->rkb_source == RD_KAFKA_CONFIGURED) {
                 (*cnt)++;
         } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto, host,
                                        port, RD_KAFKA_NODEID_UA) != NULL)
@@ -5291,7 +5291,7 @@ static void rd_kafka_find_or_add_broker(rd_kafka_t *rk,
  */
 int rd_kafka_brokers_add0(rd_kafka_t *rk,
                           const char *brokerlist,
-                          rd_bool_t adding_bootstrap) {
+                          rd_bool_t is_bootstrap_server_list) {
         char *s_copy = rd_strdup(brokerlist);
         char *s      = s_copy;
         int cnt      = 0;
@@ -5317,7 +5317,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk,
                         break;
 
                 rd_kafka_wrlock(rk);
-                if (adding_bootstrap &&
+                if (is_bootstrap_server_list &&
                     rk->rk_conf.client_dns_lookup ==
                         RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY) {
                         rd_kafka_dbg(rk, ALL, "INIT",

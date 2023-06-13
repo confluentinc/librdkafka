@@ -7,6 +7,11 @@ librdkafka v2.2.0 is a feature release:
  * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
  * Fix a bug that happens when skipping tags, causing buffer underflow in
    MetadataResponse (#4278).
+ * [KIP-881](https://cwiki.apache.org/confluence/display/KAFKA/KIP-881%3A+Rack-aware+Partition+Assignment+for+Kafka+Consumers):
+   Add support for rack-aware partition assignment for consumers
+   (#4184, #4291, #4252).
+ * Fix several bugs with sticky assignor in case of partition ownership
+   changing between members of the consumer group (#4252).
  * Added `fetch.queue.backoff.ms` to the consumer to control how long
    the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
 
@@ -31,6 +36,19 @@ librdkafka v2.2.0 is a feature release:
    when using Confluent Platform, only when racks are set,
    observers are activated and there is more than one partition.
    Fixed by skipping the correct amount of bytes when tags are received.
+
+
+### Consumer fixes
+
+  * In case of multiple owners of a partition with different generations, the
+    sticky assignor would pick the earliest (lowest generation) member as the
+    current owner, which would lead to stickiness violations. Fixed by
+    choosing the latest (highest generation) member.
+  * In case where the same partition is owned by two members with the same
+    generation, it indicates an issue. The sticky assignor had some code to
+    handle this, but it was non-functional, and did not have parity with the
+    Java assignor. Fixed by invalidating any such partition from the current
+    assignment completely.
 
 
 

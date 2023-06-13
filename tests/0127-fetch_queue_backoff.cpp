@@ -42,7 +42,7 @@ extern "C" {
  *
  * 1. Produce N messages, 1 message per batch.
  * 2. Configure consumer with queued.min.messages=1 and
- *    fetch.queue.backoff.ms=A|B.
+ *    fetch.queue.backoff.ms=<backoff_ms>
  * 3. Verify that the consume() latency is <= fetch.queue.backoff.ms.
  */
 
@@ -60,6 +60,8 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
   if (backoff_ms >= 0) {
     Test::conf_set(conf, "fetch.queue.backoff.ms", tostr() << backoff_ms);
   }
+  /* Make sure to include only one message in each fetch.
+   * Message size is 10000. */
   Test::conf_set(conf, "fetch.message.max.bytes", "12000");
 
   if (backoff_ms < 0)
@@ -73,21 +75,30 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
     Test::Fail("Failed to create KafkaConsumer: " + errstr);
   delete conf;
 
+  RdKafka::TopicPartition *rktpar = RdKafka::TopicPartition::create(topic, 0);
   std::vector<RdKafka::TopicPartition *> parts;
-  parts.push_back(RdKafka::TopicPartition::create(topic, 0));
+  parts.push_back(rktpar);
 
   RdKafka::ErrorCode err;
   if ((err = c->assign(parts)))
     Test::Fail("assigned failed: " + RdKafka::err2str(err));
+  RdKafka::TopicPartition::destroy(parts);
 
   int received       = 0;
   int in_profile_cnt = 0;
-  int dmax           = (int)(/*max overhead*/ 100.0 + (double)backoff_ms * 1.2);
+  int dmax =
+      (int)((double)backoff_ms * (test_timeout_multiplier > 1 ? 1.5 : 1.2));
+  if (backoff_ms < 15)
+    dmax = 15;
 
   int64_t ts_consume = test_clock();
 
   while (received < 5) {
-    RdKafka::Message *msg = c->consume(3000 + backoff_ms);
+    /* Wait more than dmax to count out of profile messages.
+     * Different for first message, that is skipped. */
+    int consume_timeout =
+        received == 0 ? 500 * test_timeout_multiplier : dmax * 2;
+    RdKafka::Message *msg = c->consume(consume_timeout);
 
     rd_ts_t now     = test_clock();
     int latency     = (test_clock() - ts_consume) / 1000;
@@ -95,7 +106,7 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
     bool in_profile = latency <= dmax;
 
     if (!msg)
-      Test::Fail(tostr() << "No message for " << (1000 + backoff_ms) << "ms");
+      Test::Fail(tostr() << "No message for " << consume_timeout << "ms");
     if (msg->err())
       Test::Fail("Unexpected consumer error: " + msg->errstr());
 
@@ -117,7 +128,7 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
 
   /* first message isn't counted*/
   const int expected_in_profile = received - 1;
-  TEST_ASSERT(expected_in_profile - in_profile_cnt >= (test_on_ci ? 1 : 0),
+  TEST_ASSERT(expected_in_profile - in_profile_cnt == 0,
               "Only %d/%d messages were in profile", in_profile_cnt,
               expected_in_profile);
 

@@ -5268,8 +5268,8 @@ static void rd_kafka_find_or_add_broker(rd_kafka_t *rk,
                                         int *cnt) {
         rd_kafka_broker_t *rkb = NULL;
 
-        if (rkb = rd_kafka_broker_find(rk, proto, host, port) &&
-                  rkb->rkb_source == RD_KAFKA_CONFIGURED) {
+        if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
+            rkb->rkb_source == RD_KAFKA_CONFIGURED) {
                 (*cnt)++;
         } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto, host,
                                        port, RD_KAFKA_NODEID_UA) != NULL)

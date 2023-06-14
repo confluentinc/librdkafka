@@ -7,8 +7,14 @@ librdkafka v2.2.0 is a feature release:
  * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
  * Fix a bug that happens when skipping tags, causing buffer underflow in
    MetadataResponse (#4278).
+ * [KIP-881](https://cwiki.apache.org/confluence/display/KAFKA/KIP-881%3A+Rack-aware+Partition+Assignment+for+Kafka+Consumers):
+   Add support for rack-aware partition assignment for consumers
+   (#4184, #4291, #4252).
+ * Fix several bugs with sticky assignor in case of partition ownership
+   changing between members of the consumer group (#4252).
  * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
    closes as normal ones (#4294).
+
 
 ## Fixes
 
@@ -28,6 +34,19 @@ librdkafka v2.2.0 is a feature release:
    Solved by treating SSL errors as transport errors and
    by setting an OpenSSL flag that allows to treat unclean SSL closes as normal
    ones. These types of errors can happen it the other side doesn't support `close_notify` or if there's a TCP connection reset.
+
+
+### Consumer fixes
+
+  * In case of multiple owners of a partition with different generations, the
+    sticky assignor would pick the earliest (lowest generation) member as the
+    current owner, which would lead to stickiness violations. Fixed by
+    choosing the latest (highest generation) member.
+  * In case where the same partition is owned by two members with the same
+    generation, it indicates an issue. The sticky assignor had some code to
+    handle this, but it was non-functional, and did not have parity with the
+    Java assignor. Fixed by invalidating any such partition from the current
+    assignment completely.
 
 
 # librdkafka v2.1.1

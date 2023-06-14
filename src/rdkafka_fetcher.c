@@ -879,8 +879,6 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                  * This can happen if metadata is read initially
                                  * without an existing topic (see
                                  * rd_kafka_topic_metadata_update2).
-                                 * TODO: have a private metadata struct that
-                                 * stores leader epochs before topic creation.
                                  */
                                 rd_kafka_buf_write_i32(rkbuf, 0);
                         } else {

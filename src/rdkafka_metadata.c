@@ -493,7 +493,7 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         /* If force_racks is true, the outptr mdip has to contain the partition
          * to rack map. */
         rd_bool_t force_rack_computation =
-            request->rkbuf_u.Metadata.force_racks;
+            request ? request->rkbuf_u.Metadata.force_racks : rd_false;
         rd_bool_t compute_racks = has_client_rack || force_rack_computation;
 
         /* Ignore metadata updates when terminating */

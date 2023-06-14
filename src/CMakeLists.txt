@@ -199,7 +199,7 @@ target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
 
 if(WITH_CURL)
   find_package(CURL REQUIRED)
-  target_include_directories(rdkafka PUBLIC ${CURL_INCLUDE_DIRS})
+  target_include_directories(rdkafka PRIVATE ${CURL_INCLUDE_DIRS})
   target_link_libraries(rdkafka PUBLIC ${CURL_LIBRARIES})
 endif()
 
@@ -272,7 +272,7 @@ endif()
 
 # Generate pkg-config file
 set(PKG_CONFIG_VERSION "${PROJECT_VERSION}")
-set(PKG_CONFIG_REQUIRES "")
+set(PKG_CONFIG_REQUIRES_PRIVATE "")
 if (WIN32)
   set(PKG_CONFIG_LIBS_PRIVATE "-lws2_32 -lsecur32 -lcrypt32")
 else()
@@ -296,27 +296,27 @@ if(NOT RDKAFKA_BUILD_STATIC)
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
 
   if(WITH_CURL)
-    string(APPEND PKG_CONFIG_REQUIRES "curl ")
+    string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "libcurl ")
   endif()
 
   if(WITH_ZLIB)
-    string(APPEND PKG_CONFIG_REQUIRES "zlib ")
+    string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "zlib ")
   endif()
 
   if(WITH_SSL)
-    string(APPEND PKG_CONFIG_REQUIRES "libssl ")
+    string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "libcrypto libssl ")
   endif()
 
   if(WITH_SASL_CYRUS)
-    string(APPEND PKG_CONFIG_REQUIRES "libsasl2 ")
+    string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "libsasl2 ")
   endif()
 
   if(WITH_ZSTD)
-    string(APPEND PKG_CONFIG_REQUIRES "libzstd ")
+    string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "libzstd ")
   endif()
 
   if(WITH_LZ4_EXT)
-    string(APPEND PKG_CONFIG_REQUIRES "liblz4 ")
+    string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "liblz4 ")
   endif()
 
   set(PKG_CONFIG_CFLAGS "-I\${includedir}")

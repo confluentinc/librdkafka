@@ -366,6 +366,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_bool_t all_topics;  /**< Full/All topics requested */
                         rd_bool_t cgrp_update; /**< Update cgrp with topic
                                                 *   status from response. */
+                        rd_bool_t force_racks; /**< Force the returned metadata
+                                                *   to contain partition to
+                                                *   rack mapping. */
 
                         int *decr; /* Decrement this integer by one
                                     * when request is complete:
@@ -682,6 +685,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 size_t _slen;                                                  \
                 char *_dst;                                                    \
                 rd_kafka_buf_read_str(rkbuf, &_kstr);                          \
+                if (RD_KAFKAP_STR_IS_NULL(&_kstr)) {                           \
+                        dst = NULL;                                            \
+                        break;                                                 \
+                }                                                              \
                 _slen = RD_KAFKAP_STR_LEN(&_kstr);                             \
                 if (!(_dst = rd_tmpabuf_write(tmpabuf, _kstr.str, _slen + 1))) \
                         rd_kafka_buf_parse_fail(                               \
@@ -784,9 +791,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         uint64_t _tagtype, _taglen;                            \
                         rd_kafka_buf_read_uvarint(rkbuf, &_tagtype);           \
                         rd_kafka_buf_read_uvarint(rkbuf, &_taglen);            \
-                        if (_taglen > 1)                                       \
-                                rd_kafka_buf_skip(rkbuf,                       \
-                                                  (size_t)(_taglen - 1));      \
+                        if (_taglen > 0)                                       \
+                                rd_kafka_buf_skip(rkbuf, (size_t)(_taglen));   \
                 }                                                              \
         } while (0)
 

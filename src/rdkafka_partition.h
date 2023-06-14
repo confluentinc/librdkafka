@@ -326,6 +326,10 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
          *  @locality toppar thread */
         rd_kafka_fetch_pos_t rktp_last_next_fetch_start;
 
+        /** The offset to verify.
+         *  @locality toppar thread */
+        rd_kafka_fetch_pos_t rktp_offset_validation_pos;
+
         /** Application's position.
          *  This is the latest offset delivered to application + 1.
          *  It is reset to INVALID_OFFSET when partition is
@@ -334,6 +338,11 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 
         /** Last stored offset, but maybe not yet committed. */
         rd_kafka_fetch_pos_t rktp_stored_pos;
+
+        /* Last stored metadata, but
+         * maybe not committed yet. */
+        void *rktp_stored_metadata;
+        size_t rktp_stored_metadata_size;
 
         /** Offset currently being committed */
         rd_kafka_fetch_pos_t rktp_committing_pos;
@@ -889,6 +898,10 @@ void rd_kafka_topic_partition_set_from_fetch_pos(
     rd_kafka_topic_partition_t *rktpar,
     const rd_kafka_fetch_pos_t fetchpos);
 
+void rd_kafka_topic_partition_set_metadata_from_rktp_stored(
+    rd_kafka_topic_partition_t *rktpar,
+    const rd_kafka_toppar_t *rktp);
+
 static RD_UNUSED rd_kafka_fetch_pos_t rd_kafka_topic_partition_get_fetch_pos(
     const rd_kafka_topic_partition_t *rktpar) {
         rd_kafka_fetch_pos_t fetchpos = {
@@ -1048,12 +1061,23 @@ static RD_UNUSED int rd_kafka_toppar_topic_cmp(const void *_a, const void *_b) {
  * @brief Set's the partitions next fetch position, i.e., the next offset
  *        to start fetching from.
  *
- * @locks_required rd_kafka_toppar_lock(rktp) MUST be held.
+ * @locks rd_kafka_toppar_lock(rktp) MUST be held.
  */
 static RD_UNUSED RD_INLINE void
 rd_kafka_toppar_set_next_fetch_position(rd_kafka_toppar_t *rktp,
                                         rd_kafka_fetch_pos_t next_pos) {
         rktp->rktp_next_fetch_start = next_pos;
+}
+
+/**
+ * @brief Sets the offset validation position.
+ *
+ * @locks rd_kafka_toppar_lock(rktp) MUST be held.
+ */
+static RD_UNUSED RD_INLINE void rd_kafka_toppar_set_offset_validation_position(
+    rd_kafka_toppar_t *rktp,
+    rd_kafka_fetch_pos_t offset_validation_pos) {
+        rktp->rktp_offset_validation_pos = offset_validation_pos;
 }
 
 #endif /* _RDKAFKA_PARTITION_H_ */

@@ -1,3 +1,82 @@
+# librdkafka v2.2.0
+
+librdkafka v2.2.0 is a feature release:
+
+ * Fix a segmentation fault when subscribing to non-existent topics and
+   using the consume batch functions (#4273).
+ * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse (#4278).
+ * [KIP-881](https://cwiki.apache.org/confluence/display/KAFKA/KIP-881%3A+Rack-aware+Partition+Assignment+for+Kafka+Consumers):
+   Add support for rack-aware partition assignment for consumers
+   (#4184, #4291, #4252).
+ * Fix several bugs with sticky assignor in case of partition ownership
+   changing between members of the consumer group (#4252).
+
+
+## Fixes
+
+### General fixes
+
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse. This is triggered since RPC version 9 (v2.1.0),
+   when using Confluent Platform, only when racks are set,
+   observers are activated and there is more than one partition.
+   Fixed by skipping the correct amount of bytes when tags are received.
+
+
+### Consumer fixes
+
+  * In case of multiple owners of a partition with different generations, the
+    sticky assignor would pick the earliest (lowest generation) member as the
+    current owner, which would lead to stickiness violations. Fixed by
+    choosing the latest (highest generation) member.
+  * In case where the same partition is owned by two members with the same
+    generation, it indicates an issue. The sticky assignor had some code to
+    handle this, but it was non-functional, and did not have parity with the
+    Java assignor. Fixed by invalidating any such partition from the current
+    assignment completely.
+
+
+# librdkafka v2.1.1
+
+librdkafka v2.1.1 is a maintenance release:
+
+ * Avoid duplicate messages when a fetch response is received
+   in the middle of an offset validation request (#4261).
+ * Fix segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
+ * Fix a segmentation fault when fetching from follower and the partition lease
+   expires while waiting for the result of a list offsets operation (#4254).
+ * Fix documentation for the admin request timeout, incorrectly stating -1 for infinite
+   timeout. That timeout can't be infinite.
+ * Fix CMake pkg-config cURL require and use
+   pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
+ * Fixes certain cases where polling would not keep the consumer
+   in the group or make it rejoin it (#4256).
+ * Fix to the C++ set_leader_epoch method of TopicPartitionImpl,
+   that wasn't storing the passed value (@pavel-pimenov, #4267).
+
+## Fixes
+
+### Consumer fixes
+
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request. Solved by avoiding
+   a restart from last application offset when offset validation succeeds.
+ * When fetching from follower, if the partition lease expires after 5 minutes,
+   and a list offsets operation was requested to retrieve the earliest
+   or latest offset, it resulted in segmentation fault. This was fixed by
+   allowing threads different from the main one to call
+   the `rd_kafka_toppar_set_fetch_state` function, given they hold
+   the lock on the `rktp`.
+ * In v2.1.0, a bug was fixed which caused polling any queue to reset the
+   `max.poll.interval.ms`. Only certain functions were made to reset the timer,
+   but it is possible for the user to obtain the queue with messages from
+   the broker, skipping these functions. This was fixed by encoding information
+   in a queue itself, that, whether polling, resets the timer.
+
+
 # librdkafka v2.1.0
 
 librdkafka v2.1.0 is a feature release:
@@ -64,11 +143,18 @@ librdkafka v2.1.0 is a feature release:
    any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
    interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
 
+### Consume API
+
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request.
+ * Segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage`.
+
 
 
 # librdkafka v2.0.2
 
-librdkafka v2.0.2 is a bugfix release:
+librdkafka v2.0.2 is a maintenance release:
 
 * Fix OpenSSL version in Win32 nuget package (#4152).
 
@@ -76,7 +162,7 @@ librdkafka v2.0.2 is a bugfix release:
 
 # librdkafka v2.0.1
 
-librdkafka v2.0.1 is a bugfix release:
+librdkafka v2.0.1 is a maintenance release:
 
 * Fixed nuget package for Linux ARM64 release (#4150).
 

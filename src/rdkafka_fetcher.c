@@ -879,8 +879,6 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                  * This can happen if metadata is read initially
                                  * without an existing topic (see
                                  * rd_kafka_topic_metadata_update2).
-                                 * TODO: have a private metadata struct that
-                                 * stores leader epochs before topic creation.
                                  */
                                 rd_kafka_buf_write_i32(rkbuf, 0);
                         } else {
@@ -975,7 +973,25 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
         return cnt;
 }
 
-
+/**
+ * @brief Decide whether it should start fetching from next fetch start
+ *        or continue with current fetch pos.
+ *
+ * @param rktp the toppar
+ *
+ * @returns rd_true if it should start fetching from next fetch start,
+ *          rd_false otherwise.
+ *
+ * @locality any
+ * @locks toppar_lock() MUST be held
+ */
+rd_bool_t rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
+    rd_kafka_toppar_t *rktp) {
+        return rktp->rktp_op_version > rktp->rktp_fetch_version ||
+               rd_kafka_fetch_pos_cmp(&rktp->rktp_next_fetch_start,
+                                      &rktp->rktp_last_next_fetch_start) ||
+               rktp->rktp_offsets.fetch_pos.offset == RD_KAFKA_OFFSET_INVALID;
+}
 
 /**
  * @brief Decide whether this toppar should be on the fetch list or not.
@@ -1037,10 +1053,7 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
 
         /* Update broker thread's fetch op version */
         version = rktp->rktp_op_version;
-        if (version > rktp->rktp_fetch_version ||
-            rd_kafka_fetch_pos_cmp(&rktp->rktp_next_fetch_start,
-                                   &rktp->rktp_last_next_fetch_start) ||
-            rktp->rktp_offsets.fetch_pos.offset == RD_KAFKA_OFFSET_INVALID) {
+        if (rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(rktp)) {
                 /* New version barrier, something was modified from the
                  * control plane. Reset and start over.
                  * Alternatively only the next_offset changed but not the

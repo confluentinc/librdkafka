@@ -152,6 +152,7 @@ _TEST_DECL(0045_subscribe_update);
 _TEST_DECL(0045_subscribe_update_topic_remove);
 _TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
 _TEST_DECL(0045_subscribe_update_mock);
+_TEST_DECL(0045_subscribe_update_racks_mock);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
 _TEST_DECL(0048_partitioner);
@@ -246,9 +247,13 @@ _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
 _TEST_DECL(0137_barrier_batch_consume);
 _TEST_DECL(0138_admin_mock);
+_TEST_DECL(0139_offset_validation_mock);
+_TEST_DECL(0140_commit_metadata);
+
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
+_TEST_DECL(8001_fetch_from_follower_mock_manual);
 
 
 /* Define test resource usage thresholds if the default limits
@@ -359,6 +364,7 @@ struct test tests[] = {
           TEST_BRKVER(0, 9, 0, 0),
           .scenario = "noautocreate"),
     _TEST(0045_subscribe_update_mock, TEST_F_LOCAL),
+    _TEST(0045_subscribe_update_racks_mock, TEST_F_LOCAL),
     _TEST(0046_rkt_cache, TEST_F_LOCAL),
     _TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
     _TEST(0048_partitioner,
@@ -490,9 +496,12 @@ struct test tests[] = {
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
+    _TEST(0139_offset_validation_mock, 0),
+    _TEST(0140_commit_metadata, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
+    _TEST(8001_fetch_from_follower_mock_manual, TEST_F_MANUAL),
 
     {NULL}};
 

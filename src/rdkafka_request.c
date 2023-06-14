@@ -1765,7 +1765,8 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
                 member_metadata = rkas->rkas_get_metadata_cb(
                     rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
-                    rk->rk_cgrp->rkcg_group_assignment);
+                    rk->rk_cgrp->rkcg_group_assignment,
+                    rk->rk_conf.client_rack);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
@@ -2087,14 +2088,11 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
                                      void *opaque) {
-        rd_kafka_op_t *rko           = opaque; /* Possibly NULL */
-        struct rd_kafka_metadata *md = NULL;
-        rd_kafka_topic_authorized_operations_pair_t
-            *topic_authorized_operations = NULL;
-        int32_t cluster_authorized_operations;
-        char *cluster_id = NULL;
-        int controller_id;
-        const rd_list_t *topics = request->rkbuf_u.Metadata.topics;
+        rd_kafka_op_t *rko                = opaque; /* Possibly NULL */
+        rd_kafka_metadata_internal_t *mdi = NULL;
+        // rd_kafka_topic_authorized_operations_pair_t
+        //     *topic_authorized_operations = NULL;
+        const rd_list_t *topics           = request->rkbuf_u.Metadata.topics;
         int actions;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
@@ -2121,26 +2119,21 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                            rd_list_cnt(topics),
                            request->rkbuf_u.Metadata.reason);
 
-        err = rd_kafka_parse_Metadata(
-            rkb, request, rkbuf, &md, &topic_authorized_operations,
-            &cluster_authorized_operations, NULL, &cluster_id, &controller_id);
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi, NULL);
         if (err)
                 goto err;
 
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
-                rko->rko_err           = err;
-                rko->rko_u.metadata.md = md;
-                rko->rko_u.metadata.cluster_authorized_operations =
-                    cluster_authorized_operations;
-                rko->rko_u.metadata.topic_authorized_operations =
-                    topic_authorized_operations;
+                rko->rko_err            = err;
+                rko->rko_u.metadata.md  = &mdi->metadata;
+                rko->rko_u.metadata.mdi = mdi;
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                 rko = NULL;
         } else {
-                if (md)
-                        rd_free(md);
+                if (mdi)
+                        rd_free(mdi);
         }
 
         goto done;
@@ -2166,10 +2159,9 @@ err:
                            rd_kafka_actions2str(actions));
                 /* Respond back to caller on non-retriable errors */
                 if (rko && rko->rko_replyq.q) {
-                        rko->rko_err                                    = err;
-                        rko->rko_u.metadata.md                          = NULL;
-                        rko->rko_u.metadata.topic_authorized_operations = NULL;
-                        rko->rko_u.metadata.cluster_authorized_operations = -1;
+                        rko->rko_err            = err;
+                        rko->rko_u.metadata.md  = NULL;
+                        rko->rko_u.metadata.mdi = NULL;
                         rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                         rko = NULL;
                 }
@@ -2204,6 +2196,8 @@ done:
  * @param include_topic_authorized_operations - request for topic authorized
  *                      operations.
  * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks - Force partition to rack mapping computation in
+ *                      parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
  *                    there is already a matching one in-transit.
@@ -2225,6 +2219,7 @@ rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                          rd_bool_t include_cluster_authorized_operations,
                          rd_bool_t include_topic_authorized_operations,
                          rd_bool_t cgrp_update,
+                         rd_bool_t force_racks,
                          rd_kafka_op_t *rko,
                          rd_kafka_resp_cb_t *resp_cb,
                          int force,
@@ -2248,6 +2243,7 @@ rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
 
         rkbuf->rkbuf_u.Metadata.reason      = rd_strdup(reason);
         rkbuf->rkbuf_u.Metadata.cgrp_update = cgrp_update;
+        rkbuf->rkbuf_u.Metadata.force_racks = force_racks;
 
         /* TopicArrayCnt */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);

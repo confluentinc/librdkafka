@@ -111,7 +111,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION 0x020100ff
+#define RD_KAFKA_VERSION 0x020101ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -1986,6 +1986,12 @@ class RD_EXPORT TopicPartition {
 
   /** @brief Set partition leader epoch. */
   virtual void set_leader_epoch(int32_t leader_epoch) = 0;
+
+  /** @brief Get partition metadata. */
+  virtual std::vector<unsigned char> get_metadata() = 0;
+
+  /** @brief Set partition metadata. */
+  virtual void set_metadata(std::vector<unsigned char> &metadata) = 0;
 };
 
 

@@ -31,21 +31,85 @@
 
 #include "rdavl.h"
 
+/**
+ * @brief Metadata partition internal container
+ */
+typedef struct rd_kafka_metadata_partition_internal_s {
+        /** Partition Id */
+        int32_t id;
+        /** Partition leader epoch */
+        int32_t leader_epoch;
+        /* Racks for this partition. Sorted and de-duplicated. */
+        char **racks;
+        /* Count of the racks */
+        size_t racks_cnt;
+} rd_kafka_metadata_partition_internal_t;
+
+/**
+ * @brief Metadata topic internal container
+ */
+typedef struct rd_kafka_metadata_topic_internal_s {
+        /** Internal metadata partition structs.
+         *  same count as metadata.topics[i].partition_cnt.
+         *  Sorted by Partition Id. */
+        rd_kafka_metadata_partition_internal_t *partitions;
+        /** Topic Name. */
+        char* topic_name;
+        int32_t *topic_authorized_operations; /**< ACL operations allowed
+                                                     for topic */
+} rd_kafka_metadata_topic_internal_t;
+
+
+/**
+ * @brief Metadata broker internal container
+ */
+typedef struct rd_kafka_metadata_broker_internal_s {
+        /** Broker Id. */
+        int32_t id;
+        /** Rack Id (optional). */
+        char *rack_id;
+} rd_kafka_metadata_broker_internal_t;
+
+/**
+ * @brief Metadata internal container
+ */
+typedef struct rd_kafka_metadata_internal_s {
+        rd_kafka_metadata_t
+            metadata; /**< Public metadata struct. Must
+                           be kept the first field so the pointer
+                           can be cast to *rd_kafka_metadata_internal_t
+                           when needed */
+        /* Internal metadata brokers. Same count as metadata.broker_cnt.
+         * Sorted by broker id. */
+        rd_kafka_metadata_broker_internal_t *brokers;
+        /* Internal metadata topics. Same count as metadata.topic_cnt. */
+        rd_kafka_metadata_topic_internal_t *topics;
+        char *cluster_id;       /**< current cluster id in \p cluster*/
+        int controller_id;      /**< current controller id in \p cluster*/
+        rd_list_t *cluster_authorized_operations; /**< ACL operations allowed
+                                                     for cluster */
+} rd_kafka_metadata_internal_t;
+
+/**
+ * @brief The internal metadata type corresponding to the
+ *        public one.
+ */
+#define rd_kafka_metadata_get_internal(md) ((rd_kafka_metadata_internal_t *)md)
+
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 
-rd_kafka_resp_err_t rd_kafka_parse_Metadata(
-    rd_kafka_broker_t *rkb,
-    rd_kafka_buf_t *request,
-    rd_kafka_buf_t *rkbuf,
-    struct rd_kafka_metadata **mdp,
-    rd_kafka_topic_authorized_operations_pair_t **topic_authorized_operations,
-    int32_t *cluster_authorized_operations,
-    rd_list_t *request_topics,
-    char **rk_cluster_id,
-    int *rk_controller_id);
+rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                                            rd_kafka_buf_t *request,
+                                            rd_kafka_buf_t *rkbuf,
+                                            rd_kafka_metadata_internal_t **mdp,
+                                            rd_list_t *request_topics);
 
-struct rd_kafka_metadata *
-rd_kafka_metadata_copy(const struct rd_kafka_metadata *md, size_t size);
+rd_kafka_metadata_internal_t *
+rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *mdi, size_t size);
+
+rd_kafka_metadata_internal_t *
+rd_kafka_metadata_copy_add_racks(const rd_kafka_metadata_internal_t *mdi,
+                                 size_t size);
 
 size_t
 rd_kafka_metadata_topic_match(rd_kafka_t *rk,
@@ -103,21 +167,37 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
 
 int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
+int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
+
+
+#define rd_kafka_metadata_broker_internal_find(mdi, broker_id, broker)         \
+        do {                                                                   \
+                rd_kafka_metadata_broker_internal_t __key = {.id = broker_id}; \
+                broker =                                                       \
+                    bsearch(&__key, mdi->brokers, mdi->metadata.broker_cnt,    \
+                            sizeof(rd_kafka_metadata_broker_internal_t),       \
+                            rd_kafka_metadata_broker_internal_cmp);            \
+        } while (0)
+
+
 rd_kafka_metadata_t *
 rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
-                                 size_t topic_cnt);
+                                 size_t topic_cnt,
+                                 int replication_factor,
+                                 int num_brokers);
 rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
+rd_kafka_metadata_t *rd_kafka_metadata_new_topic_with_partition_replicas_mockv(
+    int replication_factor,
+    int num_brokers,
+    size_t topic_cnt,
+    ...);
+rd_kafka_metadata_t *
+rd_kafka_metadata_new_topic_with_partition_replicas_mock(int replication_factor,
+                                                         int num_brokers,
+                                                         char *topic_names[],
+                                                         int *partition_cnts,
+                                                         size_t topic_cnt);
 
-/**
- * @{
- *
- * @brief Metadata topic name and authorized operations pair
- */
-
-typedef struct rd_kafka_topic_authorized_operations_pair {
-        char *topic_name;
-        int32_t authorized_operations;
-} rd_kafka_topic_authorized_operations_pair;
 /**
  * @{
  *
@@ -132,6 +212,8 @@ struct rd_kafka_metadata_cache_entry {
         /** Last known leader epochs array (same size as the partition count),
          *  or NULL if not known. */
         rd_kafka_metadata_topic_t rkmce_mtopic; /* Cached topic metadata */
+        /* Cached internal topic metadata */
+        rd_kafka_metadata_topic_internal_t rkmce_metadata_internal_topic;
         /* rkmce_topics.partitions memory points here. */
 };
 
@@ -174,12 +256,14 @@ struct rd_kafka_metadata_cache {
 
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
 int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
-void rd_kafka_metadata_cache_topic_update(rd_kafka_t *rk,
-                                          const rd_kafka_metadata_topic_t *mdt,
-                                          rd_bool_t propagate);
-void rd_kafka_metadata_cache_update(rd_kafka_t *rk,
-                                    const rd_kafka_metadata_t *md,
-                                    int abs_update);
+void rd_kafka_metadata_cache_topic_update(
+    rd_kafka_t *rk,
+    const rd_kafka_metadata_topic_t *mdt,
+    const rd_kafka_metadata_topic_internal_t *mdit,
+    rd_bool_t propagate,
+    rd_bool_t include_metadata,
+    rd_kafka_metadata_broker_internal_t *brokers,
+    size_t broker_cnt);
 void rd_kafka_metadata_cache_propagate_changes(rd_kafka_t *rk);
 struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_find(rd_kafka_t *rk, const char *topic, int valid);

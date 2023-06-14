@@ -375,6 +375,10 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
+        conf_set(conf, "sasl.username", "broker");
+        conf_set(conf, "sasl.password", "broker");
+        conf_set(conf, "sasl.mechanism", "SCRAM-SHA-256");
+        conf_set(conf, "security.protocol", "SASL_PLAINTEXT");
 
         /*
          * Parse common options

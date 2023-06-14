@@ -1410,8 +1410,8 @@ rd_kafka_resp_err_t rd_kafka_metadata_refresh_brokers(rd_kafka_t *rk,
         return rd_kafka_metadata_request(
             rk, rkb, NULL /*brokers only*/,
             rd_false /*!allow auto create topics*/,
-            rd_true /*include cluster authorized operations */,
-            rd_true /*include topic authorized operations */,
+            rd_false /*!include cluster authorized operations */,
+            rd_false /*!include topic authorized operations */,
             rd_false /*no cgrp update */, reason, NULL);
 }
 

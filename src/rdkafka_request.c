@@ -2090,8 +2090,6 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                                      void *opaque) {
         rd_kafka_op_t *rko                = opaque; /* Possibly NULL */
         rd_kafka_metadata_internal_t *mdi = NULL;
-        // rd_kafka_topic_authorized_operations_pair_t
-        //     *topic_authorized_operations = NULL;
         const rd_list_t *topics           = request->rkbuf_u.Metadata.topics;
         int actions;
 

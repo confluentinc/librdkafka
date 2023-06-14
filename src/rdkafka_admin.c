@@ -7092,7 +7092,6 @@ rd_kafka_admin_DescribeTopicsRequest(rd_kafka_broker_t *rkb,
                                      rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,
                                      void *opaque) {
-        int i;
         rd_kafka_resp_err_t err;
         int include_topic_authorized_operations;
 
@@ -7128,8 +7127,6 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_resp_err_t err;
         rd_list_t topics       = rko_req->rko_u.admin_request.args;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
-        rd_kafka_topic_authorized_operations_pair_t
-            *topic_authorized_operations = NULL;
         int i, cnt;
         rd_kafka_op_t *rko_result = NULL;
         // rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
@@ -7148,7 +7145,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         while (cnt--) {
                 rd_kafka_TopicDescription_t *topicdesc = NULL;
                 /* topics in md should be in the same order as in
-                 * topic_authorized_operations*/
+                 * mdi->topics[i]*/
                 rd_assert(strcmp(md->topics[i].topic,
                                  mdi->topics[i].topic_name) ==
                           0);
@@ -7496,12 +7493,9 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_ClusterDescription_t *clusterdesc = NULL;
         rd_list_t topics       = rko_req->rko_u.admin_request.args;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
-        rd_kafka_topic_authorized_operations_pair_t
-            *topic_authorized_operations = NULL;
         int32_t cluster_authorized_operations;
         char *cluster_id = NULL;
         int controller_id;
-        int i;
         rd_kafka_op_t *rko_result = NULL;
         // rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
         //                           thrd_is_current(rk->rk_thread));

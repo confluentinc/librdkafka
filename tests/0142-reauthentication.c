@@ -202,7 +202,7 @@ void do_test_txn_producer(int64_t reauth_time,
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "transactional.id", topic);
         test_conf_set(conf, "transaction.timeout.ms",
-                      tsprintf("%ld", (int64_t)(reauth_time * 1.2 + 2000)));
+                      tsprintf("%ld", (int64_t)(reauth_time * 1.2 + 60000)));
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);

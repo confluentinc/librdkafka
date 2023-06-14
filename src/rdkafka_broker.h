@@ -253,6 +253,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /** Absolute time of last connection attempt. */
         rd_ts_t rkb_ts_connect;
 
+        /** True if a reauthentication is in progress. */
+        rd_bool_t rkb_reauth_in_progress;
+
         /**< Persistent connection demand is tracked by
          *   a counter for each type of demand.
          *   The broker thread will maintain a persistent connection

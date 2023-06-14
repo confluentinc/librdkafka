@@ -573,6 +573,8 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 rkb->rkb_recv_buf = NULL;
         }
 
+        rkb->rkb_reauth_in_progress = rd_false;
+
         va_start(ap, fmt);
         rd_kafka_broker_set_error(rkb, level, err, fmt, ap);
         va_end(ap);
@@ -590,6 +592,11 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
         /* Set broker state */
         old_state = rkb->rkb_state;
         rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
+
+        /* Stop any pending reauth timer, since a teardown/reconnect will
+         * require a new timer. */
+        rd_kafka_timer_stop(&rkb->rkb_rk->rk_timers, &rkb->rkb_sasl_reauth_tmr,
+                            1 /*lock*/);
 
         /* Unlock broker since a requeue will try to lock it. */
         rd_kafka_broker_unlock(rkb);
@@ -2237,7 +2244,8 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
  */
 void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
 
-        rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
+        rkb->rkb_max_inflight       = rkb->rkb_rk->rk_conf.max_inflight;
+        rkb->rkb_reauth_in_progress = rd_false;
 
         rd_kafka_broker_lock(rkb);
         rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
@@ -4542,8 +4550,15 @@ static int rd_kafka_broker_thread_main(void *arg) {
                             rd_kafka_broker_addresses_exhausted(rkb))
                                 rd_kafka_broker_update_reconnect_backoff(
                                     rkb, &rkb->rkb_rk->rk_conf, rd_clock());
+                        /* If we haven't made progress from the last state, and
+                         * if we have exceeded
+                         * socket_connection_setup_timeout_ms, then error out.
+                         * Don't error out in case this is a reauth, for which
+                         * socket_connection_setup_timeout_ms is not
+                         * applicable. */
                         else if (
                             rkb->rkb_state == orig_state &&
+                            !rkb->rkb_reauth_in_progress &&
                             rd_clock() >=
                                 (rkb->rkb_ts_connect +
                                  (rd_ts_t)rk->rk_conf
@@ -4568,6 +4583,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
                          * state leaks unless we destroy it before the reauth.
                          */
                         rd_kafka_sasl_close(rkb->rkb_transport);
+
+                        rkb->rkb_reauth_in_progress = rd_true;
 
                         rd_kafka_broker_connect_auth(rkb);
                         break;
@@ -5891,12 +5908,18 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
  */
 void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
                                         int64_t connections_max_reauth_ms) {
-        /* Timer should not already be started in any case. */
-        rd_assert(!rd_kafka_timer_is_started(&rkb->rkb_rk->rk_timers,
-                                             &rkb->rkb_sasl_reauth_tmr));
-        if (connections_max_reauth_ms == 0) {
+        /* Timer should not already be started in any case. It indicates that
+         * we're about to schedule an extra reauth somehow. But this shouldn't
+         * be a cause for failure in production use cases. */
+        rd_dassert(!rd_kafka_timer_is_started(&rkb->rkb_rk->rk_timers,
+                                              &rkb->rkb_sasl_reauth_tmr));
+        if (rd_kafka_timer_is_started(&rkb->rkb_rk->rk_timers,
+                                      &rkb->rkb_sasl_reauth_tmr))
+                rd_kafka_timer_stop(&rkb->rkb_rk->rk_timers,
+                                    &rkb->rkb_sasl_reauth_tmr, 1 /*lock*/);
+
+        if (connections_max_reauth_ms == 0)
                 return;
-        }
 
         rd_kafka_timer_start_oneshot(
             &rkb->rkb_rk->rk_timers, &rkb->rkb_sasl_reauth_tmr, rd_false,

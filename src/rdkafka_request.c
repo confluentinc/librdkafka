@@ -2611,6 +2611,18 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
 
         rd_kafka_buf_read_bytes(rkbuf, &auth_data);
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 1) {
+                int64_t session_lifetime_ms;
+                rd_kafka_buf_read_i64(rkbuf, &session_lifetime_ms);
+
+                if (session_lifetime_ms)
+                        rd_kafka_dbg(
+                            rk, SECURITY, "REAUTH",
+                            "Received session lifetime %ld ms from broker",
+                            session_lifetime_ms);
+                rd_kafka_broker_start_reauth_timer(rkb, session_lifetime_ms);
+        }
+
         /* Pass SASL auth frame to SASL handler */
         if (rd_kafka_sasl_recv(rkb->rkb_transport, auth_data.data,
                                (size_t)RD_KAFKAP_BYTES_LEN(&auth_data), errstr,
@@ -2644,6 +2656,8 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                                       rd_kafka_resp_cb_t *resp_cb,
                                       void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        int features;
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslAuthenticate, 0, 0);
 
@@ -2657,6 +2671,10 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         /* There are no errors that can be retried, instead
          * close down the connection and reconnect on failure. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 1, &features);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (replyq.q)
                 rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb,

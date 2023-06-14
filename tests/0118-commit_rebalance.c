@@ -47,6 +47,27 @@ static void rebalance_cb(rd_kafka_t *rk,
                 TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
 
         } else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS) {
+                TEST_CALL_ERR__(rd_kafka_position(rk, parts));
+                TEST_CALL_ERR__(rd_kafka_commit(rk, parts, 0 /*sync*/));
+                TEST_CALL_ERR__(rd_kafka_assign(rk, NULL));
+        } else {
+                TEST_FAIL("Unhandled event: %s", rd_kafka_err2name(err));
+        }
+}
+
+
+static void rebalance_cb_wrong(rd_kafka_t *rk,
+                               rd_kafka_resp_err_t err,
+                               rd_kafka_topic_partition_list_t *parts,
+                               void *opaque) {
+
+        TEST_SAY("Rebalance for %s: %s: %d partition(s)\n", rd_kafka_name(rk),
+                 rd_kafka_err2name(err), parts->cnt);
+
+        if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
+                TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+
+        } else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS) {
                 rd_kafka_resp_err_t commit_err;
 
                 TEST_CALL_ERR__(rd_kafka_position(rk, parts));
@@ -82,11 +103,13 @@ static void rebalance_cb(rd_kafka_t *rk,
         }
 }
 
-
-int main_0118_commit_rebalance(int argc, char **argv) {
+static void do_test(rd_bool_t use_faulty_rebalance_cb) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
         const int msgcnt = 1000;
+
+        SUB_TEST("Check commit while rebalancing, commit %s assign.",
+                 use_faulty_rebalance_cb ? "after" : "before");
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
@@ -96,13 +119,15 @@ int main_0118_commit_rebalance(int argc, char **argv) {
         test_produce_msgs_easy_v(topic, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, 10,
                                  NULL);
 
-        c1 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
-                                  NULL);
-        c2 = test_create_consumer(topic, rebalance_cb, conf, NULL);
+        c1 = test_create_consumer(
+            topic, use_faulty_rebalance_cb ? rebalance_cb_wrong : rebalance_cb,
+            rd_kafka_conf_dup(conf), NULL);
+        c2 = test_create_consumer(
+            topic, use_faulty_rebalance_cb ? rebalance_cb_wrong : rebalance_cb,
+            conf, NULL);
 
         test_consumer_subscribe(c1, topic);
         test_consumer_subscribe(c2, topic);
-
 
         test_consumer_poll("C1.PRE", c1, 0, -1, -1, 10, NULL);
         test_consumer_poll("C2.PRE", c2, 0, -1, -1, 10, NULL);
@@ -111,11 +136,18 @@ int main_0118_commit_rebalance(int argc, char **argv) {
         test_consumer_close(c2);
         rd_kafka_destroy(c2);
 
-        /* Since no offsets were successfully committed the remaining consumer
-         * should be able to receive all messages. */
-        test_consumer_poll("C1.POST", c1, 0, -1, -1, msgcnt, NULL);
+        /* Since offsets were successfully committed the remaining consumer
+         * should be able to receive only the remaining messages. */
+        test_consumer_poll("C1.POST", c1, 0, -1, -1, msgcnt - 20, NULL);
 
         rd_kafka_destroy(c1);
 
+        SUB_TEST_PASS();
+}
+
+
+int main_0118_commit_rebalance(int argc, char **argv) {
+        do_test(rd_false);
+        do_test(rd_true);
         return 0;
 }

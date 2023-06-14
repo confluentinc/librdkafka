@@ -76,6 +76,7 @@ static void rd_kafka_sasl_scram_close(rd_kafka_transport_t *rktrans) {
         RD_IF_FREE(state->first_msg_bare.ptr, rd_free);
         RD_IF_FREE(state->ServerSignatureB64, rd_free);
         rd_free(state);
+        rktrans->rktrans_sasl.state = NULL;
 }
 
 

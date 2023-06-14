@@ -206,6 +206,11 @@ int rd_kafka_sasl_io_event(rd_kafka_transport_t *rktrans,
  * @remark May be called on non-SASL transports (no-op)
  */
 void rd_kafka_sasl_close(rd_kafka_transport_t *rktrans) {
+        /* The broker might not be up, and the transport might not exist in that
+         * case.*/
+        if (!rktrans)
+                return;
+
         const struct rd_kafka_sasl_provider *provider =
             rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.provider;
 

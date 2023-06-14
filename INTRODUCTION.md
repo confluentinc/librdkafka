@@ -1917,7 +1917,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-359 - Producer: use EpochLeaderId                                    | 2.4.0                       | Not supported                                                                                 |
 | KIP-360 - Improve handling of unknown Idempotent Producer                | 2.5.0                       | Supported                                                                                     |
 | KIP-361 - Consumer: add config to disable auto topic creation            | 2.3.0                       | Supported                                                                                     |
-| KIP-368 - SASL periodic reauth                                           | 2.2.0                       | Not supported                                                                                 |
+| KIP-368 - SASL periodic reauth                                           | 2.2.0                       | Supported                                                                                     |
 | KIP-369 - Always roundRobin partitioner                                  | 2.4.0                       | Not supported                                                                                 |
 | KIP-389 - Consumer group max size                                        | 2.2.0                       | Supported (error is propagated to application, but the consumer does not raise a fatal error) |
 | KIP-392 - Allow consumers to fetch from closest replica                  | 2.4.0                       | Supported                                                                                     |
@@ -1996,7 +1996,7 @@ release of librdkafka.
 | 28      | TxnOffsetCommit     | 3           | 3                       |
 | 32      | DescribeConfigs     | 4           | 1                       |
 | 33      | AlterConfigs        | 2           | 1                       |
-| 36      | SaslAuthenticate    | 2           | 0                       |
+| 36      | SaslAuthenticate    | 2           | 1                       |
 | 37      | CreatePartitions    | 3           | 0                       |
 | 42      | DeleteGroups        | 2           | 1                       |
 | 47      | OffsetDelete        | 0           | 0                       |

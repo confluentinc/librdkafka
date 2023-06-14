@@ -489,6 +489,7 @@ static void rd_kafka_sasl_cyrus_close(struct rd_kafka_transport_s *rktrans) {
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
         }
         rd_free(state);
+        rktrans->rktrans_sasl.state = NULL;
 }
 
 

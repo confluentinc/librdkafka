@@ -249,7 +249,7 @@ _TEST_DECL(0137_barrier_batch_consume);
 _TEST_DECL(0138_admin_mock);
 _TEST_DECL(0139_offset_validation_mock);
 _TEST_DECL(0140_commit_metadata);
-
+_TEST_DECL(0142_reauthentication);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -498,6 +498,8 @@ struct test tests[] = {
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0139_offset_validation_mock, 0),
     _TEST(0140_commit_metadata, 0),
+    _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
+
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -2319,7 +2321,7 @@ void test_produce_msgs_rate(rd_kafka_t *rk,
 
 /**
  * Create producer, produce \p msgcnt messages to \p topic \p partition,
- * destroy consumer, and returns the used testid.
+ * destroy producer, and returns the used testid.
  */
 uint64_t test_produce_msgs_easy_size(const char *topic,
                                      uint64_t testid,
@@ -5461,6 +5463,92 @@ int32_t *test_get_broker_ids(rd_kafka_t *use_rk, size_t *cntp) {
                 rd_kafka_destroy(rk);
 
         return ids;
+}
+
+/**
+ * @brief Get value of a config property from given broker id.
+ *
+ * @param rk Optional instance to use.
+ * @param broker_id Broker to query.
+ * @param key Entry key to query.
+ *
+ * @return an allocated char* which will be non-NULL if `key` is present
+ *         and there have been no errors.
+ */
+char *test_get_broker_config_entry(rd_kafka_t *use_rk,
+                                   int32_t broker_id,
+                                   const char *key) {
+        rd_kafka_t *rk;
+        char *entry_value = NULL;
+        char errstr[128];
+        rd_kafka_AdminOptions_t *options             = NULL;
+        rd_kafka_ConfigResource_t *config            = NULL;
+        rd_kafka_queue_t *queue                      = NULL;
+        const rd_kafka_DescribeConfigs_result_t *res = NULL;
+        size_t rconfig_cnt;
+        const rd_kafka_ConfigResource_t **rconfigs;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_ConfigEntry_t **entries;
+        size_t entry_cnt;
+        size_t j;
+        rd_kafka_event_t *rkev;
+
+        if (!(rk = use_rk))
+                rk = test_create_producer();
+
+        queue = rd_kafka_queue_new(rk);
+
+        config = rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_BROKER,
+                                             tsprintf("%" PRId32, broker_id));
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS);
+        err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
+                                                        sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+        rd_kafka_DescribeConfigs(rk, &config, 1, options, queue);
+        rd_kafka_ConfigResource_destroy(config);
+        rd_kafka_AdminOptions_destroy(options);
+
+        rkev = test_wait_admin_result(
+            queue, RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT, 10000);
+
+        res = rd_kafka_event_DescribeConfigs_result(rkev);
+        TEST_ASSERT(res, "expecting describe config results to be not NULL");
+
+        err = rd_kafka_event_error(rkev);
+        TEST_ASSERT(!err, "Expected success, not %s", rd_kafka_err2name(err));
+
+        rconfigs = rd_kafka_DescribeConfigs_result_resources(res, &rconfig_cnt);
+        TEST_ASSERT(rconfig_cnt == 1, "Expecting 1 resource, got %" PRIusz,
+                    rconfig_cnt);
+
+        err = rd_kafka_ConfigResource_error(rconfigs[0]);
+
+
+        entries = rd_kafka_ConfigResource_configs(rconfigs[0], &entry_cnt);
+
+        for (j = 0; j < entry_cnt; ++j) {
+                const rd_kafka_ConfigEntry_t *e = entries[j];
+                const char *cname               = rd_kafka_ConfigEntry_name(e);
+
+                if (!strcmp(cname, key)) {
+                        const char *val = rd_kafka_ConfigEntry_value(e);
+
+                        if (val) {
+                                entry_value = rd_strdup(val);
+                                break;
+                        }
+                }
+        }
+
+        rd_kafka_event_destroy(rkev);
+        rd_kafka_queue_destroy(queue);
+
+        if (!use_rk)
+                rd_kafka_destroy(rk);
+
+        return entry_value;
 }
 
 

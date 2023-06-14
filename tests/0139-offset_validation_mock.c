@@ -138,6 +138,80 @@ static void do_test_no_duplicates_during_offset_validation(void) {
         SUB_TEST_PASS();
 }
 
+
+/**
+ * @brief Test that an SSL error doesn't cause an offset reset.
+ *        See issue #4293.
+ */
+static void do_test_ssl_error_retried(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        const char *bootstraps;
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const char *c1_groupid = topic;
+        rd_kafka_t *c1;
+        rd_kafka_topic_partition_list_t *rktpars;
+        rd_kafka_topic_partition_t *rktpar;
+        int msg_count   = 5;
+        uint64_t testid = test_id_generate();
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_count, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "1", NULL);
+
+        /* Make OffsetForLeaderEpoch fail with the _SSL error */
+        rd_kafka_mock_push_request_errors(mcluster,
+                                          RD_KAFKAP_OffsetForLeaderEpoch, 1,
+                                          RD_KAFKA_RESP_ERR__SSL);
+
+        test_conf_init(&conf, NULL, 60);
+
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
+        test_conf_set(conf, "auto.offset.reset", "latest");
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "enable.auto.offset.store", "false");
+        test_conf_set(conf, "enable.partition.eof", "true");
+
+        c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
+        test_consumer_subscribe(c1, topic);
+
+        /* EOF because of reset to latest */
+        test_consumer_poll("MSG_EOF", c1, testid, 1, 0, 0, NULL);
+
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        /* Seek to 0 for validating the offset. */
+        rktpars        = rd_kafka_topic_partition_list_new(1);
+        rktpar         = rd_kafka_topic_partition_list_add(rktpars, topic, 0);
+        rktpar->offset = 0;
+
+        /* Will validate the offset at start fetching again
+         * from offset 0. */
+        rd_kafka_topic_partition_set_leader_epoch(rktpar, 0);
+        rd_kafka_seek_partitions(c1, rktpars, -1);
+        rd_kafka_topic_partition_list_destroy(rktpars);
+
+        /* Read all messages after seek to zero.
+         * In case of permanent error instead it reset to latest and
+         * gets an EOF. */
+        test_consumer_poll("MSG_ALL", c1, testid, 0, 0, 5, NULL);
+
+        rd_kafka_destroy(c1);
+
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+}
+
+
 int main_0139_offset_validation_mock(int argc, char **argv) {
 
         if (test_needs_auth()) {
@@ -146,6 +220,8 @@ int main_0139_offset_validation_mock(int argc, char **argv) {
         }
 
         do_test_no_duplicates_during_offset_validation();
+
+        do_test_ssl_error_retried();
 
         return 0;
 }

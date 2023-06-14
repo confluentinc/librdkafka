@@ -5908,11 +5908,9 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
  */
 void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
                                         int64_t connections_max_reauth_ms) {
-        /* Timer should not already be started in any case. It indicates that
-         * we're about to schedule an extra reauth somehow. But this shouldn't
-         * be a cause for failure in production use cases. */
-        rd_dassert(!rd_kafka_timer_is_started(&rkb->rkb_rk->rk_timers,
-                                              &rkb->rkb_sasl_reauth_tmr));
+        /* Timer should not already be started. It indicates that we're about to
+         * schedule an extra reauth, but this shouldn't be a cause for failure
+         * in production use cases, so, clear the timer. */
         if (rd_kafka_timer_is_started(&rkb->rkb_rk->rk_timers,
                                       &rkb->rkb_sasl_reauth_tmr))
                 rd_kafka_timer_stop(&rkb->rkb_rk->rk_timers,

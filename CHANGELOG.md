@@ -15,6 +15,8 @@ librdkafka v2.2.0 is a feature release:
  * [KIP-368](https://cwiki.apache.org/confluence/display/KAFKA/KIP-368%3A+Allow+SASL+Connections+to+Periodically+Re-Authenticate):
    Allow SASL Connections to Periodically Re-Authenticate
    (#4301, started by @vctoriawu).
+ * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
+   closes as normal ones (#4294).
 
 
 ## Fixes
@@ -26,6 +28,15 @@ librdkafka v2.2.0 is a feature release:
    when using Confluent Platform, only when racks are set,
    observers are activated and there is more than one partition.
    Fixed by skipping the correct amount of bytes when tags are received.
+ * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
+   closes as normal ones. When SSL connections are closed without `close_notify`,
+   in OpenSSL 3.x a new type of error is set and it was interpreted as permanent
+   in librdkafka. It can cause a different issue depending on the RPC.
+   If received when waiting for OffsetForLeaderEpoch response, it triggers
+   an offset reset following the configured policy.
+   Solved by treating SSL errors as transport errors and
+   by setting an OpenSSL flag that allows to treat unclean SSL closes as normal
+   ones. These types of errors can happen it the other side doesn't support `close_notify` or if there's a TCP connection reset.
 
 
 ### Consumer fixes

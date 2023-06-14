@@ -74,7 +74,7 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
                     'conf': [
                         'broker.rack=RACK${appid}',
                         'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector'] + curr_conf})  # noqa: E501
-            print(defconf)
+            print('conf broker', str(n), ': ', defconf)
         brokers.append(KafkaBrokerApp(cluster, defconf))
 
     cmd_env = os.environ.copy()

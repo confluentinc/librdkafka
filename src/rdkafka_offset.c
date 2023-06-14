@@ -998,10 +998,8 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                             &rk->rk_timers, &rktp->rktp_validate_tmr, rd_false,
                             500 * 1000 /* 500ms */,
                             rd_kafka_offset_validate_tmr_cb, rktp);
-                        goto done;
-                }
 
-                if (!(actions & RD_KAFKA_ERR_ACTION_REFRESH)) {
+                } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
                         /* Permanent error */
                         rd_kafka_offset_reset(
                             rktp, rd_kafka_broker_id(rkb),

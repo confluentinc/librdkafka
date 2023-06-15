@@ -17,6 +17,19 @@ librdkafka v2.2.0 is a feature release:
    (#4301, started by @vctoriawu).
  * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
    closes as normal ones (#4294).
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
+
+
+## Enhancements
+
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off next fetch attempt. When the pre-fetch queue
+   has exceeded its queuing thresholds: `queued.min.messages` and
+   `queued.max.messages.kbytes` it backs off for 1 seconds.
+   If those parameters have to be set too high to hold 1 s of data,
+   this new parameter allows to back off the fetch earlier, reducing memory
+   requirements.
 
 
 ## Fixes
@@ -50,6 +63,7 @@ librdkafka v2.2.0 is a feature release:
     handle this, but it was non-functional, and did not have parity with the
     Java assignor. Fixed by invalidating any such partition from the current
     assignment completely.
+
 
 
 # librdkafka v2.1.1
@@ -89,6 +103,7 @@ librdkafka v2.1.1 is a maintenance release:
    but it is possible for the user to obtain the queue with messages from
    the broker, skipping these functions. This was fixed by encoding information
    in a queue itself, that, whether polling, resets the timer.
+
 
 
 # librdkafka v2.1.0

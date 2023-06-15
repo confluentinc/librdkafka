@@ -722,14 +722,6 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
-
-                /* Sort partitions by partition id */
-                qsort(md->topics[i].partitions, md->topics[i].partition_cnt,
-                      sizeof(*md->topics[i].partitions),
-                      rd_kafka_metadata_partition_id_cmp);
-                qsort(mdi->topics[i].partitions, md->topics[i].partition_cnt,
-                      sizeof(*mdi->topics[i].partitions),
-                      rd_kafka_metadata_partition_internal_cmp);
         }
 
         if (ApiVersion >= 8 && ApiVersion <= 10) {
@@ -773,6 +765,14 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                    md->topics[i].topic);
                         continue;
                 }
+
+                /* Sort partitions by partition id */
+                qsort(md->topics[i].partitions, md->topics[i].partition_cnt,
+                      sizeof(*md->topics[i].partitions),
+                      rd_kafka_metadata_partition_id_cmp);
+                qsort(mdi->topics[i].partitions, md->topics[i].partition_cnt,
+                      sizeof(*mdi->topics[i].partitions),
+                      rd_kafka_metadata_partition_internal_cmp);
 
                 if (compute_racks)
                         rd_kafka_populate_metadata_topic_racks(&tbuf, i, mdi);

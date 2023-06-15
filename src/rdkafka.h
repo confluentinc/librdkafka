@@ -8065,12 +8065,17 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_include_topic_authorized_operations(
  * @{
  */
 
+
+/**
+ * @brief DescribeCluster result type.
+ */
 typedef struct rd_kafka_ClusterDescription_s rd_kafka_ClusterDescription_t;
 
 /**
  * @brief Gets the node for the \p clusterdesc cluster at idx position.
  *
  * @param clusterdesc The cluster description.
+ * @param idx the index at which to return the node.
  *
  * @return The node at idx position.
  *

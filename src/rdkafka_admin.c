@@ -230,12 +230,11 @@ static const char *rd_kafka_admin_state_desc[] = {
  * @enum Admin request target broker. Must be negative values since the field
  *       used is broker_id.
  */
-enum {
-        RD_KAFKA_ADMIN_TARGET_CONTROLLER  = -1, /**< Cluster controller */
-        RD_KAFKA_ADMIN_TARGET_COORDINATOR = -2, /**< (Group) Coordinator */
-        RD_KAFKA_ADMIN_TARGET_FANOUT      = -3, /**< This rko is a fanout and
-                                                 *   and has no target broker */
-        RD_KAFKA_ADMIN_TARGET_ALL = -4,         /**< All available brokers */
+enum { RD_KAFKA_ADMIN_TARGET_CONTROLLER  = -1, /**< Cluster controller */
+       RD_KAFKA_ADMIN_TARGET_COORDINATOR = -2, /**< (Group) Coordinator */
+       RD_KAFKA_ADMIN_TARGET_FANOUT      = -3, /**< This rko is a fanout and
+                                                *   and has no target broker */
+       RD_KAFKA_ADMIN_TARGET_ALL = -4,         /**< All available brokers */
 };
 
 /**
@@ -7100,10 +7099,10 @@ rd_kafka_admin_DescribeTopicsRequest(rd_kafka_broker_t *rkb,
         /* resp_cb = rd_kafka_admin_handle_response; */
 
         // error = Call metadata request
-        err = rd_kafka_MetadataRequest(rkb, topics, "describe topics", rd_false,
-                                       rd_false,
-                                       include_topic_authorized_operations,
-                                       rd_false, rd_false, NULL, resp_cb, 0, opaque);
+        err = rd_kafka_MetadataRequest(
+            rkb, topics, "describe topics", rd_false, rd_false,
+            include_topic_authorized_operations, rd_false, rd_false, NULL,
+            resp_cb, 0, opaque);
 
         if (err) {
                 rd_snprintf(errstr, errstr_size, "%s", rd_kafka_err2str(err));
@@ -7123,7 +7122,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                                       char *errstr,
                                       size_t errstr_size) {
         rd_kafka_metadata_internal_t *mdi = NULL;
-        struct rd_kafka_metadata *md = NULL;
+        struct rd_kafka_metadata *md      = NULL;
         rd_kafka_resp_err_t err;
         rd_list_t topics       = rko_req->rko_u.admin_request.args;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
@@ -7137,7 +7136,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         if (err)
                 goto err;
         rko_result = rd_kafka_admin_result_new(rko_req);
-        md = &mdi->metadata;
+        md         = &mdi->metadata;
         rd_list_init(&rko_result->rko_u.admin_result.results, md->topic_cnt,
                      rd_kafka_TopicDescription_free);
         cnt = md->topic_cnt;
@@ -7147,8 +7146,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                 /* topics in md should be in the same order as in
                  * mdi->topics[i]*/
                 rd_assert(strcmp(md->topics[i].topic,
-                                 mdi->topics[i].topic_name) ==
-                          0);
+                                 mdi->topics[i].topic_name) == 0);
                 if (md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                         rd_list_t *authorized_operations;
                         authorized_operations =
@@ -7464,13 +7462,12 @@ rd_kafka_admin_DescribeClusterRequest(rd_kafka_broker_t *rkb,
         /* resp_cb = rd_kafka_admin_handle_response; */
 
         // err = Call metadata request with NULL topics
-        err = rd_kafka_MetadataRequest(rkb, NULL, "describe cluster", 
-                                       rd_false /*no auto create*/,
-                                       include_cluster_authorized_operations,
-                                       rd_false /*!include topic authorized operations */,
-                                       rd_false /*cgrp update*/, 
-                                       rd_false /* force_rack */, 
-                                       NULL, resp_cb, 1, opaque);
+        err = rd_kafka_MetadataRequest(
+            rkb, NULL, "describe cluster", rd_false /*no auto create*/,
+            include_cluster_authorized_operations,
+            rd_false /*!include topic authorized operations */,
+            rd_false /*cgrp update*/, rd_false /* force_rack */, NULL, resp_cb,
+            1, opaque);
 
         if (err) {
                 rd_snprintf(errstr, errstr_size, "%s", rd_kafka_err2str(err));
@@ -7501,9 +7498,9 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
         //                           thrd_is_current(rk->rk_thread));
         // rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY);
 
-        err = rd_kafka_parse_Metadata(rkb, NULL, reply, &mdi, &topics);
+        err        = rd_kafka_parse_Metadata(rkb, NULL, reply, &mdi, &topics);
         cluster_id = mdi->cluster_id;
-        controller_id = mdi->controller_id;
+        controller_id                 = mdi->controller_id;
         cluster_authorized_operations = mdi->cluster_authorized_operations;
         if (err)
                 goto err;

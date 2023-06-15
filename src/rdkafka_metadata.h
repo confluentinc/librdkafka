@@ -54,7 +54,7 @@ typedef struct rd_kafka_metadata_topic_internal_s {
          *  Sorted by Partition Id. */
         rd_kafka_metadata_partition_internal_t *partitions;
         /** Topic Name. */
-        char* topic_name;
+        char *topic_name;
         int32_t topic_authorized_operations; /**< ACL operations allowed
                                                      for topic */
 } rd_kafka_metadata_topic_internal_t;
@@ -84,8 +84,8 @@ typedef struct rd_kafka_metadata_internal_s {
         rd_kafka_metadata_broker_internal_t *brokers;
         /* Internal metadata topics. Same count as metadata.topic_cnt. */
         rd_kafka_metadata_topic_internal_t *topics;
-        char *cluster_id;       /**< current cluster id in \p cluster*/
-        int controller_id;      /**< current controller id in \p cluster*/
+        char *cluster_id;  /**< current cluster id in \p cluster*/
+        int controller_id; /**< current controller id in \p cluster*/
         int32_t cluster_authorized_operations; /**< ACL operations allowed
                                                      for cluster */
 } rd_kafka_metadata_internal_t;

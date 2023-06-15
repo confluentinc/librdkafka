@@ -12,6 +12,9 @@ librdkafka v2.2.0 is a feature release:
    (#4184, #4291, #4252).
  * Fix several bugs with sticky assignor in case of partition ownership
    changing between members of the consumer group (#4252).
+ * [KIP-368](https://cwiki.apache.org/confluence/display/KAFKA/KIP-368%3A+Allow+SASL+Connections+to+Periodically+Re-Authenticate):
+   Allow SASL Connections to Periodically Re-Authenticate
+   (#4301, started by @vctoriawu).
  * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
    closes as normal ones (#4294).
 

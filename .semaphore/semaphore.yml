@@ -105,6 +105,9 @@ blocks:
       agent:
         machine:
           type: s1-prod-ubuntu20-04-amd64-2
+      env_vars:
+        - name: CFLAGS
+          value: -std=gnu90 # Test minimum C standard, default in CentOS 7
       jobs:
         - name: 'Build and integration tests'
           commands:

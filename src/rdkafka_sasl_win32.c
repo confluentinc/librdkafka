@@ -490,6 +490,7 @@ static void rd_kafka_sasl_win32_close(rd_kafka_transport_t *rktrans) {
                 rd_free(state->cred);
         }
         rd_free(state);
+        rktrans->rktrans_sasl.state = NULL;
 }
 
 

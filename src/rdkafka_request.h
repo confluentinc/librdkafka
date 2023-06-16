@@ -287,6 +287,7 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
                                       rd_kafka_buf_t *rkbuf,
                                       rd_kafka_buf_t *request,
                                       void *opaque);
+
 void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                                       const void *buf,
                                       size_t size,

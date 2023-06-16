@@ -118,6 +118,7 @@ set(
     0124-openssl_invalid_engine.c
     0125-immediate_flush.c
     0126-oauthbearer_oidc.c
+    0127-fetch_queue_backoff.cpp
     0128-sasl_callback_queue.cpp
     0129-fetch_aborted_msgs.c
     0130-store_offsets.c

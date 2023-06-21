@@ -7527,7 +7527,7 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
  *          Possible error codes:
  *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_alter_config(
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_set_incremental_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     rd_kafka_AlterConfigOpType_t op_type,

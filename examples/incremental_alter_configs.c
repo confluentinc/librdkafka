@@ -215,7 +215,7 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                               alter_op_type_s);
                 }
 
-                error = rd_kafka_ConfigResource_incremental_alter_config(
+                error = rd_kafka_ConfigResource_set_incremental_config(
                     config, config_name, op_type, config_value);
 
                 if (error) {

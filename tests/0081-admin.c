@@ -936,12 +936,12 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        error = rd_kafka_ConfigResource_incremental_alter_config(
+        error = rd_kafka_ConfigResource_set_incremental_config(
             configs[ci], "compression.type", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
             "gzip");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
-        error = rd_kafka_ConfigResource_incremental_alter_config(
+        error = rd_kafka_ConfigResource_set_incremental_config(
             configs[ci], "flush.ms", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
             "12345678");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
@@ -958,7 +958,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                     RD_KAFKA_RESOURCE_BROKER,
                     tsprintf("%" PRId32, avail_brokers[0]));
 
-                error = rd_kafka_ConfigResource_incremental_alter_config(
+                error = rd_kafka_ConfigResource_set_incremental_config(
                     configs[ci], "sasl.kerberos.min.time.before.relogin",
                     RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "58000");
                 TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
@@ -977,12 +977,12 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        error = rd_kafka_ConfigResource_incremental_alter_config(
+        error = rd_kafka_ConfigResource_set_incremental_config(
             configs[ci], "compression.type", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
             "lz4");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
-        error = rd_kafka_ConfigResource_incremental_alter_config(
+        error = rd_kafka_ConfigResource_set_incremental_config(
             configs[ci], "offset.metadata.max.bytes",
             RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "12345");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));

@@ -7435,6 +7435,15 @@ typedef enum rd_kafka_ResourcePatternType_t {
         RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT,
 } rd_kafka_ResourcePatternType_t;
 
+/* KIP-339 */
+typedef enum rd_kafka_AlterConfigOpType_t {
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET      = 0,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_DELETE   = 1,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_APPEND   = 2,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_SUBTRACT = 3,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE__CNT,
+} rd_kafka_AlterConfigOpType_t;
+
 /**
  * @returns a string representation of the \p resource_pattern_type
  */
@@ -7501,90 +7510,28 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
 
 
 /**
- * @brief Set the value of the configuration entry.
+ * @brief Set the value of the configuration entry for a subsequent
+ *        incremental alter config operation. APPEND and SUBTRACT are
+ *        possible for list-type configuration entries only.
  *
  * @param config ConfigResource to set config property on.
  * @param name Configuration name, depends on resource type.
+ * @param op_type Operation type, one of rd_kafka_AlterConfigOpType_t.
  * @param value Configuration value, depends on resource type and \p name.
- *              Set to \c NULL or use
- *              rd_kafka_ConfigResource_incremental_delete_config
+ *              Set to \c NULL, only with with op_type set to DELETE,
  *              to revert configuration value to default.
  *
- * This will overwrite the current value.
- *
  * @returns NULL on success, or an rd_kafka_error_t *
  *          with the corresponding error code and string.
  *          Error ownership belongs to the caller.
  *          Possible error codes:
  *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_set_config(
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_alter_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
+    rd_kafka_AlterConfigOpType_t op_type,
     const char *value);
-
-
-/**
- * @brief (For list-type configuration entries only) Add the specified
- *        values to the current configuration entry list.
- *
- * @param config ConfigResource to append config properties on.
- * @param name Configuration name, depends on resource type.
- * @param value Configuration values, depends on resource type and \p name.
- *
- * This will append to the current list.
- *
- * @returns NULL on success, or an rd_kafka_error_t *
- *          with the corresponding error code and string.
- *          Error ownership belongs to the caller.
- *          Possible error codes:
- *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
- */
-RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_append_config(
-    rd_kafka_ConfigResource_t *config,
-    const char *name,
-    const char *value);
-
-
-/**
- * @brief (For list-type configuration entries only) Removes the specified
- *        values from the current configuration entry list.
- *
- * @param config ConfigResource to set config property on.
- * @param name Configuration name, depends on resource type.
- * @param value Configuration values, depends on resource type and \p name.
- *
- * This will subtract from the current list.
- *
- * @returns NULL on success, or an rd_kafka_error_t *
- *          with the corresponding error code and string.
- *          Error ownership belongs to the caller.
- *          Possible error codes:
- *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
- */
-RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_subtract_config(
-    rd_kafka_ConfigResource_t *config,
-    const char *name,
-    const char *value);
-
-
-/**
- * @brief Revert the configuration entry to the default value (possibly NULL).
- *
- * @param config ConfigResource to set config property on.
- * @param name Configuration name, depends on resource type.
- *
- * This will set the value to default (possibly NULL).
- *
- * @returns NULL on success, or an rd_kafka_error_t *
- *          with the corresponding error code and string.
- *          Error ownership belongs to the caller.
- *          Possible error codes:
- *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
- */
-RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_incremental_delete_config(
-    rd_kafka_ConfigResource_t *config,
-    const char *name);
 
 
 /**

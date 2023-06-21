@@ -181,6 +181,7 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                 char *config_name     = argv[i * 5 + 3];
                 char *config_value    = argv[i * 5 + 4];
                 rd_kafka_ConfigResource_t *config;
+                rd_kafka_AlterConfigOpType_t op_type;
                 rd_kafka_ResourceType_t restype =
                     !strcmp(restype_s, "TOPIC")
                         ? RD_KAFKA_RESOURCE_TOPIC
@@ -202,24 +203,20 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                 prev_resname = resname;
 
                 if (!strcmp(alter_op_type_s, "SET")) {
-                        error = rd_kafka_ConfigResource_incremental_set_config(
-                            config, config_name, config_value);
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET;
                 } else if (!strcmp(alter_op_type_s, "APPEND")) {
-                        error =
-                            rd_kafka_ConfigResource_incremental_append_config(
-                                config, config_name, config_value);
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_APPEND;
                 } else if (!strcmp(alter_op_type_s, "SUBTRACT")) {
-                        error =
-                            rd_kafka_ConfigResource_incremental_subtract_config(
-                                config, config_name, config_value);
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_SUBTRACT;
                 } else if (!strcmp(alter_op_type_s, "DELETE")) {
-                        error =
-                            rd_kafka_ConfigResource_incremental_delete_config(
-                                config, config_name);
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_DELETE;
                 } else {
                         usage("Invalid alter config operation: %s",
                               alter_op_type_s);
                 }
+
+                error = rd_kafka_ConfigResource_incremental_alter_config(
+                    config, config_name, op_type, config_value);
 
                 if (error) {
                         usage(

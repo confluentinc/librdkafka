@@ -197,14 +197,6 @@ typedef enum rd_kafka_AlterOperation_t {
         RD_KAFKA_ALTER_OP_DELETE = 2,
 } rd_kafka_AlterOperation_t;
 
-/* KIP-339 */
-typedef enum rd_kafka_IncrementalAlterOperation_t {
-        RD_KAFKA_INCREMENTAL_ALTER_OP_SET      = 0,
-        RD_KAFKA_INCREMENTAL_ALTER_OP_DELETE   = 1,
-        RD_KAFKA_INCREMENTAL_ALTER_OP_APPEND   = 2,
-        RD_KAFKA_INCREMENTAL_ALTER_OP_SUBTRACT = 3,
-} rd_kafka_IncrementalAlterOperation_t;
-
 struct rd_kafka_ConfigEntry_s {
         rd_strtup_t *kv; /**< Name/Value pair */
 
@@ -213,7 +205,7 @@ struct rd_kafka_ConfigEntry_s {
         /* Attributes: this is a struct for easy copying */
         struct {
                 rd_kafka_AlterOperation_t operation; /**< Operation */
-                rd_kafka_IncrementalAlterOperation_t
+                rd_kafka_AlterConfigOpType_t
                     incremental_operation;      /**< IncrementalOperation */
                 rd_kafka_ConfigSource_t source; /**< Config source */
                 rd_bool_t is_readonly;  /**< Value is read-only (on broker) */

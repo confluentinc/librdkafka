@@ -6554,8 +6554,9 @@ test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
         /* Apply all existing configuration entries to resource object that
          * will later be passed to IncrementalAlterConfigs. */
         for (i = 0; i < configent_cnt; i++) {
-                error = rd_kafka_ConfigResource_incremental_set_config(
+                error = rd_kafka_ConfigResource_incremental_alter_config(
                     confres, rd_kafka_ConfigEntry_name(configents[i]),
+                    RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
                     rd_kafka_ConfigEntry_value(configents[i]));
                 TEST_ASSERT(!error,
                             "Failed to set read-back config %s=%s "
@@ -6568,8 +6569,9 @@ test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
 
         /* Then apply the configuration to change. */
         for (i = 0; i < config_cnt; i += 2) {
-                error = rd_kafka_ConfigResource_incremental_set_config(
-                    confres, configs[i], configs[i + 1]);
+                error = rd_kafka_ConfigResource_incremental_alter_config(
+                    confres, configs[i], RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
+                    configs[i + 1]);
                 TEST_ASSERT(!error,
                             "Failed to set config %s=%s on "
                             "local resource object",

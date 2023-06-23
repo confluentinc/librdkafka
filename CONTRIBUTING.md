@@ -250,15 +250,21 @@ E.g.:
 *Note: The code format style is enforced by our clang-format and pep8 rules,
 so that is not covered here.*
 
-## C standard "C98"
+## Minimum C standard: "gnu90"
 
-This is a mix of C89 and C99, to be compatible with old MSVC versions.
+This is the GCC default before 5.1.0, present in CentOS 7, [still supported](https://docs.confluent.io/platform/current/installation/versions-interoperability.html#operating-systems)
+up to its EOL in 2024.
 
-Notable, it is C99 with the following limitations:
+To test it, configure with GCC and `CFLAGS="-std=gnu90"`.
 
- * No variable declarations after statements.
+It has the following notable limitations:
+
  * No in-line variable declarations.
 
+**Note**: the "No variable declarations after
+  statements" (-Wdeclaration-after-statement) requirement has been dropped.
+  Visual Studio 2012, the last version not implementing C99, has reached EOL,
+  and there were violations already.
 
 ## Function and globals naming
 

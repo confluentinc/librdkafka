@@ -34,7 +34,7 @@
  * file. Decoding it with the correct password or not.
  *
  * Ensures it's read correctly on Windows too.
- * See https://github.com/edenhill/librdkafka/issues/3992
+ * See https://github.com/confluentinc/librdkafka/issues/3992
  */
 static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
 #define TEST_FIXTURES_FOLDER            "./fixtures"

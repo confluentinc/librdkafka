@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2022 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -897,11 +897,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Java TrustStores are not supported, use `ssl.ca.location` "
      "and a certificate file instead. "
      "See "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SSL-with-librdkafka "
      "for more information."},
     {_RK_GLOBAL, "sasl.jaas.config", _RK_C_INVALID, _RK(dummy),
      "Java JAAS configuration is not supported, see "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SASL-with-librdkafka "
      "for more information."},
 
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanisms", _RK_C_STR, _RK(sasl.mechanisms),

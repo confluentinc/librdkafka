@@ -27,5 +27,5 @@ fi
 set -eu
 
 brew bump-formula-pr $DRY_RUN --strict \
-     --url=https://github.com/edenhill/librdkafka/archive/${TAG}.tar.gz \
+     --url=https://github.com/confluentinc/librdkafka/archive/${TAG}.tar.gz \
      librdkafka

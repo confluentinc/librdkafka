@@ -27,6 +27,12 @@ The finalized nuget package maybe uploaded manually to NuGet.org
 
 2. Wait for CI builds to finish, monitor the builds here:
 
+ New builds
+
+ * https://confluentinc.semaphoreci.com/projects/librdkafka
+
+ Previous builds
+
  * https://travis-ci.org/edenhill/librdkafka
  * https://ci.appveyor.com/project/edenhill/librdkafka
 

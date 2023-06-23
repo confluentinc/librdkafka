@@ -4,7 +4,7 @@
 mkl_meta_set "description" "name"      "librdkafka"
 mkl_meta_set "description" "oneline"   "The Apache Kafka C/C++ library"
 mkl_meta_set "description" "long"      "Full Apache Kafka protocol support, including producer and consumer"
-mkl_meta_set "description" "copyright" "Copyright (c) 2012-2019 Magnus Edenhill"
+mkl_meta_set "description" "copyright" "Copyright (c) 2012-2022, Magnus Edenhill, 2023, Confluent Inc."
 
 # Enable generation of pkg-config .pc file
 mkl_mkvar_set "" GEN_PKG_CONFIG y

@@ -148,9 +148,9 @@ print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
         desc = rd_kafka_DescribeCluster_result_description(clusterdesc);
 
         controller_id = rd_kafka_ClusterDescription_controller_id(desc);
-        node_cnt      = rd_kafka_ClusterDescription_node_cnt(desc);
+        node_cnt      = rd_kafka_ClusterDescription_node_count(desc);
         cluster_authorized_operations_cnt =
-            rd_kafka_ClusterDescription_cluster_acl_operations_cnt(desc);
+            rd_kafka_ClusterDescription_cluster_authorized_operation_count(desc);
         cluster_id = rd_kafka_ClusterDescription_cluster_id(desc);
 
         printf(
@@ -159,7 +159,7 @@ print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
             cluster_id, controller_id, cluster_authorized_operations_cnt);
         for (j = 0; j < cluster_authorized_operations_cnt; j++) {
                 acl_operation =
-                    rd_kafka_ClusterDescription_authorized_operation_idx(desc,
+                    rd_kafka_ClusterDescription_authorized_operation(desc,
                                                                          j);
                 printf("\t%s operation is allowed\n",
                        rd_kafka_AclOperation_name(acl_operation));
@@ -167,7 +167,7 @@ print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
 
         for (j = 0; j < node_cnt; j++) {
                 const rd_kafka_Node_t *node = NULL;
-                node = rd_kafka_ClusterDescription_node_idx(desc, j);
+                node = rd_kafka_ClusterDescription_node(desc, j);
                 printf("Node [id: %" PRId32
                        ", host: %s"
                        ", port: %" PRIu16 "]\n",

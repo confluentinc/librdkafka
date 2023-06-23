@@ -6976,6 +6976,41 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
     size_t consumer_group_states_cnt);
 
 /**
+ * @brief Whether broker should return cluster authorized operations
+ *        (DescribeCluster).
+ *
+ * @param options Admin options.
+ * @param true_or_false Defaults to false.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for DescribeCluster.
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
+    rd_kafka_AdminOptions_t *options,
+    int true_or_false);
+
+/**
+ * @brief Whether broker should return topic authorized operations
+ *        (DescribeTopics).
+ *
+ * @param options Admin options.
+ * @param true_or_false Defaults to false.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for DescribeTopics.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_include_topic_authorized_operations(
+    rd_kafka_AdminOptions_t *options,
+    int true_or_false);
+
+/**
  * @brief Set application opaque value that can be extracted from the
  *        result event using rd_kafka_event_opaque()
  */
@@ -7794,18 +7829,6 @@ rd_kafka_DeleteRecords_result_offsets(
  * @name Admin API - DescribeTopic
  * @{
  */
-/**
- * @brief Describe a topic and the authorized acl operations
- *
- * @param rk Client instance.
- * @param topics Topic names
- * @param topics_cnt Count of topics sent in topic names.
- * @param options Optional admin options, or NULL for defaults.
- * @param rkqu Queue to emit result on.
- *
- * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT
- */
 
 /**
  * @brief DescribeTopics result type.
@@ -7814,145 +7837,157 @@ rd_kafka_DeleteRecords_result_offsets(
 typedef struct rd_kafka_TopicDescription_s rd_kafka_TopicDescription_t;
 
 /**
- * @brief Gets the partiton id for partition at index position for the \p
- * topicdesc topic.
+ * @brief Describe topics as specified by the \p topics
+ *        array of size \p topics_cnt elements.
+ *
+ * @param rk Client instance.
+ * @param topics Array of topics to describe.
+ * @param topics_cnt Number of elements in \p topics array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_DescribeTopics(rd_kafka_t *rk,
+                             const char **topics,
+                             size_t topics_cnt,
+                             const rd_kafka_AdminOptions_t *options,
+                             rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Get an array of topic results from a DescribeTopics result.
+ *
+ * @param result Result to get topics results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_TopicDescription_t **rd_kafka_DescribeTopics_result_topics(
+    const rd_kafka_DescribeTopics_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Gets the topic partition count for the \p topicdesc topic.
+ *
+ * @param topicdesc The topic description.
+ *
+ * @return The topic partition count.
+ */
+RD_EXPORT
+const int rd_kafka_TopicDescription_topic_partition_count(
+    const rd_kafka_TopicDescription_t *topicdesc);
+
+
+/**
+ * @brief Gets the partition id for partition at index position for the
+ * \p topicdesc topic.
  *
  * @param topicdesc The topic description.
  * @param idx Index for the partitions.
  *
- * @return The partiton id.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
+ * @return The partition id.
  */
 RD_EXPORT
-const int rd_kafka_TopicDescription_partiton_id(
+const int rd_kafka_TopicDescription_partition_id(
     const rd_kafka_TopicDescription_t *topicdesc,
     int idx);
 
 /**
- * @brief Gets the partiton leader for partition at index position for the \p
- * topicdesc topic.
+ * @brief Gets the partition leader for partition at index position for the
+ * \p topicdesc topic.
  *
  * @param topicdesc The topic description.
  * @param idx Index for the partitions.
  *
- * @return The partiton leader.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
+ * @return The partition leader.
  */
 RD_EXPORT
-const int rd_kafka_TopicDescription_partiton_leader(
+const int rd_kafka_TopicDescription_partition_leader(
     const rd_kafka_TopicDescription_t *topicdesc,
     int idx);
 
 /**
- * @brief Gets the partiton in-sync replica count for partition at index
+ * @brief Gets the partition in-sync replica count for partition at index
  * position for the \p topicdesc topic.
  *
  * @param topicdesc The topic description.
  * @param idx Index for the partitions.
  *
- * @return The partiton replica count.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
+ * @return The partition replica count.
  */
 RD_EXPORT
-const int rd_kafka_TopicDescription_partiton_isr_cnt(
+const int rd_kafka_TopicDescription_partition_isr_count(
     const rd_kafka_TopicDescription_t *topicdesc,
     int idx);
 
 /**
- * @brief Gets the partiton replica count for partition at index position for
- * the \p topicdesc topic.
- *
- * @param topicdesc The topic description.
- * @param idx Index for the partitions.
- *
- * @return The partiton replica count.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
- */
-RD_EXPORT
-const int rd_kafka_TopicDescription_partiton_replica_cnt(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    int idx);
-
-/**
- * @brief Gets the partiton in-sync replica at isr index
- *      for partition at partition index position for the \p topicdesc topic.
+ * @brief Gets the partition in-sync replica at \p isr_idx
+ * for partition \p partition_idx for the \p topicdesc topic.
  *
  * @param topicdesc The topic description.
  * @param partition_idx Index for the partitions.
  * @param isr_idx Index for the in-sync replica.
  *
- * @return The partiton in-sync replica.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
+ * @return The partition in-sync replica.
  */
 RD_EXPORT
-const int rd_kafka_TopicDescription_partiton_isrs_idx(
+const int rd_kafka_TopicDescription_partition_isr(
     const rd_kafka_TopicDescription_t *topicdesc,
     int partition_idx,
     int isr_idx);
 
 /**
- * @brief Gets the partiton replica at replica index
- *      for partition at partition index position for the \p topicdesc topic.
+ * @brief Gets the partition replica count for partition at index position for
+ * the \p topicdesc topic.
+ *
+ * @param topicdesc The topic description.
+ * @param idx Index for the partitions.
+ *
+ * @return The partition replica count.
+ */
+RD_EXPORT
+const int rd_kafka_TopicDescription_partition_replica_count(
+    const rd_kafka_TopicDescription_t *topicdesc,
+    int idx);
+
+
+/**
+ * @brief Gets the partition replica at replica index
+ * for partition \p partition_idx for the \p topicdesc topic.
  *
  * @param topicdesc The topic description.
  * @param partition_idx Index for the partitions.
  * @param replica_idx Index for the in-sync replica.
  *
- * @return The partiton replica.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
+ * @return The partition replica.
  */
 RD_EXPORT
-const int rd_kafka_TopicDescription_partiton_replica_idx(
+const int rd_kafka_TopicDescription_partition_replica(
     const rd_kafka_TopicDescription_t *topicdesc,
     int partition_idx,
     int replica_idx);
 
 /**
- * @brief Gets the topic partiton count for the \p topicdesc topic.
- *
- * @param topicdesc The topic description.
- *
- * @return The topic partiton count.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
- */
-RD_EXPORT
-const int rd_kafka_TopicDescription_topic_partition_cnt(
-    const rd_kafka_TopicDescription_t *topicdesc);
-
-/**
- * @brief Gets the partiton error for partition at index position for the \p
+ * @brief Gets the partition error for partition at index position for the \p
  * topicdesc topic.
  *
  * @param topicdesc The topic description.
  * @param idx Index for the partitions.
  *
- * @return The partiton error.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
+ * @return The partition error.
  */
 RD_EXPORT
-const rd_kafka_error_t *rd_kafka_TopicDescription_partition_error(
+const rd_kafka_resp_err_t rd_kafka_TopicDescription_partition_error(
     const rd_kafka_TopicDescription_t *topicdesc,
     int idx);
 
 /**
- * @brief Gets operation at idx index of topic authorized operations for the \p
- * topicdesc topic.
+ * @brief Gets operation at idx index of topic authorized operations for the
+ * \p topicdesc topic.
  *
  * @param topicdesc The topic description.
  * @param idx The index for which element is needed.
@@ -7960,7 +7995,7 @@ const rd_kafka_error_t *rd_kafka_TopicDescription_partition_error(
  * @return Authorized operation at given index.
  */
 RD_EXPORT
-const int rd_kafka_TopicDescription_authorized_operation_idx(
+const int rd_kafka_TopicDescription_authorized_operation(
     const rd_kafka_TopicDescription_t *topicdesc,
     size_t idx);
 
@@ -7972,11 +8007,9 @@ const int rd_kafka_TopicDescription_authorized_operation_idx(
  *
  * @return The topic authorized operations count.
  *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p topicdesc object.
  */
 RD_EXPORT
-const int rd_kafka_TopicDescription_topic_authorized_operations_cnt(
+const int rd_kafka_TopicDescription_topic_authorized_operation_count(
     const rd_kafka_TopicDescription_t *topicdesc);
 
 /**
@@ -8006,57 +8039,6 @@ const char *rd_kafka_TopicDescription_topic_name(
 RD_EXPORT
 const rd_kafka_error_t *
 rd_kafka_TopicDescription_error(const rd_kafka_TopicDescription_t *topicdesc);
-/**
- * @brief Get an array of topic results from a DescribeTopics result.
- *
- * The returned topics life-time is the same as the \p result object.
- *
- * @param result Result to get topics results from.
- * @param cntp is updated to the number of elements in the array.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p result object.
- */
-RD_EXPORT
-const rd_kafka_TopicDescription_t **rd_kafka_DescribeTopics_result_topics(
-    const rd_kafka_DescribeTopics_result_t *result,
-    size_t *cntp);
-/**
- * @brief Describe topics as specified by the \p topics
- *        array of size \p topics_cnt elements.
- *
- * @param rk Client instance.
- * @param topics Array of topics to describe.
- * @param topics_cnt Number of elements in \p topics array.
- * @param options Optional admin options, or NULL for defaults.
- * @param rkqu Queue to emit result on.
- *
- * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT
- */
-RD_EXPORT
-void rd_kafka_DescribeTopics(rd_kafka_t *rk,
-                             const char **topics,
-                             size_t topics_cnt,
-                             const rd_kafka_AdminOptions_t *options,
-                             rd_kafka_queue_t *rkqu);
-
-/**
- * @brief Whether broker should return topic authorized operations
- *        (DescribeTopic).
- *
- * @param options Admin options.
- * @param true_or_false Defaults to false.
- *
- * @return NULL on success, a new error instance that must be
- *         released with rd_kafka_error_destroy() in case of error.
- *
- * @remark This option is valid for DescribeTopic.
- */
-RD_EXPORT
-rd_kafka_error_t *rd_kafka_AdminOptions_set_include_topic_authorized_operations(
-    rd_kafka_AdminOptions_t *options,
-    int true_or_false);
 
 /**@}*/
 
@@ -8072,7 +8054,47 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_include_topic_authorized_operations(
 typedef struct rd_kafka_ClusterDescription_s rd_kafka_ClusterDescription_t;
 
 /**
- * @brief Gets the node for the \p clusterdesc cluster at idx position.
+ * @brief Describes the cluster.
+ *
+ * @param rk Client instance.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT
+ */
+RD_EXPORT
+void rd_kafka_DescribeCluster(rd_kafka_t *rk,
+                              const rd_kafka_AdminOptions_t *options,
+                              rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Get the DescribeCluster result.
+ *
+ * @param result Result to get cluster result from.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_ClusterDescription_t *
+rd_kafka_DescribeCluster_result_description(
+    const rd_kafka_DescribeCluster_result_t *result);
+
+
+/**
+ * @brief Gets the node count for the \p clusterdesc cluster.
+ *
+ * @param clusterdesc The cluster description.
+ *
+ * @return The node count.
+ */
+RD_EXPORT
+const int rd_kafka_ClusterDescription_node_count(
+    const rd_kafka_ClusterDescription_t *clusterdesc);
+
+/**
+ * @brief Gets the node for the \p clusterdesc cluster at \p idx position.
  *
  * @param clusterdesc The cluster description.
  * @param idx the index at which to return the node.
@@ -8083,23 +8105,9 @@ typedef struct rd_kafka_ClusterDescription_s rd_kafka_ClusterDescription_t;
  *         as the lifetime of the \p clusterdesc object.
  */
 RD_EXPORT
-const rd_kafka_Node_t *rd_kafka_ClusterDescription_node_idx(
+const rd_kafka_Node_t *rd_kafka_ClusterDescription_node(
     const rd_kafka_ClusterDescription_t *clusterdesc,
     int idx);
-
-/**
- * @brief Gets operation at idx index of cluster authorized operations for the
- * \p clusterdesc cluster.
- *
- * @param clusterdesc The cluster description.
- * @param idx The index for which element is needed.
- *
- * @return Authorized operation at given index.
- */
-RD_EXPORT
-const int rd_kafka_ClusterDescription_authorized_operation_idx(
-    const rd_kafka_ClusterDescription_t *clusterdesc,
-    size_t idx);
 
 /**
  * @brief Gets the cluster authorized acl operations for the \p clusterdesc
@@ -8108,13 +8116,24 @@ const int rd_kafka_ClusterDescription_authorized_operation_idx(
  * @param clusterdesc The cluster description.
  *
  * @return The cluster authorized operations.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p clusterdesc object.
  */
 RD_EXPORT
-const int rd_kafka_ClusterDescription_cluster_acl_operations_cnt(
+const int rd_kafka_ClusterDescription_cluster_authorized_operation_count(
     const rd_kafka_ClusterDescription_t *clusterdesc);
+
+/**
+ * @brief Gets operation at index \p idx of cluster authorized operations for
+ * the \p clusterdesc cluster.
+ *
+ * @param clusterdesc The cluster description.
+ * @param idx The index for which element is needed.
+ *
+ * @return Authorized operation at given index.
+ */
+RD_EXPORT
+const int rd_kafka_ClusterDescription_authorized_operation(
+    const rd_kafka_ClusterDescription_t *clusterdesc,
+    size_t idx);
 
 /**
  * @brief Gets the cluster current controller id for the \p clusterdesc cluster.
@@ -8122,9 +8141,6 @@ const int rd_kafka_ClusterDescription_cluster_acl_operations_cnt(
  * @param clusterdesc The cluster description.
  *
  * @return The cluster current controller id.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p clusterdesc object.
  */
 RD_EXPORT
 const int rd_kafka_ClusterDescription_controller_id(
@@ -8144,67 +8160,6 @@ RD_EXPORT
 const char *rd_kafka_ClusterDescription_cluster_id(
     const rd_kafka_ClusterDescription_t *clusterdesc);
 
-/**
- * @brief Gets the node count for the \p clusterdesc cluster.
- *
- * @param clusterdesc The cluster description.
- *
- * @return The node count.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p clusterdesc object.
- */
-RD_EXPORT
-const int rd_kafka_ClusterDescription_node_cnt(
-    const rd_kafka_ClusterDescription_t *clusterdesc);
-
-/**
- * @brief Get the DescribeCluster result.
- *
- * The returned description life-time is the same as the \p result object.
- *
- * @param result Result to get group results from.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p result object.
- */
-RD_EXPORT
-const rd_kafka_ClusterDescription_t *
-rd_kafka_DescribeCluster_result_description(
-    const rd_kafka_DescribeCluster_result_t *result);
-
-/**
- * @brief Describes the cluster.
- *
- * @param rk Client instance.
- * @param options Optional admin options, or NULL for defaults.
- * @param rkqu Queue to emit result on.
- *
- * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT
- */
-RD_EXPORT
-void rd_kafka_DescribeCluster(rd_kafka_t *rk,
-                              const rd_kafka_AdminOptions_t *options,
-                              rd_kafka_queue_t *rkqu);
-
-/**
- * @brief Whether broker should return cluster authorized operations
- *        (DescribeCluster).
- *
- * @param options Admin options.
- * @param true_or_false Defaults to false.
- *
- * @return NULL on success, a new error instance that must be
- *         released with rd_kafka_error_destroy() in case of error.
- *
- * @remark This option is valid for DescribeCluster.
- */
-RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
-    rd_kafka_AdminOptions_t *options,
-    int true_or_false);
 /**@}*/
 
 /**
@@ -8438,12 +8393,12 @@ const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
  * list is NULL or empty.
  */
 RD_EXPORT
-size_t rd_kafka_ConsumerGroupDescription_authorized_operations_count(
+size_t rd_kafka_ConsumerGroupDescription_authorized_operation_count(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
- * @brief Gets operation at idx index of authorized operations for the \p
- * grpdesc group.
+ * @brief Gets operation at index \p idx of authorized operations for the
+ * \p grpdesc group.
  *
  * @param grpdesc The group description.
  * @param idx The index for which element is needed.

@@ -160,10 +160,10 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
                 const char *topic_name =
                     rd_kafka_TopicDescription_topic_name(topic);
                 int topic_authorized_operations_cnt =
-                    rd_kafka_TopicDescription_topic_authorized_operations_cnt(
+                    rd_kafka_TopicDescription_topic_authorized_operation_count(
                         topic);
                 int partition_cnt =
-                    rd_kafka_TopicDescription_topic_partition_cnt(topic);
+                    rd_kafka_TopicDescription_topic_partition_count(topic);
                 error = rd_kafka_TopicDescription_error(topic);
 
                 if (rd_kafka_error_code(error)) {
@@ -179,13 +179,13 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
                     topic_name, topic_authorized_operations_cnt);
                 for (j = 0; j < topic_authorized_operations_cnt; j++) {
                         acl_operation =
-                            rd_kafka_TopicDescription_authorized_operation_idx(
+                            rd_kafka_TopicDescription_authorized_operation(
                                 topic, j);
                         printf("\t%s operation is allowed\n",
                                rd_kafka_AclOperation_name(acl_operation));
                 }
 
-                printf("partiton count is: %d\n", partition_cnt);
+                printf("partition count is: %d\n", partition_cnt);
                 for (j = 0; j < partition_cnt; j++) {
                         const rd_kafka_error_t *partition_error;
                         int leader, id, isr_cnt, replica_cnt, k;
@@ -201,13 +201,13 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
                                 continue;
                         }
                         printf("\tPartition at index %d succeeded\n", j);
-                        id = rd_kafka_TopicDescription_partiton_id(topic, j);
+                        id = rd_kafka_TopicDescription_partition_id(topic, j);
                         leader =
-                            rd_kafka_TopicDescription_partiton_leader(topic, j);
-                        isr_cnt = rd_kafka_TopicDescription_partiton_isr_cnt(
+                            rd_kafka_TopicDescription_partition_leader(topic, j);
+                        isr_cnt = rd_kafka_TopicDescription_partition_isr_count(
                             topic, j);
                         replica_cnt =
-                            rd_kafka_TopicDescription_partiton_replica_cnt(
+                            rd_kafka_TopicDescription_partition_replica_count(
                                 topic, j);
                         printf("\tPartition has id: %d with leader: %d\n", id,
                                leader);
@@ -219,7 +219,7 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
                                 for (k = 0; k < isr_cnt; k++)
                                         printf(
                                             "%d ",
-                                            rd_kafka_TopicDescription_partiton_isrs_idx(
+                                            rd_kafka_TopicDescription_partition_isr(
                                                 topic, j, k));
                                 printf("\n");
                         } else
@@ -231,7 +231,7 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
                                 for (k = 0; k < replica_cnt; k++)
                                         printf(
                                             "%d ",
-                                            rd_kafka_TopicDescription_partiton_replica_idx(
+                                            rd_kafka_TopicDescription_partition_replica(
                                                 topic, j, k));
                                 printf("\n");
                         } else

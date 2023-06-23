@@ -737,7 +737,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     rd_kafka_error_string(
                         rd_kafka_ConsumerGroupDescription_error(resgroups[i])));
                 TEST_ASSERT(
-                    rd_kafka_ConsumerGroupDescription_authorized_operations_count(
+                    rd_kafka_ConsumerGroupDescription_authorized_operation_count(
                         resgroups[i]) == 0,
                     "Got authorized operations"
                     "when not requested");
@@ -879,7 +879,7 @@ static void do_test_DescribeTopics(const char *what,
                             rd_kafka_error_string(
                                 rd_kafka_TopicDescription_error(restopics[i])));
                 TEST_ASSERT(
-                    rd_kafka_TopicDescription_topic_authorized_operations_cnt(
+                    rd_kafka_TopicDescription_topic_authorized_operation_count(
                         restopics[i]) == 0,
                     "Got topic authorized operations"
                     "when not requested");

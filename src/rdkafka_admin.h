@@ -514,7 +514,7 @@ struct rd_kafka_TopicDescription_s {
         char *topic;       /**< Topic name */
         int partition_cnt; /**< Number of partitions in \p partitions*/
         struct rd_kafka_metadata_partition *partitions; /**< Partitions */
-        rd_kafka_resp_err_t err; /**< Topic error reported by broker */
+        rd_kafka_error_t *error; /**< Topic error reported by broker */
         rd_list_t *topic_authorized_operations; /**< ACL operations allowed for
                                                    topics */
 };

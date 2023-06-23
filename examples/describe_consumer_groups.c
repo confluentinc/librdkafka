@@ -181,7 +181,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(group);
                 authorized_operation_count =
-                    rd_kafka_ConsumerGroupDescription_authorized_operations_count(
+                    rd_kafka_ConsumerGroupDescription_authorized_operation_count(
                         group);
                 member_cnt =
                     rd_kafka_ConsumerGroupDescription_member_count(group);

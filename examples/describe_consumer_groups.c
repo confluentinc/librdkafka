@@ -248,6 +248,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
         }
         return 0;
 }
+
 /**
  * @brief Parse an integer or fail.
  */
@@ -263,6 +264,7 @@ int64_t parse_int(const char *what, const char *str) {
 
         return (int64_t)n;
 }
+
 /**
  * @brief Call rd_kafka_DescribeConsumerGroups() with a list of
  * groups.
@@ -282,7 +284,7 @@ cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
             parse_int("include_authorized_operations", argv[0]);
         if (include_authorized_operations < 0 ||
             include_authorized_operations > 1)
-                usage("Require stable not a 0-1 int");
+                usage("include_authorized_operations not a 0-1 int");
 
         if (argc >= 1) {
                 groups     = (const char **)&argv[1];
@@ -376,6 +378,7 @@ int main(int argc, char **argv) {
          */
         conf = rd_kafka_conf_new();
 
+
         /*
          * Parse common options
          */
@@ -408,5 +411,6 @@ int main(int argc, char **argv) {
         }
 
         cmd_describe_consumer_groups(conf, argc - optind, &argv[optind]);
+
         return 0;
 }

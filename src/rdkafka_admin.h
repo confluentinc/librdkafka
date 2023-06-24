@@ -96,23 +96,9 @@ struct rd_kafka_AdminOptions_s {
                                             * return authorized operations.
                                             * Valid for:
                                             *     DescribeConsumerGroups
+                                            *     DescribeCluster
+                                            *     DescribeTopics
                                             */
-
-        rd_kafka_confval_t
-            include_topic_authorized_operations; /**< BOOL: Whether broker
-                                                  * should return topic
-                                                  * authorized operations. Valid
-                                                  * for: DescribeTopic
-                                                  *     MetadataRequest
-                                                  */
-        rd_kafka_confval_t
-            include_cluster_authorized_operations; /**< BOOL: Whether broker
-                                                    * should return cluster
-                                                    * authorized operations.
-                                                    * Valid for:
-                                                    *     DescribeCluster
-                                                    *     MetadataRequest
-                                                    */
 
         rd_kafka_confval_t
             match_consumer_group_states; /**< PTR: list of consumer group states

@@ -4794,7 +4794,9 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
                 state->wait_cnt++;
                 error = rd_kafka_DescribeGroupsRequest(
-                    rkb, 0, grps, i, rd_false, RD_KAFKA_REPLYQ(state->q, 0),
+                    rkb, 0, grps, i,
+                    rd_false /* include_authorized_operations */,
+                    RD_KAFKA_REPLYQ(state->q, 0),
                     rd_kafka_DescribeGroups_resp_cb, state);
                 if (error) {
                         rd_kafka_DescribeGroups_resp_cb(

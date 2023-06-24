@@ -806,7 +806,7 @@ static void do_test_DescribeTopics(const char *what,
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 if ((error =
-                         rd_kafka_AdminOptions_set_include_topic_authorized_operations(
+                         rd_kafka_AdminOptions_set_include_authorized_operations(
                              options, 0))) {
                         fprintf(stderr,
                                 "%% Failed to set topic authorized operations: "
@@ -941,7 +941,7 @@ static void do_test_DescribeCluster(const char *what,
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 if ((error =
-                         rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
+                         rd_kafka_AdminOptions_set_include_authorized_operations(
                              options, 0))) {
                         fprintf(stderr,
                                 "%% Failed to set cluster authorized "

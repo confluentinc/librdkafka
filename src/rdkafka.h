@@ -5367,9 +5367,9 @@ typedef int rd_kafka_event_type_t;
 /** AlterConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x10000
 /** DescribeTopics_result_t */
-#define RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT 0x20000
+#define RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT 0x100000
 /** DescribeCluster_result_t */
-#define RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT 0x40000
+#define RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT 0x200000
 
 
 /**
@@ -6942,7 +6942,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
 
 /**
  * @brief Whether broker should return authorized operations
- *        (DescribeConsumerGroups).
+ *        (DescribeConsumerGroups, DescribeTopics, DescribeCluster).
  *
  * @param options Admin options.
  * @param true_or_false Defaults to false.
@@ -6950,7 +6950,8 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
  * @return NULL on success, a new error instance that must be
  *         released with rd_kafka_error_destroy() in case of error.
  *
- * @remark This option is valid for DescribeConsumerGroups.
+ * @remark This option is valid for DescribeConsumerGroups, DescribeTopics,
+ *         DescribeCluster.
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_AdminOptions_set_include_authorized_operations(
@@ -6976,41 +6977,6 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
     size_t consumer_group_states_cnt);
 
 /**
- * @brief Whether broker should return cluster authorized operations
- *        (DescribeCluster).
- *
- * @param options Admin options.
- * @param true_or_false Defaults to false.
- *
- * @return NULL on success, a new error instance that must be
- *         released with rd_kafka_error_destroy() in case of error.
- *
- * @remark This option is valid for DescribeCluster.
- */
-RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
-    rd_kafka_AdminOptions_t *options,
-    int true_or_false);
-
-/**
- * @brief Whether broker should return topic authorized operations
- *        (DescribeTopics).
- *
- * @param options Admin options.
- * @param true_or_false Defaults to false.
- *
- * @return NULL on success, a new error instance that must be
- *         released with rd_kafka_error_destroy() in case of error.
- *
- * @remark This option is valid for DescribeTopics.
- */
-RD_EXPORT
-rd_kafka_error_t *rd_kafka_AdminOptions_set_include_topic_authorized_operations(
-    rd_kafka_AdminOptions_t *options,
-    int true_or_false);
-
-/**
  * @brief Set application opaque value that can be extracted from the
  *        result event using rd_kafka_event_opaque()
  */
@@ -7018,7 +6984,37 @@ RD_EXPORT void
 rd_kafka_AdminOptions_set_opaque(rd_kafka_AdminOptions_t *options,
                                  void *ev_opaque);
 
+
+
+/**
+ * @enum rd_kafka_AclOperation_t
+ * @brief Apache Kafka ACL operation types. Common type for multiple Admin API
+ * functions.
+ */
+typedef enum rd_kafka_AclOperation_t {
+        RD_KAFKA_ACL_OPERATION_UNKNOWN = 0, /**< Unknown */
+        RD_KAFKA_ACL_OPERATION_ANY =
+            1, /**< In a filter, matches any AclOperation */
+        RD_KAFKA_ACL_OPERATION_ALL      = 2, /**< ALL operation */
+        RD_KAFKA_ACL_OPERATION_READ     = 3, /**< READ operation */
+        RD_KAFKA_ACL_OPERATION_WRITE    = 4, /**< WRITE operation */
+        RD_KAFKA_ACL_OPERATION_CREATE   = 5, /**< CREATE operation */
+        RD_KAFKA_ACL_OPERATION_DELETE   = 6, /**< DELETE operation */
+        RD_KAFKA_ACL_OPERATION_ALTER    = 7, /**< ALTER operation */
+        RD_KAFKA_ACL_OPERATION_DESCRIBE = 8, /**< DESCRIBE operation */
+        RD_KAFKA_ACL_OPERATION_CLUSTER_ACTION =
+            9, /**< CLUSTER_ACTION operation */
+        RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS =
+            10, /**< DESCRIBE_CONFIGS operation */
+        RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS =
+            11, /**< ALTER_CONFIGS  operation */
+        RD_KAFKA_ACL_OPERATION_IDEMPOTENT_WRITE =
+            12, /**< IDEMPOTENT_WRITE operation */
+        RD_KAFKA_ACL_OPERATION__CNT
+} rd_kafka_AclOperation_t;
+
 /**@}*/
+
 
 /**
  * @name Admin API - Topics
@@ -7826,7 +7822,7 @@ rd_kafka_DeleteRecords_result_offsets(
 /**@}*/
 
 /**
- * @name Admin API - DescribeTopic
+ * @name Admin API - DescribeTopics
  * @{
  */
 
@@ -7986,20 +7982,6 @@ const rd_kafka_resp_err_t rd_kafka_TopicDescription_partition_error(
     int idx);
 
 /**
- * @brief Gets operation at idx index of topic authorized operations for the
- * \p topicdesc topic.
- *
- * @param topicdesc The topic description.
- * @param idx The index for which element is needed.
- *
- * @return Authorized operation at given index.
- */
-RD_EXPORT
-const int rd_kafka_TopicDescription_authorized_operation(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    size_t idx);
-
-/**
  * @brief Gets the topic authorized acl operations count for the \p topicdesc
  * topic.
  *
@@ -8011,6 +7993,20 @@ const int rd_kafka_TopicDescription_authorized_operation(
 RD_EXPORT
 const int rd_kafka_TopicDescription_topic_authorized_operation_count(
     const rd_kafka_TopicDescription_t *topicdesc);
+
+/**
+ * @brief Gets operation at idx index of topic authorized operations for the
+ * \p topicdesc topic.
+ *
+ * @param topicdesc The topic description.
+ * @param idx The index for which element is needed.
+ *
+ * @return Authorized operation at given index.
+ */
+RD_EXPORT
+const rd_kafka_AclOperation_t rd_kafka_TopicDescription_authorized_operation(
+    const rd_kafka_TopicDescription_t *topicdesc,
+    size_t idx);
 
 /**
  * @brief Gets the topic name for the \p topicdesc topic.
@@ -8039,6 +8035,7 @@ const char *rd_kafka_TopicDescription_topic_name(
 RD_EXPORT
 const rd_kafka_error_t *
 rd_kafka_TopicDescription_error(const rd_kafka_TopicDescription_t *topicdesc);
+
 
 /**@}*/
 
@@ -8131,7 +8128,7 @@ const int rd_kafka_ClusterDescription_cluster_authorized_operation_count(
  * @return Authorized operation at given index.
  */
 RD_EXPORT
-const int rd_kafka_ClusterDescription_authorized_operation(
+const rd_kafka_AclOperation_t rd_kafka_ClusterDescription_authorized_operation(
     const rd_kafka_ClusterDescription_t *clusterdesc,
     size_t idx);
 
@@ -8161,6 +8158,7 @@ const char *rd_kafka_ClusterDescription_cluster_id(
     const rd_kafka_ClusterDescription_t *clusterdesc);
 
 /**@}*/
+
 
 /**
  * @name Admin API - ListConsumerGroups
@@ -8406,7 +8404,7 @@ size_t rd_kafka_ConsumerGroupDescription_authorized_operation_count(
  * @return Authorized operation at given index.
  */
 RD_EXPORT
-int rd_kafka_ConsumerGroupDescription_authorized_operation(
+rd_kafka_AclOperation_t rd_kafka_ConsumerGroupDescription_authorized_operation(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc,
     size_t idx);
 
@@ -8936,32 +8934,6 @@ typedef rd_kafka_AclBinding_t rd_kafka_AclBindingFilter_t;
 RD_EXPORT const rd_kafka_error_t *
 rd_kafka_acl_result_error(const rd_kafka_acl_result_t *aclres);
 
-
-/**
- * @enum rd_kafka_AclOperation_t
- * @brief Apache Kafka ACL operation types.
- */
-typedef enum rd_kafka_AclOperation_t {
-        RD_KAFKA_ACL_OPERATION_UNKNOWN = 0, /**< Unknown */
-        RD_KAFKA_ACL_OPERATION_ANY =
-            1, /**< In a filter, matches any AclOperation */
-        RD_KAFKA_ACL_OPERATION_ALL      = 2, /**< ALL operation */
-        RD_KAFKA_ACL_OPERATION_READ     = 3, /**< READ operation */
-        RD_KAFKA_ACL_OPERATION_WRITE    = 4, /**< WRITE operation */
-        RD_KAFKA_ACL_OPERATION_CREATE   = 5, /**< CREATE operation */
-        RD_KAFKA_ACL_OPERATION_DELETE   = 6, /**< DELETE operation */
-        RD_KAFKA_ACL_OPERATION_ALTER    = 7, /**< ALTER operation */
-        RD_KAFKA_ACL_OPERATION_DESCRIBE = 8, /**< DESCRIBE operation */
-        RD_KAFKA_ACL_OPERATION_CLUSTER_ACTION =
-            9, /**< CLUSTER_ACTION operation */
-        RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS =
-            10, /**< DESCRIBE_CONFIGS operation */
-        RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS =
-            11, /**< ALTER_CONFIGS  operation */
-        RD_KAFKA_ACL_OPERATION_IDEMPOTENT_WRITE =
-            12, /**< IDEMPOTENT_WRITE operation */
-        RD_KAFKA_ACL_OPERATION__CNT
-} rd_kafka_AclOperation_t;
 
 /**
  * @returns a string representation of the \p acl_operation

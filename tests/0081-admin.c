@@ -2849,7 +2849,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 rd_free(expected[i].group_id);
         }
 
-        test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
+        test_DeleteTopics_simple(rk, NULL, &topic, 1, NULL);
 
         rd_free(topic);
 
@@ -2949,7 +2949,7 @@ static void do_test_DescribeTopics(const char *what,
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
             options, request_timeout, errstr, sizeof(errstr)));
         TEST_CALL_ERROR__(
-            rd_kafka_AdminOptions_set_include_topic_authorized_operations(
+            rd_kafka_AdminOptions_set_include_authorized_operations(
                 options, include_authorized_operations));
 
         TIMING_START(&timing, "DescribeTopics");
@@ -3019,16 +3019,16 @@ static void do_test_DescribeTopics(const char *what,
                             "Expected 8 operations allowed before creating "
                             "ACLs, got %d.",
                             authorized_operations_cnt);
-                test_match_acls(
-                    authorized_operations_cnt, result_topics[0],
-                    rd_kafka_TopicDescription_authorized_operation, 8,
-                    RD_KAFKA_ACL_OPERATION_ALTER,
-                    RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_CREATE,
-                    RD_KAFKA_ACL_OPERATION_DELETE,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_OPERATION_WRITE);
+                test_match_acls(authorized_operations_cnt, result_topics[0],
+                                rd_kafka_TopicDescription_authorized_operation,
+                                8, RD_KAFKA_ACL_OPERATION_ALTER,
+                                RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS,
+                                RD_KAFKA_ACL_OPERATION_CREATE,
+                                RD_KAFKA_ACL_OPERATION_DELETE,
+                                RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                                RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
+                                RD_KAFKA_ACL_OPERATION_READ,
+                                RD_KAFKA_ACL_OPERATION_WRITE);
         }
         rd_kafka_event_destroy(rkev);
 
@@ -3066,8 +3066,8 @@ static void do_test_DescribeTopics(const char *what,
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
             options, request_timeout, errstr, sizeof(errstr)));
         TEST_CALL_ERROR__(
-            rd_kafka_AdminOptions_set_include_topic_authorized_operations(
-                options, 1));
+            rd_kafka_AdminOptions_set_include_authorized_operations(options,
+                                                                    1));
 
         TIMING_START(&timing, "DescribeTopics");
         rd_kafka_DescribeTopics(rk, topics, my_topic_cnt, options, q);
@@ -3195,7 +3195,7 @@ static void do_test_DescribeCluster(const char *what,
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
             options, request_timeout, errstr, sizeof(errstr)));
         TEST_CALL_ERROR__(
-            rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
+            rd_kafka_AdminOptions_set_include_authorized_operations(
                 options, include_authorized_operations));
 
         TIMING_START(&timing, "DescribeCluster");
@@ -3287,8 +3287,8 @@ static void do_test_DescribeCluster(const char *what,
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
             options, request_timeout, errstr, sizeof(errstr)));
         TEST_CALL_ERROR__(
-            rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
-                options, 1));
+            rd_kafka_AdminOptions_set_include_authorized_operations(options,
+                                                                    1));
 
         TIMING_START(&timing, "DescribeCluster");
         rd_kafka_DescribeCluster(rk, options, q);

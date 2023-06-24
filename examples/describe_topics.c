@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2022, Magnus Edenhill
+ * Copyright (c) 2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -187,23 +187,23 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
 
                 printf("partition count is: %d\n", partition_cnt);
                 for (j = 0; j < partition_cnt; j++) {
-                        const rd_kafka_error_t *partition_error;
+                        rd_kafka_resp_err_t partition_err;
                         int leader, id, isr_cnt, replica_cnt, k;
-                        partition_error =
+                        partition_err =
                             rd_kafka_TopicDescription_partition_error(topic, j);
 
-                        if (rd_kafka_error_code(partition_error)) {
+                        if (partition_err != RD_KAFKA_RESP_ERR_NO_ERROR) {
                                 printf(
                                     "\tPartition at index %d has error[%" PRId32
                                     "]: %s\n",
-                                    j, rd_kafka_error_code(partition_error),
-                                    rd_kafka_error_string(partition_error));
+                                    j, partition_err,
+                                    rd_kafka_err2str(partition_err));
                                 continue;
                         }
                         printf("\tPartition at index %d succeeded\n", j);
                         id = rd_kafka_TopicDescription_partition_id(topic, j);
-                        leader =
-                            rd_kafka_TopicDescription_partition_leader(topic, j);
+                        leader = rd_kafka_TopicDescription_partition_leader(
+                            topic, j);
                         isr_cnt = rd_kafka_TopicDescription_partition_isr_count(
                             topic, j);
                         replica_cnt =
@@ -293,9 +293,8 @@ static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 goto exit;
         }
-        if ((error =
-                 rd_kafka_AdminOptions_set_include_topic_authorized_operations(
-                     options, include_topic_authorized_operations))) {
+        if ((error = rd_kafka_AdminOptions_set_include_authorized_operations(
+                 options, include_topic_authorized_operations))) {
                 fprintf(stderr,
                         "%% Failed to set require topic authorized operations: "
                         "%s\n",

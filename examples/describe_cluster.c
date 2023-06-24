@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2022, Magnus Edenhill
+ * Copyright (c) 2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -150,7 +150,8 @@ print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
         controller_id = rd_kafka_ClusterDescription_controller_id(desc);
         node_cnt      = rd_kafka_ClusterDescription_node_count(desc);
         cluster_authorized_operations_cnt =
-            rd_kafka_ClusterDescription_cluster_authorized_operation_count(desc);
+            rd_kafka_ClusterDescription_cluster_authorized_operation_count(
+                desc);
         cluster_id = rd_kafka_ClusterDescription_cluster_id(desc);
 
         printf(
@@ -159,8 +160,7 @@ print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
             cluster_id, controller_id, cluster_authorized_operations_cnt);
         for (j = 0; j < cluster_authorized_operations_cnt; j++) {
                 acl_operation =
-                    rd_kafka_ClusterDescription_authorized_operation(desc,
-                                                                         j);
+                    rd_kafka_ClusterDescription_authorized_operation(desc, j);
                 printf("\t%s operation is allowed\n",
                        rd_kafka_AclOperation_name(acl_operation));
         }
@@ -220,9 +220,8 @@ static void cmd_describe_cluster(rd_kafka_conf_t *conf, int argc, char **argv) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 goto exit;
         }
-        if ((error =
-                 rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
-                     options, include_cluster_authorized_operations))) {
+        if ((error = rd_kafka_AdminOptions_set_include_authorized_operations(
+                 options, include_cluster_authorized_operations))) {
                 fprintf(stderr,
                         "%% Failed to set require cluster authorized "
                         "operations: %s\n",

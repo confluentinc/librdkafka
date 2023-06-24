@@ -3077,6 +3077,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
                 /* Revoke assignment and rebalance on illegal generation */
+                fprintf(stderr, "MILIND::got RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION, rebalancing?\n");
                 rk->rk_cgrp->rkcg_generation_id = -1;
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(
                     rkcg, rd_true /*assignment is lost*/,
@@ -3187,9 +3188,10 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
         /* Don't attempt commit when rebalancing or initializing since
          * the rkcg_generation_id is most likely in flux. */
         if (rkcg->rkcg_subscription &&
-            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
-                err = RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS;
-                goto err;
+            (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY && rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL && rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL)) {
+                // fprintf(stderr, "MILIND::rebalance in progress with state %d", rkcg->rkcg_join_state);
+                // err = RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS;
+                // goto err;
         }
 
         /* If offsets is NULL we shall use the current assignment

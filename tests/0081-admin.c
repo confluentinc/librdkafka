@@ -3218,6 +3218,9 @@ static void do_test_DescribeCluster(const char *what,
         /* Sanity checks on fields inside the result. There's not much we can
          * say here deterministically, since it depends on the test environment.
          */
+        TEST_ASSERT(
+            strlen(rd_kafka_ClusterDescription_cluster_id(result_cluster)),
+            "Length of cluster id should be non-null.");
         TEST_ASSERT(rd_kafka_ClusterDescription_node_count(result_cluster),
                     "Expected non-zero node count in cluster.");
         node = rd_kafka_ClusterDescription_node(result_cluster, 0);

@@ -568,19 +568,18 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
-        if (ApiVersion >= 2)
-                rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, mdi->cluster_id);
-        else
-                mdi->cluster_id = NULL;
-
+        if (ApiVersion >= 2) {
+                rd_kafka_buf_read_str(rkbuf, &cluster_id);
+                mdi->cluster_id = rd_tmpabuf_write_str(&tbuf, cluster_id.str);
+        }
 
 
         if (ApiVersion >= 1) {
                 rd_kafka_buf_read_i32(rkbuf, &controller_id);
                 mdi->controller_id = controller_id;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "ClusterId: %s, ControllerId: %" PRId32,
-                           mdi->cluster_id, controller_id);
+                           "ClusterId: %.*s, ControllerId: %" PRId32,
+                           RD_KAFKAP_STR_PR(&cluster_id), controller_id);
         }
 
         qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[i]),

@@ -7445,7 +7445,6 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
             cluster_id, controller_id, authorized_operations, &mdi->metadata);
         if (authorized_operations)
                 rd_list_destroy(authorized_operations);
-        rd_free(cluster_id);
 
         rd_list_add(&rko_result->rko_u.admin_result.results, clusterdesc);
         *rko_resultp = rko_result;

@@ -2913,8 +2913,8 @@ static void do_test_DescribeTopics(const char *what,
                                    int request_timeout,
                                    rd_bool_t include_authorized_operations) {
         rd_kafka_queue_t *q;
-        const int my_topic_cnt = 3;
-        char *topics[my_topic_cnt];
+#define TEST_DESCRIBE_TOPICS_CNT 3
+        char *topics[TEST_DESCRIBE_TOPICS_CNT];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
         const rd_kafka_error_t *error;
@@ -2941,7 +2941,7 @@ static void do_test_DescribeTopics(const char *what,
         q = rkqu ? rkqu : rd_kafka_queue_new(rk);
 
         /* Only create one topic, the others will be non-existent. */
-        for (i = 0; i < my_topic_cnt; i++) {
+        for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
                 rd_strdupa(&topics[i], test_mk_topic_name(__FUNCTION__, 1));
         }
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
@@ -2957,8 +2957,8 @@ static void do_test_DescribeTopics(const char *what,
                 options, include_authorized_operations));
 
         TIMING_START(&timing, "DescribeTopics");
-        rd_kafka_DescribeTopics(rk, (const char **)topics, my_topic_cnt,
-                                options, q);
+        rd_kafka_DescribeTopics(rk, (const char **)topics,
+                                TEST_DESCRIBE_TOPICS_CNT, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
         rd_kafka_AdminOptions_destroy(options);
 
@@ -2981,9 +2981,9 @@ static void do_test_DescribeTopics(const char *what,
             rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
 
         /* Check if results have been received for all topics. */
-        TEST_ASSERT((int)result_topics_cnt == my_topic_cnt,
-                    "Expected %d topics in result, got %d", my_topic_cnt,
-                    (int)result_topics_cnt);
+        TEST_ASSERT((int)result_topics_cnt == TEST_DESCRIBE_TOPICS_CNT,
+                    "Expected %d topics in result, got %d",
+                    TEST_DESCRIBE_TOPICS_CNT, (int)result_topics_cnt);
 
         /* Check if topics[0] succeeded. */
         error = rd_kafka_TopicDescription_error(result_topics[0]);
@@ -2995,7 +2995,7 @@ static void do_test_DescribeTopics(const char *what,
          * Check whether the topics which are non-existent have
          * RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART error.
          */
-        for (i = 1; i < my_topic_cnt; i++) {
+        for (i = 1; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
                 error = rd_kafka_TopicDescription_error(result_topics[i]);
                 TEST_ASSERT(rd_kafka_error_code(error) ==
                                 RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
@@ -3074,8 +3074,8 @@ static void do_test_DescribeTopics(const char *what,
                                                                     1));
 
         TIMING_START(&timing, "DescribeTopics");
-        rd_kafka_DescribeTopics(rk, (const char **)topics, my_topic_cnt,
-                                options, q);
+        rd_kafka_DescribeTopics(rk, (const char **)topics,
+                                TEST_DESCRIBE_TOPICS_CNT, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
         rd_kafka_AdminOptions_destroy(options);
 
@@ -3098,9 +3098,9 @@ static void do_test_DescribeTopics(const char *what,
             rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
 
         /* Check if results have been received for all topics. */
-        TEST_ASSERT((int)result_topics_cnt == my_topic_cnt,
-                    "Expected %d topics in result, got %d", my_topic_cnt,
-                    (int)result_topics_cnt);
+        TEST_ASSERT((int)result_topics_cnt == TEST_DESCRIBE_TOPICS_CNT,
+                    "Expected %d topics in result, got %d",
+                    TEST_DESCRIBE_TOPICS_CNT, (int)result_topics_cnt);
 
         /* Check if topics[0] succeeded. */
         error = rd_kafka_TopicDescription_error(result_topics[0]);
@@ -3141,7 +3141,9 @@ done:
         if (!rkqu)
                 rd_kafka_queue_destroy(q);
 
+
         TEST_LATER_CHECK();
+#undef TEST_DESCRIBE_TOPICS_CNT
 
         SUB_TEST_PASS();
 }
@@ -3360,11 +3362,11 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         const rd_kafka_error_t *error;
         char errstr[512];
         const char *errstr2;
-        const int test_describe_consumer_groups_cnt = 4;
-        const int partitions_cnt                    = 1;
-        const int msgs_cnt                          = 100;
+#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 4
+        const int partitions_cnt = 1;
+        const int msgs_cnt       = 100;
         char *topic, *group_id;
-        rd_kafka_AclBinding_t *acl_bindings[test_describe_consumer_groups_cnt];
+        rd_kafka_AclBinding_t *acl_bindings[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
         int64_t testid = test_id_generate();
         const rd_kafka_ConsumerGroupDescription_t **results = NULL;
         size_t results_cnt;
@@ -3538,7 +3540,9 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         if (!useq)
                 rd_kafka_queue_destroy(q);
 
+
         TEST_LATER_CHECK();
+#undef TEST_DESCRIBE_CONSUMER_GROUPS_CNT
 
         SUB_TEST_PASS();
 }

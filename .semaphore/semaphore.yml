@@ -71,7 +71,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-nonprod-ubuntu22-04-amd64-1
       jobs:
         - name: 'Style check'
           commands:
@@ -85,7 +85,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-nonprod-ubuntu22-04-amd64-1
       jobs:
         - name: 'Generate documentation'
           commands:
@@ -104,7 +104,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-nonprod-ubuntu22-04-amd64-1
       env_vars:
         - name: CFLAGS
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
@@ -139,7 +139,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-nonprod-ubuntu22-04-amd64-1
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
@@ -333,7 +333,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-nonprod-ubuntu22-04-amd64-1
       jobs:
         - name: 'Build NuGet and static packages'
           commands:

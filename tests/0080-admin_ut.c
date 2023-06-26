@@ -916,7 +916,6 @@ static void do_test_DescribeCluster(const char *what,
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
         int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
-        int i;
         char errstr[512];
         const char *errstr2;
         rd_kafka_resp_err_t err;
@@ -924,7 +923,6 @@ static void do_test_DescribeCluster(const char *what,
         test_timing_t timing;
         rd_kafka_event_t *rkev;
         const rd_kafka_DescribeCluster_result_t *res;
-        const rd_kafka_ClusterDescription_t *clusterdesc;
         void *my_opaque = NULL, *opaque;
 
         SUB_TEST_QUICK("%s DescribeCluster with %s, timeout %dms",

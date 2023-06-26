@@ -2017,7 +2017,7 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
  *        Uses \p max_ApiVersion as maximum API version,
  *        pass -1 to use the maximum available version.
  *        Uses \p include_authorized_operations to get
- *        group ACL authorized operations, 1 to request.
+ *        group ACL authorized operations.
  *
  *        The response (unparsed) will be enqueued on \p replyq
  *        for handling by \p resp_cb (with \p opaque passed).
@@ -2225,7 +2225,6 @@ rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                          void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
-        int i;
         size_t of_TopicArrayCnt;
         int features;
         int topic_cnt  = topics ? rd_list_cnt(topics) : 0;

@@ -7,6 +7,8 @@ librdkafka v2.2.0 is a feature release:
  * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
  * Fix a bug that happens when skipping tags, causing buffer underflow in
    MetadataResponse (#4278).
+ * Fix a bug where topic leader is not refreshed in the same metadata call even if the leader is
+   present.
  * [KIP-881](https://cwiki.apache.org/confluence/display/KAFKA/KIP-881%3A+Rack-aware+Partition+Assignment+for+Kafka+Consumers):
    Add support for rack-aware partition assignment for consumers
    (#4184, #4291, #4252).
@@ -19,6 +21,10 @@ librdkafka v2.2.0 is a feature release:
    closes as normal ones (#4294).
  * Added `fetch.queue.backoff.ms` to the consumer to control how long
    the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
+ * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):
+   Return authorized operations in Describe Responses. This additionally
+   includes AdminAPI for DescribeCluster and DescribeTopics.
+   (#4240, @jainruchir).
 
 
 ## Enhancements

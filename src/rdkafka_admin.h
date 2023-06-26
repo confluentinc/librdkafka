@@ -481,7 +481,8 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_consumer_group_state_t state;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
-        /** Authorized operations. */
+        /** List of authorized operations.
+         * Type: rd_kafka_AclOperation_t* */
         rd_list_t *authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;

@@ -139,7 +139,6 @@ int64_t parse_int(const char *what, const char *str) {
  */
 static int
 print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
-        size_t i;
         int j, acl_operation;
         const rd_kafka_ClusterDescription_t *desc;
         int controller_id, node_cnt, cluster_authorized_operations_cnt;

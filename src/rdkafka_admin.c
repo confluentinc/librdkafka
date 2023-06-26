@@ -6149,7 +6149,7 @@ const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
  * @param members List of members (rd_kafka_MemberDescription_t) of this
  *                group.
  * @param partition_assignor (optional) Chosen assignor.
- * @param authorized_operations authorized operations.
+ * @param authorized_operations (optional) authorized operations.
  * @param state Group state.
  * @param coordinator (optional) Group coordinator.
  * @param error (optional) Error received for this group.
@@ -6601,22 +6601,20 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                             authorized_operations_list,
                             rd_kafka_consumer_group_state_code(group_state),
                             node, error);
-                        if (authorized_operations_list)
-                                rd_list_destroy(authorized_operations_list);
-                } else {
+                } else
                         grpdesc = rd_kafka_ConsumerGroupDescription_new_error(
                             group_id, error);
-                }
+
                 rd_list_add(&rko_result->rko_u.admin_result.results, grpdesc);
-                if (error)
-                        rd_kafka_error_destroy(error);
+
                 rd_list_destroy(&members);
                 rd_free(group_id);
                 rd_free(group_state);
                 rd_free(proto_type);
                 rd_free(proto);
-                if (authorized_operations_list)
-                        rd_list_destroy(authorized_operations_list);
+                RD_IF_FREE(error, rd_kafka_error_destroy);
+                RD_IF_FREE(authorized_operations_list, rd_list_destroy);
+
                 error                      = NULL;
                 group_id                   = NULL;
                 group_state                = NULL;
@@ -7117,10 +7115,6 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         i   = 0;
         while (cnt--) {
                 rd_kafka_TopicDescription_t *topicdesc = NULL;
-                /* topics in md should be in the same order as in
-                 * mdi->topics[i]*/
-                rd_dassert(strcmp(md->topics[i].topic,
-                                  mdi->topics[i].topic_name) == 0);
                 if (md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                         rd_list_t *authorized_operations;
                         authorized_operations =
@@ -7316,47 +7310,6 @@ rd_kafka_DescribeCluster_result_description(
 }
 
 /**
- * @brief Copy \p desc ClusterDescription.
- *
- * @param desc The cluster description to copy.
- * @return A new allocated copy of the passed ClusterDescription.
- */
-static rd_kafka_ClusterDescription_t *
-rd_kafka_ClusterDescription_copy(const rd_kafka_ClusterDescription_t *desc) {
-        rd_kafka_ClusterDescription_t *clusterdesc;
-        int i;
-        clusterdesc = rd_calloc(1, sizeof(*clusterdesc));
-
-        clusterdesc->cluster_id    = rd_strdup(desc->cluster_id);
-        clusterdesc->controller_id = desc->controller_id;
-
-        if (desc->cluster_authorized_operations) {
-                clusterdesc->cluster_authorized_operations = rd_list_new(
-                    rd_list_cnt(desc->cluster_authorized_operations), rd_free);
-                for (i = 0;
-                     i < rd_list_cnt(desc->cluster_authorized_operations);
-                     i++) {
-                        int *entry = rd_list_elem(
-                            desc->cluster_authorized_operations, i);
-                        int *oper = malloc(sizeof(int));
-                        *oper     = *entry;
-                        rd_list_add(clusterdesc->cluster_authorized_operations,
-                                    oper);
-                }
-        } else
-                clusterdesc->cluster_authorized_operations = NULL;
-
-        clusterdesc->node_cnt = desc->node_cnt;
-        clusterdesc->Nodes = malloc(sizeof(rd_kafka_Node_t) * desc->node_cnt);
-        for (i = 0; i < desc->node_cnt; i++) {
-                clusterdesc->Nodes[i].host = rd_strdup(desc->Nodes[i].host);
-                clusterdesc->Nodes[i].port = desc->Nodes[i].port;
-                clusterdesc->Nodes[i].id   = desc->Nodes[i].id;
-        }
-        return clusterdesc;
-}
-
-/**
  * @brief Create a new ClusterDescription object.
  *
  * @param cluster_id current cluster_id
@@ -7445,7 +7398,7 @@ rd_kafka_admin_DescribeClusterRequest(rd_kafka_broker_t *rkb,
             include_cluster_authorized_operations,
             rd_false /*!include topic authorized operations */,
             rd_false /*cgrp update*/, rd_false /* force_rack */, NULL, resp_cb,
-            1, opaque);
+            1 /* force */, opaque);
 
         if (err) {
                 rd_snprintf(errstr, errstr_size, "%s", rd_kafka_err2str(err));
@@ -7521,4 +7474,5 @@ void rd_kafka_DescribeCluster(rd_kafka_t *rk,
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
+
 /**@}*/

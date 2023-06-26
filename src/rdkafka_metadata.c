@@ -440,8 +440,8 @@ rd_kafka_populate_metadata_topic_racks(rd_tmpabuf_t *tbuf,
 /**
  * @brief Handle a Metadata response message.
  *
- * @param topics are the requested topics (may be NULL)
- * @param request_topics Use when rd_kafka_buf_t* request is NULL
+ * @param topics are the requested topics (may be NULL).
+ * @param request_topics Used when rd_kafka_buf_t* request is NULL.
  *
  * The metadata will be marshalled into 'rd_kafka_metadata_internal_t *'.
  *
@@ -477,8 +477,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                             ? request->rkbuf_u.Metadata.reason
                                             : "(no reason)")
                                      : "(admin request)";
-        /* changed from request->rkbuf_reqhdr.ApiVersion as request buffer may
-         * be NULL*/
+
         int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id      = -1;
@@ -569,18 +568,19 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
-        if (ApiVersion >= 2) {
-                rd_kafka_buf_read_str(rkbuf, &cluster_id);
-                mdi->cluster_id = RD_KAFKAP_STR_DUP(&cluster_id);
-        }
+        if (ApiVersion >= 2)
+                rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, mdi->cluster_id);
+        else
+                mdi->cluster_id = NULL;
+
 
 
         if (ApiVersion >= 1) {
                 rd_kafka_buf_read_i32(rkbuf, &controller_id);
                 mdi->controller_id = controller_id;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "ClusterId: %.*s, ControllerId: %" PRId32,
-                           RD_KAFKAP_STR_PR(&cluster_id), controller_id);
+                           "ClusterId: %s, ControllerId: %" PRId32,
+                           mdi->cluster_id, controller_id);
         }
 
         qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[i]),
@@ -733,65 +733,11 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         /* TopicAuthorizedOperations */
                         rd_kafka_buf_read_i32(rkbuf,
                                               &TopicAuthorizedOperations);
-                        mdi->topics[i].topic_name = md->topics[i].topic;
                         mdi->topics[i].topic_authorized_operations =
                             TopicAuthorizedOperations;
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
-
-                /* Ignore topics in blacklist */
-                if (rkb->rkb_rk->rk_conf.topic_blacklist &&
-                    rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
-                                           md->topics[i].topic)) {
-                        rd_rkb_dbg(rkb, TOPIC | RD_KAFKA_DBG_METADATA,
-                                   "BLACKLIST",
-                                   "Ignoring blacklisted topic \"%s\" "
-                                   "in metadata",
-                                   md->topics[i].topic);
-                        continue;
-                }
-
-                /* Sort partitions by partition id */
-                qsort(md->topics[i].partitions, md->topics[i].partition_cnt,
-                      sizeof(*md->topics[i].partitions),
-                      rd_kafka_metadata_partition_id_cmp);
-                qsort(mdi->topics[i].partitions, md->topics[i].partition_cnt,
-                      sizeof(*mdi->topics[i].partitions),
-                      rd_kafka_metadata_partition_internal_cmp);
-
-                if (compute_racks)
-                        rd_kafka_populate_metadata_topic_racks(&tbuf, i, mdi);
-
-                /* Update topic state based on the topic metadata */
-                rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
-                                                     &mdi->topics[i]);
-
-
-                if (requested_topics) {
-                        rd_list_free_cb(missing_topics,
-                                        rd_list_remove_cmp(missing_topics,
-                                                           md->topics[i].topic,
-                                                           (void *)strcmp));
-                        if (!all_topics) {
-                                /* Only update cache when not asking
-                                 * for all topics. */
-
-                                rd_kafka_wrlock(rk);
-                                rd_kafka_metadata_cache_topic_update(
-                                    rk, &md->topics[i], &mdi->topics[i],
-                                    rd_false /*propagate later*/,
-                                    /* use has_client_rack rather than
-                                       compute_racks. We need cached rack ids
-                                       only in case we need to rejoin the group
-                                       if they change and client.rack is set
-                                       (KIP-881). */
-                                    has_client_rack, mdi->brokers,
-                                    md->broker_cnt);
-                                cache_changes++;
-                                rd_kafka_wrunlock(rk);
-                        }
-                }
         }
 
         if (ApiVersion >= 8 && ApiVersion <= 10) {
@@ -822,6 +768,61 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                            md->brokers[i].port, md->brokers[i].id);
                 rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
                                        &md->brokers[i], NULL);
+        }
+
+        for (i = 0; i < md->topic_cnt; i++) {
+
+                /* Ignore topics in blacklist */
+                if (rkb->rkb_rk->rk_conf.topic_blacklist &&
+                    rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
+                                           md->topics[i].topic)) {
+                        rd_rkb_dbg(rkb, TOPIC | RD_KAFKA_DBG_METADATA,
+                                   "BLACKLIST",
+                                   "Ignoring blacklisted topic \"%s\" "
+                                   "in metadata",
+                                   md->topics[i].topic);
+                        continue;
+                }
+
+                /* Sort partitions by partition id */
+                qsort(md->topics[i].partitions, md->topics[i].partition_cnt,
+                      sizeof(*md->topics[i].partitions),
+                      rd_kafka_metadata_partition_id_cmp);
+                qsort(mdi->topics[i].partitions, md->topics[i].partition_cnt,
+                      sizeof(*mdi->topics[i].partitions),
+                      rd_kafka_metadata_partition_internal_cmp);
+
+                if (compute_racks)
+                        rd_kafka_populate_metadata_topic_racks(&tbuf, i, mdi);
+
+                /* Update topic state based on the topic metadata */
+                rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
+                                                     &mdi->topics[i]);
+
+                if (requested_topics) {
+                        rd_list_free_cb(missing_topics,
+                                        rd_list_remove_cmp(missing_topics,
+                                                           md->topics[i].topic,
+                                                           (void *)strcmp));
+                        if (!all_topics) {
+                                /* Only update cache when not asking
+                                 * for all topics. */
+
+                                rd_kafka_wrlock(rk);
+                                rd_kafka_metadata_cache_topic_update(
+                                    rk, &md->topics[i], &mdi->topics[i],
+                                    rd_false /*propagate later*/,
+                                    /* use has_client_rack rather than
+                                       compute_racks. We need cached rack ids
+                                       only in case we need to rejoin the group
+                                       if they change and client.rack is set
+                                       (KIP-881). */
+                                    has_client_rack, mdi->brokers,
+                                    md->broker_cnt);
+                                cache_changes++;
+                                rd_kafka_wrunlock(rk);
+                        }
+                }
         }
 
         /* Requested topics not seen in metadata? Propogate to topic code. */

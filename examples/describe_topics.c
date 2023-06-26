@@ -138,7 +138,7 @@ int64_t parse_int(const char *what, const char *str) {
  */
 static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
                              int topic_cnt) {
-        size_t i, j;
+        size_t i;
         const rd_kafka_TopicDescription_t **result_topics;
         size_t result_topics_cnt;
         result_topics = rd_kafka_DescribeTopics_result_topics(
@@ -248,7 +248,6 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
  */
 static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
-        int i;
         const char **topics = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;

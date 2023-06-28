@@ -53,9 +53,11 @@
 #include <ctype.h>
 
 #if !_WIN32
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
 #endif
 
 
@@ -73,6 +75,102 @@ static mtx_t *rd_kafka_ssl_locks;
 static int rd_kafka_ssl_locks_cnt;
 #endif
 
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L && !defined(LIBRESSL_VERSION_NUMBER)
+// LibreSSL lies about OpenSSL compatibility and always claims 2.0.0.
+// At this moment no version of LibreSSL defines SSL_CTX_set_keylog_callback.
+#define HAVE_SSL_KEYLOG_CALLBACK
+#endif
+
+static FILE *rd_kafka_ssl_keylog_file = NULL;
+
+#ifdef HAVE_SSL_KEYLOG_CALLBACK
+/**
+ * Dump the connection keys to the keylog file. The function is provided as
+ * callback SSL_CTX_set_keylog_callback (OpenSSL since 1.1.1, not available in
+ * LibreSSL).
+ * @tparam ssl SSL context
+ * @tparam line Mozilla NSS compatible key string
+ */
+static void rd_kafka_transport_ssl_keylog_callback(const SSL *ssl,
+                                                   const char *line) {
+        (void)ssl;
+        // actually the callback is registered only if the file is open
+        // this check might be true if the connection is being closed
+        if (!rd_kafka_ssl_keylog_file) {
+                return;
+        }
+        if (line && *line) {
+                // we used fprintf to let the platform build the string
+                fprintf(rd_kafka_ssl_keylog_file, "%s\n", line);
+        }
+}
+#else /* ! HAVE_SSL_KEYLOG_CALLBACK */
+#define KEYLOG_PREFIX     "CLIENT_RANDOM "
+#define KEYLOG_PREFIX_LEN (sizeof(KEYLOG_PREFIX) - 1)
+
+/**
+ * Dump the connection keys to the keylog file. This function is called
+ * explicitly when callback is not available (OpenSSL before 1.1.1, LibreSSL).
+ * The function is called once the SSL handshake is complete.
+ */
+static void rd_kafka_transport_ssl_dump_key(const SSL *ssl) {
+        const char *hex = "0123456789ABCDEF";
+        char line[KEYLOG_PREFIX_LEN + 2 * SSL3_RANDOM_SIZE + 1 +
+                  2 * SSL_MAX_MASTER_KEY_LENGTH + 1 + 1];
+
+        if (!rd_kafka_ssl_keylog_file) {
+                return;
+        }
+
+        const SSL_SESSION *session = SSL_get_session(ssl);
+        if (!session) {
+                return;
+        }
+
+        unsigned char client_random[SSL3_RANDOM_SIZE];
+        unsigned char master_key[SSL_MAX_MASTER_KEY_LENGTH];
+        size_t master_key_length = 0;
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L &&                                   \
+    !(defined(LIBRESSL_VERSION_NUMBER) &&                                      \
+      LIBRESSL_VERSION_NUMBER < 0x20700000L)
+        // if the accessor functions are available, use them
+        // LibreSSL lies about OpenSSL compatibility and always claims 2.0.0
+        // the functions are available in LibreSSL since 2.7.0
+        SSL_get_client_random(ssl, client_random, SSL3_RANDOM_SIZE);
+        master_key_length = SSL_SESSION_get_master_key(
+            session, master_key, SSL_MAX_MASTER_KEY_LENGTH);
+#else
+        // otherwise access the SSL structures directly
+        if (!ssl->s3 || session->master_key_length <= 0) {
+                return;
+        }
+        memcpy(client_random, ssl->s3->client_random, SSL3_RANDOM_SIZE);
+        master_key_length =
+            RD_MIN(session->master_key_length, SSL_MAX_MASTER_KEY_LENGTH);
+        memcpy(master_key, session->master_key, master_key_length);
+#endif
+
+        size_t pos, i;
+        memcpy(line, KEYLOG_PREFIX, KEYLOG_PREFIX_LEN);
+        pos = KEYLOG_PREFIX_LEN;
+        for (i = 0; i < SSL3_RANDOM_SIZE; i++) {
+                line[pos++] = hex[client_random[i] >> 4];
+                line[pos++] = hex[client_random[i] & 0xF];
+        }
+        line[pos++] = ' ';
+        for (i = 0; i < master_key_length; i++) {
+                line[pos++] = hex[master_key[i] >> 4];
+                line[pos++] = hex[master_key[i] & 0xF];
+        }
+        line[pos++] = '\n';
+        line[pos++] = '\0';
+
+        // the output line is generated anyway, no need to fprintf
+        fputs(line, rd_kafka_ssl_keylog_file);
+}
+
+#endif /* HAVE_SSL_KEYLOG_CALLBACK */
 
 /**
  * @brief Close and destroy SSL session
@@ -191,7 +289,6 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
 
         return errstr;
 }
-
 
 
 /**
@@ -525,6 +622,11 @@ int rd_kafka_transport_ssl_connect(rd_kafka_broker_t *rkb,
         if (r == 1) {
                 /* Connected, highly unlikely since this is a
                  * non-blocking operation. */
+#ifndef HAVE_SSL_KEYLOG_CALLBACK
+                // if SSL_CTX_set_keylog_callback is not defined, dump
+                // the keys if SSL_connect claims connected.
+                rd_kafka_transport_ssl_dump_key(rktrans->rktrans_ssl);
+#endif
                 rd_kafka_transport_connect_done(rktrans, NULL);
                 return 0;
         }
@@ -615,6 +717,11 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
 
         r = SSL_do_handshake(rktrans->rktrans_ssl);
         if (r == 1) {
+#ifndef HAVE_SSL_KEYLOG_CALLBACK
+                // if SSL_CTX_set_keylog_callback is not defined, dump
+                // the keys if SSL_do_handshake claims connected.
+                rd_kafka_transport_ssl_dump_key(rktrans->rktrans_ssl);
+#endif
                 /* SSL handshake done. Verify. */
                 if (rd_kafka_transport_ssl_verify(rktrans) == -1)
                         return -1;
@@ -669,7 +776,6 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
 
         return 0;
 }
-
 
 
 /**
@@ -743,7 +849,7 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         }
         wstore_name = rd_alloca(sizeof(*wstore_name) * wsize);
         werr        = mbstowcs_s(NULL, wstore_name, wsize, store_name,
-                          strlen(store_name));
+                                 strlen(store_name));
         rd_assert(!werr);
 
         w_store = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
@@ -856,7 +962,6 @@ static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
         return cert_cnt;
 }
 #endif /* MSC_VER */
-
 
 
 /**
@@ -1381,8 +1486,8 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
                 x509 = NULL;
                 r    = ENGINE_load_ssl_client_cert(
-                    rk->rk_conf.ssl.engine, NULL, cert_names, &x509, &pkey,
-                    NULL, NULL, rk->rk_conf.ssl.engine_callback_data);
+                       rk->rk_conf.ssl.engine, NULL, cert_names, &x509, &pkey,
+                       NULL, NULL, rk->rk_conf.ssl.engine_callback_data);
 
                 sk_X509_NAME_free(cert_names);
                 if (r == -1 || !x509 || !pkey) {
@@ -1732,6 +1837,13 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 
+#ifdef HAVE_SSL_KEYLOG_CALLBACK
+        if (rd_kafka_ssl_keylog_file) {
+                SSL_CTX_set_keylog_callback(
+                    ctx, rd_kafka_transport_ssl_keylog_callback);
+        }
+#endif
+
         rk->rk_conf.ssl.ctx = ctx;
 
         return 0;
@@ -1756,6 +1868,7 @@ fail:
 
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+
 static RD_UNUSED void
 rd_kafka_transport_ssl_lock_cb(int mode, int i, const char *file, int line) {
         if (mode & CRYPTO_LOCK)
@@ -1763,6 +1876,7 @@ rd_kafka_transport_ssl_lock_cb(int mode, int i, const char *file, int line) {
         else
                 mtx_unlock(&rd_kafka_ssl_locks[i]);
 }
+
 #endif
 
 static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb(void) {
@@ -1806,6 +1920,11 @@ void rd_kafka_ssl_term(void) {
                 rd_free(rd_kafka_ssl_locks);
         }
 #endif
+
+        if (rd_kafka_ssl_keylog_file) {
+                fclose(rd_kafka_ssl_keylog_file);
+                rd_kafka_ssl_keylog_file = NULL;
+        }
 }
 
 
@@ -1819,7 +1938,7 @@ void rd_kafka_ssl_init(void) {
         if (!CRYPTO_get_locking_callback()) {
                 rd_kafka_ssl_locks_cnt = CRYPTO_num_locks();
                 rd_kafka_ssl_locks     = rd_malloc(rd_kafka_ssl_locks_cnt *
-                                               sizeof(*rd_kafka_ssl_locks));
+                                                   sizeof(*rd_kafka_ssl_locks));
                 for (i = 0; i < rd_kafka_ssl_locks_cnt; i++)
                         mtx_init(&rd_kafka_ssl_locks[i], mtx_plain);
 
@@ -1846,4 +1965,20 @@ void rd_kafka_ssl_init(void) {
         ERR_load_crypto_strings();
         OpenSSL_add_all_algorithms();
 #endif
+
+        /* Check if env variable SSLKEYLOGFILE is defined and if it is,
+         * try opening the file for appending.
+         */
+        char *sslkeylogfile = getenv("SSLKEYLOGFILE");
+        if (sslkeylogfile && *sslkeylogfile) {
+                rd_kafka_ssl_keylog_file = fopen(sslkeylogfile, "a");
+                if (rd_kafka_ssl_keylog_file) {
+                        // if file is open, set the line buffering mode
+                        if (setvbuf(rd_kafka_ssl_keylog_file, NULL, _IOLBF,
+                                    4096)) {
+                                fclose(rd_kafka_ssl_keylog_file);
+                                rd_kafka_ssl_keylog_file = NULL;
+                        }
+                }
+        }
 }

@@ -565,7 +565,7 @@ rd_kafka_mock_cgrp_member_add(rd_kafka_mock_cgrp_t *mcgrp,
                 } else
                         member->id = RD_KAFKAP_STR_DUP(MemberId);
 
-                if (GroupInstanceId)
+                if (RD_KAFKAP_STR_LEN(GroupInstanceId))
                         member->group_instance_id =
                             RD_KAFKAP_STR_DUP(GroupInstanceId);
 

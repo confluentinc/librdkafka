@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -322,7 +323,7 @@ struct test tests[] = {
     _TEST(0028_long_topicnames,
           TEST_F_KNOWN_ISSUE,
           TEST_BRKVER(0, 9, 0, 0),
-          .extra = "https://github.com/edenhill/librdkafka/issues/529"),
+          .extra = "https://github.com/confluentinc/librdkafka/issues/529"),
     _TEST(0029_assign_offset, 0),
     _TEST(0030_offset_commit,
           0,

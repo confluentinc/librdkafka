@@ -1,9 +1,9 @@
 configurations {
-    Toolset { 
-        key : "PlatformToolset"; 
+    Toolset {
+        key : "PlatformToolset";
         choices: { v120, v140, v142 };
- 
-        // Explicitly Not including pivot variants:  "WindowsKernelModeDriver8.0", "WindowsApplicationForDrivers8.0", "WindowsUserModeDriver8.0" 
+
+        // Explicitly Not including pivot variants:  "WindowsKernelModeDriver8.0", "WindowsApplicationForDrivers8.0", "WindowsUserModeDriver8.0"
 
         // We're normalizing out the concept of the v140 platform -- Overloading the $(PlatformToolset) variable for additional pivots was a dumb idea.
         v140.condition = "( $(PlatformToolset.ToLower().IndexOf('v140')) > -1 Or '$(PlatformToolset.ToLower())' == 'windowskernelmodedriver8.0' Or '$(PlatformToolset.ToLower())' == 'windowsapplicationfordrivers8.0' Or '$(PlatformToolset.ToLower())' == 'windowsusermodedriver8.0' )";
@@ -17,10 +17,9 @@ nuget {
         // pre-deployment script.
         version : @version;
         title: "librdkafka";
-        authors: {Magnus Edenhill, edenhill};
-        owners: {Magnus Edenhill, edenhill};
-        licenseUrl: "https://github.com/edenhill/librdkafka/blob/master/LICENSES.txt";
-        projectUrl: "https://github.com/edenhill/librdkafka";
+        authors: {Magnus Edenhill, edenhill, confluent};
+        licenseUrl: "https://github.com/confluentinc/librdkafka/blob/master/LICENSES.txt";
+        projectUrl: "https://github.com/confluentinc/librdkafka";
         requireLicenseAcceptance: false;
         summary: "The Apache Kafka C/C++ client library";
 		description:"The Apache Kafka C/C++ client library";

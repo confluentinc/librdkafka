@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019, Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +30,7 @@
 /**
  * Simple high-level balanced Apache Kafka consumer
  * using the Kafka driver from librdkafka
- * (https://github.com/edenhill/librdkafka)
+ * (https://github.com/confluentinc/librdkafka)
  */
 
 #include <stdio.h>

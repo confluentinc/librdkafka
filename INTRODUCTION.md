@@ -184,7 +184,7 @@ soon as possible.
 Lower buffering time leads to smaller batches and larger per-message overheads,
 increasing network, memory and CPU usage for producers, brokers and consumers.
 
-See [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency) for more info.
+See [How to decrease message latency](https://github.com/confluentinc/librdkafka/wiki/How-to-decrease-message-latency) for more info.
 
 
 #### Latency measurement
@@ -2062,9 +2062,4 @@ librdkafka (file a github pull request).
 
 ## Community support
 
-You are welcome to direct your users to
-[librdkafka's Gitter chat room](http://gitter.im/edenhill/librdkafka) as long as
-you monitor the conversions in there to pick up questions specific to your
-bindings.
-But for the most part user questions are usually generic enough to apply to all
-librdkafka bindings.
+Community support is offered through GitHub Issues and Discussions.

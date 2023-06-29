@@ -164,7 +164,7 @@ For more information on the test suite see [tests/README.md].
 
 ## How to get your changes into the main sources
 
-File a [pull request on github](https://github.com/edenhill/librdkafka/pulls)
+File a [pull request on github](https://github.com/confluentinc/librdkafka/pulls)
 
 Your change will be reviewed and discussed there and you will be
 expected to correct flaws pointed out and update accordingly, or the change

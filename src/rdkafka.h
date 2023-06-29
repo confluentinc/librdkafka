@@ -7435,7 +7435,10 @@ typedef enum rd_kafka_ResourcePatternType_t {
         RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT,
 } rd_kafka_ResourcePatternType_t;
 
-/* KIP-339 */
+/**
+ * @enum rd_kafka_AlterConfigOpType_t
+ * @brief Incremental alter configs operations.
+ */
 typedef enum rd_kafka_AlterConfigOpType_t {
         RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET      = 0,
         RD_KAFKA_ALTER_CONFIG_OP_TYPE_DELETE   = 1,

@@ -190,7 +190,13 @@ struct rd_kafka_NewPartitions_s {
  * @{
  */
 
-/* KIP-248 */
+/**
+ * @enum rd_kafka_AlterOperation_t
+ * @brief Alter configs operations. Used only in rd_kafka_AlterConfigs()
+ *        and only with OP_SET.
+ *
+ * @deprecated Use rd_kafka_AlterConfigOpType_t.
+ */
 typedef enum rd_kafka_AlterOperation_t {
         RD_KAFKA_ALTER_OP_ADD    = 0,
         RD_KAFKA_ALTER_OP_SET    = 1,

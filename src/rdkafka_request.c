@@ -4199,16 +4199,6 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        /* Incremental requires IncrementalAlterConfigs */
-        if (rd_kafka_confval_get_int(&options->incremental)) {
-                rd_snprintf(errstr, errstr_size,
-                            "AlterConfigs.incremental=true (KIP-248) "
-                            "not supported by broker, "
-                            "replaced by IncrementalAlterConfigs");
-                rd_kafka_replyq_destroy(&replyq);
-                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
-        }
-
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_AlterConfigs, 1,
                                                  rd_list_cnt(configs) * 200,
                                                  ApiVersion >= 2);
@@ -4235,17 +4225,6 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                         /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
-
-                        if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
-                                rd_snprintf(errstr, errstr_size,
-                                            "IncrementalAlterConfigs required "
-                                            "for add/delete config "
-                                            "entries: only set supported "
-                                            "by this operation");
-                                rd_kafka_buf_destroy(rkbuf);
-                                rd_kafka_replyq_destroy(&replyq);
-                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
-                        }
 
                         rd_kafka_buf_write_tags(rkbuf);
                 }
@@ -4327,8 +4306,7 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
                         /* Name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                         /* ConfigOperation */
-                        rd_kafka_buf_write_i8(rkbuf,
-                                              entry->a.incremental_operation);
+                        rd_kafka_buf_write_i8(rkbuf, entry->a.op_type);
                         /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 

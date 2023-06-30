@@ -1524,20 +1524,6 @@ rd_kafka_AdminOptions_set_validate_only(rd_kafka_AdminOptions_t *options,
 }
 
 rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_incremental(rd_kafka_AdminOptions_t *options,
-                                      int true_or_false,
-                                      char *errstr,
-                                      size_t errstr_size) {
-        rd_snprintf(errstr, errstr_size,
-                    "Incremental updates currently not supported, see KIP-248");
-        return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
-
-        return rd_kafka_confval_set_type(&options->incremental,
-                                         RD_KAFKA_CONFVAL_INT, &true_or_false,
-                                         errstr, errstr_size);
-}
-
-rd_kafka_resp_err_t
 rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
                                  int32_t broker_id,
                                  char *errstr,
@@ -1643,13 +1629,6 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
         else
                 rd_kafka_confval_disable(&options->validate_only,
                                          "validate_only");
-
-        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
-            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS)
-                rd_kafka_confval_init_int(&options->incremental, "incremental",
-                                          0, 1, 0);
-        else
-                rd_kafka_confval_disable(&options->incremental, "incremental");
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS)
@@ -1885,18 +1864,14 @@ rd_kafka_NewTopic_set_replica_assignment(rd_kafka_NewTopic_t *new_topic,
  * @brief Generic constructor of ConfigEntry which is also added to \p rl
  */
 static rd_kafka_resp_err_t
-rd_kafka_admin_add_config0(rd_list_t *rl,
-                           const char *name,
-                           const char *value,
-                           rd_kafka_AlterOperation_t operation) {
+rd_kafka_admin_add_config0(rd_list_t *rl, const char *name, const char *value) {
         rd_kafka_ConfigEntry_t *entry;
 
         if (!name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        entry              = rd_calloc(1, sizeof(*entry));
-        entry->kv          = rd_strtup_new(name, value);
-        entry->a.operation = operation;
+        entry     = rd_calloc(1, sizeof(*entry));
+        entry->kv = rd_strtup_new(name, value);
 
         rd_list_add(rl, entry);
 
@@ -1908,11 +1883,11 @@ rd_kafka_admin_add_config0(rd_list_t *rl,
  * @brief Generic constructor of ConfigEntry for Incremental Alter Operations
  * which is also added to \p rl
  */
-static rd_kafka_error_t *rd_kafka_admin_incremental_add_config0(
-    rd_list_t *rl,
-    const char *name,
-    rd_kafka_AlterConfigOpType_t incremental_operation,
-    const char *value) {
+static rd_kafka_error_t *
+rd_kafka_admin_incremental_add_config0(rd_list_t *rl,
+                                       const char *name,
+                                       rd_kafka_AlterConfigOpType_t op_type,
+                                       const char *value) {
         rd_kafka_ConfigEntry_t *entry;
 
         if (!name) {
@@ -1920,9 +1895,9 @@ static rd_kafka_error_t *rd_kafka_admin_incremental_add_config0(
                                           "Config name is required");
         }
 
-        entry                          = rd_calloc(1, sizeof(*entry));
-        entry->kv                      = rd_strtup_new(name, value);
-        entry->a.incremental_operation = incremental_operation;
+        entry            = rd_calloc(1, sizeof(*entry));
+        entry->kv        = rd_strtup_new(name, value);
+        entry->a.op_type = op_type;
 
         rd_list_add(rl, entry);
 
@@ -1933,8 +1908,7 @@ static rd_kafka_error_t *rd_kafka_admin_incremental_add_config0(
 rd_kafka_resp_err_t rd_kafka_NewTopic_set_config(rd_kafka_NewTopic_t *new_topic,
                                                  const char *name,
                                                  const char *value) {
-        return rd_kafka_admin_add_config0(&new_topic->config, name, value,
-                                          RD_KAFKA_ALTER_OP_ADD);
+        return rd_kafka_admin_add_config0(&new_topic->config, name, value);
 }
 
 
@@ -2859,19 +2833,6 @@ rd_kafka_ConfigResource_add_ConfigEntry(rd_kafka_ConfigResource_t *config,
         rd_list_add(&config->config, entry);
 }
 
-
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_add_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value) {
-        if (!name || !*name || !value)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        return rd_kafka_admin_add_config0(&config->config, name, value,
-                                          RD_KAFKA_ALTER_OP_ADD);
-}
-
-
 rd_kafka_resp_err_t
 rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
                                    const char *name,
@@ -2879,19 +2840,7 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
         if (!name || !*name || !value)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        return rd_kafka_admin_add_config0(&config->config, name, value,
-                                          RD_KAFKA_ALTER_OP_SET);
-}
-
-
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_delete_config(rd_kafka_ConfigResource_t *config,
-                                      const char *name) {
-        if (!name || !*name)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        return rd_kafka_admin_add_config0(&config->config, name, NULL,
-                                          RD_KAFKA_ALTER_OP_DELETE);
+        return rd_kafka_admin_add_config0(&config->config, name, value);
 }
 
 

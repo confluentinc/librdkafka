@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2022 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -897,11 +897,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Java TrustStores are not supported, use `ssl.ca.location` "
      "and a certificate file instead. "
      "See "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SSL-with-librdkafka "
      "for more information."},
     {_RK_GLOBAL, "sasl.jaas.config", _RK_C_INVALID, _RK(dummy),
      "Java JAAS configuration is not supported, see "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SASL-with-librdkafka "
      "for more information."},
 
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanisms", _RK_C_STR, _RK(sasl.mechanisms),
@@ -1197,6 +1199,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Maximum time the broker may wait to fill the Fetch response "
      "with fetch.min.bytes of messages.",
      0, 300 * 1000, 500},
+    {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.queue.backoff.ms", _RK_C_INT,
+     _RK(fetch_queue_backoff_ms),
+     "How long to postpone the next fetch request for a "
+     "topic+partition in case the current fetch queue thresholds "
+     "(queued.min.messages or queued.max.messages.kbytes) have "
+     "been exceded. "
+     "This property may need to be decreased if the queue thresholds are "
+     "set low and the application is experiencing long (~1s) delays "
+     "between messages. Low values may increase CPU utilization.",
+     0, 300 * 1000, 1000},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.message.max.bytes", _RK_C_INT,
      _RK(fetch_msg_max_bytes),
      "Initial maximum number of bytes per topic+partition to request when "

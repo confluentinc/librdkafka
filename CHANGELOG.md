@@ -7,8 +7,34 @@ librdkafka v2.2.0 is a feature release:
  * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
  * Fix a bug that happens when skipping tags, causing buffer underflow in
    MetadataResponse (#4278).
+ * Fix a bug where topic leader is not refreshed in the same metadata call even if the leader is
+   present.
+ * [KIP-881](https://cwiki.apache.org/confluence/display/KAFKA/KIP-881%3A+Rack-aware+Partition+Assignment+for+Kafka+Consumers):
+   Add support for rack-aware partition assignment for consumers
+   (#4184, #4291, #4252).
+ * Fix several bugs with sticky assignor in case of partition ownership
+   changing between members of the consumer group (#4252).
+ * [KIP-368](https://cwiki.apache.org/confluence/display/KAFKA/KIP-368%3A+Allow+SASL+Connections+to+Periodically+Re-Authenticate):
+   Allow SASL Connections to Periodically Re-Authenticate
+   (#4301, started by @vctoriawu).
+ * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
+   closes as normal ones (#4294).
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
  * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
    IncrementalAlterConfigs API (#4110).
+
+
+## Enhancements
+
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off next fetch attempt. When the pre-fetch queue
+   has exceeded its queuing thresholds: `queued.min.messages` and
+   `queued.max.messages.kbytes` it backs off for 1 seconds.
+   If those parameters have to be set too high to hold 1 s of data,
+   this new parameter allows to back off the fetch earlier, reducing memory
+   requirements.
+
 
 ## Fixes
 
@@ -19,6 +45,29 @@ librdkafka v2.2.0 is a feature release:
    when using Confluent Platform, only when racks are set,
    observers are activated and there is more than one partition.
    Fixed by skipping the correct amount of bytes when tags are received.
+ * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
+   closes as normal ones. When SSL connections are closed without `close_notify`,
+   in OpenSSL 3.x a new type of error is set and it was interpreted as permanent
+   in librdkafka. It can cause a different issue depending on the RPC.
+   If received when waiting for OffsetForLeaderEpoch response, it triggers
+   an offset reset following the configured policy.
+   Solved by treating SSL errors as transport errors and
+   by setting an OpenSSL flag that allows to treat unclean SSL closes as normal
+   ones. These types of errors can happen it the other side doesn't support `close_notify` or if there's a TCP connection reset.
+
+
+### Consumer fixes
+
+  * In case of multiple owners of a partition with different generations, the
+    sticky assignor would pick the earliest (lowest generation) member as the
+    current owner, which would lead to stickiness violations. Fixed by
+    choosing the latest (highest generation) member.
+  * In case where the same partition is owned by two members with the same
+    generation, it indicates an issue. The sticky assignor had some code to
+    handle this, but it was non-functional, and did not have parity with the
+    Java assignor. Fixed by invalidating any such partition from the current
+    assignment completely.
+
 
 
 # librdkafka v2.1.1
@@ -58,6 +107,7 @@ librdkafka v2.1.1 is a maintenance release:
    but it is possible for the user to obtain the queue with messages from
    the broker, skipping these functions. This was fixed by encoding information
    in a queue itself, that, whether polling, resets the timer.
+
 
 
 # librdkafka v2.1.0
@@ -571,7 +621,7 @@ librdkafka v1.8.0 is a security release:
  * Upgrade bundled zlib version from 1.2.8 to 1.2.11 in the `librdkafka.redist`
    NuGet package. The updated zlib version fixes CVEs:
    CVE-2016-9840, CVE-2016-9841, CVE-2016-9842, CVE-2016-9843
-   See https://github.com/edenhill/librdkafka/issues/2934 for more information.
+   See https://github.com/confluentinc/librdkafka/issues/2934 for more information.
  * librdkafka now uses [vcpkg](https://vcpkg.io/) for up-to-date Windows
    dependencies in the `librdkafka.redist` NuGet package:
    OpenSSL 1.1.1l, zlib 1.2.11, zstd 1.5.0.
@@ -1284,4 +1334,4 @@ v1.4.2 is a maintenance release with the following fixes and enhancements:
 
 # Older releases
 
-See https://github.com/edenhill/librdkafka/releases
+See https://github.com/confluentinc/librdkafka/releases

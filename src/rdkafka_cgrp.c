@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1964,6 +1965,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 int sub_cnt = 0;
                 rd_list_t topics;
                 rd_kafka_op_t *rko;
+                rd_bool_t any_member_rack = rd_false;
                 rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
                              "I am elected leader for group \"%s\" "
                              "with %" PRId32 " member(s)",
@@ -2009,6 +2011,9 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                                 rd_kafka_topic_partition_list_get_topic_names(
                                     rkgm->rkgm_subscription, &topics,
                                     0 /*dont include regex*/);
+                                if (!any_member_rack && rkgm->rkgm_rack_id &&
+                                    RD_KAFKAP_STR_LEN(rkgm->rkgm_rack_id))
+                                        any_member_rack = rd_true;
                         }
                 }
 
@@ -2046,7 +2051,11 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                      * avoid triggering a rejoin or error propagation
                      * on receiving the response since some topics
                      * may be missing. */
-                    rd_false, rko);
+                    rd_false,
+                    /* force_racks is true if any memeber has a client rack set,
+                       since we will require partition to rack mapping in that
+                       case for rack-aware assignors. */
+                    any_member_rack, rko);
                 rd_list_destroy(&topics);
 
         } else {
@@ -3121,7 +3130,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
             !(err == RD_KAFKA_RESP_ERR__NO_OFFSET &&
               rko_orig->rko_u.offset_commit.silent_empty)) {
                 /* Propagate commit results (success or permanent error)
-                 * unless we're shutting down or commit was empty. */
+                 * unless we're shutting down or commit was empty, or if
+                 * there was a rebalance in progress. */
                 rd_kafka_cgrp_propagate_commit_result(rkcg, rko_orig, err,
                                                       errcnt, offsets);
         }

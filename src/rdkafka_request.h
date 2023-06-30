@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -258,6 +259,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
+                                             rd_bool_t force_racks,
                                              rd_kafka_op_t *rko);
 
 rd_kafka_resp_err_t
@@ -286,6 +288,7 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
                                       rd_kafka_buf_t *rkbuf,
                                       rd_kafka_buf_t *request,
                                       void *opaque);
+
 void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                                       const void *buf,
                                       size_t size,

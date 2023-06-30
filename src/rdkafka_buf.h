@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -366,6 +367,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_bool_t all_topics;  /**< Full/All topics requested */
                         rd_bool_t cgrp_update; /**< Update cgrp with topic
                                                 *   status from response. */
+                        rd_bool_t force_racks; /**< Force the returned metadata
+                                                *   to contain partition to
+                                                *   rack mapping. */
 
                         int *decr; /* Decrement this integer by one
                                     * when request is complete:

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -505,6 +506,7 @@ rd_kafka_mock_cgrp_member_add(rd_kafka_mock_cgrp_t *mcgrp,
                               rd_kafka_mock_connection_t *mconn,
                               rd_kafka_buf_t *resp,
                               const rd_kafkap_str_t *MemberId,
+                              const rd_kafkap_str_t *GroupInstanceId,
                               const rd_kafkap_str_t *ProtocolType,
                               rd_kafka_mock_cgrp_proto_t *protos,
                               int proto_cnt,

@@ -184,7 +184,7 @@ soon as possible.
 Lower buffering time leads to smaller batches and larger per-message overheads,
 increasing network, memory and CPU usage for producers, brokers and consumers.
 
-See [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency) for more info.
+See [How to decrease message latency](https://github.com/confluentinc/librdkafka/wiki/How-to-decrease-message-latency) for more info.
 
 
 #### Latency measurement
@@ -1917,7 +1917,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-359 - Producer: use EpochLeaderId                                    | 2.4.0                       | Not supported                                                                                 |
 | KIP-360 - Improve handling of unknown Idempotent Producer                | 2.5.0                       | Supported                                                                                     |
 | KIP-361 - Consumer: add config to disable auto topic creation            | 2.3.0                       | Supported                                                                                     |
-| KIP-368 - SASL periodic reauth                                           | 2.2.0                       | Not supported                                                                                 |
+| KIP-368 - SASL periodic reauth                                           | 2.2.0                       | Supported                                                                                     |
 | KIP-369 - Always roundRobin partitioner                                  | 2.4.0                       | Not supported                                                                                 |
 | KIP-389 - Consumer group max size                                        | 2.2.0                       | Supported (error is propagated to application, but the consumer does not raise a fatal error) |
 | KIP-392 - Allow consumers to fetch from closest replica                  | 2.4.0                       | Supported                                                                                     |
@@ -1957,6 +1957,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-654 - Aborted txns with non-flushed msgs should not be fatal         | 2.7.0                       | Supported                                                                                     |
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
+| KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0 (WIP)                 | Supported                                                                                     |
 
 
 
@@ -2062,9 +2063,4 @@ librdkafka (file a github pull request).
 
 ## Community support
 
-You are welcome to direct your users to
-[librdkafka's Gitter chat room](http://gitter.im/edenhill/librdkafka) as long as
-you monitor the conversions in there to pick up questions specific to your
-bindings.
-But for the most part user questions are usually generic enough to apply to all
-librdkafka bindings.
+Community support is offered through GitHub Issues and Discussions.

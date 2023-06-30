@@ -7602,6 +7602,8 @@ rd_kafka_ConfigResource_error_string(const rd_kafka_ConfigResource_t *config);
  *         since these resource requests must be sent to the broker specified
  *         in the resource.
  *
+ * @deprecated Use rd_kafka_IncrementalAlterConfigs().
+ *
  */
 RD_EXPORT
 void rd_kafka_AlterConfigs(rd_kafka_t *rk,

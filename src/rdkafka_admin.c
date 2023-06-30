@@ -1911,8 +1911,8 @@ rd_kafka_admin_add_config0(rd_list_t *rl,
 static rd_kafka_error_t *rd_kafka_admin_incremental_add_config0(
     rd_list_t *rl,
     const char *name,
-    const char *value,
-    rd_kafka_AlterConfigOpType_t incremental_operation) {
+    rd_kafka_AlterConfigOpType_t incremental_operation,
+    const char *value) {
         rd_kafka_ConfigEntry_t *entry;
 
         if (!name) {
@@ -2919,7 +2919,7 @@ rd_kafka_error_t *rd_kafka_ConfigResource_set_incremental_config(
         }
 
         return rd_kafka_admin_incremental_add_config0(&config->config, name,
-                                                      value, op_type);
+                                                      op_type, value);
 }
 
 
@@ -3248,11 +3248,11 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
         rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
-        if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
+        if (res_cnt != rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
                 rd_snprintf(errstr, errstr_size,
                             "Received %" PRId32
                             " ConfigResources in response "
-                            "when only %d were requested",
+                            "when %d were requested",
                             res_cnt,
                             rd_list_cnt(&rko_req->rko_u.admin_request.args));
                 return RD_KAFKA_RESP_ERR__BAD_MSG;

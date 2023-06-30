@@ -193,6 +193,8 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                         usage("Invalid resource type: %s", restype_s);
                 }
 
+                /* It's not necessary, but cleaner and more efficient to group
+                 * incremental alterations for the same ConfigResource.*/
                 if (restype != prev_restype || strcmp(resname, prev_resname)) {
                         configs[resources++] =
                             rd_kafka_ConfigResource_new(restype, resname);
@@ -256,9 +258,7 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_IncrementalAlterConfigs(rk, configs, resources, options,
                                          queue);
 
-        for (i = 0; i < resources; i++) {
-                rd_kafka_ConfigResource_destroy(configs[i]);
-        }
+        rd_kafka_ConfigResource_destroy_array(configs, resources);
         free(configs);
 
         /* Wait for results */

@@ -8,7 +8,7 @@ librdkafka v2.2.0 is a feature release:
  * Fix a bug that happens when skipping tags, causing buffer underflow in
    MetadataResponse (#4278).
  * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
-  Create a new IncrementalAlterConfigs API (#4110).
+   IncrementalAlterConfigs API (#4110).
 
 ## Fixes
 

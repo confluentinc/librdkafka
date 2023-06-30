@@ -930,6 +930,26 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
 
         test_wait_topic_exists(rk, topics[0], 10000);
 
+
+        /** Test the test helper, for use in other tests. */
+        do {
+                const char *confs_set_append[] = {
+                    "compression.type", "SET",    "lz4",
+                    "cleanup.policy",   "APPEND", "compact"};
+                const char *confs_delete_subtract[] = {
+                    "compression.type", "DELETE",   "lz4",
+                    "cleanup.policy",   "SUBTRACT", "compact"};
+                TEST_SAY("Testing test helper with SET and APPEND\n");
+                test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
+                                                    topics[0], confs_set_append,
+                                                    1);
+                TEST_SAY("Testing test helper with SUBTRACT and DELETE\n");
+                test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
+                                                    topics[0],
+                                                    confs_delete_subtract, 1);
+                TEST_SAY("End testing test helper\n");
+        } while (0);
+
         /*
          * ConfigResource #0: valid topic config
          */
@@ -992,7 +1012,6 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         else
                 exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN;
         ci++;
-
 
         /*
          * Timeout options

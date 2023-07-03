@@ -934,20 +934,41 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
 
         /** Test the test helper, for use in other tests. */
         do {
+                const char *broker_id = tsprintf("%d", avail_brokers[0]);
                 const char *confs_set_append[] = {
                     "compression.type", "SET",    "lz4",
                     "cleanup.policy",   "APPEND", "compact"};
                 const char *confs_delete_subtract[] = {
                     "compression.type", "DELETE",   "lz4",
                     "cleanup.policy",   "SUBTRACT", "compact"};
+                const char *confs_set_append_broker[] = {
+                    "background.threads", "SET",    "9",
+                    "log.cleanup.policy", "APPEND", "compact"};
+                const char *confs_delete_subtract_broker[] = {
+                    "background.threads", "DELETE",   "",
+                    "log.cleanup.policy", "SUBTRACT", "compact"};
+
                 TEST_SAY("Testing test helper with SET and APPEND\n");
                 test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
                                                     topics[0], confs_set_append,
-                                                    1);
+                                                    2);
                 TEST_SAY("Testing test helper with SUBTRACT and DELETE\n");
                 test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
                                                     topics[0],
-                                                    confs_delete_subtract, 1);
+                                                    confs_delete_subtract, 2);
+
+                TEST_SAY(
+                    "Testing test helper with SET and APPEND with BROKER "
+                    "resource type\n");
+                test_IncrementalAlterConfigs_simple(
+                    rk, RD_KAFKA_RESOURCE_BROKER, broker_id,
+                    confs_set_append_broker, 2);
+                TEST_SAY(
+                    "Testing test helper with SUBTRACT and DELETE with BROKER "
+                    "resource type\n");
+                test_IncrementalAlterConfigs_simple(
+                    rk, RD_KAFKA_RESOURCE_BROKER, broker_id,
+                    confs_delete_subtract_broker, 2);
                 TEST_SAY("End testing test helper\n");
         } while (0);
 

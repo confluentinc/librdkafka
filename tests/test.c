@@ -6508,7 +6508,7 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
         size_t result_cnt;
         const rd_kafka_ConfigEntry_t **configents;
         size_t configent_cnt;
-
+        config_cnt = config_cnt * 2;
 
         q = rd_kafka_queue_new(rk);
 
@@ -6618,8 +6618,9 @@ test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
         TEST_SAY("Incrementally altering configuration for %d %s\n", restype,
                  resname);
 
-        q       = rd_kafka_queue_new(rk);
-        confres = rd_kafka_ConfigResource_new(restype, resname);
+        q          = rd_kafka_queue_new(rk);
+        confres    = rd_kafka_ConfigResource_new(restype, resname);
+        config_cnt = config_cnt * 3;
 
         /* Apply the configuration to change. */
         for (i = 0; i < config_cnt; i += 3) {

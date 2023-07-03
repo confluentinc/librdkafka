@@ -7694,7 +7694,7 @@ void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
  */
 RD_EXPORT const rd_kafka_ConfigResource_t **
 rd_kafka_IncrementalAlterConfigs_result_resources(
-    const rd_kafka_AlterConfigs_result_t *result,
+    const rd_kafka_IncrementalAlterConfigs_result_t *result,
     size_t *cntp);
 
 

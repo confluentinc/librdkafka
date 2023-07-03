@@ -3335,6 +3335,8 @@ void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
             config_cnt, rd_map_str_cmp, rd_map_str_hash, NULL, NULL);
 
         for (i = 0; i < config_cnt; i++) {
+                /* 2 chars for the decimal restype + 1 for the comma
+                 * + 1 for the trailing zero. */
                 size_t len = 4 + strlen(configs[i]->name);
                 char *key  = rd_alloca(len);
                 const rd_kafka_ConfigEntry_t **entries;

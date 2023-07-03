@@ -5037,10 +5037,6 @@ err_parse:
         return reply->rkbuf_err;
 }
 
-int strcmp_void(const void *a, const void *b) {
-        return strcmp(a, b);
-}
-
 void rd_kafka_DescribeUserScramCredentials(
     rd_kafka_t *rk,
     const char **users,
@@ -5067,8 +5063,8 @@ void rd_kafka_DescribeUserScramCredentials(
                 for (i = 0; i < user_cnt; i++) {
                         rd_list_add(userlist, rd_strdup(users[i]));
                 }
-                rd_list_sort(userlist, strcmp_void);
-                if (rd_list_find_duplicate(userlist, strcmp_void)) {
+                rd_list_sort(userlist, rd_strcmp2);
+                if (rd_list_find_duplicate(userlist, rd_strcmp2)) {
                         rd_list_destroy(userlist);
                         rd_kafka_admin_result_fail(
                             rko, RD_KAFKA_RESP_ERR__INVALID_ARG,

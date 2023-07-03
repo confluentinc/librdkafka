@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1754,12 +1755,36 @@ void *rd_kafka_topic_opaque(const rd_kafka_topic_t *app_rkt) {
 
 int rd_kafka_topic_info_cmp(const void *_a, const void *_b) {
         const rd_kafka_topic_info_t *a = _a, *b = _b;
-        int r;
+        int r, i;
 
         if ((r = strcmp(a->topic, b->topic)))
                 return r;
 
-        return RD_CMP(a->partition_cnt, b->partition_cnt);
+        if ((r = RD_CMP(a->partition_cnt, b->partition_cnt)))
+                return r;
+
+        if (a->partitions_internal == NULL && b->partitions_internal == NULL)
+                return 0;
+
+        if (a->partitions_internal == NULL || b->partitions_internal == NULL)
+                return (a->partitions_internal == NULL) ? 1 : -1;
+
+        /* We're certain partitions_internal exist for a/b and have the same
+         * count. */
+        for (i = 0; i < a->partition_cnt; i++) {
+                size_t k;
+                if ((r = RD_CMP(a->partitions_internal[i].racks_cnt,
+                                b->partitions_internal[i].racks_cnt)))
+                        return r;
+
+                for (k = 0; k < a->partitions_internal[i].racks_cnt; k++) {
+                        if ((r = rd_strcmp(a->partitions_internal[i].racks[k],
+                                           b->partitions_internal[i].racks[k])))
+                                return r;
+                }
+        }
+
+        return 0;
 }
 
 
@@ -1789,7 +1814,77 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new(const char *topic,
         ti        = rd_malloc(sizeof(*ti) + tlen);
         ti->topic = (char *)(ti + 1);
         memcpy((char *)ti->topic, topic, tlen);
-        ti->partition_cnt = partition_cnt;
+        ti->partition_cnt       = partition_cnt;
+        ti->partitions_internal = NULL;
+
+        return ti;
+}
+
+/**
+ * Allocate new topic_info, including rack information.
+ * \p topic is copied.
+ */
+rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
+    const char *topic,
+    int partition_cnt,
+    const rd_kafka_metadata_partition_internal_t *mdpi) {
+        rd_kafka_topic_info_t *ti;
+        rd_tmpabuf_t tbuf;
+        size_t tlen             = RD_ROUNDUP(strlen(topic) + 1, 8);
+        size_t total_racks_size = 0;
+        int i;
+
+        for (i = 0; i < partition_cnt; i++) {
+                size_t j;
+                if (!mdpi[i].racks)
+                        continue;
+
+                for (j = 0; j < mdpi[i].racks_cnt; j++) {
+                        total_racks_size +=
+                            RD_ROUNDUP(strlen(mdpi[i].racks[j]) + 1, 8);
+                }
+                total_racks_size +=
+                    RD_ROUNDUP(sizeof(char *) * mdpi[i].racks_cnt, 8);
+        }
+
+        if (total_racks_size) /* Only bother allocating this if at least one
+                                 rack is there. */
+                total_racks_size +=
+                    RD_ROUNDUP(sizeof(rd_kafka_metadata_partition_internal_t) *
+                                   partition_cnt,
+                               8);
+
+        rd_tmpabuf_new(&tbuf, sizeof(*ti) + tlen + total_racks_size,
+                       1 /* assert on fail */);
+        ti                      = rd_tmpabuf_alloc(&tbuf, sizeof(*ti));
+        ti->topic               = rd_tmpabuf_write_str(&tbuf, topic);
+        ti->partition_cnt       = partition_cnt;
+        ti->partitions_internal = NULL;
+
+        if (total_racks_size) {
+                ti->partitions_internal = rd_tmpabuf_alloc(
+                    &tbuf, sizeof(*ti->partitions_internal) * partition_cnt);
+
+                for (i = 0; i < partition_cnt; i++) {
+                        size_t j;
+                        ti->partitions_internal[i].id    = mdpi[i].id;
+                        ti->partitions_internal[i].racks = NULL;
+
+                        if (!mdpi[i].racks)
+                                continue;
+
+                        ti->partitions_internal[i].racks_cnt =
+                            mdpi[i].racks_cnt;
+                        ti->partitions_internal[i].racks = rd_tmpabuf_alloc(
+                            &tbuf, sizeof(char *) * mdpi[i].racks_cnt);
+
+                        for (j = 0; j < mdpi[i].racks_cnt; j++) {
+                                ti->partitions_internal[i].racks[j] =
+                                    rd_tmpabuf_write_str(&tbuf,
+                                                         mdpi[i].racks[j]);
+                        }
+                }
+        }
 
         return ti;
 }
@@ -1902,7 +1997,8 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
         }
 
         rd_kafka_wrlock(rkt->rkt_rk);
-        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, &mdit, rd_true);
+        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, &mdit, rd_true,
+                                             rd_false, NULL, 0);
         rd_kafka_topic_metadata_update(rkt, &mdt, &mdit, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
         rd_free(partitions);

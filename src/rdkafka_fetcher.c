@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2022 Magnus Edenhill
+ * Copyright (c) 2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,15 +51,29 @@ static void rd_kafka_broker_fetch_backoff(rd_kafka_broker_t *rkb,
 
 /**
  * @brief Backoff the next Fetch for specific partition
+ *
+ * @returns the absolute backoff time (the current time for no backoff).
  */
-static void rd_kafka_toppar_fetch_backoff(rd_kafka_broker_t *rkb,
-                                          rd_kafka_toppar_t *rktp,
-                                          rd_kafka_resp_err_t err) {
-        int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+static rd_ts_t rd_kafka_toppar_fetch_backoff(rd_kafka_broker_t *rkb,
+                                             rd_kafka_toppar_t *rktp,
+                                             rd_kafka_resp_err_t err) {
+        int backoff_ms;
 
         /* Don't back off on reaching end of partition */
-        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
-                return;
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+                rktp->rktp_ts_fetch_backoff = 0;
+                return rd_clock(); /* Immediate: No practical backoff */
+        }
+
+        if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL)
+                backoff_ms = rkb->rkb_rk->rk_conf.fetch_queue_backoff_ms;
+        else
+                backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+
+        if (unlikely(!backoff_ms)) {
+                rktp->rktp_ts_fetch_backoff = 0;
+                return rd_clock(); /* Immediate: No practical backoff */
+        }
 
         /* Certain errors that may require manual intervention should have
          * a longer backoff time. */
@@ -73,8 +87,9 @@ static void rd_kafka_toppar_fetch_backoff(rd_kafka_broker_t *rkb,
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                    backoff_ms, err ? ": " : "",
                    err ? rd_kafka_err2str(err) : "");
-}
 
+        return rktp->rktp_ts_fetch_backoff;
+}
 
 /**
  * @brief Handle preferred replica in fetch response.
@@ -879,8 +894,6 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                  * This can happen if metadata is read initially
                                  * without an existing topic (see
                                  * rd_kafka_topic_metadata_update2).
-                                 * TODO: have a private metadata struct that
-                                 * stores leader epochs before topic creation.
                                  */
                                 rd_kafka_buf_write_i32(rkbuf, 0);
                         } else {
@@ -1023,7 +1036,7 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                         rd_interval(&rktp->rktp_lease_intvl,
                                     5 * 60 * 1000 * 1000 /*5 minutes*/, 0) > 0;
         if (lease_expired) {
-                /* delete_to_leader() requires no locks to be held */
+                /* delegate_to_leader() requires no locks to be held */
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_delegate_to_leader(rktp);
                 rd_kafka_toppar_lock(rktp);
@@ -1099,22 +1112,24 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                        rktp->rktp_next_fetch_start.offset)) {
                 should_fetch = 0;
                 reason       = "no concrete offset";
-
+        } else if (rktp->rktp_ts_fetch_backoff > rd_clock()) {
+                reason       = "fetch backed off";
+                ts_backoff   = rktp->rktp_ts_fetch_backoff;
+                should_fetch = 0;
         } else if (rd_kafka_q_len(rktp->rktp_fetchq) >=
                    rkb->rkb_rk->rk_conf.queued_min_msgs) {
                 /* Skip toppars who's local message queue is already above
                  * the lower threshold. */
-                reason       = "queued.min.messages exceeded";
+                reason     = "queued.min.messages exceeded";
+                ts_backoff = rd_kafka_toppar_fetch_backoff(
+                    rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
                 should_fetch = 0;
 
         } else if ((int64_t)rd_kafka_q_size(rktp->rktp_fetchq) >=
                    rkb->rkb_rk->rk_conf.queued_max_msg_bytes) {
-                reason       = "queued.max.messages.kbytes exceeded";
-                should_fetch = 0;
-
-        } else if (rktp->rktp_ts_fetch_backoff > rd_clock()) {
-                reason       = "fetch backed off";
-                ts_backoff   = rktp->rktp_ts_fetch_backoff;
+                reason     = "queued.max.messages.kbytes exceeded";
+                ts_backoff = rd_kafka_toppar_fetch_backoff(
+                    rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
                 should_fetch = 0;
         }
 

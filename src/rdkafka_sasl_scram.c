@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2017-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -76,6 +77,7 @@ static void rd_kafka_sasl_scram_close(rd_kafka_transport_t *rktrans) {
         RD_IF_FREE(state->first_msg_bare.ptr, rd_free);
         RD_IF_FREE(state->ServerSignatureB64, rd_free);
         rd_free(state);
+        rktrans->rktrans_sasl.state = NULL;
 }
 
 

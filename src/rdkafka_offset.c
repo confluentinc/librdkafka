@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -998,10 +999,8 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                             &rk->rk_timers, &rktp->rktp_validate_tmr, rd_false,
                             500 * 1000 /* 500ms */,
                             rd_kafka_offset_validate_tmr_cb, rktp);
-                        goto done;
-                }
 
-                if (!(actions & RD_KAFKA_ERR_ACTION_REFRESH)) {
+                } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
                         /* Permanent error */
                         rd_kafka_offset_reset(
                             rktp, rd_kafka_broker_id(rkb),

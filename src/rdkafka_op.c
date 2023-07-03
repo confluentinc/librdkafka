@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -106,6 +107,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:GET_REBALANCE_PROTOCOL",
             [RD_KAFKA_OP_LEADERS] = "REPLY:LEADERS",
             [RD_KAFKA_OP_BARRIER] = "REPLY:BARRIER",
+            [RD_KAFKA_OP_SASL_REAUTH] = "REPLY:SASL_REAUTH",
             [RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS] = "REPLY:ALTERUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] = "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
         };
@@ -257,6 +259,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.rebalance_protocol),
             [RD_KAFKA_OP_LEADERS] = sizeof(rko->rko_u.leaders),
             [RD_KAFKA_OP_BARRIER] = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_SASL_REAUTH] = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] = sizeof(rko->rko_u.admin_request),
         };

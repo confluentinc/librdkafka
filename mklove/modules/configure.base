@@ -2208,7 +2208,7 @@ function mkl_require {
 MKL_USAGE="Usage: ./configure [OPTIONS...]
 
  mklove configure script - mklove, not autoconf
- Copyright (c) 2014-2019 Magnus Edenhill - https://github.com/edenhill/mklove
+ Copyright (c) 2014-2023, Magnus Edenhill - https://github.com/edenhill/mklove
 "
 
 function mkl_usage {

@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1721,6 +1722,14 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         if (rd_kafka_ssl_set_certs(rk, ctx, errstr, errstr_size) == -1)
                 goto fail;
 
+
+#ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
+        /* Ignore unexpected EOF error in OpenSSL 3.x, treating
+         * it like a normal connection close even if
+         * close_notify wasn't received.
+         * see issue #4293 */
+        SSL_CTX_set_options(ctx, SSL_OP_IGNORE_UNEXPECTED_EOF);
+#endif
 
         SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 

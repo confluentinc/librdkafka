@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -424,12 +425,15 @@ int64_t rd_kafka_mock_partition_offset_for_leader_epoch(
  * @brief Automatically assign replicas for partition
  */
 static void
-rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart) {
+rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
+                                        int replication_factor) {
         rd_kafka_mock_cluster_t *mcluster = mpart->topic->cluster;
-        int replica_cnt =
-            RD_MIN(mcluster->defaults.replication_factor, mcluster->broker_cnt);
+        int replica_cnt = RD_MIN(replication_factor, mcluster->broker_cnt);
         rd_kafka_mock_broker_t *mrkb;
         int i = 0;
+        int first_replica =
+            (mpart->id * replication_factor) % mcluster->broker_cnt;
+        int skipped = 0;
 
         if (mpart->replicas)
                 rd_free(mpart->replicas);
@@ -437,7 +441,19 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart) {
         mpart->replicas    = rd_calloc(replica_cnt, sizeof(*mpart->replicas));
         mpart->replica_cnt = replica_cnt;
 
-        /* FIXME: randomize this using perhaps reservoir sampling */
+
+        /* Use a predictable, determininistic order on a per-topic basis.
+         *
+         * Two loops are needed for wraparound. */
+        TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                if (skipped < first_replica) {
+                        skipped++;
+                        continue;
+                }
+                if (i == mpart->replica_cnt)
+                        break;
+                mpart->replicas[i++] = mrkb;
+        }
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
                 if (i == mpart->replica_cnt)
                         break;
@@ -562,7 +578,7 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
 
         rd_list_init(&mpart->pidstates, 0, rd_free);
 
-        rd_kafka_mock_partition_assign_replicas(mpart);
+        rd_kafka_mock_partition_assign_replicas(mpart, replication_factor);
 }
 
 rd_kafka_mock_partition_t *
@@ -1469,6 +1485,9 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
                 TAILQ_REMOVE(&mrkb->errstacks, errstack, link);
                 rd_kafka_mock_error_stack_destroy(errstack);
         }
+
+        if (mrkb->rack)
+                rd_free(mrkb->rack);
 
         TAILQ_REMOVE(&mrkb->cluster->brokers, mrkb, link);
         mrkb->cluster->broker_cnt--;

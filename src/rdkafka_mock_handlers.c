@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill,
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1200,8 +1201,8 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
                 /* This triggers an async rebalance, the response will be
                  * sent later. */
                 err = rd_kafka_mock_cgrp_member_add(
-                    mcgrp, mconn, resp, &MemberId, &ProtocolType, protos,
-                    ProtocolCnt, SessionTimeoutMs);
+                    mcgrp, mconn, resp, &MemberId, &ProtocolType,
+                    &GroupInstanceId, protos, ProtocolCnt, SessionTimeoutMs);
                 if (!err) {
                         /* .._add() assumes ownership of resp and protos */
                         protos = NULL;

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2022 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -166,7 +167,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION 0x020101ff
+#define RD_KAFKA_VERSION 0x020200ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -2098,7 +2099,7 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  *                 rd_kafka_conf_set_opaque().
  *
  * For more information on the format of \p json, see
- * https://github.com/edenhill/librdkafka/wiki/Statistics
+ * https://github.com/confluentinc/librdkafka/wiki/Statistics
  *
  * If the application wishes to hold on to the \p json pointer and free
  * it at a later time it must return 1 from the \p stats_cb.

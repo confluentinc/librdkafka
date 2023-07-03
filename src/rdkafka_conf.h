@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2014-2018 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -355,6 +355,7 @@ struct rd_kafka_conf_s {
         int fetch_msg_max_bytes;
         int fetch_max_bytes;
         int fetch_min_bytes;
+        int fetch_queue_backoff_ms;
         int fetch_error_backoff_ms;
         char *group_id_str;
         char *group_instance_id;

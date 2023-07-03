@@ -3404,6 +3404,20 @@ void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
                                                      rd_true /*destroy*/);
                 return;
         }
+        if (rko->rko_u.admin_request.broker_id !=
+            RD_KAFKA_ADMIN_TARGET_CONTROLLER) {
+                /* Revert broker option to default if altering
+                 * broker configs. */
+                err = rd_kafka_confval_set_type(
+                    &rko->rko_u.admin_request.options.broker,
+                    RD_KAFKA_CONFVAL_INT, NULL, errstr, sizeof(errstr));
+                if (err) {
+                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko, rd_true /*destroy*/);
+                        return;
+                }
+        }
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 }

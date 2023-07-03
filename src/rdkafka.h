@@ -7657,7 +7657,7 @@ rd_kafka_AlterConfigs_result_resources(
  * @remark Multiple resources and resource types may be set, but at most one
  *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
  *         since these resource requests must be sent to the broker specified
- *         in the resource.
+ *         in the resource. Broker option will be ignored in this case.
  *
  * @param rk Client instance.
  * @param configs Array of config entries to alter.

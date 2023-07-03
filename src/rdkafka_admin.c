@@ -5130,16 +5130,12 @@ rd_kafka_UserScramCredentialUpsertion_new(const char *username,
                 alteration->alteration.upsertion.salt =
                     rd_kafkap_bytes_new(salt, salt_size);
         } else {
-#if !WITH_SSL
-                alteration->alteration.upsertion.salt = NULL;
-#else
+#if WITH_SSL
                 unsigned char random_salt[64];
                 if (RAND_priv_bytes(random_salt, sizeof(random_salt)) == 1) {
                         alteration->alteration.upsertion.salt =
                             rd_kafkap_bytes_new(random_salt,
                                                 sizeof(random_salt));
-                } else {
-                        alteration->alteration.upsertion.salt = NULL;
                 }
 #endif
         }
@@ -5276,6 +5272,7 @@ rd_kafka_AlterUserScramCredentials_result_responses(
 }
 
 
+#if WITH_SSL
 static rd_kafkap_bytes_t *
 rd_kafka_AlterUserScramCredentialsRequest_salted_password(
     rd_kafka_broker_t *rkb,
@@ -5308,6 +5305,7 @@ rd_kafka_AlterUserScramCredentialsRequest_salted_password(
             (const unsigned char *)saltedpassword_chariov.ptr,
             saltedpassword_chariov.size);
 }
+#endif
 
 rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(
     rd_kafka_broker_t *rkb,
@@ -5370,7 +5368,6 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(
         /* #Upsertions */
         rd_kafka_buf_write_arraycnt(rkbuf, num_alterations - num_deletions);
         for (i = 0; i < num_alterations; i++) {
-                rd_kafkap_bytes_t *password_bytes;
                 rd_kafka_UserScramCredentialAlteration_t *alteration =
                     rd_list_elem(user_scram_credential_alterations, i);
                 if (alteration->alteration_type !=
@@ -5399,7 +5396,7 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(
                 rd_kafka_buf_write_kbytes(
                     rkbuf, alteration->alteration.upsertion.salt);
 
-                password_bytes =
+                rd_kafkap_bytes_t *password_bytes =
                     rd_kafka_AlterUserScramCredentialsRequest_salted_password(
                         rkb, alteration->alteration.upsertion.salt,
                         alteration->alteration.upsertion.password, mechanism,

@@ -3960,8 +3960,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* AlterConfigs */
         do_test_AlterConfigs(rk, mainq);
 
-        /* IncrementalAlterConfigs */
-        do_test_IncrementalAlterConfigs(rk, mainq);
+        if (test_broker_version >= TEST_BRKVER(2, 3, 0, 0)) {
+                /* IncrementalAlterConfigs */
+                do_test_IncrementalAlterConfigs(rk, mainq);
+        }
 
         /* DescribeConfigs */
         do_test_DescribeConfigs(rk, mainq);

@@ -5563,6 +5563,13 @@ void rd_kafka_AlterUserScramCredentials(
                             rk, rko, rd_true /*destroy*/);
                         return;
                 }
+        } else {
+                rd_kafka_admin_result_fail(
+                    rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "At least one alteration is required");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
         }
 
         rd_list_init(&rko->rko_u.admin_request.args, alteration_cnt,

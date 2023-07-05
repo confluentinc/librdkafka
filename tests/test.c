@@ -6641,7 +6641,7 @@ test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
                 else
                         TEST_FAIL("Unknown op type %s\n", op_string);
 
-                error = rd_kafka_ConfigResource_set_incremental_config(
+                error = rd_kafka_ConfigResource_add_incremental_config(
                     confres, confname, op_type, confvalue);
                 TEST_ASSERT(!error,
                             "Failed to set incremental %s config %s=%s on "

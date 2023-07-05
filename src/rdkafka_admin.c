@@ -2845,7 +2845,7 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
 }
 
 
-rd_kafka_error_t *rd_kafka_ConfigResource_set_incremental_config(
+rd_kafka_error_t *rd_kafka_ConfigResource_add_incremental_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     rd_kafka_AlterConfigOpType_t op_type,

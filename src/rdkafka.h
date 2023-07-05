@@ -7514,11 +7514,11 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
 
 
 /**
- * @brief Set the value of the configuration entry for a subsequent
+ * @brief Add the value of the configuration entry for a subsequent
  *        incremental alter config operation. APPEND and SUBTRACT are
  *        possible for list-type configuration entries only.
  *
- * @param config ConfigResource to set config property on.
+ * @param config ConfigResource to add config property to.
  * @param name Configuration name, depends on resource type.
  * @param op_type Operation type, one of rd_kafka_AlterConfigOpType_t.
  * @param value Configuration value, depends on resource type and \p name.
@@ -7531,7 +7531,7 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
  *          Possible error codes:
  *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_set_incremental_config(
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_add_incremental_config(
     rd_kafka_ConfigResource_t *config,
     const char *name,
     rd_kafka_AlterConfigOpType_t op_type,

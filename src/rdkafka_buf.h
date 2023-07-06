@@ -711,12 +711,21 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 rd_kafka_buf_skip(rkbuf, RD_KAFKAP_STR_LEN0(_slen));           \
         } while (0)
 
-/* Read Kafka Bytes representation (4+N).
- *  The 'kbytes' will be updated to point to rkbuf data */
-#define rd_kafka_buf_read_bytes(rkbuf, kbytes)                                 \
+/**
+ * Read Kafka COMPACT_BYTES representation (VARINT+N) or
+ * standard BYTES representation(4+N).
+ * The 'kbytes' will be updated to point to rkbuf data.
+ */
+#define rd_kafka_buf_read_kbytes(rkbuf, kbytes)                                \
         do {                                                                   \
-                int _klen;                                                     \
-                rd_kafka_buf_read_i32a(rkbuf, _klen);                          \
+                int32_t _klen;                                                 \
+                if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {           \
+                        rd_kafka_buf_read_i32a(rkbuf, _klen);                  \
+                } else {                                                       \
+                        uint64_t _uva;                                         \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_uva);               \
+                        _klen = ((int32_t)_uva) - 1;                           \
+                }                                                              \
                 (kbytes)->len = _klen;                                         \
                 if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                         \
                         (kbytes)->data = NULL;                                 \
@@ -727,7 +736,6 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                                &(rkbuf)->rkbuf_reader, _klen)))                \
                         rd_kafka_buf_check_len(rkbuf, _klen);                  \
         } while (0)
-
 
 /**
  * @brief Read \p size bytes from buffer, setting \p *ptr to the start
@@ -745,7 +753,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 /**
  * @brief Read varint-lengted Kafka Bytes representation
  */
-#define rd_kafka_buf_read_bytes_varint(rkbuf, kbytes)                          \
+#define rd_kafka_buf_read_kbytes_varint(rkbuf, kbytes)                         \
         do {                                                                   \
                 int64_t _len2;                                                 \
                 size_t _r =                                                    \
@@ -1304,30 +1312,40 @@ static RD_INLINE void rd_kafka_buf_push_kstr(rd_kafka_buf_t *rkbuf,
 static RD_INLINE size_t
 rd_kafka_buf_write_kbytes(rd_kafka_buf_t *rkbuf,
                           const rd_kafkap_bytes_t *kbytes) {
-        size_t len;
+        size_t len, r;
 
-        if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
-                return rd_kafka_buf_write_i32(rkbuf, -1);
+        if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {
+                if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
+                        return rd_kafka_buf_write_i32(rkbuf, -1);
 
-        if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
-                return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                                          RD_KAFKAP_BYTES_SIZE(kbytes));
+                if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
+                        return rd_kafka_buf_write(rkbuf,
+                                                  RD_KAFKAP_BYTES_SER(kbytes),
+                                                  RD_KAFKAP_BYTES_SIZE(kbytes));
 
-        len = RD_KAFKAP_BYTES_LEN(kbytes);
-        rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
-        rd_kafka_buf_write(rkbuf, kbytes->data, len);
+                len = RD_KAFKAP_BYTES_LEN(kbytes);
+                rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
+                rd_kafka_buf_write(rkbuf, kbytes->data, len);
 
-        return 4 + len;
-}
+                return 4 + len;
+        }
 
-/**
- * Push (i.e., no copy) Kafka bytes to buffer iovec
- */
-static RD_INLINE void
-rd_kafka_buf_push_kbytes(rd_kafka_buf_t *rkbuf,
-                         const rd_kafkap_bytes_t *kbytes) {
-        rd_kafka_buf_push(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                          RD_KAFKAP_BYTES_SIZE(kbytes), NULL);
+        /* COMPACT_BYTES lengths are:
+         *  0   = NULL,
+         *  1   = empty
+         *  N.. = length + 1
+         */
+        if (!kbytes)
+                len = 0;
+        else
+                len = kbytes->len + 1;
+
+        r = rd_kafka_buf_write_uvarint(rkbuf, (uint64_t)len);
+        if (len > 1) {
+                rd_kafka_buf_write(rkbuf, kbytes->data, len - 1);
+                r += len - 1;
+        }
+        return r;
 }
 
 /**
@@ -1410,12 +1428,4 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
                             rd_kafka_make_req_cb_t *make_cb,
                             void *make_opaque,
                             void (*free_make_opaque_cb)(void *make_opaque));
-
-int rd_kafka_sasl_scram_Hi0(rd_kafka_broker_t *rkb,
-                                    const EVP_MD *evp,
-                                    const rd_chariov_t *in,
-                                    const rd_chariov_t *salt,
-                                    int itcnt,
-                                    rd_chariov_t *out);
-
 #endif /* _RDKAFKA_BUF_H_ */

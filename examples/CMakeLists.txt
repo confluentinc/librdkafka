@@ -26,6 +26,9 @@ target_link_libraries(openssl_engine_example_cpp PUBLIC rdkafka++)
 add_executable(misc misc.c ${win32_sources})
 target_link_libraries(misc PUBLIC rdkafka)
 
+add_executable(user_scram user_scram.c ${win32_sources})
+target_link_libraries(user_scram PUBLIC rdkafka)
+
 
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)

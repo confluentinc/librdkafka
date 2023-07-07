@@ -5046,6 +5046,7 @@ void rd_kafka_DescribeUserScramCredentials(
 
         rd_kafka_op_t *rko;
         size_t i;
+        rd_list_t *userlist = NULL;
 
         static const struct rd_kafka_admin_worker_cbs cbs = {
             rd_kafka_DescribeUserScramCredentialsRequest,
@@ -5057,22 +5058,31 @@ void rd_kafka_DescribeUserScramCredentials(
             RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT, &cbs, options,
             rkqu->rkqu_q);
 
+        /* Check empty strings */
+        for (i = 0; i < user_cnt; i++) {
+                if (!*users[i]) {
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Empty users aren't allowed, "
+                            "index %" PRIusz,
+                            i);
+                        goto err;
+                }
+        }
+
         /* Check Duplicates */
         if (user_cnt > 1) {
-                rd_list_t *userlist = rd_list_new(user_cnt, rd_free);
+                userlist = rd_list_new(user_cnt, rd_free);
                 for (i = 0; i < user_cnt; i++) {
                         rd_list_add(userlist, rd_strdup(users[i]));
                 }
                 rd_list_sort(userlist, rd_strcmp2);
                 if (rd_list_find_duplicate(userlist, rd_strcmp2)) {
-                        rd_list_destroy(userlist);
                         rd_kafka_admin_result_fail(
                             rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                             "Duplicate users aren't allowed "
                             "in the same request");
-                        rd_kafka_admin_common_worker_destroy(
-                            rk, rko, rd_true /*destroy*/);
-                        return;
+                        goto err;
                 }
                 rd_list_destroy(userlist);
         }
@@ -5083,6 +5093,10 @@ void rd_kafka_DescribeUserScramCredentials(
                             rd_kafkap_str_new(users[i], -1));
         }
         rd_kafka_q_enq(rk->rk_ops, rko);
+        return;
+err:
+        RD_IF_FREE(userlist, rd_list_destroy);
+        rd_kafka_admin_common_worker_destroy(rk, rko, rd_true /*destroy*/);
 }
 
 /**

@@ -8620,12 +8620,13 @@ typedef struct rd_kafka_UserScramCredentialAlteration_s
  *        RAND_bytes, if available.
  *
  * @param username The username (not empty).
- * @param salt Salt bytes (optional).
- * @param salt_size Size of \p salt (optional).
- * @param password Password bytes (not empty).
- * @param password_size Size of \p password (greater than 0).
  * @param mechanism SASL/SCRAM mechanism.
  * @param iterations SASL/SCRAM iterations.
+ * @param password Password bytes (not empty).
+ * @param password_size Size of \p password (greater than 0).
+ * @param salt Salt bytes (optional).
+ * @param salt_size Size of \p salt (optional).
+ *
  * @return A newly created instance of rd_kafka_UserScramCredentialAlteration_t.
  *         Ownership belongs to the caller, use
  *         rd_kafka_UserScramCredentialAlteration_destroy to destroy.
@@ -8633,12 +8634,12 @@ typedef struct rd_kafka_UserScramCredentialAlteration_s
 RD_EXPORT
 rd_kafka_UserScramCredentialAlteration_t *
 rd_kafka_UserScramCredentialUpsertion_new(const char *username,
-                                          const unsigned char *salt,
-                                          size_t salt_size,
+                                          rd_kafka_ScramMechanism_t mechanism,
+                                          int32_t iterations,
                                           const unsigned char *password,
                                           size_t password_size,
-                                          rd_kafka_ScramMechanism_t mechanism,
-                                          int32_t iterations);
+                                          const unsigned char *salt,
+                                          size_t salt_size);
 
 /**
  * @brief Allocates a new UserScramCredentialDeletion given its fields.

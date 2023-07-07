@@ -2050,8 +2050,8 @@ static void do_test_AlterUserScramCredentials(const char *what,
          * RD_KAFKA_RESP_ERR__INVALID_ARG */
         rd_kafka_UserScramCredentialAlteration_t *alterations_ssl[1];
         alterations_ssl[0] = rd_kafka_UserScramCredentialUpsertion_new(
-            "user", (unsigned char *)"salt", 4, (unsigned char *)"password", 8,
-            RD_KAFKA_SCRAM_MECHANISM_SHA_256, 10000);
+            "user", RD_KAFKA_SCRAM_MECHANISM_SHA_256, 10000,
+            (unsigned char *)"password", 8, (unsigned char *)"salt", 4);
         options = rd_kafka_AdminOptions_new(
             rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(

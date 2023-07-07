@@ -74,8 +74,8 @@ static void usage(const char *reason, ...) {
                 "\n"
                 "Usage: %s <options>\n"
                 "       DESCRIBE <user1> ... \n"
-                "       UPSERT <user1> <salt1> <password1> <mechanism1> "
-                "<iterations1> ... \n"
+                "       UPSERT <user1> <mechanism1> <iterations1> "
+                "<password1> <salt1> ... \n"
                 "       DELETE <user1> <mechanism1> ... \n"
                 "\n"
                 "Options:\n"
@@ -138,10 +138,11 @@ int64_t parse_int(const char *what, const char *str) {
 }
 
 rd_kafka_ScramMechanism_t parse_mechanism(const char *arg) {
-        return !strcmp(arg, "SHA-256")
+        return !strcmp(arg, "SCRAM-SHA-256")
                    ? RD_KAFKA_SCRAM_MECHANISM_SHA_256
-                   : !strcmp(arg, "SHA-512") ? RD_KAFKA_SCRAM_MECHANISM_SHA_512
-                                             : RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
+                   : !strcmp(arg, "SCRAM-SHA-512")
+                         ? RD_KAFKA_SCRAM_MECHANISM_SHA_512
+                         : RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
 }
 
 static void print_descriptions(
@@ -392,13 +393,13 @@ static void cmd_user_scram(rd_kafka_conf_t *conf, int argc, const char **argv) {
                 for (i = 0; i < upsert_cnt; i++) {
                         const char **upsert_args_curr = &upsert_args[i * 5];
                         size_t salt_size              = 0;
+                        const char *username          = upsert_args_curr[0];
                         rd_kafka_ScramMechanism_t mechanism =
-                            parse_mechanism(upsert_args_curr[3]);
+                            parse_mechanism(upsert_args_curr[1]);
                         int iterations =
-                            parse_int("iterations", upsert_args_curr[4]);
-                        const char *username = upsert_args_curr[0];
-                        const char *salt     = upsert_args_curr[1];
-                        const char *password = upsert_args_curr[2];
+                            parse_int("iterations", upsert_args_curr[2]);
+                        const char *password = upsert_args_curr[3];
+                        const char *salt     = upsert_args_curr[4];
 
                         if (strlen(salt) == 0)
                                 salt = NULL;
@@ -406,9 +407,9 @@ static void cmd_user_scram(rd_kafka_conf_t *conf, int argc, const char **argv) {
                                 salt_size = strlen(salt);
 
                         upserts[i] = rd_kafka_UserScramCredentialUpsertion_new(
-                            username, (const unsigned char *)salt, salt_size,
+                            username, mechanism, iterations,
                             (const unsigned char *)password, strlen(password),
-                            mechanism, iterations);
+                            (const unsigned char *)salt, salt_size);
                 }
                 Alter(rk, upserts, upsert_cnt);
                 rd_kafka_UserScramCredentialAlteration_destroy_array(

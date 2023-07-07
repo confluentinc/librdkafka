@@ -5126,17 +5126,23 @@ struct rd_kafka_UserScramCredentialAlteration_s {
 
 rd_kafka_UserScramCredentialAlteration_t *
 rd_kafka_UserScramCredentialUpsertion_new(const char *username,
-                                          const unsigned char *salt,
-                                          size_t salt_size,
+                                          rd_kafka_ScramMechanism_t mechanism,
+                                          int32_t iterations,
                                           const unsigned char *password,
                                           size_t password_size,
-                                          rd_kafka_ScramMechanism_t mechanism,
-                                          int32_t iterations) {
+                                          const unsigned char *salt,
+                                          size_t salt_size) {
         rd_kafka_UserScramCredentialAlteration_t *alteration;
         alteration       = rd_calloc(1, sizeof(*alteration));
         alteration->user = rd_strdup(username);
         alteration->alteration_type =
             RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT;
+        alteration->alteration.upsertion.credential_info.mechanism = mechanism;
+        alteration->alteration.upsertion.credential_info.iterations =
+            iterations;
+
+        alteration->alteration.upsertion.password =
+            rd_kafkap_bytes_new(password, password_size);
         if (salt_size != 0) {
                 alteration->alteration.upsertion.salt =
                     rd_kafkap_bytes_new(salt, salt_size);
@@ -5150,11 +5156,6 @@ rd_kafka_UserScramCredentialUpsertion_new(const char *username,
                 }
 #endif
         }
-        alteration->alteration.upsertion.password =
-            rd_kafkap_bytes_new(password, password_size);
-        alteration->alteration.upsertion.credential_info.mechanism = mechanism;
-        alteration->alteration.upsertion.credential_info.iterations =
-            iterations;
         return alteration;
 }
 

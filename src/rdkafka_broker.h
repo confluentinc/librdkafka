@@ -469,7 +469,9 @@ rd_kafka_broker_t *rd_kafka_broker_controller_async(rd_kafka_t *rk,
                                                     int state,
                                                     rd_kafka_enq_once_t *eonce);
 
-int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist);
+int rd_kafka_brokers_add0(rd_kafka_t *rk,
+                          const char *brokerlist,
+                          rd_bool_t is_bootstrap_server_list);
 void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state);
 
 void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,

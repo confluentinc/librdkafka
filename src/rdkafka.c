@@ -2523,7 +2523,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
         /* Add initial list of brokers from configuration */
         if (rk->rk_conf.brokerlist) {
-                if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist) == 0)
+                if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist,
+                                          rd_true) == 0)
                         rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
                                         "No brokers configured");
         }

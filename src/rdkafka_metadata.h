@@ -54,6 +54,10 @@ typedef struct rd_kafka_metadata_topic_internal_s {
          *  same count as metadata.topics[i].partition_cnt.
          *  Sorted by Partition Id. */
         rd_kafka_metadata_partition_internal_t *partitions;
+        /** Topic Name. */
+        char* topic_name;
+        int32_t topic_authorized_operations; /**< ACL operations allowed
+                                                     for topic */
 } rd_kafka_metadata_topic_internal_t;
 
 
@@ -81,6 +85,10 @@ typedef struct rd_kafka_metadata_internal_s {
         rd_kafka_metadata_broker_internal_t *brokers;
         /* Internal metadata topics. Same count as metadata.topic_cnt. */
         rd_kafka_metadata_topic_internal_t *topics;
+        char *cluster_id;       /**< current cluster id in \p cluster*/
+        int controller_id;      /**< current controller id in \p cluster*/
+        int32_t cluster_authorized_operations; /**< ACL operations allowed
+                                                     for cluster */
 } rd_kafka_metadata_internal_t;
 
 /**
@@ -94,7 +102,8 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                             rd_kafka_buf_t *request,
                                             rd_kafka_buf_t *rkbuf,
-                                            rd_kafka_metadata_internal_t **mdp);
+                                            rd_kafka_metadata_internal_t **mdp,
+                                            rd_list_t *request_topics);
 
 rd_kafka_metadata_internal_t *
 rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *mdi, size_t size);
@@ -149,6 +158,8 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
                           rd_kafka_broker_t *rkb,
                           const rd_list_t *topics,
                           rd_bool_t allow_auto_create_topics,
+                          rd_bool_t include_cluster_authorized_operations,
+                          rd_bool_t include_topic_authorized_operations,
                           rd_bool_t cgrp_update,
                           const char *reason,
                           rd_kafka_op_t *rko);

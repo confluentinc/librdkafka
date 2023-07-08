@@ -2017,6 +2017,8 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
  *        with the groups (const char *) in \p groups.
  *        Uses \p max_ApiVersion as maximum API version,
  *        pass -1 to use the maximum available version.
+ *        Uses \p include_authorized_operations to get
+ *        group ACL authorized operations, 1 to request.
  *
  *        The response (unparsed) will be enqueued on \p replyq
  *        for handling by \p resp_cb (with \p opaque passed).
@@ -2024,13 +2026,15 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
  * @return NULL on success, a new error instance that must be
  *         released with rd_kafka_error_destroy() in case of error.
  */
-rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
-                                                 int16_t max_ApiVersion,
-                                                 char **groups,
-                                                 size_t group_cnt,
-                                                 rd_kafka_replyq_t replyq,
-                                                 rd_kafka_resp_cb_t *resp_cb,
-                                                 void *opaque) {
+rd_kafka_error_t *
+rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
+                               int16_t max_ApiVersion,
+                               char **groups,
+                               size_t group_cnt,
+                               rd_bool_t include_authorized_operations,
+                               rd_kafka_replyq_t replyq,
+                               rd_kafka_resp_cb_t *resp_cb,
+                               void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         size_t of_GroupsArrayCnt;
@@ -2067,8 +2071,7 @@ rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
 
         /* write IncludeAuthorizedOperations */
         if (ApiVersion >= 3) {
-                /* TODO: implement KIP-430 */
-                rd_kafka_buf_write_bool(rkbuf, rd_false);
+                rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
@@ -2116,7 +2119,7 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                            rd_list_cnt(topics),
                            request->rkbuf_u.Metadata.reason);
 
-        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi);
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi, NULL);
         if (err)
                 goto err;
 
@@ -2188,36 +2191,49 @@ done:
  * @param allow_auto_create_topics - allow broker-side auto topic creation.
  *                                   This is best-effort, depending on broker
  *                                   config and version.
+ * @param include_cluster_authorized_operations - request for cluster
+ *                      authorized operations.
+ * @param include_topic_authorized_operations - request for topic authorized
+ *                      operations.
  * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
  * @param force_racks - Force partition to rack mapping computation in
  *                      parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
  *                    there is already a matching one in-transit.
- *
+ * @param resp_cb - callback to be used for handling response. If NULL, then
+ *                     rd_kafka_handle_Metadata() is used.
+ * @param force - 1: force a full request.
+ *                0: check if there are multiple outstanding full requests.
  * If full metadata for all topics is requested (or all brokers, which
  * results in all-topics on older brokers) and there is already a full request
  * in transit then this function will return RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS
  * otherwise RD_KAFKA_RESP_ERR_NO_ERROR. If \p rko is non-NULL the request
  * is sent regardless.
  */
-rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
-                                             const rd_list_t *topics,
-                                             const char *reason,
-                                             rd_bool_t allow_auto_create_topics,
-                                             rd_bool_t cgrp_update,
-                                             rd_bool_t force_racks,
-                                             rd_kafka_op_t *rko) {
+rd_kafka_resp_err_t
+rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
+                         const rd_list_t *topics,
+                         const char *reason,
+                         rd_bool_t allow_auto_create_topics,
+                         rd_bool_t include_cluster_authorized_operations,
+                         rd_bool_t include_topic_authorized_operations,
+                         rd_bool_t cgrp_update,
+                         rd_bool_t force_racks,
+                         rd_kafka_op_t *rko,
+                         rd_kafka_resp_cb_t *resp_cb,
+                         int force,
+                         void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
+        int i;
         size_t of_TopicArrayCnt;
         int features;
         int topic_cnt  = topics ? rd_list_cnt(topics) : 0;
         int *full_incr = NULL;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
-
+            rkb, RD_KAFKAP_Metadata, 0, 8, &features);
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
                                                  4 + (50 * topic_cnt) + 1,
                                                  ApiVersion >= 9);
@@ -2283,7 +2299,8 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                  * through regardless. */
 
                 mtx_lock(&rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock);
-                if (*full_incr > 0 && (!rko || !rko->rko_u.metadata.force)) {
+                if (!force &&
+                    (*full_incr > 0 && (!rko || !rko->rko_u.metadata.force))) {
                         mtx_unlock(
                             &rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock);
                         rd_rkb_dbg(rkb, METADATA, "METADATA",
@@ -2340,13 +2357,16 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion >= 8 && ApiVersion < 10) {
                 /* TODO: implement KIP-430 */
                 /* IncludeClusterAuthorizedOperations */
-                rd_kafka_buf_write_bool(rkbuf, rd_false);
+
+                rd_kafka_buf_write_bool(rkbuf,
+                                        include_cluster_authorized_operations);
         }
 
         if (ApiVersion >= 8) {
                 /* TODO: implement KIP-430 */
                 /* IncludeTopicAuthorizedOperations */
-                rd_kafka_buf_write_bool(rkbuf, rd_false);
+                rd_kafka_buf_write_bool(rkbuf,
+                                        include_topic_authorized_operations);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
@@ -2355,12 +2375,13 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
          * and should go before most other requests (Produce, Fetch, etc). */
         rkbuf->rkbuf_prio = RD_KAFKA_PRIO_HIGH;
 
-        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
-                                       /* Handle response thru rk_ops,
-                                        * but forward parsed result to
-                                        * rko's replyq when done. */
-                                       RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
-                                       rd_kafka_handle_Metadata, rko);
+        rd_kafka_broker_buf_enq_replyq(
+            rkb, rkbuf,
+            /* Handle response thru rk_ops,
+             * but forward parsed result to
+             * rko's replyq when done. */
+            RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
+            resp_cb ? resp_cb : rd_kafka_handle_Metadata, rko ? rko : opaque);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

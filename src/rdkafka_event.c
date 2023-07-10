@@ -60,6 +60,8 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "CreatePartitionsResult";
         case RD_KAFKA_EVENT_ALTERCONFIGS_RESULT:
                 return "AlterConfigsResult";
+        case RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT:
+                return "IncrementalAlterConfigsResult";
         case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
                 return "DescribeConfigsResult";
         case RD_KAFKA_EVENT_DELETERECORDS_RESULT:
@@ -327,6 +329,15 @@ rd_kafka_event_AlterConfigs_result(rd_kafka_event_t *rkev) {
                 return NULL;
         else
                 return (const rd_kafka_AlterConfigs_result_t *)rkev;
+}
+
+const rd_kafka_IncrementalAlterConfigs_result_t *
+rd_kafka_event_IncrementalAlterConfigs_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_IncrementalAlterConfigs_result_t *)rkev;
 }
 
 

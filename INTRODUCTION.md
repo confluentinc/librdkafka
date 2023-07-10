@@ -1909,7 +1909,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-302 - Use all addresses for resolved broker hostname                 | 2.1.0                       | Supported                                                                                     |
 | KIP-320 - Consumer: handle log truncation                                | 2.1.0, 2.2.0                | Supported                                                                                     |
 | KIP-322 - DeleteTopics disabled error code                               | 2.1.0                       | Supported                                                                                     |
-| KIP-339 - AdminAPI: incrementalAlterConfigs                              | 2.3.0                       | Not supported                                                                                 |
+| KIP-339 - AdminAPI: incrementalAlterConfigs                              | 2.3.0                       | Supported                                                                                     |
 | KIP-341 - Update Sticky partition assignment data                        | 2.3.0                       | Not supported (superceeded by KIP-429)                                                        |
 | KIP-342 - Custom SASL OAUTHBEARER extensions                             | 2.1.0                       | Supported                                                                                     |
 | KIP-345 - Consumer: Static membership                                    | 2.4.0                       | Supported                                                                                     |
@@ -1964,42 +1964,43 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.3.1, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.4.0, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 
 
-| ApiKey  | Request name        | Kafka max   | librdkafka max          |
-| ------- | ------------------- | ----------- | ----------------------- |
-| 0       | Produce             | 9           | 7                       |
-| 1       | Fetch               | 13          | 11                      |
-| 2       | ListOffsets         | 7           | 2                       |
-| 3       | Metadata            | 12          | 9                       |
-| 8       | OffsetCommit        | 8           | 7                       |
-| 9       | OffsetFetch         | 8           | 7                       |
-| 10      | FindCoordinator     | 4           | 2                       |
-| 11      | JoinGroup           | 9           | 5                       |
-| 12      | Heartbeat           | 4           | 3                       |
-| 13      | LeaveGroup          | 5           | 1                       |
-| 14      | SyncGroup           | 5           | 3                       |
-| 15      | DescribeGroups      | 5           | 4                       |
-| 16      | ListGroups          | 4           | 4                       |
-| 17      | SaslHandshake       | 1           | 1                       |
-| 18      | ApiVersions         | 3           | 3                       |
-| 19      | CreateTopics        | 7           | 4                       |
-| 20      | DeleteTopics        | 6           | 1                       |
-| 21      | DeleteRecords       | 2           | 1                       |
-| 22      | InitProducerId      | 4           | 4                       |
-| 24      | AddPartitionsToTxn  | 3           | 0                       |
-| 25      | AddOffsetsToTxn     | 3           | 0                       |
-| 26      | EndTxn              | 3           | 1                       |
-| 28      | TxnOffsetCommit     | 3           | 3                       |
-| 32      | DescribeConfigs     | 4           | 1                       |
-| 33      | AlterConfigs        | 2           | 1                       |
-| 36      | SaslAuthenticate    | 2           | 1                       |
-| 37      | CreatePartitions    | 3           | 0                       |
-| 42      | DeleteGroups        | 2           | 1                       |
-| 47      | OffsetDelete        | 0           | 0                       |
+| ApiKey  | Request name            | Kafka max   | librdkafka max          |
+| ------- | ------------------------| ----------- | ----------------------- |
+| 0       | Produce                 | 9           | 7                       |
+| 1       | Fetch                   | 13          | 11                      |
+| 2       | ListOffsets             | 7           | 2                       |
+| 3       | Metadata                | 12          | 9                       |
+| 8       | OffsetCommit            | 8           | 7                       |
+| 9       | OffsetFetch             | 8           | 7                       |
+| 10      | FindCoordinator         | 4           | 2                       |
+| 11      | JoinGroup               | 9           | 5                       |
+| 12      | Heartbeat               | 4           | 3                       |
+| 13      | LeaveGroup              | 5           | 1                       |
+| 14      | SyncGroup               | 5           | 3                       |
+| 15      | DescribeGroups          | 5           | 4                       |
+| 16      | ListGroups              | 4           | 4                       |
+| 17      | SaslHandshake           | 1           | 1                       |
+| 18      | ApiVersions             | 3           | 3                       |
+| 19      | CreateTopics            | 7           | 4                       |
+| 20      | DeleteTopics            | 6           | 1                       |
+| 21      | DeleteRecords           | 2           | 1                       |
+| 22      | InitProducerId          | 4           | 4                       |
+| 24      | AddPartitionsToTxn      | 3           | 0                       |
+| 25      | AddOffsetsToTxn         | 3           | 0                       |
+| 26      | EndTxn                  | 3           | 1                       |
+| 28      | TxnOffsetCommit         | 3           | 3                       |
+| 32      | DescribeConfigs         | 4           | 1                       |
+| 33      | AlterConfigs            | 2           | 2                       |
+| 36      | SaslAuthenticate        | 2           | 0                       |
+| 37      | CreatePartitions        | 3           | 0                       |
+| 42      | DeleteGroups            | 2           | 1                       |
+| 44      | IncrementalAlterConfigs | 1           | 1                       |
+| 47      | OffsetDelete            | 0           | 0                       |
 
 
 

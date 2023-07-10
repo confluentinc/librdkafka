@@ -31,6 +31,7 @@
 
 
 #include "rdstring.h"
+#include "rdmap.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
 
@@ -69,14 +70,8 @@ struct rd_kafka_AdminOptions_s {
                                            *     CreateTopics
                                            *     CreatePartitions
                                            *     AlterConfigs
+                                           *     IncrementalAlterConfigs
                                            */
-
-        rd_kafka_confval_t incremental; /**< BOOL: Incremental rather than
-                                         *         absolute application
-                                         *         of config.
-                                         *   Valid for:
-                                         *     AlterConfigs
-                                         */
 
         rd_kafka_confval_t broker; /**< INT: Explicitly override
                                     *        broker id to send
@@ -188,13 +183,6 @@ struct rd_kafka_NewPartitions_s {
  * @{
  */
 
-/* KIP-248 */
-typedef enum rd_kafka_AlterOperation_t {
-        RD_KAFKA_ALTER_OP_ADD    = 0,
-        RD_KAFKA_ALTER_OP_SET    = 1,
-        RD_KAFKA_ALTER_OP_DELETE = 2,
-} rd_kafka_AlterOperation_t;
-
 struct rd_kafka_ConfigEntry_s {
         rd_strtup_t *kv; /**< Name/Value pair */
 
@@ -202,8 +190,9 @@ struct rd_kafka_ConfigEntry_s {
 
         /* Attributes: this is a struct for easy copying */
         struct {
-                rd_kafka_AlterOperation_t operation; /**< Operation */
-                rd_kafka_ConfigSource_t source;      /**< Config source */
+                /** Operation type, used for IncrementalAlterConfigs */
+                rd_kafka_AlterConfigOpType_t op_type;
+                rd_kafka_ConfigSource_t source; /**< Config source */
                 rd_bool_t is_readonly;  /**< Value is read-only (on broker) */
                 rd_bool_t is_default;   /**< Value is at its default */
                 rd_bool_t is_sensitive; /**< Value is sensitive */
@@ -247,6 +236,10 @@ struct rd_kafka_ConfigResource_s {
 
 
 struct rd_kafka_AlterConfigs_result_s {
+        rd_list_t resources; /**< Type (rd_kafka_ConfigResource_t *) */
+};
+
+struct rd_kafka_IncrementalAlterConfigs_result_s {
         rd_list_t resources; /**< Type (rd_kafka_ConfigResource_t *) */
 };
 

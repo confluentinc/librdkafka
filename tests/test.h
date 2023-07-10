@@ -801,6 +801,13 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
                                              const char **configs,
                                              size_t config_cnt);
 
+rd_kafka_resp_err_t
+test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
+                                    rd_kafka_ResourceType_t restype,
+                                    const char *resname,
+                                    const char **configs,
+                                    size_t config_cnt);
+
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,
                                              char **groups,

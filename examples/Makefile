@@ -8,6 +8,7 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	describe_consumer_groups \
 	list_consumer_group_offsets \
 	alter_consumer_group_offsets \
+	incremental_alter_configs \
 	misc
 
 all: $(EXAMPLES)
@@ -77,6 +78,10 @@ list_consumer_group_offsets: ../src/librdkafka.a list_consumer_group_offsets.c
 		../src/librdkafka.a $(LIBS)
 
 alter_consumer_group_offsets: ../src/librdkafka.a alter_consumer_group_offsets.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+incremental_alter_configs: ../src/librdkafka.a incremental_alter_configs.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

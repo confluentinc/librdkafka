@@ -9,6 +9,7 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	list_consumer_group_offsets \
 	alter_consumer_group_offsets \
 	incremental_alter_configs \
+	user_scram \
 	misc
 
 all: $(EXAMPLES)
@@ -132,6 +133,10 @@ rdkafka_consume_batch: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_con
 openssl_engine_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a openssl_engine_example.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) openssl_engine_example.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
+
+user_scram: ../src/librdkafka.a user_scram.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
 
 misc: ../src/librdkafka.a misc.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \

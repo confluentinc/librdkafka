@@ -2487,7 +2487,6 @@ void rd_kafka_topic_partition_get(const rd_kafka_topic_partition_t *rktpar,
 }
 
 
-
 /**
  *
  * rd_kafka_topic_partition_t lists
@@ -2765,7 +2764,6 @@ void rd_kafka_topic_partition_list_destroy_free(void *ptr) {
         rd_kafka_topic_partition_list_destroy(
             (rd_kafka_topic_partition_list_t *)ptr);
 }
-
 
 /**
  * @brief Add a partition to an rktpar list.

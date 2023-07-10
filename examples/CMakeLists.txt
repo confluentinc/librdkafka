@@ -50,6 +50,9 @@ target_link_libraries(alter_consumer_group_offsets PUBLIC rdkafka)
 add_executable(incremental_alter_configs incremental_alter_configs.c ${win32_sources})
 target_link_libraries(incremental_alter_configs PUBLIC rdkafka)
 
+add_executable(user_scram user_scram.c ${win32_sources})
+target_link_libraries(user_scram PUBLIC rdkafka)
+
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)
     add_executable(rdkafka_example rdkafka_example.c)

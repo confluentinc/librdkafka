@@ -2610,7 +2610,7 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
                 goto err;
         }
 
-        rd_kafka_buf_read_bytes(rkbuf, &auth_data);
+        rd_kafka_buf_read_kbytes(rkbuf, &auth_data);
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1) {
                 int64_t session_lifetime_ms;

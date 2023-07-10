@@ -700,7 +700,6 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE,
               "Broker: Request principal deserialization failed during "
               "forwarding"),
-
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -4694,8 +4693,8 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                         rd_kafka_buf_read_str(reply, &MemberId);
                         rd_kafka_buf_read_str(reply, &ClientId);
                         rd_kafka_buf_read_str(reply, &ClientHost);
-                        rd_kafka_buf_read_bytes(reply, &Meta);
-                        rd_kafka_buf_read_bytes(reply, &Assignment);
+                        rd_kafka_buf_read_kbytes(reply, &Meta);
+                        rd_kafka_buf_read_kbytes(reply, &Assignment);
 
                         mi->member_id   = RD_KAFKAP_STR_DUP(&MemberId);
                         mi->client_id   = RD_KAFKAP_STR_DUP(&ClientId);

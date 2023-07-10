@@ -4214,7 +4214,7 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AlterConfigs, 0, 1, NULL);
+            rkb, RD_KAFKAP_AlterConfigs, 0, 2, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs (KIP-133) not supported "
@@ -4223,52 +4223,37 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        /* Incremental requires IncrementalAlterConfigs */
-        if (rd_kafka_confval_get_int(&options->incremental)) {
-                rd_snprintf(errstr, errstr_size,
-                            "AlterConfigs.incremental=true (KIP-248) "
-                            "not supported by broker, "
-                            "replaced by IncrementalAlterConfigs");
-                rd_kafka_replyq_destroy(&replyq);
-                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
-        }
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_AlterConfigs, 1,
+                                                 rd_list_cnt(configs) * 200,
+                                                 ApiVersion >= 2);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_AlterConfigs, 1,
-                                         rd_list_cnt(configs) * 200);
-
-        /* #resources */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+        /* #Resources */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
 
         RD_LIST_FOREACH(config, configs, i) {
                 const rd_kafka_ConfigEntry_t *entry;
                 int ei;
 
-                /* resource_type */
+                /* ResourceType */
                 rd_kafka_buf_write_i8(rkbuf, config->restype);
 
-                /* resource_name */
+                /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
 
-                /* #config */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&config->config));
+                /* #Configs */
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&config->config));
 
                 RD_LIST_FOREACH(entry, &config->config, ei) {
-                        /* config_name */
+                        /* Name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
-                        /* config_value (nullable) */
+                        /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
-                                rd_snprintf(errstr, errstr_size,
-                                            "IncrementalAlterConfigs required "
-                                            "for add/delete config "
-                                            "entries: only set supported "
-                                            "by this operation");
-                                rd_kafka_buf_destroy(rkbuf);
-                                rd_kafka_replyq_destroy(&replyq);
-                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
-                        }
+                        rd_kafka_buf_write_tags(rkbuf);
                 }
+
+                rd_kafka_buf_write_tags(rkbuf);
         }
 
         /* timeout */
@@ -4287,6 +4272,89 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *configs /*(ConfigResource_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i;
+        const rd_kafka_ConfigResource_t *config;
+        int op_timeout;
+
+        if (rd_list_cnt(configs) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No config resources specified");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_IncrementalAlterConfigs, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "IncrementalAlterConfigs (KIP-339) not supported "
+                            "by broker, requires broker version >= 2.3.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_IncrementalAlterConfigs, 1,
+            rd_list_cnt(configs) * 200, ApiVersion >= 1);
+
+        /* #Resources */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
+
+        RD_LIST_FOREACH(config, configs, i) {
+                const rd_kafka_ConfigEntry_t *entry;
+                int ei;
+
+                /* ResourceType */
+                rd_kafka_buf_write_i8(rkbuf, config->restype);
+
+                /* ResourceName */
+                rd_kafka_buf_write_str(rkbuf, config->name, -1);
+
+                /* #Configs */
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&config->config));
+
+                RD_LIST_FOREACH(entry, &config->config, ei) {
+                        /* Name */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
+                        /* ConfigOperation */
+                        rd_kafka_buf_write_i8(rkbuf, entry->a.op_type);
+                        /* Value (nullable) */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+
+                        rd_kafka_buf_write_tags(rkbuf);
+                }
+
+                rd_kafka_buf_write_tags(rkbuf);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        /* ValidateOnly */
+        rd_kafka_buf_write_i8(
+            rkbuf, rd_kafka_confval_get_int(&options->validate_only));
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 /**
  * @brief Construct and send DescribeConfigsRequest to \p rkb

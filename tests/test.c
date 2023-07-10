@@ -5835,6 +5835,7 @@ rd_kafka_event_t *test_wait_admin_result(rd_kafka_queue_t *q,
  *
  *        Supported APIs:
  *        - AlterConfigs
+ *        - IncrementalAlterConfigs
  *        - CreatePartitions
  *        - CreateTopics
  *        - DeleteGroups
@@ -5918,6 +5919,17 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
 
                 cres = rd_kafka_AlterConfigs_result_resources(res, &cres_cnt);
 
+        } else if (evtype == RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT) {
+                const rd_kafka_IncrementalAlterConfigs_result_t *res;
+
+                if (!(res =
+                          rd_kafka_event_IncrementalAlterConfigs_result(rkev)))
+                        TEST_FAIL(
+                            "Expected a IncrementalAlterConfigs result, not %s",
+                            rd_kafka_event_name(rkev));
+
+                cres = rd_kafka_IncrementalAlterConfigs_result_resources(
+                    res, &cres_cnt);
         } else if (evtype == RD_KAFKA_EVENT_CREATEACLS_RESULT) {
                 const rd_kafka_CreateAcls_result_t *res;
 
@@ -6496,7 +6508,7 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
         size_t result_cnt;
         const rd_kafka_ConfigEntry_t **configents;
         size_t configent_cnt;
-
+        config_cnt = config_cnt * 2;
 
         q = rd_kafka_queue_new(rk);
 
@@ -6575,6 +6587,74 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
 
         err = test_wait_topic_admin_result(
             q, RD_KAFKA_EVENT_ALTERCONFIGS_RESULT, NULL, 15 * 1000);
+
+        rd_kafka_queue_destroy(q);
+
+        return err;
+}
+
+/**
+ * @brief Delta Incremental Alter configuration for the given resource,
+ *        overwriting/setting the configs provided in \p configs.
+ *        Existing configuration remains intact.
+ *
+ * @param configs 'const char *name, const char *op_type', const char *value'
+ * tuples
+ * @param config_cnt is the number of tuples in \p configs
+ */
+rd_kafka_resp_err_t
+test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
+                                    rd_kafka_ResourceType_t restype,
+                                    const char *resname,
+                                    const char **configs,
+                                    size_t config_cnt) {
+        rd_kafka_queue_t *q;
+        rd_kafka_ConfigResource_t *confres;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+
+
+        TEST_SAY("Incrementally altering configuration for %d %s\n", restype,
+                 resname);
+
+        q          = rd_kafka_queue_new(rk);
+        confres    = rd_kafka_ConfigResource_new(restype, resname);
+        config_cnt = config_cnt * 3;
+
+        /* Apply the configuration to change. */
+        for (i = 0; i < config_cnt; i += 3) {
+                const char *confname  = configs[i];
+                const char *op_string = configs[i + 1];
+                const char *confvalue = configs[i + 2];
+                rd_kafka_AlterConfigOpType_t op_type =
+                    RD_KAFKA_ALTER_CONFIG_OP_TYPE__CNT;
+
+                if (!strcmp(op_string, "SET"))
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET;
+                else if (!strcmp(op_string, "DELETE"))
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_DELETE;
+                else if (!strcmp(op_string, "APPEND"))
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_APPEND;
+                else if (!strcmp(op_string, "SUBTRACT"))
+                        op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_SUBTRACT;
+                else
+                        TEST_FAIL("Unknown op type %s\n", op_string);
+
+                error = rd_kafka_ConfigResource_add_incremental_config(
+                    confres, confname, op_type, confvalue);
+                TEST_ASSERT(!error,
+                            "Failed to set incremental %s config %s=%s on "
+                            "local resource object",
+                            op_string, confname, confvalue);
+        }
+
+        rd_kafka_IncrementalAlterConfigs(rk, &confres, 1, NULL, q);
+
+        rd_kafka_ConfigResource_destroy(confres);
+
+        err = test_wait_topic_admin_result(
+            q, RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT, NULL, 15 * 1000);
 
         rd_kafka_queue_destroy(q);
 

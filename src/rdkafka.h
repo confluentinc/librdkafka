@@ -5364,11 +5364,12 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT 0x8000
 /** AlterConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x10000
+/** IncrementalAlterConfigs_result_t */
+#define RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT 0x20000
 /** DescribeUserScramCredentials_result_t */
 #define RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT 0x40000
 /** AlterUserScramCredentials_result_t */
 #define RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT 0x80000
-
 
 /**
  * @returns the event type for the given event.
@@ -5515,6 +5516,7 @@ int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_DESCRIBEACLS_RESULT
  *  - RD_KAFKA_EVENT_DELETEACLS_RESULT
  *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ *  - RD_KAFKA_EVENT_INCREMENTAL_ALTERCONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DELETEGROUPS_RESULT
  *  - RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
@@ -5618,6 +5620,8 @@ typedef rd_kafka_event_t rd_kafka_DeleteAcls_result_t;
 typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
 /*! AlterConfigs result type */
 typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
+/*! IncrementalAlterConfigs result type */
+typedef rd_kafka_event_t rd_kafka_IncrementalAlterConfigs_result_t;
 /*! CreateTopics result type */
 typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 /*! DeleteRecords result type */
@@ -5686,6 +5690,18 @@ rd_kafka_event_CreatePartitions_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_AlterConfigs_result_t *
 rd_kafka_event_AlterConfigs_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get IncrementalAlterConfigs result.
+ *
+ * @returns the result of a IncrementalAlterConfigs request, or NULL if event is
+ * of different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT
+ */
+RD_EXPORT const rd_kafka_IncrementalAlterConfigs_result_t *
+rd_kafka_event_IncrementalAlterConfigs_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DescribeConfigs result.
@@ -6756,6 +6772,8 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS,
         /** AlterConsumerGroupOffsets */
         RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS,
+        /** IncrementalAlterConfigs */
+        RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS,
         /** DescribeUserScramCredentials */
         RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS,
         /** AlterUserScramCredentials */
@@ -6895,6 +6913,8 @@ rd_kafka_AdminOptions_set_validate_only(rd_kafka_AdminOptions_t *options,
  * the following exceptions:
  *   - AlterConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
+ *   - IncrementalAlterConfigs with a BROKER resource are sent to the broker id
+ *     set as the resource name.
  *   - DescribeConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
  *
@@ -7456,6 +7476,18 @@ typedef enum rd_kafka_ResourcePatternType_t {
 } rd_kafka_ResourcePatternType_t;
 
 /**
+ * @enum rd_kafka_AlterConfigOpType_t
+ * @brief Incremental alter configs operations.
+ */
+typedef enum rd_kafka_AlterConfigOpType_t {
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET      = 0,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_DELETE   = 1,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_APPEND   = 2,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_SUBTRACT = 3,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE__CNT,
+} rd_kafka_AlterConfigOpType_t;
+
+/**
  * @returns a string representation of the \p resource_pattern_type
  */
 RD_EXPORT const char *rd_kafka_ResourcePatternType_name(
@@ -7518,6 +7550,31 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
                                    const char *name,
                                    const char *value);
+
+
+/**
+ * @brief Add the value of the configuration entry for a subsequent
+ *        incremental alter config operation. APPEND and SUBTRACT are
+ *        possible for list-type configuration entries only.
+ *
+ * @param config ConfigResource to add config property to.
+ * @param name Configuration name, depends on resource type.
+ * @param op_type Operation type, one of rd_kafka_AlterConfigOpType_t.
+ * @param value Configuration value, depends on resource type and \p name.
+ *              Set to \c NULL, only with with op_type set to DELETE,
+ *              to revert configuration value to default.
+ *
+ * @returns NULL on success, or an rd_kafka_error_t *
+ *          with the corresponding error code and string.
+ *          Error ownership belongs to the caller.
+ *          Possible error codes:
+ *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_add_incremental_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    rd_kafka_AlterConfigOpType_t op_type,
+    const char *value);
 
 
 /**
@@ -7585,6 +7642,8 @@ rd_kafka_ConfigResource_error_string(const rd_kafka_ConfigResource_t *config);
  *         since these resource requests must be sent to the broker specified
  *         in the resource.
  *
+ * @deprecated Use rd_kafka_IncrementalAlterConfigs().
+ *
  */
 RD_EXPORT
 void rd_kafka_AlterConfigs(rd_kafka_t *rk,
@@ -7615,6 +7674,66 @@ void rd_kafka_AlterConfigs(rd_kafka_t *rk,
 RD_EXPORT const rd_kafka_ConfigResource_t **
 rd_kafka_AlterConfigs_result_resources(
     const rd_kafka_AlterConfigs_result_t *result,
+    size_t *cntp);
+
+
+
+/*
+ * IncrementalAlterConfigs - alter cluster configuration incrementally.
+ *
+ */
+
+
+/**
+ * @brief Incrementally update the configuration for the specified resources.
+ *        Updates are not transactional so they may succeed for some resources
+ *        while fail for others. The configs for a particular resource are
+ *        updated atomically, executing the corresponding incremental operations
+ *        on the provided configurations.
+ *
+ * @remark Requires broker version >=2.3.0
+ *
+ * @remark Multiple resources and resource types may be set, but at most one
+ *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
+ *         since these resource requests must be sent to the broker specified
+ *         in the resource. Broker option will be ignored in this case.
+ *
+ * @param rk Client instance.
+ * @param configs Array of config entries to alter.
+ * @param config_cnt Number of elements in \p configs array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ */
+RD_EXPORT
+void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
+                                      rd_kafka_ConfigResource_t **configs,
+                                      size_t config_cnt,
+                                      const rd_kafka_AdminOptions_t *options,
+                                      rd_kafka_queue_t *rkqu);
+
+
+/*
+ * IncrementalAlterConfigs result type and methods
+ */
+
+/**
+ * @brief Get an array of resource results from a IncrementalAlterConfigs
+ * result.
+ *
+ * Use \c rd_kafka_ConfigResource_error() and
+ * \c rd_kafka_ConfigResource_error_string() to extract per-resource error
+ * results on the returned array elements.
+ *
+ * The returned object life-times are the same as the \p result object.
+ *
+ * @param result Result object to get resource results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @returns an array of ConfigResource elements, or NULL if not available.
+ */
+RD_EXPORT const rd_kafka_ConfigResource_t **
+rd_kafka_IncrementalAlterConfigs_result_resources(
+    const rd_kafka_IncrementalAlterConfigs_result_t *result,
     size_t *cntp);
 
 

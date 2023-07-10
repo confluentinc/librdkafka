@@ -1909,7 +1909,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-302 - Use all addresses for resolved broker hostname                 | 2.1.0                       | Supported                                                                                     |
 | KIP-320 - Consumer: handle log truncation                                | 2.1.0, 2.2.0                | Supported                                                                                     |
 | KIP-322 - DeleteTopics disabled error code                               | 2.1.0                       | Supported                                                                                     |
-| KIP-339 - AdminAPI: incrementalAlterConfigs                              | 2.3.0                       | Not supported                                                                                 |
+| KIP-339 - AdminAPI: incrementalAlterConfigs                              | 2.3.0                       | Supported                                                                                     |
 | KIP-341 - Update Sticky partition assignment data                        | 2.3.0                       | Not supported (superceeded by KIP-429)                                                        |
 | KIP-342 - Custom SASL OAUTHBEARER extensions                             | 2.1.0                       | Supported                                                                                     |
 | KIP-345 - Consumer: Static membership                                    | 2.4.0                       | Supported                                                                                     |
@@ -1965,7 +1965,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.3.1, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.4.0, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 
@@ -1996,15 +1996,14 @@ release of librdkafka.
 | 26      | EndTxn                        | 3           | 1                       |
 | 28      | TxnOffsetCommit               | 3           | 3                       |
 | 32      | DescribeConfigs               | 4           | 1                       |
-| 33      | AlterConfigs                  | 2           | 1                       |
+| 33      | AlterConfigs                  | 2           | 2                       |
 | 36      | SaslAuthenticate              | 2           | 1                       |
 | 37      | CreatePartitions              | 3           | 0                       |
 | 42      | DeleteGroups                  | 2           | 1                       |
+| 44      | IncrementalAlterConfigs       | 1           | 1                       |
 | 47      | OffsetDelete                  | 0           | 0                       |
 | 50      | DescribeUserScramCredentials  | 0           | 0                       |
 | 51      | AlterUserScramCredentials     | 0           | 0                       |
-
-
 
 
 # Recommendations for language binding developers

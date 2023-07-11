@@ -240,8 +240,10 @@ blocks:
       prologue:
         commands:
           - cache restore msys2-x64-${Env:ARTIFACT_KEY}
+          - Get-ChildItem -Recurse $pwd
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
+          - Get-ChildItem -Recurse $pwd
           - cache delete msys2-x64-${Env:ARTIFACT_KEY}
           - cache store msys2-x64-${Env:ARTIFACT_KEY} c:/msys64
       epilogue:

@@ -3,6 +3,8 @@ name: 'librdkafka build and release artifact pipeline'
 agent:
   machine:
     type: s1-prod-macos-arm64
+execution_time_limit:
+  hours: 3
 global_job_config:
   prologue:
     commands:

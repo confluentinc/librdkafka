@@ -239,13 +239,8 @@ blocks:
           value: UCRT64
       prologue:
         commands:
-          - cache restore msys2-x64-${Env:ARTIFACT_KEY}
-          - Get-ChildItem -Recurse $pwd
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
-          - Get-ChildItem -Recurse $pwd
-          - cache delete msys2-x64-${Env:ARTIFACT_KEY}
-          - cache store msys2-x64-${Env:ARTIFACT_KEY} c:/msys64
       epilogue:
         commands:
           - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
@@ -279,8 +274,6 @@ blocks:
           # install vcpkg in the parent directory.
           - pwd
           - cd ..
-          # Restore vcpkg caches, if any.
-          - cache restore vcpkg-archives-$Env:ARTIFACT_KEY
           # Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
           - cd librdkafka
@@ -289,11 +282,8 @@ blocks:
           - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
           - cd ..
           - pwd
-          # Store vcpkg caches
           - ls vcpkg/
           - echo $Env:VCPKG_ROOT
-          - cache delete vcpkg-archives-$Env:ARTIFACT_KEY
-          - cache store vcpkg-archives-$Env:ARTIFACT_KEY C:/Users/semaphore/AppData/Local/vcpkg/archives
           - pwd
           - cd librdkafka
       epilogue:

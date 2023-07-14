@@ -84,12 +84,12 @@ LICENSES.txt: .PHONY
 
 
 TAGS: .PHONY
-	@(if which etags >/dev/null 2>&1 ; then \
+	@(if command -v etags >/dev/null 2>&1 ; then \
 		echo "Using etags to generate $@" ; \
 		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
 			etags -f $@.tmp - ; \
 		cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp ; \
-	 elif which ctags >/dev/null 2>&1 ; then \
+	 elif command -v ctags >/dev/null 2>&1 ; then \
 		echo "Using ctags to generate $@" ; \
 		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
 			ctags -e -f $@.tmp -L- ; \
@@ -97,7 +97,7 @@ TAGS: .PHONY
 	fi)
 
 coverity: Makefile.config
-	@(which cov-build >/dev/null 2>&1 || echo "Make sure coverity../bin is in your PATH")
+	@(command -v cov-build >/dev/null 2>&1 || echo "Make sure coverity../bin is in your PATH")
 	@(cd src && \
 	 make clean && \
 	 (rm -rf cov-int cov-librdkafka.tgz cov-build || true) && \

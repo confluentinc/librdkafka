@@ -1965,7 +1965,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.4.0, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.5.0, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 
@@ -1973,8 +1973,8 @@ release of librdkafka.
 | ApiKey  | Request name                  | Kafka max   | librdkafka max          |
 | ------- | ------------------------------| ----------- | ----------------------- |
 | 0       | Produce                       | 9           | 7                       |
-| 1       | Fetch                         | 13          | 11                      |
-| 2       | ListOffsets                   | 7           | 2                       |
+| 1       | Fetch                         | 15          | 11                      |
+| 2       | ListOffsets                   | 8           | 5                       |
 | 3       | Metadata                      | 12          | 9                       |
 | 8       | OffsetCommit                  | 8           | 7                       |
 | 9       | OffsetFetch                   | 8           | 7                       |
@@ -1991,10 +1991,14 @@ release of librdkafka.
 | 20      | DeleteTopics                  | 6           | 1                       |
 | 21      | DeleteRecords                 | 2           | 1                       |
 | 22      | InitProducerId                | 4           | 4                       |
-| 24      | AddPartitionsToTxn            | 3           | 0                       |
+| 23      | OffsetForLeaderEpoch          | 4           | 2                       |
+| 24      | AddPartitionsToTxn            | 4           | 0                       |
 | 25      | AddOffsetsToTxn               | 3           | 0                       |
 | 26      | EndTxn                        | 3           | 1                       |
 | 28      | TxnOffsetCommit               | 3           | 3                       |
+| 29      | DescribeAcls                  | 3           | 1                       |
+| 30      | CreateAcls                    | 3           | 1                       |
+| 31      | DeleteAcls                    | 3           | 1                       |
 | 32      | DescribeConfigs               | 4           | 1                       |
 | 33      | AlterConfigs                  | 2           | 2                       |
 | 36      | SaslAuthenticate              | 2           | 1                       |

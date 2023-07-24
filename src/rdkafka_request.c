@@ -36,6 +36,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_metadata.h"
+#include "rdkafka_telemetry.h"
 #include "rdkafka_msgset.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_txnmgr.h"
@@ -5191,6 +5192,57 @@ rd_kafka_resp_err_t rd_kafka_EndTxnRequest(rd_kafka_broker_t *rkb,
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        /* Processing... */
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+}
+
+rd_kafka_resp_err_t
+rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        /* Processing... */
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *rkbuf,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque) {
+        /* Parsing */
+        rd_kafka_handle_get_telemetry_subscriptions(rk /*, some other fields that we need to pass from the parsed request. */);
+}
+
+void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *rkbuf,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque) {
+        /* Parsing */
+        rd_kafka_handle_push_telemetry(rk /*, some other fields that we need to pass from the parsed request. */);
 }
 
 

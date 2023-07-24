@@ -52,6 +52,7 @@ set(
     rdkafka_mock_cgrp.c
     rdkafka_error.c
     rdkafka_fetcher.c
+    rdkafka_telemetry.c
     rdlist.c
     rdlog.c
     rdmurmur2.c

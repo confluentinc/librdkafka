@@ -4,9 +4,9 @@ Maintainer: Faidon Liambotis <paravoid@debian.org>
 Build-Depends: debhelper (>= 9), zlib1g-dev, libssl-dev, libsasl2-dev, python3
 Standards-Version: 3.9.6
 Section: libs
-Homepage: https://github.com/edenhill/librdkafka
-Vcs-Git: git://github.com/edenhill/librdkafka.git -b debian
-Vcs-Browser: https://github.com/edenhill/librdkafka/tree/debian
+Homepage: https://github.com/confluentinc/librdkafka
+Vcs-Git: git://github.com/confluentinc/librdkafka.git -b debian
+Vcs-Browser: https://github.com/confluentinc/librdkafka/tree/debian
 
 Package: librdkafka1
 Architecture: any

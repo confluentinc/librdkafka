@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1987,6 +1988,140 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         SUB_TEST_PASS();
 }
 
+static void do_test_DescribeUserScramCredentials(const char *what,
+                                                 rd_kafka_t *rk,
+                                                 rd_kafka_queue_t *useq) {
+        char errstr[512];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_event_t *rkev;
+        rd_kafka_queue_t *rkqu;
+
+        SUB_TEST_QUICK("%s", what);
+
+        rkqu = useq ? useq : rd_kafka_queue_new(rk);
+
+        const char *users[2];
+        users[0] = "Sam";
+        users[1] = "Sam";
+
+        /* Whenever a duplicate user is passed,
+         * the request should fail with error code
+         * RD_KAFKA_RESP_ERR__INVALID_ARG */
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        rd_kafka_DescribeUserScramCredentials(rk, users, RD_ARRAY_SIZE(users),
+                                              options, rkqu);
+        rd_kafka_AdminOptions_destroy(options);
+
+        rkev = test_wait_admin_result(
+            rkqu, RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT, 2000);
+
+        TEST_ASSERT(
+            rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+            "Expected \"Local: Invalid argument or configuration\", not %s",
+            rd_kafka_err2str(rd_kafka_event_error(rkev)));
+
+        rd_kafka_event_destroy(rkev);
+
+        if (!useq)
+                rd_kafka_queue_destroy(rkqu);
+
+        SUB_TEST_PASS();
+}
+
+static void do_test_AlterUserScramCredentials(const char *what,
+                                              rd_kafka_t *rk,
+                                              rd_kafka_queue_t *useq) {
+        char errstr[512];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_event_t *rkev;
+        rd_kafka_queue_t *rkqu;
+
+        SUB_TEST_QUICK("%s", what);
+
+        rkqu = useq ? useq : rd_kafka_queue_new(rk);
+
+#if !WITH_SSL
+        /* Whenever librdkafka wasn't built with OpenSSL,
+         * the request should fail with error code
+         * RD_KAFKA_RESP_ERR__INVALID_ARG */
+        rd_kafka_UserScramCredentialAlteration_t *alterations_ssl[1];
+        alterations_ssl[0] = rd_kafka_UserScramCredentialUpsertion_new(
+            "user", RD_KAFKA_SCRAM_MECHANISM_SHA_256, 10000,
+            (unsigned char *)"password", 8, (unsigned char *)"salt", 4);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        rd_kafka_AlterUserScramCredentials(rk, alterations_ssl, 1, options,
+                                           rkqu);
+        rd_kafka_UserScramCredentialAlteration_destroy_array(
+            alterations_ssl, RD_ARRAY_SIZE(alterations_ssl));
+        rd_kafka_AdminOptions_destroy(options);
+
+        rkev = test_wait_admin_result(
+            rkqu, RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT, 2000);
+
+        TEST_ASSERT(
+            rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+            "Expected \"Local: Invalid argument or configuration\", not %s",
+            rd_kafka_err2str(rd_kafka_event_error(rkev)));
+
+        rd_kafka_event_destroy(rkev);
+#endif
+
+        rd_kafka_UserScramCredentialAlteration_t *alterations[1];
+        alterations[0] = rd_kafka_UserScramCredentialDeletion_new(
+            "", RD_KAFKA_SCRAM_MECHANISM_SHA_256);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        /* Whenever an empty array is passed,
+         * the request should fail with error code
+         * RD_KAFKA_RESP_ERR__INVALID_ARG */
+        rd_kafka_AlterUserScramCredentials(rk, alterations, 0, options, rkqu);
+
+        rkev = test_wait_admin_result(
+            rkqu, RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT, 2000);
+
+        TEST_ASSERT(
+            rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+            "Expected \"Local: Invalid argument or configuration\", not %s",
+            rd_kafka_err2str(rd_kafka_event_error(rkev)));
+
+        rd_kafka_event_destroy(rkev);
+
+        /* Whenever an empty user is passed,
+         * the request should fail with error code
+         * RD_KAFKA_RESP_ERR__INVALID_ARG */
+        rd_kafka_AlterUserScramCredentials(
+            rk, alterations, RD_ARRAY_SIZE(alterations), options, rkqu);
+        rkev = test_wait_admin_result(
+            rkqu, RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT, 2000);
+
+        TEST_ASSERT(
+            rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+            "Expected \"Local: Invalid argument or configuration\", not %s",
+            rd_kafka_err2str(rd_kafka_event_error(rkev)));
+
+        rd_kafka_event_destroy(rkev);
+
+
+        rd_kafka_UserScramCredentialAlteration_destroy_array(
+            alterations, RD_ARRAY_SIZE(alterations));
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(rkqu);
+
+        SUB_TEST_PASS();
+}
 
 /**
  * @brief Test a mix of APIs using the same replyq.
@@ -2494,6 +2629,12 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                                          rd_true);
         do_test_ListConsumerGroupOffsets("main queue, options", rk, mainq, 1,
                                          rd_true);
+
+        do_test_DescribeUserScramCredentials("main queue", rk, mainq);
+        do_test_DescribeUserScramCredentials("temp queue", rk, NULL);
+
+        do_test_AlterUserScramCredentials("main queue", rk, mainq);
+        do_test_AlterUserScramCredentials("temp queue", rk, NULL);
 
         do_test_mix(rk, mainq);
 

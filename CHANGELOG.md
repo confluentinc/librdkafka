@@ -21,6 +21,11 @@ librdkafka v2.2.0 is a feature release:
    closes as normal ones (#4294).
  * Added `fetch.queue.backoff.ms` to the consumer to control how long
    the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
+ * [KIP-235](https://cwiki.apache.org/confluence/display/KAFKA/KIP-235%3A+Add+DNS+alias+support+for+secured+connection):
+   Add DNS alias support for secured connection (#4292).
+ * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
+   IncrementalAlterConfigs API (started by @PrasanthV454, #4110).
+ * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
 
 
 ## Enhancements
@@ -621,7 +626,7 @@ librdkafka v1.8.0 is a security release:
  * Upgrade bundled zlib version from 1.2.8 to 1.2.11 in the `librdkafka.redist`
    NuGet package. The updated zlib version fixes CVEs:
    CVE-2016-9840, CVE-2016-9841, CVE-2016-9842, CVE-2016-9843
-   See https://github.com/edenhill/librdkafka/issues/2934 for more information.
+   See https://github.com/confluentinc/librdkafka/issues/2934 for more information.
  * librdkafka now uses [vcpkg](https://vcpkg.io/) for up-to-date Windows
    dependencies in the `librdkafka.redist` NuGet package:
    OpenSSL 1.1.1l, zlib 1.2.11, zstd 1.5.0.
@@ -1334,4 +1339,4 @@ v1.4.2 is a maintenance release with the following fixes and enhancements:
 
 # Older releases
 
-See https://github.com/edenhill/librdkafka/releases
+See https://github.com/confluentinc/librdkafka/releases

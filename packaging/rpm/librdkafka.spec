@@ -6,7 +6,7 @@ Release: %{__release}%{?dist}
 Summary: The Apache Kafka C library
 Group:   Development/Libraries/C and C++
 License: BSD-2-Clause
-URL:     https://github.com/edenhill/librdkafka
+URL:     https://github.com/confluentinc/librdkafka
 Source:	 librdkafka-%{version}.tar.gz
 
 BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++ cyrus-sasl-devel

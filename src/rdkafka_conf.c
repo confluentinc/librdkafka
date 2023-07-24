@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2022 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -906,11 +906,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Java TrustStores are not supported, use `ssl.ca.location` "
      "and a certificate file instead. "
      "See "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SSL-with-librdkafka "
      "for more information."},
     {_RK_GLOBAL, "sasl.jaas.config", _RK_C_INVALID, _RK(dummy),
      "Java JAAS configuration is not supported, see "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SASL-with-librdkafka "
      "for more information."},
 
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanisms", _RK_C_STR, _RK(sasl.mechanisms),
@@ -1446,6 +1448,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "A higher value allows for more effective batching of these "
      "messages.",
      0, 900000, 10},
+    {_RK_GLOBAL, "client.dns.lookup", _RK_C_S2I, _RK(client_dns_lookup),
+     "Controls how the client uses DNS lookups. By default, when the lookup "
+     "returns multiple IP addresses for a hostname, they will all be attempted "
+     "for connection before the connection is considered failed. This applies "
+     "to both bootstrap and advertised servers. If the value is set to "
+     "`resolve_canonical_bootstrap_servers_only`, each entry will be resolved "
+     "and expanded into a list of canonical names. NOTE: Default here is "
+     "different from the Java client's default behavior, which connects only "
+     "to the first IP address returned for a hostname. ",
+     .vdef = RD_KAFKA_USE_ALL_DNS_IPS,
+     .s2i  = {{RD_KAFKA_USE_ALL_DNS_IPS, "use_all_dns_ips"},
+             {RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
+              "resolve_canonical_bootstrap_servers_only"}}},
 
 
     /*

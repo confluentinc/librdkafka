@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#define MAX_INDEX 20000
+#define MAX_INDEX 100000
 
 const char* k_topic_name = "kudu_profile_record_stream";
 
@@ -15,6 +15,28 @@ int producer_bitset[MAX_INDEX] = {
 };
 
 int timeout = 300;
+
+void produce_dr_cb(rd_kafka_t *rk, void *payload, size_t len,
+                   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
+  char buf[128];
+  rd_snprintf(buf, sizeof(buf), "%.*s", (int)len, (char *)payload);
+  if (err) {
+    TEST_SAY("Message delivery error: %s, producer produce_dr_cb check value %s\n", rd_kafka_err2str(err), buf);
+  } else {
+    TEST_SAY("Message delivery ok, producer produce_dr_cb check value ok: %s\n", buf);
+  }
+}
+
+void produce_dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkm,
+                       void *opaque) {
+  char buf[128];
+  rd_snprintf(buf, sizeof(buf), "%.*s", (int)rkm->len, (char *)rkm->payload);
+  if (rkm->err) {
+    TEST_SAY("Message delivery error: %s, producer produce_dr_msg_cb check value %s\n", rd_kafka_err2str(rkm->err), buf);
+  } else {
+    TEST_SAY("Message delivery ok, producer produce_dr_msg_cb check value ok: %s\n", buf);
+  }
+}
 
 void* Producer(void* arg) {
     const char* prefix = (const char* ) arg;
@@ -27,6 +49,9 @@ void* Producer(void* arg) {
 
     test_conf_init(&conf, &topic_conf, timeout);
     rd_kafka_conf_set_error_cb(conf, NULL);
+    // rd_kafka_conf_set_dr_cb(conf, produce_dr_cb);
+    rd_kafka_conf_set_dr_msg_cb(conf, produce_dr_msg_cb);
+    // rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_DR);
     char errstr[512];
     rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1", errstr,
                             sizeof(errstr));
@@ -35,6 +60,7 @@ void* Producer(void* arg) {
     }
     TEST_SAY("topic_name: %s\n", topic_name);
     rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+    // rk->rk_drmode = RD_KAFKA_DR_MODE_EVENT;
     rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
     if (!rkt) {
         TEST_SAY("produce thread error\n");
@@ -52,7 +78,7 @@ void* Producer(void* arg) {
       if (error_code == RD_KAFKA_RESP_ERR_NO_ERROR) {
         TEST_SAY("produce prepare ok: %d\n", i);
       } else {
-        TEST_SAY("produce prepare error: %d, error_code: %d\n", i, error_code);
+        TEST_SAY("produce prepare error: %d, error_code: %s\n", i, rd_kafka_err2str(error_code));
         i--;
         continue;
       }
@@ -61,7 +87,7 @@ void* Producer(void* arg) {
       if (error_code == RD_KAFKA_RESP_ERR_NO_ERROR) {
         TEST_SAY("produce commit ok: %s\n", msg);
       } else {
-        TEST_SAY("produce commit error: %s, code: %d\n", msg, error_code);
+        TEST_SAY("produce commit error: %s, err_msg: %s\n", msg, rd_kafka_err2str(error_code));
         i--;
       }
     }
@@ -100,7 +126,7 @@ void* Consumer(void* arg) {
     while (1) {
       rd_kafka_message_t *rkm = rd_kafka_consume(rkt, 0, 1000);
       if (!rkm) {
-        if (retry_index++ > 80) {
+        if (retry_index++ > 180) {
           break;
         }
         TEST_SAY("retry consume: %d\n", retry_index);
@@ -141,13 +167,13 @@ void* Fuzzy(void* arg) {
     const char* stop_cmd = "sh single_kafka_controller.sh stop_only 0";
     const char* start_cmd = "sh single_kafka_controller.sh start_only 0";
     int index = 0;
-    while (++index < 50) {
+    while (++index < 100) {
         TEST_SAY("stop kafka, retry: %d\n", index);
         system(stop_cmd);
         sleep(3);
         TEST_SAY("start kafka, retry: %d\n", index);
         system(start_cmd);
-        sleep(6);
+        sleep(3);
     }
     TEST_SAY("Last start kafka, make sure kafka is running\n");
     system(start_cmd);
@@ -157,9 +183,9 @@ void* Fuzzy(void* arg) {
 
 int main_0800_fuzzy(int argc, char** argv) {
     TEST_SAY("create and run fuzzy test");
-    const char* uninstall_kafka_cmd = "sh single_kafka_controller.sh stop 0";
-    system(uninstall_kafka_cmd);
-    const char* install_kafka_cmd = "sh single_kafka_controller.sh start 0";
+    const char* uninstall_kafka_cmd = "sh single_kafka_controller.sh stop_only 0";
+    // system(uninstall_kafka_cmd);
+    const char* install_kafka_cmd = "sh single_kafka_controller.sh start_only 0";
     system(install_kafka_cmd);
 
     pthread_t producer_thread_1;

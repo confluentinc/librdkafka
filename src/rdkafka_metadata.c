@@ -28,6 +28,7 @@
 
 
 #include "rd.h"
+#include "rdkafka.h"
 #include "rdkafka_int.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_broker.h"
@@ -484,8 +485,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 /* Ignore metadata completely for temporary errors. (issue #513)
                  *   LEADER_NOT_AVAILABLE: Broker is rebalancing
                  */
-                if (mdt->err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE &&
-                    mdt->partition_cnt == 0) {
+                if ((mdt->err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE
+                     // || mdt->err == RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE
+                     ) && mdt->partition_cnt == 0) {
                         rd_rkb_dbg(rkb, TOPIC, "METADATA",
                                    "Temporary error in metadata reply for "
                                    "topic %s (PartCnt %i): %s: ignoring",

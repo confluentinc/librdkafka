@@ -8,8 +8,15 @@
     "configure": "node-gyp configure",
     "build": "node-gyp build",
     "test": "make test",
-    "install": "node-gyp rebuild",
+    "install": "node-pre-gyp install --fallback-to-build",
     "prepack": "node ./ci/prepublish.js"
+  },
+  "binary": {
+    "module_name": "node-librdkafka",
+    "module_path": "./build/{configuration}/",
+    "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{arch}.tar.gz",
+    "host": "https://github.com/emasab/node-rdkafka/releases/download/",
+    "remote_path": "v{version}"
   },
   "keywords": [
     "kafka",
@@ -39,6 +46,7 @@
     "toolkit-jsdoc": "^1.0.0"
   },
   "dependencies": {
+    "@mapbox/node-pre-gyp": "^1.0.11",
     "bindings": "^1.3.1",
     "nan": "^2.17.0"
   },

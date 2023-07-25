@@ -193,6 +193,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_atomic64_t ts_recv; /**< Timestamp of last receive */
         } rkb_c;
 
+        struct {
+                /* TODO: fill this out. */
+        } rkb_c_historic;
+
         int rkb_req_timeouts; /* Current value */
 
         thrd_t rkb_thread;

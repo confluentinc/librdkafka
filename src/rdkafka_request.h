@@ -471,5 +471,35 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
 
+rd_kafka_resp_err_t
+rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque);
+
+void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *rkbuf,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque);
+
+void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *rkbuf,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque);
+
 
 #endif /* _RDKAFKA_REQUEST_H_ */

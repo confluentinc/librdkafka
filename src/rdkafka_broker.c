@@ -58,6 +58,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_broker.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_telemetry.h"
 #include "rdkafka_transport.h"
 #include "rdkafka_proto.h"
 #include "rdkafka_buf.h"
@@ -667,6 +668,15 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                         rd_kafka_toppar_delegate_to_leader(rktp);
                 }
         }
+
+        /* If the broker is the preferred telemetry broker, remove it. */
+        /* TODO(milind): check if this right. */
+        mtx_lock(&rkb->rkb_rk->rk_telemetry.lock);
+        if (rkb->rkb_rk->rk_telemetry.preferred_broker == rkb) {
+                rd_kafka_broker_destroy(rkb->rkb_rk->rk_telemetry.preferred_broker);
+                rkb->rkb_rk->rk_telemetry.preferred_broker = NULL;
+        }
+        mtx_unlock(&rkb->rkb_rk->rk_telemetry.lock);
 
         /* Query for topic leaders to quickly pick up on failover. */
         if (err != RD_KAFKA_RESP_ERR__DESTROY &&
@@ -2245,6 +2255,7 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
  * @locality Broker thread
  */
 void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
+        int features;
 
         rkb->rkb_max_inflight       = rkb->rkb_rk->rk_conf.max_inflight;
         rkb->rkb_reauth_in_progress = rd_false;
@@ -2260,6 +2271,26 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
                 NULL, rkb, rd_false /*dont force*/, "connected") ==
             RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
                 rd_kafka_metadata_refresh_brokers(NULL, rkb, "connected");
+
+        if (rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
+            -1) {
+                rd_kafka_t *rk = rkb->rkb_rk;
+                mtx_lock(&rkb->rkb_rk->rk_telemetry.lock);
+                if (!rkb->rkb_rk->rk_telemetry.preferred_broker &&
+                    rk->rk_telemetry.state ==
+                        RD_KAFKA_ADMIN_STATE_WAIT_BROKER) {
+                        rk->rk_telemetry.preferred_broker =
+                            rd_kafka_broker_keep(rkb);
+                        rk->rk_telemetry.state =
+                            RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
+                        rd_kafka_timer_start_oneshot(
+                            &rk->rk_timers, &rk->rk_telemetry.request_timer,
+                            rd_false, 0 /* immediate */, rd_kafka_telemetry_fsm,
+                            rk);
+                }
+                mtx_unlock(&rkb->rkb_rk->rk_telemetry.lock);
+        }
 }
 
 

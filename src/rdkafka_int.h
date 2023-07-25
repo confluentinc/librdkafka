@@ -234,6 +234,14 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
         return names[state];
 }
 
+typedef enum {
+        RD_KAFKA_TELEMETRY_AWAIT_BROKER,
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED,
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,
+        RD_KAFKA_TELEMETRY_PUSH_SCHEDULED,
+        RD_KAFKA_TELEMETRY_PUSH_SENT,
+        RD_KAFKA_TELEMETRY_TERMINATING
+} rd_kafka_telemetry_state_t;
 
 
 /**
@@ -618,6 +626,28 @@ struct rd_kafka_s {
                                *   Typically assigned in provider's .init() */
                 rd_kafka_q_t *callback_q; /**< SASL callback queue, if any. */
         } rk_sasl;
+
+        struct {
+                /* Fields for the control flow. */
+                /**< Current state of the telemetry state machine. */
+                rd_kafka_telemetry_state_t state;
+                /**< Preferred broker for sending metrics to. */
+                rd_kafka_broker_t *preferred_broker;
+                /**< Timer for all the requests we schedule. */
+                rd_kafka_timer_t request_timer;
+                /**< Lock for preferred telemetry broker and state. */
+                mtx_t lock;
+
+                /* Fields obtained from broker as a result of GetSubscriptions. */
+                /* TODO: use rd_kafka_uuid_t as in https://github.com/confluentinc/librdkafka/pull/4300/files
+                 * when it is merged. */
+                char *client_instance_id;
+                int32_t subscription_id;
+                char** accepted_compression_types;
+                int32_t push_interval_ms;
+                rd_bool_t delta_temporality;
+                char** requested_metrics;
+        } rk_telemetry;
 
         /* Test mocks */
         struct {

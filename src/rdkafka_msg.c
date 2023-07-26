@@ -2035,7 +2035,7 @@ static int unittest_msgq_order(const char *what,
         /* Retry the messages, which moves them back to sendq
          * maintaining the original order */
         rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp,rd_false,0,0);
 
         RD_UT_ASSERT(rd_kafka_msgq_len(&sendq) == 0,
                      "sendq FIFO should be empty, not contain %d messages",
@@ -2075,7 +2075,7 @@ static int unittest_msgq_order(const char *what,
         /* Retry the messages, which should now keep the 3 first messages
          * on sendq (no more retries) and just number 4 moved back. */
         rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp,rd_false,0,0);
 
         if (fifo) {
                 if (ut_verify_msgq_order("readded #2", &rkmq, 4, 6, rd_true))
@@ -2096,7 +2096,7 @@ static int unittest_msgq_order(const char *what,
 
         /* Move all messages back on rkmq */
         rd_kafka_retry_msgq(&rkmq, &sendq, 0, 1000, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp,rd_false,0,0);
 
 
         /* Move first half of messages to sendq (1,2,3).
@@ -2118,9 +2118,9 @@ static int unittest_msgq_order(const char *what,
         rd_kafka_msgq_enq_sorted0(&rkmq, rkm, cmp);
 
         rd_kafka_retry_msgq(&rkmq, &sendq, 0, 1000, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp,rd_false,0,0);
         rd_kafka_retry_msgq(&rkmq, &sendq2, 0, 1000, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp,rd_false,0,0);
 
         RD_UT_ASSERT(rd_kafka_msgq_len(&sendq) == 0,
                      "sendq FIFO should be empty, not contain %d messages",

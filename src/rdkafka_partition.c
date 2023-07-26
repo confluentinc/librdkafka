@@ -883,7 +883,10 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         int max_retries,
                         rd_ts_t backoff,
                         rd_kafka_msg_status_t status,
-                        int (*cmp)(const void *a, const void *b)) {
+                        int (*cmp)(const void *a, const void *b),
+                        rd_bool_t exponential_backoff,
+                        int retry_ms,
+                        int retry_max_ms) {
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
 
@@ -900,8 +903,11 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                 rd_kafka_msgq_deq(srcq, rkm, 1);
                 rd_kafka_msgq_enq(&retryable, rkm);
 
-                rkm->rkm_u.producer.ts_backoff = backoff;
                 rkm->rkm_u.producer.retries += incr_retry;
+                if(exponential_backoff == rd_true){
+                        backoff = rd_clock() + min((1<<(rkm->rkm_u.producer.retries))*retry_ms,retry_max_ms)*1000;
+                }
+                rkm->rkm_u.producer.ts_backoff = backoff;
 
                 /* Don't downgrade a message from any form of PERSISTED
                  * to NOT_PERSISTED, since the original cause of indicating
@@ -941,7 +947,10 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                                int incr_retry,
                                rd_kafka_msg_status_t status) {
         rd_kafka_t *rk  = rktp->rktp_rkt->rkt_rk;
+        
         rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
+        int retry_ms = rk->rk_conf.retry_backoff_ms;
+        int retry_max_ms = rk->rk_conf.retry_backoff_max_ms;
         int r;
 
         if (rd_kafka_terminating(rk))
@@ -950,7 +959,7 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_lock(rktp);
         r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq, incr_retry,
                                 rk->rk_conf.max_retries, backoff, status,
-                                rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+                                rktp->rktp_rkt->rkt_conf.msg_order_cmp,rd_true,retry_ms,retry_max_ms);
         rd_kafka_toppar_unlock(rktp);
 
         return r;

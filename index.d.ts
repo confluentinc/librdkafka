@@ -7,10 +7,12 @@ import {
     ConsumerTopicConfig,
     ProducerGlobalConfig,
     ProducerTopicConfig,
-} from './config';
+} from './types/config';
 
-export * from './config';
-export * from './errors';
+export * from './types/config';
+export * from './types/errors';
+import { Kafka } from './types/kafkajs';
+import * as errors from './types/errors';
 
 export interface LibrdKafkaError {
     message: string;
@@ -344,4 +346,22 @@ export interface IAdminClient {
 
 export abstract class AdminClient {
     static create(conf: GlobalConfig): IAdminClient;
+}
+
+export type RdKafka = {
+  Consumer: KafkaConsumer,
+  Producer: Producer,
+  HighLevelProducer: HighLevelProducer,
+  AdminClient: AdminClient,
+  KafkaConsumer: KafkaConsumer,
+  createReadStream: typeof KafkaConsumer.createReadStream,
+  createWriteStream: typeof Producer.createWriteStream,
+  CODES: typeof errors.CODES,
+  Topic: (name: string) => string,
+  features: typeof features,
+  librdkafkaVersion: typeof librdkafkaVersion,
+}
+
+export type KafkaJS = {
+  Kafka: Kafka
 }

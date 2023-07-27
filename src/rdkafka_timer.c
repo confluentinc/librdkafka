@@ -325,6 +325,10 @@ void rd_kafka_timers_run(rd_kafka_timers_t *rkts, int timeout_us) {
 
                         rd_kafka_timer_unschedule(rkts, rtmr);
 
+                        if (rtmr->rtmr_oneshot) {
+                                fprintf(stderr, "MILIND::calling one shot timer with arg %p and internval %ld\n", rtmr->rtmr_arg, rtmr->rtmr_interval);
+                        }
+
                         /* If timer must only be fired once,
                          * disable it now prior to callback.
                          *

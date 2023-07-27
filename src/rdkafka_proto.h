@@ -167,6 +167,8 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
             [RD_KAFKAP_DescribeTransactions] = "DescribeTransactions",
             [RD_KAFKAP_ListTransactions]     = "ListTransactions",
             [RD_KAFKAP_AllocateProducerIds]  = "AllocateProducerIds",
+            [RD_KAFKAP_GetTelemetrySubscriptions]  = "GetTelemetrySubscriptions",
+            [RD_KAFKAP_PushTelemetry]  = "PushTelemetry",
         };
         static RD_TLS char ret[64];
 

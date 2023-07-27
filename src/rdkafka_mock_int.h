@@ -393,6 +393,12 @@ struct rd_kafka_mock_cluster_s {
         /**< Request handlers */
         struct rd_kafka_mock_api_handler api_handlers[RD_KAFKAP__NUM];
 
+        /**< Requested metrics. */
+        char **metrics;
+
+        /** < Requested metric count. */
+        size_t metrics_cnt;
+
         /**< Mutex for:
          *   .errstacks
          *   .apiversions

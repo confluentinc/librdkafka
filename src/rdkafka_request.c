@@ -5203,27 +5203,42 @@ rd_kafka_resp_err_t rd_kafka_EndTxnRequest(rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t
 rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
-                           char *errstr,
-                           size_t errstr_size,
-                           rd_kafka_replyq_t replyq,
-                           rd_kafka_resp_cb_t *resp_cb,
-                           void *opaque) {
+                                          char *errstr,
+                                          size_t errstr_size,
+                                          rd_kafka_replyq_t replyq,
+                                          rd_kafka_resp_cb_t *resp_cb,
+                                          void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
 
-        /* Processing... */
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "GetTelemetrySubscriptions (KIP-714) not supported "
+                            "by broker, requires broker version >= 3.X.Y");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_GetTelemetrySubscriptions, 1,
+            16 /* client_instance_id */, rd_true);
+
+        rd_kafka_buf_write_uuid(rkbuf,
+                                &rkb->rkb_rk->rk_telemetry.client_instance_id);
+
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
-
 }
 
-rd_kafka_resp_err_t
-rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
-                           char *errstr,
-                           size_t errstr_size,
-                           rd_kafka_replyq_t replyq,
-                           rd_kafka_resp_cb_t *resp_cb,
-                           void *opaque) {
+rd_kafka_resp_err_t rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
+                                                  char *errstr,
+                                                  size_t errstr_size,
+                                                  rd_kafka_replyq_t replyq,
+                                                  rd_kafka_resp_cb_t *resp_cb,
+                                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
         /* Processing... */
@@ -5233,21 +5248,128 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
 }
 
 void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
-                                    rd_kafka_broker_t *rkb,
-                                    rd_kafka_resp_err_t err,
-                                    rd_kafka_buf_t *rkbuf,
-                                    rd_kafka_buf_t *request,
-                                    void *opaque) {
-        /* Parsing */
-        rd_kafka_handle_get_telemetry_subscriptions(rk /*, some other fields that we need to pass from the parsed request. */);
+                                               rd_kafka_broker_t *rkb,
+                                               rd_kafka_resp_err_t err,
+                                               rd_kafka_buf_t *rkbuf,
+                                               rd_kafka_buf_t *request,
+                                               void *opaque) {
+        int16_t ErrorCode           = 0;
+        const int log_decode_errors = LOG_ERR;
+        int32_t arraycnt;
+        size_t i;
+
+        /*
+        ThrottleTime int32                   // Standard throttling.
+    ErrorCode int16                      // Error code.
+    ClientInstanceId uuid                // Assigned client instance id if
+    ClientInstanceId was Null in the request, else Null. SubscriptionId int32 //
+    Unique identifier for the current subscription set for this client instance.
+    AcceptedCompressionTypes Array[int8] // The compression types the broker
+    accepts for PushTelemetryRequest.CompressionType
+                                         // as listed in
+    MessageHeaderV2.Attributes.CompressionType. The array will be sorted in
+                                         // preference order from higher to
+    lower. The CompressionType of NONE will not be
+                                         // present in the response from the
+    broker, though the broker does support uncompressed
+                                         // client telemetry if none of the
+    accepted compression codecs are supported by the client. PushIntervalMs
+    int32                // Configured push interval, which is the lowest
+    configured interval in the current subscription set. DeltaTemporality bool
+    // If True; monotonic/counter metrics are to be emitted as deltas to the
+    previous sample.
+                                         // If False; monotonic/counter metrics
+    are to be emitted as cumulative absolute values. RequestedMetrics
+    Array[string]       // Requested telemetry metrics prefix string match.
+                                         // Empty array: No metrics subscribed.
+                                         // Array[0] empty string: All metrics
+    subscribed.
+                                         // Array[..]: prefix string match.*/
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Termination */
+                return;
+        }
+
+        if (err)
+                goto err;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (ErrorCode) {
+                err = ErrorCode;
+                goto err;
+        }
+
+        rd_kafka_buf_read_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
+        rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.subscription_id);
+
+        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: uuid %s",
+                     rk->rk_telemetry.client_instance_id.base64str);
+        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: Subscription id %d",
+                     rk->rk_telemetry.subscription_id);
+
+        int32_t cnt;
+        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
+
+        if (arraycnt) {
+                rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
+                rk->rk_telemetry.accepted_compression_types =
+                    rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
+
+                for (i = 0; i < arraycnt; i++)
+                        rd_kafka_buf_read_i8(
+                            rkbuf,
+                            &rk->rk_telemetry.accepted_compression_types[i]);
+        } else {
+                rk->rk_telemetry.accepted_compression_types_cnt = 1;
+                rk->rk_telemetry.accepted_compression_types =
+                    rd_calloc(1, sizeof(rd_kafka_compression_t));
+                rk->rk_telemetry.accepted_compression_types[0] =
+                    RD_KAFKA_COMPRESSION_NONE;
+        }
+
+        rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.push_interval_ms);
+        rd_kafka_buf_read_bool(rkbuf, &rk->rk_telemetry.delta_temporality);
+
+
+        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: Push Interval %d",
+                     rk->rk_telemetry.push_interval_ms);
+
+        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
+
+        if (arraycnt)
+                rk->rk_telemetry.requested_metrics_cnt = arraycnt;
+
+        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: metrics size %lu, %d",
+                     rk->rk_telemetry.requested_metrics_cnt, arraycnt);
+
+
+        rk->rk_telemetry.requested_metrics =
+            rd_calloc(arraycnt, sizeof(char *));
+
+        for (i = 0; i < arraycnt; i++) {
+                rd_kafkap_str_t Metric;
+                rd_kafka_buf_read_str(rkbuf, &Metric);
+                rk->rk_telemetry.requested_metrics[i] = rd_strdup(Metric.str);
+        }
+
+        rd_kafka_handle_get_telemetry_subscriptions(rk, err);
+err_parse:
+        err = rkbuf->rkbuf_err;
+        goto err;
+
+err:
 }
 
 void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,
-                                    rd_kafka_broker_t *rkb,
-                                    rd_kafka_resp_err_t err,
-                                    rd_kafka_buf_t *rkbuf,
-                                    rd_kafka_buf_t *request,
-                                    void *opaque) {
+                                   rd_kafka_broker_t *rkb,
+                                   rd_kafka_resp_err_t err,
+                                   rd_kafka_buf_t *rkbuf,
+                                   rd_kafka_buf_t *request,
+                                   void *opaque) {
         /* Parsing */
         rd_kafka_handle_push_telemetry(rk /*, some other fields that we need to pass from the parsed request. */);
 }

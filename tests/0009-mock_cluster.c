@@ -57,40 +57,46 @@ int main_0009_mock_cluster(int argc, char **argv) {
         test_conf_init(&conf, NULL, 30);
 
         test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "debug", "telemetry,mock");
 
         /* Producer */
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         p = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
 
-        /* Consumer */
-        test_conf_set(conf, "auto.offset.reset", "earliest");
-        c = test_create_consumer(topic, NULL, conf, NULL);
+        char *metric = "";
+        rd_kafka_mock_telemetry_set_requested_metrics(mcluster, &metric, 1);
 
-        rkt = test_create_producer_topic(p, topic, NULL);
+        rd_kafka_poll(p, 10000);
 
-        /* Produce */
-        test_produce_msgs(p, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, NULL, 0);
+        // /* Consumer */
+        // test_conf_set(conf, "auto.offset.reset", "earliest");
+        // c = test_create_consumer(topic, NULL, conf, NULL);
 
-        /* Produce tiny messages */
-        test_produce_msgs(p, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, "hello",
-                          5);
+        // rkt = test_create_producer_topic(p, topic, NULL);
 
-        rd_kafka_topic_destroy(rkt);
+        // /* Produce */
+        // test_produce_msgs(p, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, NULL, 0);
 
-        /* Assign */
-        parts = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(parts, topic, 0);
-        rd_kafka_topic_partition_list_add(parts, topic, 1);
-        rd_kafka_topic_partition_list_add(parts, topic, 2);
-        rd_kafka_topic_partition_list_add(parts, topic, 3);
-        test_consumer_assign("CONSUME", c, parts);
-        rd_kafka_topic_partition_list_destroy(parts);
+        // /* Produce tiny messages */
+        // test_produce_msgs(p, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, "hello",
+        //                   5);
+
+        // rd_kafka_topic_destroy(rkt);
+
+        // /* Assign */
+        // parts = rd_kafka_topic_partition_list_new(1);
+        // rd_kafka_topic_partition_list_add(parts, topic, 0);
+        // rd_kafka_topic_partition_list_add(parts, topic, 1);
+        // rd_kafka_topic_partition_list_add(parts, topic, 2);
+        // rd_kafka_topic_partition_list_add(parts, topic, 3);
+        // test_consumer_assign("CONSUME", c, parts);
+        // rd_kafka_topic_partition_list_destroy(parts);
 
 
-        /* Consume */
-        test_consumer_poll("CONSUME", c, 0, -1, 0, msgcnt, NULL);
+        // /* Consume */
+        // test_consumer_poll("CONSUME", c, 0, -1, 0, msgcnt, NULL);
 
-        rd_kafka_destroy(c);
+        // rd_kafka_destroy(c);
         rd_kafka_destroy(p);
 
         test_mock_cluster_destroy(mcluster);

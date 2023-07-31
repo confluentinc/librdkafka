@@ -95,15 +95,14 @@ static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err) {
         rd_ts_t next_scheduled;
-        fprintf(stderr, "[TELEMETRY] Coming inside rd_kafka_handle_get_telemetry_subscriptions.\n");
-
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
-                /* TODO: Log error here. */
+                rd_kafka_dbg(rk, TELEMETRY, "GETERR",
+                             "GetTelemetrySubscriptionsRequest failed: %s",
+                             rd_kafka_err2str(err));
                 if (rk->rk_telemetry.push_interval_ms == 0) {
                         rk->rk_telemetry.push_interval_ms =
                             30000; /* Default: 5min */
-                        fprintf(stderr, "[TELEMETRY] inside rd_kafka_handle_get_telemetry_subscriptions, made push interval to 5 mins.\n");
                 }
         }
 
@@ -114,15 +113,11 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                  rk->rk_telemetry.push_interval_ms;
 
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
-                fprintf(stderr, "[TELEMETRY] inside rd_kafka_handle_get_telemetry_subscriptions, scheduled push.\n");
-
         } else {
                 /* No metrics requested, or we're in error. */
                 next_scheduled = rk->rk_telemetry.push_interval_ms * 1000;
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
-                fprintf(stderr, "[TELEMETRY] inside rd_kafka_handle_get_telemetry_subscriptions, err code is %s.\n", rd_kafka_err2str(err));
-
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETHANDLE",
@@ -142,47 +137,31 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                          rd_kafka_broker_t *rkb,
                                          rd_bool_t terminating) {
 
-        /* Do some processing. */
-        //TODO: Need to cycle through requested_metrics and to string comparison and then only calculate?
+        //TODO: Need to cycle through requested_metrics.
         //TODO: Metrics processing. Update historic, calculate deltas, and serialize.
 
-        /* Enqueue on broker transmit queue.
-         * The preferred broker might change in the meanwhile but let it fail.
-         */
-        //TODO: Terminating?
+        //TODO: Update dummy values
         void *metrics_payload = NULL;
-        char *client_instance_id = "client_instance_id";
-        int subscription_id = 1;
         char *compression_type = "gzip";
-        fprintf(stderr, "[TELEMETRY] Going to push telemetry.\n");
 
-
-        //TODO: Push on PMB's transmit queue?
-//        rd_kafka_PushTelemetryRequest(rkb, rk->rk_telemetry.client_instance_id, rk->rk_telemetry.subscription_id, terminating, NULL, metrics_payload, 0,
-//                                      NULL, 0,
-//                                      RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-//                                      rd_kafka_handle_PushTelemetry, NULL);
-        rd_kafka_PushTelemetryRequest(rkb, client_instance_id, subscription_id, terminating, compression_type, metrics_payload, 0,
+        rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT", "Sending PushTelemetryRequest");
+        rd_kafka_PushTelemetryRequest(rkb, &rk->rk_telemetry.client_instance_id, rk->rk_telemetry.subscription_id, terminating, compression_type, metrics_payload, 0,
                                       NULL, 0,
                                       RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                                       rd_kafka_handle_PushTelemetry, NULL);
-
-        fprintf(stderr, "[TELEMETRY] Pushed telemetry.\n");
-
-
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SENT;
 }
 
 void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
-                fprintf(stderr, "[TELEMETRY] Pushed telemetry received success.\n");
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
                     rk->rk_telemetry.push_interval_ms * 1000, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         } else { /* error */
-                 //TODO: When to schedule in error case?
-                fprintf(stderr, "[TELEMETRY] Pushed telemetry received error.\n");
+                rd_kafka_dbg(rk, TELEMETRY, "PUSHERR",
+                             "PushTelemetryRequest failed: %s",
+                             rd_kafka_err2str(err));
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
@@ -224,7 +203,6 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
                 break;
 
         case RD_KAFKA_TELEMETRY_PUSH_SCHEDULED:
-                fprintf(stderr, "[TELEMETRY] Coming into RD_KAFKA_TELEMETRY_PUSH_SCHEDULED case.\n");
                 preferred_broker = rd_kafka_get_preferred_broker(rk);
                 if (!preferred_broker) {
                         state = RD_KAFKA_TELEMETRY_AWAIT_BROKER;
@@ -239,7 +217,12 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
                 break;
 
         case RD_KAFKA_TELEMETRY_TERMINATING:
-                /* TODO: Add special terminating handler here. */
+                preferred_broker = rd_kafka_get_preferred_broker(rk);
+                if (!preferred_broker) {
+                        state = RD_KAFKA_TELEMETRY_AWAIT_BROKER;
+                        break;
+                }
+                rd_kafka_send_push_telemetry(rk, preferred_broker, rd_true);
                 break;
 
         default:

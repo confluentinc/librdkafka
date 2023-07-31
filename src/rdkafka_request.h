@@ -481,7 +481,7 @@ rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t
 rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
-                              const char *client_instance_id,
+                              rd_kafka_uuid_t *client_instance_id,
                               int32_t subscription_id,
                               rd_bool_t terminating,
                               const char *compression_type,

@@ -5235,7 +5235,7 @@ rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t
 rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
-                              const char *client_instance_id,
+                              rd_kafka_uuid_t *client_instance_id,
                               int32_t subscription_id,
                               rd_bool_t terminating,
                               const char *compression_type,
@@ -5259,23 +5259,13 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        // length of the buffer
-//        size_t len;
-//
-//        len = strlen(client_instance_id) + 1 + sizeof(subscription_id) + sizeof(terminating) + strlen(compression_type) + 1 + metrics_size;
-
         //TODO: Check size of the request
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_PushTelemetry, 1, 500);
 
-        fprintf(stderr, "[PushTelemetry]Going to write client_instance_id\n");
-        rd_kafka_buf_write_str(rkbuf, client_instance_id, strlen(client_instance_id));
-        fprintf(stderr, "[PushTelemetry]Going to write subscription_id\n");
+        rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
         rd_kafka_buf_write_i32(rkbuf, subscription_id);
-        fprintf(stderr, "[PushTelemetry]Going to write terminating\n");
         rd_kafka_buf_write_bool(rkbuf, terminating);
-        fprintf(stderr, "[PushTelemetry]Going to write compression_type\n");
         rd_kafka_buf_write_str(rkbuf, compression_type, strlen(compression_type));
-        fprintf(stderr, "[PushTelemetry]Going to write metrics\n");
         rd_kafka_buf_write_bytes(rkbuf, metrics ? metrics : "", metrics_size);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

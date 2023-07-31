@@ -5362,6 +5362,7 @@ err_parse:
         goto err;
 
 err:
+        return;
 }
 
 void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,

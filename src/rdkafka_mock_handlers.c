@@ -2105,6 +2105,89 @@ err_parse:
         return -1;
 }
 
+static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
+                                                           rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_resp_err_t err;
+
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
+
+static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
+    rd_kafka_mock_connection_t *mconn,
+    rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_resp_err_t err;
+        int32_t TopicsCnt, i;
+        rd_kafka_uuid_t ClientInstanceId;
+        rd_kafka_uuid_t zero_uuid = RD_KAFKA_ZERO_UUID;
+
+        /* Request: ClientInstanceId */
+        rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
+        if (ClientInstanceId.least_significant_bits ==
+                zero_uuid.least_significant_bits &&
+            ClientInstanceId.most_significant_bits ==
+                zero_uuid.most_significant_bits) {
+                ClientInstanceId.least_significant_bits = 129;
+                ClientInstanceId.most_significant_bits  = 298;
+        }
+
+        /* Response: ThrottleTimeMs */
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        /* Response: ErrorCode */
+        rd_kafka_buf_write_i16(resp, err);
+
+        /* Response: ClientInstanceId*/
+        rd_kafka_buf_write_uuid(resp, &ClientInstanceId);
+
+        /* Response: SubscriptionId */
+        // TODO: Calculate subscription ID.
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* Response: #AcceptedCompressionTypes */
+        rd_kafka_buf_write_arraycnt(resp, 1);
+
+        /* We send NONE here, despite the broker never actually sending NONE. */
+        /* Response: AcceptedCompressionTypes */
+        rd_kafka_buf_write_i8(resp, RD_KAFKA_COMPRESSION_NONE);
+
+        /* Response: PushIntervalMs */
+        rd_kafka_buf_write_i32(resp, 5000);
+
+        /* Response: #RequestedMetrics */
+//        rd_kafka_buf_write_arraycnt(resp, mcluster->metrics_cnt);
+
+//        for (i = 0; i < mcluster->metrics_cnt; i++)
+//                rd_kafka_buf_write_str(resp, mcluster->metrics[i], -1);
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
+
 
 /**
  * @brief Default request handlers
@@ -2136,6 +2219,9 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
+        [RD_KAFKAP_GetTelemetrySubscriptions] =
+            {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
+        [RD_KAFKAP_PushTelemetry] = {0, 0, 0, rd_kafka_mock_handle_PushTelemetry},
 };
 
 

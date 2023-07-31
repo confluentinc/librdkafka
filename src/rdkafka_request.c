@@ -5219,12 +5219,56 @@ rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t
 rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
-                           char *errstr,
-                           size_t errstr_size,
-                           rd_kafka_replyq_t replyq,
-                           rd_kafka_resp_cb_t *resp_cb,
-                           void *opaque) {
+                              const char *client_instance_id,
+                              int32_t subscription_id,
+                              rd_bool_t terminating,
+                              const char *compression_type,
+                              const void *metrics,
+                              size_t metrics_size,
+                              char *errstr,
+                              size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_PushTelemetry,
+                                                          0, 1, NULL);
+        fprintf(stderr, "[PushTelemetry] ApiVersion: %d\n", ApiVersion);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "PushTelemetryRequest (KIP-714) not supported ");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        // length of the buffer
+//        size_t len;
+//
+//        len = strlen(client_instance_id) + 1 + sizeof(subscription_id) + sizeof(terminating) + strlen(compression_type) + 1 + metrics_size;
+
+        //TODO: Check size of the request
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_PushTelemetry, 1, 500);
+
+        fprintf(stderr, "[PushTelemetry]Going to write client_instance_id\n");
+        rd_kafka_buf_write_str(rkbuf, client_instance_id, strlen(client_instance_id));
+        fprintf(stderr, "[PushTelemetry]Going to write subscription_id\n");
+        rd_kafka_buf_write_i32(rkbuf, subscription_id);
+        fprintf(stderr, "[PushTelemetry]Going to write terminating\n");
+        rd_kafka_buf_write_bool(rkbuf, terminating);
+        fprintf(stderr, "[PushTelemetry]Going to write compression_type\n");
+        rd_kafka_buf_write_str(rkbuf, compression_type, strlen(compression_type));
+        fprintf(stderr, "[PushTelemetry]Going to write metrics\n");
+        rd_kafka_buf_write_bytes(rkbuf, metrics ? metrics : "", metrics_size);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        /* Let the handler perform retries so that it can pick
+         * up more added partitions. */
+        rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
+
+        fprintf(stderr, "[PushTelemetry]Going to enqueue reply\n");
 
         /* Processing... */
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
@@ -5248,8 +5292,34 @@ void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,
                                     rd_kafka_buf_t *rkbuf,
                                     rd_kafka_buf_t *request,
                                     void *opaque) {
-        /* Parsing */
-        rd_kafka_handle_push_telemetry(rk /*, some other fields that we need to pass from the parsed request. */);
+        const int log_decode_errors = LOG_ERR;
+        int16_t ErrorCode;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Termination */
+                return;
+        }
+
+        if (err)
+                goto err;
+
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (ErrorCode) {
+                err = ErrorCode;
+                goto err;
+        }
+        rd_kafka_handle_push_telemetry(rk, err);
+
+err_parse:
+        err = rkbuf->rkbuf_err;
+        goto err;
+
+err:
+        return ;
 }
 
 

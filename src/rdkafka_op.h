@@ -558,6 +558,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                RD_KAFKA_MOCK_CMD_COORD_SET,
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
+                               RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET,
                         } cmd;
 
                         rd_kafka_resp_err_t err; /**< Error for:
@@ -595,6 +596,9 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    APIVERSION_SET (maxver)
                                                   */
+                        char **metrics;          /**< Metrics requested, for:
+                                                  *   REQUESTED_METRICS_SET */
+
                 } mock;
 
                 struct {

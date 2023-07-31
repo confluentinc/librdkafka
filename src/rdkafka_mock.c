@@ -2145,6 +2145,27 @@ rd_kafka_mock_set_apiversion(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+//rd_kafka_resp_err_t
+//rd_kafka_mock_telemetry_set_requested_metrics(rd_kafka_mock_cluster_t *mcluster,
+//                                              char **metrics,
+//                                              size_t metrics_cnt) {
+//        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+//
+//        rko->rko_u.mock.hi      = metrics_cnt;
+//        rko->rko_u.mock.metrics = NULL;
+//        if (metrics_cnt) {
+//                size_t i;
+//                rko->rko_u.mock.metrics =
+//                    rd_calloc(metrics_cnt, sizeof(char *));
+//                for (i = 0; i < metrics_cnt; i++)
+//                        rko->rko_u.mock.metrics[i] = rd_strdup(metrics[i]);
+//        }
+//        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET;
+//
+//        return rd_kafka_op_err_destroy(
+//            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+//}
+
 
 /**
  * @brief Apply command to specific broker.
@@ -2254,6 +2275,8 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_topic_t *mtopic;
         rd_kafka_mock_partition_t *mpart;
         rd_kafka_mock_broker_t *mrkb;
+        size_t i;
+
 
         switch (rko->rko_u.mock.cmd) {
         case RD_KAFKA_MOCK_CMD_TOPIC_CREATE:
@@ -2366,6 +2389,17 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 mcluster->api_handlers[(int)rko->rko_u.mock.partition]
                     .MaxVersion = (int16_t)rko->rko_u.mock.hi;
                 break;
+
+//        case RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET:
+//                mcluster->metrics_cnt = rko->rko_u.mock.hi;
+//                if (!mcluster->metrics_cnt)
+//                        break;
+//
+//                rko->rko_u.mock.metrics =
+//                    rd_calloc(mcluster->metrics_cnt, sizeof(char *));
+//                for (i = 0; i < mcluster->metrics_cnt; i++)
+//                        mcluster->metrics[i] =
+//                            rd_strdup(rko->rko_u.mock.metrics[i]);
 
         default:
                 rd_assert(!*"unknown mock cmd");

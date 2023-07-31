@@ -364,7 +364,21 @@ rd_kafka_mock_set_apiversion(rd_kafka_mock_cluster_t *mcluster,
                              int16_t MinVersion,
                              int16_t MaxVersion);
 
-
+/**
+ * @brief Set the metrics that are expected by the broker for telemetry
+ * collection.
+ *
+ * @param metrics List of prefixes of metric names or NULL.
+ * @param metrics_cnt
+ *
+ * @note if \p metrics is NULL, no metrics will be expected by the broker. If
+ * the first elements of \p metrics is an empty string, that indicates the
+ * broker expects all metrics.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_set_requested_metrics(rd_kafka_mock_cluster_t *mcluster,
+                                              char **metrics,
+                                              size_t metrics_cnt);
 /**@}*/
 
 #ifdef __cplusplus

@@ -95,12 +95,16 @@ static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err) {
         rd_ts_t next_scheduled;
+        fprintf(stderr, "[TELEMETRY] Coming inside rd_kafka_handle_get_telemetry_subscriptions.\n");
+
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 /* TODO: Log error here. */
-                if (rk->rk_telemetry.push_interval_ms == 0)
+                if (rk->rk_telemetry.push_interval_ms == 0) {
                         rk->rk_telemetry.push_interval_ms =
                             30000; /* Default: 5min */
+                        fprintf(stderr, "[TELEMETRY] inside rd_kafka_handle_get_telemetry_subscriptions, made push interval to 5 mins.\n");
+                }
         }
 
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR &&
@@ -110,11 +114,15 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                  rk->rk_telemetry.push_interval_ms;
 
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
+                fprintf(stderr, "[TELEMETRY] inside rd_kafka_handle_get_telemetry_subscriptions, scheduled push.\n");
+
         } else {
                 /* No metrics requested, or we're in error. */
                 next_scheduled = rk->rk_telemetry.push_interval_ms * 1000;
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
+                fprintf(stderr, "[TELEMETRY] inside rd_kafka_handle_get_telemetry_subscriptions, err code is %s.\n", rd_kafka_err2str(err));
+
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETHANDLE",
@@ -171,14 +179,15 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
-                    1 /* the push interval ms */, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+                    rk->rk_telemetry.push_interval_ms * 1000, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         } else { /* error */
+                 //TODO: When to schedule in error case?
                 fprintf(stderr, "[TELEMETRY] Pushed telemetry received error.\n");
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
-                    1 /* the push interval ms */, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+                    rk->rk_telemetry.push_interval_ms * 1000, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         }
 }
 

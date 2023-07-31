@@ -5291,34 +5291,6 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         int32_t arraycnt;
         size_t i;
 
-        /*
-        ThrottleTime int32                   // Standard throttling.
-    ErrorCode int16                      // Error code.
-    ClientInstanceId uuid                // Assigned client instance id if
-    ClientInstanceId was Null in the request, else Null. SubscriptionId int32 //
-    Unique identifier for the current subscription set for this client instance.
-    AcceptedCompressionTypes Array[int8] // The compression types the broker
-    accepts for PushTelemetryRequest.CompressionType
-                                         // as listed in
-    MessageHeaderV2.Attributes.CompressionType. The array will be sorted in
-                                         // preference order from higher to
-    lower. The CompressionType of NONE will not be
-                                         // present in the response from the
-    broker, though the broker does support uncompressed
-                                         // client telemetry if none of the
-    accepted compression codecs are supported by the client. PushIntervalMs
-    int32                // Configured push interval, which is the lowest
-    configured interval in the current subscription set. DeltaTemporality bool
-    // If True; monotonic/counter metrics are to be emitted as deltas to the
-    previous sample.
-                                         // If False; monotonic/counter metrics
-    are to be emitted as cumulative absolute values. RequestedMetrics
-    Array[string]       // Requested telemetry metrics prefix string match.
-                                         // Empty array: No metrics subscribed.
-                                         // Array[0] empty string: All metrics
-    subscribed.
-                                         // Array[..]: prefix string match.*/
-
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* Termination */
                 return;

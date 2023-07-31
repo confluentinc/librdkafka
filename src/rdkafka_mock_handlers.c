@@ -2105,6 +2105,9 @@ err_parse:
         return -1;
 }
 
+/**
+ * @brief Handle GetTelemetrySubscriptions
+ */
 static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
     rd_kafka_mock_connection_t *mconn,
     rd_kafka_buf_t *rkbuf) {
@@ -2170,6 +2173,10 @@ err_parse:
         rd_kafka_buf_destroy(resp);
         return -1;
 }
+
+/**
+ * @brief Handle PushTelemetry
+ */
 static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
                                                            rd_kafka_buf_t *rkbuf) {
         const rd_bool_t log_decode_errors = rd_true;

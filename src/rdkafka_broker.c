@@ -2285,10 +2285,6 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
                         rk->rk_telemetry.preferred_broker = rkb;
                         rk->rk_telemetry.state =
                             RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
-                        fprintf(stderr, "MILIND::state %s, %p\n",
-                                rd_kafka_telemetry_state2str(
-                                    rk->rk_telemetry.state),
-                                (void *)rk);
                         rd_kafka_timer_start_oneshot(
                             &rk->rk_timers, &rk->rk_telemetry.request_timer,
                             rd_false, 1 /* immediate */,

@@ -2111,7 +2111,6 @@ static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
-        fprintf(stderr, "MILIND:: response buffer flexver? %d\n", (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER));
         rd_kafka_resp_err_t err;
         int32_t TopicsCnt, i;
         rd_kafka_uuid_t ClientInstanceId;
@@ -2164,8 +2163,6 @@ static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
                 rd_kafka_buf_write_str(resp, mcluster->metrics[i], -1);
 
         rd_kafka_mock_connection_send_response(mconn, resp);
-        fprintf(stderr, "MILIND:: get mock handler sent response?\n");
-
 
         return 0;
 

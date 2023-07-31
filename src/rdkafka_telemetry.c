@@ -154,6 +154,8 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
 
 void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+                rd_kafka_dbg(rk, TELEMETRY, "PUSHOK",
+                             "PushTelemetryRequest succeeded");
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
@@ -187,7 +189,6 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
         mtx_lock(&rk->rk_telemetry.lock);
         state = rk->rk_telemetry.state;
         mtx_unlock(&rk->rk_telemetry.lock);
-        fprintf(stderr, "MILIND::state %s, %p\n", rd_kafka_telemetry_state2str(state), &rk->rk_telemetry);
         switch (state) {
         case RD_KAFKA_TELEMETRY_AWAIT_BROKER:
                 rd_dassert(!*"Should never be awaiting a broker when the telemetry fsm is called.");

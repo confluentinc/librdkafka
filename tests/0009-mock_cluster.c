@@ -93,15 +93,6 @@ int main_0009_mock_cluster(int argc, char **argv) {
         test_consumer_assign("CONSUME", c, parts);
         rd_kafka_topic_partition_list_destroy(parts);
 
-         /* Assign */
-         parts = rd_kafka_topic_partition_list_new(1);
-         rd_kafka_topic_partition_list_add(parts, topic, 0);
-         rd_kafka_topic_partition_list_add(parts, topic, 1);
-         rd_kafka_topic_partition_list_add(parts, topic, 2);
-         rd_kafka_topic_partition_list_add(parts, topic, 3);
-         test_consumer_assign("CONSUME", c, parts);
-         rd_kafka_topic_partition_list_destroy(parts);
-
         /* Consume */
         test_consumer_poll("CONSUME", c, 0, -1, 0, msgcnt, NULL);
 

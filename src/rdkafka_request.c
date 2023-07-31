@@ -5251,7 +5251,6 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_PushTelemetry,
                                                           0, 1, NULL);
-        fprintf(stderr, "[PushTelemetry] ApiVersion: %d\n", ApiVersion);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "PushTelemetryRequest (KIP-714) not supported ");
@@ -5274,7 +5273,6 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
          * up more added partitions. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
 
-        fprintf(stderr, "[PushTelemetry]Going to enqueue reply\n");
 
         /* Processing... */
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);

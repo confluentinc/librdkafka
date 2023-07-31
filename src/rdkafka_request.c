@@ -5258,8 +5258,8 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        //TODO: Check size of the request
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_PushTelemetry, 1, 500);
+        size_t len = sizeof(rd_kafka_uuid_t) + sizeof(int32_t) + sizeof(rd_bool_t) + strlen(compression_type) + metrics_size;
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_PushTelemetry, 1, len);
 
         rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
         rd_kafka_buf_write_i32(rkbuf, subscription_id);

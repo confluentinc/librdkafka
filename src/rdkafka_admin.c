@@ -8037,28 +8037,6 @@ rd_kafka_TopicDescription_new(const char *topic,
 }
 
 /**
- * @brief Copy \p desc TopicDescription.
- *
- * @param desc The topic description to copy.
- * @return A new allocated copy of the passed TopicDescription.
- */
-static rd_kafka_TopicDescription_t *
-rd_kafka_TopicDescription_copy(const rd_kafka_TopicDescription_t *topicdesc) {
-        return rd_kafka_TopicDescription_new(
-            topicdesc->topic, topicdesc->partitions, topicdesc->partition_cnt,
-            topicdesc->topic_authorized_operations, topicdesc->error);
-}
-
-/**
- * @brief Same as rd_kafka_TopicDescription_copy() but suitable for
- *        rd_list_copy(). The \p opaque is ignored.
- */
-static void *rd_kafka_TopicDescription_copy_opaque(const void *topicdesc,
-                                                   void *opaque) {
-        return rd_kafka_TopicDescription_copy(topicdesc);
-}
-
-/**
  * @brief New instance of TopicDescription from an error.
  *
  * @param group_id The topic.
@@ -8069,50 +8047,6 @@ static rd_kafka_TopicDescription_t *
 rd_kafka_TopicDescription_new_error(const char *topic,
                                     rd_kafka_error_t *error) {
         return rd_kafka_TopicDescription_new(topic, NULL, 0, NULL, error);
-}
-
-/** @brief Merge the DescribeTopics response from a single broker
- *         into the user response list.
- */
-static void
-rd_kafka_DescribeTopics_response_merge(rd_kafka_op_t *rko_fanout,
-                                       const rd_kafka_op_t *rko_partial) {
-        rd_kafka_TopicDescription_t *topicres = NULL;
-        rd_kafka_TopicDescription_t *newtopicres;
-        const char *topic = rko_partial->rko_u.admin_result.opaque;
-        int orig_pos;
-
-        rd_assert(rko_partial->rko_evtype ==
-                  RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT);
-
-        if (!rko_partial->rko_err) {
-                /* Proper results.
-                 * We only send one topic per request, make sure it matches */
-                topicres =
-                    rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
-                rd_assert(topicres);
-                rd_assert(!strcmp(topicres->topic, topic));
-                newtopicres = rd_kafka_TopicDescription_copy(topicres);
-        } else {
-                /* Op errored, e.g. timeout */
-                rd_kafka_error_t *error =
-                    rd_kafka_error_new(rko_partial->rko_err, NULL);
-                newtopicres = rd_kafka_TopicDescription_new_error(topic, error);
-                rd_kafka_error_destroy(error);
-        }
-
-        /* As a convenience to the application we insert group result
-         * in the same order as they were requested. */
-        orig_pos = rd_list_index(&rko_fanout->rko_u.admin_request.args, topic,
-                                 rd_kafka_DescribeTopics_cmp);
-        rd_assert(orig_pos != -1);
-
-        /* Make sure result is not already set */
-        rd_assert(rd_list_elem(&rko_fanout->rko_u.admin_request.fanout.results,
-                               orig_pos) == NULL);
-
-        rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, orig_pos,
-                    newtopicres);
 }
 
 /**
@@ -8169,7 +8103,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_resp_err_t err;
         rd_list_t topics       = rko_req->rko_u.admin_request.args;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
-        int i, cnt;
+        int i;
         rd_kafka_op_t *rko_result = NULL;
 
         err = rd_kafka_parse_Metadata(rkb, NULL, reply, &mdi, &topics);
@@ -8179,9 +8113,8 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         md         = &mdi->metadata;
         rd_list_init(&rko_result->rko_u.admin_result.results, md->topic_cnt,
                      rd_kafka_TopicDescription_free);
-        cnt = md->topic_cnt;
-        i   = 0;
-        while (cnt--) {
+
+        for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_TopicDescription_t *topicdesc = NULL;
                 if (md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                         rd_list_t *authorized_operations;
@@ -8203,6 +8136,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                 }
                 rd_list_add(&rko_result->rko_u.admin_result.results, topicdesc);
         }
+
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -8220,97 +8154,51 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
                              size_t topics_cnt,
                              const rd_kafka_AdminOptions_t *options,
                              rd_kafka_queue_t *rkqu) {
-        rd_kafka_op_t *rko_fanout;
+        rd_kafka_op_t *rko;
         rd_list_t dup_list;
         size_t i;
 
-        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
-            rd_kafka_DescribeTopics_response_merge,
-            rd_kafka_TopicDescription_copy_opaque};
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_admin_DescribeTopicsRequest,
+            rd_kafka_DescribeTopicsResponse_parse,
+        };
 
         rd_assert(rkqu);
 
-        rko_fanout =
-            rd_kafka_admin_fanout_op_new(rk, RD_KAFKA_OP_DESCRIBETOPICS,
-                                         RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                         &fanout_cbs, options, rkqu->rkqu_q);
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBETOPICS,
+            RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT, &cbs, options, rkqu->rkqu_q);
 
         if (topics_cnt == 0) {
-                rd_kafka_admin_result_fail(rko_fanout,
-                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                                            "No topics to describe");
-                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
-                                                     rd_true /*destroy*/);
                 return;
         }
 
-        /* Copy topic list and store it on the request op.
-         * Maintain original ordering. */
-        rd_list_init(&rko_fanout->rko_u.admin_request.args, (int)topics_cnt,
-                     rd_free);
+        rd_list_init(&rko->rko_u.admin_request.args, (int)topics_cnt, rd_free);
         for (i = 0; i < topics_cnt; i++)
-                rd_list_add(&rko_fanout->rko_u.admin_request.args,
+                rd_list_add(&rko->rko_u.admin_request.args,
                             rd_strdup(topics[i]));
 
         /* Check for duplicates.
          * Make a temporary copy of the topic list and sort it to check for
          * duplicates, we don't want the original list sorted since we want
          * to maintain ordering. */
-        rd_list_init(&dup_list,
-                     rd_list_cnt(&rko_fanout->rko_u.admin_request.args), NULL);
-        rd_list_copy_to(&dup_list, &rko_fanout->rko_u.admin_request.args, NULL,
-                        NULL);
+        rd_list_init(&dup_list, rd_list_cnt(&rko->rko_u.admin_request.args),
+                     NULL);
+        rd_list_copy_to(&dup_list, &rko->rko_u.admin_request.args, NULL, NULL);
         rd_list_sort(&dup_list, rd_kafka_DescribeTopics_cmp);
         if (rd_list_find_duplicate(&dup_list, rd_kafka_DescribeTopics_cmp)) {
                 rd_list_destroy(&dup_list);
-                rd_kafka_admin_result_fail(rko_fanout,
-                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                                            "Duplicate topics not allowed");
-                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                rd_kafka_admin_common_worker_destroy(rk, rko,
                                                      rd_true /*destroy*/);
                 return;
         }
 
         rd_list_destroy(&dup_list);
-
-        /* Prepare results list where fanned out op's results will be
-         * accumulated. */
-        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,
-                     (int)topics_cnt, rd_kafka_TopicDescription_free);
-        rko_fanout->rko_u.admin_request.fanout.outstanding = (int)topics_cnt;
-
-        /* Create individual request ops for each topic.
-         * FIXME: A future optimization is to coalesce all topic for a single
-         *        coordinator into one op. */
-        for (i = 0; i < topics_cnt; i++) {
-                static const struct rd_kafka_admin_worker_cbs cbs = {
-                    rd_kafka_admin_DescribeTopicsRequest,
-                    rd_kafka_DescribeTopicsResponse_parse,
-                };
-                char *topic =
-                    rd_list_elem(&rko_fanout->rko_u.admin_request.args, (int)i);
-                rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
-                    rk, RD_KAFKA_OP_DESCRIBETOPICS,
-                    RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT, &cbs, options,
-                    rk->rk_ops);
-
-                rko->rko_u.admin_request.fanout_parent = rko_fanout;
-                rko->rko_u.admin_request.coordtype     = RD_KAFKA_COORD_GROUP;
-                rko->rko_u.admin_request.coordkey      = rd_strdup(topic);
-
-                /* Set the topic name as the opaque so the fanout worker use it
-                 * to fill in errors.
-                 * References rko_fanout's memory, which will always outlive
-                 * the fanned out op. */
-                rd_kafka_AdminOptions_set_opaque(
-                    &rko->rko_u.admin_request.options, topic);
-
-                rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
-                rd_list_add(&rko->rko_u.admin_request.args,
-                            rd_strdup(topics[i]));
-
-                rd_kafka_q_enq(rk->rk_ops, rko);
-        }
+        rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
 /**@}*/

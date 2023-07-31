@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -378,7 +378,7 @@ typedef struct rd_kafkap_bytes_s {
         int32_t len;      /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
         const void *data; /* points just past the struct, or other memory,
                            * not NULL-terminated */
-        const char _data[1]; /* Bytes following struct when new()ed */
+        const unsigned char _data[1]; /* Bytes following struct when new()ed */
 } rd_kafkap_bytes_t;
 
 
@@ -423,7 +423,7 @@ static RD_UNUSED void rd_kafkap_bytes_destroy(rd_kafkap_bytes_t *kbytes) {
  *  - No-copy, just alloc (bytes==NULL,len>0)
  */
 static RD_INLINE RD_UNUSED rd_kafkap_bytes_t *
-rd_kafkap_bytes_new(const char *bytes, int32_t len) {
+rd_kafkap_bytes_new(const unsigned char *bytes, int32_t len) {
         rd_kafkap_bytes_t *kbytes;
         int32_t klen;
 
@@ -440,7 +440,7 @@ rd_kafkap_bytes_new(const char *bytes, int32_t len) {
         if (len == RD_KAFKAP_BYTES_LEN_NULL)
                 kbytes->data = NULL;
         else {
-                kbytes->data = ((const char *)(kbytes + 1)) + 4;
+                kbytes->data = ((const unsigned char *)(kbytes + 1)) + 4;
                 if (bytes)
                         memcpy((void *)kbytes->data, bytes, len);
         }
@@ -455,7 +455,7 @@ rd_kafkap_bytes_new(const char *bytes, int32_t len) {
  */
 static RD_INLINE RD_UNUSED rd_kafkap_bytes_t *
 rd_kafkap_bytes_copy(const rd_kafkap_bytes_t *src) {
-        return rd_kafkap_bytes_new((const char *)src->data, src->len);
+        return rd_kafkap_bytes_new((const unsigned char *)src->data, src->len);
 }
 
 

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -799,6 +800,13 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
                                              const char *resname,
                                              const char **configs,
                                              size_t config_cnt);
+
+rd_kafka_resp_err_t
+test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
+                                    rd_kafka_ResourceType_t restype,
+                                    const char *resname,
+                                    const char **configs,
+                                    size_t config_cnt);
 
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,

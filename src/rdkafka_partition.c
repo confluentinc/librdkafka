@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2015 Magnus Edenhill
+ * Copyright (c) 2015-2022, Magnus Edenhill,
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -2486,7 +2487,6 @@ void rd_kafka_topic_partition_get(const rd_kafka_topic_partition_t *rktpar,
 }
 
 
-
 /**
  *
  * rd_kafka_topic_partition_t lists
@@ -2764,7 +2764,6 @@ void rd_kafka_topic_partition_list_destroy_free(void *ptr) {
         rd_kafka_topic_partition_list_destroy(
             (rd_kafka_topic_partition_list_t *)ptr);
 }
-
 
 /**
  * @brief Add a partition to an rktpar list.

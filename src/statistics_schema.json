@@ -1,5 +1,5 @@
 { "$schema": "http://json-schema.org/schema#",
-  "id": "https://github.com/edenhill/librdkafka/src/statistics_schema.json",
+  "id": "https://github.com/confluentinc/librdkafka/src/statistics_schema.json",
   "title": "librdkafka statistics schema - INCOMPLETE - WORK IN PROGRESS",
   "definitions": {
       "window": {

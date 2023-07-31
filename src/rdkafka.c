@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -699,7 +700,6 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE,
               "Broker: Request principal deserialization failed during "
               "forwarding"),
-
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -2523,7 +2523,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
         /* Add initial list of brokers from configuration */
         if (rk->rk_conf.brokerlist) {
-                if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist) == 0)
+                if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist,
+                                          rd_true) == 0)
                         rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
                                         "No brokers configured");
         }
@@ -3949,6 +3950,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
         case RD_KAFKA_OP_DELETETOPICS:
         case RD_KAFKA_OP_CREATEPARTITIONS:
         case RD_KAFKA_OP_ALTERCONFIGS:
+        case RD_KAFKA_OP_INCREMENTALALTERCONFIGS:
         case RD_KAFKA_OP_DESCRIBECONFIGS:
         case RD_KAFKA_OP_DELETERECORDS:
         case RD_KAFKA_OP_DELETEGROUPS:
@@ -4691,8 +4693,8 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                         rd_kafka_buf_read_str(reply, &MemberId);
                         rd_kafka_buf_read_str(reply, &ClientId);
                         rd_kafka_buf_read_str(reply, &ClientHost);
-                        rd_kafka_buf_read_bytes(reply, &Meta);
-                        rd_kafka_buf_read_bytes(reply, &Assignment);
+                        rd_kafka_buf_read_kbytes(reply, &Meta);
+                        rd_kafka_buf_read_kbytes(reply, &Assignment);
 
                         mi->member_id   = RD_KAFKAP_STR_DUP(&MemberId);
                         mi->client_id   = RD_KAFKAP_STR_DUP(&ClientId);

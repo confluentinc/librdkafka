@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2020 Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -565,7 +566,7 @@ rd_kafka_mock_cgrp_member_add(rd_kafka_mock_cgrp_t *mcgrp,
                 } else
                         member->id = RD_KAFKAP_STR_DUP(MemberId);
 
-                if (GroupInstanceId)
+                if (RD_KAFKAP_STR_LEN(GroupInstanceId))
                         member->group_instance_id =
                             RD_KAFKAP_STR_DUP(GroupInstanceId);
 

@@ -26,6 +26,32 @@ target_link_libraries(openssl_engine_example_cpp PUBLIC rdkafka++)
 add_executable(misc misc.c ${win32_sources})
 target_link_libraries(misc PUBLIC rdkafka)
 
+add_executable(idempotent_producer idempotent_producer.c ${win32_sources})
+target_link_libraries(idempotent_producer PUBLIC rdkafka)
+
+add_executable(transactions transactions.c ${win32_sources})
+target_link_libraries(transactions PUBLIC rdkafka)
+
+add_executable(delete_records delete_records.c ${win32_sources})
+target_link_libraries(delete_records PUBLIC rdkafka)
+
+add_executable(list_consumer_groups list_consumer_groups.c ${win32_sources})
+target_link_libraries(list_consumer_groups PUBLIC rdkafka)
+
+add_executable(describe_consumer_groups describe_consumer_groups.c ${win32_sources})
+target_link_libraries(describe_consumer_groups PUBLIC rdkafka)
+
+add_executable(list_consumer_group_offsets list_consumer_group_offsets.c ${win32_sources})
+target_link_libraries(list_consumer_group_offsets PUBLIC rdkafka)
+
+add_executable(alter_consumer_group_offsets alter_consumer_group_offsets.c ${win32_sources})
+target_link_libraries(alter_consumer_group_offsets PUBLIC rdkafka)
+
+add_executable(incremental_alter_configs incremental_alter_configs.c ${win32_sources})
+target_link_libraries(incremental_alter_configs PUBLIC rdkafka)
+
+add_executable(user_scram user_scram.c ${win32_sources})
+target_link_libraries(user_scram PUBLIC rdkafka)
 
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)

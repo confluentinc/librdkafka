@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2017-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -631,10 +631,10 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
 
 
         /* Extract key */
-        rd_kafka_buf_read_bytes(rkbuf, &Key);
+        rd_kafka_buf_read_kbytes(rkbuf, &Key);
 
         /* Extract Value */
-        rd_kafka_buf_read_bytes(rkbuf, &Value);
+        rd_kafka_buf_read_kbytes(rkbuf, &Value);
         Value_len = RD_KAFKAP_BYTES_LEN(&Value);
 
         /* MessageSets may contain offsets earlier than we
@@ -894,8 +894,8 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
         /* Note: messages in aborted transactions are skipped at the MessageSet
          * level */
 
-        rd_kafka_buf_read_bytes_varint(rkbuf, &hdr.Key);
-        rd_kafka_buf_read_bytes_varint(rkbuf, &hdr.Value);
+        rd_kafka_buf_read_kbytes_varint(rkbuf, &hdr.Key);
+        rd_kafka_buf_read_kbytes_varint(rkbuf, &hdr.Value);
 
         /* We parse the Headers later, just store the size (possibly truncated)
          * and pointer to the headers. */

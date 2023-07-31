@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018 Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -528,7 +529,8 @@ rd_kafka_admin_result_ret_resources(const rd_kafka_op_t *rko, size_t *cntp) {
         rd_kafka_op_type_t reqtype =
             rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
         rd_assert(reqtype == RD_KAFKA_OP_ALTERCONFIGS ||
-                  reqtype == RD_KAFKA_OP_DESCRIBECONFIGS);
+                  reqtype == RD_KAFKA_OP_DESCRIBECONFIGS ||
+                  reqtype == RD_KAFKA_OP_INCREMENTALALTERCONFIGS);
 
         *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
         return (const rd_kafka_ConfigResource_t **)
@@ -1523,20 +1525,6 @@ rd_kafka_AdminOptions_set_validate_only(rd_kafka_AdminOptions_t *options,
 }
 
 rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_incremental(rd_kafka_AdminOptions_t *options,
-                                      int true_or_false,
-                                      char *errstr,
-                                      size_t errstr_size) {
-        rd_snprintf(errstr, errstr_size,
-                    "Incremental updates currently not supported, see KIP-248");
-        return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
-
-        return rd_kafka_confval_set_type(&options->incremental,
-                                         RD_KAFKA_CONFVAL_INT, &true_or_false,
-                                         errstr, errstr_size);
-}
-
-rd_kafka_resp_err_t
 rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
                                  int32_t broker_id,
                                  char *errstr,
@@ -1645,19 +1633,13 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATETOPICS ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS)
+            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS ||
+            options->for_api == RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS)
                 rd_kafka_confval_init_int(&options->validate_only,
                                           "validate_only", 0, 1, 0);
         else
                 rd_kafka_confval_disable(&options->validate_only,
                                          "validate_only");
-
-        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
-            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS)
-                rd_kafka_confval_init_int(&options->incremental, "incremental",
-                                          0, 1, 0);
-        else
-                rd_kafka_confval_disable(&options->incremental, "incremental");
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS)
@@ -1905,18 +1887,14 @@ rd_kafka_NewTopic_set_replica_assignment(rd_kafka_NewTopic_t *new_topic,
  * @brief Generic constructor of ConfigEntry which is also added to \p rl
  */
 static rd_kafka_resp_err_t
-rd_kafka_admin_add_config0(rd_list_t *rl,
-                           const char *name,
-                           const char *value,
-                           rd_kafka_AlterOperation_t operation) {
+rd_kafka_admin_add_config0(rd_list_t *rl, const char *name, const char *value) {
         rd_kafka_ConfigEntry_t *entry;
 
         if (!name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        entry              = rd_calloc(1, sizeof(*entry));
-        entry->kv          = rd_strtup_new(name, value);
-        entry->a.operation = operation;
+        entry     = rd_calloc(1, sizeof(*entry));
+        entry->kv = rd_strtup_new(name, value);
 
         rd_list_add(rl, entry);
 
@@ -1924,11 +1902,36 @@ rd_kafka_admin_add_config0(rd_list_t *rl,
 }
 
 
+/**
+ * @brief Generic constructor of ConfigEntry for Incremental Alter Operations
+ * which is also added to \p rl
+ */
+static rd_kafka_error_t *
+rd_kafka_admin_incremental_add_config0(rd_list_t *rl,
+                                       const char *name,
+                                       rd_kafka_AlterConfigOpType_t op_type,
+                                       const char *value) {
+        rd_kafka_ConfigEntry_t *entry;
+
+        if (!name) {
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "Config name is required");
+        }
+
+        entry            = rd_calloc(1, sizeof(*entry));
+        entry->kv        = rd_strtup_new(name, value);
+        entry->a.op_type = op_type;
+
+        rd_list_add(rl, entry);
+
+        return NULL;
+}
+
+
 rd_kafka_resp_err_t rd_kafka_NewTopic_set_config(rd_kafka_NewTopic_t *new_topic,
                                                  const char *name,
                                                  const char *value) {
-        return rd_kafka_admin_add_config0(&new_topic->config, name, value,
-                                          RD_KAFKA_ALTER_OP_ADD);
+        return rd_kafka_admin_add_config0(&new_topic->config, name, value);
 }
 
 
@@ -2853,18 +2856,6 @@ rd_kafka_ConfigResource_add_ConfigEntry(rd_kafka_ConfigResource_t *config,
         rd_list_add(&config->config, entry);
 }
 
-
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_add_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value) {
-        if (!name || !*name || !value)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        return rd_kafka_admin_add_config0(&config->config, name, value,
-                                          RD_KAFKA_ALTER_OP_ADD);
-}
-
 rd_kafka_resp_err_t
 rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
                                    const char *name,
@@ -2872,18 +2863,35 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
         if (!name || !*name || !value)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        return rd_kafka_admin_add_config0(&config->config, name, value,
-                                          RD_KAFKA_ALTER_OP_SET);
+        return rd_kafka_admin_add_config0(&config->config, name, value);
 }
 
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_delete_config(rd_kafka_ConfigResource_t *config,
-                                      const char *name) {
-        if (!name || !*name)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        return rd_kafka_admin_add_config0(&config->config, name, NULL,
-                                          RD_KAFKA_ALTER_OP_DELETE);
+rd_kafka_error_t *rd_kafka_ConfigResource_add_incremental_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    rd_kafka_AlterConfigOpType_t op_type,
+    const char *value) {
+        if (op_type < 0 || op_type >= RD_KAFKA_ALTER_CONFIG_OP_TYPE__CNT) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Invalid alter config operation type");
+        }
+
+        if (!name || !*name) {
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          !name
+                                              ? "Config name is required"
+                                              : "Config name mustn't be empty");
+        }
+
+        if (op_type != RD_KAFKA_ALTER_CONFIG_OP_TYPE_DELETE && !value) {
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "Config value is required");
+        }
+
+        return rd_kafka_admin_incremental_add_config0(&config->config, name,
+                                                      op_type, value);
 }
 
 
@@ -3017,7 +3025,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
 
-        rd_kafka_buf_read_i32(reply, &res_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
         if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
                 rd_snprintf(errstr, errstr_size,
@@ -3050,6 +3058,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_i8(reply, &res_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+                rd_kafka_buf_skip_tags(reply);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
@@ -3170,6 +3179,277 @@ void rd_kafka_AlterConfigs(rd_kafka_t *rk,
 
 const rd_kafka_ConfigResource_t **rd_kafka_AlterConfigs_result_resources(
     const rd_kafka_AlterConfigs_result_t *result,
+    size_t *cntp) {
+        return rd_kafka_admin_result_ret_resources(
+            (const rd_kafka_op_t *)result, cntp);
+}
+
+/**@}*/
+
+
+
+/**
+ * @name IncrementalAlterConfigs
+ * @{
+ *
+ *
+ *
+ */
+
+
+
+/**
+ * @brief Parse IncrementalAlterConfigsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
+                                               rd_kafka_op_t **rko_resultp,
+                                               rd_kafka_buf_t *reply,
+                                               char *errstr,
+                                               size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_broker_t *rkb      = reply->rkbuf_rkb;
+        rd_kafka_t *rk              = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t res_cnt;
+        int i;
+        int32_t Throttle_Time;
+
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+
+        rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
+
+        if (res_cnt != rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Received %" PRId32
+                            " ConfigResources in response "
+                            "when %d were requested",
+                            res_cnt,
+                            rd_list_cnt(&rko_req->rko_u.admin_request.args));
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, res_cnt,
+                     rd_kafka_ConfigResource_free);
+
+        for (i = 0; i < (int)res_cnt; i++) {
+                int16_t error_code;
+                rd_kafkap_str_t error_msg;
+                int8_t res_type;
+                rd_kafkap_str_t kres_name;
+                char *res_name;
+                char *this_errstr = NULL;
+                rd_kafka_ConfigResource_t *config;
+                rd_kafka_ConfigResource_t skel;
+                int orig_pos;
+
+                rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_read_str(reply, &error_msg);
+                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_str(reply, &kres_name);
+                RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+                rd_kafka_buf_skip_tags(reply);
+
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                this_errstr =
+                                    (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
+                }
+
+                config = rd_kafka_ConfigResource_new(res_type, res_name);
+                if (!config) {
+                        rd_kafka_log(rko_req->rko_rk, LOG_ERR, "ADMIN",
+                                     "IncrementalAlterConfigs returned "
+                                     "unsupported ConfigResource #%d with "
+                                     "type %d and name \"%s\": ignoring",
+                                     i, res_type, res_name);
+                        continue;
+                }
+
+                config->err = error_code;
+                if (this_errstr)
+                        config->errstr = rd_strdup(this_errstr);
+
+                /* As a convenience to the application we insert result
+                 * in the same order as they were requested. The broker
+                 * does not maintain ordering unfortunately. */
+                skel.restype = config->restype;
+                skel.name    = config->name;
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
+                                         &skel, rd_kafka_ConfigResource_cmp);
+                if (orig_pos == -1) {
+                        rd_kafka_ConfigResource_destroy(config);
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Broker returned ConfigResource %d,%s "
+                            "that was not "
+                            "included in the original request",
+                            res_type, res_name);
+                }
+
+                if (rd_list_elem(&rko_result->rko_u.admin_result.results,
+                                 orig_pos) != NULL) {
+                        rd_kafka_ConfigResource_destroy(config);
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Broker returned ConfigResource %d,%s "
+                            "multiple times",
+                            res_type, res_name);
+                }
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
+                            config);
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(
+            errstr, errstr_size,
+            "IncrementalAlterConfigs response protocol parse failure: %s",
+            rd_kafka_err2str(reply->rkbuf_err));
+
+        return reply->rkbuf_err;
+}
+
+typedef RD_MAP_TYPE(const char *, const rd_bool_t *) map_str_bool;
+
+
+void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
+                                      rd_kafka_ConfigResource_t **configs,
+                                      size_t config_cnt,
+                                      const rd_kafka_AdminOptions_t *options,
+                                      rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        char errstr[256];
+        rd_bool_t value = rd_true;
+
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_IncrementalAlterConfigsRequest,
+            rd_kafka_IncrementalAlterConfigsResponse_parse,
+        };
+
+        rd_assert(rkqu);
+
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_INCREMENTALALTERCONFIGS,
+            RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT, &cbs, options,
+            rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, (int)config_cnt,
+                     rd_kafka_ConfigResource_free);
+
+        /* Check duplicate ConfigResource */
+        map_str_bool configs_map = RD_MAP_INITIALIZER(
+            config_cnt, rd_map_str_cmp, rd_map_str_hash, NULL, NULL);
+
+        for (i = 0; i < config_cnt; i++) {
+                /* 2 chars for the decimal restype + 1 for the comma
+                 * + 1 for the trailing zero. */
+                size_t len = 4 + strlen(configs[i]->name);
+                char *key  = rd_alloca(len);
+                const rd_kafka_ConfigEntry_t **entries;
+                size_t entry_cnt, j;
+
+                rd_snprintf(key, len - 1, "%d,%s", configs[i]->restype,
+                            configs[i]->name);
+                if (RD_MAP_GET(&configs_map, key)) {
+                        /* Duplicate ConfigResource found */
+                        break;
+                }
+                RD_MAP_SET(&configs_map, key, &value);
+                entries =
+                    rd_kafka_ConfigResource_configs(configs[i], &entry_cnt);
+
+                /* Check duplicate ConfigEntry */
+                map_str_bool entries_map = RD_MAP_INITIALIZER(
+                    entry_cnt, rd_map_str_cmp, rd_map_str_hash, NULL, NULL);
+
+                for (j = 0; j < entry_cnt; j++) {
+                        const rd_kafka_ConfigEntry_t *entry = entries[j];
+                        const char *key = rd_kafka_ConfigEntry_name(entry);
+
+                        if (RD_MAP_GET(&entries_map, key)) {
+                                /* Duplicate ConfigEntry found */
+                                break;
+                        }
+                        RD_MAP_SET(&entries_map, key, &value);
+                }
+                RD_MAP_DESTROY(&entries_map);
+
+                if (j != entry_cnt) {
+                        RD_MAP_DESTROY(&configs_map);
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate ConfigEntry found");
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko, rd_true /*destroy*/);
+                        return;
+                }
+
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_ConfigResource_copy(configs[i]));
+        }
+
+        RD_MAP_DESTROY(&configs_map);
+
+        if (i != config_cnt) {
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Duplicate ConfigResource found");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        /* If there's a BROKER resource in the list we need to
+         * speak directly to that broker rather than the controller.
+         *
+         * Multiple BROKER resources are not allowed.
+         */
+        err = rd_kafka_ConfigResource_get_single_broker_id(
+            &rko->rko_u.admin_request.args, &rko->rko_u.admin_request.broker_id,
+            errstr, sizeof(errstr));
+        if (err) {
+                rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+        if (rko->rko_u.admin_request.broker_id !=
+            RD_KAFKA_ADMIN_TARGET_CONTROLLER) {
+                /* Revert broker option to default if altering
+                 * broker configs. */
+                err = rd_kafka_confval_set_type(
+                    &rko->rko_u.admin_request.options.broker,
+                    RD_KAFKA_CONFVAL_INT, NULL, errstr, sizeof(errstr));
+                if (err) {
+                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko, rd_true /*destroy*/);
+                        return;
+                }
+        }
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+
+const rd_kafka_ConfigResource_t **
+rd_kafka_IncrementalAlterConfigs_result_resources(
+    const rd_kafka_IncrementalAlterConfigs_result_t *result,
     size_t *cntp) {
         return rd_kafka_admin_result_ret_resources(
             (const rd_kafka_op_t *)result, cntp);
@@ -3624,7 +3904,6 @@ err_parse:
 
         return reply->rkbuf_err;
 }
-
 
 /**
  * @brief Call when leaders have been queried to progress the DeleteRecords
@@ -4831,6 +5110,796 @@ void rd_kafka_DescribeAcls(rd_kafka_t *rk,
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
+struct rd_kafka_ScramCredentialInfo_s {
+        rd_kafka_ScramMechanism_t mechanism;
+        int32_t iterations;
+};
+
+rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_mechanism(
+    const rd_kafka_ScramCredentialInfo_t *scram_credential_info) {
+        return scram_credential_info->mechanism;
+}
+
+int32_t rd_kafka_ScramCredentialInfo_iterations(
+    const rd_kafka_ScramCredentialInfo_t *scram_credential_info) {
+        return scram_credential_info->iterations;
+}
+
+struct rd_kafka_UserScramCredentialsDescription_s {
+        char *user;
+        rd_kafka_error_t *error;
+        size_t credential_info_cnt;
+        rd_kafka_ScramCredentialInfo_t *credential_infos;
+};
+
+rd_kafka_UserScramCredentialsDescription_t *
+rd_kafka_UserScramCredentialsDescription_new(const char *username,
+                                             size_t num_credentials) {
+        rd_kafka_UserScramCredentialsDescription_t *description;
+        description                      = rd_calloc(1, sizeof(*description));
+        description->user                = rd_strdup(username);
+        description->error               = NULL;
+        description->credential_info_cnt = num_credentials;
+        description->credential_infos    = NULL;
+        if (num_credentials > 0) {
+                rd_kafka_ScramCredentialInfo_t *credentialinfo;
+                description->credential_infos =
+                    rd_calloc(num_credentials, sizeof(*credentialinfo));
+        }
+        return description;
+}
+
+void rd_kafka_UserScramCredentialsDescription_destroy(
+    rd_kafka_UserScramCredentialsDescription_t *description) {
+        if (!description)
+                return;
+        rd_free(description->user);
+        rd_kafka_error_destroy(description->error);
+        if (description->credential_infos)
+                rd_free(description->credential_infos);
+        rd_free(description);
+}
+
+void rd_kafka_UserScramCredentialsDescription_destroy_free(void *description) {
+        rd_kafka_UserScramCredentialsDescription_destroy(description);
+}
+
+void rd_kafka_UserScramCredentailsDescription_set_error(
+    rd_kafka_UserScramCredentialsDescription_t *description,
+    rd_kafka_resp_err_t errorcode,
+    const char *err) {
+        rd_kafka_error_destroy(description->error);
+        description->error = rd_kafka_error_new(errorcode, "%s", err);
+}
+
+const char *rd_kafka_UserScramCredentialsDescription_user(
+    const rd_kafka_UserScramCredentialsDescription_t *description) {
+        return description->user;
+}
+
+const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_error(
+    const rd_kafka_UserScramCredentialsDescription_t *description) {
+        return description->error;
+}
+
+size_t rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(
+    const rd_kafka_UserScramCredentialsDescription_t *description) {
+        return description->credential_info_cnt;
+}
+
+const rd_kafka_ScramCredentialInfo_t *
+rd_kafka_UserScramCredentialsDescription_scramcredentialinfo(
+    const rd_kafka_UserScramCredentialsDescription_t *description,
+    size_t idx) {
+        return &description->credential_infos[idx];
+}
+
+const rd_kafka_UserScramCredentialsDescription_t **
+rd_kafka_DescribeUserScramCredentials_result_descriptions(
+    const rd_kafka_DescribeUserScramCredentials_result_t *result,
+    size_t *cntp) {
+        *cntp = rd_list_cnt(&result->rko_u.admin_result.results);
+        return (const rd_kafka_UserScramCredentialsDescription_t **)
+            result->rko_u.admin_result.results.rl_elems;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_DescribeUserScramCredentialsRequest(rd_kafka_broker_t *rkb,
+                                             const rd_list_t *userlist,
+                                             rd_kafka_AdminOptions_t *options,
+                                             char *errstr,
+                                             size_t errstr_size,
+                                             rd_kafka_replyq_t replyq,
+                                             rd_kafka_resp_cb_t *resp_cb,
+                                             void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        size_t i;
+        size_t num_users;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeUserScramCredentials, 0, 0, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(
+                    errstr, errstr_size,
+                    "DescribeUserScramCredentials API (KIP-554) not supported "
+                    "by broker");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        num_users = rd_list_cnt(userlist);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DescribeUserScramCredentials, 1, num_users * 25,
+            rd_true);
+        /* #Users */
+        rd_kafka_buf_write_arraycnt(rkbuf, num_users);
+        for (i = 0; i < num_users; i++) {
+                rd_kafkap_str_t *user = rd_list_elem(userlist, i);
+                /* Name */
+                rd_kafka_buf_write_str(rkbuf, user->str, user->len);
+                rd_kafka_buf_write_tags(rkbuf);
+        }
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        /* Last Tag buffer included automatically*/
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+rd_kafka_DescribeUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
+                                                    rd_kafka_op_t **rko_resultp,
+                                                    rd_kafka_buf_t *reply,
+                                                    char *errstr,
+                                                    size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t num_users;
+        int16_t ErrorCode;
+        rd_kafkap_str_t ErrorMessage = RD_KAFKAP_STR_INITIALIZER;
+        int32_t i;
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        /* ThrottleTimeMs */
+        rd_kafka_buf_read_throttle_time(reply);
+
+        /* ErrorCode */
+        rd_kafka_buf_read_i16(reply, &ErrorCode);
+        rko_result->rko_err = ErrorCode; /*Request Level Error Code */
+
+        /* ErrorMessage */
+        rd_kafka_buf_read_str(reply, &ErrorMessage);
+        if (ErrorCode) {
+                if (RD_KAFKAP_STR_LEN(&ErrorMessage) == 0)
+                        errstr = (char *)rd_kafka_err2str(ErrorCode);
+                else
+                        RD_KAFKAP_STR_DUPA(&errstr, &ErrorMessage);
+                rko_result->rko_u.admin_result.errstr =
+                    errstr; /* Request Level Error string*/
+        }
+
+        /* #Results */
+        rd_kafka_buf_read_arraycnt(reply, &num_users, 10000);
+        rd_list_init(&rko_result->rko_u.admin_result.results, num_users,
+                     rd_kafka_UserScramCredentialsDescription_destroy_free);
+
+        for (i = 0; i < num_users; i++) {
+                rd_kafkap_str_t User;
+                int16_t ErrorCode;
+                rd_kafkap_str_t ErrorMessage = RD_KAFKAP_STR_INITIALIZER;
+                size_t itr;
+                /* User */
+                rd_kafka_buf_read_str(reply, &User);
+                /* ErrorCode */
+                rd_kafka_buf_read_i16(reply, &ErrorCode);
+                /* ErrorMessage */
+                rd_kafka_buf_read_str(reply, &ErrorMessage);
+
+                int32_t num_credentials;
+                /* #CredentialInfos */
+                rd_kafka_buf_read_arraycnt(reply, &num_credentials, 10000);
+                rd_kafka_UserScramCredentialsDescription_t *description =
+                    rd_kafka_UserScramCredentialsDescription_new(
+                        User.str, num_credentials);
+                rd_kafka_UserScramCredentailsDescription_set_error(
+                    description, ErrorCode, ErrorMessage.str);
+                for (itr = 0; itr < (size_t)num_credentials; itr++) {
+                        int8_t Mechanism;
+                        int32_t Iterations;
+                        /* Mechanism */
+                        rd_kafka_buf_read_i8(reply, &Mechanism);
+                        /* Iterations */
+                        rd_kafka_buf_read_i32(reply, &Iterations);
+                        rd_kafka_buf_skip_tags(reply);
+                        rd_kafka_ScramCredentialInfo_t *scram_credential =
+                            &description->credential_infos[itr];
+                        scram_credential->mechanism  = Mechanism;
+                        scram_credential->iterations = Iterations;
+                }
+                rd_kafka_buf_skip_tags(reply);
+                rd_list_add(&rko_result->rko_u.admin_result.results,
+                            description);
+        }
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(
+            errstr, errstr_size,
+            "DescribeUserScramCredentials response protocol parse failure: %s",
+            rd_kafka_err2str(reply->rkbuf_err));
+
+        return reply->rkbuf_err;
+}
+
+void rd_kafka_DescribeUserScramCredentials(
+    rd_kafka_t *rk,
+    const char **users,
+    size_t user_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu) {
+
+        rd_kafka_op_t *rko;
+        size_t i;
+        rd_list_t *userlist = NULL;
+
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_DescribeUserScramCredentialsRequest,
+            rd_kafka_DescribeUserScramCredentialsResponse_parse,
+        };
+
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+            RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT, &cbs, options,
+            rkqu->rkqu_q);
+
+        /* Check empty strings */
+        for (i = 0; i < user_cnt; i++) {
+                if (!*users[i]) {
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Empty users aren't allowed, "
+                            "index %" PRIusz,
+                            i);
+                        goto err;
+                }
+        }
+
+        /* Check Duplicates */
+        if (user_cnt > 1) {
+                userlist = rd_list_new(user_cnt, rd_free);
+                for (i = 0; i < user_cnt; i++) {
+                        rd_list_add(userlist, rd_strdup(users[i]));
+                }
+                rd_list_sort(userlist, rd_strcmp2);
+                if (rd_list_find_duplicate(userlist, rd_strcmp2)) {
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate users aren't allowed "
+                            "in the same request");
+                        goto err;
+                }
+                rd_list_destroy(userlist);
+        }
+
+        rd_list_init(&rko->rko_u.admin_request.args, user_cnt, rd_free);
+        for (i = 0; i < user_cnt; i++) {
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafkap_str_new(users[i], -1));
+        }
+        rd_kafka_q_enq(rk->rk_ops, rko);
+        return;
+err:
+        RD_IF_FREE(userlist, rd_list_destroy);
+        rd_kafka_admin_common_worker_destroy(rk, rko, rd_true /*destroy*/);
+}
+
+/**
+ * @enum rd_kafka_UserScramCredentialAlteration_type_t
+ * @brief Types of user SCRAM alterations.
+ */
+typedef enum rd_kafka_UserScramCredentialAlteration_type_s {
+        RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT = 0,
+        RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE = 1,
+        RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE__CNT
+} rd_kafka_UserScramCredentialAlteration_type_t;
+
+struct rd_kafka_UserScramCredentialAlteration_s {
+        char *user;
+        rd_kafka_UserScramCredentialAlteration_type_t alteration_type;
+        union {
+                struct {
+                        rd_kafka_ScramCredentialInfo_t credential_info;
+                        rd_kafkap_bytes_t *salt;
+                        rd_kafkap_bytes_t *password;
+                } upsertion;
+                struct {
+                        rd_kafka_ScramMechanism_t mechanism;
+                } deletion;
+        } alteration;
+};
+
+rd_kafka_UserScramCredentialAlteration_t *
+rd_kafka_UserScramCredentialUpsertion_new(const char *username,
+                                          rd_kafka_ScramMechanism_t mechanism,
+                                          int32_t iterations,
+                                          const unsigned char *password,
+                                          size_t password_size,
+                                          const unsigned char *salt,
+                                          size_t salt_size) {
+        rd_kafka_UserScramCredentialAlteration_t *alteration;
+        alteration       = rd_calloc(1, sizeof(*alteration));
+        alteration->user = rd_strdup(username);
+        alteration->alteration_type =
+            RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT;
+        alteration->alteration.upsertion.credential_info.mechanism = mechanism;
+        alteration->alteration.upsertion.credential_info.iterations =
+            iterations;
+
+        alteration->alteration.upsertion.password =
+            rd_kafkap_bytes_new(password, password_size);
+        if (salt_size != 0) {
+                alteration->alteration.upsertion.salt =
+                    rd_kafkap_bytes_new(salt, salt_size);
+        } else {
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
+                unsigned char random_salt[64];
+                if (RAND_priv_bytes(random_salt, sizeof(random_salt)) == 1) {
+                        alteration->alteration.upsertion.salt =
+                            rd_kafkap_bytes_new(random_salt,
+                                                sizeof(random_salt));
+                }
+#endif
+        }
+        return alteration;
+}
+
+rd_kafka_UserScramCredentialAlteration_t *
+rd_kafka_UserScramCredentialDeletion_new(const char *username,
+                                         rd_kafka_ScramMechanism_t mechanism) {
+        rd_kafka_UserScramCredentialAlteration_t *alteration;
+        alteration       = rd_calloc(1, sizeof(*alteration));
+        alteration->user = rd_strdup(username);
+        alteration->alteration_type =
+            RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE;
+        alteration->alteration.deletion.mechanism = mechanism;
+        return alteration;
+}
+
+void rd_kafka_UserScramCredentialAlteration_destroy(
+    rd_kafka_UserScramCredentialAlteration_t *alteration) {
+        if (!alteration)
+                return;
+        rd_free(alteration->user);
+        if (alteration->alteration_type ==
+            RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT) {
+                rd_kafkap_bytes_destroy(alteration->alteration.upsertion.salt);
+                rd_kafkap_bytes_destroy(
+                    alteration->alteration.upsertion.password);
+        }
+        rd_free(alteration);
+}
+
+void rd_kafka_UserScramCredentialAlteration_destroy_free(void *alteration) {
+        rd_kafka_UserScramCredentialAlteration_destroy(alteration);
+}
+
+void rd_kafka_UserScramCredentialAlteration_destroy_array(
+    rd_kafka_UserScramCredentialAlteration_t **alterations,
+    size_t alteration_cnt) {
+        size_t i;
+        for (i = 0; i < alteration_cnt; i++)
+                rd_kafka_UserScramCredentialAlteration_destroy(alterations[i]);
+}
+
+static rd_kafka_UserScramCredentialAlteration_t *
+rd_kafka_UserScramCredentialAlteration_copy(
+    const rd_kafka_UserScramCredentialAlteration_t *alteration) {
+        rd_kafka_UserScramCredentialAlteration_t *copied_alteration =
+            rd_calloc(1, sizeof(*alteration));
+        copied_alteration->user            = rd_strdup(alteration->user);
+        copied_alteration->alteration_type = alteration->alteration_type;
+
+        if (alteration->alteration_type ==
+            RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT /*Upsert*/) {
+                copied_alteration->alteration.upsertion.salt =
+                    rd_kafkap_bytes_copy(alteration->alteration.upsertion.salt);
+                copied_alteration->alteration.upsertion.password =
+                    rd_kafkap_bytes_copy(
+                        alteration->alteration.upsertion.password);
+                copied_alteration->alteration.upsertion.credential_info
+                    .mechanism =
+                    alteration->alteration.upsertion.credential_info.mechanism;
+                copied_alteration->alteration.upsertion.credential_info
+                    .iterations =
+                    alteration->alteration.upsertion.credential_info.iterations;
+        } else if (
+            alteration->alteration_type ==
+            RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE /*Delete*/) {
+                copied_alteration->alteration.deletion.mechanism =
+                    alteration->alteration.deletion.mechanism;
+        }
+
+        return copied_alteration;
+}
+
+struct rd_kafka_AlterUserScramCredentials_result_response_s {
+        char *user;
+        rd_kafka_error_t *error;
+};
+
+rd_kafka_AlterUserScramCredentials_result_response_t *
+rd_kafka_AlterUserScramCredentials_result_response_new(const char *username) {
+        rd_kafka_AlterUserScramCredentials_result_response_t *response;
+        response        = rd_calloc(1, sizeof(*response));
+        response->user  = rd_strdup(username);
+        response->error = NULL;
+        return response;
+}
+
+void rd_kafka_AlterUserScramCredentials_result_response_destroy(
+    rd_kafka_AlterUserScramCredentials_result_response_t *response) {
+        if (response->user)
+                rd_free(response->user);
+        rd_kafka_error_destroy(response->error);
+        rd_free(response);
+}
+
+void rd_kafka_AlterUserScramCredentials_result_response_destroy_free(
+    void *response) {
+        rd_kafka_AlterUserScramCredentials_result_response_destroy(response);
+}
+
+void rd_kafka_AlterUserScramCredentials_result_response_set_error(
+    rd_kafka_AlterUserScramCredentials_result_response_t *response,
+    rd_kafka_resp_err_t errorcode,
+    const char *errstr) {
+        rd_kafka_error_destroy(response->error);
+        response->error = rd_kafka_error_new(errorcode, "%s", errstr);
+}
+
+const char *rd_kafka_AlterUserScramCredentials_result_response_user(
+    const rd_kafka_AlterUserScramCredentials_result_response_t *response) {
+        return response->user;
+}
+
+const rd_kafka_error_t *
+rd_kafka_AlterUserScramCredentials_result_response_error(
+    const rd_kafka_AlterUserScramCredentials_result_response_t *response) {
+        return response->error;
+}
+
+const rd_kafka_AlterUserScramCredentials_result_response_t **
+rd_kafka_AlterUserScramCredentials_result_responses(
+    const rd_kafka_AlterUserScramCredentials_result_t *result,
+    size_t *cntp) {
+        *cntp = rd_list_cnt(&result->rko_u.admin_result.results);
+        return (const rd_kafka_AlterUserScramCredentials_result_response_t **)
+            result->rko_u.admin_result.results.rl_elems;
+}
+
+
+#if WITH_SSL
+static rd_kafkap_bytes_t *
+rd_kafka_AlterUserScramCredentialsRequest_salted_password(
+    rd_kafka_broker_t *rkb,
+    rd_kafkap_bytes_t *salt,
+    rd_kafkap_bytes_t *password,
+    rd_kafka_ScramMechanism_t mechanism,
+    int32_t iterations) {
+        rd_chariov_t saltedpassword_chariov = {.ptr =
+                                                   rd_alloca(EVP_MAX_MD_SIZE)};
+
+        rd_chariov_t salt_chariov;
+        salt_chariov.ptr  = (char *)salt->data;
+        salt_chariov.size = RD_KAFKAP_BYTES_LEN(salt);
+
+        rd_chariov_t password_chariov;
+        password_chariov.ptr  = (char *)password->data;
+        password_chariov.size = RD_KAFKAP_BYTES_LEN(password);
+
+        const EVP_MD *evp = NULL;
+        if (mechanism == RD_KAFKA_SCRAM_MECHANISM_SHA_256)
+                evp = EVP_sha256();
+        else if (mechanism == RD_KAFKA_SCRAM_MECHANISM_SHA_512)
+                evp = EVP_sha512();
+        rd_assert(evp != NULL);
+
+        rd_kafka_ssl_hmac(rkb, evp, &password_chariov, &salt_chariov,
+                          iterations, &saltedpassword_chariov);
+
+        return rd_kafkap_bytes_new(
+            (const unsigned char *)saltedpassword_chariov.ptr,
+            saltedpassword_chariov.size);
+}
+#endif
+
+rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *user_scram_credential_alterations,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        size_t num_deletions = 0;
+        size_t i;
+        size_t num_alterations;
+        size_t of_deletions;
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeUserScramCredentials, 0, 0, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(
+                    errstr, errstr_size,
+                    "AlterUserScramCredentials API (KIP-554) not supported "
+                    "by broker");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        num_alterations = rd_list_cnt(user_scram_credential_alterations);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_AlterUserScramCredentials, 1, num_alterations * 100,
+            rd_true);
+
+        /* Deletion scram requests*/
+
+        /* #Deletions */
+        of_deletions = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+
+        for (i = 0; i < num_alterations; i++) {
+                rd_kafka_UserScramCredentialAlteration_t *alteration =
+                    rd_list_elem(user_scram_credential_alterations, i);
+                if (alteration->alteration_type !=
+                    RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE)
+                        continue;
+
+                num_deletions++;
+                /* Name */
+                rd_kafka_buf_write_str(rkbuf, alteration->user,
+                                       strlen(alteration->user));
+                /* Mechanism */
+                rd_kafka_buf_write_i8(
+                    rkbuf, alteration->alteration.deletion.mechanism);
+                rd_kafka_buf_write_tags(rkbuf);
+        }
+        rd_kafka_buf_finalize_arraycnt(rkbuf, of_deletions, num_deletions);
+
+        /* Upsertion scram request*/
+
+        /* #Upsertions */
+        rd_kafka_buf_write_arraycnt(rkbuf, num_alterations - num_deletions);
+        for (i = 0; i < num_alterations; i++) {
+                rd_kafka_UserScramCredentialAlteration_t *alteration =
+                    rd_list_elem(user_scram_credential_alterations, i);
+                if (alteration->alteration_type !=
+                    RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT)
+                        continue;
+
+#if !WITH_SSL
+                rd_assert(!*"OpenSSL is required for upsertions");
+#else
+                char *user      = alteration->user;
+                size_t usersize = strlen(user);
+                rd_kafka_ScramMechanism_t mechanism =
+                    alteration->alteration.upsertion.credential_info.mechanism;
+                int32_t iterations =
+                    alteration->alteration.upsertion.credential_info.iterations;
+                /* Name */
+                rd_kafka_buf_write_str(rkbuf, user, usersize);
+
+                /* Mechanism */
+                rd_kafka_buf_write_i8(rkbuf, mechanism);
+
+                /* Iterations */
+                rd_kafka_buf_write_i32(rkbuf, iterations);
+
+                /* Salt */
+                rd_kafka_buf_write_kbytes(
+                    rkbuf, alteration->alteration.upsertion.salt);
+
+                rd_kafkap_bytes_t *password_bytes =
+                    rd_kafka_AlterUserScramCredentialsRequest_salted_password(
+                        rkb, alteration->alteration.upsertion.salt,
+                        alteration->alteration.upsertion.password, mechanism,
+                        iterations);
+
+                /* SaltedPassword */
+                rd_kafka_buf_write_kbytes(rkbuf, password_bytes);
+                rd_kafkap_bytes_destroy(password_bytes);
+                rd_kafka_buf_write_tags(rkbuf);
+#endif
+        }
+
+        rd_kafka_buf_write_tags(rkbuf);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_AlterUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
+                                                 rd_kafka_op_t **rko_resultp,
+                                                 rd_kafka_buf_t *reply,
+                                                 char *errstr,
+                                                 size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t num_results;
+        int32_t i;
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        /* ThrottleTimeMs */
+        rd_kafka_buf_read_throttle_time(reply);
+
+        /* #Results */
+        rd_kafka_buf_read_arraycnt(reply, &num_results, 10000);
+
+        rd_list_init(
+            &rko_result->rko_u.admin_result.results, num_results,
+            rd_kafka_AlterUserScramCredentials_result_response_destroy_free);
+        for (i = 0; i < num_results; i++) {
+                rd_kafkap_str_t User;
+                int16_t ErrorCode;
+                rd_kafkap_str_t ErrorMessage = RD_KAFKAP_STR_INITIALIZER;
+
+                /* User */
+                rd_kafka_buf_read_str(reply, &User);
+
+                /* ErrorCode */
+                rd_kafka_buf_read_i16(reply, &ErrorCode);
+
+                /* ErrorMessage */
+                rd_kafka_buf_read_str(reply, &ErrorMessage);
+
+                rd_kafka_buf_skip_tags(reply);
+
+                rd_kafka_AlterUserScramCredentials_result_response_t *response =
+                    rd_kafka_AlterUserScramCredentials_result_response_new(
+                        User.str);
+                rd_kafka_AlterUserScramCredentials_result_response_set_error(
+                    response, ErrorCode, ErrorMessage.str);
+                rd_list_add(&rko_result->rko_u.admin_result.results, response);
+        }
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(
+            errstr, errstr_size,
+            "AlterUserScramCredentials response protocol parse failure: %s",
+            rd_kafka_err2str(reply->rkbuf_err));
+
+        return reply->rkbuf_err;
+}
+
+void rd_kafka_AlterUserScramCredentials(
+    rd_kafka_t *rk,
+    rd_kafka_UserScramCredentialAlteration_t **alterations,
+    size_t alteration_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu) {
+
+        rd_kafka_op_t *rko;
+        size_t i;
+
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_AlterUserScramCredentialsRequest,
+            rd_kafka_AlterUserScramCredentialsResponse_parse,
+        };
+
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,
+            RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT, &cbs, options,
+            rkqu->rkqu_q);
+
+        if (alteration_cnt > 0) {
+                const char *errstr = NULL;
+                for (i = 0; i < alteration_cnt; i++) {
+                        rd_bool_t is_upsert =
+                            alterations[i]->alteration_type ==
+                            RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_UPSERT;
+                        rd_bool_t is_delete =
+                            alterations[i]->alteration_type ==
+                            RD_KAFKA_USER_SCRAM_CREDENTIAL_ALTERATION_TYPE_DELETE;
+
+                        if ((is_upsert || is_delete) &&
+                            alterations[i]
+                                    ->alteration.upsertion.credential_info
+                                    .mechanism ==
+                                RD_KAFKA_SCRAM_MECHANISM_UNKNOWN) {
+                                errstr =
+                                    "SCRAM mechanism must be specified at "
+                                    "index %" PRIusz;
+                                break;
+                        }
+
+
+                        if (!alterations[i]->user || !*alterations[i]->user) {
+                                errstr = "Empty user at index %" PRIusz;
+                                break;
+                        }
+
+                        if (is_upsert) {
+#if !WITH_SSL
+                                errstr =
+                                    "OpenSSL required for upsertion at index "
+                                    "%" PRIusz;
+                                break;
+#endif
+                                if (RD_KAFKAP_BYTES_LEN(
+                                        alterations[i]
+                                            ->alteration.upsertion.password) ==
+                                    0) {
+                                        errstr =
+                                            "Empty password at index %" PRIusz;
+                                        break;
+                                }
+
+                                if (!alterations[i]
+                                         ->alteration.upsertion.salt ||
+                                    RD_KAFKAP_BYTES_LEN(
+                                        alterations[i]
+                                            ->alteration.upsertion.salt) == 0) {
+                                        errstr = "Empty salt at index %" PRIusz;
+                                        break;
+                                }
+
+                                if (alterations[i]
+                                        ->alteration.upsertion.credential_info
+                                        .iterations <= 0) {
+                                        errstr =
+                                            "Non-positive iterations at index "
+                                            "%" PRIusz;
+                                        break;
+                                }
+                        }
+                }
+
+                if (errstr) {
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG, errstr, i);
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko, rd_true /*destroy*/);
+                        return;
+                }
+        } else {
+                rd_kafka_admin_result_fail(
+                    rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "At least one alteration is required");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        rd_list_init(&rko->rko_u.admin_request.args, alteration_cnt,
+                     rd_kafka_UserScramCredentialAlteration_destroy_free);
+
+        for (i = 0; i < alteration_cnt; i++) {
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_UserScramCredentialAlteration_copy(
+                                alterations[i]));
+        }
+        rd_kafka_q_enq(rk->rk_ops, rko);
+        return;
+}
+
 /**
  * @brief Get an array of rd_kafka_AclBinding_t from a DescribeAcls result.
  *
@@ -5327,7 +6396,6 @@ void rd_kafka_AlterConsumerGroupOffsets(
 fail:
         rd_kafka_admin_common_worker_destroy(rk, rko, rd_true /*destroy*/);
 }
-
 
 /**
  * @brief Get an array of group results from a AlterGroups result.
@@ -6525,8 +7593,8 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                         }
                         rd_kafka_buf_read_str(reply, &ClientId);
                         rd_kafka_buf_read_str(reply, &ClientHost);
-                        rd_kafka_buf_read_bytes(reply, &MemberMetadata);
-                        rd_kafka_buf_read_bytes(reply, &MemberAssignment);
+                        rd_kafka_buf_read_kbytes(reply, &MemberMetadata);
+                        rd_kafka_buf_read_kbytes(reply, &MemberAssignment);
                         if (error != NULL)
                                 continue;
 

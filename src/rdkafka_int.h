@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -130,6 +131,7 @@ typedef struct rd_kafka_fetch_pos_s {
 #define RD_KAFKAP_TOPICS_MAX     1000000
 #define RD_KAFKAP_PARTITIONS_MAX 100000
 #define RD_KAFKAP_GROUPS_MAX     100000
+#define RD_KAFKAP_CONFIGS_MAX    10000
 
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)

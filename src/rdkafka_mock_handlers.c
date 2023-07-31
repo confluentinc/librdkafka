@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill,
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -96,7 +97,7 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                                 mpart = rd_kafka_mock_partition_find(mtopic,
                                                                      Partition);
 
-                        rd_kafka_buf_read_bytes(rkbuf, &records);
+                        rd_kafka_buf_read_kbytes(rkbuf, &records);
 
                         /* Response: Partition */
                         rd_kafka_buf_write_i32(resp, Partition);
@@ -352,9 +353,10 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                         if (mset && partsize < (size_t)PartMaxBytes &&
                             totsize < (size_t)MaxBytes) {
                                 /* Response: Records */
-                                rd_kafka_buf_write_kbytes(resp, &mset->bytes);
-                                partsize += RD_KAFKAP_BYTES_SIZE(&mset->bytes);
-                                totsize += RD_KAFKAP_BYTES_SIZE(&mset->bytes);
+                                size_t written = rd_kafka_buf_write_kbytes(
+                                    resp, &mset->bytes);
+                                partsize += written;
+                                totsize += written;
 
                                 /* FIXME: Multiple messageSets ? */
                         } else {
@@ -1165,7 +1167,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
                 rd_kafkap_str_t ProtocolName;
                 rd_kafkap_bytes_t Metadata;
                 rd_kafka_buf_read_str(rkbuf, &ProtocolName);
-                rd_kafka_buf_read_bytes(rkbuf, &Metadata);
+                rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
                 protos[i].name     = rd_kafkap_str_copy(&ProtocolName);
                 protos[i].metadata = rd_kafkap_bytes_copy(&Metadata);
         }
@@ -1453,7 +1455,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_mock_cgrp_member_t *member2;
 
                 rd_kafka_buf_read_str(rkbuf, &MemberId2);
-                rd_kafka_buf_read_bytes(rkbuf, &Metadata);
+                rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
 
                 if (err)
                         continue;

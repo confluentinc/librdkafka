@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2016 Magnus Edenhill
+ * Copyright (c) 2016-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,6 +60,8 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "CreatePartitionsResult";
         case RD_KAFKA_EVENT_ALTERCONFIGS_RESULT:
                 return "AlterConfigsResult";
+        case RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT:
+                return "IncrementalAlterConfigsResult";
         case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
                 return "DescribeConfigsResult";
         case RD_KAFKA_EVENT_DELETERECORDS_RESULT:
@@ -88,6 +90,10 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "ListConsumerGroupOffsetsResult";
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
                 return "SaslOAuthBearerTokenRefresh";
+        case RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT:
+                return "DescribeUserScramCredentials";
+        case RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT:
+                return "AlterUserScramCredentials";
         default:
                 return "?unknown?";
         }
@@ -333,6 +339,15 @@ rd_kafka_event_AlterConfigs_result(rd_kafka_event_t *rkev) {
                 return (const rd_kafka_AlterConfigs_result_t *)rkev;
 }
 
+const rd_kafka_IncrementalAlterConfigs_result_t *
+rd_kafka_event_IncrementalAlterConfigs_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_IncrementalAlterConfigs_result_t *)rkev;
+}
+
 
 const rd_kafka_DescribeConfigs_result_t *
 rd_kafka_event_DescribeConfigs_result(rd_kafka_event_t *rkev) {
@@ -436,6 +451,25 @@ rd_kafka_event_AlterConsumerGroupOffsets_result(rd_kafka_event_t *rkev) {
                     const rd_kafka_AlterConsumerGroupOffsets_result_t *)rkev;
 }
 
+const rd_kafka_DescribeUserScramCredentials_result_t *
+rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype !=
+                         RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT)
+                return NULL;
+        else
+                return (
+                    const rd_kafka_DescribeUserScramCredentials_result_t *)rkev;
+}
+
+const rd_kafka_AlterUserScramCredentials_result_t *
+rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT)
+                return NULL;
+        else
+                return (
+                    const rd_kafka_AlterUserScramCredentials_result_t *)rkev;
+}
 const rd_kafka_ListConsumerGroupOffsets_result_t *
 rd_kafka_event_ListConsumerGroupOffsets_result(rd_kafka_event_t *rkev) {
         if (!rkev ||

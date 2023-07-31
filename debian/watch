@@ -1,2 +1,2 @@
 version=3
-https://github.com/edenhill/librdkafka/tags .*/v?(\d[\d\.]*)\.tar\.gz
+https://github.com/confluentinc/librdkafka/tags .*/v?(\d[\d\.]*)\.tar\.gz

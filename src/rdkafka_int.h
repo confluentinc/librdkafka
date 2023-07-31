@@ -244,6 +244,18 @@ typedef enum {
 } rd_kafka_telemetry_state_t;
 
 
+static RD_UNUSED const char *
+rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
+        static const char *names[] = {"AwaitBroker",
+                                      "GetSubscriptionsScheduled",
+                                      "GetSubscriptionsSent",
+                                      "PushScheduled",
+                                      "PushSent",
+                                      "Terminating"};
+        return names[state];
+}
+
+
 /**
  * @returns the telemetry_state_t string representation
  */

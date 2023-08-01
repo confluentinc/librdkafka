@@ -89,7 +89,7 @@ struct rd_kafka_property {
                 const char *str;
                 const char *unsupported; /**< Reason for value not being
                                           *   supported in this build. */
-        } s2i[20];                       /* _RK_C_S2I and _RK_C_S2F */
+        } s2i[21];                       /* _RK_C_S2I and _RK_C_S2F */
 
         const char *unsupported; /**< Reason for propery not being supported
                                   *   in this build.

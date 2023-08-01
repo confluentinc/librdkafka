@@ -2,9 +2,10 @@
 
 librdkafka v2.3.0 is a feature release:
 
+ * Add support for AdminAPI `DescribeCluster()` and `DescribeTopics()`
+  (#4240, @jainruchir).
  * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):
-   Return authorized operations in Describe Responses. This additionally
-   includes AdminAPI for DescribeCluster and DescribeTopics.
+   Return authorized operations in Describe Responses.
    (#4240, @jainruchir).
 
 

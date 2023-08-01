@@ -104,8 +104,6 @@ rd_kafka_metadata(rd_kafka_t *rk,
                                         * of outstanding metadata requests. */
         rd_kafka_MetadataRequest(
             rkb, &topics, "application requested", allow_auto_create_topics,
-            rd_false /*!include cluster authorized operations */,
-            rd_false /*!include topic authorized operations */,
             /* cgrp_update:
              * Only update consumer group state
              * on response if this lists all
@@ -113,7 +111,7 @@ rd_kafka_metadata(rd_kafka_t *rk,
              * partial request may make it seem
              * like some subscribed topics are missing. */
             all_topics ? rd_true : rd_false, rd_false /* force_racks */, rko,
-            NULL, 0, NULL);
+            rd_false /* force */, NULL);
 
         rd_list_destroy(&topics);
         rd_kafka_broker_destroy(rkb);
@@ -1266,11 +1264,9 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                      "Requesting metadata for %d/%d topics: %s",
                      rd_list_cnt(&q_topics), rd_list_cnt(topics), reason);
 
-        rd_kafka_MetadataRequest(
-            rkb, &q_topics, reason, allow_auto_create,
-            rd_false /*!include cluster authorized operations */,
-            rd_false /*!include topic authorized operations */, cgrp_update,
-            rd_false /* force_racks */, NULL, NULL, 0, NULL);
+        rd_kafka_MetadataRequest(rkb, &q_topics, reason, allow_auto_create,
+                                 cgrp_update, rd_false /* force_racks */, NULL,
+                                 rd_false /* force */, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -1410,12 +1406,10 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
 rd_kafka_resp_err_t rd_kafka_metadata_refresh_brokers(rd_kafka_t *rk,
                                                       rd_kafka_broker_t *rkb,
                                                       const char *reason) {
-        return rd_kafka_metadata_request(
-            rk, rkb, NULL /*brokers only*/,
-            rd_false /*!allow auto create topics*/,
-            rd_false /*!include cluster authorized operations */,
-            rd_false /*!include topic authorized operations */,
-            rd_false /*no cgrp update */, reason, NULL);
+        return rd_kafka_metadata_request(rk, rkb, NULL /*brokers only*/,
+                                         rd_false /*!allow auto create topics*/,
+                                         rd_false /*no cgrp update */, reason,
+                                         NULL);
 }
 
 
@@ -1449,10 +1443,8 @@ rd_kafka_resp_err_t rd_kafka_metadata_refresh_all(rd_kafka_t *rk,
         rd_list_init(&topics, 0, NULL); /* empty list = all topics */
         rd_kafka_MetadataRequest(
             rkb, &topics, reason, rd_false /*no auto create*/,
-            rd_false /*!include cluster authorized operations */,
-            rd_false /*!include topic authorized operations */,
-            rd_true /*cgrp update*/, rd_false /* force_rack */, NULL, NULL, 0,
-            NULL);
+            rd_true /*cgrp update*/, rd_false /* force_rack */, NULL,
+            0 /* force */, NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -1477,8 +1469,6 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
                           rd_kafka_broker_t *rkb,
                           const rd_list_t *topics,
                           rd_bool_t allow_auto_create_topics,
-                          rd_bool_t include_cluster_authorized_operations,
-                          rd_bool_t include_topic_authorized_operations,
                           rd_bool_t cgrp_update,
                           const char *reason,
                           rd_kafka_op_t *rko) {
@@ -1492,10 +1482,8 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
         }
 
         rd_kafka_MetadataRequest(rkb, topics, reason, allow_auto_create_topics,
-                                 include_cluster_authorized_operations,
-                                 include_topic_authorized_operations,
                                  cgrp_update, rd_false /* force racks */, rko,
-                                 NULL, 0, NULL);
+                                 rd_false /* force */, NULL);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);

@@ -8073,15 +8073,14 @@ rd_kafka_admin_DescribeTopicsRequest(rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_cb_t *resp_cb,
                                      void *opaque) {
         rd_kafka_resp_err_t err;
-        int include_topic_authorized_operations;
-
-        include_topic_authorized_operations =
+        int include_topic_authorized_operations =
             rd_kafka_confval_get_int(&options->include_authorized_operations);
 
-        err = rd_kafka_MetadataRequest(
-            rkb, topics, "describe topics", rd_false, rd_false,
-            include_topic_authorized_operations, rd_false, rd_false, NULL,
-            resp_cb, 0, opaque);
+        err = rd_kafka_MetadataRequest_admin(
+            rkb, topics, "describe topics",
+            rd_false /* include_topic_authorized_operations */,
+            include_topic_authorized_operations, rd_false /* force_racks */,
+            resp_cb, opaque);
 
         if (err) {
                 rd_snprintf(errstr, errstr_size, "%s", rd_kafka_err2str(err));
@@ -8331,17 +8330,14 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeClusterRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque) {
         rd_kafka_resp_err_t err;
-        int include_cluster_authorized_operations;
-
-        include_cluster_authorized_operations =
+        int include_cluster_authorized_operations =
             rd_kafka_confval_get_int(&options->include_authorized_operations);
 
-        err = rd_kafka_MetadataRequest(
-            rkb, NULL, "describe cluster", rd_false /*no auto create*/,
+        err = rd_kafka_MetadataRequest_admin(
+            rkb, NULL /* topics */, "describe cluster",
             include_cluster_authorized_operations,
-            rd_false /*!include topic authorized operations */,
-            rd_false /*cgrp update*/, rd_false /* force_rack */, NULL, resp_cb,
-            1 /* force */, opaque);
+            rd_false /* include_topic_authorized_operations */,
+            rd_false /* force_racks */, resp_cb, opaque);
 
         if (err) {
                 rd_snprintf(errstr, errstr_size, "%s", rd_kafka_err2str(err));

@@ -2043,8 +2043,6 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 rd_kafka_MetadataRequest(
                     rkb, &topics, "partition assignor",
                     rd_false /*!allow_auto_create*/,
-                    rd_false /*!include cluster authorized operations */,
-                    rd_false /*!include topic authorized operations */,
                     /* cgrp_update=false:
                      * Since the subscription list may not be identical
                      * across all members of the group and thus the
@@ -2057,7 +2055,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                     /* force_racks is true if any memeber has a client rack set,
                        since we will require partition to rack mapping in that
                        case for rack-aware assignors. */
-                    any_member_rack, rko, NULL, 0, NULL);
+                    any_member_rack, rko, rd_false /* force */, NULL);
                 rd_list_destroy(&topics);
 
         } else {
@@ -2243,11 +2241,9 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
                                  rd_kafka_cgrp_handle_Metadata_op);
         rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, 0);
 
-        err = rd_kafka_metadata_request(
-            rkcg->rkcg_rk, NULL, &topics, rd_false /*!allow auto create */,
-            rd_false /*!include cluster authorized operations */,
-            rd_false /*!include topic authorized operations */,
-            rd_true /*cgrp_update*/, reason, rko);
+        err = rd_kafka_metadata_request(rkcg->rkcg_rk, NULL, &topics,
+                                        rd_false /*!allow auto create */,
+                                        rd_true /*cgrp_update*/, reason, rko);
         if (err) {
                 rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_METADATA, "CGRPMETADATA",
                              "%s: need to refresh metadata (%dms old) "

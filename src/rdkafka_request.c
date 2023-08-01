@@ -2177,53 +2177,20 @@ done:
 }
 
 
-/**
- * @brief Construct MetadataRequest (does not send)
- *
- * \p topics is a list of topic names (char *) to request.
- *
- * !topics          - only request brokers (if supported by broker, else
- *                    all topics)
- *  topics.cnt==0   - all topics in cluster are requested
- *  topics.cnt >0   - only specified topics are requested
- *
- * @param reason    - metadata request reason
- * @param allow_auto_create_topics - allow broker-side auto topic creation.
- *                                   This is best-effort, depending on broker
- *                                   config and version.
- * @param include_cluster_authorized_operations - request for cluster
- *                      authorized operations.
- * @param include_topic_authorized_operations - request for topic authorized
- *                      operations.
- * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
- * @param force_racks - Force partition to rack mapping computation in
- *                      parse_Metadata (see comment there).
- * @param rko       - (optional) rko with replyq for handling response.
- *                    Specifying an rko forces a metadata request even if
- *                    there is already a matching one in-transit.
- * @param resp_cb - callback to be used for handling response. If NULL, then
- *                     rd_kafka_handle_Metadata() is used.
- * @param force - 1: force a full request.
- *                0: check if there are multiple outstanding full requests.
- * If full metadata for all topics is requested (or all brokers, which
- * results in all-topics on older brokers) and there is already a full request
- * in transit then this function will return RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS
- * otherwise RD_KAFKA_RESP_ERR_NO_ERROR. If \p rko is non-NULL the request
- * is sent regardless.
- */
-rd_kafka_resp_err_t
-rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
-                         const rd_list_t *topics,
-                         const char *reason,
-                         rd_bool_t allow_auto_create_topics,
-                         rd_bool_t include_cluster_authorized_operations,
-                         rd_bool_t include_topic_authorized_operations,
-                         rd_bool_t cgrp_update,
-                         rd_bool_t force_racks,
-                         rd_kafka_op_t *rko,
-                         rd_kafka_resp_cb_t *resp_cb,
-                         int force,
-                         void *opaque) {
+/* Internal implementation for MetadataRequests. */
+static rd_kafka_resp_err_t
+rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
+                          const rd_list_t *topics,
+                          const char *reason,
+                          rd_bool_t allow_auto_create_topics,
+                          rd_bool_t include_cluster_authorized_operations,
+                          rd_bool_t include_topic_authorized_operations,
+                          rd_bool_t cgrp_update,
+                          rd_bool_t force_racks,
+                          rd_kafka_op_t *rko,
+                          rd_kafka_resp_cb_t *resp_cb,
+                          int force,
+                          void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         size_t of_TopicArrayCnt;
@@ -2294,8 +2261,8 @@ rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         if (full_incr) {
                 /* Avoid multiple outstanding full requests
                  * (since they are redundant and side-effect-less).
-                 * Forced requests (app using metadata() API) are passed
-                 * through regardless. */
+                 * Forced requests (app using metadata() API or Admin API) are
+                 * passed through regardless. */
 
                 mtx_lock(&rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock);
                 if (!force &&
@@ -2354,15 +2321,12 @@ rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         }
 
         if (ApiVersion >= 8 && ApiVersion < 10) {
-                /* TODO: implement KIP-430 */
                 /* IncludeClusterAuthorizedOperations */
-
                 rd_kafka_buf_write_bool(rkbuf,
                                         include_cluster_authorized_operations);
         }
 
         if (ApiVersion >= 8) {
-                /* TODO: implement KIP-430 */
                 /* IncludeTopicAuthorizedOperations */
                 rd_kafka_buf_write_bool(rkbuf,
                                         include_topic_authorized_operations);
@@ -2380,9 +2344,109 @@ rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
              * but forward parsed result to
              * rko's replyq when done. */
             RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
-            resp_cb ? resp_cb : rd_kafka_handle_Metadata, rko ? rko : opaque);
+            /* The default response handler is rd_kafka_handle_Metadata, but we
+               allow alternate handlers to be configured. */
+            resp_cb ? resp_cb : rd_kafka_handle_Metadata,
+            /* rd_kafka_handle_Metadata (the default handler) makes use of the
+               rko (if set) to forward the response to the rko's replyq. So, in
+               case the opaque value hasn't been overrriden, we set it to the
+               rko. */
+            rko ? rko : opaque);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Construct MetadataRequest (does not send)
+ *
+ * \p topics is a list of topic names (char *) to request.
+ *
+ * !topics          - only request brokers (if supported by broker, else
+ *                    all topics)
+ *  topics.cnt==0   - all topics in cluster are requested
+ *  topics.cnt >0   - only specified topics are requested
+ *
+ * @param reason    - metadata request reason
+ * @param allow_auto_create_topics - allow broker-side auto topic creation.
+ *                                   This is best-effort, depending on broker
+ *                                   config and version.
+ * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks - Force partition to rack mapping computation in
+ *                      parse_Metadata (see comment there).
+ * @param rko       - (optional) rko with replyq for handling response.
+ *                    Specifying an rko forces a metadata request even if
+ *                    there is already a matching one in-transit.
+ * @param force - 1: force a full request (including all topics and brokers)
+ *                   even if there is such a request already in flight.
+ *              - 0: check if there are multiple outstanding full requests, and
+ *                   don't send one if there is already one present.
+ *               (See note below.)
+ *
+ * If full metadata for all topics is requested (or
+ * all brokers, which results in all-topics on older brokers) and there is
+ * already a full request in transit then this function will return
+ * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
+ * If \p rko is non-NULL or if \p force is true, the request is sent regardless.
+ */
+rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
+                                             const rd_list_t *topics,
+                                             const char *reason,
+                                             rd_bool_t allow_auto_create_topics,
+                                             rd_bool_t cgrp_update,
+                                             rd_bool_t force_racks,
+                                             rd_kafka_op_t *rko,
+                                             rd_bool_t force,
+                                             void *opaque) {
+        return rd_kafka_MetadataRequest0(
+            rkb, topics, reason, allow_auto_create_topics,
+            /* cluster and topic authorized operations are used by admin
+               operations only. */
+            rd_false, rd_false, cgrp_update, force_racks, rko,
+            /* In all other situations apart from admin ops, we use
+               rd_kafka_handle_Metadata rather than a custom resp_cb */
+            NULL, force, opaque);
+}
+
+
+/**
+ * @brief Construct MetadataRequest for use with AdminAPI (does not send).
+ *
+ * \p topics is a list of topic names (char *) to request.
+ *
+ * !topics          - only request brokers (if supported by broker, else
+ *                    all topics)
+ *  topics.cnt==0   - all topics in cluster are requested
+ *  topics.cnt >0   - only specified topics are requested
+ *
+ * @param reason    - metadata request reason
+ * @param include_cluster_authorized_operations - request for cluster
+ *                      authorized operations.
+ * @param include_topic_authorized_operations - request for topic authorized
+ *                      operations.
+ * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks - Force partition to rack mapping computation in
+ *                      parse_Metadata (see comment there).
+ * @param resp_cb - callback to be used for handling response.
+ */
+rd_kafka_resp_err_t
+rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,
+                               const rd_list_t *topics,
+                               const char *reason,
+                               rd_bool_t include_cluster_authorized_operations,
+                               rd_bool_t include_topic_authorized_operations,
+                               rd_bool_t force_racks,
+                               rd_kafka_resp_cb_t *resp_cb,
+                               void *opaque) {
+        return rd_kafka_MetadataRequest0(
+            rkb, topics, reason,
+            /* No admin operation requires topic creation. */
+            rd_false, include_cluster_authorized_operations,
+            include_topic_authorized_operations,
+            rd_false /* No admin operation should update cgrp. */, force_racks,
+            NULL /* Admin options don't require us to track the op. */, resp_cb,
+            rd_true /* Admin operation metadata requests are always forced. */,
+            opaque);
 }
 
 

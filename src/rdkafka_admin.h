@@ -501,9 +501,8 @@ struct rd_kafka_TopicDescription_s {
         char *topic;       /**< Topic name */
         int partition_cnt; /**< Number of partitions in \p partitions*/
         struct rd_kafka_metadata_partition *partitions; /**< Partitions */
-        rd_kafka_error_t *error; /**< Topic error reported by broker */
-        rd_list_t *topic_authorized_operations; /**< ACL operations allowed for
-                                                   topics */
+        rd_kafka_error_t *error;          /**< Topic error reported by broker */
+        rd_list_t *authorized_operations; /**< Operations allowed for topic */
 };
 
 /**@}*/
@@ -520,8 +519,7 @@ struct rd_kafka_ClusterDescription_s {
         int controller_id;      /**< current controller id in \p cluster*/
         int node_cnt;           /**< Number of brokers in \p cluster*/
         rd_kafka_Node_t *Nodes; /**< Nodes */
-        rd_list_t *cluster_authorized_operations; /**< ACL operations allowed
-                                                     for cluster */
+        rd_list_t *authorized_operations; /**< Operations allowed for cluster */
 };
 
 /**@}*/

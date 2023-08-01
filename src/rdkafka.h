@@ -6817,11 +6817,9 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS,
         /** AlterUserScramCredentials */
         RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS,
-        /**< DescribeTopics */
-        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,
-        /**< DescribeCluster */
-        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER,
-        RD_KAFKA_ADMIN_OP__CNT /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
+        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
+        RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**
@@ -7001,8 +6999,9 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
     int true_or_false);
 
 /**
- * @brief Whether broker should return authorized operations
- *        (DescribeConsumerGroups, DescribeTopics, DescribeCluster).
+ * @brief Whether broker should return authorized operations for the given
+ *        resource in the DescribeConsumerGroups, DescribeTopics, or
+ *        DescribeCluster calls.
  *
  * @param options Admin options.
  * @param true_or_false Defaults to false.
@@ -7999,6 +7998,8 @@ typedef struct rd_kafka_TopicDescription_s rd_kafka_TopicDescription_t;
  * @param topics Array of topics to describe.
  * @param topics_cnt Number of elements in \p topics array.
  * @param options Optional admin options, or NULL for defaults.
+ *                Valid options:
+ *                 - include_authorized_operations
  * @param rkqu Queue to emit result on.
  *
  * @remark The result event type emitted on the supplied queue is of type
@@ -8080,8 +8081,8 @@ const int rd_kafka_TopicDescription_partition_isr_count(
     int idx);
 
 /**
- * @brief Gets the partition in-sync replica at \p isr_idx
- * for partition \p partition_idx for the \p topicdesc topic.
+ * @brief Gets the in-sync replica at index \p replica_idx for the partition
+ * at the index \p partition_idx for the topic \p topicdesc.
  *
  * @param topicdesc The topic description.
  * @param partition_idx Index for the partitions.
@@ -8111,12 +8112,12 @@ const int rd_kafka_TopicDescription_partition_replica_count(
 
 
 /**
- * @brief Gets the partition replica at replica index
- * for partition \p partition_idx for the \p topicdesc topic.
+ * @brief Gets the partition replica at index \p replica_idx for the partition
+ * at the index \p partition_idx for the topic \p topicdesc.
  *
  * @param topicdesc The topic description.
  * @param partition_idx Index for the partitions.
- * @param replica_idx Index for the in-sync replica.
+ * @param replica_idx Index for the replica.
  *
  * @return The partition replica.
  */
@@ -8214,6 +8215,8 @@ typedef struct rd_kafka_ClusterDescription_s rd_kafka_ClusterDescription_t;
  *
  * @param rk Client instance.
  * @param options Optional admin options, or NULL for defaults.
+ *                Valid options:
+ *                 - include_authorized_operations
  * @param rkqu Queue to emit result on.
  *
  * @remark The result event type emitted on the supplied queue is of type
@@ -8457,6 +8460,8 @@ typedef struct rd_kafka_MemberAssignment_s rd_kafka_MemberAssignment_t;
  * @param groups Array of groups to describe.
  * @param groups_cnt Number of elements in \p groups array.
  * @param options Optional admin options, or NULL for defaults.
+ *                Valid options:
+ *                 - include_authorized_operations
  * @param rkqu Queue to emit result on.
  *
  * @remark The result event type emitted on the supplied queue is of type

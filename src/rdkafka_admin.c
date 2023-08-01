@@ -7855,14 +7855,14 @@ const rd_kafka_AclOperation_t rd_kafka_TopicDescription_authorized_operation(
     const rd_kafka_TopicDescription_t *topicdesc,
     size_t idx) {
         rd_kafka_AclOperation_t *entry =
-            rd_list_elem(topicdesc->topic_authorized_operations, idx);
+            rd_list_elem(topicdesc->authorized_operations, idx);
         return *entry;
 }
 
 const int rd_kafka_TopicDescription_topic_authorized_operation_count(
     const rd_kafka_TopicDescription_t *topicdesc) {
-        if (topicdesc->topic_authorized_operations)
-                return rd_list_cnt(topicdesc->topic_authorized_operations);
+        if (topicdesc->authorized_operations)
+                return rd_list_cnt(topicdesc->authorized_operations);
         return 0;
 }
 
@@ -7953,8 +7953,8 @@ rd_kafka_TopicDescription_destroy(rd_kafka_TopicDescription_t *topicdesc) {
         }
         if (likely(topicdesc->partitions != NULL))
                 rd_free(topicdesc->partitions);
-        if (likely(topicdesc->topic_authorized_operations != NULL))
-                rd_list_destroy(topicdesc->topic_authorized_operations);
+        if (likely(topicdesc->authorized_operations != NULL))
+                rd_list_destroy(topicdesc->authorized_operations);
         rd_free(topicdesc);
 }
 
@@ -7970,7 +7970,7 @@ static int rd_kafka_DescribeTopics_cmp(const void *a, const void *b) {
 }
 
 /**
- * @brief Create a new ConsumerGroupDescription object.
+ * @brief Create a new TopicDescription object.
  *
  * @param topic topic name
  * @param partitions Array of partition metadata (rd_kafka_metadata_partition).
@@ -7994,15 +7994,14 @@ rd_kafka_TopicDescription_new(const char *topic,
         if (error)
                 topicdesc->error = rd_kafka_error_copy(error);
         if (topic_authorized_operations) {
-                topicdesc->topic_authorized_operations = rd_list_new(
+                topicdesc->authorized_operations = rd_list_new(
                     rd_list_cnt(topic_authorized_operations), rd_free);
                 for (i = 0; i < rd_list_cnt(topic_authorized_operations); i++) {
                         int *entry =
                             rd_list_elem(topic_authorized_operations, i);
                         int *oper = rd_malloc(sizeof(int));
                         *oper     = *entry;
-                        rd_list_add(topicdesc->topic_authorized_operations,
-                                    oper);
+                        rd_list_add(topicdesc->authorized_operations, oper);
                 }
         }
 
@@ -8222,7 +8221,7 @@ const rd_kafka_AclOperation_t rd_kafka_ClusterDescription_authorized_operation(
     const rd_kafka_ClusterDescription_t *clusterdesc,
     size_t idx) {
         rd_kafka_AclOperation_t *entry =
-            rd_list_elem(clusterdesc->cluster_authorized_operations, idx);
+            rd_list_elem(clusterdesc->authorized_operations, idx);
         return *entry;
 }
 
@@ -8238,8 +8237,8 @@ const int rd_kafka_ClusterDescription_controller_id(
 
 const int rd_kafka_ClusterDescription_cluster_authorized_operation_count(
     const rd_kafka_ClusterDescription_t *clusterdesc) {
-        if (clusterdesc->cluster_authorized_operations)
-                return rd_list_cnt(clusterdesc->cluster_authorized_operations);
+        if (clusterdesc->authorized_operations)
+                return rd_list_cnt(clusterdesc->authorized_operations);
         return 0;
 }
 
@@ -8287,7 +8286,7 @@ rd_kafka_ClusterDescription_new(const char *cluster_id,
         clusterdesc->controller_id = controller_id;
 
         if (cluster_authorized_operations) {
-                clusterdesc->cluster_authorized_operations = rd_list_new(
+                clusterdesc->authorized_operations = rd_list_new(
                     rd_list_cnt(cluster_authorized_operations), rd_free);
                 for (i = 0; i < rd_list_cnt(cluster_authorized_operations);
                      i++) {
@@ -8295,11 +8294,10 @@ rd_kafka_ClusterDescription_new(const char *cluster_id,
                             rd_list_elem(cluster_authorized_operations, i);
                         int *oper = malloc(sizeof(int));
                         *oper     = *entry;
-                        rd_list_add(clusterdesc->cluster_authorized_operations,
-                                    oper);
+                        rd_list_add(clusterdesc->authorized_operations, oper);
                 }
         } else
-                clusterdesc->cluster_authorized_operations = NULL;
+                clusterdesc->authorized_operations = NULL;
 
         clusterdesc->node_cnt = md->broker_cnt;
         clusterdesc->Nodes = rd_calloc(sizeof(rd_kafka_Node_t), md->broker_cnt);
@@ -8315,8 +8313,8 @@ static void rd_kafka_ClusterDescription_destroy(
     rd_kafka_ClusterDescription_t *clusterdesc) {
         int i;
         RD_IF_FREE(clusterdesc->cluster_id, rd_free);
-        if (clusterdesc->cluster_authorized_operations)
-                rd_list_destroy(clusterdesc->cluster_authorized_operations);
+        if (clusterdesc->authorized_operations)
+                rd_list_destroy(clusterdesc->authorized_operations);
         if (clusterdesc->Nodes) {
                 for (i = 0; i < clusterdesc->node_cnt; i++) {
                         rd_kafka_Node_t *node = &(clusterdesc->Nodes[i]);

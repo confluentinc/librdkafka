@@ -474,11 +474,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                     : rd_false;
         rd_bool_t has_reliable_leader_epochs =
             rd_kafka_has_reliable_leader_epochs(rkb);
-        const char *reason = request ? (request->rkbuf_u.Metadata.reason
-                                            ? request->rkbuf_u.Metadata.reason
-                                            : "(no reason)")
-                                     : "(admin request)";
-
+        const char *reason         = "(no reason)";
         int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id      = -1;
@@ -495,6 +491,12 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         rd_bool_t force_rack_computation =
             request ? request->rkbuf_u.Metadata.force_racks : rd_false;
         rd_bool_t compute_racks = has_client_rack || force_rack_computation;
+
+        /* If there's no request, we're parsing this for an AdminAPI. */
+        if (!request)
+                reason = "(admin request)";
+        else if (request->rkbuf_u.Metadata.reason)
+                reason = request->rkbuf_u.Metadata.reason;
 
         /* Ignore metadata updates when terminating */
         if (rd_kafka_terminating(rkb->rkb_rk)) {

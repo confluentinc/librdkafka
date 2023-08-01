@@ -244,6 +244,17 @@ typedef enum {
 } rd_kafka_telemetry_state_t;
 
 
+static RD_UNUSED const char *
+rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
+        static const char *names[] = {"AwaitBroker",
+                                      "GetSubscriptionsScheduled",
+                                      "GetSubscriptionsSent",
+                                      "PushScheduled",
+                                      "PushSent",
+                                      "Terminating"};
+        return names[state];
+}
+
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */
@@ -638,15 +649,16 @@ struct rd_kafka_s {
                 /**< Lock for preferred telemetry broker and state. */
                 mtx_t lock;
 
-                /* Fields obtained from broker as a result of GetSubscriptions. */
-                /* TODO: use rd_kafka_uuid_t as in https://github.com/confluentinc/librdkafka/pull/4300/files
-                 * when it is merged. */
-                char *client_instance_id;
+                /* Fields obtained from broker as a result of GetSubscriptions.
+                 */
+                rd_kafka_uuid_t client_instance_id;
                 int32_t subscription_id;
-                char** accepted_compression_types;
+                rd_kafka_compression_t *accepted_compression_types;
+                size_t accepted_compression_types_cnt;
                 int32_t push_interval_ms;
                 rd_bool_t delta_temporality;
-                char** requested_metrics;
+                char **requested_metrics;
+                size_t requested_metrics_cnt;
         } rk_telemetry;
 
         /* Test mocks */
@@ -890,6 +902,7 @@ const char *rd_kafka_purge_flags2str(int flags);
 #define RD_KAFKA_DBG_MOCK        0x10000
 #define RD_KAFKA_DBG_ASSIGNOR    0x20000
 #define RD_KAFKA_DBG_CONF        0x40000
+#define RD_KAFKA_DBG_TELEMETRY   0x80000
 #define RD_KAFKA_DBG_ALL         0xfffff
 #define RD_KAFKA_DBG_NONE        0x0
 

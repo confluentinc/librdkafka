@@ -673,7 +673,8 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
         /* TODO(milind): check if this right. */
         mtx_lock(&rkb->rkb_rk->rk_telemetry.lock);
         if (rkb->rkb_rk->rk_telemetry.preferred_broker == rkb) {
-                rd_kafka_broker_destroy(rkb->rkb_rk->rk_telemetry.preferred_broker);
+                rd_kafka_broker_destroy(
+                    rkb->rkb_rk->rk_telemetry.preferred_broker);
                 rkb->rkb_rk->rk_telemetry.preferred_broker = NULL;
         }
         mtx_unlock(&rkb->rkb_rk->rk_telemetry.lock);
@@ -2276,18 +2277,18 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
                 rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
             -1) {
                 rd_kafka_t *rk = rkb->rkb_rk;
+
                 mtx_lock(&rkb->rkb_rk->rk_telemetry.lock);
                 if (!rkb->rkb_rk->rk_telemetry.preferred_broker &&
-                    rk->rk_telemetry.state ==
-                        RD_KAFKA_ADMIN_STATE_WAIT_BROKER) {
-                        rk->rk_telemetry.preferred_broker =
-                            rd_kafka_broker_keep(rkb);
+                    rk->rk_telemetry.state == RD_KAFKA_TELEMETRY_AWAIT_BROKER) {
+                        rd_kafka_broker_keep(rkb);
+                        rk->rk_telemetry.preferred_broker = rkb;
                         rk->rk_telemetry.state =
                             RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                         rd_kafka_timer_start_oneshot(
                             &rk->rk_timers, &rk->rk_telemetry.request_timer,
-                            rd_false, 0 /* immediate */, rd_kafka_telemetry_fsm,
-                            rk);
+                            rd_false, 1 /* immediate */,
+                            rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
                 }
                 mtx_unlock(&rkb->rkb_rk->rk_telemetry.lock);
         }

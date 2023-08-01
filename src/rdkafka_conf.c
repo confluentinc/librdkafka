@@ -89,7 +89,7 @@ struct rd_kafka_property {
                 const char *str;
                 const char *unsupported; /**< Reason for value not being
                                           *   supported in this build. */
-        } s2i[20];                       /* _RK_C_S2I and _RK_C_S2F */
+        } s2i[21];                       /* _RK_C_S2I and _RK_C_S2F */
 
         const char *unsupported; /**< Reason for propery not being supported
                                   *   in this build.
@@ -508,6 +508,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {RD_KAFKA_DBG_MOCK, "mock"},
              {RD_KAFKA_DBG_ASSIGNOR, "assignor"},
              {RD_KAFKA_DBG_CONF, "conf"},
+             {RD_KAFKA_DBG_TELEMETRY, "telemetry"},
              {RD_KAFKA_DBG_ALL, "all"}}},
     {_RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
      "Default timeout for network requests. "

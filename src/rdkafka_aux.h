@@ -120,4 +120,6 @@ rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
 
 void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
 
+void rd_kafka_Node_free(void *node);
+
 #endif /* _RDKAFKA_AUX_H_ */

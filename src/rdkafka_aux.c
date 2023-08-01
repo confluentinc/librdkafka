@@ -266,6 +266,16 @@ void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
         rd_free(node);
 }
 
+/**
+ * @brief Same as rd_kafka_Node_destroy, but for use as callback which accepts
+ *        (void *) arguments.
+ *
+ * @param node
+ */
+void rd_kafka_Node_free(void *node) {
+        rd_kafka_Node_destroy((rd_kafka_Node_t *)node);
+}
+
 int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
         return node->id;
 }

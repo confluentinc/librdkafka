@@ -481,9 +481,9 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_consumer_group_state_t state;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
-        /** List of authorized operations.
+        /** List of authorized operations allowed for group.
          * Type: rd_kafka_AclOperation_t* */
-        rd_list_t *authorized_operations;
+        rd_list_t authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;
 };
@@ -501,8 +501,10 @@ struct rd_kafka_TopicDescription_s {
         char *topic;       /**< Topic name */
         int partition_cnt; /**< Number of partitions in \p partitions*/
         struct rd_kafka_metadata_partition *partitions; /**< Partitions */
-        rd_kafka_error_t *error;          /**< Topic error reported by broker */
-        rd_list_t *authorized_operations; /**< Operations allowed for topic */
+        rd_kafka_error_t *error; /**< Topic error reported by broker */
+        rd_list_t
+            authorized_operations; /**< Operations allowed for topic.
+                                       Type: (rd_kafka_AclOperation_t *) */
 };
 
 /**@}*/
@@ -515,11 +517,13 @@ struct rd_kafka_TopicDescription_s {
  * @struct DescribeCluster result
  */
 struct rd_kafka_ClusterDescription_s {
-        char *cluster_id;       /**< current cluster id in \p cluster*/
-        int controller_id;      /**< current controller id in \p cluster*/
-        int node_cnt;           /**< Number of brokers in \p cluster*/
-        rd_kafka_Node_t *Nodes; /**< Nodes */
-        rd_list_t *authorized_operations; /**< Operations allowed for cluster */
+        char *cluster_id;  /**< current cluster id in \p cluster*/
+        int controller_id; /**< current controller id in \p cluster*/
+        rd_list_t
+            nodes; /**< Brokers in the cluster. Type: (rd_kafka_Node_t *) */
+        rd_list_t
+            authorized_operations; /**< Operations allowed for cluster.
+                                       Type: (rd_kafka_AclOperation_t *) */
 };
 
 /**@}*/

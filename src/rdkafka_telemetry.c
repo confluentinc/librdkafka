@@ -128,27 +128,29 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                      rd_kafka_err2str(err),
                      rk->rk_telemetry.requested_metrics_cnt);
 
-            rd_kafka_timer_start_oneshot(
-                &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
-                next_scheduled, rd_kafka_telemetry_fsm_tmr_cb, rk);
+        rd_kafka_timer_start_oneshot(
+            &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
+            next_scheduled, rd_kafka_telemetry_fsm_tmr_cb, rk);
 }
 
 static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                          rd_kafka_broker_t *rkb,
                                          rd_bool_t terminating) {
 
-        //TODO: Need to cycle through requested_metrics.
-        //TODO: Metrics processing. Update historic, calculate deltas, and serialize.
+        // TODO: Need to cycle through requested_metrics.
+        // TODO: Metrics processing. Update historic, calculate deltas, and
+        // serialize.
 
-        //TODO: Update dummy values
-        void *metrics_payload = NULL;
+        // TODO: Update dummy values
+        void *metrics_payload  = NULL;
         char *compression_type = "gzip";
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT", "Sending PushTelemetryRequest");
-        rd_kafka_PushTelemetryRequest(rkb, &rk->rk_telemetry.client_instance_id, rk->rk_telemetry.subscription_id, terminating, compression_type, metrics_payload, 0,
-                                      NULL, 0,
-                                      RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                                      rd_kafka_handle_PushTelemetry, NULL);
+        rd_kafka_PushTelemetryRequest(
+            rkb, &rk->rk_telemetry.client_instance_id,
+            rk->rk_telemetry.subscription_id, terminating, compression_type,
+            metrics_payload, 0, NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+            rd_kafka_handle_PushTelemetry, NULL);
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SENT;
 }
 
@@ -159,7 +161,8 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
-                    rk->rk_telemetry.push_interval_ms * 1000, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+                    rk->rk_telemetry.push_interval_ms * 1000,
+                    rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         } else { /* error */
                 rd_kafka_dbg(rk, TELEMETRY, "PUSHERR",
                              "PushTelemetryRequest failed: %s",
@@ -168,7 +171,8 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
-                    rk->rk_telemetry.push_interval_ms * 1000, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+                    rk->rk_telemetry.push_interval_ms * 1000,
+                    rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         }
 }
 
@@ -231,6 +235,6 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
         }
 }
 
-void rd_kafka_telemetry_fsm_tmr_cb(rd_kafka_timers_t* rkts, void *rk) {
+void rd_kafka_telemetry_fsm_tmr_cb(rd_kafka_timers_t *rkts, void *rk) {
         rd_kafka_telemetry_fsm(rk);
 }

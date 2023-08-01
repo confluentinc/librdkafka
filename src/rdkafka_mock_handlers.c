@@ -2178,7 +2178,7 @@ err_parse:
  * @brief Handle PushTelemetry
  */
 static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
-                                                           rd_kafka_buf_t *rkbuf) {
+                                              rd_kafka_buf_t *rkbuf) {
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
@@ -2230,7 +2230,8 @@ const struct rd_kafka_mock_api_handler
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_GetTelemetrySubscriptions] =
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
-        [RD_KAFKAP_PushTelemetry] = {0, 0, 0, rd_kafka_mock_handle_PushTelemetry},
+        [RD_KAFKAP_PushTelemetry] = {0, 0, 0,
+                                     rd_kafka_mock_handle_PushTelemetry},
 };
 
 

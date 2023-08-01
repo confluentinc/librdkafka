@@ -2400,7 +2400,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 for (i = 0; i < mcluster->metrics_cnt; i++)
                         mcluster->metrics[i] =
                             rd_strdup(rko->rko_u.mock.metrics[i]);
-                        break;
+                break;
 
         default:
                 rd_assert(!*"unknown mock cmd");

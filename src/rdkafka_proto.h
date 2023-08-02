@@ -30,13 +30,13 @@
 #define _RDKAFKA_PROTO_H_
 
 
+#include "rdstring.h"
 #include "rdendian.h"
 #include "rdvarint.h"
+#include "rdbase64.h"
 
 /* Protocol defines */
 #include "rdkafka_protocol.h"
-#include "rdbase64.h"
-#include "rdstring.h"
 
 
 

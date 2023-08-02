@@ -26,8 +26,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rdkafka_int.h"
 #include "rdbase64.h"
+
+#if WITH_SSL
+#include <openssl/ssl.h>
+#endif
 
 /**
  * @brief Base64 encode binary input \p in, and write base64-encoded string

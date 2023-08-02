@@ -34,7 +34,6 @@
 #include "rdlist.h"
 #include "rdbuf.h"
 #include "rdkafka_msgbatch.h"
-#include "rdbase64.h"
 
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 

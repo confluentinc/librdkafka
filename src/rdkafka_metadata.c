@@ -598,6 +598,8 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_read_uuid(rkbuf, &mdi->topics[i].topic_id);
                 }
 
+                printf(">>>>>>>>> Topic Id is -> %s\n", rd_kafka_uuid_base64str(&mdi->topics[i].topic_id));
+
                 if (ApiVersion >= 1) {
                         int8_t is_internal;
                         rd_kafka_buf_read_i8(rkbuf, &is_internal);

@@ -2115,7 +2115,7 @@ static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafka_resp_err_t err;
-        int32_t TopicsCnt, i;
+        size_t i;
         rd_kafka_uuid_t ClientInstanceId;
         rd_kafka_uuid_t zero_uuid = RD_KAFKA_ZERO_UUID;
 

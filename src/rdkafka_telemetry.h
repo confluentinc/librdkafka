@@ -36,4 +36,7 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err);
 void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err);
 
+void rd_kafka_telemetry_clear(rd_kafka_t *rk,
+                              rd_bool_t clear_control_flow_fields);
+
 #endif /* _RD_KAFKA_TELEMETRY_H_ */

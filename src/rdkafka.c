@@ -46,6 +46,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_telemetry.h"
 #include "rdkafka_transport.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_assignor.h"
@@ -925,6 +926,8 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         /* Synchronize state */
         rd_kafka_wrlock(rk);
         rd_kafka_wrunlock(rk);
+
+        rd_kafka_telemetry_clear(rk, rd_true /*clear_control_flow_fields*/);
 
         /* Terminate SASL provider */
         if (rk->rk_conf.sasl.provider)
@@ -2245,6 +2248,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_interval_init(&rk->rk_suppress.broker_metadata_refresh);
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
+
+        mtx_init(&rk->rk_telemetry.lock, mtx_plain);
 
         rd_atomic64_init(&rk->rk_ts_last_poll, rk->rk_ts_created);
         rd_atomic32_init(&rk->rk_flushing, 0);

@@ -2451,6 +2451,7 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_error_stack_t *errstack;
         thrd_t dummy_rkb_thread;
         int ret;
+        size_t i;
 
         while ((mtopic = TAILQ_FIRST(&mcluster->topics)))
                 rd_kafka_mock_topic_destroy(mtopic);
@@ -2500,6 +2501,13 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
         rd_socket_close(mcluster->wakeup_fds[0]);
         rd_socket_close(mcluster->wakeup_fds[1]);
+
+        if (mcluster->metrics) {
+                for (i = 0; i < mcluster->metrics_cnt; i++) {
+                        rd_free(mcluster->metrics[i]);
+                }
+                rd_free(mcluster->metrics);
+        }
 }
 
 

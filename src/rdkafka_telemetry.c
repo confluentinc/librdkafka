@@ -50,9 +50,25 @@ static rd_kafka_broker_t *rd_kafka_get_preferred_broker(rd_kafka_t *rk) {
         return rkb;
 }
 
-static void rd_kafka_free_telemetry_fields(rd_kafka_t *rk) {
-        /* Never clear the control flow related fields, or the client instance
-         * ID. */
+/**
+ * @brief Cleans up the rk.rk_telemetry struct and frees any allocations.
+ *
+ * @param clear_control_flow_fields This determines if the control flow fields
+ *                                  need to be cleared. This should only be set
+ *                                  to true if the rk is terminating.
+ */
+void rd_kafka_telemetry_clear(rd_kafka_t *rk,
+                              rd_bool_t clear_control_flow_fields) {
+        if (clear_control_flow_fields) {
+                mtx_lock(&rk->rk_telemetry.lock);
+                if (rk->rk_telemetry.preferred_broker) {
+                        rd_kafka_broker_destroy(
+                            rk->rk_telemetry.preferred_broker);
+                        rk->rk_telemetry.preferred_broker = NULL;
+                }
+                mtx_unlock(&rk->rk_telemetry.lock);
+                mtx_destroy(&rk->rk_telemetry.lock);
+        }
 
         if (rk->rk_telemetry.accepted_compression_types_cnt) {
                 rd_free(rk->rk_telemetry.accepted_compression_types);
@@ -77,7 +93,7 @@ static void rd_kafka_free_telemetry_fields(rd_kafka_t *rk) {
 static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                       rd_kafka_broker_t *rkb) {
         /* Clear out the telemetry struct, free anything that is malloc'd. */
-        rd_kafka_free_telemetry_fields(rk);
+        rd_kafka_telemetry_clear(rk, rd_false /* clear_control_flow_fields */);
 
         /* Enqueue on broker transmit queue.
          * The preferred broker might change in the meanwhile but let it fail.
@@ -120,13 +136,13 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
         }
 
-        rd_kafka_dbg(rk, TELEMETRY, "GETHANDLE",
-                     "Handled GetTelemetrySubscriptions, scheduling FSM after "
-                     "%ld microseconds, state = %s, err = %s, metrics = %d",
-                     next_scheduled,
-                     rd_kafka_telemetry_state2str(rk->rk_telemetry.state),
-                     rd_kafka_err2str(err),
-                     rk->rk_telemetry.requested_metrics_cnt);
+        rd_kafka_dbg(
+            rk, TELEMETRY, "GETHANDLE",
+            "Handled GetTelemetrySubscriptions, scheduling FSM after "
+            "%ld microseconds, state = %s, err = %s, metrics = %" PRIdsz,
+            next_scheduled,
+            rd_kafka_telemetry_state2str(rk->rk_telemetry.state),
+            rd_kafka_err2str(err), rk->rk_telemetry.requested_metrics_cnt);
 
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,

@@ -5319,7 +5319,6 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: Subscription id %d",
                      rk->rk_telemetry.subscription_id);
 
-        int32_t cnt;
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
 
         if (arraycnt) {
@@ -5327,7 +5326,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                 rk->rk_telemetry.accepted_compression_types =
                     rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
 
-                for (i = 0; i < arraycnt; i++)
+                for (i = 0; i < (size_t)arraycnt; i++)
                         rd_kafka_buf_read_i8(
                             rkbuf,
                             &rk->rk_telemetry.accepted_compression_types[i]);
@@ -5359,7 +5358,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         rk->rk_telemetry.requested_metrics =
             rd_calloc(arraycnt, sizeof(char *));
 
-        for (i = 0; i < arraycnt; i++) {
+        for (i = 0; i < (size_t)arraycnt; i++) {
                 rd_kafkap_str_t Metric;
                 rd_kafka_buf_read_str(rkbuf, &Metric);
                 rk->rk_telemetry.requested_metrics[i] = rd_strdup(Metric.str);

@@ -441,7 +441,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.mock.name, rd_free);
                 RD_IF_FREE(rko->rko_u.mock.str, rd_free);
                 if (rko->rko_u.mock.metrics) {
-                        size_t i;
+                        int64_t i;
                         for (i = 0; i < rko->rko_u.mock.hi; i++)
                                 rd_free(rko->rko_u.mock.metrics[i]);
                         rd_free(rko->rko_u.mock.metrics);

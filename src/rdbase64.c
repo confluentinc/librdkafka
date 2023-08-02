@@ -66,8 +66,8 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
 
 /**
  * @brief Base64 encode binary input \p in.
- * @returns a newly allocated, base64-encoded string or NULL in case of some issue
- *          with the conversion or the conversion is not supported.
+ * @returns a newly allocated, base64-encoded string or NULL in case of some
+ * issue with the conversion or the conversion is not supported.
  *
  * @post Returned string must be freed after use.
  */
@@ -81,8 +81,8 @@ char *rd_base64_encode_str(const rd_chariov_t *in) {
 /**
  * @brief Base64 decode input string \p in. Ignores leading and trailing
  *         whitespace.
- * @returns * 0 on successes in which case a newly allocated binary string is set
- *          in out (and size).
+ * @returns * 0 on successes in which case a newly allocated binary string is
+ * set in out (and size).
  *          * -1 on invalid Base64.
  *          * -2 on conversion not supported.
  */

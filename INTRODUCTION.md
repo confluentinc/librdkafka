@@ -1926,7 +1926,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-412 - AdminAPI: adjust log levels                                    | 2.4.0                       | Not supported                                                                                 |
 | KIP-421 - Variables in client config files                               | 2.3.0                       | Not applicable (librdkafka, et.al, does not provide a config file interface, and shouldn't)   |
 | KIP-429 - Consumer: incremental rebalance protocol                       | 2.4.0                       | Supported                                                                                     |
-| KIP-430 - AdminAPI: return authorized operations in Describe.. responses | 2.3.0                       | Not supported                                                                                 |
+| KIP-430 - AdminAPI: return authorized operations in Describe.. responses | 2.3.0                       | Supported                                                                                     |
 | KIP-436 - Start time in stats                                            | 2.3.0                       | Supported                                                                                     |
 | KIP-447 - Producer scalability for EOS                                   | 2.5.0                       | Supported                                                                                     |
 | KIP-455 - AdminAPI: Replica assignment                                   | 2.4.0 (WIP)                 | Not supported                                                                                 |

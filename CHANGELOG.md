@@ -1,3 +1,10 @@
+# librdkafka v2.2.1
+
+librdkafka v2.2.1 is a bugfix release:
+
+ * Fix a segmentation fault when closing a consumer using the
+   cooperative-sticky assignor before the first assignment (#4381).
+
 # librdkafka v2.2.0
 
 librdkafka v2.2.0 is a feature release:

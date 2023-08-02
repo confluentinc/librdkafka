@@ -34,6 +34,7 @@
 #include "rdlist.h"
 #include "rdbuf.h"
 #include "rdkafka_msgbatch.h"
+#include "rdbase64.h"
 
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
@@ -1206,7 +1207,6 @@ rd_kafka_buf_update_i64(rd_kafka_buf_t *rkbuf, size_t of, int64_t v) {
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
 }
 
-
 /**
  * @brief Write standard (2-byte header) or KIP-482 COMPACT_STRING to buffer.
  *
@@ -1428,4 +1428,21 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
                             rd_kafka_make_req_cb_t *make_cb,
                             void *make_opaque,
                             void (*free_make_opaque_cb)(void *make_opaque));
+
+
+#define rd_kafka_buf_read_uuid(rkbuf, uuid)                                    \
+        do {                                                                   \
+                rd_kafka_buf_read_i64(rkbuf,                                   \
+                                      &((uuid)->most_significant_bits));       \
+                rd_kafka_buf_read_i64(rkbuf,                                   \
+                                      &((uuid)->least_significant_bits));      \
+                (uuid)->base64str[0] = '\0';                                   \
+        } while (0)
+
+static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
+                                              rd_kafka_uuid_t *uuid) {
+        rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
+        rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
+}
+
 #endif /* _RDKAFKA_BUF_H_ */

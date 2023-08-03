@@ -59,7 +59,7 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
         if (out->ptr == NULL)
                 return;
 
-        out->size = EVP_EncodeBlock((uint8_t *)out->ptr, (uint8_t *)in->ptr,
+        out->size = EVP_EncodeBlock((unsigned char *)out->ptr, (unsigned char *)in->ptr,
                                     (int)in->size);
 
         rd_assert(out->size < max_len);
@@ -106,7 +106,7 @@ int rd_base64_decode(const rd_chariov_t *in, rd_chariov_t *out) {
         ret_len  = ((in->size / 4) * 3);
         out->ptr = rd_malloc(ret_len + 1);
 
-        if (EVP_DecodeBlock((uint8_t *)out->ptr, (uint8_t *)in->ptr,
+        if (EVP_DecodeBlock((unsigned char *)out->ptr, (unsigned char *)in->ptr,
                             (int)in->size) == -1) {
                 rd_free(out->ptr);
                 out->ptr = NULL;

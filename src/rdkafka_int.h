@@ -240,7 +240,9 @@ typedef enum {
         RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,
         RD_KAFKA_TELEMETRY_PUSH_SCHEDULED,
         RD_KAFKA_TELEMETRY_PUSH_SENT,
-        RD_KAFKA_TELEMETRY_TERMINATING
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED,
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT,
+        RD_KAFKA_TELEMETRY_TERMINATED,
 } rd_kafka_telemetry_state_t;
 
 
@@ -251,7 +253,9 @@ rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
                                       "GetSubscriptionsSent",
                                       "PushScheduled",
                                       "PushSent",
-                                      "Terminating"};
+                                      "TerminatingPushScheduled",
+                                      "TerminatingPushSent",
+                                      "Terminated"};
         return names[state];
 }
 
@@ -639,17 +643,21 @@ struct rd_kafka_s {
         } rk_sasl;
 
         struct {
-                /* Fields for the control flow. */
+                /* Fields for the control flow - unless guarded by lock, only
+                 * accessed from main thread. */
                 /**< Current state of the telemetry state machine. */
                 rd_kafka_telemetry_state_t state;
-                /**< Preferred broker for sending metrics to. */
+                /**< Preferred broker for sending telemetry (Lock protected). */
                 rd_kafka_broker_t *preferred_broker;
                 /**< Timer for all the requests we schedule. */
                 rd_kafka_timer_t request_timer;
                 /**< Lock for preferred telemetry broker and state. */
                 mtx_t lock;
+                /**< Used to wait for termination (Lock protected). */
+                cnd_t termination_cnd;
 
-                /* Fields obtained from broker as a result of GetSubscriptions.
+                /* Fields obtained from broker as a result of GetSubscriptions -
+                 * only accessed from main thread.
                  */
                 rd_kafka_uuid_t client_instance_id;
                 int32_t subscription_id;

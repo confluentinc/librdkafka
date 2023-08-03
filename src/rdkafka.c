@@ -1079,6 +1079,11 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
                 rd_kafka_consumer_close(rk);
         }
 
+        /* Await telemetry termination. This method blocks until the last
+         * PushTelemetry request is sent (if possible). */
+        if (!(flags & RD_KAFKA_DESTROY_F_IMMEDIATE))
+                rd_kafka_telemetry_await_termination(rk);
+
         /* With the consumer closed, terminate the rest of librdkafka. */
         rd_atomic32_set(&rk->rk_terminate,
                         flags | RD_KAFKA_DESTROY_F_TERMINATE);
@@ -2112,9 +2117,11 @@ static int rd_kafka_thread_main(void *arg) {
         cnd_broadcast(&rk->rk_init_cnd);
         mtx_unlock(&rk->rk_init_lock);
 
-        while (likely(!rd_kafka_terminating(rk) || rd_kafka_q_len(rk->rk_ops) ||
-                      (rk->rk_cgrp && (rk->rk_cgrp->rkcg_state !=
-                                       RD_KAFKA_CGRP_STATE_TERM)))) {
+        while (
+            likely(!rd_kafka_terminating(rk) || rd_kafka_q_len(rk->rk_ops) ||
+                   (rk->rk_cgrp &&
+                    (rk->rk_cgrp->rkcg_state != RD_KAFKA_CGRP_STATE_TERM)) ||
+                   (rk->rk_telemetry.state != RD_KAFKA_TELEMETRY_TERMINATED))) {
                 rd_ts_t sleeptime = rd_kafka_timers_next(
                     &rk->rk_timers, 1000 * 1000 /*1s*/, 1 /*lock*/);
                 rd_kafka_q_serve(rk->rk_ops, (int)(sleeptime / 1000), 0,
@@ -2250,6 +2257,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
 
         mtx_init(&rk->rk_telemetry.lock, mtx_plain);
+        cnd_init(&rk->rk_telemetry.termination_cnd);
 
         rd_atomic64_init(&rk->rk_ts_last_poll, rk->rk_ts_created);
         rd_atomic32_init(&rk->rk_flushing, 0);
@@ -3987,6 +3995,15 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_PURGE:
                 rd_kafka_purge(rk, rko->rko_u.purge.flags);
+                break;
+
+        case RD_KAFKA_OP_SET_TELEMETRY_BROKER:
+                rd_kafka_set_telemetry_broker_maybe(
+                    rk, rko->rko_u.telemetry_broker.rkb);
+                break;
+
+        case RD_KAFKA_OP_TERMINATE_TELEMETRY:
+                rd_kafka_telemetry_schedule_termination(rko->rko_rk);
                 break;
 
         default:

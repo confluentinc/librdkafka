@@ -59,8 +59,8 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
         if (out->ptr == NULL)
                 return;
 
-        out->size = EVP_EncodeBlock((unsigned char *)out->ptr, (unsigned char *)in->ptr,
-                                    (int)in->size);
+        out->size = EVP_EncodeBlock((unsigned char *)out->ptr,
+                                    (unsigned char *)in->ptr, (int)in->size);
 
         rd_assert(out->size < max_len);
         out->ptr[out->size] = 0;

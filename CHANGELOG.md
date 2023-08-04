@@ -2,6 +2,12 @@
 
 librdkafka v2.2.0 is a feature release:
 
+ * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+
+# librdkafka v2.2.0
+
+librdkafka v2.2.0 is a feature release:
+
  * Fix a segmentation fault when subscribing to non-existent topics and
    using the consume batch functions (#4273).
  * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).

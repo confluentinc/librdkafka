@@ -41,11 +41,7 @@
  */
 void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
 
-#if !WITH_SSL
-        out->ptr = NULL;
-        return;
-#endif
-
+#if WITH_SSL
         size_t max_len;
 
         /* OpenSSL takes an |int| argument so the input cannot exceed that. */
@@ -64,6 +60,10 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
 
         rd_assert(out->size < max_len);
         out->ptr[out->size] = 0;
+#else
+        out->ptr = NULL;
+        return;
+#endif
 }
 
 
@@ -91,10 +91,7 @@ char *rd_base64_encode_str(const rd_chariov_t *in) {
  */
 int rd_base64_decode(const rd_chariov_t *in, rd_chariov_t *out) {
 
-#if !WITH_SSL
-        return -2;
-#endif
-
+#if WITH_SSL
         size_t ret_len;
 
         /* OpenSSL takes an |int| argument, so |in->size| must not exceed
@@ -127,4 +124,7 @@ int rd_base64_decode(const rd_chariov_t *in, rd_chariov_t *out) {
         out->size         = ret_len;
 
         return 0;
+#else
+        return -2;
+#endif
 }

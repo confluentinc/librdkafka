@@ -37,7 +37,7 @@
  *        and it's size to \p out. out->ptr will be NULL in case of some issue
  *        with the conversion or the conversion is not supported.
  *
- * @post out->ptr must be freed after use.
+ * @remark out->ptr must be freed after use.
  */
 void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
 
@@ -52,8 +52,6 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
 
         max_len  = (((in->size + 2) / 3) * 4) + 1;
         out->ptr = rd_malloc(max_len);
-        if (out->ptr == NULL)
-                return;
 
         out->size = EVP_EncodeBlock((unsigned char *)out->ptr,
                                     (unsigned char *)in->ptr, (int)in->size);
@@ -62,7 +60,6 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
         out->ptr[out->size] = 0;
 #else
         out->ptr = NULL;
-        return;
 #endif
 }
 
@@ -70,9 +67,9 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
 /**
  * @brief Base64 encode binary input \p in.
  * @returns a newly allocated, base64-encoded string or NULL in case of some
- * issue with the conversion or the conversion is not supported.
+ *          issue with the conversion or the conversion is not supported.
  *
- * @post Returned string must be freed after use.
+ * @remark Returned string must be freed after use.
  */
 char *rd_base64_encode_str(const rd_chariov_t *in) {
         rd_chariov_t out;
@@ -85,7 +82,7 @@ char *rd_base64_encode_str(const rd_chariov_t *in) {
  * @brief Base64 decode input string \p in. Ignores leading and trailing
  *         whitespace.
  * @returns * 0 on successes in which case a newly allocated binary string is
- * set in out (and size).
+ *            set in \p out (and size).
  *          * -1 on invalid Base64.
  *          * -2 on conversion not supported.
  */

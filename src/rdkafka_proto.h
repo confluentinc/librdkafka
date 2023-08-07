@@ -2,6 +2,8 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
+
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -568,29 +570,40 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 
 
 /**
- * @brief UUID
- *
- * @param most_significant_bits - most significant 64 bits for the UUID
- * @param least_significant_bits - least significant 64 bits for the UUID
- * @param base64str - base64 encoding for the uuid. By default, it is lazy
- * loaded. Use function `rd_kafka_uuid_base64str()` as a getter for this field.
+ * @struct Struct representing UUID protocol primitive type.
  */
 typedef struct rd_kafka_uuid_s {
-        int64_t most_significant_bits;
-        int64_t least_significant_bits;
-        char base64str[23];
+        int64_t
+            most_significant_bits; /**< Most significant 64 bits for the UUID */
+        int64_t least_significant_bits; /**< Least significant 64 bits for the
+                                           UUID */
+        char base64str[23]; /**< base64 encoding for the uuid. By default, it is
+                               lazy loaded. Use function
+                               `rd_kafka_uuid_base64str()` as a getter for this
+                               field. */
 } rd_kafka_uuid_t;
 
-#define RD_KAFKA_ZERO_UUID                                                     \
+#define RD_KAFKA_UUID_ZERO                                                     \
         { 0, 0, "" }
 
-#define RD_KAFKA_METADATA_TOPIC_ID                                             \
+#define RD_KAFKA_UUID_METADATA_TOPIC_ID                                        \
         { 0, 1, "" }
+
+
+/**
+ * Creates a new UUID.
+ *
+ * @return A newly allocated UUID.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
+        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t *));
+        return uuid;
+}
 
 /**
  * Initialize given UUID to zero UUID.
  *
- * @param uuid - UUID to initialize.
+ * @param uuid UUID to initialize.
  */
 static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_uuid_t *uuid) {
         memset(uuid, 0, sizeof(*uuid));
@@ -605,7 +618,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_uuid_t *uuid) {
  */
 static RD_INLINE RD_UNUSED char *
 rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
-        if (strlen(uuid->base64str))
+        if (*uuid->base64str)
                 return uuid->base64str;
 
         rd_chariov_t in_base64;

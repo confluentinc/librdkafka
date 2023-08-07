@@ -237,29 +237,28 @@ static void rd_kafka_broker_features_set(rd_kafka_broker_t *rkb, int features) {
 
 
 /**
- * @brief Check and return supported ApiVersion for \p ApiKey.
- *
- * @returns the highest supported ApiVersion in the specified range (inclusive)
- *          or -1 if the ApiKey is not supported or no matching ApiVersion.
- *          The current feature set is also returned in \p featuresp
- * @locks none
- * @locality any
+ * @brief Implementation for rd_kafka_broker_ApiVersion_supported and
+ * rd_kafka_broker_ApiVersion_supported0.
  */
-int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
-                                             int16_t ApiKey,
-                                             int16_t minver,
-                                             int16_t maxver,
-                                             int *featuresp) {
+static int16_t
+rd_kafka_broker_ApiVersion_supported_implementation(rd_kafka_broker_t *rkb,
+                                                    int16_t ApiKey,
+                                                    int16_t minver,
+                                                    int16_t maxver,
+                                                    int *featuresp,
+                                                    rd_bool_t do_lock) {
         struct rd_kafka_ApiVersion skel = {.ApiKey = ApiKey};
         struct rd_kafka_ApiVersion ret  = RD_ZERO_INIT, *retp;
 
-        rd_kafka_broker_lock(rkb);
+        if (do_lock)
+                rd_kafka_broker_lock(rkb);
         if (featuresp)
                 *featuresp = rkb->rkb_features;
 
         if (rkb->rkb_features & RD_KAFKA_FEATURE_UNITTEST) {
                 /* For unit tests let the broker support everything. */
-                rd_kafka_broker_unlock(rkb);
+                if (do_lock)
+                        rd_kafka_broker_unlock(rkb);
                 return maxver;
         }
 
@@ -268,7 +267,9 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
                     sizeof(*rkb->rkb_ApiVersions), rd_kafka_ApiVersion_key_cmp);
         if (retp)
                 ret = *retp;
-        rd_kafka_broker_unlock(rkb);
+
+        if (do_lock)
+                rd_kafka_broker_unlock(rkb);
 
         if (!retp)
                 return -1;
@@ -284,6 +285,47 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
                 return maxver;
 }
 
+
+/**
+ * @brief Check and return supported ApiVersion for \p ApiKey.
+ *
+ * @returns the highest supported ApiVersion in the specified range (inclusive)
+ *          or -1 if the ApiKey is not supported or no matching ApiVersion.
+ *          The current feature set is also returned in \p featuresp
+ * @locks none
+ * @locks_acquired rd_kafka_broker_lock()
+ * @locality any
+ */
+int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
+                                             int16_t ApiKey,
+                                             int16_t minver,
+                                             int16_t maxver,
+                                             int *featuresp) {
+        return rd_kafka_broker_ApiVersion_supported_implementation(
+            rkb, ApiKey, minver, maxver, featuresp, rd_true /* do_lock */);
+}
+
+
+/**
+ * @brief Check and return supported ApiVersion for \p ApiKey.
+ *
+ * @returns the highest supported ApiVersion in the specified range (inclusive)
+ *          or -1 if the ApiKey is not supported or no matching ApiVersion.
+ *          The current feature set is also returned in \p featuresp
+ *
+ * @note Same as rd_kafka_broker_ApiVersion_supported except for locking.
+ * @locks rd_kafka_broker_lock()
+ * @locks_acquired none
+ * @locality any
+ */
+int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver,
+                                              int16_t maxver,
+                                              int *featuresp) {
+        return rd_kafka_broker_ApiVersion_supported_implementation(
+            rkb, ApiKey, minver, maxver, featuresp, rd_false /* do_lock */);
+}
 
 /**
  * @brief Set broker state.
@@ -673,6 +715,9 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
         /* TODO(milind): check if this right. */
         mtx_lock(&rkb->rkb_rk->rk_telemetry.lock);
         if (rkb->rkb_rk->rk_telemetry.preferred_broker == rkb) {
+                rd_kafka_dbg(rkb->rkb_rk, TELEMETRY, "TELBRKLOST",
+                             "Lost telemetry broker %s due to state change",
+                             rkb->rkb_name);
                 rd_kafka_broker_destroy(
                     rkb->rkb_rk->rk_telemetry.preferred_broker);
                 rkb->rkb_rk->rk_telemetry.preferred_broker = NULL;
@@ -1349,15 +1394,15 @@ void rd_kafka_brokers_broadcast_state_change(rd_kafka_t *rk) {
  * @locks rd_kafka_*lock() MUST be held
  * @locality any
  */
-static rd_kafka_broker_t *
-rd_kafka_broker_random0(const char *func,
-                        int line,
-                        rd_kafka_t *rk,
-                        rd_bool_t is_up,
-                        int state,
-                        int *filtered_cnt,
-                        int (*filter)(rd_kafka_broker_t *rk, void *opaque),
-                        void *opaque) {
+rd_kafka_broker_t *rd_kafka_broker_random0(const char *func,
+                                           int line,
+                                           rd_kafka_t *rk,
+                                           rd_bool_t is_up,
+                                           int state,
+                                           int *filtered_cnt,
+                                           int (*filter)(rd_kafka_broker_t *rk,
+                                                         void *opaque),
+                                           void *opaque) {
         rd_kafka_broker_t *rkb, *good = NULL;
         int cnt  = 0;
         int fcnt = 0;
@@ -1391,11 +1436,6 @@ rd_kafka_broker_random0(const char *func,
 
         return good;
 }
-
-#define rd_kafka_broker_random(rk, state, filter, opaque)                      \
-        rd_kafka_broker_random0(__FUNCTION__, __LINE__, rk, rd_false, state,   \
-                                NULL, filter, opaque)
-
 
 /**
  * @returns the broker (with refcnt increased) with the highest weight based
@@ -2277,20 +2317,11 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
                 rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
             -1) {
                 rd_kafka_t *rk = rkb->rkb_rk;
-
-                mtx_lock(&rkb->rkb_rk->rk_telemetry.lock);
-                if (!rkb->rkb_rk->rk_telemetry.preferred_broker &&
-                    rk->rk_telemetry.state == RD_KAFKA_TELEMETRY_AWAIT_BROKER) {
-                        rd_kafka_broker_keep(rkb);
-                        rk->rk_telemetry.preferred_broker = rkb;
-                        rk->rk_telemetry.state =
-                            RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
-                        rd_kafka_timer_start_oneshot(
-                            &rk->rk_timers, &rk->rk_telemetry.request_timer,
-                            rd_false, 1 /* immediate */,
-                            rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
-                }
-                mtx_unlock(&rkb->rkb_rk->rk_telemetry.lock);
+                rd_kafka_op_t *rko =
+                    rd_kafka_op_new(RD_KAFKA_OP_SET_TELEMETRY_BROKER);
+                rd_kafka_broker_keep(rkb);
+                rko->rko_u.telemetry_broker.rkb = rkb;
+                rd_kafka_q_enq(rk->rk_ops, rko);
         }
 }
 

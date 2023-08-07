@@ -5365,11 +5365,15 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         }
 
         rd_kafka_handle_get_telemetry_subscriptions(rk, err);
+        return;
+
 err_parse:
         err = rkbuf->rkbuf_err;
         goto err;
 
 err:
+        /* TODO: Add error handling actions, possibly call
+         * rd_kafka_handle_get_telemetry_subscriptions with error. */
         return;
 }
 
@@ -5400,12 +5404,14 @@ void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,
                 goto err;
         }
         rd_kafka_handle_push_telemetry(rk, err);
-
+        return;
 err_parse:
         err = rkbuf->rkbuf_err;
         goto err;
 
 err:
+        /* TODO: Add error handling actions, possibly call
+         * rd_kafka_handle_push_telemetry with error. */
         return;
 }
 

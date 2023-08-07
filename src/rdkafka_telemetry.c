@@ -33,21 +33,21 @@
 #include "rdkafka_request.h"
 
 /**
- * @brief Returns the preferred metrics broker or NULL if unavailable.
+ * @brief Filters broker by availability of GetTelemetrySubscription.
  *
- * @locks_acquired rk_telemetry.lock
+ * @return 0 if GetTelemetrySubscription is supported, 1 otherwise.
+ *
+ * @locks rd_kafka_broker_lock()
  */
-static rd_kafka_broker_t *rd_kafka_get_preferred_broker(rd_kafka_t *rk) {
-        rd_kafka_broker_t *rkb = NULL;
-
-        mtx_lock(&rk->rk_telemetry.lock);
-        if (rk->rk_telemetry.preferred_broker) {
-                rkb = rk->rk_telemetry.preferred_broker;
-        }
-        /* TODO: handle recalculation of preferred broker in case broker goes
-         * down. For now just return. */
-        mtx_unlock(&rk->rk_telemetry.lock);
-        return rkb;
+static int
+rd_kafka_filter_broker_by_GetTelemetrySubscription(rd_kafka_broker_t *rkb,
+                                                   void *opaque) {
+        int features;
+        if (rd_kafka_broker_ApiVersion_supported0(
+                rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
+            -1)
+                return 0;
+        return 1;
 }
 
 /**
@@ -56,6 +56,9 @@ static rd_kafka_broker_t *rd_kafka_get_preferred_broker(rd_kafka_t *rk) {
  * @param clear_control_flow_fields This determines if the control flow fields
  *                                  need to be cleared. This should only be set
  *                                  to true if the rk is terminating.
+ * @locality main thread
+ * @locks none
+ * @locks_acquired rk_telemetry.lock
  */
 void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                               rd_bool_t clear_control_flow_fields) {
@@ -68,6 +71,7 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 }
                 mtx_unlock(&rk->rk_telemetry.lock);
                 mtx_destroy(&rk->rk_telemetry.lock);
+                cnd_destroy(&rk->rk_telemetry.termination_cnd);
         }
 
         if (rk->rk_telemetry.accepted_compression_types_cnt) {
@@ -87,8 +91,31 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
 }
 
 /**
+ * @brief Sets the telemetry state to TERMINATED and signals the conditional
+ * variable
+ *
+ * @locality main thread
+ * @locks none
+ * @locks_acquired rk_telemetry.lock
+ */
+static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
+        rd_dassert(thrd_is_current(rk->rk_thread));
+
+        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
+                     "Setting state to TERMINATED and signalling");
+
+        rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATED;
+        mtx_lock(&rk->rk_telemetry.lock);
+        cnd_signal(&rk->rk_telemetry.termination_cnd);
+        mtx_unlock(&rk->rk_telemetry.lock);
+}
+
+/**
  * @brief Enqueues a GetTelemetrySubscriptionsRequest.
  *
+ * @locks none
+ * @locks_acquired none
+ * @locality main thread
  */
 static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                       rd_kafka_broker_t *rkb) {
@@ -107,7 +134,13 @@ static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT;
 }
 
-
+/**
+ * @brief Handles parsed GetTelemetrySubscriptions response.
+ *
+ * @locks none
+ * @locks_acquired none
+ * @locality main thread
+ */
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err) {
         rd_ts_t next_scheduled;
@@ -149,6 +182,7 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
             next_scheduled, rd_kafka_telemetry_fsm_tmr_cb, rk);
 }
 
+
 static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                          rd_kafka_broker_t *rkb,
                                          rd_bool_t terminating) {
@@ -161,16 +195,38 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         void *metrics_payload  = NULL;
         char *compression_type = "gzip";
 
-        rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT", "Sending PushTelemetryRequest");
+        rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
+                     "Sending PushTelemetryRequest with terminating = %d",
+                     terminating);
         rd_kafka_PushTelemetryRequest(
             rkb, &rk->rk_telemetry.client_instance_id,
             rk->rk_telemetry.subscription_id, terminating, compression_type,
             metrics_payload, 0, NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
             rd_kafka_handle_PushTelemetry, NULL);
-        rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SENT;
+
+        rk->rk_telemetry.state = terminating
+                                     ? RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT
+                                     : RD_KAFKA_TELEMETRY_PUSH_SENT;
 }
 
+
 void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
+
+        /* We only make a best-effort attempt to push telemetry while
+         * terminating, and don't care about any errors. */
+        if (rk->rk_telemetry.state ==
+            RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT) {
+                rd_kafka_telemetry_set_terminated(rk);
+                return;
+        }
+
+        /* There's a possiblity that we sent a PushTelemetryRequest, and
+         * scheduled a termination before getting the response. In that case, we
+         * will enter this method in the TERMINATED state when/if we get a
+         * response, and we should not take any action. */
+        if (rk->rk_telemetry.state != RD_KAFKA_TELEMETRY_PUSH_SENT)
+                return;
+
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_dbg(rk, TELEMETRY, "PUSHOK",
                              "PushTelemetryRequest succeeded");
@@ -180,6 +236,7 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                     rk->rk_telemetry.push_interval_ms * 1000,
                     rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         } else { /* error */
+                /* TODO: add specific error handling. */
                 rd_kafka_dbg(rk, TELEMETRY, "PUSHERR",
                              "PushTelemetryRequest failed: %s",
                              rd_kafka_err2str(err));
@@ -193,23 +250,161 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
 }
 
 /**
+ * @brief This method starts the termination for telemetry and awaits
+ * completion.
+ *
+ * @locks none
+ * @locks_acquired rk_telemetry.lock
+ * @locality app thread (normal case) or the main thread (when terminated
+ *           during creation).
+ */
+void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
+        rd_kafka_op_t *rko;
+
+        /* In the case where we have a termination during creation, we can't
+         * send any telemetry. */
+        if (thrd_is_current(rk->rk_thread)) {
+                /* We can change state since we're on the main thread. */
+                rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATED;
+                return;
+        }
+
+        rko         = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE_TELEMETRY);
+        rko->rko_rk = rk;
+        rd_kafka_q_enq(rk->rk_ops, rko);
+
+        /* Await termination sequence completion. */
+        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
+                     "Awaiting termination of telemetry.");
+        mtx_lock(&rk->rk_telemetry.lock);
+        cnd_timedwait_ms(&rk->rk_telemetry.termination_cnd,
+                         &rk->rk_telemetry.lock,
+                         /* TODO(milind): Evaluate this timeout after completion
+                            of all metrics push, is it too much, or too less if
+                            we include serialization? */
+                         1000 /* timeout for waiting */);
+        mtx_unlock(&rk->rk_telemetry.lock);
+        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
+                     "Ended waiting for termination of telemetry.");
+}
+
+/**
+ * @brief Send a final push request before terminating.
+ *
+ * @locks none
+ * @locks_acquired none
+ * @locality main thread
+ * @note This method is on a best-effort basis.
+ */
+void rd_kafka_telemetry_schedule_termination(rd_kafka_t *rk) {
+        rd_kafka_dbg(
+            rk, TELEMETRY, "TELTERM",
+            "Starting rd_kafka_telemetry_schedule_termination in state %s",
+            rd_kafka_telemetry_state2str(rk->rk_telemetry.state));
+
+        if (rk->rk_telemetry.state != RD_KAFKA_TELEMETRY_PUSH_SCHEDULED) {
+                rd_kafka_telemetry_set_terminated(rk);
+                return;
+        }
+
+        rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED;
+
+        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
+                     "Sending final request for Push");
+        rd_kafka_timer_override_once(
+            &rk->rk_timers, &rk->rk_telemetry.request_timer, 0 /* immediate */);
+}
+
+
+/**
+ * @brief Sets telemetry broker if we are in AWAIT_BROKER state.
+ *
+ * @locks none
+ * @locks_acquired rk_telemetry.lock
+ * @locality main thread
+ */
+void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
+                                         rd_kafka_broker_t *rkb) {
+        rd_dassert(thrd_is_current(rk->rk_thread));
+
+        /* The op triggering this method is scheduled by brokers without knowing
+         * if a preferred broker is already set. If it is set, this method is a
+         * no-op. */
+        if (rk->rk_telemetry.state != RD_KAFKA_TELEMETRY_AWAIT_BROKER)
+                return;
+
+        mtx_lock(&rk->rk_telemetry.lock);
+
+        if (rk->rk_telemetry.preferred_broker) {
+                mtx_unlock(&rk->rk_telemetry.lock);
+                return;
+        }
+
+        rd_kafka_broker_keep(rkb);
+        rk->rk_telemetry.preferred_broker = rkb;
+
+        mtx_unlock(&rk->rk_telemetry.lock);
+
+        rd_kafka_dbg(rk, TELEMETRY, "TELBRKSET",
+                     "Setting telemetry broker to %s\n", rkb->rkb_name);
+
+        rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
+        rd_kafka_timer_start_oneshot(
+            &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
+            0 /* immediate */, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+}
+
+/**
+ * @brief Returns the preferred metrics broker or NULL if unavailable.
+ *
+ * @locks none
+ * @locks_acquired rk_telemetry.lock, rd_kafka_wrlock()
+ * @locality main thread
+ */
+static rd_kafka_broker_t *rd_kafka_get_preferred_broker(rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb = NULL;
+
+        mtx_lock(&rk->rk_telemetry.lock);
+        if (rk->rk_telemetry.preferred_broker)
+                rkb = rk->rk_telemetry.preferred_broker;
+        else {
+                /* If there is no preferred broker, that means that our previous
+                 * one failed. Iterate through all available brokers to find
+                 * one. */
+                rd_kafka_wrlock(rk);
+                rkb = rd_kafka_broker_random_up(
+                    rk, rd_kafka_filter_broker_by_GetTelemetrySubscription,
+                    NULL);
+                rd_kafka_wrunlock(rk);
+
+                /* No need to increase refcnt as broker_random_up does it
+                 * already. */
+                rk->rk_telemetry.preferred_broker = rkb;
+
+                rd_kafka_dbg(rk, TELEMETRY, "TELBRKSET",
+                             "Lost preferred broker, switching to new "
+                             "preferred broker %d\n",
+                             rkb ? rd_kafka_broker_id(rkb) : -1);
+        }
+        mtx_unlock(&rk->rk_telemetry.lock);
+
+        return rkb;
+}
+
+/**
  * @brief Progress the telemetry state machine.
  *
+ * @locks none
+ * @locks_acquired none
  * @locality main thread
  */
 static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
-        rd_kafka_telemetry_state_t state;
-        rd_kafka_broker_t *preferred_broker;
+        rd_kafka_broker_t *preferred_broker = NULL;
 
         rd_dassert(rk);
+        rd_dassert(thrd_is_current(rk->rk_thread));
 
-        /* We don't require a lock here, as the only way we can reach this
-         * function is if we've already set the state from the broker thread,
-         * and further state transitions happen only on the main thread. */
-        mtx_lock(&rk->rk_telemetry.lock);
-        state = rk->rk_telemetry.state;
-        mtx_unlock(&rk->rk_telemetry.lock);
-        switch (state) {
+        switch (rk->rk_telemetry.state) {
         case RD_KAFKA_TELEMETRY_AWAIT_BROKER:
                 rd_dassert(!*"Should never be awaiting a broker when the telemetry fsm is called.");
                 break;
@@ -217,7 +412,8 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
         case RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED:
                 preferred_broker = rd_kafka_get_preferred_broker(rk);
                 if (!preferred_broker) {
-                        state = RD_KAFKA_TELEMETRY_AWAIT_BROKER;
+                        rk->rk_telemetry.state =
+                            RD_KAFKA_TELEMETRY_AWAIT_BROKER;
                         break;
                 }
                 rd_kafka_send_get_telemetry_subscriptions(rk, preferred_broker);
@@ -226,7 +422,8 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
         case RD_KAFKA_TELEMETRY_PUSH_SCHEDULED:
                 preferred_broker = rd_kafka_get_preferred_broker(rk);
                 if (!preferred_broker) {
-                        state = RD_KAFKA_TELEMETRY_AWAIT_BROKER;
+                        rk->rk_telemetry.state =
+                            RD_KAFKA_TELEMETRY_AWAIT_BROKER;
                         break;
                 }
                 rd_kafka_send_push_telemetry(rk, preferred_broker, rd_false);
@@ -234,16 +431,24 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
 
         case RD_KAFKA_TELEMETRY_PUSH_SENT:
         case RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT:
+        case RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT:
                 rd_dassert(!*"Should never be awaiting response when the telemetry fsm is called.");
                 break;
 
-        case RD_KAFKA_TELEMETRY_TERMINATING:
+        case RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED:
                 preferred_broker = rd_kafka_get_preferred_broker(rk);
                 if (!preferred_broker) {
-                        state = RD_KAFKA_TELEMETRY_AWAIT_BROKER;
+                        /* If there's no preferred broker, set state to
+                         * terminated immediately to stop the app thread from
+                         * waiting indefinitely. */
+                        rd_kafka_telemetry_set_terminated(rk);
                         break;
                 }
                 rd_kafka_send_push_telemetry(rk, preferred_broker, rd_true);
+                break;
+
+        case RD_KAFKA_TELEMETRY_TERMINATED:
+                rd_dassert(!*"Should not be terminated when the telemetry fsm is called.");
                 break;
 
         default:
@@ -251,6 +456,13 @@ static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
         }
 }
 
+/**
+ * @brief Callback for FSM timer.
+ *
+ * @locks none
+ * @locks_acquired none
+ * @locality main thread
+ */
 void rd_kafka_telemetry_fsm_tmr_cb(rd_kafka_timers_t *rkts, void *rk) {
         rd_kafka_telemetry_fsm(rk);
 }

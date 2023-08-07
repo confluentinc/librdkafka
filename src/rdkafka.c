@@ -1084,7 +1084,8 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
         if (!(flags & RD_KAFKA_DESTROY_F_IMMEDIATE))
                 rd_kafka_telemetry_await_termination(rk);
 
-        /* With the consumer closed, terminate the rest of librdkafka. */
+        /* With the consumer and telemetry closed, terminate the rest of
+         * librdkafka. */
         rd_atomic32_set(&rk->rk_terminate,
                         flags | RD_KAFKA_DESTROY_F_TERMINATE);
 
@@ -2117,11 +2118,9 @@ static int rd_kafka_thread_main(void *arg) {
         cnd_broadcast(&rk->rk_init_cnd);
         mtx_unlock(&rk->rk_init_lock);
 
-        while (
-            likely(!rd_kafka_terminating(rk) || rd_kafka_q_len(rk->rk_ops) ||
-                   (rk->rk_cgrp &&
-                    (rk->rk_cgrp->rkcg_state != RD_KAFKA_CGRP_STATE_TERM)) ||
-                   (rk->rk_telemetry.state != RD_KAFKA_TELEMETRY_TERMINATED))) {
+        while (likely(!rd_kafka_terminating(rk) || rd_kafka_q_len(rk->rk_ops) ||
+                      (rk->rk_cgrp && (rk->rk_cgrp->rkcg_state !=
+                                       RD_KAFKA_CGRP_STATE_TERM)))) {
                 rd_ts_t sleeptime = rd_kafka_timers_next(
                     &rk->rk_timers, 1000 * 1000 /*1s*/, 1 /*lock*/);
                 rd_kafka_q_serve(rk->rk_ops, (int)(sleeptime / 1000), 0,

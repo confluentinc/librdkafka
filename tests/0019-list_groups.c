@@ -92,7 +92,6 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
         rd_kafka_resp_err_t err = 0;
         const struct rd_kafka_group_list *grplist;
         int i, r;
-        int fails    = 0;
         int seen     = 0;
         int seen_all = 0;
         int retries  = 5;
@@ -127,7 +126,6 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
                 if (err) {
                         TEST_SAY("Failed to list group %s: %s\n", groups[i],
                                  rd_kafka_err2str(err));
-                        fails++;
                         continue;
                 }
 

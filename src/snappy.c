@@ -164,7 +164,7 @@ static inline bool is_little_endian(void)
 #define rd_ctz(n)   __cnttz4(n)
 #define rd_ctz64(n) __cnttz8(n)
 
-#elif defined(__SUNPRO_C) // Solaris Studio compiler on sun  
+#elif defined(__SUNPRO_C) // Solaris Studio compiler on sun
 /*
  * Source for following definitions is Hacker’s Delight, Second Edition by Henry S. Warren
  * http://www.hackersdelight.org/permissions.htm
@@ -377,7 +377,7 @@ static inline const char *peek(struct source *s, size_t *len)
 {
 	if (likely(s->curvec < s->iovlen)) {
 		struct iovec *iv = &s->iov[s->curvec];
-		if ((unsigned)s->curoff < (size_t)iv->iov_len) { 
+		if ((unsigned)s->curoff < (size_t)iv->iov_len) {
 			*len = iv->iov_len - s->curoff;
 			return n_bytes_after_addr(iv->iov_base, s->curoff);
 		}
@@ -609,7 +609,7 @@ static inline bool writer_append(struct writer *w, const char *ip, u32 len)
 	return true;
 }
 
-static inline bool writer_try_fast_append(struct writer *w, const char *ip, 
+static inline bool writer_try_fast_append(struct writer *w, const char *ip,
 					  u32 available_bytes, u32 len)
 {
 	char *const op = w->op;
@@ -802,8 +802,8 @@ EXPORT_SYMBOL(rd_kafka_snappy_uncompressed_length);
 #define kblock_log 16
 #define kblock_size (1 << kblock_log)
 
-/* 
- * This value could be halfed or quartered to save memory 
+/*
+ * This value could be halfed or quartered to save memory
  * at the cost of slightly worse compression.
  */
 #define kmax_hash_table_bits 14
@@ -955,12 +955,12 @@ static inline u32 get_u32_at_offset(u64 v, int offset)
 
 typedef const char *eight_bytes_reference;
 
-static inline eight_bytes_reference get_eight_bytes_at(const char* ptr) 
+static inline eight_bytes_reference get_eight_bytes_at(const char* ptr)
 {
 	return ptr;
 }
 
-static inline u32 get_u32_at_offset(const char *v, int offset) 
+static inline u32 get_u32_at_offset(const char *v, int offset)
 {
 	DCHECK_GE(offset, 0);
 	DCHECK_LE(offset, 4);
@@ -1283,7 +1283,7 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 
 		if ((c & 0x3) == LITERAL) {
 			u32 literal_length = (c >> 2) + 1;
-			if (writer_try_fast_append(writer, ip, (u32) (d->ip_limit - ip), 
+			if (writer_try_fast_append(writer, ip, (u32) (d->ip_limit - ip),
 						   literal_length)) {
 				DCHECK_LT(literal_length, 61);
 				ip += literal_length;
@@ -1437,13 +1437,11 @@ static inline int sn_compress(struct snappy_env *env, struct source *reader,
 			   struct sink *writer)
 {
 	int err;
-	size_t written = 0;
 	int N = available(reader);
 	char ulength[kmax32];
 	char *p = varint_encode32(ulength, N);
 
 	append(writer, ulength, p - ulength);
-	written += (p - ulength);
 
 	while (N > 0) {
 		/* Get next block to compress (without copying if possible) */
@@ -1500,7 +1498,6 @@ static inline int sn_compress(struct snappy_env *env, struct source *reader,
 		char *end = compress_fragment(fragment, fragment_size,
 					      dest, table, table_size);
 		append(writer, dest, end - dest);
-		written += (end - dest);
 
 		N -= num_to_read;
 		skip(reader, pending_advance);

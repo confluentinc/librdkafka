@@ -70,7 +70,7 @@ typedef struct rd_kafka_metadata_broker_internal_s {
 /**
  * @brief Metadata internal container
  */
-typedef struct rd_kafka_metadata_internal_s {
+struct rd_kafka_metadata_internal_s {
         rd_kafka_metadata_t
             metadata; /**< Public metadata struct. Must
                            be kept the first field so the pointer
@@ -81,7 +81,7 @@ typedef struct rd_kafka_metadata_internal_s {
         rd_kafka_metadata_broker_internal_t *brokers;
         /* Internal metadata topics. Same count as metadata.topic_cnt. */
         rd_kafka_metadata_topic_internal_t *topics;
-} rd_kafka_metadata_internal_t;
+};
 
 /**
  * @brief The internal metadata type corresponding to the

@@ -35,8 +35,6 @@
 #include "rdbuf.h"
 #include "rdkafka_msgbatch.h"
 
-typedef struct rd_kafka_broker_s rd_kafka_broker_t;
-
 #define RD_KAFKA_HEADERS_IOV_CNT 2
 
 

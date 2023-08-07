@@ -479,9 +479,8 @@ static int unittest_untyped_map(void) {
 
 
 int unittest_map(void) {
-        int fails = 0;
-        fails += unittest_untyped_map();
-        fails += unittest_typed_map();
-        fails += unittest_typed_map2();
+        unittest_untyped_map();
+        unittest_typed_map();
+        unittest_typed_map2();
         return 0;
 }

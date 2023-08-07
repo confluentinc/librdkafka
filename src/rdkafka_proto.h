@@ -2,6 +2,8 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
+
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,8 +32,10 @@
 #define _RDKAFKA_PROTO_H_
 
 
+#include "rdstring.h"
 #include "rdendian.h"
 #include "rdvarint.h"
+#include "rdbase64.h"
 
 /* Protocol defines */
 #include "rdkafka_protocol.h"
@@ -564,6 +568,84 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 #define RD_KAFKAP_MSGSET_V2_OF_RecordCount                                     \
         (8 + 4 + 4 + 1 + 4 + 2 + 4 + 8 + 8 + 8 + 2 + 4)
 
+
+/**
+ * @struct Struct representing UUID protocol primitive type.
+ */
+typedef struct rd_kafka_uuid_s {
+        int64_t
+            most_significant_bits; /**< Most significant 64 bits for the UUID */
+        int64_t least_significant_bits; /**< Least significant 64 bits for the
+                                           UUID */
+        char base64str[23]; /**< base64 encoding for the uuid. By default, it is
+                               lazy loaded. Use function
+                               `rd_kafka_uuid_base64str()` as a getter for this
+                               field. */
+} rd_kafka_uuid_t;
+
+#define RD_KAFKA_UUID_ZERO                                                     \
+        { 0, 0, "" }
+
+#define RD_KAFKA_UUID_METADATA_TOPIC_ID                                        \
+        { 0, 1, "" }
+
+
+/**
+ * Creates a new UUID.
+ *
+ * @return A newly allocated UUID.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
+        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t *));
+        return uuid;
+}
+
+/**
+ * Initialize given UUID to zero UUID.
+ *
+ * @param uuid UUID to initialize.
+ */
+static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_uuid_t *uuid) {
+        memset(uuid, 0, sizeof(*uuid));
+}
+
+/**
+ * @brief Computes base64 encoding for the given uuid string.
+ * @param uuid UUID for which base64 encoding is required.
+ *
+ * @return base64 encoded string for the given UUID or NULL in case of some
+ *         issue with the conversion or the conversion is not supported.
+ */
+static RD_INLINE RD_UNUSED char *
+rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
+        if (*uuid->base64str)
+                return uuid->base64str;
+
+        rd_chariov_t in_base64;
+        char *out_base64_str;
+        char *uuid_bytes;
+        uint64_t input_uuid[2];
+
+        input_uuid[0]  = htobe64(uuid->most_significant_bits);
+        input_uuid[1]  = htobe64(uuid->least_significant_bits);
+        uuid_bytes     = (char *)input_uuid;
+        in_base64.ptr  = uuid_bytes;
+        in_base64.size = sizeof(uuid->most_significant_bits) +
+                         sizeof(uuid->least_significant_bits);
+
+        out_base64_str = rd_base64_encode_str(&in_base64);
+        if (!out_base64_str)
+                return NULL;
+
+        rd_strlcpy(uuid->base64str, out_base64_str,
+                   23 /* Removing extra ('=') padding */);
+        rd_free(out_base64_str);
+        return uuid->base64str;
+}
+
+static RD_INLINE RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid) {
+        rd_free(uuid);
+}
 
 
 /**

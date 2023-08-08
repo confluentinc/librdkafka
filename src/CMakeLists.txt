@@ -201,6 +201,8 @@ target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()
+target_include_directories(rdkafka PRIVATE nanopb opentelemetry)
+target_compile_definitions(rdkafka PRIVATE PB_FIELD_32BIT)
 
 # We need 'dummy' directory to support `#include "../config.h"` path
 set(dummy "${GENERATED_DIR}/dummy")

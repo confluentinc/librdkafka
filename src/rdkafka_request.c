@@ -1180,7 +1180,7 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                     rkbuf, parts, rd_false /*include invalid offsets*/,
                     rd_false /*skip valid offsets */, fields);
         } else {
-                rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_write_arraycnt(rkbuf, PartCnt);
         }
 
         if (ApiVersion >= 7) {

@@ -723,6 +723,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {           \
                         rd_kafka_buf_read_i32a(rkbuf, _klen);                  \
                 } else {                                                       \
+                        printf("flexver set");\
                         uint64_t _uva;                                         \
                         rd_kafka_buf_read_uvarint(rkbuf, &_uva);               \
                         _klen = ((int32_t)_uva) - 1;                           \

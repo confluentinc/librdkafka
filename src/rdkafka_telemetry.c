@@ -30,7 +30,12 @@
 #include "rdrand.h"
 #include "rdkafka_int.h"
 #include "rdkafka_telemetry.h"
+#include "rdkafka_telemetry_encode.h"
 #include "rdkafka_request.h"
+#include "pb.h"
+#include "pb_encode.h"
+#include "pb_decode.h"
+#include "metrics.pb.h"
 
 /**
  * @brief Filters broker by availability of GetTelemetrySubscription.
@@ -192,7 +197,8 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         // serialize.
 
         // TODO: Update dummy values
-        void *metrics_payload  = NULL;
+        size_t metrics_payload_size;
+        void *metrics_payload  = encode_metrics(rk, &metrics_payload_size);
         char *compression_type = "gzip";
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
@@ -201,7 +207,7 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         rd_kafka_PushTelemetryRequest(
             rkb, &rk->rk_telemetry.client_instance_id,
             rk->rk_telemetry.subscription_id, terminating, compression_type,
-            metrics_payload, 0, NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+            metrics_payload, metrics_payload_size, NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
             rd_kafka_handle_PushTelemetry, NULL);
 
         rk->rk_telemetry.state = terminating

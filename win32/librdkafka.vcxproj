@@ -233,6 +233,9 @@
     <ClCompile Include="..\src\rdkafka_error.c" />
     <ClCompile Include="..\src\rdkafka_fetcher.c" />
     <ClCompile Include="..\src\rdkafka_telemetry.c" />
+        <ClCompile Include="..\src\rdkafka_telemetry_decode.c" />
+    <ClCompile Include="..\src\rdkafka_telemetry_encode.c" />
+
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />

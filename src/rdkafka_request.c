@@ -5268,6 +5268,7 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_bool(rkbuf, terminating);
         rd_kafka_buf_write_str(rkbuf, compression_type,
                                strlen(compression_type));
+
         rd_kafka_buf_write_bytes(rkbuf, metrics ? metrics : "", metrics_size);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

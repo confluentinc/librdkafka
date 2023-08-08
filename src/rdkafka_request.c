@@ -5261,7 +5261,8 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         size_t len = sizeof(rd_kafka_uuid_t) + sizeof(int32_t) +
                      sizeof(rd_bool_t) + strlen(compression_type) +
                      metrics_size;
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_PushTelemetry, 1, len);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_PushTelemetry,
+                                                 1, len, rd_true);
 
         rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
         rd_kafka_buf_write_i32(rkbuf, subscription_id);
@@ -5269,9 +5270,9 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_str(rkbuf, compression_type,
                                strlen(compression_type));
 
-        rd_kafka_buf_write_bytes(rkbuf, metrics ? metrics : "", metrics_size);
-
-        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_buf_write_kbytes(rkbuf,
+                                  rd_kafkap_bytes_new(metrics, metrics_size));
+        rd_free(metrics);
 
         /* Let the handler perform retries so that it can pick
          * up more added partitions. */

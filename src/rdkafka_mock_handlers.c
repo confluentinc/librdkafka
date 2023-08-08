@@ -2244,7 +2244,7 @@ const struct rd_kafka_mock_api_handler
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_GetTelemetrySubscriptions] =
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
-        [RD_KAFKAP_PushTelemetry] = {0, 0, -1,
+        [RD_KAFKAP_PushTelemetry] = {0, 0, 0,
                                      rd_kafka_mock_handle_PushTelemetry},
 };
 

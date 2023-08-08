@@ -1,0 +1,1 @@
+opentelemetry.proto.metrics.v1.Metric submsg_callback:true;

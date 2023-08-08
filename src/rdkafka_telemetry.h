@@ -42,7 +42,8 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk);
 
 void rd_kafka_telemetry_schedule_termination(rd_kafka_t *rk);
 
-void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk, rd_kafka_broker_t *rkb);
+void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
+                                         rd_kafka_broker_t *rkb);
 
 void rd_kafka_telemetry_fsm_tmr_cb(rd_kafka_timers_t *rkts, void *rk);
 

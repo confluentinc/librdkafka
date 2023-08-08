@@ -33,110 +33,154 @@
 #include "pb_decode.h"
 #include "metrics.pb.h"
 
-bool decode_and_print_string(pb_istream_t *stream, const pb_field_t *field, void **arg)
-{
-    uint8_t buffer[1024] = {0};
+bool decode_and_print_string(pb_istream_t *stream,
+                             const pb_field_t *field,
+                             void **arg) {
+        uint8_t buffer[1024] = {0};
 
-    if (stream->bytes_left > sizeof(buffer) - 1) {
-        fprintf(stderr, "String too long for buffer\n");
-        return false;
-    }
+        if (stream->bytes_left > sizeof(buffer) - 1) {
+                fprintf(stderr, "String too long for buffer\n");
+                return false;
+        }
 
-    if (!pb_read(stream, buffer, stream->bytes_left)) {
-        fprintf(stderr, "Failed to read string\n");
-        return false;
-    }
-    fprintf(stderr, "String: %s\n", buffer);
+        if (!pb_read(stream, buffer, stream->bytes_left)) {
+                fprintf(stderr, "Failed to read string\n");
+                return false;
+        }
+        fprintf(stderr, "String: %s\n", buffer);
 
-    return true;
+        return true;
 }
 
-bool decode_and_print_key_value(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-    opentelemetry_proto_common_v1_KeyValue key_value = opentelemetry_proto_common_v1_KeyValue_init_zero;
-    key_value.key.funcs.decode = &decode_and_print_string;
-    key_value.value.value.string_value.funcs.decode = &decode_and_print_string;
-    if (!pb_decode(stream, opentelemetry_proto_common_v1_KeyValue_fields, &key_value)) {
-        fprintf(stderr, "Failed to decode KeyValue: %s\n", PB_GET_ERROR(stream));
-        return false;
-    }
+bool decode_and_print_key_value(pb_istream_t *stream,
+                                const pb_field_t *field,
+                                void **arg) {
+        opentelemetry_proto_common_v1_KeyValue key_value =
+            opentelemetry_proto_common_v1_KeyValue_init_zero;
+        key_value.key.funcs.decode = &decode_and_print_string;
+        key_value.value.value.string_value.funcs.decode =
+            &decode_and_print_string;
+        if (!pb_decode(stream, opentelemetry_proto_common_v1_KeyValue_fields,
+                       &key_value)) {
+                fprintf(stderr, "Failed to decode KeyValue: %s\n",
+                        PB_GET_ERROR(stream));
+                return false;
+        }
 
-    return true;
+        return true;
 }
 
-bool decode_and_print_number_data_point(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-    opentelemetry_proto_metrics_v1_NumberDataPoint data_point = opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
-    data_point.attributes.funcs.decode = &decode_and_print_key_value;
-    if (!pb_decode(stream, opentelemetry_proto_metrics_v1_NumberDataPoint_fields, &data_point)) {
-        fprintf(stderr, "Failed to decode NumberDataPoint: %s\n", PB_GET_ERROR(stream));
-        return false;
-    }
+bool decode_and_print_number_data_point(pb_istream_t *stream,
+                                        const pb_field_t *field,
+                                        void **arg) {
+        opentelemetry_proto_metrics_v1_NumberDataPoint data_point =
+            opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
+        data_point.attributes.funcs.decode = &decode_and_print_key_value;
+        if (!pb_decode(stream,
+                       opentelemetry_proto_metrics_v1_NumberDataPoint_fields,
+                       &data_point)) {
+                fprintf(stderr, "Failed to decode NumberDataPoint: %s\n",
+                        PB_GET_ERROR(stream));
+                return false;
+        }
 
-    fprintf(stderr, "NumberDataPoint value: %lld time: %llu\n", data_point.value.as_int, data_point.time_unix_nano);
-    return true;
+        fprintf(stderr, "NumberDataPoint value: %lld time: %llu\n",
+                data_point.value.as_int, data_point.time_unix_nano);
+        return true;
 }
 
-bool data_msg_callback(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-    if (field->tag == opentelemetry_proto_metrics_v1_Metric_sum_tag) {
-        opentelemetry_proto_metrics_v1_Sum *sum = field->pData;
-        sum->data_points.funcs.decode = &decode_and_print_number_data_point;
-    } else if (field->tag == opentelemetry_proto_metrics_v1_Metric_gauge_tag) {
-        opentelemetry_proto_metrics_v1_Gauge *gauge = field->pData;
-        gauge->data_points.funcs.decode = &decode_and_print_number_data_point;
-    }
-    return true;
+bool data_msg_callback(pb_istream_t *stream,
+                       const pb_field_t *field,
+                       void **arg) {
+        if (field->tag == opentelemetry_proto_metrics_v1_Metric_sum_tag) {
+                opentelemetry_proto_metrics_v1_Sum *sum = field->pData;
+                sum->data_points.funcs.decode =
+                    &decode_and_print_number_data_point;
+        } else if (field->tag ==
+                   opentelemetry_proto_metrics_v1_Metric_gauge_tag) {
+                opentelemetry_proto_metrics_v1_Gauge *gauge = field->pData;
+                gauge->data_points.funcs.decode =
+                    &decode_and_print_number_data_point;
+        }
+        return true;
 }
 
 
-bool decode_and_print_metric(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-    opentelemetry_proto_metrics_v1_Metric metric = opentelemetry_proto_metrics_v1_Metric_init_zero;
-    metric.name.funcs.decode = &decode_and_print_string;
-    metric.description.funcs.decode = &decode_and_print_string;
-    metric.unit.funcs.decode = &decode_and_print_string;
-    metric.cb_data.funcs.decode = &data_msg_callback;
+bool decode_and_print_metric(pb_istream_t *stream,
+                             const pb_field_t *field,
+                             void **arg) {
+        opentelemetry_proto_metrics_v1_Metric metric =
+            opentelemetry_proto_metrics_v1_Metric_init_zero;
+        metric.name.funcs.decode        = &decode_and_print_string;
+        metric.description.funcs.decode = &decode_and_print_string;
+        metric.unit.funcs.decode        = &decode_and_print_string;
+        metric.cb_data.funcs.decode     = &data_msg_callback;
 
-    if (!pb_decode(stream, opentelemetry_proto_metrics_v1_Metric_fields, &metric)) {
-        fprintf(stderr, "Failed to decode Metric: %s\n", PB_GET_ERROR(stream));
-        return false;
-    }
+        if (!pb_decode(stream, opentelemetry_proto_metrics_v1_Metric_fields,
+                       &metric)) {
+                fprintf(stderr, "Failed to decode Metric: %s\n",
+                        PB_GET_ERROR(stream));
+                return false;
+        }
 
-    return true;
+        return true;
 }
 
-bool decode_and_print_scope_metrics(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-    opentelemetry_proto_metrics_v1_ScopeMetrics scope_metrics = opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
-    scope_metrics.scope.name.funcs.decode = &decode_and_print_string;
-    scope_metrics.scope.version.funcs.decode = &decode_and_print_string;
-    scope_metrics.metrics.funcs.decode = &decode_and_print_metric;
-    if (!pb_decode(stream, opentelemetry_proto_metrics_v1_ScopeMetrics_fields, &scope_metrics)) {
-        fprintf(stderr, "Failed to decode ScopeMetrics: %s\n", PB_GET_ERROR(stream));
-        return false;
-    }
-    return true;
+bool decode_and_print_scope_metrics(pb_istream_t *stream,
+                                    const pb_field_t *field,
+                                    void **arg) {
+        opentelemetry_proto_metrics_v1_ScopeMetrics scope_metrics =
+            opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
+        scope_metrics.scope.name.funcs.decode    = &decode_and_print_string;
+        scope_metrics.scope.version.funcs.decode = &decode_and_print_string;
+        scope_metrics.metrics.funcs.decode       = &decode_and_print_metric;
+        if (!pb_decode(stream,
+                       opentelemetry_proto_metrics_v1_ScopeMetrics_fields,
+                       &scope_metrics)) {
+                fprintf(stderr, "Failed to decode ScopeMetrics: %s\n",
+                        PB_GET_ERROR(stream));
+                return false;
+        }
+        return true;
 }
 
-bool decode_and_print_resource_metrics(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-    opentelemetry_proto_metrics_v1_ResourceMetrics resource_metrics = opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
-    resource_metrics.resource.attributes.funcs.decode = &decode_and_print_key_value;
-    resource_metrics.scope_metrics.funcs.decode = &decode_and_print_scope_metrics;
-    if (!pb_decode(stream, opentelemetry_proto_metrics_v1_ResourceMetrics_fields, &resource_metrics)) {
-        fprintf(stderr, "Failed to decode ResourceMetrics: %s\n", PB_GET_ERROR(stream));
-        return false;
-    }
-    return true;
+bool decode_and_print_resource_metrics(pb_istream_t *stream,
+                                       const pb_field_t *field,
+                                       void **arg) {
+        opentelemetry_proto_metrics_v1_ResourceMetrics resource_metrics =
+            opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
+        resource_metrics.resource.attributes.funcs.decode =
+            &decode_and_print_key_value;
+        resource_metrics.scope_metrics.funcs.decode =
+            &decode_and_print_scope_metrics;
+        if (!pb_decode(stream,
+                       opentelemetry_proto_metrics_v1_ResourceMetrics_fields,
+                       &resource_metrics)) {
+                fprintf(stderr, "Failed to decode ResourceMetrics: %s\n",
+                        PB_GET_ERROR(stream));
+                return false;
+        }
+        return true;
 }
 
 /**
- * Decode a metric from a buffer encoded with opentelemetry_proto_metrics_v1_MetricsData datatype.
- * Used for testing and debugging.
+ * Decode a metric from a buffer encoded with
+ * opentelemetry_proto_metrics_v1_MetricsData datatype. Used for testing and
+ * debugging.
  */
-void decode_metric(void* buffer, size_t size) {
-    opentelemetry_proto_metrics_v1_MetricsData metricsData = opentelemetry_proto_metrics_v1_MetricsData_init_zero;
+void decode_metric(void *buffer, size_t size) {
+        opentelemetry_proto_metrics_v1_MetricsData metricsData =
+            opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 
-    pb_istream_t stream = pb_istream_from_buffer(buffer, size);
-    metricsData.resource_metrics.funcs.decode = &decode_and_print_resource_metrics;
+        pb_istream_t stream = pb_istream_from_buffer(buffer, size);
+        metricsData.resource_metrics.funcs.decode =
+            &decode_and_print_resource_metrics;
 
-    bool status = pb_decode(&stream, opentelemetry_proto_metrics_v1_MetricsData_fields, &metricsData);
-    if (!status) {
-        fprintf(stderr, "Failed to decode MetricsData: %s\n", PB_GET_ERROR(&stream));
-    }
+        bool status = pb_decode(
+            &stream, opentelemetry_proto_metrics_v1_MetricsData_fields,
+            &metricsData);
+        if (!status) {
+                fprintf(stderr, "Failed to decode MetricsData: %s\n",
+                        PB_GET_ERROR(&stream));
+        }
 }

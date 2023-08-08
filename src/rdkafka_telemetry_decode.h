@@ -29,6 +29,6 @@
 #ifndef _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H
 #define _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H
 
-void decode_metric(void* buffer, size_t size);
+void decode_metric(void *buffer, size_t size);
 
 #endif /* _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H */

@@ -34,188 +34,241 @@
 #include "pb_decode.h"
 #include "metrics.pb.h"
 
-bool encode_string(pb_ostream_t *stream, const pb_field_t *field, void * const *arg)
-{
-    if (!pb_encode_tag_for_field(stream, field))
-        return false;
-    return pb_encode_string(stream, (uint8_t*)(*arg), strlen(*arg));
+bool encode_string(pb_ostream_t *stream,
+                   const pb_field_t *field,
+                   void *const *arg) {
+        if (!pb_encode_tag_for_field(stream, field))
+                return false;
+        return pb_encode_string(stream, (uint8_t *)(*arg), strlen(*arg));
 }
 
-bool encode_number_data_point(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
-    opentelemetry_proto_metrics_v1_NumberDataPoint *data_point = (opentelemetry_proto_metrics_v1_NumberDataPoint*)*arg;
-    if (!pb_encode_tag_for_field(stream, field)) {
-        return false;
-    }
-    bool status = pb_encode_submessage(stream, opentelemetry_proto_metrics_v1_NumberDataPoint_fields, data_point);
-    return status;
+bool encode_number_data_point(pb_ostream_t *stream,
+                              const pb_field_t *field,
+                              void *const *arg) {
+        opentelemetry_proto_metrics_v1_NumberDataPoint *data_point =
+            (opentelemetry_proto_metrics_v1_NumberDataPoint *)*arg;
+        if (!pb_encode_tag_for_field(stream, field)) {
+                return false;
+        }
+        bool status = pb_encode_submessage(
+            stream, opentelemetry_proto_metrics_v1_NumberDataPoint_fields,
+            data_point);
+        return status;
 }
 
-bool encode_metric(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
-    opentelemetry_proto_metrics_v1_Metric *metric = (opentelemetry_proto_metrics_v1_Metric*)*arg;
-    if (!pb_encode_tag_for_field(stream, field)) {
-        return false;
-    }
-    return pb_encode_submessage(stream, opentelemetry_proto_metrics_v1_Metric_fields, metric);
+bool encode_metric(pb_ostream_t *stream,
+                   const pb_field_t *field,
+                   void *const *arg) {
+        opentelemetry_proto_metrics_v1_Metric *metric =
+            (opentelemetry_proto_metrics_v1_Metric *)*arg;
+        if (!pb_encode_tag_for_field(stream, field)) {
+                return false;
+        }
+        return pb_encode_submessage(
+            stream, opentelemetry_proto_metrics_v1_Metric_fields, metric);
 }
 
-bool encode_scope_metrics(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
-    opentelemetry_proto_metrics_v1_ScopeMetrics *scope_metrics = (opentelemetry_proto_metrics_v1_ScopeMetrics*)*arg;
-    if (!pb_encode_tag_for_field(stream, field)) {
-        return false;
-    }
-    return pb_encode_submessage(stream, opentelemetry_proto_metrics_v1_ScopeMetrics_fields, scope_metrics);
+bool encode_scope_metrics(pb_ostream_t *stream,
+                          const pb_field_t *field,
+                          void *const *arg) {
+        opentelemetry_proto_metrics_v1_ScopeMetrics *scope_metrics =
+            (opentelemetry_proto_metrics_v1_ScopeMetrics *)*arg;
+        if (!pb_encode_tag_for_field(stream, field)) {
+                return false;
+        }
+        return pb_encode_submessage(
+            stream, opentelemetry_proto_metrics_v1_ScopeMetrics_fields,
+            scope_metrics);
 }
 
-bool encode_resource_metrics(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
-    opentelemetry_proto_metrics_v1_ResourceMetrics *resource_metrics = (opentelemetry_proto_metrics_v1_ResourceMetrics*)*arg;
-    if (!pb_encode_tag_for_field(stream, field)) {
-        return false;
-    }
-    return pb_encode_submessage(stream, opentelemetry_proto_metrics_v1_ResourceMetrics_fields, resource_metrics);
+bool encode_resource_metrics(pb_ostream_t *stream,
+                             const pb_field_t *field,
+                             void *const *arg) {
+        opentelemetry_proto_metrics_v1_ResourceMetrics *resource_metrics =
+            (opentelemetry_proto_metrics_v1_ResourceMetrics *)*arg;
+        if (!pb_encode_tag_for_field(stream, field)) {
+                return false;
+        }
+        return pb_encode_submessage(
+            stream, opentelemetry_proto_metrics_v1_ResourceMetrics_fields,
+            resource_metrics);
 }
 
-bool encode_key_value(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
-    if (!pb_encode_tag_for_field(stream, field)) {
-        return false;
-    }
-    opentelemetry_proto_common_v1_KeyValue *key_value = (opentelemetry_proto_common_v1_KeyValue*)*arg;
-    return pb_encode_submessage(stream, opentelemetry_proto_common_v1_KeyValue_fields, key_value);
+bool encode_key_value(pb_ostream_t *stream,
+                      const pb_field_t *field,
+                      void *const *arg) {
+        if (!pb_encode_tag_for_field(stream, field)) {
+                return false;
+        }
+        opentelemetry_proto_common_v1_KeyValue *key_value =
+            (opentelemetry_proto_common_v1_KeyValue *)*arg;
+        return pb_encode_submessage(
+            stream, opentelemetry_proto_common_v1_KeyValue_fields, key_value);
 }
 
 static const char *rd_kafka_type2str(rd_kafka_type_t type) {
-    static const char *types[] = {
+        static const char *types[] = {
             [RD_KAFKA_PRODUCER] = "producer",
             [RD_KAFKA_CONSUMER] = "consumer",
-    };
-    return types[type];
+        };
+        return types[type];
 }
 
-//TODO: Update
+// TODO: Update
 int calculate_connection_creation_total(rd_kafka_t *rk) {
-    rd_atomic32_t total;
-    rd_kafka_broker_t *rkb;
+        rd_atomic32_t total;
+        rd_kafka_broker_t *rkb;
 
-    TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-        rd_atomic32_add(&total, rkb->rkb_c.connects.val);
-        rkb->rkb_c_historic.connects = rkb->rkb_c.connects;
-    }
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_atomic32_add(&total, rkb->rkb_c.connects.val);
+                rkb->rkb_c_historic.connects = rkb->rkb_c.connects;
+        }
 
-    rd_kafka_dbg(rk, TELEMETRY, "CONNECTIONS", "Total connections: %d", total.val);
+        rd_kafka_dbg(rk, TELEMETRY, "CONNECTIONS", "Total connections: %d",
+                     total.val);
 
-    return total.val;
+        return total.val;
 }
 
 /**
- * @brief Encodes the metrics to opentelemetry_proto_metrics_v1_MetricsData and returns the serialized data.
- * Currently only supports encoding of connection creation total by default
+ * @brief Encodes the metrics to opentelemetry_proto_metrics_v1_MetricsData and
+ * returns the serialized data. Currently only supports encoding of connection
+ * creation total by default
  */
-void* encode_metrics(rd_kafka_t *rk, size_t* size) {
-    rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Serializing metrics");
+void *encode_metrics(rd_kafka_t *rk, size_t *size) {
+        rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Serializing metrics");
 
-    opentelemetry_proto_metrics_v1_MetricsData metricsData = opentelemetry_proto_metrics_v1_MetricsData_init_zero;
+        opentelemetry_proto_metrics_v1_MetricsData metricsData =
+            opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 
-    opentelemetry_proto_metrics_v1_ResourceMetrics resourceMetrics = opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
+        opentelemetry_proto_metrics_v1_ResourceMetrics resourceMetrics =
+            opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
 
-    //    TODO: Add resource attributes as needed
-    //    opentelemetry_proto_common_v1_KeyValue resource_attribute = opentelemetry_proto_common_v1_KeyValue_init_zero;
-    //    resource_attribute.key.funcs.encode = &encode_string;
-    //    resource_attribute.key.arg = "type-resource_attribute";
-    //    resource_attribute.has_value = true;
-    //    resource_attribute.value.which_value = opentelemetry_proto_common_v1_AnyValue_string_value_tag;
-    //    resource_attribute.value.value.string_value.funcs.encode = &encode_string;
-    //    resource_attribute.value.value.string_value.arg = "heap-resource_attribute";
-    //
-    //    resourceMetrics.has_resource = true;
-    //    resourceMetrics.resource.attributes.funcs.encode = &encode_key_value;
-    //    resourceMetrics.resource.attributes.arg = &resource_attribute;
+        //    TODO: Add resource attributes as needed
+        //    opentelemetry_proto_common_v1_KeyValue resource_attribute =
+        //    opentelemetry_proto_common_v1_KeyValue_init_zero;
+        //    resource_attribute.key.funcs.encode = &encode_string;
+        //    resource_attribute.key.arg = "type-resource_attribute";
+        //    resource_attribute.has_value = true;
+        //    resource_attribute.value.which_value =
+        //    opentelemetry_proto_common_v1_AnyValue_string_value_tag;
+        //    resource_attribute.value.value.string_value.funcs.encode =
+        //    &encode_string; resource_attribute.value.value.string_value.arg =
+        //    "heap-resource_attribute";
+        //
+        //    resourceMetrics.has_resource = true;
+        //    resourceMetrics.resource.attributes.funcs.encode =
+        //    &encode_key_value; resourceMetrics.resource.attributes.arg =
+        //    &resource_attribute;
 
-    opentelemetry_proto_metrics_v1_ScopeMetrics scopeMetrics = opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
+        opentelemetry_proto_metrics_v1_ScopeMetrics scopeMetrics =
+            opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
 
-    opentelemetry_proto_common_v1_InstrumentationScope instrumentationScope = opentelemetry_proto_common_v1_InstrumentationScope_init_zero;
-    //TODO: Update these with librdkafka client name and version
-    instrumentationScope.name.funcs.encode = &encode_string;
-    instrumentationScope.name.arg = &"Example scope name";
-    instrumentationScope.version.funcs.encode = &encode_string;
-    instrumentationScope.version.arg = &"Example scope version";
+        opentelemetry_proto_common_v1_InstrumentationScope
+            instrumentationScope =
+                opentelemetry_proto_common_v1_InstrumentationScope_init_zero;
+        // TODO: Update these with librdkafka client name and version
+        instrumentationScope.name.funcs.encode    = &encode_string;
+        instrumentationScope.name.arg             = &"Example scope name";
+        instrumentationScope.version.funcs.encode = &encode_string;
+        instrumentationScope.version.arg          = &"Example scope version";
 
-    scopeMetrics.has_scope = true;
-    scopeMetrics.scope = instrumentationScope;
+        scopeMetrics.has_scope = true;
+        scopeMetrics.scope     = instrumentationScope;
 
-    opentelemetry_proto_metrics_v1_Metric metric = opentelemetry_proto_metrics_v1_Metric_init_zero;
+        opentelemetry_proto_metrics_v1_Metric metric =
+            opentelemetry_proto_metrics_v1_Metric_init_zero;
 
-    opentelemetry_proto_metrics_v1_Sum sum = opentelemetry_proto_metrics_v1_Sum_init_zero;
+        opentelemetry_proto_metrics_v1_Sum sum =
+            opentelemetry_proto_metrics_v1_Sum_init_zero;
 
-    opentelemetry_proto_metrics_v1_NumberDataPoint data_point = opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
-    data_point.which_value = opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
-    data_point.value.as_int = calculate_connection_creation_total(rk);
-    data_point.time_unix_nano = rd_clock();
+        opentelemetry_proto_metrics_v1_NumberDataPoint data_point =
+            opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
+        data_point.which_value =
+            opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
+        data_point.value.as_int   = calculate_connection_creation_total(rk);
+        data_point.time_unix_nano = rd_clock();
 
-    //    TODO: Add data point attributes as needed
-    //    opentelemetry_proto_common_v1_KeyValue attribute = opentelemetry_proto_common_v1_KeyValue_init_zero;
-    //    attribute.key.funcs.encode = &encode_string;
-    //    attribute.key.arg = "type";
-    //    attribute.has_value = true;
-    //    attribute.value.which_value = opentelemetry_proto_common_v1_AnyValue_string_value_tag;
-    //    attribute.value.value.string_value.funcs.encode = &encode_string;
-    //    attribute.value.value.string_value.arg = "heap";
-    //
-    //    data_point.attributes.funcs.encode = &encode_key_value;
-    //    data_point.attributes.arg = &attribute;
+        //    TODO: Add data point attributes as needed
+        //    opentelemetry_proto_common_v1_KeyValue attribute =
+        //    opentelemetry_proto_common_v1_KeyValue_init_zero;
+        //    attribute.key.funcs.encode = &encode_string;
+        //    attribute.key.arg = "type";
+        //    attribute.has_value = true;
+        //    attribute.value.which_value =
+        //    opentelemetry_proto_common_v1_AnyValue_string_value_tag;
+        //    attribute.value.value.string_value.funcs.encode = &encode_string;
+        //    attribute.value.value.string_value.arg = "heap";
+        //
+        //    data_point.attributes.funcs.encode = &encode_key_value;
+        //    data_point.attributes.arg = &attribute;
 
-    sum.data_points.funcs.encode = &encode_number_data_point;
-    sum.data_points.arg = &data_point;
-    sum.aggregation_temporality = opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
-    sum.is_monotonic = true;
+        sum.data_points.funcs.encode = &encode_number_data_point;
+        sum.data_points.arg          = &data_point;
+        sum.aggregation_temporality =
+            opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
+        sum.is_monotonic = true;
 
-    metric.which_data = opentelemetry_proto_metrics_v1_Metric_sum_tag;
-    metric.data.sum = sum;
+        metric.which_data = opentelemetry_proto_metrics_v1_Metric_sum_tag;
+        metric.data.sum   = sum;
 
-    metric.description.funcs.encode = &encode_string;
-    metric.description.arg = &"The total number of connections established.";
+        metric.description.funcs.encode = &encode_string;
+        metric.description.arg =
+            &"The total number of connections established.";
 
-    char *metric_suffix = ".connection.creation.total";
-    char *metric_name = (char *) malloc(strlen(rd_kafka_type2str(rk->rk_type)) + strlen(metric_suffix) + 1);
-    strcpy(metric_name, rd_kafka_type2str(rk->rk_type));
-    strcat(metric_name, metric_suffix);
+        char *metric_suffix = ".connection.creation.total";
+        char *metric_name   = (char *)malloc(
+            strlen(rd_kafka_type2str(rk->rk_type)) + strlen(metric_suffix) + 1);
+        strcpy(metric_name, rd_kafka_type2str(rk->rk_type));
+        strcat(metric_name, metric_suffix);
 
-    metric.name.funcs.encode = &encode_string;
-    metric.name.arg = metric_name;
+        metric.name.funcs.encode = &encode_string;
+        metric.name.arg          = metric_name;
 
-    metric.unit.funcs.encode = &encode_string;
-    metric.unit.arg = &"1";
+        metric.unit.funcs.encode = &encode_string;
+        metric.unit.arg          = &"1";
 
-    scopeMetrics.metrics.funcs.encode = &encode_metric;
-    scopeMetrics.metrics.arg = &metric;
+        scopeMetrics.metrics.funcs.encode = &encode_metric;
+        scopeMetrics.metrics.arg          = &metric;
 
-    resourceMetrics.scope_metrics.funcs.encode = &encode_scope_metrics;
-    resourceMetrics.scope_metrics.arg = &scopeMetrics;
+        resourceMetrics.scope_metrics.funcs.encode = &encode_scope_metrics;
+        resourceMetrics.scope_metrics.arg          = &scopeMetrics;
 
-    metricsData.resource_metrics.funcs.encode = &encode_resource_metrics;
-    metricsData.resource_metrics.arg = &resourceMetrics;
+        metricsData.resource_metrics.funcs.encode = &encode_resource_metrics;
+        metricsData.resource_metrics.arg          = &resourceMetrics;
 
-    size_t message_size;
-    bool status = pb_get_encoded_size(&message_size, opentelemetry_proto_metrics_v1_MetricsData_fields, &metricsData);
-    if (!status) {
-        rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Failed to get encoded size");
-        return NULL;
-    }
+        size_t message_size;
+        bool status = pb_get_encoded_size(
+            &message_size, opentelemetry_proto_metrics_v1_MetricsData_fields,
+            &metricsData);
+        if (!status) {
+                rd_kafka_dbg(rk, TELEMETRY, "METRICS",
+                             "Failed to get encoded size");
+                return NULL;
+        }
 
-    uint8_t *buffer = rd_malloc(message_size);
-    if (buffer == NULL) {
-        rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Failed to allocate memory for buffer");
-        return NULL;
-    }
+        uint8_t *buffer = rd_malloc(message_size);
+        if (buffer == NULL) {
+                rd_kafka_dbg(rk, TELEMETRY, "METRICS",
+                             "Failed to allocate memory for buffer");
+                return NULL;
+        }
 
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, message_size);
-    status = pb_encode(&stream, opentelemetry_proto_metrics_v1_MetricsData_fields, &metricsData);
+        pb_ostream_t stream = pb_ostream_from_buffer(buffer, message_size);
+        status              = pb_encode(&stream,
+                           opentelemetry_proto_metrics_v1_MetricsData_fields,
+                           &metricsData);
 
-    if (!status) {
-        rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Encoding failed: %s", PB_GET_ERROR(&stream));
-        free(buffer);
-        return NULL;
-    }
+        if (!status) {
+                rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Encoding failed: %s",
+                             PB_GET_ERROR(&stream));
+                free(buffer);
+                return NULL;
+        }
 
-    rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Push Telemetry metrics encoded, size: %ld", stream.bytes_written);
-    *size = message_size;
-    return (void*)buffer;
+        rd_kafka_dbg(rk, TELEMETRY, "METRICS",
+                     "Push Telemetry metrics encoded, size: %ld",
+                     stream.bytes_written);
+        *size = message_size;
+        return (void *)buffer;
 }

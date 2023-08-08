@@ -9,7 +9,7 @@ ifneq ($(wildcard ../.git),)
 CPPFLAGS += -DLIBRDKAFKA_GIT_VERSION="\"$(shell git describe --abbrev=6 --dirty --tags 2>/dev/null)\""
 endif
 
-CPPFLAGS += -I../nanopb -I../opentelemetry -DPB_FIELD_32BIT
+CPPFLAGS += -Inanopb -Iopentelemetry -DPB_FIELD_32BIT
 
 
 SRCS_$(WITH_SASL_CYRUS) += rdkafka_sasl_cyrus.c
@@ -60,12 +60,9 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_mock.c rdkafka_mock_handlers.c rdkafka_mock_cgrp.c \
 		rdkafka_error.c rdkafka_fetcher.c rdkafka_telemetry.c \
 		rdkafka_telemetry_encode.c rdkafka_telemetry_decode.c \
-		../nanopb/pb_encode.c ../nanopb/pb_decode.c ../nanopb/pb_common.c \
+		nanopb/pb_encode.c nanopb/pb_decode.c nanopb/pb_common.c \
+		opentelemetry/metrics.pb.c opentelemetry/common.pb.c opentelemetry/resource.pb.c \
 		$(SRCS_y)
-
-SRCS += ../opentelemetry/metrics.pb.c
-SRCS += ../opentelemetry/common.pb.c
-SRCS += ../opentelemetry/resource.pb.c
 
 HDRS=		rdkafka.h rdkafka_mock.h
 

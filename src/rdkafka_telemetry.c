@@ -33,9 +33,6 @@
 #include "rdkafka_telemetry_encode.h"
 #include "rdkafka_request.h"
 #include "pb.h"
-#include "pb_encode.h"
-#include "pb_decode.h"
-#include "metrics.pb.h"
 
 /**
  * @brief Filters broker by availability of GetTelemetrySubscription.

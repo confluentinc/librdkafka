@@ -54,8 +54,8 @@ set(
     rdkafka_error.c
     rdkafka_fetcher.c
     rdkafka_telemetry.c
-        rdkafka_telemetry_decode.c
-        rdkafka_telemetry_encode.c
+    rdkafka_telemetry_decode.c
+    rdkafka_telemetry_encode.c
     rdlist.c
     rdlog.c
     rdmurmur2.c

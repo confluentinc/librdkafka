@@ -5270,9 +5270,10 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_str(rkbuf, compression_type,
                                strlen(compression_type));
 
-        rd_kafka_buf_write_kbytes(rkbuf,
-                                  rd_kafkap_bytes_new(metrics, metrics_size));
-        rd_free(metrics);
+        rd_kafkap_bytes_t *metric_bytes =
+            rd_kafkap_bytes_new(metrics, metrics_size);
+        rd_kafka_buf_write_kbytes(rkbuf, metric_bytes);
+        rd_free(metric_bytes);
 
         /* Let the handler perform retries so that it can pick
          * up more added partitions. */

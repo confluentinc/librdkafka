@@ -116,7 +116,7 @@ static const char *rd_kafka_type2str(rd_kafka_type_t type) {
 
 // TODO: Update
 int calculate_connection_creation_total(rd_kafka_t *rk) {
-        rd_atomic32_t total;
+        rd_atomic32_t total = {0};
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -217,7 +217,7 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
             &"The total number of connections established.";
 
         char *metric_suffix = ".connection.creation.total";
-        char *metric_name   = (char *)malloc(
+        char *metric_name   = (char *)rd_malloc(
             strlen(rd_kafka_type2str(rk->rk_type)) + strlen(metric_suffix) + 1);
         strcpy(metric_name, rd_kafka_type2str(rk->rk_type));
         strcat(metric_name, metric_suffix);
@@ -244,6 +244,7 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
         if (!status) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
                              "Failed to get encoded size");
+                rd_free(metric_name);
                 return NULL;
         }
 
@@ -251,6 +252,7 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
         if (buffer == NULL) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
                              "Failed to allocate memory for buffer");
+                rd_free(metric_name);
                 return NULL;
         }
 
@@ -262,9 +264,11 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
         if (!status) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Encoding failed: %s",
                              PB_GET_ERROR(&stream));
-                free(buffer);
+                rd_free(buffer);
+                rd_free(metric_name);
                 return NULL;
         }
+        rd_free(metric_name);
 
         rd_kafka_dbg(rk, TELEMETRY, "METRICS",
                      "Push Telemetry metrics encoded, size: %ld",

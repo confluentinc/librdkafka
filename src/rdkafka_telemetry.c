@@ -207,6 +207,7 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                       metrics_payload, metrics_payload_size,
                                       NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                                       rd_kafka_handle_PushTelemetry, NULL);
+        rd_free(metrics_payload);
 
         rk->rk_telemetry.state = terminating
                                      ? RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT

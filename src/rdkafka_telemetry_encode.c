@@ -139,7 +139,7 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
         size_t message_size;
         uint8_t *buffer;
         pb_ostream_t stream;
-        bool status;
+        rd_bool_t status;
         // TODO: Removed hardcoded values
         char *metric_suffix = ".connection.creation.total",
              *metric_description =

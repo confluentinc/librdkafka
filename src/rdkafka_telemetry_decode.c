@@ -178,7 +178,7 @@ void decode_metric(void *buffer, size_t size) {
         metricsData.resource_metrics.funcs.decode =
             &decode_and_print_resource_metrics;
 
-        bool status = pb_decode(
+        rd_bool_t status = pb_decode(
             &stream, opentelemetry_proto_metrics_v1_MetricsData_fields,
             &metricsData);
         if (!status) {

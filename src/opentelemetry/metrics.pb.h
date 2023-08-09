@@ -3,9 +3,9 @@
 
 #ifndef PB_OPENTELEMETRY_PROTO_METRICS_V1_OPENTELEMETRY_PROTO_METRICS_V1_METRICS_PB_H_INCLUDED
 #define PB_OPENTELEMETRY_PROTO_METRICS_V1_OPENTELEMETRY_PROTO_METRICS_V1_METRICS_PB_H_INCLUDED
-#include <pb.h>
-#include "common.pb.h"
-#include "resource.pb.h"
+#include <nanopb/pb.h>
+#include "opentelemetry/common.pb.h"
+#include "opentelemetry/resource.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.

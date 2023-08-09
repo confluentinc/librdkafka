@@ -29,10 +29,10 @@
 #include "rd.h"
 #include "rdkafka_int.h"
 #include "rdkafka_telemetry_encode.h"
-#include "pb.h"
-#include "pb_encode.h"
-#include "pb_decode.h"
-#include "metrics.pb.h"
+#include "nanopb/pb.h"
+#include "nanopb/pb_encode.h"
+#include "nanopb/pb_decode.h"
+#include "opentelemetry/metrics.pb.h"
 
 bool encode_string(pb_ostream_t *stream,
                    const pb_field_t *field,

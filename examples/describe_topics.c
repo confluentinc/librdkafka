@@ -118,6 +118,7 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
                 fatal("Failed to set %s=%s: %s", name, val, errstr);
 }
 
+
 /**
  * @brief Parse an integer or fail.
  */
@@ -133,6 +134,8 @@ int64_t parse_int(const char *what, const char *str) {
 
         return (int64_t)n;
 }
+
+
 /**
  * @brief Print topics information.
  */
@@ -242,6 +245,8 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
         }
         return 0;
 }
+
+
 /**
  * @brief Call rd_kafka_DescribeTopics() with a list of
  * topics.
@@ -267,14 +272,14 @@ static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
                 topics_cnt = argc - 1;
         }
         /*
-         * Create consumer instance
+         * Create producer instance
          * NOTE: rd_kafka_new() takes ownership of the conf object
          *       and the application must not reference it again after
          *       this call.
          */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         if (!rk)
-                fatal("Failed to create new consumer: %s", errstr);
+                fatal("Failed to create new producer: %s", errstr);
 
         /*
          * Describe topics
@@ -299,7 +304,8 @@ static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
                         "%s\n",
                         rd_kafka_error_string(error));
                 rd_kafka_error_destroy(error);
-                exit(1);
+                retval = 1;
+                goto exit;
         }
 
         rd_kafka_DescribeTopics(rk, topics, topics_cnt, options, queue);
@@ -342,6 +348,7 @@ exit:
 
         exit(retval);
 }
+
 
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */

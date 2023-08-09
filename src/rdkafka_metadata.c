@@ -58,6 +58,46 @@ static int rd_kafka_metadata_partition_internal_cmp(const void *_a,
         return RD_CMP(a->id, b->id);
 }
 
+/**
+ * @brief Helper function to copy from one rd_kafka_metadata_partition to
+ * another.
+ *
+ * @note Both are assumed to be allocated.
+ * @note The dst should not be contained inside a metadata struct allocated with
+ * tmpabuf.
+ */
+void rd_kafka_copy_metadata_partition(struct rd_kafka_metadata_partition *src,
+                                      struct rd_kafka_metadata_partition *dst) {
+        int i;
+        dst->err     = src->err;
+        dst->id      = src->id;
+        dst->isr_cnt = src->isr_cnt;
+        dst->isrs    = rd_calloc(sizeof(int32_t), dst->isr_cnt);
+        for (i = 0; i < dst->isr_cnt; i++) {
+                dst->isrs[i] = src->isrs[i];
+        }
+        dst->leader      = src->leader;
+        dst->replica_cnt = src->replica_cnt;
+        dst->replicas    = rd_calloc(sizeof(int32_t), dst->replica_cnt);
+        for (i = 0; i < dst->replica_cnt; i++) {
+                dst->replicas[i] = src->replicas[i];
+        }
+}
+
+
+/**
+ * @brief Helper function to clear a rd_kafka_metadata_partition.
+ *
+ * @note Does not deallocate the rd_kafka_metadata_partition itself.
+ * @note Should not be used if there is an metadata struct allocated with
+ * tmpabuf in which rd_kafka_metadata_partition is contained.
+ */
+void rd_kafka_metadata_partition_clear(
+    struct rd_kafka_metadata_partition *rkmp) {
+        RD_IF_FREE(rkmp->isrs, rd_free);
+        RD_IF_FREE(rkmp->replicas, rd_free);
+}
+
 
 rd_kafka_resp_err_t
 rd_kafka_metadata(rd_kafka_t *rk,

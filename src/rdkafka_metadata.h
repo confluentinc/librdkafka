@@ -166,6 +166,11 @@ int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
 int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
 
+void rd_kafka_copy_metadata_partition(struct rd_kafka_metadata_partition *src,
+                                      struct rd_kafka_metadata_partition *dst);
+
+void rd_kafka_metadata_partition_clear(
+    struct rd_kafka_metadata_partition *rkmp);
 
 #define rd_kafka_metadata_broker_internal_find(mdi, broker_id, broker)         \
         do {                                                                   \

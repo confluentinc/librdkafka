@@ -1,7 +1,9 @@
+<<<<<<< HEAD
 # librdkafka v2.3.0
 
 librdkafka v2.3.0 is a feature release:
 
+ * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
  * Add support for AdminAPI `DescribeCluster()` and `DescribeTopics()`
   (#4240, @jainruchir).
  * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):

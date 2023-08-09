@@ -34,31 +34,30 @@
 #include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
 
-bool encode_string(pb_ostream_t *stream,
-                   const pb_field_t *field,
-                   void *const *arg) {
+rd_bool_t
+encode_string(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
         if (!pb_encode_tag_for_field(stream, field))
                 return false;
         return pb_encode_string(stream, (uint8_t *)(*arg), strlen(*arg));
 }
 
-bool encode_number_data_point(pb_ostream_t *stream,
-                              const pb_field_t *field,
-                              void *const *arg) {
+// TODO: Update to handle multiple data points.
+rd_bool_t encode_number_data_point(pb_ostream_t *stream,
+                                   const pb_field_t *field,
+                                   void *const *arg) {
         opentelemetry_proto_metrics_v1_NumberDataPoint *data_point =
             (opentelemetry_proto_metrics_v1_NumberDataPoint *)*arg;
         if (!pb_encode_tag_for_field(stream, field)) {
                 return false;
         }
-        bool status = pb_encode_submessage(
+        return pb_encode_submessage(
             stream, opentelemetry_proto_metrics_v1_NumberDataPoint_fields,
             data_point);
-        return status;
 }
 
-bool encode_metric(pb_ostream_t *stream,
-                   const pb_field_t *field,
-                   void *const *arg) {
+// TODO: Update to handle multiple metrics.
+rd_bool_t
+encode_metric(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
         opentelemetry_proto_metrics_v1_Metric *metric =
             (opentelemetry_proto_metrics_v1_Metric *)*arg;
         if (!pb_encode_tag_for_field(stream, field)) {
@@ -68,9 +67,9 @@ bool encode_metric(pb_ostream_t *stream,
             stream, opentelemetry_proto_metrics_v1_Metric_fields, metric);
 }
 
-bool encode_scope_metrics(pb_ostream_t *stream,
-                          const pb_field_t *field,
-                          void *const *arg) {
+rd_bool_t encode_scope_metrics(pb_ostream_t *stream,
+                               const pb_field_t *field,
+                               void *const *arg) {
         opentelemetry_proto_metrics_v1_ScopeMetrics *scope_metrics =
             (opentelemetry_proto_metrics_v1_ScopeMetrics *)*arg;
         if (!pb_encode_tag_for_field(stream, field)) {
@@ -81,9 +80,9 @@ bool encode_scope_metrics(pb_ostream_t *stream,
             scope_metrics);
 }
 
-bool encode_resource_metrics(pb_ostream_t *stream,
-                             const pb_field_t *field,
-                             void *const *arg) {
+rd_bool_t encode_resource_metrics(pb_ostream_t *stream,
+                                  const pb_field_t *field,
+                                  void *const *arg) {
         opentelemetry_proto_metrics_v1_ResourceMetrics *resource_metrics =
             (opentelemetry_proto_metrics_v1_ResourceMetrics *)*arg;
         if (!pb_encode_tag_for_field(stream, field)) {
@@ -94,9 +93,10 @@ bool encode_resource_metrics(pb_ostream_t *stream,
             resource_metrics);
 }
 
-bool encode_key_value(pb_ostream_t *stream,
-                      const pb_field_t *field,
-                      void *const *arg) {
+// TODO: Update to handle multiple KV pairs
+rd_bool_t encode_key_value(pb_ostream_t *stream,
+                           const pb_field_t *field,
+                           void *const *arg) {
         if (!pb_encode_tag_for_field(stream, field)) {
                 return false;
         }
@@ -136,6 +136,29 @@ int calculate_connection_creation_total(rd_kafka_t *rk) {
  * creation total by default
  */
 void *encode_metrics(rd_kafka_t *rk, size_t *size) {
+        size_t message_size;
+        uint8_t *buffer;
+        pb_ostream_t stream;
+        bool status;
+        // TODO: Removed hardcoded values
+        char *metric_suffix = ".connection.creation.total",
+             *metric_description =
+                 "The total number of connections established.",
+             *metric_unit     = "1",
+             *metric_type_str = rd_kafka_type2str(rk->rk_type), *metric_name;
+        size_t metric_name_len =
+            strlen(metric_type_str) + strlen(metric_suffix) + 1;
+        metric_name = rd_malloc(metric_name_len);
+
+        if (metric_name == NULL) {
+                rd_kafka_dbg(rk, TELEMETRY, "METRICS",
+                             "Failed to allocate memory for metric name");
+                return NULL;
+        }
+        rd_snprintf(metric_name, metric_name_len, "%s%s", metric_type_str,
+                    metric_suffix);
+
+
         rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Serializing metrics");
 
         opentelemetry_proto_metrics_v1_MetricsData metricsData =
@@ -213,20 +236,13 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
         metric.data.sum   = sum;
 
         metric.description.funcs.encode = &encode_string;
-        metric.description.arg =
-            &"The total number of connections established.";
-
-        char *metric_suffix = ".connection.creation.total";
-        char *metric_name   = (char *)rd_malloc(
-            strlen(rd_kafka_type2str(rk->rk_type)) + strlen(metric_suffix) + 1);
-        strcpy(metric_name, rd_kafka_type2str(rk->rk_type));
-        strcat(metric_name, metric_suffix);
+        metric.description.arg          = metric_description;
 
         metric.name.funcs.encode = &encode_string;
         metric.name.arg          = metric_name;
 
         metric.unit.funcs.encode = &encode_string;
-        metric.unit.arg          = &"1";
+        metric.unit.arg          = metric_unit;
 
         scopeMetrics.metrics.funcs.encode = &encode_metric;
         scopeMetrics.metrics.arg          = &metric;
@@ -237,8 +253,7 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
         metricsData.resource_metrics.funcs.encode = &encode_resource_metrics;
         metricsData.resource_metrics.arg          = &resourceMetrics;
 
-        size_t message_size;
-        bool status = pb_get_encoded_size(
+        status = pb_get_encoded_size(
             &message_size, opentelemetry_proto_metrics_v1_MetricsData_fields,
             &metricsData);
         if (!status) {
@@ -248,7 +263,7 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
                 return NULL;
         }
 
-        uint8_t *buffer = rd_malloc(message_size);
+        buffer = rd_malloc(message_size);
         if (buffer == NULL) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
                              "Failed to allocate memory for buffer");
@@ -256,12 +271,13 @@ void *encode_metrics(rd_kafka_t *rk, size_t *size) {
                 return NULL;
         }
 
-        pb_ostream_t stream = pb_ostream_from_buffer(buffer, message_size);
-        status              = pb_encode(&stream,
+        stream = pb_ostream_from_buffer(buffer, message_size);
+        status = pb_encode(&stream,
                            opentelemetry_proto_metrics_v1_MetricsData_fields,
                            &metricsData);
 
         if (!status) {
+                // TODO: Log error message
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Encoding failed: %s",
                              PB_GET_ERROR(&stream));
                 rd_free(buffer);

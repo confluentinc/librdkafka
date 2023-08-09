@@ -2055,7 +2055,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                     /* force_racks is true if any memeber has a client rack set,
                        since we will require partition to rack mapping in that
                        case for rack-aware assignors. */
-                    any_member_rack, rko, rd_false /* force */, NULL);
+                    any_member_rack, rko);
                 rd_list_destroy(&topics);
 
         } else {

@@ -150,8 +150,7 @@ rd_kafka_metadata(rd_kafka_t *rk,
              * topics in the cluster, since a
              * partial request may make it seem
              * like some subscribed topics are missing. */
-            all_topics ? rd_true : rd_false, rd_false /* force_racks */, rko,
-            rd_false /* force */, NULL);
+            all_topics ? rd_true : rd_false, rd_false /* force_racks */, rko);
 
         rd_list_destroy(&topics);
         rd_kafka_broker_destroy(rkb);
@@ -475,26 +474,14 @@ rd_kafka_populate_metadata_topic_racks(rd_tmpabuf_t *tbuf,
         }
 }
 
-
-/**
- * @brief Handle a Metadata response message.
- *
- * @param topics are the requested topics (may be NULL).
- * @param request_topics Used when rd_kafka_buf_t* request is NULL.
- *
- * The metadata will be marshalled into 'rd_kafka_metadata_internal_t *'.
- *
- * The marshalled metadata is returned in \p *mdip, (NULL on error).
- *
- * @returns an error code on parse failure, else NO_ERRRO.
- *
- * @locality rdkafka main thread
- */
-rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
-                                            rd_kafka_buf_t *request,
-                                            rd_kafka_buf_t *rkbuf,
-                                            rd_kafka_metadata_internal_t **mdip,
-                                            rd_list_t *request_topics) {
+/* Internal implementation for parsing Metadata. */
+static rd_kafka_resp_err_t
+rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
+                         rd_kafka_buf_t *request,
+                         rd_kafka_buf_t *rkbuf,
+                         rd_kafka_metadata_internal_t **mdip,
+                         rd_list_t *request_topics,
+                         const char *reason) {
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
@@ -512,7 +499,6 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                     : rd_false;
         rd_bool_t has_reliable_leader_epochs =
             rd_kafka_has_reliable_leader_epochs(rkb);
-        const char *reason         = "(no reason)";
         int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id      = -1;
@@ -530,11 +516,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
             request ? request->rkbuf_u.Metadata.force_racks : rd_false;
         rd_bool_t compute_racks = has_client_rack || force_rack_computation;
 
-        /* If there's no request, we're parsing this for an AdminAPI. */
-        if (!request)
-                reason = "(admin request)";
-        else if (request->rkbuf_u.Metadata.reason)
-                reason = request->rkbuf_u.Metadata.reason;
+        /* If there's reason is NULL, set it to a human-readable string. */
+        if (!reason)
+                reason = "(no reason)";
 
         /* Ignore metadata updates when terminating */
         if (rd_kafka_terminating(rkb->rkb_rk)) {
@@ -611,7 +595,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
         if (ApiVersion >= 2) {
                 rd_kafka_buf_read_str(rkbuf, &cluster_id);
-                mdi->cluster_id = rd_tmpabuf_write_str(&tbuf, cluster_id.str);
+                if (cluster_id.str)
+                        mdi->cluster_id = rd_tmpabuf_write_str(&tbuf, cluster_id.str);
         }
 
 
@@ -1030,6 +1015,50 @@ err:
 
 
 /**
+ * @brief Handle a Metadata response message.
+ *
+ * @param request Initial Metadata request, containing the topic information.
+ *                Must not be NULL.
+ * @param mdip A pointer to (rd_kafka_metadata_internal_t *) into which the
+ *             metadata will be marshalled (set to NULL on error.)
+ *
+ * @returns an error code on parse failure, else NO_ERRRO.
+ *
+ * @locality rdkafka main thread
+ */
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                        rd_kafka_buf_t *request,
+                        rd_kafka_buf_t *rkbuf,
+                        rd_kafka_metadata_internal_t **mdip) {
+        const char *reason = request->rkbuf_u.Metadata.reason;
+        return rd_kafka_parse_Metadata0(rkb, request, rkbuf, mdip, NULL,
+                                        reason);
+}
+
+/**
+ * @brief Handle a Metadata response message for admin requests.
+ *
+ * @param request_topics List containing topics in Metadata request. Must not be
+ *                       NULL.
+ * @param mdip A pointer to (rd_kafka_metadata_internal_t *) into which the
+ *             metadata will be marshalled (set to NULL on error.)
+ *
+ * @returns an error code on parse failure, else NO_ERRRO.
+ *
+ * @locality rdkafka main thread
+ */
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
+                              rd_kafka_buf_t *rkbuf,
+                              rd_list_t *request_topics,
+                              rd_kafka_metadata_internal_t **mdip) {
+        return rd_kafka_parse_Metadata0(rkb, NULL, rkbuf, mdip, request_topics,
+                                        "(admin request)");
+}
+
+
+/**
  * @brief Add all topics in current cached full metadata
  *        that matches the topics in \p match
  *        to \p tinfos (rd_kafka_topic_info_t *).
@@ -1305,8 +1334,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                      rd_list_cnt(&q_topics), rd_list_cnt(topics), reason);
 
         rd_kafka_MetadataRequest(rkb, &q_topics, reason, allow_auto_create,
-                                 cgrp_update, rd_false /* force_racks */, NULL,
-                                 rd_false /* force */, NULL);
+                                 cgrp_update, rd_false /* force_racks */, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -1483,8 +1511,7 @@ rd_kafka_resp_err_t rd_kafka_metadata_refresh_all(rd_kafka_t *rk,
         rd_list_init(&topics, 0, NULL); /* empty list = all topics */
         rd_kafka_MetadataRequest(
             rkb, &topics, reason, rd_false /*no auto create*/,
-            rd_true /*cgrp update*/, rd_false /* force_rack */, NULL,
-            0 /* force */, NULL);
+            rd_true /*cgrp update*/, rd_false /* force_rack */, NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -1522,8 +1549,7 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
         }
 
         rd_kafka_MetadataRequest(rkb, topics, reason, allow_auto_create_topics,
-                                 cgrp_update, rd_false /* force racks */, rko,
-                                 rd_false /* force */, NULL);
+                                 cgrp_update, rd_false /* force racks */, rko);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);

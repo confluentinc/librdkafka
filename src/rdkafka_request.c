@@ -2119,7 +2119,7 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                            rd_list_cnt(topics),
                            request->rkbuf_u.Metadata.reason);
 
-        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi, NULL);
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi);
         if (err)
                 goto err;
 
@@ -2177,7 +2177,21 @@ done:
 }
 
 
-/* Internal implementation for MetadataRequests. */
+/**
+ * @brief Internal implementation of MetadataRequest (does not send).
+ *
+ * @param force - 1: force a full request (including all topics and brokers)
+ *                   even if there is such a request already in flight.
+ *              - 0: check if there are multiple outstanding full requests, and
+ *                   don't send one if there is already one present.
+ *               (See note below.)
+ *
+ * If full metadata for all topics is requested (or
+ * all brokers, which results in all-topics on older brokers) and there is
+ * already a full request in transit then this function will return
+ * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
+ * If \p rko is non-NULL or if \p force is true, the request is sent regardless.
+ */
 static rd_kafka_resp_err_t
 rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                           const rd_list_t *topics,
@@ -2189,7 +2203,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                           rd_bool_t force_racks,
                           rd_kafka_op_t *rko,
                           rd_kafka_resp_cb_t *resp_cb,
-                          int force,
+                          rd_bool_t force,
                           void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
@@ -2197,9 +2211,11 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         int features;
         int topic_cnt  = topics ? rd_list_cnt(topics) : 0;
         int *full_incr = NULL;
+        void *handler_arg;
+        rd_kafka_resp_cb_t *handler_cb = rd_kafka_handle_Metadata;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 8, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
                                                  4 + (50 * topic_cnt) + 1,
                                                  ApiVersion >= 9);
@@ -2338,6 +2354,21 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
          * and should go before most other requests (Produce, Fetch, etc). */
         rkbuf->rkbuf_prio = RD_KAFKA_PRIO_HIGH;
 
+        /* The default handler is rd_kafka_handle_Metadata, but it can be
+         * overriden to use a custom handler. */
+        if (resp_cb)
+                handler_cb = resp_cb;
+
+        /* If a custom handler is provided, we also allow the caller to set a
+         * custom argument which is passed as the opaque argument to the
+         * handler. However, if we're using the default handler, it expects
+         * either rko or NULL as its opaque argument (it forwards the response
+         * to rko's replyq if it's non-NULL). */
+        if (resp_cb && opaque)
+                handler_arg = opaque;
+        else
+                handler_arg = rko;
+
         rd_kafka_broker_buf_enq_replyq(
             rkb, rkbuf,
             /* Handle response thru rk_ops,
@@ -2346,12 +2377,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
             RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
             /* The default response handler is rd_kafka_handle_Metadata, but we
                allow alternate handlers to be configured. */
-            resp_cb ? resp_cb : rd_kafka_handle_Metadata,
-            /* rd_kafka_handle_Metadata (the default handler) makes use of the
-               rko (if set) to forward the response to the rko's replyq. So, in
-               case the opaque value hasn't been overrriden, we set it to the
-               rko. */
-            rko ? rko : opaque);
+            handler_cb, handler_arg);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -2377,17 +2403,12 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
  *                    there is already a matching one in-transit.
- * @param force - 1: force a full request (including all topics and brokers)
- *                   even if there is such a request already in flight.
- *              - 0: check if there are multiple outstanding full requests, and
- *                   don't send one if there is already one present.
- *               (See note below.)
  *
  * If full metadata for all topics is requested (or
  * all brokers, which results in all-topics on older brokers) and there is
  * already a full request in transit then this function will return
  * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
- * If \p rko is non-NULL or if \p force is true, the request is sent regardless.
+ * If \p rko is non-NULL, the request is sent regardless.
  */
 rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const rd_list_t *topics,
@@ -2395,9 +2416,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
                                              rd_bool_t force_racks,
-                                             rd_kafka_op_t *rko,
-                                             rd_bool_t force,
-                                             void *opaque) {
+                                             rd_kafka_op_t *rko) {
         return rd_kafka_MetadataRequest0(
             rkb, topics, reason, allow_auto_create_topics,
             /* cluster and topic authorized operations are used by admin
@@ -2405,7 +2424,10 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
             rd_false, rd_false, cgrp_update, force_racks, rko,
             /* In all other situations apart from admin ops, we use
                rd_kafka_handle_Metadata rather than a custom resp_cb */
-            NULL, force, opaque);
+            NULL,
+            /* If the request needs to be forced, rko_u.metadata.force will be
+               set. */
+            rd_false, NULL);
 }
 
 
@@ -2428,6 +2450,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
  * @param force_racks - Force partition to rack mapping computation in
  *                      parse_Metadata (see comment there).
  * @param resp_cb - callback to be used for handling response.
+ * @param opaque - (optional) parameter to be passed to resp_cb.
  */
 rd_kafka_resp_err_t
 rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,

@@ -262,9 +262,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
                                              rd_bool_t force_racks,
-                                             rd_kafka_op_t *rko,
-                                             rd_bool_t force,
-                                             void *opaque);
+                                             rd_kafka_op_t *rko);
 
 rd_kafka_resp_err_t
 rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,

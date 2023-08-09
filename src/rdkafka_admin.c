@@ -8087,7 +8087,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         int i;
         rd_kafka_op_t *rko_result = NULL;
 
-        err = rd_kafka_parse_Metadata(rkb, NULL, reply, &mdi, &topics);
+        err = rd_kafka_parse_Metadata_admin(rkb, reply, &topics, &mdi);
         if (err)
                 goto err;
 
@@ -8154,6 +8154,8 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
         if (topics_cnt == 0) {
                 rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                                            "No topics to describe");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
                 return;
         }
 
@@ -8257,11 +8259,10 @@ rd_kafka_DescribeCluster_result_description(
 static rd_kafka_ClusterDescription_t *
 rd_kafka_ClusterDescription_new(const rd_kafka_metadata_internal_t *mdi) {
         const rd_kafka_metadata_t *md = &mdi->metadata;
-        rd_kafka_ClusterDescription_t *clusterdesc;
+        rd_kafka_ClusterDescription_t *clusterdesc = rd_calloc(1, sizeof(*clusterdesc));
         rd_list_t *authorized_operations = rd_kafka_AuthorizedOperations_parse(
             mdi->cluster_authorized_operations);
         int i;
-        clusterdesc = rd_calloc(1, sizeof(*clusterdesc));
 
         clusterdesc->cluster_id    = rd_strdup(mdi->cluster_id);
         clusterdesc->controller_id = mdi->controller_id;
@@ -8345,7 +8346,7 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
         rd_kafka_op_t *rko_result = NULL;
 
-        err = rd_kafka_parse_Metadata(rkb, NULL, reply, &mdi, &topics);
+        err = rd_kafka_parse_Metadata_admin(rkb, reply, &topics, &mdi);
         if (err)
                 goto err;
 

@@ -100,8 +100,12 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                             rd_kafka_buf_t *request,
                                             rd_kafka_buf_t *rkbuf,
-                                            rd_kafka_metadata_internal_t **mdp,
-                                            rd_list_t *request_topics);
+                                            rd_kafka_metadata_internal_t **mdip);
+
+rd_kafka_resp_err_t rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
+                                            rd_kafka_buf_t *rkbuf,
+                                            rd_list_t *request_topics,
+                                            rd_kafka_metadata_internal_t **mdip);
 
 rd_kafka_metadata_internal_t *
 rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *mdi, size_t size);

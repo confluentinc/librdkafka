@@ -50,8 +50,8 @@
 
 const char *argv0;
 static rd_kafka_queue_t *queue = NULL; /** Admin result queue.
-                                 *  This is a global so we can
-                                 *  yield in stop() */
+                                        *  This is a global so we can
+                                        *  yield in stop() */
 static volatile sig_atomic_t run = 1;
 
 /**
@@ -71,19 +71,18 @@ static void stop(int sig) {
 
 static void usage(const char *reason, ...) {
 
-        fprintf(
-            stderr,
-            "Describe cluster usage examples\n"
-            "\n"
-            "Usage: %s <options> <include_cluster_authorized_operations>"
-            "\n"
-            "Options:\n"
-            "   -b <brokers>    Bootstrap server list to connect to.\n"
-            "   -X <prop=val>   Set librdkafka configuration property.\n"
-            "                   See CONFIGURATION.md for full list.\n"
-            "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
-            "\n",
-            argv0, rd_kafka_get_debug_contexts());
+        fprintf(stderr,
+                "Describe cluster usage examples\n"
+                "\n"
+                "Usage: %s <options> <include_cluster_authorized_operations>"
+                "\n"
+                "Options:\n"
+                "   -b <brokers>    Bootstrap server list to connect to.\n"
+                "   -X <prop=val>   Set librdkafka configuration property.\n"
+                "                   See CONFIGURATION.md for full list.\n"
+                "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
+                "\n",
+                argv0, rd_kafka_get_debug_contexts());
 
         if (reason) {
                 va_list ap;
@@ -187,9 +186,9 @@ static void cmd_describe_cluster(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_event_t *event = NULL;
+        rd_kafka_event_t *event          = NULL;
         rd_kafka_error_t *error;
-        int retval = 0;
+        int retval         = 0;
         const int min_argc = 1;
 
         if (argc < min_argc)

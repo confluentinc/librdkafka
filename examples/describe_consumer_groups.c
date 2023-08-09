@@ -281,11 +281,11 @@ int64_t parse_int(const char *what, const char *str) {
  */
 static void
 cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
-        rd_kafka_t *rk = NULL;
+        rd_kafka_t *rk      = NULL;
         const char **groups = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_event_t *event = NULL;
+        rd_kafka_event_t *event          = NULL;
         rd_kafka_error_t *error;
         int retval         = 0;
         int groups_cnt     = 0;

@@ -8259,7 +8259,8 @@ rd_kafka_DescribeCluster_result_description(
 static rd_kafka_ClusterDescription_t *
 rd_kafka_ClusterDescription_new(const rd_kafka_metadata_internal_t *mdi) {
         const rd_kafka_metadata_t *md = &mdi->metadata;
-        rd_kafka_ClusterDescription_t *clusterdesc = rd_calloc(1, sizeof(*clusterdesc));
+        rd_kafka_ClusterDescription_t *clusterdesc =
+            rd_calloc(1, sizeof(*clusterdesc));
         rd_list_t *authorized_operations = rd_kafka_AuthorizedOperations_parse(
             mdi->cluster_authorized_operations);
         int i;

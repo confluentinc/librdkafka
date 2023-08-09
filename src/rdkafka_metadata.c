@@ -596,7 +596,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         if (ApiVersion >= 2) {
                 rd_kafka_buf_read_str(rkbuf, &cluster_id);
                 if (cluster_id.str)
-                        mdi->cluster_id = rd_tmpabuf_write_str(&tbuf, cluster_id.str);
+                        mdi->cluster_id =
+                            rd_tmpabuf_write_str(&tbuf, cluster_id.str);
         }
 
 

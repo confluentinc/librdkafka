@@ -195,8 +195,10 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
 
         // TODO: Update dummy values
         size_t metrics_payload_size;
-        void *metrics_payload  = encode_metrics(rk, &metrics_payload_size);
-        char *compression_type = "gzip";
+        const void *metrics_payload =
+            rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
+        // TODO: Use rd_kafka_compression_t
+        const char *compression_type = "gzip";
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
                      "Sending PushTelemetryRequest with terminating = %d",

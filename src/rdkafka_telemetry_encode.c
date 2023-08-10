@@ -34,7 +34,7 @@
 #include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
 
-rd_bool_t
+static bool
 encode_string(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
         if (!pb_encode_tag_for_field(stream, field))
                 return false;
@@ -42,92 +42,84 @@ encode_string(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
 }
 
 // TODO: Update to handle multiple data points.
-rd_bool_t encode_number_data_point(pb_ostream_t *stream,
-                                   const pb_field_t *field,
-                                   void *const *arg) {
+static bool encode_number_data_point(pb_ostream_t *stream,
+                                     const pb_field_t *field,
+                                     void *const *arg) {
         opentelemetry_proto_metrics_v1_NumberDataPoint *data_point =
             (opentelemetry_proto_metrics_v1_NumberDataPoint *)*arg;
-        if (!pb_encode_tag_for_field(stream, field)) {
+        if (!pb_encode_tag_for_field(stream, field))
                 return false;
-        }
+
         return pb_encode_submessage(
             stream, opentelemetry_proto_metrics_v1_NumberDataPoint_fields,
             data_point);
 }
 
 // TODO: Update to handle multiple metrics.
-rd_bool_t
+static bool
 encode_metric(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
         opentelemetry_proto_metrics_v1_Metric *metric =
             (opentelemetry_proto_metrics_v1_Metric *)*arg;
-        if (!pb_encode_tag_for_field(stream, field)) {
+        if (!pb_encode_tag_for_field(stream, field))
                 return false;
-        }
+
         return pb_encode_submessage(
             stream, opentelemetry_proto_metrics_v1_Metric_fields, metric);
 }
 
-rd_bool_t encode_scope_metrics(pb_ostream_t *stream,
-                               const pb_field_t *field,
-                               void *const *arg) {
+static bool encode_scope_metrics(pb_ostream_t *stream,
+                                 const pb_field_t *field,
+                                 void *const *arg) {
         opentelemetry_proto_metrics_v1_ScopeMetrics *scope_metrics =
             (opentelemetry_proto_metrics_v1_ScopeMetrics *)*arg;
-        if (!pb_encode_tag_for_field(stream, field)) {
+        if (!pb_encode_tag_for_field(stream, field))
                 return false;
-        }
+
         return pb_encode_submessage(
             stream, opentelemetry_proto_metrics_v1_ScopeMetrics_fields,
             scope_metrics);
 }
 
-rd_bool_t encode_resource_metrics(pb_ostream_t *stream,
-                                  const pb_field_t *field,
-                                  void *const *arg) {
+static bool encode_resource_metrics(pb_ostream_t *stream,
+                                    const pb_field_t *field,
+                                    void *const *arg) {
         opentelemetry_proto_metrics_v1_ResourceMetrics *resource_metrics =
             (opentelemetry_proto_metrics_v1_ResourceMetrics *)*arg;
-        if (!pb_encode_tag_for_field(stream, field)) {
+        if (!pb_encode_tag_for_field(stream, field))
                 return false;
-        }
+
         return pb_encode_submessage(
             stream, opentelemetry_proto_metrics_v1_ResourceMetrics_fields,
             resource_metrics);
 }
 
 // TODO: Update to handle multiple KV pairs
-rd_bool_t encode_key_value(pb_ostream_t *stream,
-                           const pb_field_t *field,
-                           void *const *arg) {
-        if (!pb_encode_tag_for_field(stream, field)) {
+static bool encode_key_value(pb_ostream_t *stream,
+                             const pb_field_t *field,
+                             void *const *arg) {
+        if (!pb_encode_tag_for_field(stream, field))
                 return false;
-        }
+
         opentelemetry_proto_common_v1_KeyValue *key_value =
             (opentelemetry_proto_common_v1_KeyValue *)*arg;
         return pb_encode_submessage(
             stream, opentelemetry_proto_common_v1_KeyValue_fields, key_value);
 }
 
-static const char *rd_kafka_type2str(rd_kafka_type_t type) {
-        static const char *types[] = {
-            [RD_KAFKA_PRODUCER] = "producer",
-            [RD_KAFKA_CONSUMER] = "consumer",
-        };
-        return types[type];
-}
-
 // TODO: Update
-int calculate_connection_creation_total(rd_kafka_t *rk) {
-        rd_atomic32_t total = {0};
+static int calculate_connection_creation_total(rd_kafka_t *rk) {
+        int32_t total = 0;
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_atomic32_add(&total, rkb->rkb_c.connects.val);
-                rkb->rkb_c_historic.connects = rkb->rkb_c.connects;
+                total += rkb->rkb_c.connects.val;
+                rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "CONNECTIONS", "Total connections: %d",
-                     total.val);
+                     total);
 
-        return total.val;
+        return total;
 }
 
 /**
@@ -135,17 +127,18 @@ int calculate_connection_creation_total(rd_kafka_t *rk) {
  * returns the serialized data. Currently only supports encoding of connection
  * creation total by default
  */
-void *encode_metrics(rd_kafka_t *rk, size_t *size) {
+void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         size_t message_size;
         uint8_t *buffer;
         pb_ostream_t stream;
-        rd_bool_t status;
+        bool status;
         // TODO: Removed hardcoded values
-        char *metric_suffix = ".connection.creation.total",
-             *metric_description =
-                 "The total number of connections established.",
-             *metric_unit     = "1",
-             *metric_type_str = rd_kafka_type2str(rk->rk_type), *metric_name;
+        const char *metric_suffix = ".connection.creation.total",
+                   *metric_description =
+                       "The total number of connections established.",
+                   *metric_unit     = "1",
+                   *metric_type_str = rd_kafka_type2str(rk->rk_type);
+        char *metric_name;
         size_t metric_name_len =
             strlen(metric_type_str) + strlen(metric_suffix) + 1;
         metric_name = rd_malloc(metric_name_len);

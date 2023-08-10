@@ -194,8 +194,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         } rkb_c;
 
         struct {
-                rd_atomic32_t connects; /**< Connection attempts,
-                                         *   successful or not. */
+                int32_t connects; /**< Connection attempts,
+                                   *   successful or not. */
         } rkb_c_historic;
 
         int rkb_req_timeouts; /* Current value */

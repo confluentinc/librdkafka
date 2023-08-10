@@ -395,14 +395,6 @@ void rd_kafka_set_log_level(rd_kafka_t *rk, int level) {
 
 
 
-static const char *rd_kafka_type2str(rd_kafka_type_t type) {
-        static const char *types[] = {
-            [RD_KAFKA_PRODUCER] = "producer",
-            [RD_KAFKA_CONSUMER] = "consumer",
-        };
-        return types[type];
-}
-
 #define _ERR_DESC(ENUM, DESC)                                                  \
         [ENUM - RD_KAFKA_RESP_ERR__BEGIN] = {ENUM, &(#ENUM)[18] /*pfx*/, DESC}
 

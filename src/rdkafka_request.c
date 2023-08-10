@@ -5250,7 +5250,7 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_PushTelemetry, 0, 1, NULL);
+            rkb, RD_KAFKAP_PushTelemetry, 0, 0, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "PushTelemetryRequest (KIP-714) not supported ");
@@ -5275,8 +5275,6 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kbytes(rkbuf, metric_bytes);
         rd_free(metric_bytes);
 
-        /* Let the handler perform retries so that it can pick
-         * up more added partitions. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
 
 

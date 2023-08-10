@@ -35,28 +35,28 @@
 
 #define _NANOPB_STRING_DECODE_MAX_BUFFER_SIZE 1024
 
-rd_bool_t decode_and_print_string(pb_istream_t *stream,
-                                  const pb_field_t *field,
-                                  void **arg) {
+static bool decode_and_print_string(pb_istream_t *stream,
+                                    const pb_field_t *field,
+                                    void **arg) {
         uint8_t buffer[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE] = {0};
 
         if (stream->bytes_left > sizeof(buffer) - 1) {
                 fprintf(stderr, "String too long for buffer\n");
-                return rd_false;
+                return false;
         }
 
         if (!pb_read(stream, buffer, stream->bytes_left)) {
                 fprintf(stderr, "Failed to read string\n");
-                return rd_false;
+                return false;
         }
         fprintf(stderr, "String: %s\n", buffer);
 
-        return rd_true;
+        return true;
 }
 
-rd_bool_t decode_and_print_key_value(pb_istream_t *stream,
-                                     const pb_field_t *field,
-                                     void **arg) {
+static bool decode_and_print_key_value(pb_istream_t *stream,
+                                       const pb_field_t *field,
+                                       void **arg) {
         opentelemetry_proto_common_v1_KeyValue key_value =
             opentelemetry_proto_common_v1_KeyValue_init_zero;
         key_value.key.funcs.decode = &decode_and_print_string;
@@ -66,15 +66,15 @@ rd_bool_t decode_and_print_key_value(pb_istream_t *stream,
                        &key_value)) {
                 fprintf(stderr, "Failed to decode KeyValue: %s\n",
                         PB_GET_ERROR(stream));
-                return rd_false;
+                return false;
         }
 
-        return rd_true;
+        return true;
 }
 
-rd_bool_t decode_and_print_number_data_point(pb_istream_t *stream,
-                                             const pb_field_t *field,
-                                             void **arg) {
+static bool decode_and_print_number_data_point(pb_istream_t *stream,
+                                               const pb_field_t *field,
+                                               void **arg) {
         opentelemetry_proto_metrics_v1_NumberDataPoint data_point =
             opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
         data_point.attributes.funcs.decode = &decode_and_print_key_value;
@@ -83,16 +83,16 @@ rd_bool_t decode_and_print_number_data_point(pb_istream_t *stream,
                        &data_point)) {
                 fprintf(stderr, "Failed to decode NumberDataPoint: %s\n",
                         PB_GET_ERROR(stream));
-                return rd_false;
+                return false;
         }
 
         fprintf(stderr, "NumberDataPoint value: %lld time: %llu\n",
                 data_point.value.as_int, data_point.time_unix_nano);
-        return rd_true;
+        return true;
 }
 
 // TODO: add support for other data types
-rd_bool_t
+static bool
 data_msg_callback(pb_istream_t *stream, const pb_field_t *field, void **arg) {
         if (field->tag == opentelemetry_proto_metrics_v1_Metric_sum_tag) {
                 opentelemetry_proto_metrics_v1_Sum *sum = field->pData;
@@ -104,13 +104,13 @@ data_msg_callback(pb_istream_t *stream, const pb_field_t *field, void **arg) {
                 gauge->data_points.funcs.decode =
                     &decode_and_print_number_data_point;
         }
-        return rd_true;
+        return true;
 }
 
 
-rd_bool_t decode_and_print_metric(pb_istream_t *stream,
-                                  const pb_field_t *field,
-                                  void **arg) {
+static bool decode_and_print_metric(pb_istream_t *stream,
+                                    const pb_field_t *field,
+                                    void **arg) {
         opentelemetry_proto_metrics_v1_Metric metric =
             opentelemetry_proto_metrics_v1_Metric_init_zero;
         metric.name.funcs.decode        = &decode_and_print_string;
@@ -122,15 +122,15 @@ rd_bool_t decode_and_print_metric(pb_istream_t *stream,
                        &metric)) {
                 fprintf(stderr, "Failed to decode Metric: %s\n",
                         PB_GET_ERROR(stream));
-                return rd_false;
+                return false;
         }
 
-        return rd_true;
+        return true;
 }
 
-rd_bool_t decode_and_print_scope_metrics(pb_istream_t *stream,
-                                         const pb_field_t *field,
-                                         void **arg) {
+static bool decode_and_print_scope_metrics(pb_istream_t *stream,
+                                           const pb_field_t *field,
+                                           void **arg) {
         opentelemetry_proto_metrics_v1_ScopeMetrics scope_metrics =
             opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
         scope_metrics.scope.name.funcs.decode    = &decode_and_print_string;
@@ -141,14 +141,14 @@ rd_bool_t decode_and_print_scope_metrics(pb_istream_t *stream,
                        &scope_metrics)) {
                 fprintf(stderr, "Failed to decode ScopeMetrics: %s\n",
                         PB_GET_ERROR(stream));
-                return rd_false;
+                return false;
         }
-        return rd_true;
+        return true;
 }
 
-rd_bool_t decode_and_print_resource_metrics(pb_istream_t *stream,
-                                            const pb_field_t *field,
-                                            void **arg) {
+static bool decode_and_print_resource_metrics(pb_istream_t *stream,
+                                              const pb_field_t *field,
+                                              void **arg) {
         opentelemetry_proto_metrics_v1_ResourceMetrics resource_metrics =
             opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
         resource_metrics.resource.attributes.funcs.decode =
@@ -160,9 +160,9 @@ rd_bool_t decode_and_print_resource_metrics(pb_istream_t *stream,
                        &resource_metrics)) {
                 fprintf(stderr, "Failed to decode ResourceMetrics: %s\n",
                         PB_GET_ERROR(stream));
-                return rd_false;
+                return false;
         }
-        return rd_true;
+        return true;
 }
 
 /**
@@ -170,7 +170,7 @@ rd_bool_t decode_and_print_resource_metrics(pb_istream_t *stream,
  * opentelemetry_proto_metrics_v1_MetricsData datatype. Used for testing and
  * debugging.
  */
-void decode_metric(void *buffer, size_t size) {
+void rd_kafka_telemetry_decode_metrics(void *buffer, size_t size) {
         opentelemetry_proto_metrics_v1_MetricsData metricsData =
             opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 
@@ -178,7 +178,7 @@ void decode_metric(void *buffer, size_t size) {
         metricsData.resource_metrics.funcs.decode =
             &decode_and_print_resource_metrics;
 
-        rd_bool_t status = pb_decode(
+        bool status = pb_decode(
             &stream, opentelemetry_proto_metrics_v1_MetricsData_fields,
             &metricsData);
         if (!status) {

@@ -1876,7 +1876,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-84 - SASL SCRAM                                                      | 0.10.2.0                    | Supported                                                                                     |
 | KIP-85 - SASL config properties                                          | 0.10.2.0                    | Supported                                                                                     |
 | KIP-86 - Configurable SASL callbacks                                     | 2.0.0                       | Not supported                                                                                 |
-| KIP-88 - AdminAPI: ListGroupOffsets                                      | 0.10.2.0                    | Supported                                                                                 |
+| KIP-88 - AdminAPI: ListGroupOffsets                                      | 0.10.2.0                    | Supported                                                                                     |
 | KIP-91 - Intuitive timeouts in Producer                                  | 2.1.0                       | Supported                                                                                     |
 | KIP-92 - Per-partition lag metrics in Consumer                           | 0.10.2.0                    | Supported                                                                                     |
 | KIP-97 - Backwards compatibility with older brokers                      | 0.10.2.0                    | Supported                                                                                     |
@@ -1900,7 +1900,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-226 - AdminAPI: Dynamic broker config                                | 1.1.0                       | Supported                                                                                     |
 | KIP-227 - Consumer Incremental Fetch                                     | 1.1.0                       | Not supported                                                                                 |
 | KIP-229 - AdminAPI: DeleteGroups                                         | 1.1.0                       | Supported                                                                                     |
-| KIP-235 - DNS alias for secure connections                               | 2.1.0                       | Supported                                                                                 |
+| KIP-235 - DNS alias for secure connections                               | 2.1.0                       | Supported                                                                                     |
 | KIP-249 - AdminAPI: Deletegation Tokens                                  | 2.0.0                       | Not supported                                                                                 |
 | KIP-255 - SASL OAUTHBEARER                                               | 2.0.0                       | Supported                                                                                     |
 | KIP-266 - Fix indefinite consumer timeouts                               | 2.0.0                       | Supported (bound by session.timeout.ms and max.poll.interval.ms)                              |
@@ -1938,6 +1938,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-496 - AdminAPI: delete offsets                                       | 2.4.0                       | Supported                                                                                     |
 | KIP-511 - Collect Client's Name and Version                              | 2.4.0                       | Supported                                                                                     |
 | KIP-514 - Bounded flush()                                                | 2.4.0                       | Supported                                                                                     |
+| KIP-516 - Topic Identifiers                                              | 2.8.0 (WIP)                 | Partially Supported                                                                           |
 | KIP-517 - Consumer poll() metrics                                        | 2.4.0                       | Not supported                                                                                 |
 | KIP-518 - Allow listing consumer groups per state                        | 2.6.0                       | Supported                                                                                     |
 | KIP-519 - Make SSL engine configurable                                   | 2.6.0                       | Supported                                                                                     |
@@ -1965,7 +1966,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.4.0, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.5.0, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 
@@ -1973,9 +1974,9 @@ release of librdkafka.
 | ApiKey  | Request name                  | Kafka max   | librdkafka max          |
 | ------- | ------------------------------| ----------- | ----------------------- |
 | 0       | Produce                       | 9           | 7                       |
-| 1       | Fetch                         | 13          | 11                      |
-| 2       | ListOffsets                   | 7           | 2                       |
-| 3       | Metadata                      | 12          | 9                       |
+| 1       | Fetch                         | 15          | 11                      |
+| 2       | ListOffsets                   | 8           | 5                       |
+| 3       | Metadata                      | 12          | 12                      |
 | 8       | OffsetCommit                  | 8           | 7                       |
 | 9       | OffsetFetch                   | 8           | 7                       |
 | 10      | FindCoordinator               | 4           | 2                       |
@@ -1991,10 +1992,14 @@ release of librdkafka.
 | 20      | DeleteTopics                  | 6           | 1                       |
 | 21      | DeleteRecords                 | 2           | 1                       |
 | 22      | InitProducerId                | 4           | 4                       |
-| 24      | AddPartitionsToTxn            | 3           | 0                       |
+| 23      | OffsetForLeaderEpoch          | 4           | 2                       |
+| 24      | AddPartitionsToTxn            | 4           | 0                       |
 | 25      | AddOffsetsToTxn               | 3           | 0                       |
 | 26      | EndTxn                        | 3           | 1                       |
 | 28      | TxnOffsetCommit               | 3           | 3                       |
+| 29      | DescribeAcls                  | 3           | 1                       |
+| 30      | CreateAcls                    | 3           | 1                       |
+| 31      | DeleteAcls                    | 3           | 1                       |
 | 32      | DescribeConfigs               | 4           | 1                       |
 | 33      | AlterConfigs                  | 2           | 2                       |
 | 36      | SaslAuthenticate              | 2           | 1                       |

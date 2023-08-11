@@ -3181,7 +3181,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   c_subscribe_no_cb_test(true /*close consumer*/);
 
   if (test_quick) {
-    Test::Say("Skipping subsequent due to quick mode\n");
+    Test::Say("Skipping tests >= c_ .. due to quick mode\n");
     return 0;
   }
 

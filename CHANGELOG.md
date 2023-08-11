@@ -1,7 +1,8 @@
 # librdkafka v2.2.1
 
-librdkafka v2.2.1 is a bugfix release:
+librdkafka v2.2.1 is a maintenance release:
 
+ * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
  * Fix a segmentation fault when closing a consumer using the
    cooperative-sticky assignor before the first assignment (#4381).
 

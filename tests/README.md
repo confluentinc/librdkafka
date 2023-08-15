@@ -189,7 +189,7 @@ be it `make`, `run-test.sh`, `until-fail.sh`, etc.
  * `TESTS_SKIP_BEFORE=0nnn` - skip tests before this test. Tests are skipped
                               even if they are part of `TESTS` variable.
                               Usage: `TESTS_SKIP_BEFORE=0030`. All the tests
-                              till test 0030 is skipped.
+                              until test 0030 are skipped.
 
 
 Let's say that you run the full test suite and get a failure in test 0061,

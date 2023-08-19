@@ -4308,7 +4308,9 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 do_test_DeleteConsumerGroupOffsets(
                     "main queue", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/);
+        }
 
+        if (test_broker_version >= TEST_BRKVER(2, 5, 0, 0)) {
                 /* Alter committed offsets */
                 do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
                                                   rd_false, rd_true);
@@ -4321,7 +4323,9 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                     "main queue", rk, mainq, 1500,
                     rd_true, /*with subscribing consumer*/
                     rd_true);
+        }
 
+        if (test_broker_version >= TEST_BRKVER(2, 0, 0, 0)) {
                 /* List committed offsets */
                 do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
                                                  rd_false, rd_false);

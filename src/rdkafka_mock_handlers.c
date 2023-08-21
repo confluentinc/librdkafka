@@ -39,6 +39,7 @@
 #include "rdkafka_mock_int.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_telemetry_decode.h"
 
 
 
@@ -2183,11 +2184,24 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafka_resp_err_t err;
+        rd_kafka_uuid_t ClientInstanceId;
+        int32_t SubscriptionId;
+        rd_bool_t terminating;
+        rd_kafkap_str_t compression_type;
+        rd_kafkap_bytes_t metrics;
 
+        rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
+        rd_kafka_buf_read_i32(rkbuf, &SubscriptionId);
+        rd_kafka_buf_read_bool(rkbuf, &terminating);
+        rd_kafka_buf_read_str(rkbuf, &compression_type);
+        rd_kafka_buf_read_kbytes(rkbuf, &metrics);
+
+        rd_kafka_telemetry_decode_metrics((void *)metrics.data, metrics.len);
+
+        // ThrottleTime
         rd_kafka_buf_write_i32(resp, 0);
-
-        /* Inject error */
-        err = rd_kafka_mock_next_request_error(mconn, resp);
+        // ErrorCode
+        rd_kafka_buf_write_i16(resp, 0);
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 

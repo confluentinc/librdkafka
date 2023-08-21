@@ -30,7 +30,9 @@
 #include "rdrand.h"
 #include "rdkafka_int.h"
 #include "rdkafka_telemetry.h"
+#include "rdkafka_telemetry_encode.h"
 #include "rdkafka_request.h"
+#include "nanopb/pb.h"
 
 /**
  * @brief Filters broker by availability of GetTelemetrySubscription.
@@ -192,17 +194,22 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         // serialize.
 
         // TODO: Update dummy values
-        void *metrics_payload  = NULL;
-        char *compression_type = "gzip";
+        size_t metrics_payload_size;
+        const void *metrics_payload =
+            rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
+        // TODO: Use rd_kafka_compression_t
+        const char *compression_type = "gzip";
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
                      "Sending PushTelemetryRequest with terminating = %d",
                      terminating);
-        rd_kafka_PushTelemetryRequest(
-            rkb, &rk->rk_telemetry.client_instance_id,
-            rk->rk_telemetry.subscription_id, terminating, compression_type,
-            metrics_payload, 0, NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-            rd_kafka_handle_PushTelemetry, NULL);
+        rd_kafka_PushTelemetryRequest(rkb, &rk->rk_telemetry.client_instance_id,
+                                      rk->rk_telemetry.subscription_id,
+                                      terminating, compression_type,
+                                      metrics_payload, metrics_payload_size,
+                                      NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                                      rd_kafka_handle_PushTelemetry, NULL);
+        rd_free(metrics_payload);
 
         rk->rk_telemetry.state = terminating
                                      ? RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT

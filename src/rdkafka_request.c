@@ -5250,7 +5250,7 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_PushTelemetry, 0, 1, NULL);
+            rkb, RD_KAFKAP_PushTelemetry, 0, 0, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "PushTelemetryRequest (KIP-714) not supported ");
@@ -5261,19 +5261,20 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         size_t len = sizeof(rd_kafka_uuid_t) + sizeof(int32_t) +
                      sizeof(rd_bool_t) + strlen(compression_type) +
                      metrics_size;
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_PushTelemetry, 1, len);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_PushTelemetry,
+                                                 1, len, rd_true);
 
         rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
         rd_kafka_buf_write_i32(rkbuf, subscription_id);
         rd_kafka_buf_write_bool(rkbuf, terminating);
         rd_kafka_buf_write_str(rkbuf, compression_type,
                                strlen(compression_type));
-        rd_kafka_buf_write_bytes(rkbuf, metrics ? metrics : "", metrics_size);
 
-        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafkap_bytes_t *metric_bytes =
+            rd_kafkap_bytes_new(metrics, metrics_size);
+        rd_kafka_buf_write_kbytes(rkbuf, metric_bytes);
+        rd_free(metric_bytes);
 
-        /* Let the handler perform retries so that it can pick
-         * up more added partitions. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
 
 

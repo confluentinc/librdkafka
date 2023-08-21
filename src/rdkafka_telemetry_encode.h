@@ -26,25 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H
+#define _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H
 
-#ifndef _RD_KAFKA_TELEMETRY_H_
-#define _RD_KAFKA_TELEMETRY_H_
+void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size);
 
-void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
-                                                 rd_kafka_resp_err_t err);
-
-void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err);
-
-void rd_kafka_telemetry_clear(rd_kafka_t *rk,
-                              rd_bool_t clear_control_flow_fields);
-
-void rd_kafka_telemetry_await_termination(rd_kafka_t *rk);
-
-void rd_kafka_telemetry_schedule_termination(rd_kafka_t *rk);
-
-void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
-                                         rd_kafka_broker_t *rkb);
-
-void rd_kafka_telemetry_fsm_tmr_cb(rd_kafka_timers_t *rkts, void *rk);
-
-#endif /* _RD_KAFKA_TELEMETRY_H_ */
+#endif /* _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H */

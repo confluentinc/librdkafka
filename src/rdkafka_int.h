@@ -259,6 +259,14 @@ rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
         return names[state];
 }
 
+static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
+        static const char *types[] = {
+            [RD_KAFKA_PRODUCER] = "producer",
+            [RD_KAFKA_CONSUMER] = "consumer",
+        };
+        return types[type];
+}
+
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */

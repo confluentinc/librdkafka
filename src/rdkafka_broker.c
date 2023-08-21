@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,6 +50,7 @@
 #include <ctype.h>
 
 #include "rd.h"
+#include "rdaddr.h"
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_msgset.h"
@@ -79,9 +81,9 @@
 static const int rd_kafka_max_block_ms = 1000;
 
 const char *rd_kafka_broker_state_names[] = {
-    "INIT",        "DOWN", "TRY_CONNECT", "CONNECT",          "SSL_HANDSHAKE",
-    "AUTH_LEGACY", "UP",   "UPDATE",      "APIVERSION_QUERY", "AUTH_HANDSHAKE",
-    "AUTH_REQ"};
+    "INIT",        "DOWN",  "TRY_CONNECT", "CONNECT",          "SSL_HANDSHAKE",
+    "AUTH_LEGACY", "UP",    "UPDATE",      "APIVERSION_QUERY", "AUTH_HANDSHAKE",
+    "AUTH_REQ",    "REAUTH"};
 
 const char *rd_kafka_secproto_names[] = {
     [RD_KAFKA_PROTO_PLAINTEXT]      = "plaintext",
@@ -554,6 +556,7 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
         va_list ap;
         rd_kafka_bufq_t tmpq_waitresp, tmpq;
         int old_state;
+        rd_kafka_toppar_t *rktp;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -572,6 +575,8 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 rkb->rkb_recv_buf = NULL;
         }
 
+        rkb->rkb_reauth_in_progress = rd_false;
+
         va_start(ap, fmt);
         rd_kafka_broker_set_error(rkb, level, err, fmt, ap);
         va_end(ap);
@@ -589,6 +594,11 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
         /* Set broker state */
         old_state = rkb->rkb_state;
         rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
+
+        /* Stop any pending reauth timer, since a teardown/reconnect will
+         * require a new timer. */
+        rd_kafka_timer_stop(&rkb->rkb_rk->rk_timers, &rkb->rkb_sasl_reauth_tmr,
+                            1 /*lock*/);
 
         /* Unlock broker since a requeue will try to lock it. */
         rd_kafka_broker_unlock(rkb);
@@ -641,6 +651,22 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 rd_kafka_bufq_dump(rkb, "BRKOUTBUFS", &rkb->rkb_outbufs);
         }
 
+        /* If this broker acts as the preferred (follower) replica for any
+         * partition, delegate the partition back to the leader. */
+        TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+                rd_kafka_toppar_lock(rktp);
+                if (unlikely(rktp->rktp_broker != rkb)) {
+                        /* Currently migrating away from this
+                         * broker, skip. */
+                        rd_kafka_toppar_unlock(rktp);
+                        continue;
+                }
+                rd_kafka_toppar_unlock(rktp);
+
+                if (rktp->rktp_leader_id != rktp->rktp_broker_id) {
+                        rd_kafka_toppar_delegate_to_leader(rktp);
+                }
+        }
 
         /* Query for topic leaders to quickly pick up on failover. */
         if (err != RD_KAFKA_RESP_ERR__DESTROY &&
@@ -1817,7 +1843,7 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find(rd_kafka_broker_t *rkb,
  */
 static int rd_kafka_req_response(rd_kafka_broker_t *rkb,
                                  rd_kafka_buf_t *rkbuf) {
-        rd_kafka_buf_t *req;
+        rd_kafka_buf_t *req   = NULL;
         int log_decode_errors = LOG_ERR;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
@@ -2220,7 +2246,8 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
  */
 void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
 
-        rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
+        rkb->rkb_max_inflight       = rkb->rkb_rk->rk_conf.max_inflight;
+        rkb->rkb_reauth_in_progress = rd_false;
 
         rd_kafka_broker_lock(rkb);
         rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
@@ -3434,6 +3461,20 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 wakeup = rd_true;
                 break;
 
+        case RD_KAFKA_OP_SASL_REAUTH:
+                rd_rkb_dbg(rkb, BROKER, "REAUTH", "Received REAUTH op");
+
+                /* We don't need a lock for rkb_max_inflight. It's changed only
+                 * on the broker thread. */
+                rkb->rkb_max_inflight = 1;
+
+                rd_kafka_broker_lock(rkb);
+                rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_REAUTH);
+                rd_kafka_broker_unlock(rkb);
+
+                wakeup = rd_true;
+                break;
+
         default:
                 rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
                 break;
@@ -4511,8 +4552,15 @@ static int rd_kafka_broker_thread_main(void *arg) {
                             rd_kafka_broker_addresses_exhausted(rkb))
                                 rd_kafka_broker_update_reconnect_backoff(
                                     rkb, &rkb->rkb_rk->rk_conf, rd_clock());
+                        /* If we haven't made progress from the last state, and
+                         * if we have exceeded
+                         * socket_connection_setup_timeout_ms, then error out.
+                         * Don't error out in case this is a reauth, for which
+                         * socket_connection_setup_timeout_ms is not
+                         * applicable. */
                         else if (
                             rkb->rkb_state == orig_state &&
+                            !rkb->rkb_reauth_in_progress &&
                             rd_clock() >=
                                 (rkb->rkb_ts_connect +
                                  (rd_ts_t)rk->rk_conf
@@ -4525,6 +4573,22 @@ static int rd_kafka_broker_thread_main(void *arg) {
                                     rd_kafka_broker_state_names
                                         [rkb->rkb_state]);
 
+                        break;
+
+                case RD_KAFKA_BROKER_STATE_REAUTH:
+                        /* Since we've already authenticated once, the provider
+                         * should be ready. */
+                        rd_assert(rd_kafka_sasl_ready(rkb->rkb_rk));
+
+                        /* Since we aren't disconnecting, the transport isn't
+                         * destroyed, and as a consequence, some of the SASL
+                         * state leaks unless we destroy it before the reauth.
+                         */
+                        rd_kafka_sasl_close(rkb->rkb_transport);
+
+                        rkb->rkb_reauth_in_progress = rd_true;
+
+                        rd_kafka_broker_connect_auth(rkb);
                         break;
 
                 case RD_KAFKA_BROKER_STATE_UPDATE:
@@ -4654,6 +4718,9 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rkb->rkb_logname = NULL;
         mtx_unlock(&rkb->rkb_logname_lock);
         mtx_destroy(&rkb->rkb_logname_lock);
+
+        rd_kafka_timer_stop(&rkb->rkb_rk->rk_timers, &rkb->rkb_sasl_reauth_tmr,
+                            1 /*lock*/);
 
         mtx_destroy(&rkb->rkb_lock);
 
@@ -5192,23 +5259,53 @@ static int rd_kafka_broker_name_parse(rd_kafka_t *rk,
 }
 
 /**
+ * @brief Add a broker from a string of type "[proto://]host[:port]" to the list
+ * of brokers. *cnt is increased by one if a broker was added, else not.
+ */
+static void rd_kafka_find_or_add_broker(rd_kafka_t *rk,
+                                        rd_kafka_secproto_t proto,
+                                        const char *host,
+                                        uint16_t port,
+                                        int *cnt) {
+        rd_kafka_broker_t *rkb = NULL;
+
+        if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
+            rkb->rkb_source == RD_KAFKA_CONFIGURED) {
+                (*cnt)++;
+        } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto, host,
+                                       port, RD_KAFKA_NODEID_UA) != NULL)
+                (*cnt)++;
+
+        /* If rd_kafka_broker_find returned a broker its
+         * reference needs to be released
+         * See issue #193 */
+        if (rkb)
+                rd_kafka_broker_destroy(rkb);
+}
+
+/**
  * @brief Adds a (csv list of) broker(s).
  * Returns the number of brokers succesfully added.
  *
  * @locality any thread
  * @locks none
  */
-int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
+int rd_kafka_brokers_add0(rd_kafka_t *rk,
+                          const char *brokerlist,
+                          rd_bool_t is_bootstrap_server_list) {
         char *s_copy = rd_strdup(brokerlist);
         char *s      = s_copy;
         int cnt      = 0;
-        rd_kafka_broker_t *rkb;
-        int pre_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+        int pre_cnt  = rd_atomic32_get(&rk->rk_broker_cnt);
+        rd_sockaddr_inx_t *sinx;
+        rd_sockaddr_list_t *sockaddr_list;
 
         /* Parse comma-separated list of brokers. */
         while (*s) {
                 uint16_t port;
                 const char *host;
+                const char *err_str;
+                const char *resolved_FQDN;
                 rd_kafka_secproto_t proto;
 
                 if (*s == ',' || *s == ' ') {
@@ -5221,20 +5318,43 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
                         break;
 
                 rd_kafka_wrlock(rk);
+                if (is_bootstrap_server_list &&
+                    rk->rk_conf.client_dns_lookup ==
+                        RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY) {
+                        rd_kafka_dbg(rk, ALL, "INIT",
+                                     "Canonicalizing bootstrap broker %s:%d",
+                                     host, port);
+                        sockaddr_list = rd_getaddrinfo(
+                            host, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
+                            rk->rk_conf.broker_addr_family, SOCK_STREAM,
+                            IPPROTO_TCP, rk->rk_conf.resolve_cb,
+                            rk->rk_conf.opaque, &err_str);
 
-                if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
-                    rkb->rkb_source == RD_KAFKA_CONFIGURED) {
-                        cnt++;
-                } else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, proto,
-                                               host, port,
-                                               RD_KAFKA_NODEID_UA) != NULL)
-                        cnt++;
+                        if (!sockaddr_list) {
+                                rd_kafka_log(rk, LOG_WARNING, "BROKER",
+                                             "Failed to resolve '%s': %s", host,
+                                             err_str);
+                                rd_kafka_wrunlock(rk);
+                                continue;
+                        }
 
-                /* If rd_kafka_broker_find returned a broker its
-                 * reference needs to be released
-                 * See issue #193 */
-                if (rkb)
-                        rd_kafka_broker_destroy(rkb);
+                        RD_SOCKADDR_LIST_FOREACH(sinx, sockaddr_list) {
+                                resolved_FQDN = rd_sockaddr2str(
+                                    sinx, RD_SOCKADDR2STR_F_RESOLVE);
+                                rd_kafka_dbg(
+                                    rk, ALL, "INIT",
+                                    "Adding broker with resolved hostname %s",
+                                    resolved_FQDN);
+
+                                rd_kafka_find_or_add_broker(
+                                    rk, proto, resolved_FQDN, port, &cnt);
+                        };
+
+                        rd_sockaddr_list_destroy(sockaddr_list);
+                } else {
+                        rd_kafka_find_or_add_broker(rk, proto, host, port,
+                                                    &cnt);
+                }
 
                 rd_kafka_wrunlock(rk);
         }
@@ -5256,7 +5376,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist) {
 
 
 int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist) {
-        return rd_kafka_brokers_add0(rk, brokerlist);
+        return rd_kafka_brokers_add0(rk, brokerlist, rd_false);
 }
 
 
@@ -5832,6 +5952,46 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
         rd_kafka_broker_unlock(rkb);
 
         rd_kafka_broker_destroy(rkb);
+}
+
+/**
+ * @brief Starts the reauth timer for this broker.
+ *        If connections_max_reauth_ms=0, then no timer is set.
+ *
+ * @locks none
+ * @locality broker thread
+ */
+void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
+                                        int64_t connections_max_reauth_ms) {
+        /* Timer should not already be started. It indicates that we're about to
+         * schedule an extra reauth, but this shouldn't be a cause for failure
+         * in production use cases, so, clear the timer. */
+        if (rd_kafka_timer_is_started(&rkb->rkb_rk->rk_timers,
+                                      &rkb->rkb_sasl_reauth_tmr))
+                rd_kafka_timer_stop(&rkb->rkb_rk->rk_timers,
+                                    &rkb->rkb_sasl_reauth_tmr, 1 /*lock*/);
+
+        if (connections_max_reauth_ms == 0)
+                return;
+
+        rd_kafka_timer_start_oneshot(
+            &rkb->rkb_rk->rk_timers, &rkb->rkb_sasl_reauth_tmr, rd_false,
+            connections_max_reauth_ms * 900 /* 90% * microsecond*/,
+            rd_kafka_broker_start_reauth_cb, (void *)rkb);
+}
+
+/**
+ * @brief Starts the reauth process for the broker rkb.
+ *
+ * @locks none
+ * @locality main thread
+ */
+void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
+        rd_kafka_op_t *rko     = NULL;
+        rd_kafka_broker_t *rkb = (rd_kafka_broker_t *)_rkb;
+        rd_dassert(rkb);
+        rko = rd_kafka_op_new(RD_KAFKA_OP_SASL_REAUTH);
+        rd_kafka_q_enq(rkb->rkb_ops, rko);
 }
 
 /**

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019, Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +30,7 @@
 /**
  * Simple high-level balanced Apache Kafka consumer
  * using the Kafka driver from librdkafka
- * (https://github.com/edenhill/librdkafka)
+ * (https://github.com/confluentinc/librdkafka)
  */
 
 #include <stdio.h>
@@ -225,9 +226,10 @@ int main(int argc, char **argv) {
                 }
 
                 /* Proper message. */
-                printf("Message on %s [%" PRId32 "] at offset %" PRId64 ":\n",
+                printf("Message on %s [%" PRId32 "] at offset %" PRId64
+                       " (leader epoch %" PRId32 "):\n",
                        rd_kafka_topic_name(rkm->rkt), rkm->partition,
-                       rkm->offset);
+                       rkm->offset, rd_kafka_message_leader_epoch(rkm));
 
                 /* Print the message key. */
                 if (rkm->key && is_printable(rkm->key, rkm->key_len))

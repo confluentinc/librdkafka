@@ -118,6 +118,7 @@ set(
     0124-openssl_invalid_engine.c
     0125-immediate_flush.c
     0126-oauthbearer_oidc.c
+    0127-fetch_queue_backoff.cpp
     0128-sasl_callback_queue.cpp
     0129-fetch_aborted_msgs.c
     0130-store_offsets.c
@@ -129,7 +130,11 @@ set(
     0136-resolve_cb.c
     0137-barrier_batch_consume.c
     0138-admin_mock.c
+    0139-offset_validation_mock.c
+    0140-commit_metadata.cpp
+    0142-reauthentication.c
     8000-idle.cpp
+    8001-fetch_from_follower_mock_manual.c
     test.c
     testcpp.cpp
     rusage.c

@@ -149,7 +149,7 @@ is finished, then download the relevant artifacts for further use, see
 
 ## Publish release on github
 
-Create a release on github by going to https://github.com/edenhill/librdkafka/releases
+Create a release on github by going to https://github.com/confluentinc/librdkafka/releases
 and Draft a new release.
 Name the release the same as the final release tag (e.g., `v1.9.0`) and set
 the tag to the same.

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018 Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -110,8 +111,10 @@ typedef struct rd_kafka_Node_s {
         char *rack_id; /*< (optional) Node rack id */
 } rd_kafka_Node_t;
 
-rd_kafka_Node_t *
-rd_kafka_Node_new(int id, const char *host, uint16_t port, const char *rack_id);
+rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
+                                   const char *host,
+                                   uint16_t port,
+                                   const char *rack_id);
 
 rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
 

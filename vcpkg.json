@@ -1,6 +1,6 @@
 {
     "name": "librdkafka",
-    "version": "2.0.2",
+    "version": "2.2.0",
     "dependencies": [
         {
             "name": "zstd",
@@ -12,7 +12,7 @@
         },
         {
             "name": "openssl",
-            "version>=": "3.0.7"
+            "version>=": "3.0.8"
         },
         {
             "name": "curl",

@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2014-2018 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -158,6 +158,11 @@ typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, /**< RFC2818 */
 } rd_kafka_ssl_endpoint_id_t;
 
+typedef enum {
+        RD_KAFKA_USE_ALL_DNS_IPS,
+        RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
+} rd_kafka_client_dns_lookup_t;
+
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
 #define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
@@ -224,6 +229,7 @@ struct rd_kafka_conf_s {
         int api_version_fallback_ms;
         char *broker_version_fallback;
         rd_kafka_secproto_t security_protocol;
+        rd_kafka_client_dns_lookup_t client_dns_lookup;
 
         struct {
 #if WITH_SSL
@@ -355,6 +361,7 @@ struct rd_kafka_conf_s {
         int fetch_msg_max_bytes;
         int fetch_max_bytes;
         int fetch_min_bytes;
+        int fetch_queue_backoff_ms;
         int fetch_error_backoff_ms;
         char *group_id_str;
         char *group_instance_id;

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012,2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,6 +55,7 @@ typedef enum {
         RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
         RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE,
         RD_KAFKA_BROKER_STATE_AUTH_REQ,
+        RD_KAFKA_BROKER_STATE_REAUTH,
 } rd_kafka_broker_state_t;
 
 /**
@@ -252,6 +254,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /** Absolute time of last connection attempt. */
         rd_ts_t rkb_ts_connect;
 
+        /** True if a reauthentication is in progress. */
+        rd_bool_t rkb_reauth_in_progress;
+
         /**< Persistent connection demand is tracked by
          *   a counter for each type of demand.
          *   The broker thread will maintain a persistent connection
@@ -323,6 +328,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_kafka_resp_err_t err; /**< Last error code */
                 int cnt;                 /**< Number of identical errors */
         } rkb_last_err;
+
+
+        rd_kafka_timer_t rkb_sasl_reauth_tmr;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -461,7 +469,9 @@ rd_kafka_broker_t *rd_kafka_broker_controller_async(rd_kafka_t *rk,
                                                     int state,
                                                     rd_kafka_enq_once_t *eonce);
 
-int rd_kafka_brokers_add0(rd_kafka_t *rk, const char *brokerlist);
+int rd_kafka_brokers_add0(rd_kafka_t *rk,
+                          const char *brokerlist,
+                          rd_bool_t is_bootstrap_server_list);
 void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state);
 
 void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
@@ -601,6 +611,11 @@ void rd_kafka_broker_monitor_add(rd_kafka_broker_monitor_t *rkbmon,
                                  void (*callback)(rd_kafka_broker_t *rkb));
 
 void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon);
+
+void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
+                                        int64_t connections_max_reauth_ms);
+
+void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *rkb);
 
 int unittest_broker(void);
 

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -78,8 +79,32 @@ struct rd_kafka_topic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
 struct rd_kafka_toppar_s;
-
+typedef struct rd_kafka_metadata_internal_s rd_kafka_metadata_internal_t;
+typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
+
+
+/**
+ * Protocol level sanity
+ */
+#define RD_KAFKAP_BROKERS_MAX    10000
+#define RD_KAFKAP_TOPICS_MAX     1000000
+#define RD_KAFKAP_PARTITIONS_MAX 100000
+
+
+#define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
+
+
+/**
+ * @struct Represents a fetch position:
+ *         an offset and an partition leader epoch (if known, else -1).
+ */
+typedef struct rd_kafka_fetch_pos_s {
+        int64_t offset;
+        int32_t leader_epoch;
+        rd_bool_t validated;
+} rd_kafka_fetch_pos_t;
+
 
 
 #include "rdkafka_op.h"
@@ -106,6 +131,7 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 #define RD_KAFKAP_TOPICS_MAX     1000000
 #define RD_KAFKAP_PARTITIONS_MAX 100000
 #define RD_KAFKAP_GROUPS_MAX     100000
+#define RD_KAFKAP_CONFIGS_MAX    10000
 
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
@@ -327,8 +353,9 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        struct rd_kafka_metadata *rk_full_metadata; /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata;                /* Timesstamp of .. */
+        rd_kafka_metadata_internal_t
+            *rk_full_metadata;       /* Last full metadata. */
+        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */

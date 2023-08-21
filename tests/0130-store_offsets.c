@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2020, Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,8 +31,8 @@
 
 
 /**
- * Verify that offsets_store() is not allowed for unassigned partitions,
- * and that those offsets are not committed.
+ * Verify that offsets_store() commits the right offsets and metadata,
+ * and is not allowed for unassigned partitions.
  */
 static void do_test_store_unassigned(void) {
         const char *topic = test_mk_topic_name("0130_store_unassigned", 1);
@@ -40,6 +41,7 @@ static void do_test_store_unassigned(void) {
         rd_kafka_topic_partition_list_t *parts;
         rd_kafka_resp_err_t err;
         rd_kafka_message_t *rkmessage;
+        char metadata[]             = "metadata";
         const int64_t proper_offset = 900, bad_offset = 300;
 
         SUB_TEST_QUICK();
@@ -60,8 +62,13 @@ static void do_test_store_unassigned(void) {
         TEST_SAY("Consume one message\n");
         test_consumer_poll_once(c, NULL, tmout_multip(3000));
 
-        parts->elems[0].offset = proper_offset;
-        TEST_SAY("Storing offset %" PRId64 " while assigned: should succeed\n",
+        parts->elems[0].offset        = proper_offset;
+        parts->elems[0].metadata_size = sizeof metadata;
+        parts->elems[0].metadata      = malloc(parts->elems[0].metadata_size);
+        memcpy(parts->elems[0].metadata, metadata,
+               parts->elems[0].metadata_size);
+        TEST_SAY("Storing offset %" PRId64
+                 " with metadata while assigned: should succeed\n",
                  parts->elems[0].offset);
         TEST_CALL_ERR__(rd_kafka_offsets_store(c, parts));
 
@@ -71,7 +78,10 @@ static void do_test_store_unassigned(void) {
         TEST_SAY("Unassigning partitions and trying to store again\n");
         TEST_CALL_ERR__(rd_kafka_assign(c, NULL));
 
-        parts->elems[0].offset = bad_offset;
+        parts->elems[0].offset        = bad_offset;
+        parts->elems[0].metadata_size = 0;
+        rd_free(parts->elems[0].metadata);
+        parts->elems[0].metadata = NULL;
         TEST_SAY("Storing offset %" PRId64 " while unassigned: should fail\n",
                  parts->elems[0].offset);
         err = rd_kafka_offsets_store(c, parts);
@@ -108,9 +118,50 @@ static void do_test_store_unassigned(void) {
                     "offset %" PRId64 ", not %" PRId64,
                     proper_offset, rkmessage->offset);
 
+        TEST_SAY(
+            "Retrieving committed offsets to verify committed offset "
+            "metadata\n");
+        rd_kafka_topic_partition_list_t *committed_toppar;
+        committed_toppar = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(committed_toppar, topic, 0);
+        TEST_CALL_ERR__(
+            rd_kafka_committed(c, committed_toppar, tmout_multip(3000)));
+        TEST_ASSERT(committed_toppar->elems[0].offset == proper_offset,
+                    "Expected committed offset to be %" PRId64 ", not %" PRId64,
+                    proper_offset, committed_toppar->elems[0].offset);
+        TEST_ASSERT(committed_toppar->elems[0].metadata != NULL,
+                    "Expected metadata to not be NULL");
+        TEST_ASSERT(strcmp(committed_toppar->elems[0].metadata, metadata) == 0,
+                    "Expected metadata to be %s, not %s", metadata,
+                    (char *)committed_toppar->elems[0].metadata);
+
+        TEST_SAY("Storing next offset without metadata\n");
+        parts->elems[0].offset = proper_offset + 1;
+        TEST_CALL_ERR__(rd_kafka_offsets_store(c, parts));
+
+        TEST_SAY("Committing\n");
+        TEST_CALL_ERR__(rd_kafka_commit(c, NULL, rd_false /*sync*/));
+
+        TEST_SAY(
+            "Retrieving committed offset to verify empty committed offset "
+            "metadata\n");
+        rd_kafka_topic_partition_list_t *committed_toppar_empty;
+        committed_toppar_empty = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(committed_toppar_empty, topic, 0);
+        TEST_CALL_ERR__(
+            rd_kafka_committed(c, committed_toppar_empty, tmout_multip(3000)));
+        TEST_ASSERT(committed_toppar_empty->elems[0].offset ==
+                        proper_offset + 1,
+                    "Expected committed offset to be %" PRId64 ", not %" PRId64,
+                    proper_offset, committed_toppar_empty->elems[0].offset);
+        TEST_ASSERT(committed_toppar_empty->elems[0].metadata == NULL,
+                    "Expected metadata to be NULL");
+
         rd_kafka_message_destroy(rkmessage);
 
         rd_kafka_topic_partition_list_destroy(parts);
+        rd_kafka_topic_partition_list_destroy(committed_toppar);
+        rd_kafka_topic_partition_list_destroy(committed_toppar_empty);
 
         rd_kafka_consumer_close(c);
         rd_kafka_destroy(c);

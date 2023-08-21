@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +30,7 @@
 /**
  * Apache Kafka consumer & producer performance tester
  * using the Kafka driver from librdkafka
- * (https://github.com/edenhill/librdkafka)
+ * (https://github.com/confluentinc/librdkafka)
  */
 
 #ifdef _MSC_VER
@@ -1651,6 +1652,7 @@ int main(int argc, char **argv) {
                 /*
                  * High-level balanced Consumer
                  */
+                rd_kafka_message_t **rkmessages = NULL;
 
                 rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
@@ -1676,25 +1678,60 @@ int main(int argc, char **argv) {
                 }
                 fprintf(stderr, "%% Waiting for group rebalance..\n");
 
+                if (batch_size) {
+                        rkmessages = malloc(sizeof(*rkmessages) * batch_size);
+                } else {
+                        rkmessages = malloc(sizeof(*rkmessages));
+                }
+
+                rkqu = rd_kafka_queue_get_consumer(rk);
+
                 while (run && (msgcnt == -1 || msgcnt > (int)cnt.msgs)) {
                         /* Consume messages.
                          * A message may either be a real message, or
                          * an event (if rkmessage->err is set).
                          */
-                        rd_kafka_message_t *rkmessage;
                         uint64_t fetch_latency;
+                        ssize_t r;
 
                         fetch_latency = rd_clock();
 
-                        rkmessage = rd_kafka_consumer_poll(rk, 1000);
-                        if (rkmessage) {
-                                msg_consume(rkmessage, NULL);
-                                rd_kafka_message_destroy(rkmessage);
+                        if (batch_size) {
+                                /* Batch fetch mode */
+                                ssize_t i = 0;
+                                r         = rd_kafka_consume_batch_queue(
+                                    rkqu, 1000, rkmessages, batch_size);
+                                if (r != -1) {
+                                        for (i = 0; i < r; i++) {
+                                                msg_consume(rkmessages[i],
+                                                            NULL);
+                                                rd_kafka_message_destroy(
+                                                    rkmessages[i]);
+                                        }
+                                }
 
-                                /* Simulate processing time
-                                 * if `-r <rate>` was set. */
-                                if (rate_sleep)
+                                if (r == -1)
+                                        fprintf(stderr, "%% Error: %s\n",
+                                                rd_kafka_err2str(
+                                                    rd_kafka_last_error()));
+                                else if (r > 0 && rate_sleep) {
+                                        /* Simulate processing time
+                                         * if `-r <rate>` was set. */
                                         do_sleep(rate_sleep);
+                                }
+
+                        } else {
+                                rkmessages[0] =
+                                    rd_kafka_consumer_poll(rk, 1000);
+                                if (rkmessages[0]) {
+                                        msg_consume(rkmessages[0], NULL);
+                                        rd_kafka_message_destroy(rkmessages[0]);
+
+                                        /* Simulate processing time
+                                         * if `-r <rate>` was set. */
+                                        if (rate_sleep)
+                                                do_sleep(rate_sleep);
+                                }
                         }
 
                         cnt.t_fetch_latency += rd_clock() - fetch_latency;
@@ -1708,6 +1745,8 @@ int main(int argc, char **argv) {
                         fprintf(stderr, "%% Failed to close consumer: %s\n",
                                 rd_kafka_err2str(err));
 
+                free(rkmessages);
+                rd_kafka_queue_destroy(rkqu);
                 rd_kafka_destroy(rk);
         }
 

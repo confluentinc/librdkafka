@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -616,6 +617,15 @@ void test_consumer_poll_expect_err(rd_kafka_t *rk,
                                    int timeout_ms,
                                    rd_kafka_resp_err_t err);
 int test_consumer_poll_once(rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms);
+int test_consumer_poll_exact_timeout(const char *what,
+                                     rd_kafka_t *rk,
+                                     uint64_t testid,
+                                     int exp_eof_cnt,
+                                     int exp_msg_base,
+                                     int exp_cnt,
+                                     rd_bool_t exact,
+                                     test_msgver_t *mv,
+                                     int timeout_ms);
 int test_consumer_poll_exact(const char *what,
                              rd_kafka_t *rk,
                              uint64_t testid,
@@ -631,6 +641,14 @@ int test_consumer_poll(const char *what,
                        int exp_msg_base,
                        int exp_cnt,
                        test_msgver_t *mv);
+int test_consumer_poll_timeout(const char *what,
+                               rd_kafka_t *rk,
+                               uint64_t testid,
+                               int exp_eof_cnt,
+                               int exp_msg_base,
+                               int exp_cnt,
+                               test_msgver_t *mv,
+                               int timeout_ms);
 
 void test_consumer_wait_assignment(rd_kafka_t *rk, rd_bool_t do_poll);
 void test_consumer_verify_assignment0(const char *func,
@@ -739,6 +757,10 @@ void test_headers_dump(const char *what,
 
 int32_t *test_get_broker_ids(rd_kafka_t *use_rk, size_t *cntp);
 
+char *test_get_broker_config_entry(rd_kafka_t *use_rk,
+                                   int32_t broker_id,
+                                   const char *key);
+
 void test_wait_metadata_update(rd_kafka_t *rk,
                                rd_kafka_metadata_topic_t *topics,
                                size_t topic_cnt,
@@ -778,6 +800,13 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
                                              const char *resname,
                                              const char **configs,
                                              size_t config_cnt);
+
+rd_kafka_resp_err_t
+test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
+                                    rd_kafka_ResourceType_t restype,
+                                    const char *resname,
+                                    const char **configs,
+                                    size_t config_cnt);
 
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,

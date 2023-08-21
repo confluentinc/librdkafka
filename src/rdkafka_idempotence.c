@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018 Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -243,10 +243,22 @@ redo:
         case RD_KAFKA_IDEMP_STATE_WAIT_TRANSPORT:
                 /* Waiting for broker/coordinator to become available */
                 if (rd_kafka_is_transactional(rk)) {
-                        /* Assert that a coordinator has been assigned by
-                         * inspecting txn_curr_coord (the real broker)
-                         * rather than txn_coord (the logical broker). */
-                        rd_assert(rk->rk_eos.txn_curr_coord);
+                        /* Check that a proper coordinator broker has
+                         * been assigned by inspecting txn_curr_coord
+                         * (the real broker) rather than txn_coord
+                         * (the logical broker). */
+                        if (!rk->rk_eos.txn_curr_coord) {
+                                /*
+                                 * Can happen if the coordinator wasn't set or
+                                 * wasn't up initially and has been set to NULL
+                                 * after a COORDINATOR_NOT_AVAILABLE error in
+                                 * FindCoordinatorResponse. When the coordinator
+                                 * is known this FSM will be called again.
+                                 */
+                                rd_kafka_txn_coord_query(
+                                    rk, "Awaiting coordinator");
+                                return;
+                        }
                         rkb = rk->rk_eos.txn_coord;
                         rd_kafka_broker_keep(rkb);
 
@@ -355,6 +367,11 @@ redo:
                 /* Wait for outstanding ProduceRequests to finish
                  * before bumping the current epoch. */
                 break;
+
+        case RD_KAFKA_IDEMP_STATE_WAIT_TXN_ABORT:
+                /* Wait for txnmgr to abort its current transaction
+                 * and then trigger a drain & reset or bump. */
+                break;
         }
 }
 
@@ -433,6 +450,8 @@ void rd_kafka_idemp_request_pid_failed(rd_kafka_broker_t *rkb,
              err == RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE))
                 rd_kafka_txn_coord_set(rk, NULL, "%s", errstr);
 
+        /* This error code is read by init_transactions() for propagation
+         * to the application. */
         rk->rk_eos.txn_init_err = err;
 
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
@@ -597,41 +616,74 @@ void rd_kafka_idemp_drain_reset(rd_kafka_t *rk, const char *reason) {
  * @brief Schedule an epoch bump when the local ProduceRequest queues
  *        have been fully drained.
  *
- * The PID is not bumped until the queues are fully drained.
+ * The PID is not bumped until the queues are fully drained and the current
+ * transaction is aborted (if any).
  *
+ * @param allow_txn_abort If this is a transactional producer and this flag is
+ *                        true then we trigger an abortable txn error to abort
+ *                        the current transaction first. The txnmgr will later
+ *                        call us back with this flag set to false to go ahead
+ *                        with the epoch bump.
  * @param fmt is a human-readable reason for the bump
  *
  *
  * @locality any
  * @locks none
  */
-void rd_kafka_idemp_drain_epoch_bump(rd_kafka_t *rk,
-                                     rd_kafka_resp_err_t err,
-                                     const char *fmt,
-                                     ...) {
+void rd_kafka_idemp_drain_epoch_bump0(rd_kafka_t *rk,
+                                      rd_bool_t allow_txn_abort,
+                                      rd_kafka_resp_err_t err,
+                                      const char *fmt,
+                                      ...) {
         va_list ap;
         char buf[256];
+        rd_bool_t requires_txn_abort =
+            allow_txn_abort && rd_kafka_is_transactional(rk);
 
         va_start(ap, fmt);
         rd_vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
 
         rd_kafka_wrlock(rk);
-        rd_kafka_dbg(rk, EOS, "DRAIN",
-                     "Beginning partition drain for %s epoch bump "
-                     "for %d partition(s) with in-flight requests: %s",
-                     rd_kafka_pid2str(rk->rk_eos.pid),
-                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt), buf);
-        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
+
+
+        if (requires_txn_abort) {
+                rd_kafka_dbg(rk, EOS, "DRAIN",
+                             "Need transaction abort before beginning "
+                             "partition drain in state %s for %s epoch bump "
+                             "for %d partition(s) with in-flight requests: %s",
+                             rd_kafka_idemp_state2str(rk->rk_eos.idemp_state),
+                             rd_kafka_pid2str(rk->rk_eos.pid),
+                             rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt),
+                             buf);
+                rd_kafka_idemp_set_state(rk,
+                                         RD_KAFKA_IDEMP_STATE_WAIT_TXN_ABORT);
+
+        } else {
+                rd_kafka_dbg(rk, EOS, "DRAIN",
+                             "Beginning partition drain in state %s "
+                             "for %s epoch bump "
+                             "for %d partition(s) with in-flight requests: %s",
+                             rd_kafka_idemp_state2str(rk->rk_eos.idemp_state),
+                             rd_kafka_pid2str(rk->rk_eos.pid),
+                             rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt),
+                             buf);
+
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
+        }
+
         rd_kafka_wrunlock(rk);
 
-        /* Transactions: bumping the epoch requires the current transaction
-         *               to be aborted. */
-        if (rd_kafka_is_transactional(rk))
+        if (requires_txn_abort) {
+                /* Transactions: bumping the epoch requires the current
+                 *               transaction to be aborted first. */
                 rd_kafka_txn_set_abortable_error_with_bump(rk, err, "%s", buf);
 
-        /* Check right away if the drain could be done. */
-        rd_kafka_idemp_check_drain_done(rk);
+        } else {
+                /* Idempotent producer: check right away if the drain could
+                 *                      be done. */
+                rd_kafka_idemp_check_drain_done(rk);
+        }
 }
 
 /**
@@ -698,7 +750,10 @@ void rd_kafka_idemp_start(rd_kafka_t *rk, rd_bool_t immediate) {
                 return;
 
         rd_kafka_wrlock(rk);
-        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
+        /* Don't restart PID acquisition if there's already an outstanding
+         * request. */
+        if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_WAIT_PID)
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
         rd_kafka_wrunlock(rk);
 
         /* Schedule request timer */

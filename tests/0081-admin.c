@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,6 +29,7 @@
 
 #include "test.h"
 #include "rdkafka.h"
+#include "../src/rdstring.h"
 
 /**
  * @brief Admin API integration tests.
@@ -824,6 +826,252 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                     rd_kafka_err2name(err), errstr2);
 
         rconfigs = rd_kafka_AlterConfigs_result_resources(res, &rconfig_cnt);
+        TEST_ASSERT((int)rconfig_cnt == ci,
+                    "Expected %d result resources, got %" PRIusz "\n", ci,
+                    rconfig_cnt);
+
+        /*
+         * Verify status per resource
+         */
+        for (i = 0; i < (int)rconfig_cnt; i++) {
+                const rd_kafka_ConfigEntry_t **entries;
+                size_t entry_cnt;
+
+                err     = rd_kafka_ConfigResource_error(rconfigs[i]);
+                errstr2 = rd_kafka_ConfigResource_error_string(rconfigs[i]);
+
+                entries =
+                    rd_kafka_ConfigResource_configs(rconfigs[i], &entry_cnt);
+
+                TEST_SAY(
+                    "ConfigResource #%d: type %s (%d), \"%s\": "
+                    "%" PRIusz " ConfigEntries, error %s (%s)\n",
+                    i,
+                    rd_kafka_ResourceType_name(
+                        rd_kafka_ConfigResource_type(rconfigs[i])),
+                    rd_kafka_ConfigResource_type(rconfigs[i]),
+                    rd_kafka_ConfigResource_name(rconfigs[i]), entry_cnt,
+                    rd_kafka_err2name(err), errstr2 ? errstr2 : "");
+
+                test_print_ConfigEntry_array(entries, entry_cnt, 1);
+
+                if (rd_kafka_ConfigResource_type(rconfigs[i]) !=
+                        rd_kafka_ConfigResource_type(configs[i]) ||
+                    strcmp(rd_kafka_ConfigResource_name(rconfigs[i]),
+                           rd_kafka_ConfigResource_name(configs[i]))) {
+                        TEST_FAIL_LATER(
+                            "ConfigResource #%d: "
+                            "expected type %s name %s, "
+                            "got type %s name %s",
+                            i,
+                            rd_kafka_ResourceType_name(
+                                rd_kafka_ConfigResource_type(configs[i])),
+                            rd_kafka_ConfigResource_name(configs[i]),
+                            rd_kafka_ResourceType_name(
+                                rd_kafka_ConfigResource_type(rconfigs[i])),
+                            rd_kafka_ConfigResource_name(rconfigs[i]));
+                        fails++;
+                        continue;
+                }
+
+
+                if (err != exp_err[i]) {
+                        TEST_FAIL_LATER(
+                            "ConfigResource #%d: "
+                            "expected %s (%d), got %s (%s)",
+                            i, rd_kafka_err2name(exp_err[i]), exp_err[i],
+                            rd_kafka_err2name(err), errstr2 ? errstr2 : "");
+                        fails++;
+                }
+        }
+
+        TEST_ASSERT(!fails, "See %d previous failure(s)", fails);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_ConfigResource_destroy_array(configs, ci);
+
+        TEST_LATER_CHECK();
+#undef MY_CONFRES_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test IncrementalAlterConfigs
+ */
+static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
+                                            rd_kafka_queue_t *rkqu) {
+#define MY_CONFRES_CNT 3
+        char *topics[MY_CONFRES_CNT];
+        rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t exp_err[MY_CONFRES_CNT];
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+        const rd_kafka_IncrementalAlterConfigs_result_t *res;
+        const rd_kafka_ConfigResource_t **rconfigs;
+        size_t rconfig_cnt;
+        char errstr[128];
+        const char *errstr2;
+        int ci = 0;
+        int i;
+        int fails = 0;
+
+        SUB_TEST_QUICK();
+
+        /*
+         * Only create one topic, the others will be non-existent.
+         */
+        for (i = 0; i < MY_CONFRES_CNT; i++)
+                rd_strdupa(&topics[i], test_mk_topic_name(__FUNCTION__, 1));
+
+        test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
+
+        test_wait_topic_exists(rk, topics[0], 10000);
+
+
+        /** Test the test helper, for use in other tests. */
+        do {
+                const char *broker_id = tsprintf("%d", avail_brokers[0]);
+                const char *confs_set_append[] = {
+                    "compression.type", "SET",    "lz4",
+                    "cleanup.policy",   "APPEND", "compact"};
+                const char *confs_delete_subtract[] = {
+                    "compression.type", "DELETE",   "lz4",
+                    "cleanup.policy",   "SUBTRACT", "compact"};
+                const char *confs_set_append_broker[] = {
+                    "background.threads", "SET",    "9",
+                    "log.cleanup.policy", "APPEND", "compact"};
+                const char *confs_delete_subtract_broker[] = {
+                    "background.threads", "DELETE",   "",
+                    "log.cleanup.policy", "SUBTRACT", "compact"};
+
+                TEST_SAY("Testing test helper with SET and APPEND\n");
+                test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
+                                                    topics[0], confs_set_append,
+                                                    2);
+                TEST_SAY("Testing test helper with SUBTRACT and DELETE\n");
+                test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
+                                                    topics[0],
+                                                    confs_delete_subtract, 2);
+
+                TEST_SAY(
+                    "Testing test helper with SET and APPEND with BROKER "
+                    "resource type\n");
+                test_IncrementalAlterConfigs_simple(
+                    rk, RD_KAFKA_RESOURCE_BROKER, broker_id,
+                    confs_set_append_broker, 2);
+                TEST_SAY(
+                    "Testing test helper with SUBTRACT and DELETE with BROKER "
+                    "resource type\n");
+                test_IncrementalAlterConfigs_simple(
+                    rk, RD_KAFKA_RESOURCE_BROKER, broker_id,
+                    confs_delete_subtract_broker, 2);
+                TEST_SAY("End testing test helper\n");
+        } while (0);
+
+        /*
+         * ConfigResource #0: valid topic config
+         */
+        configs[ci] =
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
+
+        error = rd_kafka_ConfigResource_add_incremental_config(
+            configs[ci], "compression.type", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
+            "gzip");
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+
+        error = rd_kafka_ConfigResource_add_incremental_config(
+            configs[ci], "flush.ms", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
+            "12345678");
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        ci++;
+
+
+        if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
+                /*
+                 * ConfigResource #1: valid broker config
+                 */
+                configs[ci] = rd_kafka_ConfigResource_new(
+                    RD_KAFKA_RESOURCE_BROKER,
+                    tsprintf("%" PRId32, avail_brokers[0]));
+
+                error = rd_kafka_ConfigResource_add_incremental_config(
+                    configs[ci], "sasl.kerberos.min.time.before.relogin",
+                    RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "58000");
+                TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+                ci++;
+        } else {
+                TEST_WARN(
+                    "Skipping RESOURCE_BROKER test on unsupported "
+                    "broker version\n");
+        }
+
+        /*
+         * ConfigResource #2: valid topic config, non-existent topic
+         */
+        configs[ci] =
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
+
+        error = rd_kafka_ConfigResource_add_incremental_config(
+            configs[ci], "compression.type", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
+            "lz4");
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+
+        error = rd_kafka_ConfigResource_add_incremental_config(
+            configs[ci], "offset.metadata.max.bytes",
+            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "12345");
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+
+        if (test_broker_version >= TEST_BRKVER(2, 7, 0, 0))
+                exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+        else
+                exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN;
+        ci++;
+
+        /*
+         * Timeout options
+         */
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS);
+        err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
+                                                        sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+
+        /*
+         * Fire off request
+         */
+        rd_kafka_IncrementalAlterConfigs(rk, configs, ci, options, rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        /*
+         * Wait for result
+         */
+        rkev = test_wait_admin_result(
+            rkqu, RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT, 10000 + 1000);
+
+        /*
+         * Extract result
+         */
+        res = rd_kafka_event_IncrementalAlterConfigs_result(rkev);
+        TEST_ASSERT(res, "Expected AlterConfigs result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!err, "Expected success, not %s: %s",
+                    rd_kafka_err2name(err), errstr2);
+
+        rconfigs = rd_kafka_IncrementalAlterConfigs_result_resources(
+            res, &rconfig_cnt);
         TEST_ASSERT((int)rconfig_cnt == ci,
                     "Expected %d result resources, got %" PRIusz "\n", ci,
                     rconfig_cnt);
@@ -2233,7 +2481,7 @@ typedef struct expected_group_result {
 static void do_test_DeleteGroups(const char *what,
                                  rd_kafka_t *rk,
                                  rd_kafka_queue_t *useq,
-                                 int op_timeout) {
+                                 int request_timeout) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
         rd_kafka_event_t *rkev           = NULL;
@@ -2255,16 +2503,16 @@ static void do_test_DeleteGroups(const char *what,
         rd_kafka_DeleteGroup_t *del_groups[MY_DEL_GROUPS_CNT];
         const rd_kafka_DeleteGroups_result_t *res;
 
-        SUB_TEST_QUICK("%s DeleteGroups with %s, op_timeout %d",
-                       rd_kafka_name(rk), what, op_timeout);
+        SUB_TEST_QUICK("%s DeleteGroups with %s, request_timeout %d",
+                       rd_kafka_name(rk), what, request_timeout);
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        if (op_timeout != -1) {
+        if (request_timeout != -1) {
                 options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
 
-                err = rd_kafka_AdminOptions_set_operation_timeout(
-                    options, op_timeout, errstr, sizeof(errstr));
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         }
 
@@ -2385,6 +2633,478 @@ static void do_test_DeleteGroups(const char *what,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test list groups, creating consumers for a set of groups,
+ * listing and deleting them at the end.
+ */
+static void do_test_ListConsumerGroups(const char *what,
+                                       rd_kafka_t *rk,
+                                       rd_kafka_queue_t *useq,
+                                       int request_timeout,
+                                       rd_bool_t match_states) {
+#define TEST_LIST_CONSUMER_GROUPS_CNT 4
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev           = NULL;
+        rd_kafka_resp_err_t err;
+        size_t valid_cnt, error_cnt;
+        rd_bool_t is_simple_consumer_group;
+        rd_kafka_consumer_group_state_t state;
+        char errstr[512];
+        const char *errstr2, *group_id;
+        char *list_consumer_groups[TEST_LIST_CONSUMER_GROUPS_CNT];
+        const int partitions_cnt = 1;
+        const int msgs_cnt       = 100;
+        size_t i, found;
+        char *topic;
+        rd_kafka_metadata_topic_t exp_mdtopic = {0};
+        int64_t testid                        = test_id_generate();
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        const rd_kafka_ListConsumerGroups_result_t *res;
+        const rd_kafka_ConsumerGroupListing_t **groups;
+        rd_bool_t has_match_states =
+            test_broker_version >= TEST_BRKVER(2, 7, 0, 0);
+
+        SUB_TEST_QUICK(
+            "%s ListConsumerGroups with %s, request_timeout %d"
+            ", match_states %s",
+            rd_kafka_name(rk), what, request_timeout, RD_STR_ToF(match_states));
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (request_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
+
+                if (match_states) {
+                        rd_kafka_consumer_group_state_t empty =
+                            RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY;
+
+                        TEST_CALL_ERROR__(
+                            rd_kafka_AdminOptions_set_match_consumer_group_states(
+                                options, &empty, 1));
+                }
+
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr)));
+        }
+
+
+        topic             = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        exp_mdtopic.topic = topic;
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
+
+        /* Produce 100 msgs */
+        test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
+
+        for (i = 0; i < TEST_LIST_CONSUMER_GROUPS_CNT; i++) {
+                char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                test_consume_msgs_easy(group, topic, testid, -1, msgs_cnt,
+                                       NULL);
+                list_consumer_groups[i] = group;
+        }
+
+        TIMING_START(&timing, "ListConsumerGroups");
+        TEST_SAY("Call ListConsumerGroups\n");
+        rd_kafka_ListConsumerGroups(rk, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        TIMING_START(&timing, "ListConsumerGroups.queue_poll");
+
+        /* Poll result queue for ListConsumerGroups result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
+                TEST_SAY("ListConsumerGroups: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT) {
+                        break;
+                }
+
+                rd_kafka_event_destroy(rkev);
+        }
+        /* Convert event to proper result */
+        res = rd_kafka_event_ListConsumerGroups_result(rkev);
+        TEST_ASSERT(res, "expected ListConsumerGroups_result, got %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == exp_err,
+                    "expected ListConsumerGroups to return %s, got %s (%s)",
+                    rd_kafka_err2str(exp_err), rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("ListConsumerGroups: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        groups = rd_kafka_ListConsumerGroups_result_valid(res, &valid_cnt);
+        rd_kafka_ListConsumerGroups_result_errors(res, &error_cnt);
+
+        /* Other tests could be running */
+        TEST_ASSERT(valid_cnt >= TEST_LIST_CONSUMER_GROUPS_CNT,
+                    "expected ListConsumerGroups to return at least %" PRId32
+                    " valid groups,"
+                    " got %zu",
+                    TEST_LIST_CONSUMER_GROUPS_CNT, valid_cnt);
+
+        TEST_ASSERT(error_cnt == 0,
+                    "expected ListConsumerGroups to return 0 errors,"
+                    " got %zu",
+                    error_cnt);
+
+        found = 0;
+        for (i = 0; i < valid_cnt; i++) {
+                int j;
+                const rd_kafka_ConsumerGroupListing_t *group;
+                group    = groups[i];
+                group_id = rd_kafka_ConsumerGroupListing_group_id(group);
+                is_simple_consumer_group =
+                    rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
+                        group);
+                state = rd_kafka_ConsumerGroupListing_state(group);
+                for (j = 0; j < TEST_LIST_CONSUMER_GROUPS_CNT; j++) {
+                        if (!strcmp(list_consumer_groups[j], group_id)) {
+                                found++;
+                                TEST_ASSERT(!is_simple_consumer_group,
+                                            "expected a normal group,"
+                                            " got a simple group");
+
+                                if (!has_match_states)
+                                        break;
+
+                                TEST_ASSERT(
+                                    state ==
+                                        RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
+                                    "expected an Empty state,"
+                                    " got state %s",
+                                    rd_kafka_consumer_group_state_name(state));
+                                break;
+                        }
+                }
+        }
+        TEST_ASSERT(found == TEST_LIST_CONSUMER_GROUPS_CNT,
+                    "expected to find %d"
+                    " started groups,"
+                    " got %" PRIusz,
+                    TEST_LIST_CONSUMER_GROUPS_CNT, found);
+
+        rd_kafka_event_destroy(rkev);
+
+        test_DeleteGroups_simple(rk, NULL, (char **)list_consumer_groups,
+                                 TEST_LIST_CONSUMER_GROUPS_CNT, NULL);
+
+        for (i = 0; i < TEST_LIST_CONSUMER_GROUPS_CNT; i++) {
+                rd_free(list_consumer_groups[i]);
+        }
+
+        rd_free(topic);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef TEST_LIST_CONSUMER_GROUPS_CNT
+
+        SUB_TEST_PASS();
+}
+
+typedef struct expected_DescribeConsumerGroups_result {
+        char *group_id;
+        rd_kafka_resp_err_t err;
+} expected_DescribeConsumerGroups_result_t;
+
+
+/**
+ * @brief Test describe groups, creating consumers for a set of groups,
+ * describing and deleting them at the end.
+ */
+static void do_test_DescribeConsumerGroups(const char *what,
+                                           rd_kafka_t *rk,
+                                           rd_kafka_queue_t *useq,
+                                           int request_timeout) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev           = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 4
+        int known_groups = TEST_DESCRIBE_CONSUMER_GROUPS_CNT - 1;
+        int i;
+        const int partitions_cnt = 1;
+        const int msgs_cnt       = 100;
+        char *topic;
+        rd_kafka_metadata_topic_t exp_mdtopic = {0};
+        int64_t testid                        = test_id_generate();
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        const rd_kafka_ConsumerGroupDescription_t **results = NULL;
+        expected_DescribeConsumerGroups_result_t
+            expected[TEST_DESCRIBE_CONSUMER_GROUPS_CNT] = RD_ZERO_INIT;
+        const char *describe_groups[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
+        char group_instance_ids[TEST_DESCRIBE_CONSUMER_GROUPS_CNT][512];
+        char client_ids[TEST_DESCRIBE_CONSUMER_GROUPS_CNT][512];
+        rd_kafka_t *rks[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
+        const rd_kafka_DescribeConsumerGroups_result_t *res;
+        rd_bool_t has_group_instance_id =
+            test_broker_version >= TEST_BRKVER(2, 4, 0, 0);
+
+        SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
+                       rd_kafka_name(rk), what, request_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (request_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        topic             = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        exp_mdtopic.topic = topic;
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
+
+        /* Produce 100 msgs */
+        test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
+
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                rd_kafka_conf_t *conf;
+                char *group_id = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                if (i < known_groups) {
+                        snprintf(group_instance_ids[i],
+                                 sizeof(group_instance_ids[i]),
+                                 "group_instance_id_%" PRId32, i);
+                        snprintf(client_ids[i], sizeof(client_ids[i]),
+                                 "client_id_%" PRId32, i);
+
+                        test_conf_init(&conf, NULL, 0);
+                        test_conf_set(conf, "client.id", client_ids[i]);
+                        test_conf_set(conf, "group.instance.id",
+                                      group_instance_ids[i]);
+                        test_conf_set(conf, "session.timeout.ms", "5000");
+                        test_conf_set(conf, "auto.offset.reset", "earliest");
+                        rks[i] =
+                            test_create_consumer(group_id, NULL, conf, NULL);
+                        test_consumer_subscribe(rks[i], topic);
+                        /* Consume messages */
+                        test_consumer_poll("consumer", rks[i], testid, -1, -1,
+                                           msgs_cnt, NULL);
+                }
+                expected[i].group_id = group_id;
+                expected[i].err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+                describe_groups[i]   = group_id;
+        }
+
+        TIMING_START(&timing, "DescribeConsumerGroups");
+        TEST_SAY("Call DescribeConsumerGroups\n");
+        rd_kafka_DescribeConsumerGroups(
+            rk, describe_groups, TEST_DESCRIBE_CONSUMER_GROUPS_CNT, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        TIMING_START(&timing, "DescribeConsumerGroups.queue_poll");
+
+        /* Poll result queue for DescribeConsumerGroups result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
+                TEST_SAY("DescribeConsumerGroups: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT) {
+                        break;
+                }
+
+                rd_kafka_event_destroy(rkev);
+        }
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeConsumerGroups_result(rkev);
+        TEST_ASSERT(res, "expected DescribeConsumerGroups_result, got %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == exp_err,
+                    "expected DescribeConsumerGroups to return %s, got %s (%s)",
+                    rd_kafka_err2str(exp_err), rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("DescribeConsumerGroups: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        size_t cnt = 0;
+        results    = rd_kafka_DescribeConsumerGroups_result_groups(res, &cnt);
+
+        TEST_ASSERT(
+            TEST_DESCRIBE_CONSUMER_GROUPS_CNT == cnt,
+            "expected DescribeConsumerGroups_result_groups to return %d items, "
+            "got %" PRIusz,
+            TEST_DESCRIBE_CONSUMER_GROUPS_CNT, cnt);
+
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                expected_DescribeConsumerGroups_result_t *exp  = &expected[i];
+                rd_kafka_resp_err_t exp_err                    = exp->err;
+                const rd_kafka_ConsumerGroupDescription_t *act = results[i];
+                rd_kafka_resp_err_t act_err = rd_kafka_error_code(
+                    rd_kafka_ConsumerGroupDescription_error(act));
+                rd_kafka_consumer_group_state_t state =
+                    rd_kafka_ConsumerGroupDescription_state(act);
+                TEST_ASSERT(
+                    strcmp(exp->group_id,
+                           rd_kafka_ConsumerGroupDescription_group_id(act)) ==
+                        0,
+                    "Result order mismatch at #%d: expected group id to be "
+                    "%s, got %s",
+                    i, exp->group_id,
+                    rd_kafka_ConsumerGroupDescription_group_id(act));
+                if (i < known_groups) {
+                        int member_count;
+                        const rd_kafka_MemberDescription_t *member;
+                        const rd_kafka_MemberAssignment_t *assignment;
+                        const char *client_id;
+                        const char *group_instance_id;
+                        const rd_kafka_topic_partition_list_t *partitions;
+
+                        TEST_ASSERT(state ==
+                                        RD_KAFKA_CONSUMER_GROUP_STATE_STABLE,
+                                    "Expected Stable state, got %s.",
+                                    rd_kafka_consumer_group_state_name(state));
+
+                        TEST_ASSERT(
+                            !rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
+                                act),
+                            "Expected a normal consumer group, got a simple "
+                            "one.");
+
+                        member_count =
+                            rd_kafka_ConsumerGroupDescription_member_count(act);
+                        TEST_ASSERT(member_count == 1,
+                                    "Expected one member, got %d.",
+                                    member_count);
+
+                        member =
+                            rd_kafka_ConsumerGroupDescription_member(act, 0);
+
+                        client_id =
+                            rd_kafka_MemberDescription_client_id(member);
+                        TEST_ASSERT(!strcmp(client_id, client_ids[i]),
+                                    "Expected client id \"%s\","
+                                    " got \"%s\".",
+                                    client_ids[i], client_id);
+
+                        if (has_group_instance_id) {
+                                group_instance_id =
+                                    rd_kafka_MemberDescription_group_instance_id(
+                                        member);
+                                TEST_ASSERT(!strcmp(group_instance_id,
+                                                    group_instance_ids[i]),
+                                            "Expected group instance id \"%s\","
+                                            " got \"%s\".",
+                                            group_instance_ids[i],
+                                            group_instance_id);
+                        }
+
+                        assignment =
+                            rd_kafka_MemberDescription_assignment(member);
+                        TEST_ASSERT(assignment != NULL,
+                                    "Expected non-NULL member assignment");
+
+                        partitions =
+                            rd_kafka_MemberAssignment_partitions(assignment);
+                        TEST_ASSERT(partitions != NULL,
+                                    "Expected non-NULL member partitions");
+
+                        TEST_SAY(
+                            "Member client.id=\"%s\", "
+                            "group.instance.id=\"%s\", "
+                            "consumer_id=\"%s\", "
+                            "host=\"%s\", assignment:\n",
+                            rd_kafka_MemberDescription_client_id(member),
+                            rd_kafka_MemberDescription_group_instance_id(
+                                member),
+                            rd_kafka_MemberDescription_consumer_id(member),
+                            rd_kafka_MemberDescription_host(member));
+                        /* This is just to make sure the returned memory
+                         * is valid. */
+                        test_print_partition_list(partitions);
+                } else {
+                        TEST_ASSERT(state == RD_KAFKA_CONSUMER_GROUP_STATE_DEAD,
+                                    "Expected Dead state, got %s.",
+                                    rd_kafka_consumer_group_state_name(state));
+                }
+                TEST_ASSERT(exp_err == act_err,
+                            "expected err=%d for group %s, got %d (%s)",
+                            exp_err, exp->group_id, act_err,
+                            rd_kafka_err2str(act_err));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0; i < known_groups; i++) {
+                test_consumer_close(rks[i]);
+                rd_kafka_destroy(rks[i]);
+        }
+
+        /* Wait session timeout + 1s. Because using static group membership */
+        rd_sleep(6);
+
+        test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
+                                 known_groups, NULL);
+
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                rd_free(expected[i].group_id);
+        }
+
+        rd_free(topic);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef TEST_DESCRIBE_CONSUMER_GROUPS_CNT
+
+        SUB_TEST_PASS();
+}
 
 /**
  * @brief Test deletion of committed offsets.
@@ -2394,7 +3114,7 @@ static void do_test_DeleteGroups(const char *what,
 static void do_test_DeleteConsumerGroupOffsets(const char *what,
                                                rd_kafka_t *rk,
                                                rd_kafka_queue_t *useq,
-                                               int op_timeout,
+                                               int req_timeout_ms,
                                                rd_bool_t sub_consumer) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
@@ -2419,20 +3139,22 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         rd_kafka_t *consumer;
         char *groupid;
 
-        SUB_TEST_QUICK("%s DeleteConsumerGroupOffsets with %s, op_timeout %d%s",
-                       rd_kafka_name(rk), what, op_timeout,
-                       sub_consumer ? ", with subscribing consumer" : "");
+        SUB_TEST_QUICK(
+            "%s DeleteConsumerGroupOffsets with %s, req_timeout_ms %d%s",
+            rd_kafka_name(rk), what, req_timeout_ms,
+            sub_consumer ? ", with subscribing consumer" : "");
 
         if (sub_consumer)
                 exp_err = RD_KAFKA_RESP_ERR_GROUP_SUBSCRIBED_TO_TOPIC;
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+        if (req_timeout_ms != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS);
 
-                err = rd_kafka_AdminOptions_set_operation_timeout(
-                    options, op_timeout, errstr, sizeof(errstr));
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, req_timeout_ms, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         }
 
@@ -2486,7 +3208,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
 
-        if (test_partition_list_cmp(committed, orig_offsets)) {
+        if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
                 test_print_partition_list(orig_offsets);
                 TEST_SAY("committed() list:\n");
@@ -2500,18 +3222,21 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         offsets   = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
         to_delete = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
         for (i = 0; i < orig_offsets->cnt; i++) {
-                if (i < orig_offsets->cnt / 2)
-                        rd_kafka_topic_partition_list_add(
+                rd_kafka_topic_partition_t *rktpar;
+                if (i < orig_offsets->cnt / 2) {
+                        rktpar = rd_kafka_topic_partition_list_add(
                             offsets, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
-                else {
-                        rd_kafka_topic_partition_list_add(
+                        rktpar->offset = orig_offsets->elems[i].offset;
+                } else {
+                        rktpar = rd_kafka_topic_partition_list_add(
                             to_delete, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
-                        rd_kafka_topic_partition_list_add(
+                        rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+                        rktpar         = rd_kafka_topic_partition_list_add(
                             offsets, orig_offsets->elems[i].topic,
-                            orig_offsets->elems[i].partition)
-                            ->offset = RD_KAFKA_OFFSET_INVALID;
+                            orig_offsets->elems[i].partition);
+                        rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                 }
         }
 
@@ -2570,7 +3295,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         deleted = rd_kafka_topic_partition_list_copy(
             rd_kafka_group_result_partitions(gres[0]));
 
-        if (test_partition_list_cmp(deleted, to_delete)) {
+        if (test_partition_list_and_offsets_cmp(deleted, to_delete)) {
                 TEST_SAY("Result list:\n");
                 test_print_partition_list(deleted);
                 TEST_SAY("Partitions passed to DeleteConsumerGroupOffsets:\n");
@@ -2609,9 +3334,13 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         TEST_SAY("Committed offsets after delete:\n");
         test_print_partition_list(committed);
 
-        if (test_partition_list_cmp(committed, offsets)) {
+        rd_kafka_topic_partition_list_t *expected = offsets;
+        if (sub_consumer)
+                expected = orig_offsets;
+
+        if (test_partition_list_and_offsets_cmp(committed, expected)) {
                 TEST_SAY("expected list:\n");
-                test_print_partition_list(offsets);
+                test_print_partition_list(expected);
                 TEST_SAY("committed() list:\n");
                 test_print_partition_list(committed);
                 TEST_FAIL("committed offsets don't match");
@@ -2634,11 +3363,856 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
                 rd_kafka_queue_destroy(q);
 
         TEST_LATER_CHECK();
-#undef MY_DEL_RECORDS_CNT
+#undef MY_TOPIC_CNT
 
         SUB_TEST_PASS();
 }
 
+
+/**
+ * @brief Test altering of committed offsets.
+ *
+ *
+ */
+static void do_test_AlterConsumerGroupOffsets(const char *what,
+                                              rd_kafka_t *rk,
+                                              rd_kafka_queue_t *useq,
+                                              int req_timeout_ms,
+                                              rd_bool_t sub_consumer,
+                                              rd_bool_t create_topics) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *orig_offsets, *offsets, *to_alter,
+            *committed, *alterd, *subscription = NULL;
+        rd_kafka_event_t *rkev = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT 3
+        int i;
+        const int partitions_cnt = 3;
+        char *topics[TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT];
+        rd_kafka_metadata_topic_t
+            exp_mdtopics[TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT] = {{0}};
+        int exp_mdtopic_cnt                                           = 0;
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets;
+        const rd_kafka_AlterConsumerGroupOffsets_result_t *res;
+        const rd_kafka_group_result_t **gres;
+        size_t gres_cnt;
+        rd_kafka_t *consumer = NULL;
+        char *group_id;
+
+        SUB_TEST_QUICK(
+            "%s AlterConsumerGroupOffsets with %s, "
+            "request_timeout %d%s",
+            rd_kafka_name(rk), what, req_timeout_ms,
+            sub_consumer ? ", with subscribing consumer" : "");
+
+        if (!create_topics)
+                exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+        else if (sub_consumer)
+                exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+
+        if (sub_consumer && !create_topics)
+                TEST_FAIL(
+                    "Can't use set sub_consumer and unset create_topics at the "
+                    "same time");
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (req_timeout_ms != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, req_timeout_ms, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        subscription = rd_kafka_topic_partition_list_new(
+            TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT);
+
+        for (i = 0; i < TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT; i++) {
+                char pfx[64];
+                char *topic;
+
+                rd_snprintf(pfx, sizeof(pfx), "DCGO-topic%d", i);
+                topic = rd_strdup(test_mk_topic_name(pfx, 1));
+
+                topics[i]                             = topic;
+                exp_mdtopics[exp_mdtopic_cnt++].topic = topic;
+
+                rd_kafka_topic_partition_list_add(subscription, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+
+        group_id = topics[0];
+
+        /* Create the topics first if needed. */
+        if (create_topics) {
+                test_CreateTopics_simple(
+                    rk, NULL, topics,
+                    TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT, partitions_cnt,
+                    NULL);
+
+                /* Verify that topics are reported by metadata */
+                test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt,
+                                          NULL, 0, 15 * 1000);
+
+                rd_sleep(1); /* Additional wait time for cluster propagation */
+
+                consumer = test_create_consumer(group_id, NULL, NULL, NULL);
+
+                if (sub_consumer) {
+                        TEST_CALL_ERR__(
+                            rd_kafka_subscribe(consumer, subscription));
+                        test_consumer_wait_assignment(consumer, rd_true);
+                }
+        }
+
+        orig_offsets = rd_kafka_topic_partition_list_new(
+            TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * partitions_cnt);
+        for (i = 0;
+             i < TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * partitions_cnt;
+             i++) {
+                rd_kafka_topic_partition_t *rktpar;
+                rktpar = rd_kafka_topic_partition_list_add(
+                    orig_offsets, topics[i / partitions_cnt],
+                    i % partitions_cnt);
+                rktpar->offset = (i + 1) * 10;
+                rd_kafka_topic_partition_set_leader_epoch(rktpar, 1);
+        }
+
+        /* Commit some offsets, if topics exists */
+        if (create_topics) {
+                TEST_CALL_ERR__(
+                    rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/));
+
+                /* Verify committed offsets match */
+                committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+                TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
+                                                   tmout_multip(5 * 1000)));
+
+                if (test_partition_list_and_offsets_cmp(committed,
+                                                        orig_offsets)) {
+                        TEST_SAY("commit() list:\n");
+                        test_print_partition_list(orig_offsets);
+                        TEST_SAY("committed() list:\n");
+                        test_print_partition_list(committed);
+                        TEST_FAIL("committed offsets don't match");
+                }
+                rd_kafka_topic_partition_list_destroy(committed);
+        }
+
+        /* Now alter second half of the commits */
+        offsets  = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
+        to_alter = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
+        for (i = 0; i < orig_offsets->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar;
+                if (i < orig_offsets->cnt / 2) {
+                        rktpar = rd_kafka_topic_partition_list_add(
+                            offsets, orig_offsets->elems[i].topic,
+                            orig_offsets->elems[i].partition);
+                        rktpar->offset = orig_offsets->elems[i].offset;
+                        rd_kafka_topic_partition_set_leader_epoch(
+                            rktpar, rd_kafka_topic_partition_get_leader_epoch(
+                                        &orig_offsets->elems[i]));
+                } else {
+                        rktpar = rd_kafka_topic_partition_list_add(
+                            to_alter, orig_offsets->elems[i].topic,
+                            orig_offsets->elems[i].partition);
+                        rktpar->offset = 5;
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                        rktpar = rd_kafka_topic_partition_list_add(
+                            offsets, orig_offsets->elems[i].topic,
+                            orig_offsets->elems[i].partition);
+                        rktpar->offset = 5;
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                }
+        }
+
+        cgoffsets = rd_kafka_AlterConsumerGroupOffsets_new(group_id, to_alter);
+
+        TIMING_START(&timing, "AlterConsumerGroupOffsets");
+        TEST_SAY("Call AlterConsumerGroupOffsets\n");
+        rd_kafka_AlterConsumerGroupOffsets(rk, &cgoffsets, 1, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        rd_kafka_AlterConsumerGroupOffsets_destroy(cgoffsets);
+
+        TIMING_START(&timing, "AlterConsumerGroupOffsets.queue_poll");
+        /* Poll result queue for AlterConsumerGroupOffsets result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(10 * 1000));
+                TEST_SAY("AlterConsumerGroupOffsets: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT)
+                        break;
+
+                rd_kafka_event_destroy(rkev);
+        }
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_AlterConsumerGroupOffsets_result(rkev);
+        TEST_ASSERT(res, "expected AlterConsumerGroupOffsets_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!err,
+                    "expected AlterConsumerGroupOffsets to succeed, "
+                    "got %s (%s)",
+                    rd_kafka_err2name(err), err ? errstr2 : "n/a");
+
+        TEST_SAY("AlterConsumerGroupOffsets: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        gres = rd_kafka_AlterConsumerGroupOffsets_result_groups(res, &gres_cnt);
+        TEST_ASSERT(gres && gres_cnt == 1,
+                    "expected gres_cnt == 1, not %" PRIusz, gres_cnt);
+
+        alterd = rd_kafka_topic_partition_list_copy(
+            rd_kafka_group_result_partitions(gres[0]));
+
+        if (test_partition_list_and_offsets_cmp(alterd, to_alter)) {
+                TEST_SAY("Result list:\n");
+                test_print_partition_list(alterd);
+                TEST_SAY("Partitions passed to AlterConsumerGroupOffsets:\n");
+                test_print_partition_list(to_alter);
+                TEST_FAIL("altered/requested offsets don't match");
+        }
+
+        /* Verify expected errors */
+        for (i = 0; i < alterd->cnt; i++) {
+                TEST_ASSERT_LATER(alterd->elems[i].err == exp_err,
+                                  "Result %s [%" PRId32
+                                  "] has error %s, "
+                                  "expected %s",
+                                  alterd->elems[i].topic,
+                                  alterd->elems[i].partition,
+                                  rd_kafka_err2name(alterd->elems[i].err),
+                                  rd_kafka_err2name(exp_err));
+        }
+
+        TEST_LATER_CHECK();
+
+        rd_kafka_topic_partition_list_destroy(alterd);
+        rd_kafka_topic_partition_list_destroy(to_alter);
+
+        rd_kafka_event_destroy(rkev);
+
+
+        /* Verify committed offsets match, if topics exist. */
+        if (create_topics) {
+                committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+                TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
+                                                   tmout_multip(5 * 1000)));
+
+                rd_kafka_topic_partition_list_t *expected = offsets;
+                if (sub_consumer) {
+                        /* Alter fails with an active consumer */
+                        expected = orig_offsets;
+                }
+                TEST_SAY("Original committed offsets:\n");
+                test_print_partition_list(orig_offsets);
+
+                TEST_SAY("Committed offsets after alter:\n");
+                test_print_partition_list(committed);
+
+                if (test_partition_list_and_offsets_cmp(committed, expected)) {
+                        TEST_SAY("expected list:\n");
+                        test_print_partition_list(expected);
+                        TEST_SAY("committed() list:\n");
+                        test_print_partition_list(committed);
+                        TEST_FAIL("committed offsets don't match");
+                }
+                rd_kafka_topic_partition_list_destroy(committed);
+        }
+
+        rd_kafka_topic_partition_list_destroy(offsets);
+        rd_kafka_topic_partition_list_destroy(orig_offsets);
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        for (i = 0; i < TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT; i++)
+                rd_free(topics[i]);
+
+        if (create_topics) /* consumer is created only if topics are. */
+                rd_kafka_destroy(consumer);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test listing of committed offsets.
+ *
+ *
+ */
+static void do_test_ListConsumerGroupOffsets(const char *what,
+                                             rd_kafka_t *rk,
+                                             rd_kafka_queue_t *useq,
+                                             int req_timeout_ms,
+                                             rd_bool_t sub_consumer,
+                                             rd_bool_t null_toppars) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *orig_offsets, *to_list, *committed,
+            *listd, *subscription = NULL;
+        rd_kafka_event_t *rkev = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT 3
+        int i;
+        const int partitions_cnt = 3;
+        char *topics[TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT];
+        rd_kafka_metadata_topic_t
+            exp_mdtopics[TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT] = {{0}};
+        int exp_mdtopic_cnt                                          = 0;
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets;
+        const rd_kafka_ListConsumerGroupOffsets_result_t *res;
+        const rd_kafka_group_result_t **gres;
+        size_t gres_cnt;
+        rd_kafka_t *consumer;
+        char *group_id;
+
+        SUB_TEST_QUICK(
+            "%s ListConsumerGroupOffsets with %s, "
+            "request timeout %d%s",
+            rd_kafka_name(rk), what, req_timeout_ms,
+            sub_consumer ? ", with subscribing consumer" : "");
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (req_timeout_ms != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS);
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, req_timeout_ms, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        subscription = rd_kafka_topic_partition_list_new(
+            TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT);
+
+        for (i = 0; i < TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT; i++) {
+                char pfx[64];
+                char *topic;
+
+                rd_snprintf(pfx, sizeof(pfx), "DCGO-topic%d", i);
+                topic = rd_strdup(test_mk_topic_name(pfx, 1));
+
+                topics[i]                             = topic;
+                exp_mdtopics[exp_mdtopic_cnt++].topic = topic;
+
+                rd_kafka_topic_partition_list_add(subscription, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+
+        group_id = topics[0];
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, topics,
+                                 TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT,
+                                 partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
+                                  15 * 1000);
+
+        rd_sleep(1); /* Additional wait time for cluster propagation */
+
+        consumer = test_create_consumer(group_id, NULL, NULL, NULL);
+
+        if (sub_consumer) {
+                TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
+                test_consumer_wait_assignment(consumer, rd_true);
+        }
+
+        /* Commit some offsets */
+        orig_offsets = rd_kafka_topic_partition_list_new(
+            TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * 2);
+        for (i = 0; i < TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * 2; i++) {
+                rd_kafka_topic_partition_t *rktpar;
+                rktpar = rd_kafka_topic_partition_list_add(
+                    orig_offsets, topics[i / 2],
+                    i % TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT);
+                rktpar->offset = (i + 1) * 10;
+                rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+        }
+
+        TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/));
+
+        /* Verify committed offsets match */
+        committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+        TEST_CALL_ERR__(
+            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
+
+        if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
+                TEST_SAY("commit() list:\n");
+                test_print_partition_list(orig_offsets);
+                TEST_SAY("committed() list:\n");
+                test_print_partition_list(committed);
+                TEST_FAIL("committed offsets don't match");
+        }
+
+        rd_kafka_topic_partition_list_destroy(committed);
+
+        to_list = rd_kafka_topic_partition_list_new(orig_offsets->cnt);
+        for (i = 0; i < orig_offsets->cnt; i++) {
+                rd_kafka_topic_partition_list_add(
+                    to_list, orig_offsets->elems[i].topic,
+                    orig_offsets->elems[i].partition);
+        }
+
+        if (null_toppars) {
+                cgoffsets =
+                    rd_kafka_ListConsumerGroupOffsets_new(group_id, NULL);
+        } else {
+                cgoffsets =
+                    rd_kafka_ListConsumerGroupOffsets_new(group_id, to_list);
+        }
+
+        TIMING_START(&timing, "ListConsumerGroupOffsets");
+        TEST_SAY("Call ListConsumerGroupOffsets\n");
+        rd_kafka_ListConsumerGroupOffsets(rk, &cgoffsets, 1, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        rd_kafka_ListConsumerGroupOffsets_destroy(cgoffsets);
+
+        TIMING_START(&timing, "ListConsumerGroupOffsets.queue_poll");
+        /* Poll result queue for ListConsumerGroupOffsets result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(10 * 1000));
+                TEST_SAY("ListConsumerGroupOffsets: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT)
+                        break;
+
+                rd_kafka_event_destroy(rkev);
+        }
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_ListConsumerGroupOffsets_result(rkev);
+        TEST_ASSERT(res, "expected ListConsumerGroupOffsets_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!err,
+                    "expected ListConsumerGroupOffsets to succeed, "
+                    "got %s (%s)",
+                    rd_kafka_err2name(err), err ? errstr2 : "n/a");
+
+        TEST_SAY("ListConsumerGroupOffsets: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        gres = rd_kafka_ListConsumerGroupOffsets_result_groups(res, &gres_cnt);
+        TEST_ASSERT(gres && gres_cnt == 1,
+                    "expected gres_cnt == 1, not %" PRIusz, gres_cnt);
+
+        listd = rd_kafka_topic_partition_list_copy(
+            rd_kafka_group_result_partitions(gres[0]));
+
+        if (test_partition_list_and_offsets_cmp(listd, orig_offsets)) {
+                TEST_SAY("Result list:\n");
+                test_print_partition_list(listd);
+                TEST_SAY("Partitions passed to ListConsumerGroupOffsets:\n");
+                test_print_partition_list(orig_offsets);
+                TEST_FAIL("listd/requested offsets don't match");
+        }
+
+        /* Verify expected errors */
+        for (i = 0; i < listd->cnt; i++) {
+                TEST_ASSERT_LATER(listd->elems[i].err == exp_err,
+                                  "Result %s [%" PRId32
+                                  "] has error %s, "
+                                  "expected %s",
+                                  listd->elems[i].topic,
+                                  listd->elems[i].partition,
+                                  rd_kafka_err2name(listd->elems[i].err),
+                                  rd_kafka_err2name(exp_err));
+        }
+
+        TEST_LATER_CHECK();
+
+        rd_kafka_topic_partition_list_destroy(listd);
+        rd_kafka_topic_partition_list_destroy(to_list);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_topic_partition_list_destroy(orig_offsets);
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        for (i = 0; i < TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT; i++)
+                rd_free(topics[i]);
+
+        rd_kafka_destroy(consumer);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+
+#undef TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT
+
+        SUB_TEST_PASS();
+}
+
+static void do_test_UserScramCredentials(const char *what,
+                                         rd_kafka_t *rk,
+                                         rd_kafka_queue_t *useq,
+                                         rd_bool_t null_bytes) {
+        rd_kafka_event_t *event;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_DescribeUserScramCredentials_result_t *describe_result;
+        const rd_kafka_UserScramCredentialsDescription_t **descriptions;
+        const rd_kafka_UserScramCredentialsDescription_t *description;
+        const rd_kafka_AlterUserScramCredentials_result_t *alter_result;
+        const rd_kafka_AlterUserScramCredentials_result_response_t *
+            *alter_responses;
+        const rd_kafka_AlterUserScramCredentials_result_response_t *response;
+        const rd_kafka_ScramCredentialInfo_t *scram_credential;
+        rd_kafka_ScramMechanism_t mechanism;
+        size_t response_cnt;
+        size_t description_cnt;
+        size_t num_credentials;
+        char errstr[512];
+        const char *username;
+        const rd_kafka_error_t *error;
+        int32_t iterations;
+        rd_kafka_UserScramCredentialAlteration_t *alterations[1];
+        char *salt           = tsprintf("%s", "salt");
+        size_t salt_size     = 4;
+        char *password       = tsprintf("%s", "password");
+        size_t password_size = 8;
+        rd_kafka_queue_t *queue;
+        const char *users[1];
+        users[0] = "testuserforscram";
+
+        if (null_bytes) {
+                salt[1]     = '\0';
+                salt[3]     = '\0';
+                password[0] = '\0';
+                password[3] = '\0';
+        }
+
+        SUB_TEST_QUICK("%s, null bytes: %s", what, RD_STR_ToF(null_bytes));
+
+        queue = useq ? useq : rd_kafka_queue_new(rk);
+
+        rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
+
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        /* Describe an unknown user */
+        rd_kafka_DescribeUserScramCredentials(rk, users, RD_ARRAY_SIZE(users),
+                                              options, queue);
+        rd_kafka_AdminOptions_destroy(options);
+        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+
+        /* Request level error code should be 0*/
+        TEST_CALL_ERR__(rd_kafka_event_error(event));
+        err = rd_kafka_event_error(event);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, not %s", rd_kafka_err2name(err));
+
+        describe_result =
+            rd_kafka_event_DescribeUserScramCredentials_result(event);
+        descriptions =
+            rd_kafka_DescribeUserScramCredentials_result_descriptions(
+                describe_result, &description_cnt);
+
+        /* Assert num_results should be 1 */
+        TEST_ASSERT(description_cnt == 1,
+                    "There should be exactly 1 description, got %" PRIusz,
+                    description_cnt);
+
+        description = descriptions[0];
+        username = rd_kafka_UserScramCredentialsDescription_user(description);
+        error    = rd_kafka_UserScramCredentialsDescription_error(description);
+        err      = rd_kafka_error_code(error);
+
+        num_credentials =
+            rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(
+                description);
+        /* username should be the same, err should be RESOURCE_NOT_FOUND
+         * and num_credentials should be 0 */
+        TEST_ASSERT(strcmp(users[0], username) == 0,
+                    "Username should be %s, got %s", users[0], username);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_RESOURCE_NOT_FOUND,
+                    "Error code should be RESOURCE_NOT_FOUND as user "
+                    "does not exist, got %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(num_credentials == 0,
+                    "Credentials count should be 0, got %" PRIusz,
+                    num_credentials);
+        rd_kafka_event_destroy(event);
+
+        /* Create a credential for user 0 */
+        mechanism      = RD_KAFKA_SCRAM_MECHANISM_SHA_256;
+        iterations     = 10000;
+        alterations[0] = rd_kafka_UserScramCredentialUpsertion_new(
+            users[0], mechanism, iterations, (unsigned char *)password,
+            password_size, (unsigned char *)salt, salt_size);
+
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        rd_kafka_AlterUserScramCredentials(
+            rk, alterations, RD_ARRAY_SIZE(alterations), options, queue);
+        rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_UserScramCredentialAlteration_destroy_array(
+            alterations, RD_ARRAY_SIZE(alterations));
+
+        /* Wait for results */
+        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+        err   = rd_kafka_event_error(event);
+#if !WITH_SSL
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Expected _INVALID_ARG, not %s", rd_kafka_err2name(err));
+        rd_kafka_event_destroy(event);
+        goto final_checks;
+#else
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, not %s", rd_kafka_err2name(err));
+
+        alter_result = rd_kafka_event_AlterUserScramCredentials_result(event);
+        alter_responses = rd_kafka_AlterUserScramCredentials_result_responses(
+            alter_result, &response_cnt);
+
+        /* response_cnt should be 1*/
+        TEST_ASSERT(response_cnt == 1,
+                    "There should be exactly 1 response, got %" PRIusz,
+                    response_cnt);
+
+        response = alter_responses[0];
+        username =
+            rd_kafka_AlterUserScramCredentials_result_response_user(response);
+        error =
+            rd_kafka_AlterUserScramCredentials_result_response_error(response);
+
+        err = rd_kafka_error_code(error);
+        /* username should be the same and err should be NO_ERROR*/
+        TEST_ASSERT(strcmp(users[0], username) == 0,
+                    "Username should be %s, got %s", users[0], username);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Error code should be NO_ERROR, got %s",
+                    rd_kafka_err2name(err));
+
+        rd_kafka_event_destroy(event);
+#endif
+
+        /* Credential should be retrieved */
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
+
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        rd_kafka_DescribeUserScramCredentials(rk, users, RD_ARRAY_SIZE(users),
+                                              options, queue);
+        rd_kafka_AdminOptions_destroy(options);
+
+        /* Wait for results */
+        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+        err   = rd_kafka_event_error(event);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, not %s", rd_kafka_err2name(err));
+
+        describe_result =
+            rd_kafka_event_DescribeUserScramCredentials_result(event);
+        descriptions =
+            rd_kafka_DescribeUserScramCredentials_result_descriptions(
+                describe_result, &description_cnt);
+        /* Assert description_cnt should be 1 , request level error code should
+         * be 0*/
+        TEST_ASSERT(description_cnt == 1,
+                    "There should be exactly 1 description, got %" PRIusz,
+                    description_cnt);
+
+        description = descriptions[0];
+        username = rd_kafka_UserScramCredentialsDescription_user(description);
+        error    = rd_kafka_UserScramCredentialsDescription_error(description);
+        err      = rd_kafka_error_code(error);
+
+        num_credentials =
+            rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(
+                description);
+        /* username should be the same, err should be NO_ERROR and
+         * num_credentials should be 1 */
+        TEST_ASSERT(strcmp(users[0], username) == 0,
+                    "Username should be %s, got %s", users[0], username);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Error code should be NO_ERROR, got %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(num_credentials == 1,
+                    "Credentials count should be 1, got %" PRIusz,
+                    num_credentials);
+
+        scram_credential =
+            rd_kafka_UserScramCredentialsDescription_scramcredentialinfo(
+                description, 0);
+        mechanism  = rd_kafka_ScramCredentialInfo_mechanism(scram_credential);
+        iterations = rd_kafka_ScramCredentialInfo_iterations(scram_credential);
+        /* mechanism should be SHA 256 and iterations 10000 */
+        TEST_ASSERT(mechanism == RD_KAFKA_SCRAM_MECHANISM_SHA_256,
+                    "Mechanism should be %d, got: %d",
+                    RD_KAFKA_SCRAM_MECHANISM_SHA_256, mechanism);
+        TEST_ASSERT(iterations == 10000,
+                    "Iterations should be 10000, got %" PRId32, iterations);
+
+        rd_kafka_event_destroy(event);
+
+        /* Delete the credential */
+        alterations[0] =
+            rd_kafka_UserScramCredentialDeletion_new(users[0], mechanism);
+
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS);
+
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        rd_kafka_AlterUserScramCredentials(
+            rk, alterations, RD_ARRAY_SIZE(alterations), options, queue);
+        rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_UserScramCredentialAlteration_destroy_array(
+            alterations, RD_ARRAY_SIZE(alterations));
+
+        /* Wait for results */
+        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+        err   = rd_kafka_event_error(event);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, not %s", rd_kafka_err2name(err));
+
+        alter_result = rd_kafka_event_AlterUserScramCredentials_result(event);
+        alter_responses = rd_kafka_AlterUserScramCredentials_result_responses(
+            alter_result, &response_cnt);
+
+        /* response_cnt should be 1*/
+        TEST_ASSERT(response_cnt == 1,
+                    "There should be exactly 1 response, got %" PRIusz,
+                    response_cnt);
+
+        response = alter_responses[0];
+        username =
+            rd_kafka_AlterUserScramCredentials_result_response_user(response);
+        error =
+            rd_kafka_AlterUserScramCredentials_result_response_error(response);
+
+        err = rd_kafka_error_code(error);
+        /* username should be the same and err should be NO_ERROR*/
+        TEST_ASSERT(strcmp(users[0], username) == 0,
+                    "Username should be %s, got %s", users[0], username);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Error code should be NO_ERROR, got %s",
+                    rd_kafka_err2name(err));
+
+        rd_kafka_event_destroy(event);
+
+#if !WITH_SSL
+final_checks:
+#endif
+
+        /* Credential doesn't exist anymore for this user */
+
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS);
+
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        rd_kafka_DescribeUserScramCredentials(rk, users, RD_ARRAY_SIZE(users),
+                                              options, queue);
+        rd_kafka_AdminOptions_destroy(options);
+        /* Wait for results */
+        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+        err   = rd_kafka_event_error(event);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR, not %s", rd_kafka_err2name(err));
+
+        describe_result =
+            rd_kafka_event_DescribeUserScramCredentials_result(event);
+        descriptions =
+            rd_kafka_DescribeUserScramCredentials_result_descriptions(
+                describe_result, &description_cnt);
+        /* Assert description_cnt should be 1, request level error code should
+         * be 0*/
+        TEST_ASSERT(description_cnt == 1,
+                    "There should be exactly 1 description, got %" PRIusz,
+                    description_cnt);
+
+        description = descriptions[0];
+        username = rd_kafka_UserScramCredentialsDescription_user(description);
+        error    = rd_kafka_UserScramCredentialsDescription_error(description);
+        err      = rd_kafka_error_code(error);
+        num_credentials =
+            rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(
+                description);
+        /* username should be the same, err should be RESOURCE_NOT_FOUND
+         * and num_credentials should be 0 */
+        TEST_ASSERT(strcmp(users[0], username) == 0,
+                    "Username should be %s, got %s", users[0], username);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_RESOURCE_NOT_FOUND,
+                    "Error code should be RESOURCE_NOT_FOUND, got %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(num_credentials == 0,
+                    "Credentials count should be 0, got %" PRIusz,
+                    num_credentials);
+
+        rd_kafka_event_destroy(event);
+
+        if (!useq)
+                rd_kafka_queue_destroy(queue);
+
+        SUB_TEST_PASS();
+}
 
 static void do_test_apis(rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
@@ -2701,6 +4275,11 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* AlterConfigs */
         do_test_AlterConfigs(rk, mainq);
 
+        if (test_broker_version >= TEST_BRKVER(2, 3, 0, 0)) {
+                /* IncrementalAlterConfigs */
+                do_test_IncrementalAlterConfigs(rk, mainq);
+        }
+
         /* DescribeConfigs */
         do_test_DescribeConfigs(rk, mainq);
 
@@ -2708,20 +4287,68 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
         do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
 
+        /* List groups */
+        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
+        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
+
+        /* Describe groups */
+        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
+
         /* Delete groups */
-        do_test_DeleteGroups("temp queue, op timeout 0", rk, NULL, 0);
-        do_test_DeleteGroups("main queue, op timeout 1500", rk, mainq, 1500);
-        do_test_DeleteGroups("main queue, op timeout 1500", rk, mainq, 1500);
+        do_test_DeleteGroups("temp queue", rk, NULL, -1);
+        do_test_DeleteGroups("main queue", rk, mainq, 1500);
 
         if (test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
                 /* Delete committed offsets */
-                do_test_DeleteConsumerGroupOffsets("temp queue, op timeout 0",
-                                                   rk, NULL, 0, rd_false);
+                do_test_DeleteConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                   rd_false);
+                do_test_DeleteConsumerGroupOffsets("main queue", rk, mainq,
+                                                   1500, rd_false);
                 do_test_DeleteConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500, rd_false);
-                do_test_DeleteConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500,
+                    "main queue", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/);
+        }
+
+        if (test_broker_version >= TEST_BRKVER(2, 5, 0, 0)) {
+                /* Alter committed offsets */
+                do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                  rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                  rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
+                    rd_false /* don't create topics */);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true, /*with subscribing consumer*/
+                    rd_true);
+        }
+
+        if (test_broker_version >= TEST_BRKVER(2, 0, 0, 0)) {
+                /* List committed offsets */
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue, op timeout "
+                    "1500",
+                    rk, mainq, 1500, rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/, rd_false);
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                 rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/, rd_true);
+        }
+
+        if (test_broker_version >= TEST_BRKVER(2, 7, 0, 0)) {
+                do_test_UserScramCredentials("main queue", rk, mainq, rd_false);
+                do_test_UserScramCredentials("temp queue", rk, NULL, rd_false);
+                do_test_UserScramCredentials("main queue", rk, mainq, rd_true);
         }
 
         rd_kafka_queue_destroy(mainq);
@@ -2735,7 +4362,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 int main_0081_admin(int argc, char **argv) {
 
         do_test_apis(RD_KAFKA_PRODUCER);
-
         if (test_quick) {
                 TEST_SAY("Skipping further 0081 tests due to quick mode\n");
                 return 0;

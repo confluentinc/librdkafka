@@ -3,6 +3,11 @@
 # Check or apply/fix the project coding style to all files passed as arguments.
 # Uses clang-format for C/C++ and flake8 for Python.
 #
+# Requires clang-format version 10  (apt install clang-format-10).
+#
+
+
+CLANG_FORMAT=${CLANG_FORMAT:-clang-format}
 
 set -e
 
@@ -19,6 +24,12 @@ if [[ $1 == "--fix" ]]; then
     shift
 else
     fix=0
+fi
+
+clang_format_version=$(${CLANG_FORMAT} --version | sed -Ee 's/.*version ([[:digit:]]+)\.[[:digit:]]+\.[[:digit:]]+.*/\1/')
+if [[ $clang_format_version != "10" ]] ; then
+    echo "$0: clang-format version 10, '$clang_format_version' detected"
+    exit 1
 fi
 
 # Get list of files from .formatignore to ignore formatting for.
@@ -73,12 +84,15 @@ for f in $*; do
     check=0
 
     if [[ $fix == 1 ]]; then
-        # Convert tabs to spaces first.
-        sed -i -e 's/\t/        /g' "$f"
+        # Convert tabs to 8 spaces first.
+        if grep -ql $'\t' "$f"; then
+            sed -i -e 's/\t/        /g' "$f"
+            echo "$f: tabs converted to spaces"
+        fi
 
         if [[ $lang == c ]]; then
             # Run clang-format to reformat the file
-            clang-format --style="$style" "$f" > _styletmp
+            ${CLANG_FORMAT} --style="$style" "$f" > _styletmp
 
         else
             # Run autopep8 to reformat the file.
@@ -104,7 +118,7 @@ for f in $*; do
 
         # Check style
         if [[ $lang == c ]]; then
-            if ! clang-format --style="$style" --Werror --dry-run "$f" ; then
+            if ! ${CLANG_FORMAT} --style="$style" --Werror --dry-run "$f" ; then
                 echo "$f: had style errors ($stylename): see clang-format output above"
                 ret=1
             fi

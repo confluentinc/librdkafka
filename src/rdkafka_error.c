@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2020 Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -80,7 +80,7 @@ rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src) {
         ssize_t strsz = 0;
 
         if (src->errstr) {
-                strsz = strlen(src->errstr);
+                strsz = strlen(src->errstr) + 1;
         }
 
         error                     = rd_malloc(sizeof(*error) + strsz);
@@ -97,6 +97,14 @@ rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src) {
         }
 
         return error;
+}
+
+/**
+ * @brief Same as rd_kafka_error_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+void *rd_kafka_error_copy_opaque(const void *error, void *opaque) {
+        return rd_kafka_error_copy(error);
 }
 
 

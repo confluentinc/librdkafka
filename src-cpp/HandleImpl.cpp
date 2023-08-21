@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2014 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -391,6 +392,14 @@ rd_kafka_topic_partition_list_t *partitions_to_c_parts(
     rd_kafka_topic_partition_t *rktpar = rd_kafka_topic_partition_list_add(
         c_parts, tpi->topic_.c_str(), tpi->partition_);
     rktpar->offset = tpi->offset_;
+    if (tpi->metadata_.size()) {
+      void *metadata_p = mem_malloc(tpi->metadata_.size());
+      memcpy(metadata_p, tpi->metadata_.data(), tpi->metadata_.size());
+      rktpar->metadata      = metadata_p;
+      rktpar->metadata_size = tpi->metadata_.size();
+    }
+    if (tpi->leader_epoch_ != -1)
+      rd_kafka_topic_partition_set_leader_epoch(rktpar, tpi->leader_epoch_);
   }
 
   return c_parts;
@@ -412,11 +421,16 @@ void update_partitions_from_c_parts(
           dynamic_cast<RdKafka::TopicPartitionImpl *>(partitions[j]);
       if (!strcmp(p->topic, pp->topic_.c_str()) &&
           p->partition == pp->partition_) {
-        pp->offset_ = p->offset;
-        pp->err_    = static_cast<RdKafka::ErrorCode>(p->err);
+        pp->offset_       = p->offset;
+        pp->err_          = static_cast<RdKafka::ErrorCode>(p->err);
+        pp->leader_epoch_ = rd_kafka_topic_partition_get_leader_epoch(p);
+        if (p->metadata_size) {
+          unsigned char *metadata = (unsigned char *)p->metadata;
+          pp->metadata_.assign(metadata, metadata + p->metadata_size);
+        }
       }
     }
   }
 }
 
-};  // namespace RdKafka
+}  // namespace RdKafka

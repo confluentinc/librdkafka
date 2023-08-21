@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,12 +28,13 @@
  */
 
 #include "test.h"
+#include "../src/rdkafka_protocol.h"
 
 /**
  * @name Test rd_kafka_purge()
  *
  * Local test:
- *  - produce 20 messages (that will be held up in queues),
+ *  - produce 29 messages (that will be held up in queues),
  *    for specific partitions and UA.
  *  - purge(INFLIGHT) => no change in len()
  *  - purge(QUEUE) => len() should drop to 0, dr errs should be ERR__PURGE_QUEUE
@@ -40,15 +42,17 @@
  * Remote test (WITH_SOCKEM):
  *  - Limit in-flight messages to 10
  *  - Produce 20 messages to the same partition, in batches of 10.
- *  - Make sure only first batch is sent.
+ *  - First batch succeeds, then sets a 50 s delay
+ *  - Second batch times out in flight
+ *  - Third batch isn't completed an times out in queue
  *  - purge(QUEUE) => len should drop to 10, dr err ERR__PURGE_QUEUE
  *  - purge(INFLIGHT|QUEUE) => len should drop to 0, ERR__PURGE_INFLIGHT
  */
 
 
-static const int msgcnt = 20;
+static const int msgcnt = 29;
 struct waitmsgs {
-        rd_kafka_resp_err_t exp_err[20];
+        rd_kafka_resp_err_t exp_err[29];
         int cnt;
 };
 
@@ -58,14 +62,8 @@ static int produce_req_cnt = 0;
 
 
 #if WITH_SOCKEM
-/**
- * @brief Sockem connect, called from **internal librdkafka thread** through
- *        librdkafka's connect_cb
- */
-static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
-        sockem_set(skm, "delay", 500, NULL);
-        return 0;
-}
+
+int test_sockfd = 0;
 
 static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
                                            int sockfd,
@@ -77,21 +75,34 @@ static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
                                            size_t size,
                                            void *ic_opaque) {
 
-        /* Ignore if not a ProduceRequest */
-        if (ApiKey != 0)
+        /* Save socket fd to limit ProduceRequest */
+        if (ApiKey == RD_KAFKAP_ApiVersion) {
+                test_sockfd = sockfd;
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
 
-        TEST_SAY("ProduceRequest sent to %s (%" PRId32 ")\n", brokername,
-                 brokerid);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
-        mtx_lock(&produce_req_lock);
-        produce_req_cnt++;
-        cnd_broadcast(&produce_req_cnd);
-        mtx_unlock(&produce_req_lock);
-
-        /* Stall the connection */
-        test_socket_sockem_set(sockfd, "delay", 5000);
-
+static rd_kafka_resp_err_t on_response_received(rd_kafka_t *rk,
+                                                int sockfd,
+                                                const char *brokername,
+                                                int32_t brokerid,
+                                                int16_t ApiKey,
+                                                int16_t ApiVersion,
+                                                int32_t CorrId,
+                                                size_t size,
+                                                int64_t rtt,
+                                                rd_kafka_resp_err_t err,
+                                                void *ic_opaque) {
+        /* Add delay to send fd after first batch is received */
+        if (ApiKey == RD_KAFKAP_Produce) {
+                mtx_lock(&produce_req_lock);
+                produce_req_cnt++;
+                cnd_broadcast(&produce_req_cnd);
+                mtx_unlock(&produce_req_lock);
+                test_socket_sockem_set(test_sockfd, "delay", 50000);
+        }
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -100,8 +111,14 @@ static rd_kafka_resp_err_t on_new_producer(rd_kafka_t *rk,
                                            void *ic_opaque,
                                            char *errstr,
                                            size_t errstr_size) {
-        return rd_kafka_interceptor_add_on_request_sent(
-            rk, "catch_producer_req", on_request_sent, NULL);
+        rd_kafka_resp_err_t err;
+        err = rd_kafka_interceptor_add_on_request_sent(rk, "catch_producer_req",
+                                                       on_request_sent, NULL);
+        if (!err) {
+                rd_kafka_interceptor_add_on_response_received(
+                    rk, "catch_api_version_resp", on_response_received, NULL);
+        }
+        return err;
 }
 #endif
 
@@ -203,7 +220,7 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
 
         test_conf_set(conf, "batch.num.messages", "10");
         test_conf_set(conf, "max.in.flight", "1");
-        test_conf_set(conf, "linger.ms", "500");
+        test_conf_set(conf, "linger.ms", "5000");
         test_conf_set(conf, "enable.idempotence",
                       idempotence ? "true" : "false");
         test_conf_set(conf, "enable.gapless.guarantee",
@@ -213,7 +230,6 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
         if (remote) {
 #if WITH_SOCKEM
                 test_socket_enable(conf);
-                test_curr->connect_cb = connect_cb;
                 rd_kafka_conf_interceptor_add_on_new(conf, "on_new_producer",
                                                      on_new_producer, NULL);
 #endif
@@ -240,7 +256,7 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
                          * up behind the first messageset */
                         partition = 0;
                 } else {
-                        partition = (i < 10 ? i % 3 : RD_KAFKA_PARTITION_UA);
+                        partition = (i < 20 ? i % 3 : RD_KAFKA_PARTITION_UA);
                 }
 
                 err = rd_kafka_producev(
@@ -253,8 +269,10 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
                             rd_kafka_err2str(err));
 
                 waitmsgs.exp_err[i] =
-                    (remote && i < 10 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
-                                      : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
+                    (remote && i < 10
+                         ? RD_KAFKA_RESP_ERR_NO_ERROR
+                         : remote && i < 20 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
+                                            : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
 
                 waitmsgs.cnt++;
         }

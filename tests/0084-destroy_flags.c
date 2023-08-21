@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018, Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -182,8 +183,10 @@ static void destroy_flags(int local_mode) {
 
         /* Create the topic to avoid not-yet-auto-created-topics being
          * subscribed to (and thus raising an error). */
-        if (!local_mode)
+        if (!local_mode) {
                 test_create_topic(NULL, topic, 3, 1);
+                test_wait_topic_exists(NULL, topic, 5000);
+        }
 
         for (i = 0; i < (int)RD_ARRAYSIZE(args); i++) {
                 for (j = 0; j < (int)RD_ARRAYSIZE(flag_combos); j++) {

@@ -1,7 +1,7 @@
 /*
  * librd - Rapid Development C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -96,6 +96,14 @@
 #define rd_dassert(cond)                                                       \
         do {                                                                   \
         } while (0)
+#endif
+
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+/** Function attribute to indicate that a sentinel NULL is required at the
+ *  end of the va-arg input list. */
+#define RD_SENTINEL __attribute__((__sentinel__))
+#else
+#define RD_SENTINEL
 #endif
 
 

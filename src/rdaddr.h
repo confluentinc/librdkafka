@@ -1,7 +1,7 @@
 /*
  * librd - Rapid Development C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -139,7 +139,7 @@ rd_sockaddr_list_next(rd_sockaddr_list_t *rsal) {
 
 #define RD_SOCKADDR_LIST_FOREACH(sinx, rsal)                                   \
         for ((sinx) = &(rsal)->rsal_addr[0];                                   \
-             (sinx) < &(rsal)->rsal_addr[(rsal)->rsal_len]; (sinx)++)
+             (sinx) < &(rsal)->rsal_addr[(rsal)->rsal_cnt]; (sinx)++)
 
 /**
  * Wrapper for getaddrinfo(3) that performs these additional tasks:
@@ -157,13 +157,22 @@ rd_sockaddr_list_next(rd_sockaddr_list_t *rsal) {
                     * FIXME: Guessing non-used bits like this                  \
                     *        is a bad idea. */
 
-rd_sockaddr_list_t *rd_getaddrinfo(const char *nodesvc,
-                                   const char *defsvc,
-                                   int flags,
-                                   int family,
-                                   int socktype,
-                                   int protocol,
-                                   const char **errstr);
+struct addrinfo;
+
+rd_sockaddr_list_t *
+rd_getaddrinfo(const char *nodesvc,
+               const char *defsvc,
+               int flags,
+               int family,
+               int socktype,
+               int protocol,
+               int (*resolve_cb)(const char *node,
+                                 const char *service,
+                                 const struct addrinfo *hints,
+                                 struct addrinfo **res,
+                                 void *opaque),
+               void *opaque,
+               const char **errstr);
 
 
 

@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2021 Magnus Edenhill
+ * Copyright (c) 2021-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -107,7 +107,7 @@ static rd_http_error_t *rd_http_error_new_from_buf(int code,
 
 void rd_http_req_destroy(rd_http_req_t *hreq) {
         RD_IF_FREE(hreq->hreq_curl, curl_easy_cleanup);
-        RD_IF_FREE(hreq->hreq_buf, rd_buf_destroy);
+        RD_IF_FREE(hreq->hreq_buf, rd_buf_destroy_free);
 }
 
 

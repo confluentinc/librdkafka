@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -366,6 +367,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_bool_t all_topics;  /**< Full/All topics requested */
                         rd_bool_t cgrp_update; /**< Update cgrp with topic
                                                 *   status from response. */
+                        rd_bool_t force_racks; /**< Force the returned metadata
+                                                *   to contain partition to
+                                                *   rack mapping. */
 
                         int *decr; /* Decrement this integer by one
                                     * when request is complete:
@@ -682,6 +686,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 size_t _slen;                                                  \
                 char *_dst;                                                    \
                 rd_kafka_buf_read_str(rkbuf, &_kstr);                          \
+                if (RD_KAFKAP_STR_IS_NULL(&_kstr)) {                           \
+                        dst = NULL;                                            \
+                        break;                                                 \
+                }                                                              \
                 _slen = RD_KAFKAP_STR_LEN(&_kstr);                             \
                 if (!(_dst = rd_tmpabuf_write(tmpabuf, _kstr.str, _slen + 1))) \
                         rd_kafka_buf_parse_fail(                               \
@@ -703,12 +711,21 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 rd_kafka_buf_skip(rkbuf, RD_KAFKAP_STR_LEN0(_slen));           \
         } while (0)
 
-/* Read Kafka Bytes representation (4+N).
- *  The 'kbytes' will be updated to point to rkbuf data */
-#define rd_kafka_buf_read_bytes(rkbuf, kbytes)                                 \
+/**
+ * Read Kafka COMPACT_BYTES representation (VARINT+N) or
+ * standard BYTES representation(4+N).
+ * The 'kbytes' will be updated to point to rkbuf data.
+ */
+#define rd_kafka_buf_read_kbytes(rkbuf, kbytes)                                \
         do {                                                                   \
-                int _klen;                                                     \
-                rd_kafka_buf_read_i32a(rkbuf, _klen);                          \
+                int32_t _klen;                                                 \
+                if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {           \
+                        rd_kafka_buf_read_i32a(rkbuf, _klen);                  \
+                } else {                                                       \
+                        uint64_t _uva;                                         \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_uva);               \
+                        _klen = ((int32_t)_uva) - 1;                           \
+                }                                                              \
                 (kbytes)->len = _klen;                                         \
                 if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                         \
                         (kbytes)->data = NULL;                                 \
@@ -719,7 +736,6 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                                &(rkbuf)->rkbuf_reader, _klen)))                \
                         rd_kafka_buf_check_len(rkbuf, _klen);                  \
         } while (0)
-
 
 /**
  * @brief Read \p size bytes from buffer, setting \p *ptr to the start
@@ -737,7 +753,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 /**
  * @brief Read varint-lengted Kafka Bytes representation
  */
-#define rd_kafka_buf_read_bytes_varint(rkbuf, kbytes)                          \
+#define rd_kafka_buf_read_kbytes_varint(rkbuf, kbytes)                         \
         do {                                                                   \
                 int64_t _len2;                                                 \
                 size_t _r =                                                    \
@@ -784,9 +800,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         uint64_t _tagtype, _taglen;                            \
                         rd_kafka_buf_read_uvarint(rkbuf, &_tagtype);           \
                         rd_kafka_buf_read_uvarint(rkbuf, &_taglen);            \
-                        if (_taglen > 1)                                       \
-                                rd_kafka_buf_skip(rkbuf,                       \
-                                                  (size_t)(_taglen - 1));      \
+                        if (_taglen > 0)                                       \
+                                rd_kafka_buf_skip(rkbuf, (size_t)(_taglen));   \
                 }                                                              \
         } while (0)
 
@@ -815,7 +830,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 } else {                                                       \
                         rd_kafka_buf_read_i32(rkbuf, arrcnt);                  \
                 }                                                              \
-                if (*(arrcnt) < 0 || ((maxval) != -1 && *(arrcnt) > (maxval))) \
+                if (*(arrcnt) < -1 ||                                          \
+                    ((maxval) != -1 && *(arrcnt) > (maxval)))                  \
                         rd_kafka_buf_parse_fail(                               \
                             rkbuf, "ApiArrayCnt %" PRId32 " out of range",     \
                             *(arrcnt));                                        \
@@ -1073,8 +1089,56 @@ rd_kafka_buf_update_u32(rd_kafka_buf_t *rkbuf, size_t of, uint32_t v) {
 
 
 /**
+ * @brief Write varint-encoded signed value to buffer.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_varint(rd_kafka_buf_t *rkbuf,
+                                                  int64_t v) {
+        char varint[RD_UVARINT_ENC_SIZEOF(v)];
+        size_t sz;
+
+        sz = rd_uvarint_enc_i64(varint, sizeof(varint), v);
+
+        return rd_kafka_buf_write(rkbuf, varint, sz);
+}
+
+/**
+ * @brief Write varint-encoded unsigned value to buffer.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_uvarint(rd_kafka_buf_t *rkbuf,
+                                                   uint64_t v) {
+        char varint[RD_UVARINT_ENC_SIZEOF(v)];
+        size_t sz;
+
+        sz = rd_uvarint_enc_u64(varint, sizeof(varint), v);
+
+        return rd_kafka_buf_write(rkbuf, varint, sz);
+}
+
+
+
+/**
+ * @brief Write standard or flexver arround count field to buffer.
+ *        Use this when the array count is known beforehand, else use
+ *        rd_kafka_buf_write_arraycnt_pos().
+ */
+static RD_INLINE RD_UNUSED size_t
+rd_kafka_buf_write_arraycnt(rd_kafka_buf_t *rkbuf, size_t cnt) {
+
+        /* Count must fit in 31-bits minus the per-byte carry-bit */
+        rd_assert(cnt + 1 < (size_t)(INT_MAX >> 4));
+
+        if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))
+                return rd_kafka_buf_write_i32(rkbuf, (int32_t)cnt);
+
+        /* CompactArray has a base of 1, 0 is for Null arrays */
+        cnt += 1;
+        return rd_kafka_buf_write_uvarint(rkbuf, (uint64_t)cnt);
+}
+
+
+/**
  * @brief Write array count field to buffer (i32) for later update with
- *        rd_kafka_buf_update_arraycnt().
+ *        rd_kafka_buf_finalize_arraycnt().
  */
 #define rd_kafka_buf_write_arraycnt_pos(rkbuf) rd_kafka_buf_write_i32(rkbuf, 0)
 
@@ -1092,11 +1156,11 @@ rd_kafka_buf_update_u32(rd_kafka_buf_t *rkbuf, size_t of, uint32_t v) {
  *         and may thus be costly.
  */
 static RD_INLINE void
-rd_kafka_buf_finalize_arraycnt(rd_kafka_buf_t *rkbuf, size_t of, int cnt) {
+rd_kafka_buf_finalize_arraycnt(rd_kafka_buf_t *rkbuf, size_t of, size_t cnt) {
         char buf[sizeof(int32_t)];
         size_t sz, r;
 
-        rd_assert(cnt >= 0);
+        rd_assert(cnt < (size_t)INT_MAX);
 
         if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {
                 rd_kafka_buf_update_i32(rkbuf, of, (int32_t)cnt);
@@ -1108,7 +1172,8 @@ rd_kafka_buf_finalize_arraycnt(rd_kafka_buf_t *rkbuf, size_t of, int cnt) {
 
         sz = rd_uvarint_enc_u64(buf, sizeof(buf), (uint64_t)cnt);
         rd_assert(!RD_UVARINT_OVERFLOW(sz));
-
+        if (cnt < 127)
+                rd_assert(sz == 1);
         rd_buf_write_update(&rkbuf->rkbuf_buf, of, buf, sz);
 
         if (sz < sizeof(int32_t)) {
@@ -1140,34 +1205,6 @@ rd_kafka_buf_update_i64(rd_kafka_buf_t *rkbuf, size_t of, int64_t v) {
         v = htobe64(v);
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
 }
-
-
-/**
- * @brief Write varint-encoded signed value to buffer.
- */
-static RD_INLINE size_t rd_kafka_buf_write_varint(rd_kafka_buf_t *rkbuf,
-                                                  int64_t v) {
-        char varint[RD_UVARINT_ENC_SIZEOF(v)];
-        size_t sz;
-
-        sz = rd_uvarint_enc_i64(varint, sizeof(varint), v);
-
-        return rd_kafka_buf_write(rkbuf, varint, sz);
-}
-
-/**
- * @brief Write varint-encoded unsigned value to buffer.
- */
-static RD_INLINE size_t rd_kafka_buf_write_uvarint(rd_kafka_buf_t *rkbuf,
-                                                   uint64_t v) {
-        char varint[RD_UVARINT_ENC_SIZEOF(v)];
-        size_t sz;
-
-        sz = rd_uvarint_enc_u64(varint, sizeof(varint), v);
-
-        return rd_kafka_buf_write(rkbuf, varint, sz);
-}
-
 
 /**
  * @brief Write standard (2-byte header) or KIP-482 COMPACT_STRING to buffer.
@@ -1274,30 +1311,40 @@ static RD_INLINE void rd_kafka_buf_push_kstr(rd_kafka_buf_t *rkbuf,
 static RD_INLINE size_t
 rd_kafka_buf_write_kbytes(rd_kafka_buf_t *rkbuf,
                           const rd_kafkap_bytes_t *kbytes) {
-        size_t len;
+        size_t len, r;
 
-        if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
-                return rd_kafka_buf_write_i32(rkbuf, -1);
+        if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {
+                if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
+                        return rd_kafka_buf_write_i32(rkbuf, -1);
 
-        if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
-                return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                                          RD_KAFKAP_BYTES_SIZE(kbytes));
+                if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
+                        return rd_kafka_buf_write(rkbuf,
+                                                  RD_KAFKAP_BYTES_SER(kbytes),
+                                                  RD_KAFKAP_BYTES_SIZE(kbytes));
 
-        len = RD_KAFKAP_BYTES_LEN(kbytes);
-        rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
-        rd_kafka_buf_write(rkbuf, kbytes->data, len);
+                len = RD_KAFKAP_BYTES_LEN(kbytes);
+                rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
+                rd_kafka_buf_write(rkbuf, kbytes->data, len);
 
-        return 4 + len;
-}
+                return 4 + len;
+        }
 
-/**
- * Push (i.e., no copy) Kafka bytes to buffer iovec
- */
-static RD_INLINE void
-rd_kafka_buf_push_kbytes(rd_kafka_buf_t *rkbuf,
-                         const rd_kafkap_bytes_t *kbytes) {
-        rd_kafka_buf_push(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                          RD_KAFKAP_BYTES_SIZE(kbytes), NULL);
+        /* COMPACT_BYTES lengths are:
+         *  0   = NULL,
+         *  1   = empty
+         *  N.. = length + 1
+         */
+        if (!kbytes)
+                len = 0;
+        else
+                len = kbytes->len + 1;
+
+        r = rd_kafka_buf_write_uvarint(rkbuf, (uint64_t)len);
+        if (len > 1) {
+                rd_kafka_buf_write(rkbuf, kbytes->data, len - 1);
+                r += len - 1;
+        }
+        return r;
 }
 
 /**
@@ -1380,5 +1427,21 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
                             rd_kafka_make_req_cb_t *make_cb,
                             void *make_opaque,
                             void (*free_make_opaque_cb)(void *make_opaque));
+
+
+#define rd_kafka_buf_read_uuid(rkbuf, uuid)                                    \
+        do {                                                                   \
+                rd_kafka_buf_read_i64(rkbuf,                                   \
+                                      &((uuid)->most_significant_bits));       \
+                rd_kafka_buf_read_i64(rkbuf,                                   \
+                                      &((uuid)->least_significant_bits));      \
+                (uuid)->base64str[0] = '\0';                                   \
+        } while (0)
+
+static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
+                                              rd_kafka_uuid_t *uuid) {
+        rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
+        rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
+}
 
 #endif /* _RDKAFKA_BUF_H_ */

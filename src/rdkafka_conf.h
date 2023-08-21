@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2014-2018 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,10 @@
 #include "rdlist.h"
 #include "rdkafka_cert.h"
 
-#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 &&                        \
+    !defined(OPENSSL_IS_BORINGSSL)
+#define WITH_SSL_ENGINE 1
+/* Deprecated in OpenSSL 3 */
 #include <openssl/engine.h>
 #endif /* WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 */
 
@@ -155,9 +158,14 @@ typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, /**< RFC2818 */
 } rd_kafka_ssl_endpoint_id_t;
 
+typedef enum {
+        RD_KAFKA_USE_ALL_DNS_IPS,
+        RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
+} rd_kafka_client_dns_lookup_t;
+
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 30)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -221,6 +229,7 @@ struct rd_kafka_conf_s {
         int api_version_fallback_ms;
         char *broker_version_fallback;
         rd_kafka_secproto_t security_protocol;
+        rd_kafka_client_dns_lookup_t client_dns_lookup;
 
         struct {
 #if WITH_SSL
@@ -248,6 +257,8 @@ struct rd_kafka_conf_s {
                 char *engine_location;
                 char *engine_id;
                 void *engine_callback_data;
+                char *providers;
+                rd_list_t loaded_providers; /**< (SSL_PROVIDER*) */
                 char *keystore_location;
                 char *keystore_password;
                 int endpoint_identification;
@@ -272,6 +283,9 @@ struct rd_kafka_conf_s {
                 char *kinit_cmd;
                 char *keytab;
                 int relogin_min_time;
+                /** Protects .username and .password access after client
+                 *  instance has been created (see sasl_set_credentials()). */
+                mtx_t lock;
                 char *username;
                 char *password;
 #if WITH_SASL_SCRAM
@@ -310,20 +324,21 @@ struct rd_kafka_conf_s {
         /* Interceptors */
         struct {
                 /* rd_kafka_interceptor_method_t lists */
-                rd_list_t on_conf_set;          /* on_conf_set interceptors
-                                                 * (not copied on conf_dup()) */
-                rd_list_t on_conf_dup;          /* .. (not copied) */
-                rd_list_t on_conf_destroy;      /* .. (not copied) */
-                rd_list_t on_new;               /* .. (copied) */
-                rd_list_t on_destroy;           /* .. (copied) */
-                rd_list_t on_send;              /* .. (copied) */
-                rd_list_t on_acknowledgement;   /* .. (copied) */
-                rd_list_t on_consume;           /* .. (copied) */
-                rd_list_t on_commit;            /* .. (copied) */
-                rd_list_t on_request_sent;      /* .. (copied) */
-                rd_list_t on_response_received; /* .. (copied) */
-                rd_list_t on_thread_start;      /* .. (copied) */
-                rd_list_t on_thread_exit;       /* .. (copied) */
+                rd_list_t on_conf_set;            /* on_conf_set interceptors
+                                                   * (not copied on conf_dup()) */
+                rd_list_t on_conf_dup;            /* .. (not copied) */
+                rd_list_t on_conf_destroy;        /* .. (not copied) */
+                rd_list_t on_new;                 /* .. (copied) */
+                rd_list_t on_destroy;             /* .. (copied) */
+                rd_list_t on_send;                /* .. (copied) */
+                rd_list_t on_acknowledgement;     /* .. (copied) */
+                rd_list_t on_consume;             /* .. (copied) */
+                rd_list_t on_commit;              /* .. (copied) */
+                rd_list_t on_request_sent;        /* .. (copied) */
+                rd_list_t on_response_received;   /* .. (copied) */
+                rd_list_t on_thread_start;        /* .. (copied) */
+                rd_list_t on_thread_exit;         /* .. (copied) */
+                rd_list_t on_broker_state_change; /* .. (copied) */
 
                 /* rd_strtup_t list */
                 rd_list_t config; /* Configuration name=val's
@@ -346,6 +361,7 @@ struct rd_kafka_conf_s {
         int fetch_msg_max_bytes;
         int fetch_max_bytes;
         int fetch_min_bytes;
+        int fetch_queue_backoff_ms;
         int fetch_error_backoff_ms;
         char *group_id_str;
         char *group_instance_id;
@@ -494,6 +510,13 @@ struct rd_kafka_conf_s {
                        int flags,
                        mode_t mode,
                        void *opaque);
+
+        /* Address resolution callback */
+        int (*resolve_cb)(const char *node,
+                          const char *service,
+                          const struct addrinfo *hints,
+                          struct addrinfo **res,
+                          void *opaque);
 
         /* Background queue event callback */
         void (*background_event_cb)(rd_kafka_t *rk,

@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019, Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,11 +61,11 @@
  */
 
 
-static void test_assert(bool cond, std::string msg) {
-  if (!cond)
-    Test::Say(msg);
-  assert(cond);
-}
+#define test_assert(cond, msg)                                                 \
+  do {                                                                         \
+    if (!(cond))                                                               \
+      Test::Say(msg);                                                          \
+  } while (0)
 
 
 class TestEvent2Cb : public RdKafka::EventCb {
@@ -235,6 +235,7 @@ static int get_broker_rack_count(std::vector<int> &replica_ids) {
     test_assert(!err, cerrstr);
 
     rd_kafka_DescribeConfigs(p->c_ptr(), &config, 1, options, mainq);
+    rd_kafka_ConfigResource_destroy(config);
     rd_kafka_AdminOptions_destroy(options);
     rd_kafka_event_t *rkev = test_wait_admin_result(
         mainq, RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT, 5000);
@@ -275,6 +276,7 @@ static int get_broker_rack_count(std::vector<int> &replica_ids) {
     rd_kafka_event_destroy(rkev);
   }
 
+  rd_kafka_queue_destroy(mainq);
   delete p;
 
   return (int)racks.size();

@@ -35,8 +35,8 @@ git clone /v librdkafka
 
 pushd librdkafka
 
-export DEBEMAIL="librdkafka packaging <rdkafka@edenhill.se>"
-git config user.email "rdkafka@edenhill.se"
+export DEBEMAIL="librdkafka packaging <cloud-support@confluent.io>"
+git config user.email "cloud-support@confluent.io"
 git config user.name "librdkafka packaging"
 
 DEB_BRANCH=origin/confluent-debian

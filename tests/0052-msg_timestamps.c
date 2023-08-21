@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -183,6 +183,11 @@ int main_0052_msg_timestamps(int argc, char **argv) {
 
         if (!test_can_create_topics(1))
                 return 0;
+
+        if (test_needs_auth()) {
+                TEST_SKIP("Test cluster requires authentication/SSL\n");
+                return 0;
+        }
 
         /* Broker version limits the producer's feature set,
          * for 0.9.0.0 no timestamp will be transmitted,

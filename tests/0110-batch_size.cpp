@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2020, Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -132,6 +132,8 @@ static void do_test_batch_size() {
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)
     Test::Fail("Failed to create Producer: " + errstr);
+
+  delete conf;
 
   /* Produce messages */
   char val[msgsize];

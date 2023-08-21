@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2017-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +38,7 @@
 #include "rdkafka_sasl_int.h"
 #include "rdrand.h"
 #include "rdunittest.h"
+#include "rdbase64.h"
 
 
 #if WITH_SSL
@@ -76,6 +78,7 @@ static void rd_kafka_sasl_scram_close(rd_kafka_transport_t *rktrans) {
         RD_IF_FREE(state->first_msg_bare.ptr, rd_free);
         RD_IF_FREE(state->ServerSignatureB64, rd_free);
         rd_free(state);
+        rktrans->rktrans_sasl.state = NULL;
 }
 
 
@@ -141,77 +144,6 @@ static char *rd_kafka_sasl_scram_get_attr(const rd_chariov_t *inbuf,
 
 
 /**
- * @brief Base64 encode binary input \p in
- * @returns a newly allocated, base64-encoded string or NULL on error.
- */
-static char *rd_base64_encode(const rd_chariov_t *in) {
-        char *ret;
-        size_t ret_len, max_len;
-
-        /* OpenSSL takes an |int| argument so the input cannot exceed that. */
-        if (in->size > INT_MAX) {
-                return NULL;
-        }
-
-        /* This does not overflow given the |INT_MAX| bound, above. */
-        max_len = (((in->size + 2) / 3) * 4) + 1;
-        ret     = rd_malloc(max_len);
-        if (ret == NULL) {
-                return NULL;
-        }
-
-        ret_len =
-            EVP_EncodeBlock((uint8_t *)ret, (uint8_t *)in->ptr, (int)in->size);
-        assert(ret_len < max_len);
-        ret[ret_len] = 0;
-
-        return ret;
-}
-
-
-/**
- * @brief Base64 decode input string \p in. Ignores leading and trailing
- *         whitespace.
- * @returns -1 on invalid Base64, or 0 on successes in which case a
- *         newly allocated binary string is set in out (and size).
- */
-static int rd_base64_decode(const rd_chariov_t *in, rd_chariov_t *out) {
-        size_t ret_len;
-
-        /* OpenSSL takes an |int| argument, so |in->size| must not exceed
-         * that. */
-        if (in->size % 4 != 0 || in->size > INT_MAX) {
-                return -1;
-        }
-
-        ret_len  = ((in->size / 4) * 3);
-        out->ptr = rd_malloc(ret_len + 1);
-
-        if (EVP_DecodeBlock((uint8_t *)out->ptr, (uint8_t *)in->ptr,
-                            (int)in->size) == -1) {
-                rd_free(out->ptr);
-                out->ptr = NULL;
-                return -1;
-        }
-
-        /* EVP_DecodeBlock will pad the output with trailing NULs and count
-         * them in the return value. */
-        if (in->size > 1 && in->ptr[in->size - 1] == '=') {
-                if (in->size > 2 && in->ptr[in->size - 2] == '=') {
-                        ret_len -= 2;
-                } else {
-                        ret_len -= 1;
-                }
-        }
-
-        out->ptr[ret_len] = 0;
-        out->size         = ret_len;
-
-        return 0;
-}
-
-
-/**
  * @brief Perform H(str) hash function and stores the result in \p out
  *        which must be at least EVP_MAX_MD_SIZE.
  * @returns 0 on success, else -1
@@ -254,8 +186,6 @@ static int rd_kafka_sasl_scram_HMAC(rd_kafka_transport_t *rktrans,
         return 0;
 }
 
-
-
 /**
  * @brief Perform \p itcnt iterations of HMAC() on the given buffer \p in
  *        using \p salt, writing the output into \p out which must be
@@ -267,55 +197,12 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
                                   const rd_chariov_t *salt,
                                   int itcnt,
                                   rd_chariov_t *out) {
+        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
         const EVP_MD *evp =
             rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.scram_evp;
-        unsigned int ressize = 0;
-        unsigned char tempres[EVP_MAX_MD_SIZE];
-        unsigned char *saltplus;
-        int i;
-
-        /* U1   := HMAC(str, salt + INT(1)) */
-        saltplus = rd_alloca(salt->size + 4);
-        memcpy(saltplus, salt->ptr, salt->size);
-        saltplus[salt->size]     = 0;
-        saltplus[salt->size + 1] = 0;
-        saltplus[salt->size + 2] = 0;
-        saltplus[salt->size + 3] = 1;
-
-        /* U1   := HMAC(str, salt + INT(1)) */
-        if (!HMAC(evp, (const unsigned char *)in->ptr, (int)in->size, saltplus,
-                  salt->size + 4, tempres, &ressize)) {
-                rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SCRAM",
-                           "HMAC priming failed");
-                return -1;
-        }
-
-        memcpy(out->ptr, tempres, ressize);
-
-        /* Ui-1 := HMAC(str, Ui-2) ..  */
-        for (i = 1; i < itcnt; i++) {
-                unsigned char tempdest[EVP_MAX_MD_SIZE];
-                int j;
-
-                if (unlikely(!HMAC(evp, (const unsigned char *)in->ptr,
-                                   (int)in->size, tempres, ressize, tempdest,
-                                   NULL))) {
-                        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SCRAM",
-                                   "Hi() HMAC #%d/%d failed", i, itcnt);
-                        return -1;
-                }
-
-                /* U1 XOR U2 .. */
-                for (j = 0; j < (int)ressize; j++) {
-                        out->ptr[j] ^= tempdest[j];
-                        tempres[j] = tempdest[j];
-                }
-        }
-
-        out->size = ressize;
-
-        return 0;
+        return rd_kafka_ssl_hmac(rkb, evp, in, salt, itcnt, out);
 }
+
 
 
 /**
@@ -397,9 +284,8 @@ static int rd_kafka_sasl_scram_build_client_final_message(
     int itcnt,
     rd_chariov_t *out) {
         struct rd_kafka_sasl_scram_state *state = rktrans->rktrans_sasl.state;
-        const rd_kafka_conf_t *conf  = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
-        rd_chariov_t SaslPassword    = {.ptr  = conf->sasl.password,
-                                     .size = strlen(conf->sasl.password)};
+        rd_kafka_conf_t *conf        = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
+        rd_chariov_t SaslPassword    = RD_ZERO_INIT;
         rd_chariov_t SaltedPassword  = {.ptr = rd_alloca(EVP_MAX_MD_SIZE)};
         rd_chariov_t ClientKey       = {.ptr = rd_alloca(EVP_MAX_MD_SIZE)};
         rd_chariov_t ServerKey       = {.ptr = rd_alloca(EVP_MAX_MD_SIZE)};
@@ -415,6 +301,11 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         rd_chariov_t client_final_msg_wo_proof;
         char *ClientProofB64;
         int i;
+
+        mtx_lock(&conf->sasl.lock);
+        rd_strdupa(&SaslPassword.ptr, conf->sasl.password);
+        mtx_unlock(&conf->sasl.lock);
+        SaslPassword.size = strlen(SaslPassword.ptr);
 
         /* Constructing the ClientProof attribute (p):
          *
@@ -482,7 +373,7 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         }
 
         /* Store the Base64 encoded ServerSignature for quick comparison */
-        state->ServerSignatureB64 = rd_base64_encode(&ServerSignature);
+        state->ServerSignatureB64 = rd_base64_encode_str(&ServerSignature);
         if (state->ServerSignatureB64 == NULL) {
                 rd_free(client_final_msg_wo_proof.ptr);
                 return -1;
@@ -507,7 +398,7 @@ static int rd_kafka_sasl_scram_build_client_final_message(
 
 
         /* Base64 encoded ClientProof */
-        ClientProofB64 = rd_base64_encode(&ClientProof);
+        ClientProofB64 = rd_base64_encode_str(&ClientProof);
         if (ClientProofB64 == NULL) {
                 rd_free(client_final_msg_wo_proof.ptr);
                 return -1;
@@ -664,7 +555,7 @@ rd_kafka_sasl_scram_handle_server_final_message(rd_kafka_transport_t *rktrans,
         } else if ((attr_v = rd_kafka_sasl_scram_get_attr(
                         in, 'v', "verifier in server-final-message", errstr,
                         errstr_size))) {
-                const rd_kafka_conf_t *conf;
+                rd_kafka_conf_t *conf;
 
                 /* Authentication succesful on server,
                  * but we need to verify the ServerSignature too. */
@@ -686,9 +577,11 @@ rd_kafka_sasl_scram_handle_server_final_message(rd_kafka_transport_t *rktrans,
 
                 conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
 
+                mtx_lock(&conf->sasl.lock);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
                            "SCRAMAUTH", "Authenticated as %s using %s",
                            conf->sasl.username, conf->sasl.mechanisms);
+                mtx_unlock(&conf->sasl.lock);
 
                 rd_kafka_sasl_auth_done(rktrans);
                 return 0;
@@ -711,11 +604,13 @@ rd_kafka_sasl_scram_build_client_first_message(rd_kafka_transport_t *rktrans,
                                                rd_chariov_t *out) {
         char *sasl_username;
         struct rd_kafka_sasl_scram_state *state = rktrans->rktrans_sasl.state;
-        const rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
+        rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
 
         rd_kafka_sasl_scram_generate_nonce(&state->cnonce);
 
+        mtx_lock(&conf->sasl.lock);
         sasl_username = rd_kafka_sasl_safe_string(conf->sasl.username);
+        mtx_unlock(&conf->sasl.lock);
 
         out->size =
             strlen("n,,n=,r=") + strlen(sasl_username) + state->cnonce.size;
@@ -842,8 +737,13 @@ static int rd_kafka_sasl_scram_conf_validate(rd_kafka_t *rk,
                                              char *errstr,
                                              size_t errstr_size) {
         const char *mech = rk->rk_conf.sasl.mechanisms;
+        rd_bool_t both_set;
 
-        if (!rk->rk_conf.sasl.username || !rk->rk_conf.sasl.password) {
+        mtx_lock(&rk->rk_conf.sasl.lock);
+        both_set = rk->rk_conf.sasl.username && rk->rk_conf.sasl.password;
+        mtx_unlock(&rk->rk_conf.sasl.lock);
+
+        if (!both_set) {
                 rd_snprintf(errstr, errstr_size,
                             "sasl.username and sasl.password must be set");
                 return -1;

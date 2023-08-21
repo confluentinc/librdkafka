@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2017-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,8 @@ typedef struct rd_kafka_interceptor_method_s {
                     *on_response_received;
                 rd_kafka_interceptor_f_on_thread_start_t *on_thread_start;
                 rd_kafka_interceptor_f_on_thread_exit_t *on_thread_exit;
+                rd_kafka_interceptor_f_on_broker_state_change_t
+                    *on_broker_state_change;
                 void *generic; /* For easy assignment */
 
         } u;
@@ -174,6 +176,7 @@ void rd_kafka_interceptors_destroy(rd_kafka_conf_t *conf) {
         rd_list_destroy(&conf->interceptors.on_response_received);
         rd_list_destroy(&conf->interceptors.on_thread_start);
         rd_list_destroy(&conf->interceptors.on_thread_exit);
+        rd_list_destroy(&conf->interceptors.on_broker_state_change);
 
         /* Interceptor config */
         rd_list_destroy(&conf->interceptors.config);
@@ -222,6 +225,9 @@ static void rd_kafka_interceptors_init(rd_kafka_conf_t *conf) {
                      rd_kafka_interceptor_method_destroy)
             ->rl_flags |= RD_LIST_F_UNIQUE;
         rd_list_init(&conf->interceptors.on_thread_exit, 0,
+                     rd_kafka_interceptor_method_destroy)
+            ->rl_flags |= RD_LIST_F_UNIQUE;
+        rd_list_init(&conf->interceptors.on_broker_state_change, 0,
                      rd_kafka_interceptor_method_destroy)
             ->rl_flags |= RD_LIST_F_UNIQUE;
 
@@ -618,6 +624,34 @@ void rd_kafka_interceptors_on_thread_exit(rd_kafka_t *rk,
 }
 
 
+/**
+ * @brief Call interceptor on_broker_state_change methods.
+ * @locality any.
+ */
+void rd_kafka_interceptors_on_broker_state_change(rd_kafka_t *rk,
+                                                  int32_t broker_id,
+                                                  const char *secproto,
+                                                  const char *name,
+                                                  int port,
+                                                  const char *state) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method,
+                        &rk->rk_conf.interceptors.on_broker_state_change, i) {
+                rd_kafka_resp_err_t ic_err;
+
+                ic_err = method->u.on_broker_state_change(
+                    rk, broker_id, secproto, name, port, state,
+                    method->ic_opaque);
+                if (unlikely(ic_err))
+                        rd_kafka_interceptor_failed(rk, method,
+                                                    "on_broker_state_change",
+                                                    ic_err, NULL, NULL);
+        }
+}
+
+
 
 /**
  * @name Public API (backend)
@@ -770,4 +804,16 @@ rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_exit(
         return rd_kafka_interceptor_method_add(
             &rk->rk_conf.interceptors.on_thread_exit, ic_name,
             (void *)on_thread_exit, ic_opaque);
+}
+
+
+rd_kafka_resp_err_t rd_kafka_interceptor_add_on_broker_state_change(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_broker_state_change_t *on_broker_state_change,
+    void *ic_opaque) {
+        assert(!rk->rk_initialized);
+        return rd_kafka_interceptor_method_add(
+            &rk->rk_conf.interceptors.on_broker_state_change, ic_name,
+            (void *)on_broker_state_change, ic_opaque);
 }

@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -484,6 +484,8 @@ static void consume_seek_pause_resume(void) {
 
         TEST_SAY("Assigning partition\n");
         TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+
+        rd_kafka_topic_partition_list_destroy(parts);
 
 
         TEST_SAY("Consuming messages 0..100\n");

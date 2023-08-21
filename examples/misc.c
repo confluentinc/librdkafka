@@ -174,7 +174,7 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * Print group information
          */
-        for (i = 0; grplist->group_cnt; i++) {
+        for (i = 0; i < grplist->group_cnt; i++) {
                 int j;
                 const struct rd_kafka_group_info *grp = &grplist->groups[i];
 

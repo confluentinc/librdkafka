@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -126,29 +127,51 @@ typedef enum {
         RD_KAFKA_OP_DELETETOPICS, /**< Admin: DeleteTopics: u.admin_request*/
         RD_KAFKA_OP_CREATEPARTITIONS, /**< Admin: CreatePartitions:
                                        *   u.admin_request*/
-        RD_KAFKA_OP_ALTERCONFIGS,    /**< Admin: AlterConfigs: u.admin_request*/
-        RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs:
-                                      *   u.admin_request*/
-        RD_KAFKA_OP_DELETERECORDS,   /**< Admin: DeleteRecords:
-                                      *   u.admin_request*/
-        RD_KAFKA_OP_DELETEGROUPS,    /**< Admin: DeleteGroups: u.admin_request*/
+        RD_KAFKA_OP_ALTERCONFIGS, /**< Admin: AlterConfigs: u.admin_request*/
+        RD_KAFKA_OP_INCREMENTALALTERCONFIGS, /**< Admin:
+                                              *    IncrementalAlterConfigs:
+                                              *    u.admin_request */
+        RD_KAFKA_OP_DESCRIBECONFIGS,         /**< Admin: DescribeConfigs:
+                                              *   u.admin_request*/
+        RD_KAFKA_OP_DELETERECORDS,           /**< Admin: DeleteRecords:
+                                              *   u.admin_request*/
+        RD_KAFKA_OP_LISTCONSUMERGROUPS,      /**< Admin:
+                                              *   ListConsumerGroups
+                                              *   u.admin_request */
+        RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,  /**< Admin:
+                                              *   DescribeConsumerGroups
+                                              *   u.admin_request */
+        RD_KAFKA_OP_DELETEGROUPS, /**< Admin: DeleteGroups: u.admin_request*/
         RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS, /**< Admin:
                                                  *   DeleteConsumerGroupOffsets
                                                  *   u.admin_request */
         RD_KAFKA_OP_CREATEACLS,   /**< Admin: CreateAcls: u.admin_request*/
         RD_KAFKA_OP_DESCRIBEACLS, /**< Admin: DescribeAcls: u.admin_request*/
         RD_KAFKA_OP_DELETEACLS,   /**< Admin: DeleteAcls: u.admin_request*/
-        RD_KAFKA_OP_ADMIN_FANOUT, /**< Admin: fanout request */
-        RD_KAFKA_OP_ADMIN_RESULT, /**< Admin API .._result_t */
-        RD_KAFKA_OP_PURGE,        /**< Purge queues */
-        RD_KAFKA_OP_CONNECT,      /**< Connect (to broker) */
-        RD_KAFKA_OP_OAUTHBEARER_REFRESH,    /**< Refresh OAUTHBEARER token */
-        RD_KAFKA_OP_MOCK,                   /**< Mock cluster command */
-        RD_KAFKA_OP_BROKER_MONITOR,         /**< Broker state change */
-        RD_KAFKA_OP_TXN,                    /**< Transaction command */
-        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
-        RD_KAFKA_OP_LEADERS,                /**< Partition leader query */
-        RD_KAFKA_OP_BARRIER,                /**< Version barrier bump */
+        RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS, /**< Admin:
+                                                *   AlterConsumerGroupOffsets
+                                                *   u.admin_request */
+        RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS,  /**< Admin:
+                                                *   ListConsumerGroupOffsets
+                                                *   u.admin_request */
+        RD_KAFKA_OP_ADMIN_FANOUT,              /**< Admin: fanout request */
+        RD_KAFKA_OP_ADMIN_RESULT,              /**< Admin API .._result_t */
+        RD_KAFKA_OP_PURGE,                     /**< Purge queues */
+        RD_KAFKA_OP_CONNECT,                   /**< Connect (to broker) */
+        RD_KAFKA_OP_OAUTHBEARER_REFRESH,       /**< Refresh OAUTHBEARER token */
+        RD_KAFKA_OP_MOCK,                      /**< Mock cluster command */
+        RD_KAFKA_OP_BROKER_MONITOR,            /**< Broker state change */
+        RD_KAFKA_OP_TXN,                       /**< Transaction command */
+        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL,    /**< Get rebalance protocol */
+        RD_KAFKA_OP_LEADERS,                   /**< Partition leader query */
+        RD_KAFKA_OP_BARRIER,                   /**< Version barrier bump */
+        RD_KAFKA_OP_SASL_REAUTH, /**< Sasl reauthentication for broker */
+        RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS, /* < Admin:
+                                                     DescribeUserScramCredentials
+                                                     u.admin_request >*/
+        RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,    /* < Admin:
+                                                     AlterUserScramCredentials
+                                                     u.admin_request >*/
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -290,7 +313,7 @@ struct rd_kafka_op_s {
                 struct {
                         rd_kafka_topic_partition_list_t *partitions;
                         /** Require stable (txn-commited) offsets */
-                        rd_bool_t require_stable;
+                        rd_bool_t require_stable_offsets;
                         int do_free; /* free .partitions on destroy() */
                 } offset_fetch;
 
@@ -358,6 +381,7 @@ struct rd_kafka_op_s {
                 /* RD_KAFKA_OP_METADATA */
                 struct {
                         rd_kafka_metadata_t *md;
+                        rd_kafka_metadata_internal_t *mdi;
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
                 } metadata;
@@ -375,13 +399,13 @@ struct rd_kafka_op_s {
                 } node;
 
                 struct {
-                        int64_t offset;
+                        rd_kafka_fetch_pos_t pos;
                         int32_t broker_id; /**< Originating broker, or -1 */
                         char *reason;
                 } offset_reset;
 
                 struct {
-                        int64_t offset;
+                        rd_kafka_fetch_pos_t pos;
                         struct rd_kafka_cgrp_s *rkcg;
                 } fetch_start; /* reused for SEEK */
 
@@ -433,6 +457,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
                                RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
                                RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
+                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
                         } state;
 
                         int32_t broker_id; /**< Requested broker id to
@@ -505,6 +530,7 @@ struct rd_kafka_op_s {
                                             *
                                             * (rd_kafka_ConfigResource_t *):
                                             * AlterConfigs, DescribeConfigs
+                                            * IncrementalAlterConfigs
                                             */
 
                         void *opaque; /**< Application's opaque as set by
@@ -744,5 +770,22 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko);
 #define rd_kafka_op_replyq_is_valid(RKO)                                       \
         (rd_kafka_replyq_is_valid(&(RKO)->rko_replyq) &&                       \
          !rd_kafka_op_version_outdated((RKO), 0))
+
+
+
+/**
+ * @returns the rko for a consumer message (RD_KAFKA_OP_FETCH).
+ */
+static RD_UNUSED rd_kafka_op_t *
+rd_kafka_message2rko(rd_kafka_message_t *rkmessage) {
+        rd_kafka_op_t *rko = rkmessage->_private;
+
+        if (!rko || rko->rko_type != RD_KAFKA_OP_FETCH)
+                return NULL;
+
+        return rko;
+}
+
+
 
 #endif /* _RDKAFKA_OP_H_ */

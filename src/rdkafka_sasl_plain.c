@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2017-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,13 +74,16 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
         char *buf;
         int of     = 0;
         int zidlen = 0;
-        int cidlen = rk->rk_conf.sasl.username
-                         ? (int)strlen(rk->rk_conf.sasl.username)
-                         : 0;
-        int pwlen = rk->rk_conf.sasl.password
-                        ? (int)strlen(rk->rk_conf.sasl.password)
-                        : 0;
+        int cidlen, pwlen;
 
+        mtx_lock(&rk->rk_conf.sasl.lock);
+
+        cidlen = rk->rk_conf.sasl.username
+                     ? (int)strlen(rk->rk_conf.sasl.username)
+                     : 0;
+        pwlen = rk->rk_conf.sasl.password
+                    ? (int)strlen(rk->rk_conf.sasl.password)
+                    : 0;
 
         buf = rd_alloca(zidlen + 1 + cidlen + 1 + pwlen + 1);
 
@@ -95,6 +98,7 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
         /* passwd */
         memcpy(&buf[of], rk->rk_conf.sasl.password, pwlen);
         of += pwlen;
+        mtx_unlock(&rk->rk_conf.sasl.lock);
 
         rd_rkb_dbg(rkb, SECURITY, "SASLPLAIN",
                    "Sending SASL PLAIN (builtin) authentication token");
@@ -115,7 +119,13 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_plain_conf_validate(rd_kafka_t *rk,
                                              char *errstr,
                                              size_t errstr_size) {
-        if (!rk->rk_conf.sasl.username || !rk->rk_conf.sasl.password) {
+        rd_bool_t both_set;
+
+        mtx_lock(&rk->rk_conf.sasl.lock);
+        both_set = rk->rk_conf.sasl.username && rk->rk_conf.sasl.password;
+        mtx_unlock(&rk->rk_conf.sasl.lock);
+
+        if (!both_set) {
                 rd_snprintf(errstr, errstr_size,
                             "sasl.username and sasl.password must be set");
                 return -1;

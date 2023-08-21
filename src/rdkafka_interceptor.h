@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2017-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -81,6 +81,13 @@ void rd_kafka_interceptors_on_thread_start(rd_kafka_t *rk,
                                            rd_kafka_thread_type_t thread_type);
 void rd_kafka_interceptors_on_thread_exit(rd_kafka_t *rk,
                                           rd_kafka_thread_type_t thread_type);
+
+void rd_kafka_interceptors_on_broker_state_change(rd_kafka_t *rk,
+                                                  int32_t broker_id,
+                                                  const char *secproto,
+                                                  const char *name,
+                                                  int port,
+                                                  const char *state);
 
 void rd_kafka_conf_interceptor_ctor(int scope, void *pconf);
 void rd_kafka_conf_interceptor_dtor(int scope, void *pconf);

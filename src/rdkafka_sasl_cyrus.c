@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2015 Magnus Edenhill
+ * Copyright (c) 2015-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,8 +92,10 @@ static int rd_kafka_sasl_cyrus_recv(struct rd_kafka_transport_s *rktrans,
                 const char *out;
                 unsigned int outlen;
 
+                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
                 r = sasl_client_step(state->conn, size > 0 ? buf : NULL, size,
                                      &interact, &out, &outlen);
+                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (r >= 0) {
                         /* Note: outlen may be 0 here for an empty response */
@@ -148,9 +151,11 @@ auth_successful:
             RD_KAFKA_DBG_SECURITY) {
                 const char *user, *mech, *authsrc;
 
+                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
                 if (sasl_getprop(state->conn, SASL_USERNAME,
                                  (const void **)&user) != SASL_OK)
                         user = "(unknown)";
+                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (sasl_getprop(state->conn, SASL_MECHNAME,
                                  (const void **)&mech) != SASL_OK)
@@ -356,6 +361,12 @@ static int rd_kafka_sasl_cyrus_cb_getsimple(void *context,
         switch (id) {
         case SASL_CB_USER:
         case SASL_CB_AUTHNAME:
+                /* Since cyrus expects the returned pointer to be stable
+                 * and not have its content changed, but the username
+                 * and password may be updated at anytime by the application
+                 * calling sasl_set_credentials(), we need to lock
+                 * rk_conf.sasl.lock before each call into cyrus-sasl.
+                 * So when we get here the lock is already held. */
                 *result = rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.username;
                 break;
 
@@ -381,6 +392,7 @@ static int rd_kafka_sasl_cyrus_cb_getsecret(sasl_conn_t *conn,
         rd_kafka_transport_t *rktrans = context;
         const char *password;
 
+        /* rk_conf.sasl.lock is already locked */
         password = rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.password;
 
         if (!password) {
@@ -472,9 +484,13 @@ static void rd_kafka_sasl_cyrus_close(struct rd_kafka_transport_s *rktrans) {
         if (!state)
                 return;
 
-        if (state->conn)
+        if (state->conn) {
+                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
                 sasl_dispose(&state->conn);
+                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+        }
         rd_free(state);
+        rktrans->rktrans_sasl.state = NULL;
 }
 
 
@@ -528,9 +544,11 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
 
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
+        mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname, NULL,
                             NULL, /* no local & remote IP checks */
                             state->callbacks, 0, &state->conn);
+        mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
         if (r != SASL_OK) {
                 rd_snprintf(errstr, errstr_size, "%s",
                             sasl_errstring(r, NULL, NULL));
@@ -550,8 +568,10 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
                 unsigned int outlen;
                 const char *mech = NULL;
 
+                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
                 r = sasl_client_start(state->conn, rk->rk_conf.sasl.mechanisms,
                                       NULL, &out, &outlen, &mech);
+                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (r >= 0)
                         if (rd_kafka_sasl_send(rktrans, out, outlen, errstr,

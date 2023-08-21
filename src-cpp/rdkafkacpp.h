@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2014 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -111,7 +112,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION 0x010900ff
+#define RD_KAFKA_VERSION 0x020200ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -324,6 +325,8 @@ enum ErrorCode {
   ERR__NOOP = -141,
   /** No offset to automatically reset to */
   ERR__AUTO_OFFSET_RESET = -140,
+  /** Partition log truncation detected */
+  ERR__LOG_TRUNCATION = -139,
 
   /** End internal error codes */
   ERR__END = -100,
@@ -1326,6 +1329,14 @@ class RD_EXPORT Conf {
    *
    * @remark CA certificate in PEM format may also be set with the
    *         `ssl.ca.pem` configuration property.
+   *
+   * @remark When librdkafka is linked to OpenSSL 3.0 and the certificate is
+   *         encoded using an obsolete cipher, it might be necessary to set up
+   *         an OpenSSL configuration file to load the "legacy" provider and
+   *         set the OPENSSL_CONF environment variable.
+   *         See
+   * https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md for more
+   * information.
    */
   virtual Conf::ConfResult set_ssl_cert(RdKafka::CertificateType cert_type,
                                         RdKafka::CertificateEncoding cert_enc,
@@ -1505,7 +1516,7 @@ class RD_EXPORT Handle {
   }
 
   /** @returns the name of the handle */
-  virtual const std::string name() const = 0;
+  virtual std::string name() const = 0;
 
   /**
    * @brief Returns the client's broker-assigned group member id
@@ -1515,7 +1526,7 @@ class RD_EXPORT Handle {
    * @returns Last assigned member id, or empty string if not currently
    *          a group member.
    */
-  virtual const std::string memberid() const = 0;
+  virtual std::string memberid() const = 0;
 
 
   /**
@@ -1714,7 +1725,7 @@ class RD_EXPORT Handle {
    * @returns Last cached ClusterId, or empty string if no ClusterId could be
    *          retrieved in the allotted timespan.
    */
-  virtual const std::string clusterid(int timeout_ms) = 0;
+  virtual std::string clusterid(int timeout_ms) = 0;
 
   /**
    * @brief Returns the underlying librdkafka C rd_kafka_t handle.
@@ -1891,6 +1902,23 @@ class RD_EXPORT Handle {
    *         that explicitly mention using this function for freeing.
    */
   virtual void mem_free(void *ptr) = 0;
+
+  /**
+   * @brief Sets SASL credentials used for SASL PLAIN and SCRAM mechanisms by
+   *        this Kafka client.
+   *
+   * This function sets or resets the SASL username and password credentials
+   * used by this Kafka client. The new credentials will be used the next time
+   * this client needs to authenticate to a broker.
+   * will not disconnect existing connections that might have been made using
+   * the old credentials.
+   *
+   * @remark This function only applies to the SASL PLAIN and SCRAM mechanisms.
+   *
+   * @returns NULL on success or an error object on error.
+   */
+  virtual Error *sasl_set_credentials(const std::string &username,
+                                      const std::string &password) = 0;
 };
 
 
@@ -1953,6 +1981,18 @@ class RD_EXPORT TopicPartition {
 
   /** @returns error code (if applicable) */
   virtual ErrorCode err() const = 0;
+
+  /** @brief Get partition leader epoch, or -1 if not known or relevant. */
+  virtual int32_t get_leader_epoch() = 0;
+
+  /** @brief Set partition leader epoch. */
+  virtual void set_leader_epoch(int32_t leader_epoch) = 0;
+
+  /** @brief Get partition metadata. */
+  virtual std::vector<unsigned char> get_metadata() = 0;
+
+  /** @brief Set partition metadata. */
+  virtual void set_metadata(std::vector<unsigned char> &metadata) = 0;
 };
 
 
@@ -1996,7 +2036,7 @@ class RD_EXPORT Topic {
 
 
   /** @returns the topic name */
-  virtual const std::string name() const = 0;
+  virtual std::string name() const = 0;
 
   /**
    * @returns true if \p partition is available for the topic (has leader).
@@ -2009,6 +2049,11 @@ class RD_EXPORT Topic {
    * @brief Store offset \p offset + 1 for topic partition \p partition.
    * The offset will be committed (written) to the broker (or file) according
    * to \p auto.commit.interval.ms or next manual offset-less commit call.
+   *
+   * @deprecated This API lacks support for partition leader epochs, which makes
+   *             it at risk for unclean leader election log truncation issues.
+   *             Use KafkaConsumer::offsets_store() or
+   *             Message::offset_store() instead.
    *
    * @remark \c enable.auto.offset.store must be set to \c false when using
    *         this API.
@@ -2440,6 +2485,31 @@ class RD_EXPORT Message {
   /** @returns the broker id of the broker the message was produced to or
    *           fetched from, or -1 if not known/applicable. */
   virtual int32_t broker_id() const = 0;
+
+  /** @returns the message's partition leader epoch at the time the message was
+   *           fetched and if known, else -1. */
+  virtual int32_t leader_epoch() const = 0;
+
+  /**
+   * @brief Store offset +1 for the consumed message.
+   *
+   * The message offset + 1 will be committed to broker according
+   * to \c `auto.commit.interval.ms` or manual offset-less commit()
+   *
+   * @warning This method may only be called for partitions that are currently
+   *          assigned.
+   *          Non-assigned partitions will fail with ERR__STATE.
+   *
+   * @warning Avoid storing offsets after calling seek() (et.al) as
+   *          this may later interfere with resuming a paused partition, instead
+   *          store offsets prior to calling seek.
+   *
+   * @remark \c `enable.auto.offset.store` must be set to "false" when using
+   *         this API.
+   *
+   * @returns NULL on success or an error object on failure.
+   */
+  virtual Error *offset_store() = 0;
 };
 
 /**@}*/
@@ -2839,6 +2909,9 @@ class RD_EXPORT KafkaConsumer : public virtual Handle {
    *
    * @remark \c enable.auto.offset.store must be set to \c false when using
    *         this API.
+   *
+   * @remark The leader epoch, if set, will be used to fence outdated partition
+   *         leaders. See TopicPartition::set_leader_epoch().
    *
    * @returns RdKafka::ERR_NO_ERROR on success, or
    *          RdKafka::ERR___UNKNOWN_PARTITION if none of the offsets could
@@ -3580,7 +3653,7 @@ class BrokerMetadata {
   virtual int32_t id() const = 0;
 
   /** @returns Broker hostname */
-  virtual const std::string host() const = 0;
+  virtual std::string host() const = 0;
 
   /** @returns Broker listening port */
   virtual int port() const = 0;
@@ -3639,7 +3712,7 @@ class TopicMetadata {
   typedef PartitionMetadataVector::const_iterator PartitionMetadataIterator;
 
   /** @returns Topic name */
-  virtual const std::string topic() const = 0;
+  virtual std::string topic() const = 0;
 
   /** @returns Partition list */
   virtual const PartitionMetadataVector *partitions() const = 0;
@@ -3685,7 +3758,7 @@ class Metadata {
   virtual int32_t orig_broker_id() const = 0;
 
   /** @brief Broker (name) originating this metadata */
-  virtual const std::string orig_broker_name() const = 0;
+  virtual std::string orig_broker_name() const = 0;
 
   virtual ~Metadata() = 0;
 };

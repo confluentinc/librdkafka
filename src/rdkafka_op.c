@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,14 +80,23 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DELETETOPICS]     = "REPLY:DELETETOPICS",
             [RD_KAFKA_OP_CREATEPARTITIONS] = "REPLY:CREATEPARTITIONS",
             [RD_KAFKA_OP_ALTERCONFIGS]     = "REPLY:ALTERCONFIGS",
-            [RD_KAFKA_OP_DESCRIBECONFIGS]  = "REPLY:DESCRIBECONFIGS",
-            [RD_KAFKA_OP_DELETERECORDS]    = "REPLY:DELETERECORDS",
-            [RD_KAFKA_OP_DELETEGROUPS]     = "REPLY:DELETEGROUPS",
+            [RD_KAFKA_OP_INCREMENTALALTERCONFIGS] =
+                "REPLY:INCREMENTALALTERCONFIGS",
+            [RD_KAFKA_OP_DESCRIBECONFIGS]    = "REPLY:DESCRIBECONFIGS",
+            [RD_KAFKA_OP_DELETERECORDS]      = "REPLY:DELETERECORDS",
+            [RD_KAFKA_OP_LISTCONSUMERGROUPS] = "REPLY:LISTCONSUMERGROUPS",
+            [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
+                "REPLY:DESCRIBECONSUMERGROUPS",
+            [RD_KAFKA_OP_DELETEGROUPS] = "REPLY:DELETEGROUPS",
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
-            [RD_KAFKA_OP_CREATEACLS]          = "REPLY:CREATEACLS",
-            [RD_KAFKA_OP_DESCRIBEACLS]        = "REPLY:DESCRIBEACLS",
-            [RD_KAFKA_OP_DELETEACLS]          = "REPLY:DELETEACLS",
+            [RD_KAFKA_OP_CREATEACLS]   = "REPLY:CREATEACLS",
+            [RD_KAFKA_OP_DESCRIBEACLS] = "REPLY:DESCRIBEACLS",
+            [RD_KAFKA_OP_DELETEACLS]   = "REPLY:DELETEACLS",
+            [RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS] =
+                "REPLY:ALTERCONSUMERGROUPOFFSETS",
+            [RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS] =
+                "REPLY:LISTCONSUMERGROUPOFFSETS",
             [RD_KAFKA_OP_ADMIN_FANOUT]        = "REPLY:ADMIN_FANOUT",
             [RD_KAFKA_OP_ADMIN_RESULT]        = "REPLY:ADMIN_RESULT",
             [RD_KAFKA_OP_PURGE]               = "REPLY:PURGE",
@@ -97,8 +107,13 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_TXN]                 = "REPLY:TXN",
             [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
                 "REPLY:GET_REBALANCE_PROTOCOL",
-            [RD_KAFKA_OP_LEADERS] = "REPLY:LEADERS",
-            [RD_KAFKA_OP_BARRIER] = "REPLY:BARRIER",
+            [RD_KAFKA_OP_LEADERS]     = "REPLY:LEADERS",
+            [RD_KAFKA_OP_BARRIER]     = "REPLY:BARRIER",
+            [RD_KAFKA_OP_SASL_REAUTH] = "REPLY:SASL_REAUTH",
+            [RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS] =
+                "REPLY:ALTERUSERSCRAMCREDENTIALS",
+            [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
+                "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -221,14 +236,23 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DELETETOPICS]     = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_CREATEPARTITIONS] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_ALTERCONFIGS]     = sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_DESCRIBECONFIGS]  = sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_DELETERECORDS]    = sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_DELETEGROUPS]     = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_INCREMENTALALTERCONFIGS] =
+                sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBECONFIGS]    = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DELETERECORDS]      = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_LISTCONSUMERGROUPS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
+                sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DELETEGROUPS] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_CREATEACLS]   = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBEACLS] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETEACLS]   = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS] =
+                sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS] =
+                sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_ADMIN_FANOUT] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_ADMIN_RESULT] = sizeof(rko->rko_u.admin_result),
             [RD_KAFKA_OP_PURGE]        = sizeof(rko->rko_u.purge),
@@ -239,8 +263,13 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_TXN]            = sizeof(rko->rko_u.txn),
             [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
                 sizeof(rko->rko_u.rebalance_protocol),
-            [RD_KAFKA_OP_LEADERS] = sizeof(rko->rko_u.leaders),
-            [RD_KAFKA_OP_BARRIER] = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_LEADERS]     = sizeof(rko->rko_u.leaders),
+            [RD_KAFKA_OP_BARRIER]     = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_SASL_REAUTH] = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS] =
+                sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
+                sizeof(rko->rko_u.admin_request),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -360,6 +389,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
 
         case RD_KAFKA_OP_METADATA:
                 RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
+                /* It's not needed to free metadata.mdi because they
+                   are the in the same memory allocation. */
                 break;
 
         case RD_KAFKA_OP_LOG:
@@ -373,15 +404,27 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_DELETETOPICS:
         case RD_KAFKA_OP_CREATEPARTITIONS:
         case RD_KAFKA_OP_ALTERCONFIGS:
+        case RD_KAFKA_OP_INCREMENTALALTERCONFIGS:
         case RD_KAFKA_OP_DESCRIBECONFIGS:
         case RD_KAFKA_OP_DELETERECORDS:
+        case RD_KAFKA_OP_LISTCONSUMERGROUPS:
+        case RD_KAFKA_OP_DESCRIBECONSUMERGROUPS:
         case RD_KAFKA_OP_DELETEGROUPS:
         case RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS:
         case RD_KAFKA_OP_CREATEACLS:
         case RD_KAFKA_OP_DESCRIBEACLS:
         case RD_KAFKA_OP_DELETEACLS:
+        case RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS:
+        case RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
+                if (rko->rko_u.admin_request.options.match_consumer_group_states
+                        .u.PTR) {
+                        rd_list_destroy(rko->rko_u.admin_request.options
+                                            .match_consumer_group_states.u.PTR);
+                }
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);
                 RD_IF_FREE(rko->rko_u.admin_request.coordkey, rd_free);
                 break;
@@ -888,7 +931,7 @@ rd_kafka_op_res_t rd_kafka_op_handle(rd_kafka_t *rk,
  */
 void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         rd_kafka_toppar_t *rktp;
-        int64_t offset;
+        rd_kafka_fetch_pos_t pos;
 
         if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH || rko->rko_err))
                 return;
@@ -898,13 +941,8 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         if (unlikely(!rk))
                 rk = rktp->rktp_rkt->rkt_rk;
 
-        offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+        pos.offset       = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+        pos.leader_epoch = rko->rko_u.fetch.rkm.rkm_u.consumer.leader_epoch;
 
-        rd_kafka_toppar_lock(rktp);
-        rktp->rktp_app_offset = offset;
-        if (rk->rk_conf.enable_auto_offset_store)
-                rd_kafka_offset_store0(rktp, offset,
-                                       /* force: ignore assignment state */
-                                       rd_true, RD_DONT_LOCK);
-        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_update_app_pos(rk, rktp, pos, RD_DO_LOCK);
 }

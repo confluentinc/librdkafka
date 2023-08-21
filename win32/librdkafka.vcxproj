@@ -4,7 +4,7 @@
     <ProjectGuid>{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>librdkafka</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <PropertyGroup Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -102,6 +102,7 @@
     <ClInclude Include="..\src\rdatomic.h" />
     <ClInclude Include="..\src\rdavg.h" />
     <ClInclude Include="..\src\rdbuf.h" />
+    <ClInclude Include="..\src\rdbase64.h" />
     <ClInclude Include="..\src\rdendian.h" />
     <ClInclude Include="..\src\rdfloat.h" />
     <ClInclude Include="..\src\rdgz.h" />
@@ -174,6 +175,7 @@
     <ClCompile Include="..\src\crc32c.c" />
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
+    <ClCompile Include="..\src\rdbase64.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
     <ClCompile Include="..\src\rdfnv1a.c" />
     <ClCompile Include="..\src\rdgz.c" />
@@ -229,6 +231,7 @@
     <ClCompile Include="..\src\rdkafka_mock_handlers.c" />
     <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_error.c" />
+    <ClCompile Include="..\src\rdkafka_fetcher.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />

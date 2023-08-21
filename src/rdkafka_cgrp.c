@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -415,7 +416,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_wait_coord_q             = rd_kafka_q_new(rk);
         rkcg->rkcg_wait_coord_q->rkq_serve  = rkcg->rkcg_ops->rkq_serve;
         rkcg->rkcg_wait_coord_q->rkq_opaque = rkcg->rkcg_ops->rkq_opaque;
-        rkcg->rkcg_q                        = rd_kafka_q_new(rk);
+        rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
 
@@ -1505,10 +1506,13 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
                 rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rkcg->rkcg_rk);
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
-        if (!(assignment = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, rd_false, rd_false)))
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        if (!(assignment =
+                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
                 goto err_parse;
-        rd_kafka_buf_read_bytes(rkbuf, &UserData);
+        rd_kafka_buf_read_kbytes(rkbuf, &UserData);
 
 done:
         rd_kafka_cgrp_update_session_timeout(rkcg, rd_true /*reset timeout*/);
@@ -1613,7 +1617,7 @@ static void rd_kafka_cgrp_handle_SyncGroup(rd_kafka_t *rk,
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-        rd_kafka_buf_read_bytes(rkbuf, &MemberState);
+        rd_kafka_buf_read_kbytes(rkbuf, &MemberState);
 
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, request,
@@ -1659,7 +1663,7 @@ err_parse:
 static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
                                        rd_kafka_assignor_t *rkas,
                                        rd_kafka_resp_err_t err,
-                                       rd_kafka_metadata_t *metadata,
+                                       rd_kafka_metadata_internal_t *metadata,
                                        rd_kafka_group_member_t *members,
                                        int member_cnt) {
         char errstr[512];
@@ -1674,8 +1678,8 @@ static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
         *errstr = '\0';
 
         /* Run assignor */
-        err = rd_kafka_assignor_run(rkcg, rkas, metadata, members, member_cnt,
-                                    errstr, sizeof(errstr));
+        err = rd_kafka_assignor_run(rkcg, rkas, &metadata->metadata, members,
+                                    member_cnt, errstr, sizeof(errstr));
 
         if (err) {
                 if (!*errstr)
@@ -1742,7 +1746,7 @@ rd_kafka_cgrp_assignor_handle_Metadata_op(rd_kafka_t *rk,
         }
 
         rd_kafka_cgrp_assignor_run(rkcg, rkcg->rkcg_assignor, rko->rko_err,
-                                   rko->rko_u.metadata.md,
+                                   rko->rko_u.metadata.mdi,
                                    rkcg->rkcg_group_leader.members,
                                    rkcg->rkcg_group_leader.member_cnt);
 
@@ -1774,9 +1778,12 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
         rkbuf = rd_kafka_buf_new_shadow(
             MemberMetadata->data, RD_KAFKAP_BYTES_LEN(MemberMetadata), NULL);
 
-        /* Protocol parser needs a broker handle to log errors on. */
-        rkbuf->rkbuf_rkb = rkb;
-        rd_kafka_broker_keep(rkb);
+        /* Protocol parser needs a broker handle to log errors on.
+         * If none is provided, don't log errors (mainly for unit tests). */
+        if (rkb) {
+                rkbuf->rkbuf_rkb = rkb;
+                rd_kafka_broker_keep(rkb);
+        }
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
         rd_kafka_buf_read_i32(rkbuf, &subscription_cnt);
@@ -1796,13 +1803,26 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
                     rkgm->rkgm_subscription, topic_name, RD_KAFKA_PARTITION_UA);
         }
 
-        rd_kafka_buf_read_bytes(rkbuf, &UserData);
+        rd_kafka_buf_read_kbytes(rkbuf, &UserData);
         rkgm->rkgm_userdata = rd_kafkap_bytes_copy(&UserData);
 
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         if (Version >= 1 &&
-            !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, rd_false, rd_false)))
+            !(rkgm->rkgm_owned =
+                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
                 goto err;
+
+        if (Version >= 2) {
+                rd_kafka_buf_read_i32(rkbuf, &rkgm->rkgm_generation);
+        }
+
+        if (Version >= 3) {
+                rd_kafkap_str_t RackId = RD_KAFKAP_STR_INITIALIZER;
+                rd_kafka_buf_read_str(rkbuf, &RackId);
+                rkgm->rkgm_rack_id = rd_kafkap_str_copy(&RackId);
+        }
 
         rd_kafka_buf_destroy(rkbuf);
 
@@ -1812,10 +1832,11 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 err:
-        rd_rkb_dbg(rkb, CGRP, "MEMBERMETA",
-                   "Failed to parse MemberMetadata for \"%.*s\": %s",
-                   RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-                   rd_kafka_err2str(err));
+        if (rkb)
+                rd_rkb_dbg(rkb, CGRP, "MEMBERMETA",
+                           "Failed to parse MemberMetadata for \"%.*s\": %s",
+                           RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
+                           rd_kafka_err2str(err));
         if (rkgm->rkgm_subscription) {
                 rd_kafka_topic_partition_list_destroy(rkgm->rkgm_subscription);
                 rkgm->rkgm_subscription = NULL;
@@ -1944,6 +1965,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 int sub_cnt = 0;
                 rd_list_t topics;
                 rd_kafka_op_t *rko;
+                rd_bool_t any_member_rack = rd_false;
                 rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
                              "I am elected leader for group \"%s\" "
                              "with %" PRId32 " member(s)",
@@ -1968,7 +1990,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                         rd_kafka_buf_read_str(rkbuf, &MemberId);
                         if (request->rkbuf_reqhdr.ApiVersion >= 5)
                                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
-                        rd_kafka_buf_read_bytes(rkbuf, &MemberMetadata);
+                        rd_kafka_buf_read_kbytes(rkbuf, &MemberMetadata);
 
                         rkgm                 = &members[sub_cnt];
                         rkgm->rkgm_member_id = rd_kafkap_str_copy(&MemberId);
@@ -1989,6 +2011,9 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                                 rd_kafka_topic_partition_list_get_topic_names(
                                     rkgm->rkgm_subscription, &topics,
                                     0 /*dont include regex*/);
+                                if (!any_member_rack && rkgm->rkgm_rack_id &&
+                                    RD_KAFKAP_STR_LEN(rkgm->rkgm_rack_id))
+                                        any_member_rack = rd_true;
                         }
                 }
 
@@ -2026,7 +2051,11 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                      * avoid triggering a rejoin or error propagation
                      * on receiving the response since some topics
                      * may be missing. */
-                    rd_false, rko);
+                    rd_false,
+                    /* force_racks is true if any memeber has a client rack set,
+                       since we will require partition to rack mapping in that
+                       case for rack-aware assignors. */
+                    any_member_rack, rko);
                 rd_list_destroy(&topics);
 
         } else {
@@ -2726,6 +2755,10 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
  */
 static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
                                         rd_kafka_toppar_t *rktp) {
+        int cnt = 0, barrier_cnt = 0, message_cnt = 0, other_cnt = 0;
+        rd_kafka_op_t *rko;
+        rd_kafka_q_t *rkq;
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
                      "Group \"%s\": delete %s [%" PRId32 "]",
                      rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
@@ -2734,6 +2767,56 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
         rd_kafka_toppar_lock(rktp);
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
+
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE) {
+                /* Partition is being removed from the cluster and it's stopped,
+                 * so rktp->rktp_fetchq->rkq_fwdq is NULL.
+                 * Purge remaining operations in rktp->rktp_fetchq->rkq_q,
+                 * while holding lock, to avoid circular references */
+                rkq = rktp->rktp_fetchq;
+                mtx_lock(&rkq->rkq_lock);
+                rd_assert(!rkq->rkq_fwdq);
+
+                rko = TAILQ_FIRST(&rkq->rkq_q);
+                while (rko) {
+                        if (rko->rko_type != RD_KAFKA_OP_BARRIER &&
+                            rko->rko_type != RD_KAFKA_OP_FETCH) {
+                                rd_kafka_log(
+                                    rkcg->rkcg_rk, LOG_WARNING, "PARTDEL",
+                                    "Purging toppar fetch queue buffer op"
+                                    "with unexpected type: %s",
+                                    rd_kafka_op2str(rko->rko_type));
+                        }
+
+                        if (rko->rko_type == RD_KAFKA_OP_BARRIER)
+                                barrier_cnt++;
+                        else if (rko->rko_type == RD_KAFKA_OP_FETCH)
+                                message_cnt++;
+                        else
+                                other_cnt++;
+
+                        rko = TAILQ_NEXT(rko, rko_link);
+                        cnt++;
+                }
+
+                mtx_unlock(&rkq->rkq_lock);
+
+                if (cnt) {
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
+                                     "Purge toppar fetch queue buffer "
+                                     "containing %d op(s) "
+                                     "(%d barrier(s), %d message(s), %d other)"
+                                     " to avoid "
+                                     "circular references",
+                                     cnt, barrier_cnt, message_cnt, other_cnt);
+                        rd_kafka_q_purge(rktp->rktp_fetchq);
+                } else {
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
+                                     "Not purging toppar fetch queue buffer."
+                                     " No ops present in the buffer.");
+                }
+        }
+
         rd_kafka_toppar_unlock(rktp);
 
         rd_list_remove(&rkcg->rkcg_toppars, rktp);
@@ -2832,7 +2915,8 @@ static int rd_kafka_cgrp_update_committed_offsets(
                         continue;
 
                 rd_kafka_toppar_lock(rktp);
-                rktp->rktp_committed_offset = rktpar->offset;
+                rktp->rktp_committed_pos =
+                    rd_kafka_topic_partition_get_fetch_pos(rktpar);
                 rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_toppar_destroy(rktp); /* from get_toppar() */
@@ -2949,8 +3033,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
 
-        err =
-            rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request, offsets);
+        err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request,
+                                           offsets, rd_false);
 
         /* Suppress empty commit debug logs if allowed */
         if (err != RD_KAFKA_RESP_ERR__NO_OFFSET ||
@@ -3046,7 +3130,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
             !(err == RD_KAFKA_RESP_ERR__NO_OFFSET &&
               rko_orig->rko_u.offset_commit.silent_empty)) {
                 /* Propagate commit results (success or permanent error)
-                 * unless we're shutting down or commit was empty. */
+                 * unless we're shutting down or commit was empty, or if
+                 * there was a rebalance in progress. */
                 rd_kafka_cgrp_propagate_commit_result(rkcg, rko_orig, err,
                                                       errcnt, offsets);
         }
@@ -3076,8 +3161,9 @@ static size_t rd_kafka_topic_partition_has_absolute_offset(
  *
  * \p rko...silent_empty: if there are no offsets to commit bail out
  *                        silently without posting an op on the reply queue.
- * \p set_offsets: set offsets in rko->rko_u.offset_commit.partitions from
- *                 the rktp's stored offset.
+ * \p set_offsets: set offsets and epochs in
+ *                 rko->rko_u.offset_commit.partitions from the rktp's
+ *                 stored offset.
  *
  * Locality: cgrp thread
  */
@@ -3091,6 +3177,7 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
         int r;
         rd_kafka_buf_t *rkbuf;
         rd_kafka_op_t *reply;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
 
         if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
                 /* wait_commit_cnt has already been increased for
@@ -3165,10 +3252,17 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
                    rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                    reason);
 
+        cgmetadata = rd_kafka_consumer_group_metadata_new_with_genid(
+            rkcg->rkcg_rk->rk_conf.group_id_str, rkcg->rkcg_generation_id,
+            rkcg->rkcg_member_id->str,
+            rkcg->rkcg_rk->rk_conf.group_instance_id);
+
         /* Send OffsetCommit */
-        r = rd_kafka_OffsetCommitRequest(
-            rkcg->rkcg_coord, rkcg, offsets, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
-            rd_kafka_cgrp_op_handle_OffsetCommit, rko, reason);
+        r = rd_kafka_OffsetCommitRequest(rkcg->rkcg_coord, cgmetadata, offsets,
+                                         RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+                                         rd_kafka_cgrp_op_handle_OffsetCommit,
+                                         rko, reason);
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
 
         /* Must have valid offsets to commit if we get here */
         rd_kafka_assert(NULL, r != 0);
@@ -4871,8 +4965,10 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
                 }
 
                 rd_kafka_OffsetFetchRequest(
-                    rkcg->rkcg_coord, rko->rko_u.offset_fetch.partitions,
-                    rko->rko_u.offset_fetch.require_stable,
+                    rkcg->rkcg_coord, rk->rk_group_id->str,
+                    rko->rko_u.offset_fetch.partitions,
+                    rko->rko_u.offset_fetch.require_stable_offsets,
+                    0, /* Timeout */
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_op_handle_OffsetFetch, rko);
                 rko = NULL; /* rko now owned by request */
@@ -5290,9 +5386,7 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
                         result = rd_kafka_topic_partition_list_new(
                             rkcg->rkcg_group_assignment->cnt);
 
-                rd_kafka_topic_partition_list_add0(
-                    __FUNCTION__, __LINE__, result, curr->topic,
-                    curr->partition, curr->_private);
+                rd_kafka_topic_partition_list_add_copy(result, curr);
         }
 
         return result;
@@ -5882,6 +5976,75 @@ static int unittest_list_to_map(void) {
         RD_UT_PASS();
 }
 
+int unittest_member_metadata_serdes(void) {
+        rd_list_t *topics = rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
+        rd_kafka_topic_partition_list_t *owned_partitions =
+            rd_kafka_topic_partition_list_new(0);
+        rd_kafkap_str_t *rack_id    = rd_kafkap_str_new("myrack", -1);
+        const void *userdata        = NULL;
+        const int32_t userdata_size = 0;
+        const int generation        = 3;
+        const char topic_name[]     = "mytopic";
+        rd_kafka_group_member_t *rkgm;
+        int version;
+
+        rd_list_add(topics, rd_kafka_topic_info_new(topic_name, 3));
+        rd_kafka_topic_partition_list_add(owned_partitions, topic_name, 0);
+        rkgm = rd_calloc(1, sizeof(*rkgm));
+
+        /* Note that the version variable doesn't actually change the Version
+         *  field in the serialized message. It only runs the tests with/without
+         *  additional fields added in that particular version. */
+        for (version = 0; version <= 3; version++) {
+                rd_kafkap_bytes_t *member_metadata;
+
+                /* Serialize. */
+                member_metadata =
+                    rd_kafka_consumer_protocol_member_metadata_new(
+                        topics, userdata, userdata_size,
+                        version >= 1 ? owned_partitions : NULL,
+                        version >= 2 ? generation : -1,
+                        version >= 3 ? rack_id : NULL);
+
+                /* Deserialize. */
+                rd_kafka_group_MemberMetadata_consumer_read(NULL, rkgm,
+                                                            member_metadata);
+
+                /* Compare results. */
+                RD_UT_ASSERT(rkgm->rkgm_subscription->cnt ==
+                                 rd_list_cnt(topics),
+                             "subscription size should be correct");
+                RD_UT_ASSERT(!strcmp(topic_name,
+                                     rkgm->rkgm_subscription->elems[0].topic),
+                             "subscriptions should be correct");
+                RD_UT_ASSERT(rkgm->rkgm_userdata->len == userdata_size,
+                             "userdata should have the size 0");
+                if (version >= 1)
+                        RD_UT_ASSERT(!rd_kafka_topic_partition_list_cmp(
+                                         rkgm->rkgm_owned, owned_partitions,
+                                         rd_kafka_topic_partition_cmp),
+                                     "owned partitions should be same");
+                if (version >= 2)
+                        RD_UT_ASSERT(generation == rkgm->rkgm_generation,
+                                     "generation should be same");
+                if (version >= 3)
+                        RD_UT_ASSERT(
+                            !rd_kafkap_str_cmp(rack_id, rkgm->rkgm_rack_id),
+                            "rack id should be same");
+
+                rd_kafka_group_member_clear(rkgm);
+                rd_kafkap_bytes_destroy(member_metadata);
+        }
+
+        /* Clean up. */
+        rd_list_destroy(topics);
+        rd_kafka_topic_partition_list_destroy(owned_partitions);
+        rd_kafkap_str_destroy(rack_id);
+        rd_free(rkgm);
+
+        RD_UT_PASS();
+}
+
 
 /**
  * @brief Consumer group unit tests
@@ -5894,6 +6057,7 @@ int unittest_cgrp(void) {
         fails += unittest_set_subtract();
         fails += unittest_map_to_list();
         fails += unittest_list_to_map();
+        fails += unittest_member_metadata_serdes();
 
         return fails;
 }

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2014 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -117,7 +118,7 @@ class ErrorImpl : public Error {
  public:
   ~ErrorImpl() {
     rd_kafka_error_destroy(c_error_);
-  };
+  }
 
   ErrorImpl(ErrorCode code, const std::string *errstr) {
     c_error_ = rd_kafka_error_new(static_cast<rd_kafka_resp_err_t>(code),
@@ -125,7 +126,8 @@ class ErrorImpl : public Error {
                                   errstr ? errstr->c_str() : NULL);
   }
 
-  ErrorImpl(rd_kafka_error_t *c_error) : c_error_(c_error) {};
+  ErrorImpl(rd_kafka_error_t *c_error) : c_error_(c_error) {
+  }
 
   static Error *create(ErrorCode code, const std::string *errstr) {
     return new ErrorImpl(code, errstr);
@@ -161,7 +163,8 @@ class ErrorImpl : public Error {
 
 class EventImpl : public Event {
  public:
-  ~EventImpl() {};
+  ~EventImpl() {
+  }
 
   EventImpl(Type type,
             ErrorCode err,
@@ -175,7 +178,8 @@ class EventImpl : public Event {
       str_(str),
       id_(0),
       throttle_time_(0),
-      fatal_(false) {};
+      fatal_(false) {
+  }
 
   EventImpl(Type type) :
       type_(type),
@@ -185,7 +189,8 @@ class EventImpl : public Event {
       str_(""),
       id_(0),
       throttle_time_(0),
-      fatal_(false) {};
+      fatal_(false) {
+  }
 
   Type type() const {
     return type_;
@@ -379,7 +384,7 @@ class MessageImpl : public Message {
       delete key_;
     if (headers_)
       delete headers_;
-  };
+  }
 
   MessageImpl(rd_kafka_type_t rk_type,
               RdKafka::Topic *topic,
@@ -495,7 +500,7 @@ class MessageImpl : public Message {
 
   void *msg_opaque() const {
     return rkmessage_->_private;
-  };
+  }
 
   int64_t latency() const {
     return rd_kafka_message_latency(rkmessage_);
@@ -536,6 +541,21 @@ class MessageImpl : public Message {
     return rd_kafka_message_broker_id(rkmessage_);
   }
 
+  int32_t leader_epoch() const {
+    return rd_kafka_message_leader_epoch(rkmessage_);
+  }
+
+
+  Error *offset_store() {
+    rd_kafka_error_t *c_error;
+
+    c_error = rd_kafka_offset_store_message(rkmessage_);
+
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
+  }
 
   RdKafka::Topic *topic_;
   rd_kafka_message_t *rkmessage_;
@@ -990,12 +1010,14 @@ class ConfImpl : public Conf {
 
 class HandleImpl : virtual public Handle {
  public:
-  ~HandleImpl() {};
-  HandleImpl() {};
-  const std::string name() const {
+  ~HandleImpl() {
+  }
+  HandleImpl() {
+  }
+  std::string name() const {
     return std::string(rd_kafka_name(rk_));
-  };
-  const std::string memberid() const {
+  }
+  std::string memberid() const {
     char *str            = rd_kafka_memberid(rk_);
     std::string memberid = str ? str : "";
     if (str)
@@ -1004,10 +1026,10 @@ class HandleImpl : virtual public Handle {
   }
   int poll(int timeout_ms) {
     return rd_kafka_poll(rk_, timeout_ms);
-  };
+  }
   int outq_len() {
     return rd_kafka_outq_len(rk_);
-  };
+  }
 
   void set_common_config(const RdKafka::ConfImpl *confimpl);
 
@@ -1075,7 +1097,7 @@ class HandleImpl : virtual public Handle {
     rd_kafka_yield(rk_);
   }
 
-  const std::string clusterid(int timeout_ms) {
+  std::string clusterid(int timeout_ms) {
     char *str             = rd_kafka_clusterid(rk_, timeout_ms);
     std::string clusterid = str ? str : "";
     if (str)
@@ -1127,7 +1149,7 @@ class HandleImpl : virtual public Handle {
   ErrorCode oauthbearer_set_token_failure(const std::string &errstr) {
     return static_cast<ErrorCode>(
         rd_kafka_oauthbearer_set_token_failure(rk_, errstr.c_str()));
-  };
+  }
 
   Error *sasl_background_callbacks_enable() {
     rd_kafka_error_t *c_error = rd_kafka_sasl_background_callbacks_enable(rk_);
@@ -1138,13 +1160,24 @@ class HandleImpl : virtual public Handle {
     return NULL;
   }
 
+  Error *sasl_set_credentials(const std::string &username,
+                              const std::string &password) {
+    rd_kafka_error_t *c_error =
+        rd_kafka_sasl_set_credentials(rk_, username.c_str(), password.c_str());
+
+    if (c_error)
+      return new ErrorImpl(c_error);
+
+    return NULL;
+  };
+
   void *mem_malloc(size_t size) {
     return rd_kafka_mem_malloc(rk_, size);
-  };
+  }
 
   void mem_free(void *ptr) {
     rd_kafka_mem_free(rk_, ptr);
-  };
+  }
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
@@ -1171,7 +1204,7 @@ class TopicImpl : public Topic {
     rd_kafka_topic_destroy(rkt_);
   }
 
-  const std::string name() const {
+  std::string name() const {
     return rd_kafka_topic_name(rkt_);
   }
 
@@ -1201,7 +1234,8 @@ class TopicImpl : public Topic {
  */
 class TopicPartitionImpl : public TopicPartition {
  public:
-  ~TopicPartitionImpl() {};
+  ~TopicPartitionImpl() {
+  }
 
   static TopicPartition *create(const std::string &topic, int partition);
 
@@ -1209,22 +1243,28 @@ class TopicPartitionImpl : public TopicPartition {
       topic_(topic),
       partition_(partition),
       offset_(RdKafka::Topic::OFFSET_INVALID),
-      err_(ERR_NO_ERROR) {
+      err_(ERR_NO_ERROR),
+      leader_epoch_(-1) {
   }
 
   TopicPartitionImpl(const std::string &topic, int partition, int64_t offset) :
       topic_(topic),
       partition_(partition),
       offset_(offset),
-      err_(ERR_NO_ERROR) {
+      err_(ERR_NO_ERROR),
+      leader_epoch_(-1) {
   }
 
   TopicPartitionImpl(const rd_kafka_topic_partition_t *c_part) {
-    topic_     = std::string(c_part->topic);
-    partition_ = c_part->partition;
-    offset_    = c_part->offset;
-    err_       = static_cast<ErrorCode>(c_part->err);
-    // FIXME: metadata
+    topic_        = std::string(c_part->topic);
+    partition_    = c_part->partition;
+    offset_       = c_part->offset;
+    err_          = static_cast<ErrorCode>(c_part->err);
+    leader_epoch_ = rd_kafka_topic_partition_get_leader_epoch(c_part);
+    if (c_part->metadata_size > 0) {
+      unsigned char *metadata = (unsigned char *)c_part->metadata;
+      metadata_.assign(metadata, metadata + c_part->metadata_size);
+    }
   }
 
   static void destroy(std::vector<TopicPartition *> &partitions);
@@ -1248,6 +1288,22 @@ class TopicPartitionImpl : public TopicPartition {
     offset_ = offset;
   }
 
+  int32_t get_leader_epoch() {
+    return leader_epoch_;
+  }
+
+  void set_leader_epoch(int32_t leader_epoch) {
+    leader_epoch_ = leader_epoch;
+  }
+
+  std::vector<unsigned char> get_metadata() {
+    return metadata_;
+  }
+
+  void set_metadata(std::vector<unsigned char> &metadata) {
+    metadata_ = metadata;
+  }
+
   std::ostream &operator<<(std::ostream &ostrm) const {
     return ostrm << topic_ << " [" << partition_ << "]";
   }
@@ -1256,6 +1312,8 @@ class TopicPartitionImpl : public TopicPartition {
   int partition_;
   int64_t offset_;
   ErrorCode err_;
+  int32_t leader_epoch_;
+  std::vector<unsigned char> metadata_;
 };
 
 
@@ -1371,7 +1429,7 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
 
   bool closed() {
     return rd_kafka_consumer_closed(rk_) ? true : false;
-  };
+  }
 
   ErrorCode seek(const TopicPartition &partition, int timeout_ms);
 
@@ -1398,7 +1456,7 @@ class MetadataImpl : public Metadata {
     return &topics_;
   }
 
-  const std::string orig_broker_name() const {
+  std::string orig_broker_name() const {
     return std::string(metadata_->orig_broker_name);
   }
 
@@ -1420,7 +1478,7 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
   ~ConsumerImpl() {
     if (rk_)
       rd_kafka_destroy(rk_);
-  };
+  }
   static Consumer *create(Conf *conf, std::string &errstr);
 
   ErrorCode start(Topic *topic, int32_t partition, int64_t offset);
@@ -1453,7 +1511,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
   ~ProducerImpl() {
     if (rk_)
       rd_kafka_destroy(rk_);
-  };
+  }
 
   ErrorCode produce(Topic *topic,
                     int32_t partition,

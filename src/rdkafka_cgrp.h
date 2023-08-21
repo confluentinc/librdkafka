@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -367,7 +367,6 @@ struct rd_kafka_consumer_group_metadata_s {
 
 rd_kafka_consumer_group_metadata_t *rd_kafka_consumer_group_metadata_dup(
     const rd_kafka_consumer_group_metadata_t *cgmetadata);
-
 
 static RD_UNUSED const char *
 rd_kafka_rebalance_protocol2str(rd_kafka_rebalance_protocol_t protocol) {

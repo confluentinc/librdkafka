@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -131,6 +131,8 @@ typedef struct rd_kafka_msg_s {
                         rd_kafkap_bytes_t binhdrs; /**< Unparsed
                                                     *   binary headers in
                                                     *   protocol msg */
+                        int32_t leader_epoch;      /**< Leader epoch at the time
+                                                    *   the message was fetched. */
                 } consumer;
         } rkm_u;
 } rd_kafka_msg_t;

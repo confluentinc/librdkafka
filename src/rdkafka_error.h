@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2020 Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,6 +54,8 @@ rd_kafka_error_t *
 rd_kafka_error_new_v(rd_kafka_resp_err_t code, const char *fmt, va_list ap);
 
 rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src);
+
+void *rd_kafka_error_copy_opaque(const void *error, void *opaque);
 
 void rd_kafka_error_set_fatal(rd_kafka_error_t *error);
 void rd_kafka_error_set_retriable(rd_kafka_error_t *error);

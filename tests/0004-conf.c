@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -529,6 +529,8 @@ int main_0004_conf(int argc, char **argv) {
                 "ssl.ca.certificate.stores",
                 "Intermediate ,, Root ,",
 #endif
+                "client.dns.lookup",
+                "resolve_canonical_bootstrap_servers_only",
                 NULL
         };
         static const char *tconfs[] = {"request.required.acks",
@@ -716,6 +718,7 @@ int main_0004_conf(int argc, char **argv) {
                             "Expected rd_kafka_new() to fail with "
                             "invalid ssl.ca.location");
                 TEST_SAY("rd_kafka_new() failed as expected: %s\n", errstr);
+                rd_kafka_conf_destroy(conf);
         }
 
 #ifdef _WIN32

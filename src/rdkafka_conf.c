@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -147,6 +147,20 @@ struct rd_kafka_property {
 #else
 #define _UNSUPPORTED_OPENSSL_1_1_0                                             \
         .unsupported = "OpenSSL >= 1.1.0 not available at build time"
+#endif
+
+#if WITH_SSL_ENGINE
+#define _UNSUPPORTED_SSL_ENGINE .unsupported = NULL
+#else
+#define _UNSUPPORTED_SSL_ENGINE                                                \
+        .unsupported = "OpenSSL >= 1.1.x not available at build time"
+#endif
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000 && defined(WITH_SSL)
+#define _UNSUPPORTED_SSL_3 .unsupported = NULL
+#else
+#define _UNSUPPORTED_SSL_3                                                     \
+        .unsupported = "OpenSSL >= 3.0.0 not available at build time"
 #endif
 
 
@@ -669,6 +683,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           rd_kafka_open_cb_generic
 #endif
     },
+    {_RK_GLOBAL, "resolve_cb", _RK_C_PTR, _RK(resolve_cb),
+     "Address resolution callback (set with rd_kafka_conf_set_resolve_cb())."},
     {_RK_GLOBAL, "opaque", _RK_C_PTR, _RK(opaque),
      "Application opaque (set with rd_kafka_conf_set_opaque())"},
     {_RK_GLOBAL, "default_topic_conf", _RK_C_PTR, _RK(topic_conf),
@@ -718,6 +734,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Any other value >= 0.10, such as 0.10.2.1, "
      "enables ApiVersionRequests.",
      .sdef = "0.10.0", .validate = rd_kafka_conf_validate_broker_version},
+    {_RK_GLOBAL, "allow.auto.create.topics", _RK_C_BOOL,
+     _RK(allow_auto_create_topics),
+     "Allow automatic topic creation on the broker when subscribing to "
+     "or assigning non-existent topics. "
+     "The broker must also be configured with "
+     "`auto.create.topics.enable=true` for this configuration to "
+     "take effect. "
+     "Note: the default value (true) for the producer is "
+     "different from the default value (false) for the consumer. "
+     "Further, the consumer default value is different from the Java "
+     "consumer (true), and this property is not supported by the Java "
+     "producer. Requires broker version >= 0.11.0.0, for older broker "
+     "versions only the broker configuration applies.",
+     0, 1, 0},
 
     /* Security related global properties */
     {_RK_GLOBAL | _RK_HIGH, "security.protocol", _RK_C_S2I,
@@ -821,17 +851,24 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
      _RK(ssl.keystore_password), "Client's keystore (PKCS#12) password.",
      _UNSUPPORTED_SSL},
-    {_RK_GLOBAL, "ssl.engine.location", _RK_C_STR, _RK(ssl.engine_location),
-     "Path to OpenSSL engine library. OpenSSL >= 1.1.0 required.",
-     _UNSUPPORTED_OPENSSL_1_1_0},
+    {_RK_GLOBAL, "ssl.providers", _RK_C_STR, _RK(ssl.providers),
+     "Comma-separated list of OpenSSL 3.0.x implementation providers. "
+     "E.g., \"default,legacy\".",
+     _UNSUPPORTED_SSL_3},
+    {_RK_GLOBAL | _RK_DEPRECATED, "ssl.engine.location", _RK_C_STR,
+     _RK(ssl.engine_location),
+     "Path to OpenSSL engine library. OpenSSL >= 1.1.x required. "
+     "DEPRECATED: OpenSSL engine support is deprecated and should be "
+     "replaced by OpenSSL 3 providers.",
+     _UNSUPPORTED_SSL_ENGINE},
     {_RK_GLOBAL, "ssl.engine.id", _RK_C_STR, _RK(ssl.engine_id),
      "OpenSSL engine id is the name used for loading engine.",
-     .sdef = "dynamic", _UNSUPPORTED_OPENSSL_1_1_0},
+     .sdef = "dynamic", _UNSUPPORTED_SSL_ENGINE},
     {_RK_GLOBAL, "ssl_engine_callback_data", _RK_C_PTR,
      _RK(ssl.engine_callback_data),
      "OpenSSL engine callback data (set "
      "with rd_kafka_conf_set_engine_callback_data()).",
-     _UNSUPPORTED_OPENSSL_1_1_0},
+     _UNSUPPORTED_SSL_ENGINE},
     {_RK_GLOBAL, "enable.ssl.certificate.verification", _RK_C_BOOL,
      _RK(ssl.enable_verify),
      "Enable OpenSSL's builtin broker (server) certificate verification. "
@@ -846,7 +883,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "specified in RFC2818. "
      "none - No endpoint verification. "
      "OpenSSL >= 1.0.2 required.",
-     .vdef = RD_KAFKA_SSL_ENDPOINT_ID_NONE,
+     .vdef = RD_KAFKA_SSL_ENDPOINT_ID_HTTPS,
      .s2i  = {{RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none"},
              {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
      _UNSUPPORTED_OPENSSL_1_0_2},
@@ -860,11 +897,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Java TrustStores are not supported, use `ssl.ca.location` "
      "and a certificate file instead. "
      "See "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SSL-with-librdkafka "
      "for more information."},
     {_RK_GLOBAL, "sasl.jaas.config", _RK_C_INVALID, _RK(dummy),
      "Java JAAS configuration is not supported, see "
-     "https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka "
+     "https://github.com/confluentinc/librdkafka/"
+     "wiki/Using-SASL-with-librdkafka "
      "for more information."},
 
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanisms", _RK_C_STR, _RK(sasl.mechanisms),
@@ -1160,6 +1199,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Maximum time the broker may wait to fill the Fetch response "
      "with fetch.min.bytes of messages.",
      0, 300 * 1000, 500},
+    {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.queue.backoff.ms", _RK_C_INT,
+     _RK(fetch_queue_backoff_ms),
+     "How long to postpone the next fetch request for a "
+     "topic+partition in case the current fetch queue thresholds "
+     "(queued.min.messages or queued.max.messages.kbytes) have "
+     "been exceded. "
+     "This property may need to be decreased if the queue thresholds are "
+     "set low and the application is experiencing long (~1s) delays "
+     "between messages. Low values may increase CPU utilization.",
+     0, 300 * 1000, 1000},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.message.max.bytes", _RK_C_INT,
      _RK(fetch_msg_max_bytes),
      "Initial maximum number of bytes per topic+partition to request when "
@@ -1233,18 +1282,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "on-disk corruption to the messages occurred. This check comes "
      "at slightly increased CPU usage.",
      0, 1, 0},
-    {_RK_GLOBAL | _RK_CONSUMER, "allow.auto.create.topics", _RK_C_BOOL,
-     _RK(allow_auto_create_topics),
-     "Allow automatic topic creation on the broker when subscribing to "
-     "or assigning non-existent topics. "
-     "The broker must also be configured with "
-     "`auto.create.topics.enable=true` for this configuraiton to "
-     "take effect. "
-     "Note: The default value (false) is different from the "
-     "Java consumer (true). "
-     "Requires broker version >= 0.11.0.0, for older broker versions "
-     "only the broker configuration applies.",
-     0, 1, 0},
     {_RK_GLOBAL, "client.rack", _RK_C_KSTR, _RK(client_rack),
      "A rack identifier for this client. This can be any string value "
      "which indicates where this client is physically located. It "
@@ -1307,8 +1344,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_PRODUCER | _RK_HIGH, "queue.buffering.max.messages",
      _RK_C_INT, _RK(queue_buffering_max_msgs),
      "Maximum number of messages allowed on the producer queue. "
-     "This queue is shared by all topics and partitions.",
-     1, 10000000, 100000},
+     "This queue is shared by all topics and partitions. A value of 0 disables "
+     "this limit.",
+     0, INT_MAX, 100000},
     {_RK_GLOBAL | _RK_PRODUCER | _RK_HIGH, "queue.buffering.max.kbytes",
      _RK_C_INT, _RK(queue_buffering_max_kbytes),
      "Maximum total message size sum allowed on the producer queue. "
@@ -1401,6 +1439,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "A higher value allows for more effective batching of these "
      "messages.",
      0, 900000, 10},
+    {_RK_GLOBAL, "client.dns.lookup", _RK_C_S2I, _RK(client_dns_lookup),
+     "Controls how the client uses DNS lookups. By default, when the lookup "
+     "returns multiple IP addresses for a hostname, they will all be attempted "
+     "for connection before the connection is considered failed. This applies "
+     "to both bootstrap and advertised servers. If the value is set to "
+     "`resolve_canonical_bootstrap_servers_only`, each entry will be resolved "
+     "and expanded into a list of canonical names. NOTE: Default here is "
+     "different from the Java client's default behavior, which connects only "
+     "to the first IP address returned for a hostname. ",
+     .vdef = RD_KAFKA_USE_ALL_DNS_IPS,
+     .s2i  = {{RD_KAFKA_USE_ALL_DNS_IPS, "use_all_dns_ips"},
+             {RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
+              "resolve_canonical_bootstrap_servers_only"}}},
 
 
     /*
@@ -2764,6 +2815,16 @@ void rd_kafka_conf_set_open_cb(rd_kafka_conf_t *conf,
 }
 #endif
 
+void rd_kafka_conf_set_resolve_cb(
+    rd_kafka_conf_t *conf,
+    int (*resolve_cb)(const char *node,
+                      const char *service,
+                      const struct addrinfo *hints,
+                      struct addrinfo **res,
+                      void *opaque)) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "resolve_cb",
+                                      resolve_cb);
+}
 
 rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(
     rd_kafka_conf_t *conf,

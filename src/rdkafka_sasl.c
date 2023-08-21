@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2015 Magnus Edenhill
+ * Copyright (c) 2015-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -206,6 +207,11 @@ int rd_kafka_sasl_io_event(rd_kafka_transport_t *rktrans,
  * @remark May be called on non-SASL transports (no-op)
  */
 void rd_kafka_sasl_close(rd_kafka_transport_t *rktrans) {
+        /* The broker might not be up, and the transport might not exist in that
+         * case.*/
+        if (!rktrans)
+                return;
+
         const struct rd_kafka_sasl_provider *provider =
             rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.provider;
 
@@ -487,4 +493,36 @@ int rd_kafka_sasl_global_init(void) {
 #else
         return 0;
 #endif
+}
+
+/**
+ * Sets or resets the SASL (PLAIN or SCRAM) credentials used by this
+ * client when making new connections to brokers.
+ *
+ * @returns NULL on success or an error object on error.
+ */
+rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
+                                                const char *username,
+                                                const char *password) {
+
+        if (!username || !password)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "Username and password are required");
+
+        mtx_lock(&rk->rk_conf.sasl.lock);
+
+        if (rk->rk_conf.sasl.username)
+                rd_free(rk->rk_conf.sasl.username);
+        rk->rk_conf.sasl.username = rd_strdup(username);
+
+        if (rk->rk_conf.sasl.password)
+                rd_free(rk->rk_conf.sasl.password);
+        rk->rk_conf.sasl.password = rd_strdup(password);
+
+        mtx_unlock(&rk->rk_conf.sasl.lock);
+
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                    "SASL credentials updated");
+
+        return NULL;
 }

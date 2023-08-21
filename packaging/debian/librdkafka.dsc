@@ -3,11 +3,11 @@ Source: librdkafka
 Binary: librdkafka1, librdkafka-dev, librdkafka1-dbg
 Architecture: any
 Version: 0.9.1-1pre1
-Maintainer: Magnus Edenhill <librdkafka@edenhill.se>
-Homepage: https://github.com/edenhill/librdkafka
+Maintainer: Confluent Inc. <cloud-support@confluent.io>
+Homepage: https://github.com/confluentinc/librdkafka
 Standards-Version: 3.9.6
-Vcs-Browser: https://github.com/edenhill/librdkafka/tree/master
-Vcs-Git: git://github.com/edenhill/librdkafka.git -b master
+Vcs-Browser: https://github.com/confluentinc/librdkafka/tree/master
+Vcs-Git: git://github.com/confluentinc/librdkafka.git -b master
 Build-Depends: debhelper (>= 9), zlib1g-dev, libssl-dev, libsasl2-dev, python3
 Package-List:
  librdkafka-dev deb libdevel optional arch=any

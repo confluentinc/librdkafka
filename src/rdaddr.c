@@ -1,7 +1,7 @@
 /*
  * librd - Rapid Development C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -154,13 +154,20 @@ const char *rd_addrinfo_prepare(const char *nodesvc, char **node, char **svc) {
 
 
 
-rd_sockaddr_list_t *rd_getaddrinfo(const char *nodesvc,
-                                   const char *defsvc,
-                                   int flags,
-                                   int family,
-                                   int socktype,
-                                   int protocol,
-                                   const char **errstr) {
+rd_sockaddr_list_t *
+rd_getaddrinfo(const char *nodesvc,
+               const char *defsvc,
+               int flags,
+               int family,
+               int socktype,
+               int protocol,
+               int (*resolve_cb)(const char *node,
+                                 const char *service,
+                                 const struct addrinfo *hints,
+                                 struct addrinfo **res,
+                                 void *opaque),
+               void *opaque,
+               const char **errstr) {
         struct addrinfo hints;
         memset(&hints, 0, sizeof(hints));
         hints.ai_family   = family;
@@ -182,7 +189,13 @@ rd_sockaddr_list_t *rd_getaddrinfo(const char *nodesvc,
         if (*svc)
                 defsvc = svc;
 
-        if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
+        if (resolve_cb) {
+                r = resolve_cb(node, defsvc, &hints, &ais, opaque);
+        } else {
+                r = getaddrinfo(node, defsvc, &hints, &ais);
+        }
+
+        if (r) {
 #ifdef EAI_SYSTEM
                 if (r == EAI_SYSTEM)
 #else
@@ -206,7 +219,10 @@ rd_sockaddr_list_t *rd_getaddrinfo(const char *nodesvc,
 
         if (cnt == 0) {
                 /* unlikely? */
-                freeaddrinfo(ais);
+                if (resolve_cb)
+                        resolve_cb(NULL, NULL, NULL, &ais, opaque);
+                else
+                        freeaddrinfo(ais);
                 errno   = ENOENT;
                 *errstr = "No addresses";
                 return NULL;
@@ -219,7 +235,10 @@ rd_sockaddr_list_t *rd_getaddrinfo(const char *nodesvc,
                 memcpy(&rsal->rsal_addr[rsal->rsal_cnt++], ai->ai_addr,
                        ai->ai_addrlen);
 
-        freeaddrinfo(ais);
+        if (resolve_cb)
+                resolve_cb(NULL, NULL, NULL, &ais, opaque);
+        else
+                freeaddrinfo(ais);
 
         /* Shuffle address list for proper round-robin */
         if (!(flags & RD_AI_NOSHUFFLE))

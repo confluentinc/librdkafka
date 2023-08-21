@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018 Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,9 @@
 /**
  * @brief Get the current PID if state permits.
  *
+ * @param bumpable If true, return PID even if it may only be used for
+ *                 bumping the Epoch.
+ *
  * @returns If there is no valid PID or the state
  *          does not permit further PID usage (such as when draining)
  *          then an invalid PID is returned.
@@ -49,12 +52,17 @@
  * @locks none
  */
 static RD_UNUSED RD_INLINE rd_kafka_pid_t
-rd_kafka_idemp_get_pid0(rd_kafka_t *rk, rd_bool_t do_lock) {
+rd_kafka_idemp_get_pid0(rd_kafka_t *rk,
+                        rd_dolock_t do_lock,
+                        rd_bool_t bumpable) {
         rd_kafka_pid_t pid;
 
         if (do_lock)
                 rd_kafka_rdlock(rk);
         if (likely(rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_ASSIGNED))
+                pid = rk->rk_eos.pid;
+        else if (unlikely(bumpable && rk->rk_eos.idemp_state ==
+                                          RD_KAFKA_IDEMP_STATE_WAIT_TXN_ABORT))
                 pid = rk->rk_eos.pid;
         else
                 rd_kafka_pid_reset(&pid);
@@ -64,7 +72,8 @@ rd_kafka_idemp_get_pid0(rd_kafka_t *rk, rd_bool_t do_lock) {
         return pid;
 }
 
-#define rd_kafka_idemp_get_pid(rk) rd_kafka_idemp_get_pid0(rk, rd_true /*lock*/)
+#define rd_kafka_idemp_get_pid(rk)                                             \
+        rd_kafka_idemp_get_pid0(rk, RD_DO_LOCK, rd_false)
 
 void rd_kafka_idemp_set_state(rd_kafka_t *rk, rd_kafka_idemp_state_t new_state);
 void rd_kafka_idemp_request_pid_failed(rd_kafka_broker_t *rkb,
@@ -73,10 +82,14 @@ void rd_kafka_idemp_pid_update(rd_kafka_broker_t *rkb,
                                const rd_kafka_pid_t pid);
 void rd_kafka_idemp_pid_fsm(rd_kafka_t *rk);
 void rd_kafka_idemp_drain_reset(rd_kafka_t *rk, const char *reason);
-void rd_kafka_idemp_drain_epoch_bump(rd_kafka_t *rk,
-                                     rd_kafka_resp_err_t err,
-                                     const char *fmt,
-                                     ...) RD_FORMAT(printf, 3, 4);
+void rd_kafka_idemp_drain_epoch_bump0(rd_kafka_t *rk,
+                                      rd_bool_t allow_txn_abort,
+                                      rd_kafka_resp_err_t err,
+                                      const char *fmt,
+                                      ...) RD_FORMAT(printf, 4, 5);
+#define rd_kafka_idemp_drain_epoch_bump(rk, err, ...)                          \
+        rd_kafka_idemp_drain_epoch_bump0(rk, rd_true, err, __VA_ARGS__)
+
 void rd_kafka_idemp_drain_toppar(rd_kafka_toppar_t *rktp, const char *reason);
 void rd_kafka_idemp_inflight_toppar_sub(rd_kafka_t *rk,
                                         rd_kafka_toppar_t *rktp);

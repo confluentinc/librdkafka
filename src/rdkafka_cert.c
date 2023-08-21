@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -95,8 +95,10 @@ static rd_kafka_cert_t *rd_kafka_cert_dup(rd_kafka_cert_t *src) {
         return src;
 }
 
+
+#if OPENSSL_VERSION_NUMBER < 0x30000000
 /**
- * @brief Print the OpenSSL error stack do stdout, for development use.
+ * @brief Print the OpenSSL error stack to stdout, for development use.
  */
 static RD_UNUSED void rd_kafka_print_ssl_errors(void) {
         unsigned long l;
@@ -121,6 +123,8 @@ static RD_UNUSED void rd_kafka_print_ssl_errors(void) {
                        flags & ERR_TXT_STRING);
         }
 }
+#endif
+
 
 /**
  * @returns a cert structure with a copy of the memory in \p buffer on success,
@@ -150,7 +154,7 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                                       [RD_KAFKA_CERT_ENC_DER]    = rd_true,
                                       [RD_KAFKA_CERT_ENC_PEM]    = rd_true},
             };
-        const char *action = "";
+        const char *action = "", *ssl_errstr = NULL, *extra = "";
         BIO *bio;
         rd_kafka_cert_t *cert = NULL;
         PKCS12 *p12           = NULL;
@@ -249,6 +253,8 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                                 X509_free(x509);
                                 goto fail;
                         }
+
+                        X509_free(x509);
                 } break;
 
                 case RD_KAFKA_CERT_ENC_PEM: {
@@ -273,6 +279,7 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                                         goto fail;
                                 }
 
+                                X509_free(x509);
                                 cnt++;
                         }
 
@@ -397,10 +404,22 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
         return cert;
 
 fail:
-        rd_snprintf(errstr, errstr_size, "Failed to %s %s (encoding %s): %s",
+        ssl_errstr = rd_kafka_ssl_last_error_str();
+
+        /* OpenSSL 3.x does not provide obsolete ciphers out of the box, so
+         * let's try to identify such an error message and guide the user
+         * to what to do (set up a provider config file and point to it
+         * through the OPENSSL_CONF environment variable).
+         * We could call OSSL_PROVIDER_load("legacy") here, but that would be
+         * a non-obvious side-effect of calling this set function. */
+        if (strstr(action, "parse") && strstr(ssl_errstr, "Algorithm"))
+                extra =
+                    ": legacy ciphers may require loading OpenSSL's \"legacy\" "
+                    "provider through an OPENSSL_CONF configuration file";
+
+        rd_snprintf(errstr, errstr_size, "Failed to %s %s (encoding %s): %s%s",
                     action, rd_kafka_cert_type_names[type],
-                    rd_kafka_cert_enc_names[encoding],
-                    rd_kafka_ssl_last_error_str());
+                    rd_kafka_cert_enc_names[encoding], ssl_errstr, extra);
 
         if (cert)
                 rd_kafka_cert_destroy(cert);

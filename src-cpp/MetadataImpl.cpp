@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2014 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,10 +30,14 @@
 
 using namespace RdKafka;
 
-BrokerMetadata::~BrokerMetadata() {};
-PartitionMetadata::~PartitionMetadata() {};
-TopicMetadata::~TopicMetadata() {};
-Metadata::~Metadata() {};
+BrokerMetadata::~BrokerMetadata() {
+}
+PartitionMetadata::~PartitionMetadata() {
+}
+TopicMetadata::~TopicMetadata() {
+}
+Metadata::~Metadata() {
+}
 
 
 /**
@@ -49,7 +53,7 @@ class BrokerMetadataImpl : public BrokerMetadata {
     return broker_metadata_->id;
   }
 
-  const std::string host() const {
+  std::string host() const {
     return host_;
   }
   int port() const {
@@ -101,7 +105,8 @@ class PartitionMetadataImpl : public PartitionMetadata {
     return &isrs_;
   }
 
-  ~PartitionMetadataImpl() {};
+  ~PartitionMetadataImpl() {
+  }
 
  private:
   const rd_kafka_metadata_partition_t *partition_metadata_;
@@ -126,7 +131,7 @@ class TopicMetadataImpl : public TopicMetadata {
       delete partitions_[i];
   }
 
-  const std::string topic() const {
+  std::string topic() const {
     return topic_;
   }
   const std::vector<const PartitionMetadata *> *partitions() const {

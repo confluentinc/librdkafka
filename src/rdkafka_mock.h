@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -188,6 +188,27 @@ rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
                                              int16_t ApiKey,
                                              size_t cnt,
                                              ...);
+
+
+
+/**
+ * @brief Get the count of errors in the broker's error stack for
+ *        the given \p ApiKey.
+ *
+ * @param mcluster the mock cluster.
+ * @param broker_id id of the broker in the cluster.
+ * @param ApiKey is the Kafka protocol request type, e.g., ProduceRequest (0).
+ * @param cntp pointer for receiving the count.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR if the count was retrieved,
+ * \c RD_KAFKA_RESP_ERR__UNKNOWN_BROKER if there was no broker with this id,
+ * \c RD_KAFKA_RESP_ERR__INVALID_ARG if some of the parameters are not valid.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_error_stack_cnt(rd_kafka_mock_cluster_t *mcluster,
+                                     int32_t broker_id,
+                                     int16_t ApiKey,
+                                     size_t *cntp);
 
 
 /**

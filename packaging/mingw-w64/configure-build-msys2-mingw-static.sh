@@ -14,11 +14,11 @@ $mingw64 mingw32-make install
 # Bundle all the static dependencies with the static lib we just built
 mkdir mergescratch
 pushd mergescratch
-cp /C/tools/msys64/mingw64/lib/libzstd.a ./
-cp /C/tools/msys64/mingw64/lib/libcrypto.a ./
-cp /C/tools/msys64/mingw64/lib/liblz4.a ./
-cp /C/tools/msys64/mingw64/lib/libssl.a ./
-cp /C/tools/msys64/mingw64/lib/libz.a ./
+cp /C/msys64/mingw64/lib/libzstd.a ./
+cp /C/msys64/mingw64/lib/libcrypto.a ./
+cp /C/msys64/mingw64/lib/liblz4.a ./
+cp /C/msys64/mingw64/lib/libssl.a ./
+cp /C/msys64/mingw64/lib/libz.a ./
 cp ../src/librdkafka.a ./
 
 # Have to rename because ar won't work with + in the name

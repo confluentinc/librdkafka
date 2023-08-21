@@ -2440,8 +2440,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
                 if (RD_KAFKAP_STR_LEN(rk->rk_group_id) > 0) {
                         /* Create consumer group handle */
-                        rk->rk_cgrp = rd_kafka_cgrp_new(rk, rk->rk_group_id,
-                                                        rk->rk_client_id);
+                        rk->rk_cgrp = rd_kafka_cgrp_new(
+                            rk, rk->rk_conf.group_protocol, rk->rk_group_id,
+                            rk->rk_client_id);
                         rk->rk_consumer.q =
                             rd_kafka_q_keep(rk->rk_cgrp->rkcg_q);
                 } else {

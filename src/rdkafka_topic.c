@@ -1854,7 +1854,7 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
                                    partition_cnt,
                                8);
 
-        rd_tmpabuf_new(&tbuf, sizeof(*ti) + tlen + total_racks_size,
+        rd_tmpabuf_new(&tbuf, RD_ROUNDUP(sizeof(*ti), 8) + tlen + total_racks_size,
                        1 /* assert on fail */);
         ti                      = rd_tmpabuf_alloc(&tbuf, sizeof(*ti));
         ti->topic               = rd_tmpabuf_write_str(&tbuf, topic);

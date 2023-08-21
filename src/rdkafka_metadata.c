@@ -507,9 +507,10 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
          * This is increased to 5 times in case if we want to compute partition
          * to rack mapping. */
         rd_tmpabuf_new(&tbuf,
-                       sizeof(*mdi) + rkb_namelen +
-                           (rkbuf->rkbuf_totlen * 4 +
-                            (compute_racks ? rkbuf->rkbuf_totlen : 0)),
+                       RD_ROUNDUP(sizeof(*mdi), 8) +
+                       RD_ROUNDUP(rkb_namelen, 8) +
+                       RD_ROUNDUP(rkbuf->rkbuf_totlen *
+                                  (4 + (compute_racks ? 1 : 0)), 8),
                        0 /*dont assert on fail*/);
 
         if (!(mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi)))) {
@@ -1603,16 +1604,19 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
         rd_kafka_metadata_internal_t *mdi;
         rd_kafka_metadata_t *md;
         rd_tmpabuf_t tbuf;
-        size_t topic_names_size = 0;
-        int total_partition_cnt = 0;
+        size_t rounded_topic_names_size = 0;
+        size_t rounded_partitions_size = 0;
         size_t i;
         int curr_broker = 0;
 
         /* Calculate total partition count and topic names size before
          * allocating memory. */
         for (i = 0; i < topic_cnt; i++) {
-                topic_names_size += 1 + strlen(topics[i].topic);
-                total_partition_cnt += topics[i].partition_cnt;
+                rounded_topic_names_size += RD_ROUNDUP(1 + strlen(topics[i].topic), 8);
+                rounded_partitions_size  += RD_ROUNDUP(topics[i].partition_cnt * sizeof(*md->topics[i].partitions), 8) +
+                                            RD_ROUNDUP(topics[i].partition_cnt * sizeof(*mdi->topics[i].partitions), 8) +
+                                            (replication_factor > 0 ? topics[i].partition_cnt *
+                                                                      RD_ROUNDUP(replication_factor * sizeof(int), 8) : 0);
         }
 
         /* If the replication factor is given, num_brokers must also be given */
@@ -1622,15 +1626,12 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
          * needed by the final metadata_t object */
         rd_tmpabuf_new(
             &tbuf,
-            sizeof(*mdi) + (sizeof(*md->topics) * topic_cnt) +
-                topic_names_size + (64 /*topic name size..*/ * topic_cnt) +
-                (sizeof(*md->topics[0].partitions) * total_partition_cnt) +
-                (sizeof(*mdi->topics) * topic_cnt) +
-                (sizeof(*mdi->topics[0].partitions) * total_partition_cnt) +
-                (sizeof(*mdi->brokers) * RD_ROUNDUP(num_brokers, 8)) +
-                (replication_factor > 0 ? RD_ROUNDUP(replication_factor, 8) *
-                                              total_partition_cnt * sizeof(int)
-                                        : 0),
+            RD_ROUNDUP(sizeof(*mdi), 8) +
+            RD_ROUNDUP(sizeof(*md->topics) * topic_cnt, 8) +
+            RD_ROUNDUP(sizeof(*mdi->topics) * topic_cnt, 8) +
+            RD_ROUNDUP(sizeof(*mdi->brokers) * num_brokers, 8) +
+            rounded_topic_names_size +
+            rounded_partitions_size,
             1 /*assert on fail*/);
 
         mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi));

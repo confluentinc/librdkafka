@@ -932,7 +932,7 @@ rd_kafka_mock_connection_read_request(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_t *rkbuf;
         char errstr[128];
         ssize_t r;
-
+        
         if (!(rkbuf = mconn->rxbuf)) {
                 /* Initial read for a protocol request.
                  * Allocate enough room for the protocol header
@@ -1031,7 +1031,7 @@ rd_kafka_mock_connection_read_request(rd_kafka_mock_connection_t *mconn,
                        RD_KAFKAP_REQHDR_SIZE ==
                    rkbuf->rkbuf_totlen) {
                 /* The full request is now read into the buffer. */
-
+                
                 /* Set up response reader slice starting past the
                  * request header */
                 rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf,
@@ -1092,6 +1092,7 @@ static int
 rd_kafka_mock_connection_parse_request(rd_kafka_mock_connection_t *mconn,
                                        rd_kafka_buf_t *rkbuf) {
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_mock_broker_t *broker = mconn->broker;
         rd_kafka_t *rk                    = mcluster->rk;
 
         if (rkbuf->rkbuf_reqhdr.ApiKey < 0 ||
@@ -1126,7 +1127,9 @@ rd_kafka_mock_connection_parse_request(rd_kafka_mock_connection_t *mconn,
                     rd_sockaddr2str(&mconn->peer, RD_SOCKADDR2STR_F_PORT));
                 return -1;
         }
-
+        mtx_lock(&mcluster->lock);
+        rd_list_add(broker->request_list,rd_kafka_mock_request_new(rkbuf->rkbuf_reqhdr.ApiKey,rd_clock())); 
+        mtx_unlock(&mcluster->lock);
         rd_kafka_dbg(rk, MOCK, "MOCK",
                      "Broker %" PRId32 ": Received %sRequestV%hd from %s",
                      mconn->broker->id,
@@ -1491,6 +1494,7 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 
         TAILQ_REMOVE(&mrkb->cluster->brokers, mrkb, link);
         mrkb->cluster->broker_cnt--;
+        rd_list_destroy_free(mrkb->request_list);
 
         rd_free(mrkb);
 }
@@ -1611,6 +1615,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
         mrkb->listen_s = listen_s;
         mrkb->sin      = sin;
         mrkb->port     = ntohs(sin.sin_port);
+        mrkb->request_list = rd_list_new(10,rd_kafka_mock_request_free);
         rd_snprintf(mrkb->advertised_listener,
                     sizeof(mrkb->advertised_listener), "%s",
                     rd_sockaddr2str(&sin, 0));

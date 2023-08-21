@@ -1,0 +1,54 @@
+list of mock_broker
+
+struct mock_broker{
+    int_16 broker_id;
+    // identifiers
+    list of requests
+}
+
+struct request{
+    api_key; /*ListOffsetRequest*/
+    timestamp;
+}
+
+// functions to clear the request list of a mock_broker -> Clearing more efficient and avoid memory leaks
+
+// functions to fetch the list -> Mandatory
+
+
+// Few Doubts
+
+Testing Something
+We need to make requests 3 of each api_key which is affected
+We need to tell the broker to fail 2 of the requests
+
+For each api_key:
+    Push the errors on error stack
+    make the request -> we make mock_cluster with only 1 broker -> we want to fail but eventually succeed otherwise the request will keep on enquing upto max retries
+    wait
+    fetch the list of requests sent to mock_broker
+    verify the exponential backoff
+
+Produce
+In that case the metadata request is made after backoff and then a new request is made to the different broker(without the backoff)
+Fetch 
+static backoff
+
+We would not be able to, check the correctness of retries we did something like this 
+we send 2 request of same api api_key
+and then they are retried
+
+// make some changes first to write a fake test as an example to test things out -> we can focus more on what errors to push into stack which are retriable and if any more consideration are needed to be made
+
+fetch the request list(mock_broker_ref )
+    inside the function 
+    obtain the lock 
+    get the list and copy it and return to the caller
+    release the lock
+    return the list 
+
+clear part
+
+
+
+

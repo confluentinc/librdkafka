@@ -4634,6 +4634,9 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
         if (err)
                 goto err;
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(reply);
+
         rd_kafka_buf_read_i32(reply, &cnt);
 
         while (cnt-- > 0) {
@@ -4756,6 +4759,9 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
         if (err)
                 goto err;
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(reply);
 
         rd_kafka_buf_read_i16(reply, &ErrorCode);
         if (ErrorCode) {

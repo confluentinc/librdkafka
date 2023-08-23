@@ -7,8 +7,9 @@ async function consumerStart() {
         ssl: true,
         sasl: {
             mechanism: 'plain',
-            username: '<fill>',
-            password: '<fill>',
+        },
+        rdKafka: {
+          'enable.auto.commit': false
         }
     });
 
@@ -23,6 +24,7 @@ async function consumerStart() {
       ]
     })
 
+    var batch = 0;
     consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
         console.log({
@@ -32,13 +34,21 @@ async function consumerStart() {
           key: message.key?.toString(),
           value: message.value.toString(),
         })
+
+        if (++batch % 100 == 0) {
+          await consumer.commitOffsets();
+          batch = 0;
+        }
       },
     });
 
-    const disconnect = () =>
+    const disconnect = () => {
+      process.off('SIGINT', disconnect);
+      process.off('SIGTERM', disconnect);
       consumer.disconnect().then(() => {
         console.log("Disconnected successfully");
       });
+    }
     process.on('SIGINT', disconnect);
     process.on('SIGTERM', disconnect);
 }

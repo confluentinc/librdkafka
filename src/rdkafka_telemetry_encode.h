@@ -34,6 +34,9 @@ typedef enum {
         METRIC_TYPE_GAUGE,
 } MetricType;
 
-void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, const MetricNames *metrics_to_encode, const size_t *metrics_to_encode_count, size_t *size);
+void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
+                                        const MetricNames *metrics_to_encode,
+                                        const size_t *metrics_to_encode_count,
+                                        size_t *size);
 
 #endif /* _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H */

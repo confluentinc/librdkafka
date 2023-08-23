@@ -51,7 +51,7 @@ static int calculate_connection_creation_total(rd_kafka_t *rk) {
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
-                total += rkb->rkb_c_historic.connects;
+        total += rkb->rkb_c_historic.connects;
 
         return total;
 }
@@ -68,20 +68,22 @@ static int calculate_connection_creation_rate(rd_kafka_t *rk) {
 }
 
 MetricInfo METRICS[METRIC_COUNT] = {
-    [METRIC_CONNECTION_CREATION_TOTAL] = {
-        .name = "connection.creation.total",
-        .description = "The total number of connections established.",
-        .unit = "1",
-        .type = METRIC_TYPE_SUM,
-        .calculate_value = &calculate_connection_creation_total,
-    },
-    [METRIC_CONNECTION_CREATION_RATE] = {
-        .name = "connection.creation.rate",
-        .description = "The rate of connections established per second.",
-        .unit = "1",
-        .type = METRIC_TYPE_GAUGE,
-        .calculate_value = &calculate_connection_creation_rate,
-    },
+    [METRIC_CONNECTION_CREATION_TOTAL] =
+        {
+            .name            = "connection.creation.total",
+            .description     = "The total number of connections established.",
+            .unit            = "1",
+            .type            = METRIC_TYPE_SUM,
+            .calculate_value = &calculate_connection_creation_total,
+        },
+    [METRIC_CONNECTION_CREATION_RATE] =
+        {
+            .name        = "connection.creation.rate",
+            .description = "The rate of connections established per second.",
+            .unit        = "1",
+            .type        = METRIC_TYPE_GAUGE,
+            .calculate_value = &calculate_connection_creation_rate,
+        },
 };
 
 
@@ -162,7 +164,10 @@ static bool encode_key_value(pb_ostream_t *stream,
  * returns the serialized data. Currently only supports encoding of connection
  * creation total by default
  */
-void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, const MetricNames *metrics_to_encode, const size_t *metrics_count, size_t *size) {
+void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
+                                        const MetricNames *metrics_to_encode,
+                                        const size_t *metrics_count,
+                                        size_t *size) {
         size_t message_size;
         uint8_t *buffer;
         pb_ostream_t stream;
@@ -219,32 +224,35 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, const MetricNames *metri
                     opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
                 data_point.which_value =
                     opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
-                data_point.value.as_int  = METRICS[metrics_to_encode[i]].calculate_value(rk);
+                data_point.value.as_int =
+                    METRICS[metrics_to_encode[i]].calculate_value(rk);
                 data_point.time_unix_nano = rd_clock();
 
                 switch (METRICS[metrics_to_encode[i]].type) {
 
-                case METRIC_TYPE_SUM:
-                {
+                case METRIC_TYPE_SUM: {
                         opentelemetry_proto_metrics_v1_Sum sum =
                             opentelemetry_proto_metrics_v1_Sum_init_zero;
-                        sum.data_points.funcs.encode = &encode_number_data_point;
+                        sum.data_points.funcs.encode =
+                            &encode_number_data_point;
                         sum.data_points.arg = &data_point;
                         sum.aggregation_temporality =
                             opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
                         sum.is_monotonic = true;
-                        metric.which_data = opentelemetry_proto_metrics_v1_Metric_sum_tag;
-                        metric.data.sum   = sum;
+                        metric.which_data =
+                            opentelemetry_proto_metrics_v1_Metric_sum_tag;
+                        metric.data.sum = sum;
                         break;
                 }
-                case METRIC_TYPE_GAUGE:
-                {
+                case METRIC_TYPE_GAUGE: {
                         opentelemetry_proto_metrics_v1_Gauge gauge =
                             opentelemetry_proto_metrics_v1_Gauge_init_zero;
-                        gauge.data_points.funcs.encode = &encode_number_data_point;
+                        gauge.data_points.funcs.encode =
+                            &encode_number_data_point;
                         gauge.data_points.arg = &data_point;
-                        metric.which_data = opentelemetry_proto_metrics_v1_Metric_gauge_tag;
-                        metric.data.gauge   = gauge;
+                        metric.which_data =
+                            opentelemetry_proto_metrics_v1_Metric_gauge_tag;
+                        metric.data.gauge = gauge;
                         break;
                 }
                 default:
@@ -252,18 +260,22 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, const MetricNames *metri
                 }
 
                 metric.description.funcs.encode = &encode_string;
-                metric.description.arg          = METRICS[metrics_to_encode[i]].description;
+                metric.description.arg =
+                    METRICS[metrics_to_encode[i]].description;
 
-                metric_name_len =
-                    strlen(metric_type_str) + strlen(METRICS[metrics_to_encode[i]].name) + 2;
+                metric_name_len = strlen(metric_type_str) +
+                                  strlen(METRICS[metrics_to_encode[i]].name) +
+                                  2;
                 metric_name = rd_malloc(metric_name_len);
 
                 if (metric_name == NULL) {
-                        rd_kafka_dbg(rk, TELEMETRY, "METRICS",
-                                     "Failed to allocate memory for metric name");
+                        rd_kafka_dbg(
+                            rk, TELEMETRY, "METRICS",
+                            "Failed to allocate memory for metric name");
                         return NULL;
                 }
-                rd_snprintf(metric_name, metric_name_len, "%s.%s", metric_type_str,
+                rd_snprintf(metric_name, metric_name_len, "%s.%s",
+                            metric_type_str,
                             METRICS[metrics_to_encode[i]].name);
 
 
@@ -274,18 +286,19 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, const MetricNames *metri
                 metric.unit.arg          = METRICS[metrics_to_encode[i]].unit;
         }
 
-//        opentelemetry_proto_metrics_v1_Metric metric =
-//            opentelemetry_proto_metrics_v1_Metric_init_zero;
-//
-//        opentelemetry_proto_metrics_v1_Sum sum =
-//            opentelemetry_proto_metrics_v1_Sum_init_zero;
-//
-//        opentelemetry_proto_metrics_v1_NumberDataPoint data_point =
-//            opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
-//        data_point.which_value =
-//            opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
-//        data_point.value.as_int   = calculate_connection_creation_total(rk);
-//        data_point.time_unix_nano = rd_clock();
+        //        opentelemetry_proto_metrics_v1_Metric metric =
+        //            opentelemetry_proto_metrics_v1_Metric_init_zero;
+        //
+        //        opentelemetry_proto_metrics_v1_Sum sum =
+        //            opentelemetry_proto_metrics_v1_Sum_init_zero;
+        //
+        //        opentelemetry_proto_metrics_v1_NumberDataPoint data_point =
+        //            opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
+        //        data_point.which_value =
+        //            opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
+        //        data_point.value.as_int   =
+        //        calculate_connection_creation_total(rk);
+        //        data_point.time_unix_nano = rd_clock();
 
         //    TODO: Add data point attributes as needed
         //    opentelemetry_proto_common_v1_KeyValue attribute =
@@ -301,23 +314,24 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, const MetricNames *metri
         //    data_point.attributes.funcs.encode = &encode_key_value;
         //    data_point.attributes.arg = &attribute;
 
-//        sum.data_points.funcs.encode = &encode_number_data_point;
-//        sum.data_points.arg          = &data_point;
-//        sum.aggregation_temporality =
-//            opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
-//        sum.is_monotonic = true;
-//
-//        metric.which_data = opentelemetry_proto_metrics_v1_Metric_sum_tag;
-//        metric.data.sum   = sum;
-//
-//        metric.description.funcs.encode = &encode_string;
-//        metric.description.arg          = metric_description;
-//
-//        metric.name.funcs.encode = &encode_string;
-//        metric.name.arg          = metric_name;
-//
-//        metric.unit.funcs.encode = &encode_string;
-//        metric.unit.arg          = metric_unit;
+        //        sum.data_points.funcs.encode = &encode_number_data_point;
+        //        sum.data_points.arg          = &data_point;
+        //        sum.aggregation_temporality =
+        //            opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
+        //        sum.is_monotonic = true;
+        //
+        //        metric.which_data =
+        //        opentelemetry_proto_metrics_v1_Metric_sum_tag; metric.data.sum
+        //        = sum;
+        //
+        //        metric.description.funcs.encode = &encode_string;
+        //        metric.description.arg          = metric_description;
+        //
+        //        metric.name.funcs.encode = &encode_string;
+        //        metric.name.arg          = metric_name;
+        //
+        //        metric.unit.funcs.encode = &encode_string;
+        //        metric.unit.arg          = metric_unit;
 
         scopeMetrics.metrics.funcs.encode = &encode_metric;
         scopeMetrics.metrics.arg          = &metric;

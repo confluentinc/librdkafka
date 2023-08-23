@@ -112,8 +112,9 @@ static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
         mtx_unlock(&rk->rk_telemetry.lock);
 }
 
-static MetricNames * rd_kafka_match_requested_metrics(rd_kafka_t *rk, size_t *matched_count) {
-        MetricNames* matched_metrics = rd_malloc(sizeof(MetricNames) * 1);
+static MetricNames *rd_kafka_match_requested_metrics(rd_kafka_t *rk,
+                                                     size_t *matched_count) {
+        MetricNames *matched_metrics = rd_malloc(sizeof(MetricNames) * 1);
 
         if (matched_metrics == NULL) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
@@ -122,12 +123,14 @@ static MetricNames * rd_kafka_match_requested_metrics(rd_kafka_t *rk, size_t *ma
         }
 
         *matched_count = 0;
-        //TODO: Implement prefix matching
+        // TODO: Implement prefix matching
         if (rk->rk_telemetry.delta_temporality) {
-                matched_metrics[*matched_count] = METRIC_CONNECTION_CREATION_RATE;
+                matched_metrics[*matched_count] =
+                    METRIC_CONNECTION_CREATION_RATE;
                 *matched_count += 1;
         } else {
-                matched_metrics[*matched_count] = METRIC_CONNECTION_CREATION_TOTAL;
+                matched_metrics[*matched_count] =
+                    METRIC_CONNECTION_CREATION_TOTAL;
                 *matched_count += 1;
         }
 
@@ -216,12 +219,13 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         // serialize.
 
         size_t matched_metrics_count;
-        MetricNames *matched_metrics = rd_kafka_match_requested_metrics(rk, &matched_metrics_count);
+        MetricNames *matched_metrics =
+            rd_kafka_match_requested_metrics(rk, &matched_metrics_count);
 
         // TODO: Update dummy values
         size_t metrics_payload_size;
-        const void *metrics_payload =
-            rd_kafka_telemetry_encode_metrics(rk, matched_metrics, &matched_metrics_count, &metrics_payload_size);
+        const void *metrics_payload = rd_kafka_telemetry_encode_metrics(
+            rk, matched_metrics, &matched_metrics_count, &metrics_payload_size);
         // TODO: Use rd_kafka_compression_t
         const char *compression_type = "gzip";
 

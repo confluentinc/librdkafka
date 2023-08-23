@@ -197,9 +197,11 @@ static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
         int partition_cnt =
             rd_kafka_TopicDescription_topic_partition_count(topic);
         error = rd_kafka_TopicDescription_error(topic);
-        const char *uuid_str = rd_kafka_TopicDescription_uuid_base64str(topic);
-        int16_t most_significant_bits = rd_kafka_TopicDescription_uuid_most_significant_bits(topic);
-        int16_t least_significant_bits = rd_kafka_TopicDescription_uuid_least_significant_bits(topic);
+        
+        rd_kafka_uuid_t *uuid = rd_kafka_TopicDescription_topic_id(topic);
+        char *uuid_str = rd_kafka_uuid_base64str(uuid);
+        int16_t most_significant_bits = rd_kafka_uuid_most_significant_bits(topic);
+        int16_t least_significant_bits = rd_kafka_uuid_least_significant_bits(topic);
 
         if (rd_kafka_error_code(error)) {
                 printf("Topic: %s [LSB : %d MSB : %d Base64String : %s] has error[%" PRId32 "]: %s\n", topic_name,

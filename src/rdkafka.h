@@ -262,6 +262,7 @@ typedef struct rd_kafka_error_s rd_kafka_error_t;
 typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 typedef struct rd_kafka_group_result_s rd_kafka_group_result_t;
 typedef struct rd_kafka_acl_result_s rd_kafka_acl_result_t;
+typedef struct rd_kafka_uuid_s rd_kafka_uuid_t;
 /* @endcond */
 
 

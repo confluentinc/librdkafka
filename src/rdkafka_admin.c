@@ -7929,7 +7929,8 @@ rd_kafka_TopicDescription_destroy(rd_kafka_TopicDescription_t *topicdesc) {
 
         RD_IF_FREE(topicdesc->topic, rd_free);
         RD_IF_FREE(topicdesc->error, rd_kafka_error_destroy);
-
+        RD_IF_FREE(topicdesc->topic_id->base64str, rd_free);
+        rd_free(topicdesc->topic_id);
         for (i = 0; i < topicdesc->partition_cnt; i++)
                 rd_kafka_metadata_partition_clear(&topicdesc->partitions[i]);
 
@@ -8013,14 +8014,39 @@ const rd_kafka_error_t *
 rd_kafka_TopicDescription_error(const rd_kafka_TopicDescription_t *topicdesc) {
         return topicdesc->error;
 }
-const char *rd_kafka_TopicDescription_uuid_base64str(const rd_kafka_TopicDescription_t *topicdesc){
-        return rd_kafka_uuid_base64str(&topicdesc->topic_id);
+const rd_kafka_uuid_t *rd_kafka_TopicDescription_topic_id(const rd_kafka_TopicDescription_t *topicdesc){
+        return topicdesc->topic_id;
 }
-int16_t rd_kafka_TopicDescription_uuid_least_significant_bits(const rd_kafka_TopicDescription_t *topicdesc){
-        return topicdesc->topic_id.least_significant_bits;
+char *rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
+        if (*uuid->base64str)
+                return uuid->base64str;
+
+        rd_chariov_t in_base64;
+        char *out_base64_str;
+        char *uuid_bytes;
+        uint64_t input_uuid[2];
+
+        input_uuid[0]  = htobe64(uuid->most_significant_bits);
+        input_uuid[1]  = htobe64(uuid->least_significant_bits);
+        uuid_bytes     = (char *)input_uuid;
+        in_base64.ptr  = uuid_bytes;
+        in_base64.size = sizeof(uuid->most_significant_bits) +
+                         sizeof(uuid->least_significant_bits);
+
+        out_base64_str = rd_base64_encode_str(&in_base64);
+        if (!out_base64_str)
+                return NULL;
+
+        rd_strlcpy(uuid->base64str, out_base64_str,
+                   23 /* Removing extra ('=') padding */);
+        rd_free(out_base64_str);
+        return uuid->base64str;
 }
-int16_t rd_kafka_TopicDescription_uuid_most_significant_bits(const rd_kafka_TopicDescription_t *topicdesc){
-        return topicdesc->topic_id.most_significant_bits;
+int16_t rd_kafka_uuid_least_significant_bits(const rd_kafka_uuid_t *uuid){
+        return uuid->least_significant_bits;
+}
+int16_t rd_kafka_uuid_most_significant_bits(const rd_kafka_uuid_t *uuid){
+        return uuid->most_significant_bits;
 }
 const rd_kafka_TopicDescription_t **rd_kafka_DescribeTopics_result_topics(
     const rd_kafka_DescribeTopics_result_t *result,

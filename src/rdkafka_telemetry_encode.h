@@ -29,6 +29,11 @@
 #ifndef _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H
 #define _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H
 
-void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size);
+typedef enum {
+        METRIC_TYPE_SUM,
+        METRIC_TYPE_GAUGE,
+} MetricType;
+
+void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, const MetricNames *metrics_to_encode, const size_t *metrics_to_encode_count, size_t *size);
 
 #endif /* _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H */

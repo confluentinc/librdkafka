@@ -181,6 +181,8 @@ typedef struct rd_kafka_cgrp_s {
 
         int32_t rkcg_generation_id; /* Current generation id */
 
+        int32_t rkcg_member_epoch; /* KIP848TODO: Merge this and Generation Id field */
+
         rd_kafka_assignor_t *rkcg_assignor; /**< The current partition
                                              *   assignor. used by both
                                              *   leader and members. */
@@ -226,6 +228,7 @@ typedef struct rd_kafka_cgrp_s {
          *  completes. The waiting subscription is stored here.
          *  Mutually exclusive with rkcg_next_subscription. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
+        rd_kafka_topic_partition_list_t *rkcg_next_subscription_regex;
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe

@@ -1973,6 +1973,24 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
 
+void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
+                                       const rd_kafkap_str_t *group_id,
+                                       const rd_kafkap_str_t *member_id,
+                                       int32_t member_epoch,
+                                       const rd_kafkap_str_t *group_instance_id,
+                                       const rd_kafkap_str_t *rack_id,
+                                       int32_t rebalance_timeout_ms,
+                                       const rd_kafka_topic_partition_list_t *subscribe_topics,
+                                       const rd_kafka_topic_partition_list_t *subscribe_topics_regex,
+                                       const rd_kafkap_str_t *remote_assignor,
+                                       const rd_kafka_topic_partition_list_t *current_assignments,
+                                       rd_bool_t full_request,
+                                       rd_kafka_replyq_t replyq,
+                                       rd_kafka_resp_cb_t *resp_cb,
+                                       void *opaque) {
+        printf("Sending ConsumerGroupHeartbeat Request\n");
+}
+
 
 
 /**

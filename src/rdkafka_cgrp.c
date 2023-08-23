@@ -411,6 +411,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_coord_id       = -1;
         rkcg->rkcg_generation_id  = -1;
         rkcg->rkcg_wait_resp      = -1;
+        rkcg->rkcg_member_epoch   = 0;
 
         rkcg->rkcg_ops                      = rd_kafka_q_new(rk);
         rkcg->rkcg_ops->rkq_serve           = rd_kafka_cgrp_op_serve;
@@ -423,6 +424,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
         rkcg->rkcg_group_remote_assignor =
             rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
+        rkcg->rkcg_next_subscription = NULL;
+        rkcg->rkcg_next_subscription_regex = NULL;
 
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
@@ -2441,6 +2444,19 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
         rkcg->rkcg_subscribed_topics = tinfos;
 
         return rd_true;
+}
+
+
+/**
+ * @brief Handle Heartbeat response.
+ */
+void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *rkbuf,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque) {
+        printf("Got ConsumerGroupHeartbeat Response");
 }
 
 
@@ -5198,6 +5214,40 @@ static void rd_kafka_cgrp_join_state_serve(rd_kafka_cgrp_t *rkcg) {
                 break;
         }
 }
+
+void  rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg) {
+
+        /* Don't send heartbeats if max.poll.interval.ms was exceeded */
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED)
+                return;
+
+        /* Skip heartbeat if we have one in transit */
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT)
+                return;
+
+        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+        rd_kafka_ConsumerGroupHeartbeatRequest(
+            rkcg->rkcg_coord,
+            rkcg->rkcg_group_id,
+            rkcg->rkcg_member_id,
+            rkcg->rkcg_member_epoch,
+            rkcg->rkcg_group_instance_id,
+            rkcg->rkcg_rk->rk_conf.client_rack,
+            rkcg->rkcg_rk->rk_conf.max_poll_interval_ms,
+            rkcg->rkcg_next_subscription,
+            rkcg->rkcg_next_subscription_regex,
+            rkcg->rkcg_group_remote_assignor,
+            rkcg->rkcg_group_assignment,
+            rd_true,
+            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+            rd_kafka_cgrp_handle_ConsumerGroupHeartbeat,
+            NULL);
+}
+
+void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_cgrp_consumer_group_heartbeat(rkcg);
+}
+
 /**
  * Client group handling.
  * Called from main thread to serve the operational aspects of a cgrp.
@@ -5311,7 +5361,12 @@ retry:
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in state up");
 
-                rd_kafka_cgrp_join_state_serve(rkcg);
+                if(rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                        rd_kafka_cgrp_consumer_serve(rkcg);
+                } else {
+                        rd_kafka_cgrp_join_state_serve(rkcg);
+                }
+
                 break;
         }
 

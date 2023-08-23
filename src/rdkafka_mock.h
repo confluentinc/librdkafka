@@ -421,6 +421,26 @@ rd_kafka_mock_get_requests(rd_kafka_mock_cluster_t *mcluster, size_t *cntp);
  */
 RD_EXPORT void rd_kafka_mock_clear_requests(rd_kafka_mock_cluster_t *mcluster);
 
+/**
+ * @brief Sets next target assignment for the member
+ *        identified by \p member_id in the group identified by
+ *        \p group_id to the list of partitions contained in \p rktparlist,
+ *        in the cluster \p mcluster.
+ *
+ * @remark used for mocking target assignment
+ *         in KIP-848 consumer group protocol.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param group_id Group id.
+ * @param member_id Member id.
+ * @param rktparlist Partitions to assign to the member.
+ */
+void rd_kafka_mock_cgrp_consumer_target_assignment(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *group_id,
+    const char *member_id,
+    const rd_kafka_topic_partition_list_t *rktparlist);
+
 /**@}*/
 
 #ifdef __cplusplus

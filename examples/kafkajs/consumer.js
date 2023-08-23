@@ -17,20 +17,13 @@ async function consumerStart() {
     await consumer.connect();
     console.log("Connected successfully");
 
-    const disconnect = () =>
-      consumer.disconnect().then(() => {
-        console.log("Disconnected successfully");
-      });
-    process.on('SIGINT', disconnect);
-    process.on('SIGTERM', disconnect);
-
-    consumer.subscribe({
+    await consumer.subscribe({
       topics: [
         "topic2"
       ]
     })
 
-    await consumer.run({
+    consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
         console.log({
           topic,
@@ -41,6 +34,13 @@ async function consumerStart() {
         })
       },
     });
+
+    const disconnect = () =>
+      consumer.disconnect().then(() => {
+        console.log("Disconnected successfully");
+      });
+    process.on('SIGINT', disconnect);
+    process.on('SIGTERM', disconnect);
 }
 
 consumerStart()

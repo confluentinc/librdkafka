@@ -7874,6 +7874,7 @@ rd_kafka_DescribeConsumerGroups_result_groups(
  */
 static rd_kafka_TopicDescription_t *
 rd_kafka_TopicDescription_new(const char *topic,
+                              const rd_kafka_uuid_t *uuid,
                               struct rd_kafka_metadata_partition *partitions,
                               int partition_cnt,
                               const rd_list_t *topic_authorized_operations,
@@ -7882,6 +7883,8 @@ rd_kafka_TopicDescription_new(const char *topic,
         int i;
         topicdesc                = rd_calloc(1, sizeof(*topicdesc));
         topicdesc->topic         = rd_strdup(topic);
+        topicdesc->topic_id.least_significant_bits = uuid->least_significant_bits;
+        topicdesc->topic_id.most_significant_bits = uuid->most_significant_bits;
         topicdesc->partition_cnt = partition_cnt;
         if (error)
                 topicdesc->error = rd_kafka_error_copy(error);
@@ -7915,9 +7918,9 @@ rd_kafka_TopicDescription_new(const char *topic,
  *         Use rd_kafka_TopicDescription_destroy() to free when done.
  */
 static rd_kafka_TopicDescription_t *
-rd_kafka_TopicDescription_new_error(const char *topic,
+rd_kafka_TopicDescription_new_error(const char *topic, const rd_kafka_uuid_t *uuid,
                                     rd_kafka_error_t *error) {
-        return rd_kafka_TopicDescription_new(topic, NULL, 0, NULL, error);
+        return rd_kafka_TopicDescription_new(topic,uuid, NULL, 0, NULL, error);
 }
 
 static void
@@ -8010,7 +8013,15 @@ const rd_kafka_error_t *
 rd_kafka_TopicDescription_error(const rd_kafka_TopicDescription_t *topicdesc) {
         return topicdesc->error;
 }
-
+const char *rd_kafka_TopicDescription_uuid_base64str(const rd_kafka_TopicDescription_t *topicdesc){
+        return rd_kafka_uuid_base64str(&topicdesc->topic_id);
+}
+int16_t rd_kafka_TopicDescription_uuid_least_significant_bits(const rd_kafka_TopicDescription_t *topicdesc){
+        return topicdesc->topic_id.least_significant_bits;
+}
+int16_t rd_kafka_TopicDescription_uuid_most_significant_bits(const rd_kafka_TopicDescription_t *topicdesc){
+        return topicdesc->topic_id.most_significant_bits;
+}
 const rd_kafka_TopicDescription_t **rd_kafka_DescribeTopics_result_topics(
     const rd_kafka_DescribeTopics_result_t *result,
     size_t *cntp) {
@@ -8104,16 +8115,17 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                             rd_kafka_AuthorizedOperations_parse(
                                 mdi->topics[i].topic_authorized_operations);
                         topicdesc = rd_kafka_TopicDescription_new(
-                            md->topics[i].topic, md->topics[i].partitions,
+                            md->topics[i].topic, &mdi->topics[i].topic_id, md->topics[i].partitions,
                             md->topics[i].partition_cnt, authorized_operations,
                             NULL);
+                        
                         if (authorized_operations)
                                 rd_list_destroy(authorized_operations);
                 } else {
                         rd_kafka_error_t *error =
                             rd_kafka_error_new(md->topics[i].err, NULL);
                         topicdesc = rd_kafka_TopicDescription_new_error(
-                            md->topics[i].topic, error);
+                            md->topics[i].topic, &mdi->topics[i].topic_id, error);
                         rd_kafka_error_destroy(error);
                 }
                 rd_list_add(&rko_result->rko_u.admin_result.results, topicdesc);

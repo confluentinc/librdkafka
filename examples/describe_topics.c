@@ -197,18 +197,22 @@ static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
         int partition_cnt =
             rd_kafka_TopicDescription_topic_partition_count(topic);
         error = rd_kafka_TopicDescription_error(topic);
+        const char *uuid_str = rd_kafka_TopicDescription_uuid_base64str(topic);
+        int16_t most_significant_bits = rd_kafka_TopicDescription_uuid_most_significant_bits(topic);
+        int16_t least_significant_bits = rd_kafka_TopicDescription_uuid_least_significant_bits(topic);
 
         if (rd_kafka_error_code(error)) {
-                printf("Topic: %s has error[%" PRId32 "]: %s\n", topic_name,
+                printf("Topic: %s [LSB : %d MSB : %d Base64String : %s] has error[%" PRId32 "]: %s\n", topic_name,
+                       least_significant_bits, most_significant_bits, uuid_str,
                        rd_kafka_error_code(error),
                        rd_kafka_error_string(error));
                 return;
         }
 
         printf(
-            "Topic: %s succeeded, has %d topic authorized operations "
+            "Topic: %s [LSB : %d MSB : %d Base64String : %s] succeeded, has %d topic authorized operations "
             "allowed, they are:\n",
-            topic_name, topic_authorized_operations_cnt);
+            topic_name, least_significant_bits, most_significant_bits, uuid_str, topic_authorized_operations_cnt);
         for (j = 0; j < topic_authorized_operations_cnt; j++) {
                 acl_operation =
                     rd_kafka_TopicDescription_authorized_operation(topic, j);

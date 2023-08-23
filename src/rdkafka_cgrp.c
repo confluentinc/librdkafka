@@ -5560,6 +5560,11 @@ rd_kafka_consumer_group_metadata(rd_kafka_t *rk) {
         return cgmetadata;
 }
 
+const char *rd_kafka_consumer_group_metadata_member_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->member_id;
+}
+
 void rd_kafka_consumer_group_metadata_destroy(
     rd_kafka_consumer_group_metadata_t *cgmetadata) {
         rd_free(cgmetadata->group_id);

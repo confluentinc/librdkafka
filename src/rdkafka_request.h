@@ -91,6 +91,7 @@ int rd_kafka_buf_write_topic_partitions(
     const rd_kafka_topic_partition_list_t *parts,
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
+    rd_bool_t use_topic_id,
     const rd_kafka_topic_partition_field_t *fields);
 
 rd_kafka_resp_err_t

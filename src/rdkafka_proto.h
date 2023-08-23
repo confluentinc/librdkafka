@@ -584,10 +584,14 @@ typedef struct rd_kafka_uuid_s {
 } rd_kafka_uuid_t;
 
 #define RD_KAFKA_UUID_ZERO                                                     \
-        { 0, 0, "" }
+        (rd_kafka_uuid_t) {                                                    \
+                0, 0, ""                                                       \
+        }
 
 #define RD_KAFKA_UUID_METADATA_TOPIC_ID                                        \
-        { 0, 1, "" }
+        (rd_kafka_uuid_t) {                                                    \
+                0, 1, ""                                                       \
+        }
 
 
 /**
@@ -607,6 +611,12 @@ static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
  */
 static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_uuid_t *uuid) {
         memset(uuid, 0, sizeof(*uuid));
+}
+
+static RD_INLINE RD_UNUSED int rd_kafka_uuid_cmp(rd_kafka_uuid_t a,
+                                                 rd_kafka_uuid_t b) {
+        return (a.most_significant_bits - b.most_significant_bits) ||
+               (a.least_significant_bits - b.least_significant_bits);
 }
 
 /**

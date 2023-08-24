@@ -1981,14 +1981,74 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
                                        const rd_kafkap_str_t *rack_id,
                                        int32_t rebalance_timeout_ms,
                                        const rd_kafka_topic_partition_list_t *subscribe_topics,
-                                       const rd_kafka_topic_partition_list_t *subscribe_topics_regex,
+                                       const rd_kafkap_str_t *subscribe_topics_regex,
                                        const rd_kafkap_str_t *remote_assignor,
                                        const rd_kafka_topic_partition_list_t *current_assignments,
                                        rd_bool_t full_request,
                                        rd_kafka_replyq_t replyq,
                                        rd_kafka_resp_cb_t *resp_cb,
                                        void *opaque) {
-        printf("Sending ConsumerGroupHeartbeat Request\n");
+
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 0, &features);
+
+        printf("ApiVersion is %d\n", ApiVersion);
+
+        size_t next_subscription_size = 0;
+
+        if(subscribe_topics) {
+                next_subscription_size = ((subscribe_topics->cnt * (4+50)) + 4);
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
+                                         RD_KAFKAP_STR_SIZE(group_id) +
+                                         RD_KAFKAP_STR_SIZE(member_id) +
+                                         4 /* MemberEpoch */ +
+                                         RD_KAFKAP_STR_SIZE(group_instance_id) +
+                                         RD_KAFKAP_STR_SIZE(rack_id) +
+                                         4 /* RebalanceTimeoutMs */ +
+                                         next_subscription_size /* SubscribedTopicNames */+
+                                         RD_KAFKAP_STR_SIZE(subscribe_topics_regex) /* SubscribedTopicRegex */ +
+                                         RD_KAFKAP_STR_SIZE(remote_assignor) +
+                                         ((current_assignments->cnt * (16 + 100)) + 4) /* TopicPartitions */,
+                                         rd_true);
+
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+        rd_kafka_buf_write_i32(rkbuf, member_epoch);
+        rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
+        rd_kafka_buf_write_kstr(rkbuf, rack_id);
+        rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
+
+        if(subscribe_topics) {
+                const rd_kafka_topic_partition_field_t subscribe_topics_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                rd_kafka_buf_write_topic_partitions(
+                    rkbuf, subscribe_topics, rd_true /*doesn't matter*/,
+                    rd_false /*doesn't matter*/, subscribe_topics_fields);
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, 0);
+        }
+
+        rd_kafka_buf_write_kstr(rkbuf, subscribe_topics_regex);
+        rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
+
+        const rd_kafka_topic_partition_field_t current_assignments_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                                                                               RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        rd_kafka_buf_write_topic_partitions(
+            rkbuf, current_assignments, rd_true /*doesn't matter*/,
+            rd_false /*doesn't matter*/, current_assignments_fields);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_buf_set_abs_timeout(
+            rkbuf, rkb->rkb_rk->rk_conf.group_session_timeout_ms, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
 }
 
 

@@ -420,13 +420,14 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_wait_coord_q->rkq_serve  = rkcg->rkcg_ops->rkq_serve;
         rkcg->rkcg_wait_coord_q->rkq_opaque = rkcg->rkcg_ops->rkq_opaque;
         rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
+        rkcg->rkcg_member_id = rd_kafkap_str_new("", -1);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
         rkcg->rkcg_group_remote_assignor =
             rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
         rkcg->rkcg_next_subscription = NULL;
-        rkcg->rkcg_next_subscription_regex = NULL;
-
+        rkcg->rkcg_next_subscription_regex = rd_kafkap_str_new(NULL, -1);
+        rkcg->rkcg_group_assignment = rd_kafka_topic_partition_list_new(0);
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
         rd_kafka_cgrp_set_member_id(rkcg, "");
@@ -2456,7 +2457,23 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                     rd_kafka_buf_t *rkbuf,
                                     rd_kafka_buf_t *request,
                                     void *opaque) {
-        printf("Got ConsumerGroupHeartbeat Response");
+
+        printf("In ConsumerGroupHeartbeat Response Handler\n");
+
+        rd_kafka_cgrp_t *rkcg       = rk->rk_cgrp;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
+
+        rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+
+        rkcg->rkcg_last_heartbeat_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        if (err) {
+                printf("Got Error for ConsumerGroupHeartbeat -> '%s'", rd_kafka_err2str(err));
+                rkcg->rkcg_last_heartbeat_err = err;
+        }
 }
 
 
@@ -4587,6 +4604,12 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+static rd_kafka_resp_err_t
+rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
+                        rd_kafka_topic_partition_list_t *rktparlist) {
+        rkcg->rkcg_next_subscription = rktparlist;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 /**
  * Set new atomic topic subscription.
@@ -5029,8 +5052,13 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
                 rd_kafka_app_polled(rk);
 
                 /* New atomic subscription (may be NULL) */
-                err =
-                    rd_kafka_cgrp_subscribe(rkcg, rko->rko_u.subscribe.topics);
+                if(rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                        err =
+                            rd_kafka_cgrp_consumer_subscribe(rkcg, rko->rko_u.subscribe.topics);
+                } else {
+                        err =
+                            rd_kafka_cgrp_subscribe(rkcg, rko->rko_u.subscribe.topics);
+                }
 
                 if (!err) /* now owned by rkcg */
                         rko->rko_u.subscribe.topics = NULL;
@@ -5226,6 +5254,7 @@ void  rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg) {
                 return;
 
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+
         rd_kafka_ConsumerGroupHeartbeatRequest(
             rkcg->rkcg_coord,
             rkcg->rkcg_group_id,
@@ -5242,6 +5271,8 @@ void  rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg) {
             RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
             rd_kafka_cgrp_handle_ConsumerGroupHeartbeat,
             NULL);
+
+        printf("Sent ConsumerGroupHeartbeatRequest\n");
 }
 
 void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
@@ -5341,10 +5372,14 @@ retry:
                         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_UP);
 
                         /* Serve join state to trigger (re)join */
-                        rd_kafka_cgrp_join_state_serve(rkcg);
+                        if(rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                                rd_kafka_cgrp_consumer_serve(rkcg);
+                        } else {
+                                rd_kafka_cgrp_join_state_serve(rkcg);
 
-                        /* Serve any pending partitions in the assignment */
-                        rd_kafka_assignment_serve(rkcg->rkcg_rk);
+                                /* Serve any pending partitions in the assignment */
+                                rd_kafka_assignment_serve(rkcg->rkcg_rk);
+                        }
                 }
                 break;
 

@@ -228,7 +228,7 @@ typedef struct rd_kafka_cgrp_s {
          *  completes. The waiting subscription is stored here.
          *  Mutually exclusive with rkcg_next_subscription. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
-        rd_kafka_topic_partition_list_t *rkcg_next_subscription_regex;
+        rd_kafkap_str_t *rkcg_next_subscription_regex;
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe

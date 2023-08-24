@@ -36,6 +36,11 @@ async function consumerStart() {
         })
 
         if (++batch % 100 == 0) {
+          await consumer.seek({
+            topic,
+            partition,
+            offset: -2
+          });
           await consumer.commitOffsets();
           batch = 0;
         }

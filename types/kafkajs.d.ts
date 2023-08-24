@@ -413,7 +413,7 @@ export type Consumer = {
   stop(): Promise<void>
   run(config?: ConsumerRunConfig): Promise<void>
   commitOffsets(topicPartitions: Array<TopicPartitionOffsetAndMetadata>): Promise<void>
-  seek(topicPartitionOffset: TopicPartitionOffset): void
+  seek(topicPartitionOffset: TopicPartitionOffset): Promise<void>
   describeGroup(): Promise<GroupDescription>
   pause(topics: Array<{ topic: string; partitions?: number[] }>): void
   paused(): TopicPartitions[]

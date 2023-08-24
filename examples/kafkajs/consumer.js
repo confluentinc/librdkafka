@@ -2,18 +2,28 @@ const { Kafka } = require('../..').KafkaJS
 //const { Kafka } = require('kafkajs')
 
 async function consumerStart() {
+    let consumer;
     const kafka = new Kafka({
         brokers: ['pkc-8w6ry7.us-west-2.aws.devel.cpdev.cloud:9092'],
         ssl: true,
         sasl: {
             mechanism: 'plain',
         },
+        rebalanceListener: {
+          onPartitionsAssigned: async (assignment) => {
+            console.log(`Assigned partitions ${JSON.stringify(assignment)}`);
+          },
+          onPartitionsRevoked: async (assignment) => {
+            console.log(`Revoked partitions ${JSON.stringify(assignment)}`);
+            await consumer.commitOffsets();
+          }
+        },
         rdKafka: {
           'enable.auto.commit': false
         }
     });
 
-    const consumer = kafka.consumer({ groupId: 'test-group' });
+    consumer = kafka.consumer({ groupId: 'test-group' });
 
     await consumer.connect();
     console.log("Connected successfully");
@@ -50,7 +60,7 @@ async function consumerStart() {
     const disconnect = () => {
       process.off('SIGINT', disconnect);
       process.off('SIGTERM', disconnect);
-      consumer.disconnect().then(() => {
+      consumer.disconnect().finally(() => {
         console.log("Disconnected successfully");
       });
     }

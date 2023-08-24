@@ -4,11 +4,13 @@ const { Kafka } = require('../..').KafkaJS
 async function consumerStart() {
     let consumer;
     const kafka = new Kafka({
-        brokers: ['pkc-8w6ry7.us-west-2.aws.devel.cpdev.cloud:9092'],
+        brokers: ['<fill>'],
         ssl: true,
         connectionTimeout: 5000,
         sasl: {
             mechanism: 'plain',
+            username: '<fill>',
+            password: '<fill>',
         },
         rebalanceListener: {
           onPartitionsAssigned: async (assignment) => {

@@ -3,7 +3,7 @@ const { Kafka } = require('../..').KafkaJS
 
 async function producerStart() {
     const kafka = new Kafka({
-        brokers: ['pkc-8w6ry7.us-west-2.aws.devel.cpdev.cloud:9092'],
+        brokers: ['<fill>'],
         ssl: true,
         sasl: {
             mechanism: 'plain',

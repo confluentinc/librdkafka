@@ -6,6 +6,7 @@ async function consumerStart() {
     const kafka = new Kafka({
         brokers: ['pkc-8w6ry7.us-west-2.aws.devel.cpdev.cloud:9092'],
         ssl: true,
+        connectionTimeout: 5000,
         sasl: {
             mechanism: 'plain',
         },
@@ -15,7 +16,9 @@ async function consumerStart() {
           },
           onPartitionsRevoked: async (assignment) => {
             console.log(`Revoked partitions ${JSON.stringify(assignment)}`);
-            await consumer.commitOffsets();
+            await consumer.commitOffsets().catch((e) => {
+              console.error(`Failed to commit ${e}`);
+            })
           }
         },
         rdKafka: {

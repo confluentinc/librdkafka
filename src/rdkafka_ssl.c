@@ -42,6 +42,7 @@
 #pragma comment(lib, "crypt32.lib")
 #ifdef _DEBUG
 #pragma comment(lib, "libcryptod.lib")
+#pragma comment(lib, "libssld.lib")
 #else
 #pragma comment(lib, "libcrypto.lib")
 #pragma comment(lib, "libssl.lib")

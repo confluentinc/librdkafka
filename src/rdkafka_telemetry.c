@@ -117,14 +117,9 @@ static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
 
 static rd_kafka_telemetry_metric_name_t *
 rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
+        // TODO: Change size of matched_metrics to be the number of matched
         rd_kafka_telemetry_metric_name_t *matched_metrics =
             rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) * 1);
-
-        if (matched_metrics == NULL) {
-                rd_kafka_dbg(rk, TELEMETRY, "METRICS",
-                             "Failed to allocate memory for matched metrics");
-                return NULL;
-        }
 
         rk->rk_telemetry.matched_metrics_cnt = 0;
         // TODO: Implement prefix matching

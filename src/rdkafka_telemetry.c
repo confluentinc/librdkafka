@@ -115,8 +115,10 @@ static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
         mtx_unlock(&rk->rk_telemetry.lock);
 }
 
-static rd_kafka_telemetry_metric_name_t *rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
-        rd_kafka_telemetry_metric_name_t *matched_metrics = rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) * 1);
+static rd_kafka_telemetry_metric_name_t *
+rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_name_t *matched_metrics =
+            rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) * 1);
 
         if (matched_metrics == NULL) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
@@ -219,16 +221,10 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                          rd_kafka_broker_t *rkb,
                                          rd_bool_t terminating) {
 
-        // TODO: Need to cycle through requested_metrics.
-        // TODO: Metrics processing. Update historic, calculate deltas, and
-        // serialize.
-
-        size_t matched_metrics_count;
-
         // TODO: Update dummy values
         size_t metrics_payload_size;
-        const void *metrics_payload = rd_kafka_telemetry_encode_metrics(
-            rk, &metrics_payload_size);
+        const void *metrics_payload =
+            rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
         // TODO: Use rd_kafka_compression_t
         const char *compression_type = "gzip";
 
@@ -241,7 +237,7 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                       metrics_payload, metrics_payload_size,
                                       NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                                       rd_kafka_handle_PushTelemetry, NULL);
-        rd_free(metrics_payload);
+        rd_free((void *)metrics_payload);
         rk->rk_telemetry.state = terminating
                                      ? RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT
                                      : RD_KAFKA_TELEMETRY_PUSH_SENT;

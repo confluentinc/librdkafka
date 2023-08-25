@@ -40,7 +40,8 @@ typedef union {
         double doubleValue;
 } rd_kafka_telemetry_metric_value_t;
 
-typedef rd_kafka_telemetry_metric_value_t (*metric_value_calculator_t)(rd_kafka_t *);
+typedef rd_kafka_telemetry_metric_value_t (*metric_value_calculator_t)(
+    rd_kafka_t *);
 
 typedef struct {
         void **metrics;
@@ -56,7 +57,8 @@ typedef struct {
         metric_value_calculator_t calculate_value;
 } rd_kafka_telemetry_metric_info_t;
 
-static rd_kafka_telemetry_metric_value_t calculate_connection_creation_total(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_connection_creation_total(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
 
@@ -68,13 +70,15 @@ static rd_kafka_telemetry_metric_value_t calculate_connection_creation_total(rd_
         return total;
 }
 
-static rd_kafka_telemetry_metric_value_t calculate_connection_creation_rate(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_connection_creation_rate(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
 
         total.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                total.intValue += rkb->rkb_c.connects.val - rkb->rkb_c_historic.connects;
+                total.intValue +=
+                    rkb->rkb_c.connects.val - rkb->rkb_c_historic.connects;
                 rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
         }
         return total;
@@ -125,11 +129,15 @@ static bool encode_number_data_point(pb_ostream_t *stream,
 
 static bool
 encode_metric(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
-        rd_kafka_telemetry_metrics_repeated_t *metricArr = (rd_kafka_telemetry_metrics_repeated_t *)*arg;
+        rd_kafka_telemetry_metrics_repeated_t *metricArr =
+            (rd_kafka_telemetry_metrics_repeated_t *)*arg;
+        size_t i;
 
-        for (size_t i = 0; i < metricArr->count; i++) {
+        for (i = 0; i < metricArr->count; i++) {
 
-                opentelemetry_proto_metrics_v1_Metric *metric = ((opentelemetry_proto_metrics_v1_Metric **)metricArr->metrics)[i];
+                opentelemetry_proto_metrics_v1_Metric *metric =
+                    ((opentelemetry_proto_metrics_v1_Metric **)
+                         metricArr->metrics)[i];
                 if (!pb_encode_tag_for_field(stream, field))
                         return false;
 
@@ -180,11 +188,18 @@ static bool encode_key_value(pb_ostream_t *stream,
             stream, opentelemetry_proto_common_v1_KeyValue_fields, key_value);
 }
 
-static void free_metrics(opentelemetry_proto_metrics_v1_Metric **metrics, char **metric_names, size_t count) {
-        for (size_t i = 0; i < count; i++) {
+static void
+free_metrics(opentelemetry_proto_metrics_v1_Metric **metrics,
+             char **metric_names,
+             opentelemetry_proto_metrics_v1_NumberDataPoint **data_points,
+             size_t count) {
+        size_t i;
+        for (i = 0; i < count; i++) {
+                rd_free(data_points[i]);
                 rd_free(metric_names[i]);
                 rd_free(metrics[i]);
         }
+        rd_free(data_points);
         rd_free(metric_names);
         rd_free(metrics);
 }
@@ -194,16 +209,17 @@ static void free_metrics(opentelemetry_proto_metrics_v1_Metric **metrics, char *
  * returns the serialized data. Currently only supports encoding of connection
  * creation total by default
  */
-void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
-                                        size_t *size) {
+void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         size_t message_size;
         uint8_t *buffer;
         pb_ostream_t stream;
         bool status;
         const char *metric_type_str = rd_kafka_type2str(rk->rk_type);
         char **metric_names;
-        const rd_kafka_telemetry_metric_name_t *metrics_to_encode = rk->rk_telemetry.matched_metrics;
-        const size_t metrics_to_encode_count = rk->rk_telemetry.matched_metrics_cnt;
+        const rd_kafka_telemetry_metric_name_t *metrics_to_encode =
+            rk->rk_telemetry.matched_metrics;
+        const size_t metrics_to_encode_count =
+            rk->rk_telemetry.matched_metrics_cnt;
         size_t metric_name_len;
 
         rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Serializing metrics");
@@ -215,7 +231,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
             opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
 
         opentelemetry_proto_metrics_v1_Metric **metrics;
-        opentelemetry_proto_metrics_v1_NumberDataPoint *data_point;
+        opentelemetry_proto_metrics_v1_NumberDataPoint **data_points;
         opentelemetry_proto_metrics_v1_Sum *sum;
         opentelemetry_proto_metrics_v1_Gauge *gauge;
         rd_kafka_telemetry_metrics_repeated_t metrics_repeated;
@@ -244,37 +260,50 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
             instrumentationScope =
                 opentelemetry_proto_common_v1_InstrumentationScope_init_zero;
         instrumentationScope.name.funcs.encode    = &encode_string;
-        instrumentationScope.name.arg             = rd_kafka_name(rk);
+        instrumentationScope.name.arg             = (void *)rd_kafka_name(rk);
         instrumentationScope.version.funcs.encode = &encode_string;
-        instrumentationScope.version.arg          = rd_kafka_version_str();
+        instrumentationScope.version.arg = (void *)rd_kafka_version_str();
 
         scopeMetrics.has_scope = true;
         scopeMetrics.scope     = instrumentationScope;
 
-        metrics = rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Metric*) * metrics_to_encode_count);
-        metric_names = rd_malloc(sizeof(char*) * metrics_to_encode_count);
+        metrics = rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Metric *) *
+                            metrics_to_encode_count);
+        data_points =
+            rd_malloc(sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint *) *
+                      metrics_to_encode_count);
+        metric_names = rd_malloc(sizeof(char *) * metrics_to_encode_count);
+        size_t i;
 
-        for (size_t i = 0; i < metrics_to_encode_count; i++) {
-                metrics[i] = rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Metric));
-                memset(metrics[i], 0, sizeof(opentelemetry_proto_metrics_v1_Metric));
-                data_point =
-                    (opentelemetry_proto_metrics_v1_NumberDataPoint*) rd_malloc(sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
-                memset(data_point, 0, sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
+        for (i = 0; i < metrics_to_encode_count; i++) {
+                metrics[i] =
+                    rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Metric));
+                memset(metrics[i], 0,
+                       sizeof(opentelemetry_proto_metrics_v1_Metric));
+                data_points[i] =
+                    (opentelemetry_proto_metrics_v1_NumberDataPoint *)rd_malloc(
+                        sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
+                memset(data_points[i], 0,
+                       sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
 
                 if (METRICS[metrics_to_encode[i]].is_int) {
-                        data_point->which_value =
+                        data_points[i]->which_value =
                             opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
-                        data_point->value.as_int =
-                            METRICS[metrics_to_encode[i]].calculate_value(rk).intValue;
+                        data_points[i]->value.as_int =
+                            METRICS[metrics_to_encode[i]]
+                                .calculate_value(rk)
+                                .intValue;
 
                 } else {
-                        data_point->which_value =
+                        data_points[i]->which_value =
                             opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag;
-                        data_point->value.as_double =
-                            METRICS[metrics_to_encode[i]].calculate_value(rk).doubleValue;
+                        data_points[i]->value.as_double =
+                            METRICS[metrics_to_encode[i]]
+                                .calculate_value(rk)
+                                .doubleValue;
                 }
 
-                data_point->time_unix_nano = rd_clock();
+                data_points[i]->time_unix_nano = rd_clock();
 
                 //    TODO: Add data point attributes as needed
                 //    opentelemetry_proto_common_v1_KeyValue attribute =
@@ -284,8 +313,9 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
                 //    attribute.has_value = true;
                 //    attribute.value.which_value =
                 //    opentelemetry_proto_common_v1_AnyValue_string_value_tag;
-                //    attribute.value.value.string_value.funcs.encode = &encode_string;
-                //    attribute.value.value.string_value.arg = "heap";
+                //    attribute.value.value.string_value.funcs.encode =
+                //    &encode_string; attribute.value.value.string_value.arg =
+                //    "heap";
                 //
                 //    data_point.attributes.funcs.encode = &encode_key_value;
                 //    data_point.attributes.arg = &attribute;
@@ -294,11 +324,13 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
                 switch (METRICS[metrics_to_encode[i]].type) {
 
                 case METRIC_TYPE_SUM: {
-                        sum = rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Sum));
-                        memset(sum, 0, sizeof(opentelemetry_proto_metrics_v1_Sum));
+                        sum = rd_malloc(
+                            sizeof(opentelemetry_proto_metrics_v1_Sum));
+                        memset(sum, 0,
+                               sizeof(opentelemetry_proto_metrics_v1_Sum));
                         sum->data_points.funcs.encode =
                             &encode_number_data_point;
-                        sum->data_points.arg = data_point;
+                        sum->data_points.arg = data_points[i];
                         sum->aggregation_temporality =
                             opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
                         sum->is_monotonic = true;
@@ -309,11 +341,13 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
                         break;
                 }
                 case METRIC_TYPE_GAUGE: {
-                        gauge = rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Gauge));
-                        memset(gauge, 0, sizeof(opentelemetry_proto_metrics_v1_Gauge));
+                        gauge = rd_malloc(
+                            sizeof(opentelemetry_proto_metrics_v1_Gauge));
+                        memset(gauge, 0,
+                               sizeof(opentelemetry_proto_metrics_v1_Gauge));
                         gauge->data_points.funcs.encode =
                             &encode_number_data_point;
-                        gauge->data_points.arg = data_point;
+                        gauge->data_points.arg = data_points[i];
                         metrics[i]->which_data =
                             opentelemetry_proto_metrics_v1_Metric_gauge_tag;
                         metrics[i]->data.gauge = *gauge;
@@ -326,7 +360,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
 
                 metrics[i]->description.funcs.encode = &encode_string;
                 metrics[i]->description.arg =
-                    METRICS[metrics_to_encode[i]].description;
+                    (void *)METRICS[metrics_to_encode[i]].description;
 
                 metric_name_len = strlen(metric_type_str) +
                                   strlen(METRICS[metrics_to_encode[i]].name) +
@@ -342,8 +376,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
                 metrics[i]->name.arg          = metric_names[i];
 
                 metrics[i]->unit.funcs.encode = &encode_string;
-                metrics[i]->unit.arg          = METRICS[metrics_to_encode[i]].unit;
-                rd_free(data_point);
+                metrics[i]->unit.arg =
+                    (void *)METRICS[metrics_to_encode[i]].unit;
         }
 
         metrics_repeated.metrics = (void **)metrics;
@@ -365,7 +399,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
         if (!status) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
                              "Failed to get encoded size");
-                free_metrics(metrics, metric_names, metrics_to_encode_count);
+                free_metrics(metrics, metric_names, data_points,
+                             metrics_to_encode_count);
                 return NULL;
         }
 
@@ -373,7 +408,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
         if (buffer == NULL) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
                              "Failed to allocate memory for buffer");
-                free_metrics(metrics, metric_names, metrics_to_encode_count);
+                free_metrics(metrics, metric_names, data_points,
+                             metrics_to_encode_count);
                 return NULL;
         }
 
@@ -386,10 +422,12 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk,
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS", "Encoding failed: %s",
                              PB_GET_ERROR(&stream));
                 rd_free(buffer);
-                free_metrics(metrics, metric_names, metrics_to_encode_count);
+                free_metrics(metrics, metric_names, data_points,
+                             metrics_to_encode_count);
                 return NULL;
         }
-        free_metrics(metrics, metric_names, metrics_to_encode_count);
+        free_metrics(metrics, metric_names, data_points,
+                     metrics_to_encode_count);
 
         rd_kafka_dbg(rk, TELEMETRY, "METRICS",
                      "Push Telemetry metrics encoded, size: %ld",

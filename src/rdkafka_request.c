@@ -1994,7 +1994,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 0, &features);
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 1, &features);
 
         printf("ApiVersion is %d\n", ApiVersion);
 
@@ -2014,6 +2014,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
                                          next_subscription_size /* SubscribedTopicNames */+
                                          RD_KAFKAP_STR_SIZE(subscribe_topics_regex) /* SubscribedTopicRegex */ +
                                          RD_KAFKAP_STR_SIZE(remote_assignor) +
+                                         4 /* Client Assignors */ +
                                          ((current_assignments->cnt * (16 + 100)) + 4) /* TopicPartitions */,
                                          rd_true);
 
@@ -2021,26 +2022,38 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, member_id);
         rd_kafka_buf_write_i32(rkbuf, member_epoch);
         rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
-        rd_kafka_buf_write_kstr(rkbuf, rack_id);
+        rd_kafka_buf_write_kstr(rkbuf, rd_kafkap_str_new(NULL, -1));
         rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
 
-        if(subscribe_topics) {
-                const rd_kafka_topic_partition_field_t subscribe_topics_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-                rd_kafka_buf_write_topic_partitions(
-                    rkbuf, subscribe_topics, rd_true /*doesn't matter*/,
-                    rd_false /*doesn't matter*/, subscribe_topics_fields);
+        if(subscribe_topics && subscribe_topics->cnt > 0) {
+                size_t of_TopicsArrayCnt;
+                int topics_cnt = subscribe_topics->cnt;
+
+                /* write Topics */
+                of_TopicsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicsArrayCnt, topics_cnt);
+                while (--topics_cnt >= 0)
+                        rd_kafka_buf_write_str(rkbuf, subscribe_topics->elems[topics_cnt].topic, -1);
+
         } else {
-                rd_kafka_buf_write_arraycnt(rkbuf, 0);
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
         }
 
         rd_kafka_buf_write_kstr(rkbuf, subscribe_topics_regex);
         rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
+        rd_kafka_buf_write_arraycnt(rkbuf, -1); /* Client Assignor */
 
-        const rd_kafka_topic_partition_field_t current_assignments_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
-                                                                               RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-        rd_kafka_buf_write_topic_partitions(
-            rkbuf, current_assignments, rd_true /*doesn't matter*/,
-            rd_false /*doesn't matter*/, current_assignments_fields);
+        if(current_assignments) {
+                const rd_kafka_topic_partition_field_t current_assignments_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                                                                                       RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                rd_kafka_buf_write_topic_partitions(
+                    rkbuf, current_assignments, rd_false,
+                    rd_false, current_assignments_fields);
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
+
+        rd_kafka_buf_write_tags(rkbuf);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

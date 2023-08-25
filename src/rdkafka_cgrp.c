@@ -2461,19 +2461,54 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         printf("In ConsumerGroupHeartbeat Response Handler\n");
 
         rd_kafka_cgrp_t *rkcg       = rk->rk_cgrp;
+        const int log_decode_errors = LOG_ERR;
+        int16_t error_code           = 0;
+        rd_kafkap_str_t error_str;
+        rd_kafkap_str_t member_id;
+        int32_t member_epoch;
+        rd_bool_t should_compute_assignment;
+        int32_t heartbeat_interval_ms;
+
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY)
                 return;
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
-        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+//        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
 
         rkcg->rkcg_last_heartbeat_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        if (err) {
-                printf("Got Error for ConsumerGroupHeartbeat -> '%s'", rd_kafka_err2str(err));
-                rkcg->rkcg_last_heartbeat_err = err;
+        if (err)
+                goto err;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &error_code);
+        rd_kafka_buf_read_str(rkbuf, &error_str);
+
+        if (error_code) {
+                err = error_code;
+                printf("Server Side Error -> '%s'\n", error_str.str);
+                goto err;
         }
+
+        rd_kafka_buf_read_str(rkbuf, &member_id);
+        rd_kafka_buf_read_i32(rkbuf, &member_epoch);
+        rd_kafka_buf_read_bool(rkbuf, &should_compute_assignment);
+        rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
+
+        printf("Member Id is '%s'\n", member_id.str);
+        printf("Member Epoch is '%d'\n", member_epoch);
+        printf("Should Compute Assignment is '%s'\n", should_compute_assignment ? "true" : "false");
+        printf("Heartbeat Interval Ms is '%d'\n", heartbeat_interval_ms);
+
+err_parse:
+        err = rkbuf->rkbuf_err;
+
+err:
+        printf("Got Error for ConsumerGroupHeartbeat -> '%s'\n", rd_kafka_err2str(err));
+
+        rkcg->rkcg_last_heartbeat_err = err;
 }
 
 
@@ -5276,7 +5311,9 @@ void  rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg) {
 }
 
 void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
-        rd_kafka_cgrp_consumer_group_heartbeat(rkcg);
+        if(rkcg->rkcg_next_subscription->cnt > 0) {
+                rd_kafka_cgrp_consumer_group_heartbeat(rkcg);
+        }
 }
 
 /**

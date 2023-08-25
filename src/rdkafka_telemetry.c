@@ -87,8 +87,11 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 for (i = 0; i < rk->rk_telemetry.requested_metrics_cnt; i++)
                         rd_free(rk->rk_telemetry.requested_metrics[i]);
                 rd_free(rk->rk_telemetry.requested_metrics);
+                rd_free(rk->rk_telemetry.matched_metrics);
                 rk->rk_telemetry.requested_metrics     = NULL;
                 rk->rk_telemetry.requested_metrics_cnt = 0;
+                rk->rk_telemetry.matched_metrics       = NULL;
+                rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
 }
 
@@ -112,9 +115,8 @@ static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
         mtx_unlock(&rk->rk_telemetry.lock);
 }
 
-static MetricNames *rd_kafka_match_requested_metrics(rd_kafka_t *rk,
-                                                     size_t *matched_count) {
-        MetricNames *matched_metrics = rd_malloc(sizeof(MetricNames) * 1);
+static rd_kafka_telemetry_metric_name_t *rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_name_t *matched_metrics = rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) * 1);
 
         if (matched_metrics == NULL) {
                 rd_kafka_dbg(rk, TELEMETRY, "METRICS",
@@ -122,16 +124,16 @@ static MetricNames *rd_kafka_match_requested_metrics(rd_kafka_t *rk,
                 return NULL;
         }
 
-        *matched_count = 0;
+        rk->rk_telemetry.matched_metrics_cnt = 0;
         // TODO: Implement prefix matching
         if (rk->rk_telemetry.delta_temporality) {
-                matched_metrics[*matched_count] =
+                matched_metrics[rk->rk_telemetry.matched_metrics_cnt] =
                     METRIC_CONNECTION_CREATION_RATE;
-                *matched_count += 1;
+                rk->rk_telemetry.matched_metrics_cnt += 1;
         } else {
-                matched_metrics[*matched_count] =
+                matched_metrics[rk->rk_telemetry.matched_metrics_cnt] =
                     METRIC_CONNECTION_CREATION_TOTAL;
-                *matched_count += 1;
+                rk->rk_telemetry.matched_metrics_cnt += 1;
         }
 
         return matched_metrics;
@@ -184,6 +186,9 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
 
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR &&
             rk->rk_telemetry.requested_metrics_cnt) {
+                rk->rk_telemetry.matched_metrics =
+                    rd_kafka_match_requested_metrics(rk);
+
                 /* Some metrics are requested. Start the timer accordingly */
                 next_scheduled = rd_jitter(0.8, 1.2) * 1000 *
                                  rk->rk_telemetry.push_interval_ms;
@@ -219,13 +224,11 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         // serialize.
 
         size_t matched_metrics_count;
-        MetricNames *matched_metrics =
-            rd_kafka_match_requested_metrics(rk, &matched_metrics_count);
 
         // TODO: Update dummy values
         size_t metrics_payload_size;
         const void *metrics_payload = rd_kafka_telemetry_encode_metrics(
-            rk, matched_metrics, &matched_metrics_count, &metrics_payload_size);
+            rk, &metrics_payload_size);
         // TODO: Use rd_kafka_compression_t
         const char *compression_type = "gzip";
 
@@ -239,8 +242,6 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                       NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                                       rd_kafka_handle_PushTelemetry, NULL);
         rd_free(metrics_payload);
-        rd_free(matched_metrics);
-
         rk->rk_telemetry.state = terminating
                                      ? RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT
                                      : RD_KAFKA_TELEMETRY_PUSH_SENT;

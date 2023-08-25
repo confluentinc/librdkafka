@@ -267,6 +267,13 @@ static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
         return types[type];
 }
 
+typedef enum {
+        METRIC_CONNECTION_CREATION_TOTAL,
+        METRIC_CONNECTION_CREATION_RATE,
+        // add more metrics here
+        METRIC_COUNT
+} rd_kafka_telemetry_metric_name_t;
+
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */
@@ -675,6 +682,8 @@ struct rd_kafka_s {
                 rd_bool_t delta_temporality;
                 char **requested_metrics;
                 size_t requested_metrics_cnt;
+                rd_kafka_telemetry_metric_name_t *matched_metrics;
+                size_t matched_metrics_cnt;
         } rk_telemetry;
 
         /* Test mocks */

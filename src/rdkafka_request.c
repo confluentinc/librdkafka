@@ -211,6 +211,7 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
  */
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields) {
         const int log_decode_errors = LOG_ERR;
@@ -226,12 +227,19 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                 rd_kafkap_str_t kTopic;
                 int32_t PartArrayCnt;
                 char *topic;
+                rd_kafka_uuid_t topic_id;
 
-                rd_kafka_buf_read_str(rkbuf, &kTopic);
+                if(use_topic_id) {
+                        topic = "";
+                        rd_kafka_buf_read_uuid(rkbuf, &topic_id);
+                } else {
+                        rd_kafka_buf_read_str(rkbuf, &kTopic);
+                        RD_KAFKAP_STR_DUPA(&topic, &kTopic);
+                }
+
                 rd_kafka_buf_read_arraycnt(rkbuf, &PartArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
 
-                RD_KAFKAP_STR_DUPA(&topic, &kTopic);
 
                 while (PartArrayCnt-- > 0) {
                         int32_t Partition = -1, Epoch = -1234,
@@ -270,7 +278,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                         rd_assert(!*"metadata not implemented");
                                         break;
                                 case RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP:
-                                        break;
+                                        /* Fallback */
                                 case RD_KAFKA_TOPIC_PARTITION_FIELD_END:
                                         break;
                                 }
@@ -278,6 +286,8 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
 
                         rktpar = rd_kafka_topic_partition_list_add(parts, topic,
                                                                    Partition);
+                        if(use_topic_id)
+                                rd_kafka_topic_partition_set_topic_id(rktpar, topic_id);
                         /* Use dummy sentinel values that are unlikely to be
                          * seen from the broker to know if we are to set these
                          * fields or not. */
@@ -804,7 +814,7 @@ rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
                             : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
             RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-        *offsets = rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields);
+        *offsets = rd_kafka_buf_read_topic_partitions(rkbuf, rd_false, 0, fields);
         if (!*offsets)
                 goto err_parse;
 

@@ -1,7 +1,7 @@
 # Configuration properties
 ## Global configuration properties
 
-Property                                 | C/P | Range           |       Default | Importance | Description              
+Property                                 | C/P | Range           |       Default | Importance | Description
 -----------------------------------------|-----|-----------------|--------------:|------------| --------------------------
 builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4, sasl_gssapi, sasl_plain, sasl_scram, plugins, zstd, sasl_oauthbearer, http, oidc | low        | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | low        | Client identifier. <br>*Type: string*
@@ -158,7 +158,7 @@ client.dns.lookup                        |  *  | use_all_dns_ips, resolve_canoni
 
 ## Topic configuration properties
 
-Property                                 | C/P | Range           |       Default | Importance | Description              
+Property                                 | C/P | Range           |       Default | Importance | Description
 -----------------------------------------|-----|-----------------|--------------:|------------| --------------------------
 request.required.acks                    |  P  | -1 .. 1000      |            -1 | high       | This field indicates the number of acknowledgements the leader broker must receive from ISR brokers before responding to the request: *0*=Broker does not send any response/ack to client, *-1* or *all*=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than `min.insync.replicas` (broker configuration) in the ISR set the produce request will fail. <br>*Type: integer*
 acks                                     |  P  | -1 .. 1000      |            -1 | high       | Alias for `request.required.acks`: This field indicates the number of acknowledgements the leader broker must receive from ISR brokers before responding to the request: *0*=Broker does not send any response/ack to client, *-1* or *all*=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than `min.insync.replicas` (broker configuration) in the ISR set the produce request will fail. <br>*Type: integer*

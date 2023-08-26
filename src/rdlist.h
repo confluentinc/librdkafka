@@ -381,7 +381,6 @@ static RD_UNUSED void *rd_list_string_copy(const void *elem, void *opaque) {
 }
 
 
-
 /**
  * @brief Move elements from \p src to \p dst.
  *

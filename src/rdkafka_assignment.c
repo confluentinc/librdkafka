@@ -543,7 +543,8 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                              partitions_to_query->cnt);
 
                 rd_kafka_OffsetFetchRequest(
-                    coord, rk->rk_group_id->str, partitions_to_query,
+                    coord, rk->rk_group_id->str, partitions_to_query, rd_false,
+                    -1, NULL,
                     rk->rk_conf.isolation_level ==
                         RD_KAFKA_READ_COMMITTED /*require_stable_offsets*/,
                     0, /* Timeout */

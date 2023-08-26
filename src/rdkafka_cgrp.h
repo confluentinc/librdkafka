@@ -56,6 +56,7 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafkap_str_t *rkcg_member_id; /* Last assigned MemberId */
         rd_kafkap_str_t *rkcg_group_instance_id;
         const rd_kafkap_str_t *rkcg_client_id;
+        rd_kafkap_str_t *rkcg_client_rack;
 
         enum {
                 /* Init state */
@@ -181,6 +182,9 @@ typedef struct rd_kafka_cgrp_s {
 
         int32_t rkcg_generation_id; /* Current generation id */
 
+        int32_t rkcg_member_epoch; /* KIP848TODO: Merge this and Generation Id
+                                      field */
+
         rd_kafka_assignor_t *rkcg_assignor; /**< The current partition
                                              *   assignor. used by both
                                              *   leader and members. */
@@ -226,6 +230,7 @@ typedef struct rd_kafka_cgrp_s {
          *  completes. The waiting subscription is stored here.
          *  Mutually exclusive with rkcg_next_subscription. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
+        rd_kafkap_str_t *rkcg_next_subscription_regex;
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe
@@ -260,6 +265,14 @@ typedef struct rd_kafka_cgrp_s {
         /** The partitions to incrementally assign following a
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
+        // Added with KIP-848. Not being used right now.
+        rd_kafka_topic_partition_list_t *rkcg_current_target_assignment;
+        // Target assignment present in the CGHB protocol will be updated here
+        // only.
+        rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
+
+        rd_bool_t rkcg_assignment_inprogress;
+        rd_bool_t rkcg_revocation_inprogress;
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */

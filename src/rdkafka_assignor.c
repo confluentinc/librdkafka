@@ -159,8 +159,8 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, owned_partitions,
                     rd_false /*don't skip invalid offsets*/,
-                    rd_false /*any offset*/, rd_false /* don't use topic_id */,
-                    fields);
+                    rd_false /*any offset*/, rd_false /* use_topic name */,
+                    rd_true, fields);
         }
 
         /* Following data is ignored by consumer version < 2 */

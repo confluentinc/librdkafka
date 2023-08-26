@@ -230,7 +230,6 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                 rd_kafka_uuid_t topic_id;
 
                 if(use_topic_id) {
-                        topic = "";
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
                 } else {
                         rd_kafka_buf_read_str(rkbuf, &kTopic);
@@ -284,10 +283,13 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                 }
                         }
 
-                        rktpar = rd_kafka_topic_partition_list_add(parts, topic,
-                                                                   Partition);
-                        if(use_topic_id)
-                                rd_kafka_topic_partition_set_topic_id(rktpar, topic_id);
+                        if(use_topic_id) {
+                                rktpar = rd_kafka_topic_partition_list_add_with_topic_id(parts, topic_id, Partition);
+                        } else {
+                                rktpar = rd_kafka_topic_partition_list_add(parts, topic,
+                                                                           Partition);
+                        }
+
                         /* Use dummy sentinel values that are unlikely to be
                          * seen from the broker to know if we are to set these
                          * fields or not. */

@@ -695,6 +695,11 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
     rd_kafka_toppar_t *rktp,
     const rd_kafka_topic_partition_private_t *parpriv);
 
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_add_with_topic_id(rd_kafka_topic_partition_list_t *rktparlist,
+                                                rd_kafka_uuid_t topic_id,
+                                                int32_t partition);
+
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     rd_kafka_topic_partition_list_t *rktparlist,
     const char *topic,
@@ -788,6 +793,20 @@ rd_kafka_topic_partition_get_private(rd_kafka_topic_partition_t *rktpar) {
                 rktpar->_private              = parpriv;
         }
 
+        return parpriv;
+}
+
+/**
+ * Creates a new empty topic partition private.
+ *
+ * This struct is dynamically allocated and hence should be freed.
+ */
+static RD_UNUSED RD_INLINE rd_kafka_topic_partition_private_t *
+rd_kafka_topic_partition_private_new() {
+        rd_kafka_topic_partition_private_t *parpriv;
+        parpriv                       = rd_calloc(1, sizeof(*parpriv));
+        parpriv->leader_epoch         = -1;
+        parpriv->current_leader_epoch = -1;
         return parpriv;
 }
 

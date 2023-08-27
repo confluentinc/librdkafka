@@ -2317,6 +2317,7 @@ done:
  */
 rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const rd_list_t *topics,
+                                             rd_list_t *topic_ids,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
@@ -2327,13 +2328,18 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         size_t of_TopicArrayCnt;
         int features;
         int topic_cnt  = topics ? rd_list_cnt(topics) : 0;
+        int topic_id_cnt;
+        int total_topic_cnt;
         int *full_incr = NULL;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_Metadata, 0, 12, &features);
 
+        topic_id_cnt = (ApiVersion >= 10 && topic_ids) ? rd_list_cnt(topic_ids) : 0;
+        total_topic_cnt = topic_cnt + topic_id_cnt;
+
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
-                                                 4 + (50 * topic_cnt) + 1,
+                                                 4 + ((50 /*topic name */ + 16 /* topic id */) * total_topic_cnt) + 1,
                                                  ApiVersion >= 9);
 
         if (!reason)
@@ -2346,7 +2352,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         /* TopicArrayCnt */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
-        if (!topics) {
+        if (!topics && !topic_ids) {
                 /* v0: keep 0, brokers only not available,
                  * request all topics */
                 /* v1-8: 0 means empty array, brokers only */
@@ -2361,7 +2367,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                 full_incr =
                     &rkb->rkb_rk->rk_metadata_cache.rkmc_full_brokers_sent;
 
-        } else if (topic_cnt == 0) {
+        } else if (total_topic_cnt == 0) {
                 /* v0: keep 0, request all topics */
                 if (ApiVersion >= 1 && ApiVersion < 9) {
                         /* v1-8: update to -1, all topics */
@@ -2382,7 +2388,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         } else {
                 /* request cnt topics */
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
-                                               topic_cnt);
+                                               total_topic_cnt);
 
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "Request metadata for %d topic(s): "
@@ -2428,12 +2434,27 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
 
                 RD_LIST_FOREACH(topic, topics, i) {
                         if (ApiVersion >= 10) {
-                                /* FIXME: Not supporting topic id in the request
-                                 * right now. Update this to correct topic
-                                 * id once KIP-516 is fully implemented. */
                                 rd_kafka_buf_write_uuid(rkbuf, &zero_uuid);
                         }
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
+                        /* Tags for previous topic */
+                        rd_kafka_buf_write_tags(rkbuf);
+                }
+        }
+
+        if (ApiVersion >= 10 && topic_id_cnt > 0) {
+                int i;
+                rd_kafka_uuid_t *topic_id;
+
+                /* KIP848TODO: Properly handle usecases for this similar to Metadata.topics */
+                /* Maintain a copy of the topics list so we can purge
+                 * hints from the metadata cache on error. */
+                rkbuf->rkbuf_u.Metadata.topic_ids =
+                    rd_list_copy(topic_ids, rd_list_uuid_copy, NULL);
+
+                RD_LIST_FOREACH(topic_id, topic_ids, i) {
+                        rd_kafka_buf_write_uuid(rkbuf, topic_id);
+                        rd_kafka_buf_write_str(rkbuf, NULL, -1);
                         /* Tags for previous topic */
                         rd_kafka_buf_write_tags(rkbuf);
                 }

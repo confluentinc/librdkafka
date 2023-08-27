@@ -600,7 +600,7 @@ typedef struct rd_kafka_uuid_s {
  * @return A newly allocated UUID.
  */
 static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
-        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t *));
+        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t));
         return uuid;
 }
 
@@ -653,8 +653,37 @@ rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
         return uuid->base64str;
 }
 
+/**
+ * Returns a newly allocated copy of the given UUID.
+ *
+ * @param uuid UUID to copy.
+ * @return Copy of the provided UUID.
+ *
+ * @remark Dynamically allocated. Deallocate (free) after use.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_copy(rd_kafka_uuid_t *uuid) {
+        rd_kafka_uuid_t *copy_uuid = rd_kafka_uuid_new();
+        copy_uuid->most_significant_bits = uuid->most_significant_bits;
+        copy_uuid->least_significant_bits = uuid->least_significant_bits;
+        if (*uuid->base64str)
+                memcpy(copy_uuid->base64str, uuid->base64str, 23);
+        printf("Copied Topic Id -> %s\n", copy_uuid->base64str);
+        return copy_uuid;
+}
+
+/**
+ * @brief UUID copier for rd_list_copy()
+ */
+static RD_UNUSED void *rd_list_uuid_copy(const void *elem, void *opaque) {
+        return (void *)rd_kafka_uuid_copy((rd_kafka_uuid_t *) elem);
+}
+
 static RD_INLINE RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid) {
         rd_free(uuid);
+}
+
+static RD_INLINE RD_UNUSED void rd_list_uuid_destroy(void *uuid) {
+        rd_kafka_uuid_destroy((rd_kafka_uuid_t *) uuid);
 }
 
 

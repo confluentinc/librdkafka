@@ -2049,7 +2049,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
 
                 rd_kafka_MetadataRequest(
-                    rkb, &topics, "partition assignor",
+                    rkb, &topics, NULL, "partition assignor",
                     rd_false /*!allow_auto_create*/,
                     /* cgrp_update=false:
                      * Since the subscription list may not be identical
@@ -2521,9 +2521,9 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         if(are_assignments_present) {
                 int8_t assignment_error_code;
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;
-                rd_kafka_topic_partition_list_t *pending_topic_partitions;
-                int16_t metadata_version;
-                rd_kafkap_bytes_t metadata_bytes;
+//                rd_kafka_topic_partition_list_t *pending_topic_partitions;
+//                int16_t metadata_version;
+//                rd_kafkap_bytes_t metadata_bytes;
 
                 rd_kafka_buf_read_i8(rkbuf, &assignment_error_code);
                 if(assignment_error_code) {
@@ -2539,9 +2539,23 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                                        rd_true,
                                                        0,
                                                        assignments_fields);
-                rd_kafka_uuid_t topic_id =
-                    rd_kafka_topic_partition_get_topic_id(&assigned_topic_partitions->elems[0]);
-                printf("Assigned Topic id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
+
+
+                if(assigned_topic_partitions && assigned_topic_partitions->cnt > 0) {
+
+                        rd_kafka_uuid_t topic_id =
+                            rd_kafka_topic_partition_get_topic_id(&assigned_topic_partitions->elems[0]);
+                        printf("Assigned Topic id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
+
+                        rd_list_t *topic_ids = rd_list_new(1, rd_list_uuid_destroy);
+                        rd_list_add(topic_ids, rd_kafka_uuid_copy(&topic_id));
+                        rd_kafka_MetadataRequest(
+                            rkb, NULL, topic_ids, "ConsumerGroupHeartbeat API Response",
+                            rd_false /*!allow_auto_create*/,
+                            rd_false,
+                            rd_false, NULL);
+                        rd_list_destroy(topic_ids);
+                }
 
 //                pending_topic_partitions =
 //                    rd_kafka_buf_read_topic_partitions(rkbuf,

@@ -2846,6 +2846,7 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
                 parpriv_copy->current_leader_epoch =
                     parpriv->current_leader_epoch;
                 parpriv_copy->topic_id = parpriv->topic_id;
+                printf("ParPriv Copy Topic Id -> %s\n", rd_kafka_uuid_base64str(&parpriv_copy->topic_id));
         } else if (rktp) {
                 rd_kafka_topic_partition_private_t *parpriv_copy =
                     rd_kafka_topic_partition_get_private(rktpar);

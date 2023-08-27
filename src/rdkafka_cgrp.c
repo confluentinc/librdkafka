@@ -2502,6 +2502,63 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         printf("Should Compute Assignment is '%s'\n", should_compute_assignment ? "true" : "false");
         printf("Heartbeat Interval Ms is '%d'\n", heartbeat_interval_ms);
 
+        /*
+         * assignment => error [assigned_topic_partitions] [pending_topic_partitions] metadata_version metadata_bytes TAG_BUFFER
+            error => INT8
+            assigned_topic_partitions => topic_id [partitions] TAG_BUFFER
+              topic_id => UUID
+              partitions => INT32
+            pending_topic_partitions => topic_id [partitions] TAG_BUFFER
+              topic_id => UUID
+              partitions => INT32
+            metadata_version => INT16
+            metadata_bytes => COMPACT_BYTES
+         */
+
+        int8_t are_assignments_present;
+        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
+
+        if(are_assignments_present) {
+                int8_t assignment_error_code;
+                rd_kafka_topic_partition_list_t *assigned_topic_partitions;
+                rd_kafka_topic_partition_list_t *pending_topic_partitions;
+                int16_t metadata_version;
+                rd_kafkap_bytes_t metadata_bytes;
+
+                rd_kafka_buf_read_i8(rkbuf, &assignment_error_code);
+                if(assignment_error_code) {
+                        err = (int16_t ) assignment_error_code;
+                        goto err;
+                }
+
+                const rd_kafka_topic_partition_field_t
+                    assignments_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                                                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                assigned_topic_partitions =
+                    rd_kafka_buf_read_topic_partitions(rkbuf,
+                                                       rd_true,
+                                                       0,
+                                                       assignments_fields);
+                rd_kafka_uuid_t topic_id =
+                    rd_kafka_topic_partition_get_topic_id(&assigned_topic_partitions->elems[0]);
+                printf("Assigned Topic id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
+
+//                pending_topic_partitions =
+//                    rd_kafka_buf_read_topic_partitions(rkbuf,
+//                                                       rd_true,
+//                                                       0,
+//                                                       assignments_fields);
+
+//                /* Metadata information -> not used right now */
+//                rd_kafka_buf_read_i16(rkbuf, &metadata_version);
+//                if(metadata_version) {
+//                        rd_kafka_buf_read_kbytes_varint(rkbuf, &metadata_bytes);
+//                }
+        }
+
+        return;
+
+
 err_parse:
         err = rkbuf->rkbuf_err;
 

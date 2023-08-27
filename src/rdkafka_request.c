@@ -231,6 +231,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
 
                 if(use_topic_id) {
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
+                        printf("Buffer Topic Id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
                 } else {
                         rd_kafka_buf_read_str(rkbuf, &kTopic);
                         RD_KAFKAP_STR_DUPA(&topic, &kTopic);
@@ -2048,7 +2049,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
                                                                                        RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, current_assignments, rd_false,
-                    rd_false, current_assignments_fields);
+                    rd_false, rd_true, current_assignments_fields);
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
         }

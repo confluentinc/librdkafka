@@ -268,10 +268,10 @@ static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
 }
 
 typedef enum {
-        METRIC_CONNECTION_CREATION_TOTAL,
-        METRIC_CONNECTION_CREATION_RATE,
+        RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_RATE,
         // add more metrics here
-        METRIC_COUNT
+        RD_KAFKA_TELEMETRY_METRIC__CNT
 } rd_kafka_telemetry_metric_name_t;
 
 /**

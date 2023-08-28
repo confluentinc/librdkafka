@@ -2865,6 +2865,21 @@ rd_kafka_topic_partition_list_add(rd_kafka_topic_partition_list_t *rktparlist,
 }
 
 
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_uuid_t topic_id,
+    int32_t partition) {
+        rd_kafka_topic_partition_private_t *parpriv =
+            rd_kafka_topic_partition_private_new();
+        rd_kafka_topic_partition_t *rktpar;
+        parpriv->topic_id = topic_id;
+        rktpar            = rd_kafka_topic_partition_list_add0(
+            __FUNCTION__, __LINE__, rktparlist, "", partition, NULL, parpriv);
+        rd_kafka_topic_partition_private_destroy(parpriv);
+        return rktpar;
+}
+
+
 /**
  * Adds a consecutive list of partitions to a list
  */

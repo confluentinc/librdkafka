@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2020 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,13 +61,13 @@ extern "C" {
 #ifndef WIN32_MEAN_AND_LEAN
 #define WIN32_MEAN_AND_LEAN
 #endif
-#include <winsock2.h>  /* for sockaddr, .. */
+#include <winsock2.h> /* for sockaddr, .. */
 #ifndef _SSIZE_T_DEFINED
 #define _SSIZE_T_DEFINED
 typedef SSIZE_T ssize_t;
 #endif
 #define RD_UNUSED
-#define RD_INLINE __inline
+#define RD_INLINE     __inline
 #define RD_DEPRECATED __declspec(deprecated)
 #define RD_FORMAT(...)
 #undef RD_EXPORT
@@ -92,7 +93,8 @@ typedef SSIZE_T ssize_t;
 #define RD_DEPRECATED __attribute__((deprecated))
 
 #if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
-#define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
+#define RD_HAS_STATEMENT_EXPRESSIONS
+#define RD_FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #else
 #define RD_FORMAT(...)
 #endif
@@ -109,29 +111,36 @@ typedef SSIZE_T ssize_t;
  * @returns \p RET
  */
 #if LIBRDKAFKA_TYPECHECKS
-#define _LRK_TYPECHECK(RET,TYPE,ARG)                    \
-        ({ if (0) { TYPE __t RD_UNUSED = (ARG); } RET; })
+#define _LRK_TYPECHECK(RET, TYPE, ARG)                                         \
+        ({                                                                     \
+                if (0) {                                                       \
+                        TYPE __t RD_UNUSED = (ARG);                            \
+                }                                                              \
+                RET;                                                           \
+        })
 
-#define _LRK_TYPECHECK2(RET,TYPE,ARG,TYPE2,ARG2)        \
-        ({                                              \
-                if (0) {                                \
-                        TYPE __t RD_UNUSED = (ARG);     \
-                        TYPE2 __t2 RD_UNUSED = (ARG2);  \
-                }                                       \
-                RET; })
+#define _LRK_TYPECHECK2(RET, TYPE, ARG, TYPE2, ARG2)                           \
+        ({                                                                     \
+                if (0) {                                                       \
+                        TYPE __t RD_UNUSED   = (ARG);                          \
+                        TYPE2 __t2 RD_UNUSED = (ARG2);                         \
+                }                                                              \
+                RET;                                                           \
+        })
 
-#define _LRK_TYPECHECK3(RET,TYPE,ARG,TYPE2,ARG2,TYPE3,ARG3) \
-        ({                                              \
-                if (0) {                                \
-                        TYPE __t RD_UNUSED = (ARG);     \
-                        TYPE2 __t2 RD_UNUSED = (ARG2);  \
-                        TYPE3 __t3 RD_UNUSED = (ARG3);  \
-                }                                       \
-                RET; })
+#define _LRK_TYPECHECK3(RET, TYPE, ARG, TYPE2, ARG2, TYPE3, ARG3)              \
+        ({                                                                     \
+                if (0) {                                                       \
+                        TYPE __t RD_UNUSED   = (ARG);                          \
+                        TYPE2 __t2 RD_UNUSED = (ARG2);                         \
+                        TYPE3 __t3 RD_UNUSED = (ARG3);                         \
+                }                                                              \
+                RET;                                                           \
+        })
 #else
-#define _LRK_TYPECHECK(RET,TYPE,ARG)  (RET)
-#define _LRK_TYPECHECK2(RET,TYPE,ARG,TYPE2,ARG2) (RET)
-#define _LRK_TYPECHECK3(RET,TYPE,ARG,TYPE2,ARG2,TYPE3,ARG3) (RET)
+#define _LRK_TYPECHECK(RET, TYPE, ARG)                            (RET)
+#define _LRK_TYPECHECK2(RET, TYPE, ARG, TYPE2, ARG2)              (RET)
+#define _LRK_TYPECHECK3(RET, TYPE, ARG, TYPE2, ARG2, TYPE3, ARG3) (RET)
 #endif
 
 /* @endcond */
@@ -158,7 +167,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x010802ff
+#define RD_KAFKA_VERSION 0x020200ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -177,7 +186,7 @@ int rd_kafka_version(void);
  * @returns Version string
  */
 RD_EXPORT
-const char *rd_kafka_version_str (void);
+const char *rd_kafka_version_str(void);
 
 /**@}*/
 
@@ -198,8 +207,8 @@ const char *rd_kafka_version_str (void);
  * @sa rd_kafka_new()
  */
 typedef enum rd_kafka_type_t {
-	RD_KAFKA_PRODUCER, /**< Producer client */
-	RD_KAFKA_CONSUMER  /**< Consumer client */
+        RD_KAFKA_PRODUCER, /**< Producer client */
+        RD_KAFKA_CONSUMER  /**< Consumer client */
 } rd_kafka_type_t;
 
 
@@ -209,9 +218,9 @@ typedef enum rd_kafka_type_t {
  * @sa rd_kafka_message_timestamp()
  */
 typedef enum rd_kafka_timestamp_type_t {
-	RD_KAFKA_TIMESTAMP_NOT_AVAILABLE,   /**< Timestamp not available */
-	RD_KAFKA_TIMESTAMP_CREATE_TIME,     /**< Message creation time */
-	RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME  /**< Log append time */
+        RD_KAFKA_TIMESTAMP_NOT_AVAILABLE,  /**< Timestamp not available */
+        RD_KAFKA_TIMESTAMP_CREATE_TIME,    /**< Message creation time */
+        RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME /**< Log append time */
 } rd_kafka_timestamp_type_t;
 
 
@@ -232,8 +241,10 @@ const char *rd_kafka_get_debug_contexts(void);
  *             linking another version of the library.
  *             Use rd_kafka_get_debug_contexts() instead.
  */
-#define RD_KAFKA_DEBUG_CONTEXTS \
-        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin,eos,mock,assignor,conf"
+#define RD_KAFKA_DEBUG_CONTEXTS                                                \
+        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,"   \
+        "security,fetch,interceptor,plugin,consumer,admin,eos,mock,assignor,"  \
+        "conf"
 
 
 /* @cond NO_DOC */
@@ -246,10 +257,11 @@ typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 typedef struct rd_kafka_op_s rd_kafka_event_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
 typedef struct rd_kafka_consumer_group_metadata_s
-rd_kafka_consumer_group_metadata_t;
+    rd_kafka_consumer_group_metadata_t;
 typedef struct rd_kafka_error_s rd_kafka_error_t;
 typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 typedef struct rd_kafka_group_result_s rd_kafka_group_result_t;
+typedef struct rd_kafka_acl_result_s rd_kafka_acl_result_t;
 /* @endcond */
 
 
@@ -266,80 +278,80 @@ typedef struct rd_kafka_group_result_s rd_kafka_group_result_t;
  * @sa Use rd_kafka_err2str() to translate an error code a human readable string
  */
 typedef enum {
-	/* Internal errors to rdkafka: */
-	/** Begin internal error codes */
-	RD_KAFKA_RESP_ERR__BEGIN = -200,
-	/** Received message is incorrect */
-	RD_KAFKA_RESP_ERR__BAD_MSG = -199,
-	/** Bad/unknown compression */
-	RD_KAFKA_RESP_ERR__BAD_COMPRESSION = -198,
-	/** Broker is going away */
-	RD_KAFKA_RESP_ERR__DESTROY = -197,
-	/** Generic failure */
-	RD_KAFKA_RESP_ERR__FAIL = -196,
-	/** Broker transport failure */
-	RD_KAFKA_RESP_ERR__TRANSPORT = -195,
-	/** Critical system resource */
-	RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE = -194,
-	/** Failed to resolve broker */
-	RD_KAFKA_RESP_ERR__RESOLVE = -193,
-	/** Produced message timed out*/
-	RD_KAFKA_RESP_ERR__MSG_TIMED_OUT = -192,
-	/** Reached the end of the topic+partition queue on
-	 * the broker. Not really an error.
-	 * This event is disabled by default,
-	 * see the `enable.partition.eof` configuration property. */
-	RD_KAFKA_RESP_ERR__PARTITION_EOF = -191,
-	/** Permanent: Partition does not exist in cluster. */
-	RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION = -190,
-	/** File or filesystem error */
-	RD_KAFKA_RESP_ERR__FS = -189,
-	 /** Permanent: Topic does not exist in cluster. */
-	RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC = -188,
-	/** All broker connections are down. */
-	RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN = -187,
-	/** Invalid argument, or invalid configuration */
-	RD_KAFKA_RESP_ERR__INVALID_ARG = -186,
-	/** Operation timed out */
-	RD_KAFKA_RESP_ERR__TIMED_OUT = -185,
-	/** Queue is full */
-	RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,
-	/** ISR count < required.acks */
+        /* Internal errors to rdkafka: */
+        /** Begin internal error codes */
+        RD_KAFKA_RESP_ERR__BEGIN = -200,
+        /** Received message is incorrect */
+        RD_KAFKA_RESP_ERR__BAD_MSG = -199,
+        /** Bad/unknown compression */
+        RD_KAFKA_RESP_ERR__BAD_COMPRESSION = -198,
+        /** Broker is going away */
+        RD_KAFKA_RESP_ERR__DESTROY = -197,
+        /** Generic failure */
+        RD_KAFKA_RESP_ERR__FAIL = -196,
+        /** Broker transport failure */
+        RD_KAFKA_RESP_ERR__TRANSPORT = -195,
+        /** Critical system resource */
+        RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE = -194,
+        /** Failed to resolve broker */
+        RD_KAFKA_RESP_ERR__RESOLVE = -193,
+        /** Produced message timed out*/
+        RD_KAFKA_RESP_ERR__MSG_TIMED_OUT = -192,
+        /** Reached the end of the topic+partition queue on
+         * the broker. Not really an error.
+         * This event is disabled by default,
+         * see the `enable.partition.eof` configuration property. */
+        RD_KAFKA_RESP_ERR__PARTITION_EOF = -191,
+        /** Permanent: Partition does not exist in cluster. */
+        RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION = -190,
+        /** File or filesystem error */
+        RD_KAFKA_RESP_ERR__FS = -189,
+        /** Permanent: Topic does not exist in cluster. */
+        RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC = -188,
+        /** All broker connections are down. */
+        RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN = -187,
+        /** Invalid argument, or invalid configuration */
+        RD_KAFKA_RESP_ERR__INVALID_ARG = -186,
+        /** Operation timed out */
+        RD_KAFKA_RESP_ERR__TIMED_OUT = -185,
+        /** Queue is full */
+        RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,
+        /** ISR count < required.acks */
         RD_KAFKA_RESP_ERR__ISR_INSUFF = -183,
-	/** Broker node update */
+        /** Broker node update */
         RD_KAFKA_RESP_ERR__NODE_UPDATE = -182,
-	/** SSL error */
-	RD_KAFKA_RESP_ERR__SSL = -181,
-	/** Waiting for coordinator to become available. */
+        /** SSL error */
+        RD_KAFKA_RESP_ERR__SSL = -181,
+        /** Waiting for coordinator to become available. */
         RD_KAFKA_RESP_ERR__WAIT_COORD = -180,
-	/** Unknown client group */
+        /** Unknown client group */
         RD_KAFKA_RESP_ERR__UNKNOWN_GROUP = -179,
-	/** Operation in progress */
+        /** Operation in progress */
         RD_KAFKA_RESP_ERR__IN_PROGRESS = -178,
-	 /** Previous operation in progress, wait for it to finish. */
+        /** Previous operation in progress, wait for it to finish. */
         RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS = -177,
-	 /** This operation would interfere with an existing subscription */
+        /** This operation would interfere with an existing subscription */
         RD_KAFKA_RESP_ERR__EXISTING_SUBSCRIPTION = -176,
-	/** Assigned partitions (rebalance_cb) */
+        /** Assigned partitions (rebalance_cb) */
         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS = -175,
-	/** Revoked partitions (rebalance_cb) */
+        /** Revoked partitions (rebalance_cb) */
         RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS = -174,
-	/** Conflicting use */
+        /** Conflicting use */
         RD_KAFKA_RESP_ERR__CONFLICT = -173,
-	/** Wrong state */
+        /** Wrong state */
         RD_KAFKA_RESP_ERR__STATE = -172,
-	/** Unknown protocol */
+        /** Unknown protocol */
         RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL = -171,
-	/** Not implemented */
+        /** Not implemented */
         RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED = -170,
-	/** Authentication failure*/
-	RD_KAFKA_RESP_ERR__AUTHENTICATION = -169,
-	/** No stored offset */
-	RD_KAFKA_RESP_ERR__NO_OFFSET = -168,
-	/** Outdated */
-	RD_KAFKA_RESP_ERR__OUTDATED = -167,
-	/** Timed out in queue */
-	RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE = -166,
+        /** Authentication failure*/
+        RD_KAFKA_RESP_ERR__AUTHENTICATION = -169,
+        /** No stored offset */
+        RD_KAFKA_RESP_ERR__NO_OFFSET = -168,
+        /** Outdated */
+        RD_KAFKA_RESP_ERR__OUTDATED = -167,
+        /** Timed out in queue */
+        RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE = -166,
         /** Feature not supported by broker */
         RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE = -165,
         /** Awaiting cache update */
@@ -392,110 +404,114 @@ typedef enum {
         RD_KAFKA_RESP_ERR__NOOP = -141,
         /** No offset to automatically reset to */
         RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET = -140,
+        /** Partition log truncation detected */
+        RD_KAFKA_RESP_ERR__LOG_TRUNCATION = -139,
 
-	/** End internal error codes */
-	RD_KAFKA_RESP_ERR__END = -100,
+        /** End internal error codes */
+        RD_KAFKA_RESP_ERR__END = -100,
 
-	/* Kafka broker errors: */
-	/** Unknown broker error */
-	RD_KAFKA_RESP_ERR_UNKNOWN = -1,
-	/** Success */
-	RD_KAFKA_RESP_ERR_NO_ERROR = 0,
-	/** Offset out of range */
-	RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE = 1,
-	/** Invalid message */
-	RD_KAFKA_RESP_ERR_INVALID_MSG = 2,
-	/** Unknown topic or partition */
-	RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART = 3,
-	/** Invalid message size */
-	RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE = 4,
-	/** Leader not available */
-	RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE = 5,
-	/** Not leader for partition */
-	RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION = 6,
-	/** Request timed out */
-	RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT = 7,
-	/** Broker not available */
-	RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE = 8,
-	/** Replica not available */
-	RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE = 9,
-	/** Message size too large */
-	RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE = 10,
-	/** StaleControllerEpochCode */
-	RD_KAFKA_RESP_ERR_STALE_CTRL_EPOCH = 11,
-	/** Offset metadata string too large */
-	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
-	/** Broker disconnected before response received */
-	RD_KAFKA_RESP_ERR_NETWORK_EXCEPTION = 13,
+        /* Kafka broker errors: */
+        /** Unknown broker error */
+        RD_KAFKA_RESP_ERR_UNKNOWN = -1,
+        /** Success */
+        RD_KAFKA_RESP_ERR_NO_ERROR = 0,
+        /** Offset out of range */
+        RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE = 1,
+        /** Invalid message */
+        RD_KAFKA_RESP_ERR_INVALID_MSG = 2,
+        /** Unknown topic or partition */
+        RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART = 3,
+        /** Invalid message size */
+        RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE = 4,
+        /** Leader not available */
+        RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE = 5,
+/** Not leader for partition */
+#define RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER                               \
+        RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION
+        RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION = 6,
+        /** Request timed out */
+        RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT = 7,
+        /** Broker not available */
+        RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE = 8,
+        /** Replica not available */
+        RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE = 9,
+        /** Message size too large */
+        RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE = 10,
+        /** StaleControllerEpochCode */
+        RD_KAFKA_RESP_ERR_STALE_CTRL_EPOCH = 11,
+        /** Offset metadata string too large */
+        RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
+        /** Broker disconnected before response received */
+        RD_KAFKA_RESP_ERR_NETWORK_EXCEPTION = 13,
         /** Coordinator load in progress */
         RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS = 14,
-        /** Group coordinator load in progress */
-#define RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS        \
+/** Group coordinator load in progress */
+#define RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS                               \
         RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS
         /** Coordinator not available */
         RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE = 15,
-        /** Group coordinator not available */
-#define RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE       \
+/** Group coordinator not available */
+#define RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE                      \
         RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE
         /** Not coordinator */
         RD_KAFKA_RESP_ERR_NOT_COORDINATOR = 16,
-        /** Not coordinator for group */
-#define RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP     \
+/** Not coordinator for group */
+#define RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP                            \
         RD_KAFKA_RESP_ERR_NOT_COORDINATOR
-	/** Invalid topic */
+        /** Invalid topic */
         RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION = 17,
-	/** Message batch larger than configured server segment size */
+        /** Message batch larger than configured server segment size */
         RD_KAFKA_RESP_ERR_RECORD_LIST_TOO_LARGE = 18,
-	/** Not enough in-sync replicas */
+        /** Not enough in-sync replicas */
         RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS = 19,
-	/** Message(s) written to insufficient number of in-sync replicas */
+        /** Message(s) written to insufficient number of in-sync replicas */
         RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND = 20,
-	/** Invalid required acks value */
+        /** Invalid required acks value */
         RD_KAFKA_RESP_ERR_INVALID_REQUIRED_ACKS = 21,
-	/** Specified group generation id is not valid */
+        /** Specified group generation id is not valid */
         RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION = 22,
-	/** Inconsistent group protocol */
+        /** Inconsistent group protocol */
         RD_KAFKA_RESP_ERR_INCONSISTENT_GROUP_PROTOCOL = 23,
-	/** Invalid group.id */
-	RD_KAFKA_RESP_ERR_INVALID_GROUP_ID = 24,
-	/** Unknown member */
+        /** Invalid group.id */
+        RD_KAFKA_RESP_ERR_INVALID_GROUP_ID = 24,
+        /** Unknown member */
         RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID = 25,
-	/** Invalid session timeout */
+        /** Invalid session timeout */
         RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT = 26,
-	/** Group rebalance in progress */
-	RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS = 27,
-	/** Commit offset data size is not valid */
+        /** Group rebalance in progress */
+        RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS = 27,
+        /** Commit offset data size is not valid */
         RD_KAFKA_RESP_ERR_INVALID_COMMIT_OFFSET_SIZE = 28,
-	/** Topic authorization failed */
+        /** Topic authorization failed */
         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED = 29,
-	/** Group authorization failed */
-	RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED = 30,
-	/** Cluster authorization failed */
-	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
-	/** Invalid timestamp */
-	RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP = 32,
-	/** Unsupported SASL mechanism */
-	RD_KAFKA_RESP_ERR_UNSUPPORTED_SASL_MECHANISM = 33,
-	/** Illegal SASL state */
-	RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE = 34,
-	/** Unuspported version */
-	RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION = 35,
-	/** Topic already exists */
-	RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS = 36,
-	/** Invalid number of partitions */
-	RD_KAFKA_RESP_ERR_INVALID_PARTITIONS = 37,
-	/** Invalid replication factor */
-	RD_KAFKA_RESP_ERR_INVALID_REPLICATION_FACTOR = 38,
-	/** Invalid replica assignment */
-	RD_KAFKA_RESP_ERR_INVALID_REPLICA_ASSIGNMENT = 39,
-	/** Invalid config */
-	RD_KAFKA_RESP_ERR_INVALID_CONFIG = 40,
-	/** Not controller for cluster */
-	RD_KAFKA_RESP_ERR_NOT_CONTROLLER = 41,
-	/** Invalid request */
-	RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
-	/** Message format on broker does not support request */
-	RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
+        /** Group authorization failed */
+        RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED = 30,
+        /** Cluster authorization failed */
+        RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
+        /** Invalid timestamp */
+        RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP = 32,
+        /** Unsupported SASL mechanism */
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_SASL_MECHANISM = 33,
+        /** Illegal SASL state */
+        RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE = 34,
+        /** Unuspported version */
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION = 35,
+        /** Topic already exists */
+        RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS = 36,
+        /** Invalid number of partitions */
+        RD_KAFKA_RESP_ERR_INVALID_PARTITIONS = 37,
+        /** Invalid replication factor */
+        RD_KAFKA_RESP_ERR_INVALID_REPLICATION_FACTOR = 38,
+        /** Invalid replica assignment */
+        RD_KAFKA_RESP_ERR_INVALID_REPLICA_ASSIGNMENT = 39,
+        /** Invalid config */
+        RD_KAFKA_RESP_ERR_INVALID_CONFIG = 40,
+        /** Not controller for cluster */
+        RD_KAFKA_RESP_ERR_NOT_CONTROLLER = 41,
+        /** Invalid request */
+        RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
+        /** Message format on broker does not support request */
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
         /** Policy violation */
         RD_KAFKA_RESP_ERR_POLICY_VIOLATION = 44,
         /** Broker received an out of order sequence number */
@@ -527,7 +543,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR_OPERATION_NOT_ATTEMPTED = 55,
         /** Disk error when trying to access log file on the disk */
         RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR = 56,
-        /** The user-specified log directory is not found in the broker config */
+        /** The user-specified log directory is not found in the broker config
+         */
         RD_KAFKA_RESP_ERR_LOG_DIR_NOT_FOUND = 57,
         /** SASL Authentication failed */
         RD_KAFKA_RESP_ERR_SASL_AUTHENTICATION_FAILED = 58,
@@ -624,9 +641,9 @@ typedef enum {
  *        the full set of librdkafka error codes.
  */
 struct rd_kafka_err_desc {
-	rd_kafka_resp_err_t code;/**< Error code */
-	const char *name;      /**< Error name, same as code enum sans prefix */
-	const char *desc;      /**< Human readable error description. */
+        rd_kafka_resp_err_t code; /**< Error code */
+        const char *name; /**< Error name, same as code enum sans prefix */
+        const char *desc; /**< Human readable error description. */
 };
 
 
@@ -634,9 +651,8 @@ struct rd_kafka_err_desc {
  * @brief Returns the full list of error codes.
  */
 RD_EXPORT
-void rd_kafka_get_err_descs (const struct rd_kafka_err_desc **errdescs,
-			     size_t *cntp);
-
+void rd_kafka_get_err_descs(const struct rd_kafka_err_desc **errdescs,
+                            size_t *cntp);
 
 
 
@@ -646,7 +662,7 @@ void rd_kafka_get_err_descs (const struct rd_kafka_err_desc **errdescs,
  * @param err Error code to translate
  */
 RD_EXPORT
-const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
+const char *rd_kafka_err2str(rd_kafka_resp_err_t err);
 
 
 
@@ -656,7 +672,7 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
  * @param err Error code to translate
  */
 RD_EXPORT
-const char *rd_kafka_err2name (rd_kafka_resp_err_t err);
+const char *rd_kafka_err2name(rd_kafka_resp_err_t err);
 
 
 /**
@@ -685,7 +701,7 @@ const char *rd_kafka_err2name (rd_kafka_resp_err_t err);
  *         and should not be used, use rd_kafka_last_error() instead.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_last_error (void);
+rd_kafka_resp_err_t rd_kafka_last_error(void);
 
 
 /**
@@ -712,8 +728,7 @@ rd_kafka_resp_err_t rd_kafka_last_error (void);
  *
  * @sa rd_kafka_last_error()
  */
-RD_EXPORT RD_DEPRECATED
-rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
+RD_EXPORT RD_DEPRECATED rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
 
 
 /**
@@ -728,9 +743,7 @@ rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
  * @deprecated Use rd_kafka_last_error() to retrieve the last error code
  *             set by the legacy librdkafka APIs.
  */
-RD_EXPORT RD_DEPRECATED
-int rd_kafka_errno (void);
-
+RD_EXPORT RD_DEPRECATED int rd_kafka_errno(void);
 
 
 
@@ -761,8 +774,8 @@ int rd_kafka_errno (void);
  *          any other error code.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
-                                          char *errstr, size_t errstr_size);
+rd_kafka_resp_err_t
+rd_kafka_fatal_error(rd_kafka_t *rk, char *errstr, size_t errstr_size);
 
 
 /**
@@ -782,9 +795,9 @@ rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
  *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous fatal error
  *          has already been triggered.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                           const char *reason);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_test_fatal_error(rd_kafka_t *rk,
+                                                        rd_kafka_resp_err_t err,
+                                                        const char *reason);
 
 
 /**
@@ -792,7 +805,7 @@ rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
  *          \p error is NULL.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_error_code (const rd_kafka_error_t *error);
+rd_kafka_resp_err_t rd_kafka_error_code(const rd_kafka_error_t *error);
 
 /**
  * @returns the error code name for \p error, e.g, "ERR_UNKNOWN_MEMBER_ID",
@@ -803,7 +816,7 @@ rd_kafka_resp_err_t rd_kafka_error_code (const rd_kafka_error_t *error);
  * @sa rd_kafka_err2name()
  */
 RD_EXPORT
-const char *rd_kafka_error_name (const rd_kafka_error_t *error);
+const char *rd_kafka_error_name(const rd_kafka_error_t *error);
 
 /**
  * @returns a human readable error string for \p error,
@@ -812,7 +825,7 @@ const char *rd_kafka_error_name (const rd_kafka_error_t *error);
  * @remark The lifetime of the returned pointer is the same as the error object.
  */
 RD_EXPORT
-const char *rd_kafka_error_string (const rd_kafka_error_t *error);
+const char *rd_kafka_error_string(const rd_kafka_error_t *error);
 
 
 /**
@@ -820,7 +833,7 @@ const char *rd_kafka_error_string (const rd_kafka_error_t *error);
  *          instance is no longer usable, else 0 (also if \p error is NULL).
  */
 RD_EXPORT
-int rd_kafka_error_is_fatal (const rd_kafka_error_t *error);
+int rd_kafka_error_is_fatal(const rd_kafka_error_t *error);
 
 
 /**
@@ -828,7 +841,7 @@ int rd_kafka_error_is_fatal (const rd_kafka_error_t *error);
  *          else 0 (also if \p error is NULL).
  */
 RD_EXPORT
-int rd_kafka_error_is_retriable (const rd_kafka_error_t *error);
+int rd_kafka_error_is_retriable(const rd_kafka_error_t *error);
 
 
 /**
@@ -842,7 +855,7 @@ int rd_kafka_error_is_retriable (const rd_kafka_error_t *error);
  *         by the transactional API.
  */
 RD_EXPORT
-int rd_kafka_error_txn_requires_abort (const rd_kafka_error_t *error);
+int rd_kafka_error_txn_requires_abort(const rd_kafka_error_t *error);
 
 /**
  * @brief Free and destroy an error object.
@@ -850,7 +863,7 @@ int rd_kafka_error_txn_requires_abort (const rd_kafka_error_t *error);
  * @remark As a conveniance it is permitted to pass a NULL \p error.
  */
 RD_EXPORT
-void rd_kafka_error_destroy (rd_kafka_error_t *error);
+void rd_kafka_error_destroy(rd_kafka_error_t *error);
 
 
 /**
@@ -862,9 +875,9 @@ void rd_kafka_error_destroy (rd_kafka_error_t *error);
  * The returned object must be destroyed with rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
-                                      const char *fmt, ...)
-        RD_FORMAT(printf, 2, 3);
+rd_kafka_error_t *rd_kafka_error_new(rd_kafka_resp_err_t code,
+                                     const char *fmt,
+                                     ...) RD_FORMAT(printf, 2, 3);
 
 
 /**
@@ -883,36 +896,61 @@ rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
  * @sa rd_kafka_topic_partition_list_new()
  */
 typedef struct rd_kafka_topic_partition_s {
-        char        *topic;             /**< Topic name */
-        int32_t      partition;         /**< Partition */
-	int64_t      offset;            /**< Offset */
-        void        *metadata;          /**< Metadata */
-        size_t       metadata_size;     /**< Metadata size */
-        void        *opaque;            /**< Opaque value for application use */
-        rd_kafka_resp_err_t err;        /**< Error code, depending on use. */
-        void       *_private;           /**< INTERNAL USE ONLY,
-                                         *   INITIALIZE TO ZERO, DO NOT TOUCH */
+        char *topic;             /**< Topic name */
+        int32_t partition;       /**< Partition */
+        int64_t offset;          /**< Offset */
+        void *metadata;          /**< Metadata */
+        size_t metadata_size;    /**< Metadata size */
+        void *opaque;            /**< Opaque value for application use */
+        rd_kafka_resp_err_t err; /**< Error code, depending on use. */
+        void *_private;          /**< INTERNAL USE ONLY,
+                                  *   INITIALIZE TO ZERO, DO NOT TOUCH,
+                                  *   DO NOT COPY, DO NOT SHARE WITH OTHER
+                                  *   rd_kafka_t INSTANCES. */
 } rd_kafka_topic_partition_t;
-
 
 /**
  * @brief Destroy a rd_kafka_topic_partition_t.
  * @remark This must not be called for elements in a topic partition list.
  */
 RD_EXPORT
-void rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar);
+void rd_kafka_topic_partition_destroy(rd_kafka_topic_partition_t *rktpar);
 
+
+/**
+ * @brief Sets the offset leader epoch (use -1 to clear).
+ *
+ * @param rktpar Partition object.
+ * @param leader_epoch Offset leader epoch, use -1 to reset.
+ *
+ * @remark See KIP-320 for more information.
+ */
+RD_EXPORT
+void rd_kafka_topic_partition_set_leader_epoch(
+    rd_kafka_topic_partition_t *rktpar,
+    int32_t leader_epoch);
+
+/**
+ * @returns the offset leader epoch, if relevant and known,
+ *          else -1.
+ *
+ * @param rktpar Partition object.
+ *
+ * @remark See KIP-320 for more information.
+ */
+RD_EXPORT
+int32_t rd_kafka_topic_partition_get_leader_epoch(
+    const rd_kafka_topic_partition_t *rktpar);
 
 /**
  * @brief A growable list of Topic+Partitions.
  *
  */
 typedef struct rd_kafka_topic_partition_list_s {
-        int cnt;               /**< Current number of elements */
-        int size;              /**< Current allocated size */
+        int cnt;                           /**< Current number of elements */
+        int size;                          /**< Current allocated size */
         rd_kafka_topic_partition_t *elems; /**< Element array[] */
 } rd_kafka_topic_partition_list_t;
-
 
 /**
  * @brief Create a new list/vector Topic+Partition container.
@@ -929,15 +967,14 @@ typedef struct rd_kafka_topic_partition_list_s {
  * @sa     rd_kafka_topic_partition_list_add()
  */
 RD_EXPORT
-rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size);
-
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new(int size);
 
 /**
  * @brief Free all resources used by the list and the list itself.
  */
 RD_EXPORT
-void
-rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rkparlist);
+void rd_kafka_topic_partition_list_destroy(
+    rd_kafka_topic_partition_list_t *rkparlist);
 
 /**
  * @brief Add topic+partition to list
@@ -950,8 +987,9 @@ rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rkparlis
  */
 RD_EXPORT
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
-                                   const char *topic, int32_t partition);
+rd_kafka_topic_partition_list_add(rd_kafka_topic_partition_list_t *rktparlist,
+                                  const char *topic,
+                                  int32_t partition);
 
 
 /**
@@ -963,11 +1001,11 @@ rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
  * @param stop       Last partition of range (inclusive)
  */
 RD_EXPORT
-void
-rd_kafka_topic_partition_list_add_range (rd_kafka_topic_partition_list_t
-                                         *rktparlist,
-                                         const char *topic,
-                                         int32_t start, int32_t stop);
+void rd_kafka_topic_partition_list_add_range(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t start,
+    int32_t stop);
 
 
 
@@ -983,9 +1021,10 @@ rd_kafka_topic_partition_list_add_range (rd_kafka_topic_partition_list_t
  * @remark Any held indices to elems[] are unusable after this call returns 1.
  */
 RD_EXPORT
-int
-rd_kafka_topic_partition_list_del (rd_kafka_topic_partition_list_t *rktparlist,
-				   const char *topic, int32_t partition);
+int rd_kafka_topic_partition_list_del(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition);
 
 
 /**
@@ -996,10 +1035,9 @@ rd_kafka_topic_partition_list_del (rd_kafka_topic_partition_list_t *rktparlist,
  * @sa rd_kafka_topic_partition_list_del()
  */
 RD_EXPORT
-int
-rd_kafka_topic_partition_list_del_by_idx (
-	rd_kafka_topic_partition_list_t *rktparlist,
-	int idx);
+int rd_kafka_topic_partition_list_del_by_idx(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    int idx);
 
 
 /**
@@ -1011,8 +1049,7 @@ rd_kafka_topic_partition_list_del_by_idx (
  */
 RD_EXPORT
 rd_kafka_topic_partition_list_t *
-rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src);
-
+rd_kafka_topic_partition_list_copy(const rd_kafka_topic_partition_list_t *src);
 
 
 
@@ -1024,9 +1061,11 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src);
  *          in the list.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
-	rd_kafka_topic_partition_list_t *rktparlist,
-	const char *topic, int32_t partition, int64_t offset);
+rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition,
+    int64_t offset);
 
 
 
@@ -1036,10 +1075,10 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
  * @returns a pointer to the first matching element, or NULL if not found.
  */
 RD_EXPORT
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_find (
-        const rd_kafka_topic_partition_list_t *rktparlist,
-        const char *topic, int32_t partition);
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition);
 
 
 /**
@@ -1051,11 +1090,10 @@ rd_kafka_topic_partition_list_find (
  * \p cmp_opaque is provided as the \p cmp_opaque argument to \p cmp.
  *
  */
-RD_EXPORT void
-rd_kafka_topic_partition_list_sort (rd_kafka_topic_partition_list_t *rktparlist,
-                                    int (*cmp) (const void *a, const void *b,
-                                                void *cmp_opaque),
-                                    void *cmp_opaque);
+RD_EXPORT void rd_kafka_topic_partition_list_sort(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    int (*cmp)(const void *a, const void *b, void *cmp_opaque),
+    void *cmp_opaque);
 
 
 /**@}*/
@@ -1080,14 +1118,14 @@ typedef enum rd_kafka_vtype_t {
         RD_KAFKA_VTYPE_TOPIC,     /**< (const char *) Topic name */
         RD_KAFKA_VTYPE_RKT,       /**< (rd_kafka_topic_t *) Topic handle */
         RD_KAFKA_VTYPE_PARTITION, /**< (int32_t) Partition */
-        RD_KAFKA_VTYPE_VALUE,     /**< (void *, size_t) Message value (payload)*/
-        RD_KAFKA_VTYPE_KEY,       /**< (void *, size_t) Message key */
-        RD_KAFKA_VTYPE_OPAQUE,    /**< (void *) Per-message application opaque
-                                   *            value. This is the same as
-                                   *            the _private field in
-                                   *            rd_kafka_message_t, also known
-                                   *            as the msg_opaque. */
-        RD_KAFKA_VTYPE_MSGFLAGS,  /**< (int) RD_KAFKA_MSG_F_.. flags */
+        RD_KAFKA_VTYPE_VALUE,    /**< (void *, size_t) Message value (payload)*/
+        RD_KAFKA_VTYPE_KEY,      /**< (void *, size_t) Message key */
+        RD_KAFKA_VTYPE_OPAQUE,   /**< (void *) Per-message application opaque
+                                  *            value. This is the same as
+                                  *            the _private field in
+                                  *            rd_kafka_message_t, also known
+                                  *            as the msg_opaque. */
+        RD_KAFKA_VTYPE_MSGFLAGS, /**< (int) RD_KAFKA_MSG_F_.. flags */
         RD_KAFKA_VTYPE_TIMESTAMP, /**< (int64_t) Milliseconds since epoch UTC */
         RD_KAFKA_VTYPE_HEADER,    /**< (const char *, const void *, ssize_t)
                                    *   Message Header */
@@ -1102,7 +1140,7 @@ typedef enum rd_kafka_vtype_t {
  * to which RD_KAFKA_VTYPE_...
  */
 typedef struct rd_kafka_vu_s {
-        rd_kafka_vtype_t vtype;           /**< RD_KAFKA_VTYPE_.. */
+        rd_kafka_vtype_t vtype; /**< RD_KAFKA_VTYPE_.. */
         /** Value union, see RD_KAFKA_V_.. macros for which field to use. */
         union {
                 const char *cstr;
@@ -1121,7 +1159,7 @@ typedef struct rd_kafka_vu_s {
                 } header;
                 rd_kafka_headers_t *headers;
                 void *ptr;
-                char _pad[64];  /**< Padding size for future-proofness */
+                char _pad[64]; /**< Padding size for future-proofness */
         } u;
 } rd_kafka_vu_t;
 
@@ -1140,41 +1178,41 @@ typedef struct rd_kafka_vu_s {
  *
  * rd_kafka_vu_t field: u.cstr
  */
-#define RD_KAFKA_V_TOPIC(topic)                                         \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TOPIC, const char *, topic),      \
-        (const char *)topic
+#define RD_KAFKA_V_TOPIC(topic)                                                \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TOPIC, const char *, topic),             \
+            (const char *)topic
 /*!
  * Topic object (rd_kafka_topic_t *)
  *
  * rd_kafka_vu_t field: u.rkt
  */
-#define RD_KAFKA_V_RKT(rkt)                                             \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_RKT, rd_kafka_topic_t *, rkt),    \
-        (rd_kafka_topic_t *)rkt
+#define RD_KAFKA_V_RKT(rkt)                                                    \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_RKT, rd_kafka_topic_t *, rkt),           \
+            (rd_kafka_topic_t *)rkt
 /*!
  * Partition (int32_t)
  *
  * rd_kafka_vu_t field: u.i32
  */
-#define RD_KAFKA_V_PARTITION(partition)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_PARTITION, int32_t, partition),   \
-        (int32_t)partition
+#define RD_KAFKA_V_PARTITION(partition)                                        \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_PARTITION, int32_t, partition),          \
+            (int32_t)partition
 /*!
  * Message value/payload pointer and length (void *, size_t)
  *
  * rd_kafka_vu_t fields: u.mem.ptr, u.mem.size
  */
-#define RD_KAFKA_V_VALUE(VALUE,LEN)                                     \
-        _LRK_TYPECHECK2(RD_KAFKA_VTYPE_VALUE, void *, VALUE, size_t, LEN), \
-        (void *)VALUE, (size_t)LEN
+#define RD_KAFKA_V_VALUE(VALUE, LEN)                                           \
+        _LRK_TYPECHECK2(RD_KAFKA_VTYPE_VALUE, void *, VALUE, size_t, LEN),     \
+            (void *)VALUE, (size_t)LEN
 /*!
  * Message key pointer and length (const void *, size_t)
  *
  * rd_kafka_vu_t field: u.mem.ptr, rd_kafka_vu.t.u.mem.size
  */
-#define RD_KAFKA_V_KEY(KEY,LEN)                                         \
-        _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
-        (void *)KEY, (size_t)LEN
+#define RD_KAFKA_V_KEY(KEY, LEN)                                               \
+        _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN),   \
+            (void *)KEY, (size_t)LEN
 /*!
  * Message opaque pointer (void *)
  * Same as \c msg_opaque, \c produce(.., msg_opaque),
@@ -1182,27 +1220,26 @@ typedef struct rd_kafka_vu_s {
  *
  * rd_kafka_vu_t field: u.ptr
  */
-#define RD_KAFKA_V_OPAQUE(msg_opaque)                                   \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, msg_opaque),      \
-        (void *)msg_opaque
+#define RD_KAFKA_V_OPAQUE(msg_opaque)                                          \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, msg_opaque),             \
+            (void *)msg_opaque
 /*!
  * Message flags (int)
  * @sa RD_KAFKA_MSG_F_COPY, et.al.
  *
  * rd_kafka_vu_t field: u.i
  */
-#define RD_KAFKA_V_MSGFLAGS(msgflags)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags),       \
-        (int)msgflags
+#define RD_KAFKA_V_MSGFLAGS(msgflags)                                          \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags), (int)msgflags
 /*!
  * Timestamp in milliseconds since epoch UTC (int64_t).
  * A value of 0 will use the current wall-clock time.
  *
  * rd_kafka_vu_t field: u.i64
  */
-#define RD_KAFKA_V_TIMESTAMP(timestamp)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp),   \
-        (int64_t)timestamp
+#define RD_KAFKA_V_TIMESTAMP(timestamp)                                        \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp),          \
+            (int64_t)timestamp
 /*!
  * Add Message Header (const char *NAME, const void *VALUE, ssize_t LEN).
  * @sa rd_kafka_header_add()
@@ -1211,10 +1248,10 @@ typedef struct rd_kafka_vu_s {
  *
  * rd_kafka_vu_t fields: u.header.name, u.header.val, u.header.size
  */
-#define RD_KAFKA_V_HEADER(NAME,VALUE,LEN)                               \
-        _LRK_TYPECHECK3(RD_KAFKA_VTYPE_HEADER, const char *, NAME,      \
-                        const void *, VALUE, ssize_t, LEN),             \
-                (const char *)NAME, (const void *)VALUE, (ssize_t)LEN
+#define RD_KAFKA_V_HEADER(NAME, VALUE, LEN)                                    \
+        _LRK_TYPECHECK3(RD_KAFKA_VTYPE_HEADER, const char *, NAME,             \
+                        const void *, VALUE, ssize_t, LEN),                    \
+            (const char *)NAME, (const void *)VALUE, (ssize_t)LEN
 
 /*!
  * Message Headers list (rd_kafka_headers_t *).
@@ -1227,9 +1264,9 @@ typedef struct rd_kafka_vu_s {
  *
  * rd_kafka_vu_t fields: u.headers
  */
-#define RD_KAFKA_V_HEADERS(HDRS)                                        \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_HEADERS, rd_kafka_headers_t *, HDRS), \
-                (rd_kafka_headers_t *)HDRS
+#define RD_KAFKA_V_HEADERS(HDRS)                                               \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_HEADERS, rd_kafka_headers_t *, HDRS),    \
+            (rd_kafka_headers_t *)HDRS
 
 
 /**@}*/
@@ -1262,19 +1299,19 @@ typedef struct rd_kafka_vu_s {
  *                      Any number of headers may be added, updated and
  *                      removed regardless of the initial count.
  */
-RD_EXPORT rd_kafka_headers_t *rd_kafka_headers_new (size_t initial_count);
+RD_EXPORT rd_kafka_headers_t *rd_kafka_headers_new(size_t initial_count);
 
 /**
  * @brief Destroy the headers list. The object and any returned value pointers
  *        are not usable after this call.
  */
-RD_EXPORT void rd_kafka_headers_destroy (rd_kafka_headers_t *hdrs);
+RD_EXPORT void rd_kafka_headers_destroy(rd_kafka_headers_t *hdrs);
 
 /**
  * @brief Make a copy of headers list \p src.
  */
 RD_EXPORT rd_kafka_headers_t *
-rd_kafka_headers_copy (const rd_kafka_headers_t *src);
+rd_kafka_headers_copy(const rd_kafka_headers_t *src);
 
 /**
  * @brief Add header with name \p name and value \p val (copied) of size
@@ -1293,10 +1330,11 @@ rd_kafka_headers_copy (const rd_kafka_headers_t *src);
  * @returns RD_KAFKA_RESP_ERR__READ_ONLY if the headers are read-only,
  *          else RD_KAFKA_RESP_ERR_NO_ERROR.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_header_add (rd_kafka_headers_t *hdrs,
-                     const char *name, ssize_t name_size,
-                     const void *value, ssize_t value_size);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_header_add(rd_kafka_headers_t *hdrs,
+                                                  const char *name,
+                                                  ssize_t name_size,
+                                                  const void *value,
+                                                  ssize_t value_size);
 
 /**
  * @brief Remove all headers for the given key (if any).
@@ -1305,8 +1343,8 @@ rd_kafka_header_add (rd_kafka_headers_t *hdrs,
  *          RD_KAFKA_RESP_ERR__NOENT if no matching headers were found,
  *          else RD_KAFKA_RESP_ERR_NO_ERROR if headers were removed.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_header_remove (rd_kafka_headers_t *hdrs, const char *name);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_header_remove(rd_kafka_headers_t *hdrs,
+                                                     const char *name);
 
 
 /**
@@ -1327,8 +1365,10 @@ rd_kafka_header_remove (rd_kafka_headers_t *hdrs, const char *name);
  *         the header item is valid.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_header_get_last (const rd_kafka_headers_t *hdrs,
-                          const char *name, const void **valuep, size_t *sizep);
+rd_kafka_header_get_last(const rd_kafka_headers_t *hdrs,
+                         const char *name,
+                         const void **valuep,
+                         size_t *sizep);
 
 /**
  * @brief Iterator for headers matching \p name.
@@ -1344,8 +1384,11 @@ rd_kafka_header_get_last (const rd_kafka_headers_t *hdrs,
  * @param sizep  (out) Set to the value's size (not including null-terminator).
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_header_get (const rd_kafka_headers_t *hdrs, size_t idx,
-                     const char *name, const void **valuep, size_t *sizep);
+rd_kafka_header_get(const rd_kafka_headers_t *hdrs,
+                    size_t idx,
+                    const char *name,
+                    const void **valuep,
+                    size_t *sizep);
 
 
 /**
@@ -1356,9 +1399,11 @@ rd_kafka_header_get (const rd_kafka_headers_t *hdrs, size_t idx,
  * @sa rd_kafka_header_get()
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_header_get_all (const rd_kafka_headers_t *hdrs, size_t idx,
-                         const char **namep,
-                         const void **valuep, size_t *sizep);
+rd_kafka_header_get_all(const rd_kafka_headers_t *hdrs,
+                        size_t idx,
+                        const char **namep,
+                        const void **valuep,
+                        size_t *sizep);
 
 
 
@@ -1391,34 +1436,35 @@ rd_kafka_header_get_all (const rd_kafka_headers_t *hdrs, size_t idx,
  * rd_kafka_message_destroy() unless otherwise noted.
  */
 typedef struct rd_kafka_message_s {
-	rd_kafka_resp_err_t err;   /**< Non-zero for error signaling. */
-	rd_kafka_topic_t *rkt;     /**< Topic */
-	int32_t partition;         /**< Partition */
-	void   *payload;           /**< Producer: original message payload.
-				    * Consumer: Depends on the value of \c err :
-				    * - \c err==0: Message payload.
-				    * - \c err!=0: Error string */
-	size_t  len;               /**< Depends on the value of \c err :
-				    * - \c err==0: Message payload length
-				    * - \c err!=0: Error string length */
-	void   *key;               /**< Depends on the value of \c err :
-				    * - \c err==0: Optional message key */
-	size_t  key_len;           /**< Depends on the value of \c err :
-				    * - \c err==0: Optional message key length*/
-	int64_t offset;            /**< Consumer:
-                                    * - Message offset (or offset for error
-				    *   if \c err!=0 if applicable).
-                                    *   Producer, dr_msg_cb:
-                                    *   Message offset assigned by broker.
-                                    *   May be RD_KAFKA_OFFSET_INVALID
-                                    *   for retried messages when
-                                    *   idempotence is enabled. */
-        void  *_private;           /**< Consumer:
-                                    *  - rdkafka private pointer: DO NOT MODIFY
-                                    *  Producer:
-                                    *  - dr_msg_cb:
-                                    *    msg_opaque from produce() call or
-                                    *    RD_KAFKA_V_OPAQUE from producev(). */
+        rd_kafka_resp_err_t err; /**< Non-zero for error signaling. */
+        rd_kafka_topic_t *rkt;   /**< Topic */
+        int32_t partition;       /**< Partition */
+        void *payload;           /**< Producer: original message payload.
+                                  * Consumer: Depends on the value of \c err :
+                                  * - \c err==0: Message payload.
+                                  * - \c err!=0: Error string */
+        size_t len;              /**< Depends on the value of \c err :
+                                  * - \c err==0: Message payload length
+                                  * - \c err!=0: Error string length */
+        void *key;               /**< Depends on the value of \c err :
+                                  * - \c err==0: Optional message key */
+        size_t key_len;          /**< Depends on the value of \c err :
+                                  * - \c err==0: Optional message key length*/
+        int64_t offset;          /**< Consumer:
+                                  * - Message offset (or offset for error
+                                  *   if \c err!=0 if applicable).
+                                  *   Producer, dr_msg_cb:
+                                  *   Message offset assigned by broker.
+                                  *   May be RD_KAFKA_OFFSET_INVALID
+                                  *   for retried messages when
+                                  *   idempotence is enabled. */
+        void *_private;          /**< Consumer:
+                                  *  - rdkafka private pointer:
+                                  *    DO NOT MODIFY, DO NOT COPY.
+                                  *  Producer:
+                                  *  - dr_msg_cb:
+                                  *    msg_opaque from produce() call or
+                                  *    RD_KAFKA_V_OPAQUE from producev(). */
 } rd_kafka_message_t;
 
 
@@ -1430,7 +1476,6 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
 
 
 
-
 /**
  * @brief Returns the error string for an errored rd_kafka_message_t or NULL if
  *        there was no error.
@@ -1438,7 +1483,7 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  * @remark This function MUST NOT be used with the producer.
  */
 RD_EXPORT
-const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage);
+const char *rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage);
 
 
 /**
@@ -1453,8 +1498,8 @@ const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage);
  * @remark Message timestamps require broker version 0.10.0 or later.
  */
 RD_EXPORT
-int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
-				    rd_kafka_timestamp_type_t *tstype);
+int64_t rd_kafka_message_timestamp(const rd_kafka_message_t *rkmessage,
+                                   rd_kafka_timestamp_type_t *tstype);
 
 
 
@@ -1465,7 +1510,7 @@ int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
  * @returns the latency in microseconds, or -1 if not available.
  */
 RD_EXPORT
-int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage);
+int64_t rd_kafka_message_latency(const rd_kafka_message_t *rkmessage);
 
 
 /**
@@ -1475,7 +1520,7 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage);
  * @returns a broker id if known, else -1.
  */
 RD_EXPORT
-int32_t rd_kafka_message_broker_id (const rd_kafka_message_t *rkmessage);
+int32_t rd_kafka_message_broker_id(const rd_kafka_message_t *rkmessage);
 
 
 /**
@@ -1495,8 +1540,8 @@ int32_t rd_kafka_message_broker_id (const rd_kafka_message_t *rkmessage);
  *         the first call to this function.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_message_headers (const rd_kafka_message_t *rkmessage,
-                          rd_kafka_headers_t **hdrsp);
+rd_kafka_message_headers(const rd_kafka_message_t *rkmessage,
+                         rd_kafka_headers_t **hdrsp);
 
 /**
  * @brief Get the message header list and detach the list from the message
@@ -1510,8 +1555,8 @@ rd_kafka_message_headers (const rd_kafka_message_t *rkmessage,
  * @sa rd_kafka_message_headers
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_message_detach_headers (rd_kafka_message_t *rkmessage,
-                                 rd_kafka_headers_t **hdrsp);
+rd_kafka_message_detach_headers(rd_kafka_message_t *rkmessage,
+                                rd_kafka_headers_t **hdrsp);
 
 
 /**
@@ -1527,8 +1572,8 @@ rd_kafka_message_detach_headers (rd_kafka_message_t *rkmessage,
  * @remark The existing headers object, if any, will be destroyed.
  */
 RD_EXPORT
-void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
-                                   rd_kafka_headers_t *hdrs);
+void rd_kafka_message_set_headers(rd_kafka_message_t *rkmessage,
+                                  rd_kafka_headers_t *hdrs);
 
 
 /**
@@ -1536,7 +1581,7 @@ void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
  *
  * @param hdrs   Headers to count
  */
-RD_EXPORT size_t rd_kafka_header_cnt (const rd_kafka_headers_t *hdrs);
+RD_EXPORT size_t rd_kafka_header_cnt(const rd_kafka_headers_t *hdrs);
 
 
 /**
@@ -1558,7 +1603,7 @@ typedef enum {
         /** Message was written to the log and acknowledged by the broker.
          *  No reason for application to retry.
          *  Note: this value should only be trusted with \c acks=all. */
-        RD_KAFKA_MSG_STATUS_PERSISTED =  2
+        RD_KAFKA_MSG_STATUS_PERSISTED = 2
 } rd_kafka_msg_status_t;
 
 
@@ -1569,7 +1614,19 @@ typedef enum {
  *         interceptors.
  */
 RD_EXPORT rd_kafka_msg_status_t
-rd_kafka_message_status (const rd_kafka_message_t *rkmessage);
+rd_kafka_message_status(const rd_kafka_message_t *rkmessage);
+
+
+/**
+ * @returns the message's partition leader epoch at the time the message was
+ *          fetched and if known, else -1.
+ *
+ * @remark This API must only be used on consumed messages without error.
+ * @remark Requires broker version >= 2.10 (KIP-320).
+ */
+RD_EXPORT int32_t
+rd_kafka_message_leader_epoch(const rd_kafka_message_t *rkmessage);
+
 
 /**@}*/
 
@@ -1587,11 +1644,11 @@ rd_kafka_message_status (const rd_kafka_message_t *rkmessage);
  * @brief Configuration result type
  */
 typedef enum {
-	RD_KAFKA_CONF_UNKNOWN = -2, /**< Unknown configuration name. */
-	RD_KAFKA_CONF_INVALID = -1, /**< Invalid configuration value or
+        RD_KAFKA_CONF_UNKNOWN = -2, /**< Unknown configuration name. */
+        RD_KAFKA_CONF_INVALID = -1, /**< Invalid configuration value or
                                      *   property or value not supported in
                                      *   this build. */
-	RD_KAFKA_CONF_OK = 0        /**< Configuration okay */
+        RD_KAFKA_CONF_OK = 0        /**< Configuration okay */
 } rd_kafka_conf_res_t;
 
 
@@ -1654,9 +1711,9 @@ rd_kafka_conf_t *rd_kafka_conf_dup(const rd_kafka_conf_t *conf);
  *        prefixes to filter out (ignore) when copying.
  */
 RD_EXPORT
-rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
-                                           size_t filter_cnt,
-                                           const char **filter);
+rd_kafka_conf_t *rd_kafka_conf_dup_filter(const rd_kafka_conf_t *conf,
+                                          size_t filter_cnt,
+                                          const char **filter);
 
 
 
@@ -1669,7 +1726,7 @@ rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
  *         as the rd_kafka_t object.
  */
 RD_EXPORT
-const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk);
+const rd_kafka_conf_t *rd_kafka_conf(rd_kafka_t *rk);
 
 
 /**
@@ -1681,7 +1738,7 @@ const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk);
  * Topic-level configuration properties may be set using this interface
  * in which case they are applied on the \c default_topic_conf.
  * If no \c default_topic_conf has been set one will be created.
- * Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will
+ * Any subsequent rd_kafka_conf_set_default_topic_conf() calls will
  * replace the current default topic configuration.
  *
  * @returns \c rd_kafka_conf_res_t to indicate success or failure.
@@ -1693,9 +1750,10 @@ const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk);
  */
 RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
-				       const char *name,
-				       const char *value,
-				       char *errstr, size_t errstr_size);
+                                      const char *name,
+                                      const char *value,
+                                      char *errstr,
+                                      size_t errstr_size);
 
 
 /**
@@ -1742,11 +1800,9 @@ void rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
  *
  * @sa rd_kafka_queue_get_background
  */
-RD_EXPORT void
-rd_kafka_conf_set_background_event_cb (rd_kafka_conf_t *conf,
-                                       void (*event_cb) (rd_kafka_t *rk,
-                                                         rd_kafka_event_t *rkev,
-                                                         void *opaque));
+RD_EXPORT void rd_kafka_conf_set_background_event_cb(
+    rd_kafka_conf_t *conf,
+    void (*event_cb)(rd_kafka_t *rk, rd_kafka_event_t *rkev, void *opaque));
 
 
 /**
@@ -1754,10 +1810,12 @@ rd_kafka_conf_set_background_event_cb (rd_kafka_conf_t *conf,
  */
 RD_EXPORT
 void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
-			      void (*dr_cb) (rd_kafka_t *rk,
-					     void *payload, size_t len,
-					     rd_kafka_resp_err_t err,
-					     void *opaque, void *msg_opaque));
+                             void (*dr_cb)(rd_kafka_t *rk,
+                                           void *payload,
+                                           size_t len,
+                                           rd_kafka_resp_err_t err,
+                                           void *opaque,
+                                           void *msg_opaque));
 
 /**
  * @brief \b Producer: Set delivery report callback in provided \p conf object.
@@ -1790,11 +1848,11 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  *         acknowledged.
  */
 RD_EXPORT
-void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
-                                  void (*dr_msg_cb) (rd_kafka_t *rk,
-                                                     const rd_kafka_message_t *
-                                                     rkmessage,
-                                                     void *opaque));
+void rd_kafka_conf_set_dr_msg_cb(
+    rd_kafka_conf_t *conf,
+    void (*dr_msg_cb)(rd_kafka_t *rk,
+                      const rd_kafka_message_t *rkmessage,
+                      void *opaque));
 
 
 /**
@@ -1805,10 +1863,9 @@ void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
  * rd_kafka_conf_set_opaque().
  */
 RD_EXPORT
-void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
-                                   void (*consume_cb) (rd_kafka_message_t *
-                                                       rkmessage,
-                                                       void *opaque));
+void rd_kafka_conf_set_consume_cb(
+    rd_kafka_conf_t *conf,
+    void (*consume_cb)(rd_kafka_message_t *rkmessage, void *opaque));
 
 /**
  * @brief \b Consumer: Set rebalance callback for use with
@@ -1915,12 +1972,12 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *         the examples/ directory.
  */
 RD_EXPORT
-void rd_kafka_conf_set_rebalance_cb (
-        rd_kafka_conf_t *conf,
-        void (*rebalance_cb) (rd_kafka_t *rk,
-                              rd_kafka_resp_err_t err,
-                              rd_kafka_topic_partition_list_t *partitions,
-                              void *opaque));
+void rd_kafka_conf_set_rebalance_cb(
+    rd_kafka_conf_t *conf,
+    void (*rebalance_cb)(rd_kafka_t *rk,
+                         rd_kafka_resp_err_t err,
+                         rd_kafka_topic_partition_list_t *partitions,
+                         void *opaque));
 
 
 
@@ -1942,12 +1999,12 @@ void rd_kafka_conf_set_rebalance_cb (
  * rd_kafka_conf_set_opaque().
  */
 RD_EXPORT
-void rd_kafka_conf_set_offset_commit_cb (
-        rd_kafka_conf_t *conf,
-        void (*offset_commit_cb) (rd_kafka_t *rk,
-                                  rd_kafka_resp_err_t err,
-                                  rd_kafka_topic_partition_list_t *offsets,
-                                  void *opaque));
+void rd_kafka_conf_set_offset_commit_cb(
+    rd_kafka_conf_t *conf,
+    void (*offset_commit_cb)(rd_kafka_t *rk,
+                             rd_kafka_resp_err_t err,
+                             rd_kafka_topic_partition_list_t *offsets,
+                             void *opaque));
 
 
 /**
@@ -1974,9 +2031,10 @@ void rd_kafka_conf_set_offset_commit_cb (
  */
 RD_EXPORT
 void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
-				 void  (*error_cb) (rd_kafka_t *rk, int err,
-						    const char *reason,
-						    void *opaque));
+                                void (*error_cb)(rd_kafka_t *rk,
+                                                 int err,
+                                                 const char *reason,
+                                                 void *opaque));
 
 /**
  * @brief Set throttle callback.
@@ -1996,13 +2054,12 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
  * @remark Requires broker version 0.9.0 or later.
  */
 RD_EXPORT
-void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
-				    void (*throttle_cb) (
-					    rd_kafka_t *rk,
-					    const char *broker_name,
-					    int32_t broker_id,
-					    int throttle_time_ms,
-					    void *opaque));
+void rd_kafka_conf_set_throttle_cb(rd_kafka_conf_t *conf,
+                                   void (*throttle_cb)(rd_kafka_t *rk,
+                                                       const char *broker_name,
+                                                       int32_t broker_id,
+                                                       int throttle_time_ms,
+                                                       void *opaque));
 
 
 /**
@@ -2023,8 +2080,10 @@ void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
  */
 RD_EXPORT
 void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
-			  void (*log_cb) (const rd_kafka_t *rk, int level,
-                                          const char *fac, const char *buf));
+                              void (*log_cb)(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf));
 
 
 /**
@@ -2040,7 +2099,7 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  *                 rd_kafka_conf_set_opaque().
  *
  * For more information on the format of \p json, see
- * https://github.com/edenhill/librdkafka/wiki/Statistics
+ * https://github.com/confluentinc/librdkafka/wiki/Statistics
  *
  * If the application wishes to hold on to the \p json pointer and free
  * it at a later time it must return 1 from the \p stats_cb.
@@ -2050,11 +2109,9 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  * See STATISTICS.md for a full definition of the JSON object.
  */
 RD_EXPORT
-void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
-				 int (*stats_cb) (rd_kafka_t *rk,
-						  char *json,
-						  size_t json_len,
-						  void *opaque));
+void rd_kafka_conf_set_stats_cb(
+    rd_kafka_conf_t *conf,
+    int (*stats_cb)(rd_kafka_t *rk, char *json, size_t json_len, void *opaque));
 
 /**
  * @brief Set SASL/OAUTHBEARER token refresh callback in provided conf object.
@@ -2082,21 +2139,66 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  *
  * Note that before any SASL/OAUTHBEARER broker connection can succeed the
  * application must call rd_kafka_oauthbearer_set_token() once -- either
- * directly or, more typically, by invoking either rd_kafka_poll() or
- * rd_kafka_queue_poll() -- in order to cause retrieval of an initial token to
- * occur.
+ * directly or, more typically, by invoking either rd_kafka_poll(),
+ * rd_kafka_consumer_poll(), rd_kafka_queue_poll(), etc, in order to cause
+ * retrieval of an initial token to occur.
+ *
+ * Alternatively, the application can enable the SASL queue by calling
+ * rd_kafka_conf_enable_sasl_queue() on the configuration object prior to
+ * creating the client instance, get the SASL queue with
+ * rd_kafka_queue_get_sasl(), and either serve the queue manually by calling
+ * rd_kafka_queue_poll(), or redirecting the queue to the background thread to
+ * have the queue served automatically. For the latter case the SASL queue
+ * must be forwarded to the background queue with rd_kafka_queue_forward().
+ * A convenience function is available to automatically forward the SASL queue
+ * to librdkafka's background thread, see
+ * rd_kafka_sasl_background_callbacks_enable().
  *
  * An unsecured JWT refresh handler is provided by librdkafka for development
  * and testing purposes, it is enabled by setting
  * the \c enable.sasl.oauthbearer.unsecure.jwt property to true and is
  * mutually exclusive to using a refresh callback.
+ *
+ * @sa rd_kafka_sasl_background_callbacks_enable()
+ * @sa rd_kafka_queue_get_sasl()
  */
 RD_EXPORT
-void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
-        rd_kafka_conf_t *conf,
-        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
-                                              const char *oauthbearer_config,
-                                              void *opaque));
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+    rd_kafka_conf_t *conf,
+    void (*oauthbearer_token_refresh_cb)(rd_kafka_t *rk,
+                                         const char *oauthbearer_config,
+                                         void *opaque));
+
+/**
+ * @brief Enable/disable creation of a queue specific to SASL events
+ *        and callbacks.
+ *
+ * For SASL mechanisms that trigger callbacks (currently OAUTHBEARER) this
+ * configuration API allows an application to get a dedicated
+ * queue for the SASL events/callbacks. After enabling the queue with this API
+ * the application can retrieve the queue by calling
+ * rd_kafka_queue_get_sasl() on the client instance.
+ * This queue may then be served directly by the application
+ * (with rd_kafka_queue_poll(), et.al)  or forwarded to another queue, such as
+ * the background queue.
+ *
+ * A convenience function is available to automatically forward the SASL queue
+ * to librdkafka's background thread, see
+ * rd_kafka_sasl_background_callbacks_enable().
+ *
+ * By default (\p enable = 0) the main queue (as served by rd_kafka_poll(),
+ * et.al.) is used for SASL callbacks.
+ *
+ * @remark The SASL queue is currently only used by the SASL OAUTHBEARER
+ *         mechanism's token_refresh_cb().
+ *
+ * @sa rd_kafka_queue_get_sasl()
+ * @sa rd_kafka_sasl_background_callbacks_enable()
+ */
+
+RD_EXPORT
+void rd_kafka_conf_enable_sasl_queue(rd_kafka_conf_t *conf, int enable);
+
 
 /**
  * @brief Set socket callback.
@@ -2116,10 +2218,9 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
  * @remark The callback will be called from an internal librdkafka thread.
  */
 RD_EXPORT
-void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
-                                  int (*socket_cb) (int domain, int type,
-                                                    int protocol,
-                                                    void *opaque));
+void rd_kafka_conf_set_socket_cb(
+    rd_kafka_conf_t *conf,
+    int (*socket_cb)(int domain, int type, int protocol, void *opaque));
 
 
 
@@ -2139,12 +2240,12 @@ void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
  * @remark The callback will be called from an internal librdkafka thread.
  */
 RD_EXPORT void
-rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
-                              int (*connect_cb) (int sockfd,
-                                                 const struct sockaddr *addr,
-                                                 int addrlen,
-                                                 const char *id,
-                                                 void *opaque));
+rd_kafka_conf_set_connect_cb(rd_kafka_conf_t *conf,
+                             int (*connect_cb)(int sockfd,
+                                               const struct sockaddr *addr,
+                                               int addrlen,
+                                               const char *id,
+                                               void *opaque));
 
 /**
  * @brief Set close socket callback.
@@ -2156,10 +2257,9 @@ rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
  *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT void
-rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
-                                  int (*closesocket_cb) (int sockfd,
-                                                         void *opaque));
+RD_EXPORT void rd_kafka_conf_set_closesocket_cb(
+    rd_kafka_conf_t *conf,
+    int (*closesocket_cb)(int sockfd, void *opaque));
 
 
 
@@ -2182,12 +2282,40 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
  * @remark The callback will be called from an internal librdkafka thread.
  */
 RD_EXPORT
-void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
-                                int (*open_cb) (const char *pathname,
-                                                int flags, mode_t mode,
-                                                void *opaque));
+void rd_kafka_conf_set_open_cb(
+    rd_kafka_conf_t *conf,
+    int (*open_cb)(const char *pathname, int flags, mode_t mode, void *opaque));
 #endif
 
+/** Forward declaration to avoid netdb.h or winsock includes */
+struct addrinfo;
+
+/**
+ * @brief Set address resolution callback.
+ *
+ * The callback is responsible for resolving the hostname \p node and the
+ * service \p service into a list of socket addresses as \c getaddrinfo(3)
+ * would. The \p hints and \p res parameters function as they do for
+ * \c getaddrinfo(3). The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
+ * If the callback is invoked with a NULL \p node, \p service, and \p hints, the
+ * callback should instead free the addrinfo struct specified in \p res. In this
+ * case the callback must succeed; the return value will not be checked by the
+ * caller.
+ *
+ * The callback's return value is interpreted as the return value of \p
+ * \c getaddrinfo(3).
+ *
+ * @remark The callback will be called from an internal librdkafka thread.
+ */
+RD_EXPORT void
+rd_kafka_conf_set_resolve_cb(rd_kafka_conf_t *conf,
+                             int (*resolve_cb)(const char *node,
+                                               const char *service,
+                                               const struct addrinfo *hints,
+                                               struct addrinfo **res,
+                                               void *opaque));
 
 /**
  * @brief Sets the verification callback of the broker certificate
@@ -2231,16 +2359,18 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
  *         for a list of \p x509_error codes.
  */
 RD_EXPORT
-rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb (
-        rd_kafka_conf_t *conf,
-        int (*ssl_cert_verify_cb) (rd_kafka_t *rk,
-                                   const char *broker_name,
-                                   int32_t broker_id,
-                                   int *x509_error,
-                                   int depth,
-                                   const char *buf, size_t size,
-                                   char *errstr, size_t errstr_size,
-                                   void *opaque));
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(
+    rd_kafka_conf_t *conf,
+    int (*ssl_cert_verify_cb)(rd_kafka_t *rk,
+                              const char *broker_name,
+                              int32_t broker_id,
+                              int *x509_error,
+                              int depth,
+                              const char *buf,
+                              size_t size,
+                              char *errstr,
+                              size_t errstr_size,
+                              void *opaque));
 
 
 /**
@@ -2265,9 +2395,9 @@ typedef enum rd_kafka_cert_type_t {
  * @sa rd_kafka_conf_set_ssl_cert
  */
 typedef enum rd_kafka_cert_enc_t {
-        RD_KAFKA_CERT_ENC_PKCS12,  /**< PKCS#12 */
-        RD_KAFKA_CERT_ENC_DER,     /**< DER / binary X.509 ASN1 */
-        RD_KAFKA_CERT_ENC_PEM,     /**< PEM */
+        RD_KAFKA_CERT_ENC_PKCS12, /**< PKCS#12 */
+        RD_KAFKA_CERT_ENC_DER,    /**< DER / binary X.509 ASN1 */
+        RD_KAFKA_CERT_ENC_PEM,    /**< PEM */
         RD_KAFKA_CERT_ENC__CNT,
 } rd_kafka_cert_enc_t;
 
@@ -2305,13 +2435,23 @@ typedef enum rd_kafka_cert_enc_t {
  *
  * @remark CA certificate in PEM format may also be set with the
  *         `ssl.ca.pem` configuration property.
+ *
+ * @remark When librdkafka is linked to OpenSSL 3.0 and the certificate is
+ *         encoded using an obsolete cipher, it might be necessary to set up
+ *         an OpenSSL configuration file to load the "legacy" provider and
+ *         set the OPENSSL_CONF environment variable.
+ *         See
+ * https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md for more
+ * information.
  */
 RD_EXPORT rd_kafka_conf_res_t
-rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
-                            rd_kafka_cert_type_t cert_type,
-                            rd_kafka_cert_enc_t cert_enc,
-                            const void *buffer, size_t size,
-                            char *errstr, size_t errstr_size);
+rd_kafka_conf_set_ssl_cert(rd_kafka_conf_t *conf,
+                           rd_kafka_cert_type_t cert_type,
+                           rd_kafka_cert_enc_t cert_enc,
+                           const void *buffer,
+                           size_t size,
+                           char *errstr,
+                           size_t errstr_size);
 
 
 /**
@@ -2329,8 +2469,8 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
  *         use it.
  */
 RD_EXPORT
-void rd_kafka_conf_set_engine_callback_data (rd_kafka_conf_t *conf,
-                                             void *callback_data);
+void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t *conf,
+                                            void *callback_data);
 
 
 /**
@@ -2364,8 +2504,8 @@ void *rd_kafka_opaque(const rd_kafka_t *rk);
  *             global rd_kafka_conf_t object instead.
  */
 RD_EXPORT
-void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
-                                           rd_kafka_topic_conf_t *tconf);
+void rd_kafka_conf_set_default_topic_conf(rd_kafka_conf_t *conf,
+                                          rd_kafka_topic_conf_t *tconf);
 
 /**
  * @brief Gets the default topic configuration as previously set with
@@ -2380,7 +2520,7 @@ void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
  *          rd_kafka_conf_set_default_topic_conf().
  */
 RD_EXPORT rd_kafka_topic_conf_t *
-rd_kafka_conf_get_default_topic_conf (rd_kafka_conf_t *conf);
+rd_kafka_conf_get_default_topic_conf(rd_kafka_conf_t *conf);
 
 
 /**
@@ -2403,9 +2543,10 @@ rd_kafka_conf_get_default_topic_conf (rd_kafka_conf_t *conf);
  * \p RD_KAFKA_CONF_UNKNOWN.
  */
 RD_EXPORT
-rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
-                                       const char *name,
-                                       char *dest, size_t *dest_size);
+rd_kafka_conf_res_t rd_kafka_conf_get(const rd_kafka_conf_t *conf,
+                                      const char *name,
+                                      char *dest,
+                                      size_t *dest_size);
 
 
 /**
@@ -2414,9 +2555,10 @@ rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
  * @sa rd_kafka_conf_get()
  */
 RD_EXPORT
-rd_kafka_conf_res_t rd_kafka_topic_conf_get (const rd_kafka_topic_conf_t *conf,
-                                             const char *name,
-                                             char *dest, size_t *dest_size);
+rd_kafka_conf_res_t rd_kafka_topic_conf_get(const rd_kafka_topic_conf_t *conf,
+                                            const char *name,
+                                            char *dest,
+                                            size_t *dest_size);
 
 
 /**
@@ -2441,7 +2583,7 @@ const char **rd_kafka_conf_dump(rd_kafka_conf_t *conf, size_t *cntp);
  */
 RD_EXPORT
 const char **rd_kafka_topic_conf_dump(rd_kafka_topic_conf_t *conf,
-				       size_t *cntp);
+                                      size_t *cntp);
 
 /**
  * @brief Frees a configuration dump returned from `rd_kafka_conf_dump()` or
@@ -2465,9 +2607,8 @@ void rd_kafka_conf_properties_show(FILE *fp);
 
 /**
  * @name Topic configuration
- * @{
- *
  * @brief Topic configuration property interface
+ * @{
  *
  */
 
@@ -2485,15 +2626,15 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_new(void);
  * @brief Creates a copy/duplicate of topic configuration object \p conf.
  */
 RD_EXPORT
-rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup(const rd_kafka_topic_conf_t
-						*conf);
+rd_kafka_topic_conf_t *
+rd_kafka_topic_conf_dup(const rd_kafka_topic_conf_t *conf);
 
 /**
  * @brief Creates a copy/duplicate of \p rk 's default topic configuration
  *        object.
  */
 RD_EXPORT
-rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk);
+rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup(rd_kafka_t *rk);
 
 
 /**
@@ -2513,9 +2654,10 @@ void rd_kafka_topic_conf_destroy(rd_kafka_topic_conf_t *topic_conf);
  */
 RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_topic_conf_set(rd_kafka_topic_conf_t *conf,
-					     const char *name,
-					     const char *value,
-					     char *errstr, size_t errstr_size);
+                                            const char *name,
+                                            const char *value,
+                                            char *errstr,
+                                            size_t errstr_size);
 
 /**
  * @brief Sets the application's opaque pointer that will be passed to all topic
@@ -2548,15 +2690,14 @@ void rd_kafka_topic_conf_set_opaque(rd_kafka_topic_conf_t *conf,
  *     could not be performed.
  */
 RD_EXPORT
-void
-rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
-					int32_t (*partitioner) (
-						const rd_kafka_topic_t *rkt,
-						const void *keydata,
-						size_t keylen,
-						int32_t partition_cnt,
-						void *rkt_opaque,
-						void *msg_opaque));
+void rd_kafka_topic_conf_set_partitioner_cb(
+    rd_kafka_topic_conf_t *topic_conf,
+    int32_t (*partitioner)(const rd_kafka_topic_t *rkt,
+                           const void *keydata,
+                           size_t keylen,
+                           int32_t partition_cnt,
+                           void *rkt_opaque,
+                           void *msg_opaque));
 
 
 /**
@@ -2584,11 +2725,10 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
  * @warning THIS IS AN EXPERIMENTAL API, SUBJECT TO CHANGE OR REMOVAL,
  *          DO NOT USE IN PRODUCTION.
  */
-RD_EXPORT void
-rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
-                                       int (*msg_order_cmp) (
-                                               const rd_kafka_message_t *a,
-                                               const rd_kafka_message_t *b));
+RD_EXPORT void rd_kafka_topic_conf_set_msg_order_cmp(
+    rd_kafka_topic_conf_t *topic_conf,
+    int (*msg_order_cmp)(const rd_kafka_message_t *a,
+                         const rd_kafka_message_t *b));
 
 
 /**
@@ -2600,13 +2740,13 @@ rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
  */
 RD_EXPORT
 int rd_kafka_topic_partition_available(const rd_kafka_topic_t *rkt,
-					int32_t partition);
+                                       int32_t partition);
 
 
 /*******************************************************************
- *								   *
+ *                                                                   *
  * Partitioners provided by rdkafka                                *
- *								   *
+ *                                                                   *
  *******************************************************************/
 
 /**
@@ -2624,9 +2764,11 @@ int rd_kafka_topic_partition_available(const rd_kafka_topic_t *rkt,
  */
 RD_EXPORT
 int32_t rd_kafka_msg_partitioner_random(const rd_kafka_topic_t *rkt,
-					 const void *key, size_t keylen,
-					 int32_t partition_cnt,
-					 void *rkt_opaque, void *msg_opaque);
+                                        const void *key,
+                                        size_t keylen,
+                                        int32_t partition_cnt,
+                                        void *rkt_opaque,
+                                        void *msg_opaque);
 
 /**
  * @brief Consistent partitioner.
@@ -2642,10 +2784,12 @@ int32_t rd_kafka_msg_partitioner_random(const rd_kafka_topic_t *rkt,
  *          the CRC value of the key
  */
 RD_EXPORT
-int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
-					 const void *key, size_t keylen,
-					 int32_t partition_cnt,
-					 void *rkt_opaque, void *msg_opaque);
+int32_t rd_kafka_msg_partitioner_consistent(const rd_kafka_topic_t *rkt,
+                                            const void *key,
+                                            size_t keylen,
+                                            int32_t partition_cnt,
+                                            void *rkt_opaque,
+                                            void *msg_opaque);
 
 /**
  * @brief Consistent-Random partitioner.
@@ -2663,10 +2807,12 @@ int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
  *          the CRC value of the key (if provided)
  */
 RD_EXPORT
-int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
-           const void *key, size_t keylen,
-           int32_t partition_cnt,
-           void *rkt_opaque, void *msg_opaque);
+int32_t rd_kafka_msg_partitioner_consistent_random(const rd_kafka_topic_t *rkt,
+                                                   const void *key,
+                                                   size_t keylen,
+                                                   int32_t partition_cnt,
+                                                   void *rkt_opaque,
+                                                   void *msg_opaque);
 
 
 /**
@@ -2683,11 +2829,12 @@ int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
  * @returns a partition between 0 and \p partition_cnt - 1.
  */
 RD_EXPORT
-int32_t rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
-                                          const void *key, size_t keylen,
-                                          int32_t partition_cnt,
-                                          void *rkt_opaque,
-                                          void *msg_opaque);
+int32_t rd_kafka_msg_partitioner_murmur2(const rd_kafka_topic_t *rkt,
+                                         const void *key,
+                                         size_t keylen,
+                                         int32_t partition_cnt,
+                                         void *rkt_opaque,
+                                         void *msg_opaque);
 
 /**
  * @brief Consistent-Random Murmur2 partitioner (Java compatible).
@@ -2704,11 +2851,12 @@ int32_t rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
  * @returns a partition between 0 and \p partition_cnt - 1.
  */
 RD_EXPORT
-int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
-                                                 const void *key, size_t keylen,
-                                                 int32_t partition_cnt,
-                                                 void *rkt_opaque,
-                                                 void *msg_opaque);
+int32_t rd_kafka_msg_partitioner_murmur2_random(const rd_kafka_topic_t *rkt,
+                                                const void *key,
+                                                size_t keylen,
+                                                int32_t partition_cnt,
+                                                void *rkt_opaque,
+                                                void *msg_opaque);
 
 
 /**
@@ -2725,11 +2873,12 @@ int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
  * @returns a partition between 0 and \p partition_cnt - 1.
  */
 RD_EXPORT
-int32_t rd_kafka_msg_partitioner_fnv1a (const rd_kafka_topic_t *rkt,
-                                        const void *key, size_t keylen,
-                                        int32_t partition_cnt,
-                                        void *rkt_opaque,
-                                        void *msg_opaque);
+int32_t rd_kafka_msg_partitioner_fnv1a(const rd_kafka_topic_t *rkt,
+                                       const void *key,
+                                       size_t keylen,
+                                       int32_t partition_cnt,
+                                       void *rkt_opaque,
+                                       void *msg_opaque);
 
 
 /**
@@ -2747,11 +2896,12 @@ int32_t rd_kafka_msg_partitioner_fnv1a (const rd_kafka_topic_t *rkt,
  * @returns a partition between 0 and \p partition_cnt - 1.
  */
 RD_EXPORT
-int32_t rd_kafka_msg_partitioner_fnv1a_random (const rd_kafka_topic_t *rkt,
-                                               const void *key, size_t keylen,
-                                               int32_t partition_cnt,
-                                               void *rkt_opaque,
-                                               void *msg_opaque);
+int32_t rd_kafka_msg_partitioner_fnv1a_random(const rd_kafka_topic_t *rkt,
+                                              const void *key,
+                                              size_t keylen,
+                                              int32_t partition_cnt,
+                                              void *rkt_opaque,
+                                              void *msg_opaque);
 
 
 /**@}*/
@@ -2767,7 +2917,6 @@ int32_t rd_kafka_msg_partitioner_fnv1a_random (const rd_kafka_topic_t *rkt,
 
 
 
-
 /**
  * @brief Creates a new Kafka handle and starts its operation according to the
  *        specified \p type (\p RD_KAFKA_CONSUMER or \p RD_KAFKA_PRODUCER).
@@ -2775,7 +2924,7 @@ int32_t rd_kafka_msg_partitioner_fnv1a_random (const rd_kafka_topic_t *rkt,
  * \p conf is an optional struct created with `rd_kafka_conf_new()` that will
  * be used instead of the default configuration.
  * The \p conf object is freed by this function on success and must not be used
- * or destroyed by the application sub-sequently.
+ * or destroyed by the application subsequently.
  * See `rd_kafka_conf_set()` et.al for more information.
  *
  * \p errstr must be a pointer to memory of at least size \p errstr_size where
@@ -2795,8 +2944,10 @@ int32_t rd_kafka_msg_partitioner_fnv1a_random (const rd_kafka_topic_t *rkt,
  * @sa To destroy the Kafka handle, use rd_kafka_destroy().
  */
 RD_EXPORT
-rd_kafka_t *rd_kafka_new(rd_kafka_type_t type, rd_kafka_conf_t *conf,
-			  char *errstr, size_t errstr_size);
+rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
+                         rd_kafka_conf_t *conf,
+                         char *errstr,
+                         size_t errstr_size);
 
 
 /**
@@ -2814,7 +2965,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type, rd_kafka_conf_t *conf,
  * @sa rd_kafka_destroy_flags()
  */
 RD_EXPORT
-void        rd_kafka_destroy(rd_kafka_t *rk);
+void rd_kafka_destroy(rd_kafka_t *rk);
 
 
 /**
@@ -2822,7 +2973,7 @@ void        rd_kafka_destroy(rd_kafka_t *rk);
  *
  */
 RD_EXPORT
-void rd_kafka_destroy_flags (rd_kafka_t *rk, int flags);
+void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags);
 
 /**
  * @brief Flags for rd_kafka_destroy_flags()
@@ -2867,7 +3018,7 @@ rd_kafka_type_t rd_kafka_type(const rd_kafka_t *rk);
  *          rd_kafka_mem_free()
  */
 RD_EXPORT
-char *rd_kafka_memberid (const rd_kafka_t *rk);
+char *rd_kafka_memberid(const rd_kafka_t *rk);
 
 
 
@@ -2890,7 +3041,7 @@ char *rd_kafka_memberid (const rd_kafka_t *rk);
  *          if no ClusterId could be retrieved in the allotted timespan.
  */
 RD_EXPORT
-char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms);
+char *rd_kafka_clusterid(rd_kafka_t *rk, int timeout_ms);
 
 
 /**
@@ -2909,7 +3060,7 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms);
  *          retrieved in the allotted timespan.
  */
 RD_EXPORT
-int32_t rd_kafka_controllerid (rd_kafka_t *rk, int timeout_ms);
+int32_t rd_kafka_controllerid(rd_kafka_t *rk, int timeout_ms);
 
 
 /**
@@ -2919,7 +3070,7 @@ int32_t rd_kafka_controllerid (rd_kafka_t *rk, int timeout_ms);
  * `rd_kafka_topic_conf_new()` that will be used instead of the default
  * topic configuration.
  * The \p conf object is freed by this function and must not be used or
- * destroyed by the application sub-sequently.
+ * destroyed by the application subsequently.
  * See `rd_kafka_topic_conf_set()` et.al for more information.
  *
  * Topic handles are refcounted internally and calling rd_kafka_topic_new()
@@ -2934,8 +3085,9 @@ int32_t rd_kafka_controllerid (rd_kafka_t *rk, int timeout_ms);
  * @sa rd_kafka_topic_destroy()
  */
 RD_EXPORT
-rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk, const char *topic,
-				      rd_kafka_topic_conf_t *conf);
+rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk,
+                                     const char *topic,
+                                     rd_kafka_topic_conf_t *conf);
 
 
 
@@ -2963,7 +3115,7 @@ const char *rd_kafka_topic_name(const rd_kafka_topic_t *rkt);
  *        with rd_kafka_topic_conf_set_opaque().
  */
 RD_EXPORT
-void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
+void *rd_kafka_topic_opaque(const rd_kafka_topic_t *rkt);
 
 
 /**
@@ -2972,32 +3124,33 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  * The unassigned partition is used by the producer API for messages
  * that should be partitioned using the configured or default partitioner.
  */
-#define RD_KAFKA_PARTITION_UA  ((int32_t)-1)
+#define RD_KAFKA_PARTITION_UA ((int32_t)-1)
 
 
 /**
  * @brief Polls the provided kafka handle for events.
  *
- * Events will cause application provided callbacks to be called.
+ * Events will cause application-provided callbacks to be called.
  *
  * The \p timeout_ms argument specifies the maximum amount of time
  * (in milliseconds) that the call will block waiting for events.
  * For non-blocking calls, provide 0 as \p timeout_ms.
- * To wait indefinately for an event, provide -1.
+ * To wait indefinitely for an event, provide -1.
  *
  * @remark  An application should make sure to call poll() at regular
  *          intervals to serve any queued callbacks waiting to be called.
  * @remark  If your producer doesn't have any callback set (in particular
  *          via rd_kafka_conf_set_dr_msg_cb or rd_kafka_conf_set_error_cb)
- *          you might chose not to call poll(), though this is not
+ *          you might choose not to call poll(), though this is not
  *          recommended.
  *
  * Events:
- *   - delivery report callbacks  (if dr_cb/dr_msg_cb is configured) [producer]
+ *   - delivery report callbacks (if dr_cb/dr_msg_cb is configured) [producer]
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
- *   - OAUTHBEARER token refresh callbacks (rd_kafka_conf_set_oauthbearer_token_refresh_cb()) [all]
+ *   - OAUTHBEARER token refresh callbacks
+ * (rd_kafka_conf_set_oauthbearer_token_refresh_cb()) [all]
  *
  * @returns the number of events served.
  */
@@ -3016,8 +3169,7 @@ int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms);
  * @remark This function MUST ONLY be called from within a librdkafka callback.
  */
 RD_EXPORT
-void rd_kafka_yield (rd_kafka_t *rk);
-
+void rd_kafka_yield(rd_kafka_t *rk);
 
 
 
@@ -3029,8 +3181,8 @@ void rd_kafka_yield (rd_kafka_t *rk);
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_pause_partitions (rd_kafka_t *rk,
-			   rd_kafka_topic_partition_list_t *partitions);
+rd_kafka_pause_partitions(rd_kafka_t *rk,
+                          rd_kafka_topic_partition_list_t *partitions);
 
 
 
@@ -3042,9 +3194,8 @@ rd_kafka_pause_partitions (rd_kafka_t *rk,
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_resume_partitions (rd_kafka_t *rk,
-			    rd_kafka_topic_partition_list_t *partitions);
-
+rd_kafka_resume_partitions(rd_kafka_t *rk,
+                           rd_kafka_topic_partition_list_t *partitions);
 
 
 
@@ -3057,9 +3208,12 @@ rd_kafka_resume_partitions (rd_kafka_t *rk,
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on failure.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_query_watermark_offsets (rd_kafka_t *rk,
-		      const char *topic, int32_t partition,
-		      int64_t *low, int64_t *high, int timeout_ms);
+rd_kafka_query_watermark_offsets(rd_kafka_t *rk,
+                                 const char *topic,
+                                 int32_t partition,
+                                 int64_t *low,
+                                 int64_t *high,
+                                 int timeout_ms);
 
 
 /**
@@ -3078,10 +3232,11 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk,
  *
  * @remark Shall only be used with an active consumer instance.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
-				const char *topic, int32_t partition,
-				int64_t *low, int64_t *high);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_get_watermark_offsets(rd_kafka_t *rk,
+                                                             const char *topic,
+                                                             int32_t partition,
+                                                             int64_t *low,
+                                                             int64_t *high);
 
 
 
@@ -3098,7 +3253,8 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
  * The function will block for at most \p timeout_ms milliseconds.
  *
  * @remark Duplicate Topic+Partitions are not supported.
- * @remark Per-partition errors may be returned in \c rd_kafka_topic_partition_t.err
+ * @remark Per-partition errors may be returned in \c
+ * rd_kafka_topic_partition_t.err
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if offsets were be queried (do note
  *          that per-partition errors might be set),
@@ -3110,9 +3266,9 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
  *          for the given partitions.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_offsets_for_times (rd_kafka_t *rk,
-                            rd_kafka_topic_partition_list_t *offsets,
-                            int timeout_ms);
+rd_kafka_offsets_for_times(rd_kafka_t *rk,
+                           rd_kafka_topic_partition_list_t *offsets,
+                           int timeout_ms);
 
 
 
@@ -3130,7 +3286,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
  *         rd_kafka_mem_free()
  */
 RD_EXPORT
-void *rd_kafka_mem_calloc (rd_kafka_t *rk, size_t num, size_t size);
+void *rd_kafka_mem_calloc(rd_kafka_t *rk, size_t num, size_t size);
 
 
 
@@ -3148,7 +3304,7 @@ void *rd_kafka_mem_calloc (rd_kafka_t *rk, size_t num, size_t size);
  *         rd_kafka_mem_free()
  */
 RD_EXPORT
-void *rd_kafka_mem_malloc (rd_kafka_t *rk, size_t size);
+void *rd_kafka_mem_malloc(rd_kafka_t *rk, size_t size);
 
 
 
@@ -3169,12 +3325,10 @@ void *rd_kafka_mem_malloc (rd_kafka_t *rk, size_t size);
  *         that explicitly mention using this function for freeing.
  */
 RD_EXPORT
-void rd_kafka_mem_free (rd_kafka_t *rk, void *ptr);
+void rd_kafka_mem_free(rd_kafka_t *rk, void *ptr);
 
 
 /**@}*/
-
-
 
 
 
@@ -3212,8 +3366,60 @@ void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
  * Use rd_kafka_queue_destroy() to loose the reference.
  */
 RD_EXPORT
-rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk);
+rd_kafka_queue_t *rd_kafka_queue_get_main(rd_kafka_t *rk);
 
+
+
+/**
+ * @returns a reference to the SASL callback queue, if a SASL mechanism
+ *          with callbacks is configured (currently only OAUTHBEARER), else
+ *          returns NULL.
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ *
+ * @sa rd_kafka_sasl_background_callbacks_enable()
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_sasl(rd_kafka_t *rk);
+
+
+/**
+ * @brief Enable SASL OAUTHBEARER refresh callbacks on the librdkafka
+ *        background thread.
+ *
+ * This serves as an alternative for applications that do not call
+ * rd_kafka_poll() (et.al.) at regular intervals (or not at all), as a means
+ * of automatically trigger the refresh callbacks, which are needed to
+ * initiate connections to the brokers in the case a custom OAUTHBEARER
+ * refresh callback is configured.
+ *
+ * @returns NULL on success or an error object on error.
+ *
+ * @sa rd_kafka_queue_get_sasl()
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb()
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable(rd_kafka_t *rk);
+
+
+/**
+ * @brief Sets SASL credentials used for SASL PLAIN and SCRAM mechanisms by
+ *        this Kafka client.
+ *
+ * This function sets or resets the SASL username and password credentials
+ * used by this Kafka client. The new credentials will be used the next time
+ * this client needs to authenticate to a broker. This function
+ * will not disconnect existing connections that might have been made using
+ * the old credentials.
+ *
+ * @remark This function only applies to the SASL PLAIN and SCRAM mechanisms.
+ *
+ * @returns NULL on success or an error object on error.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
+                                                const char *username,
+                                                const char *password);
 
 /**
  * @returns a reference to the librdkafka consumer queue.
@@ -3223,9 +3429,15 @@ rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk);
  *
  * @remark rd_kafka_queue_destroy() MUST be called on this queue
  *         prior to calling rd_kafka_consumer_close().
+ * @remark Polling the returned queue counts as a consumer poll, and will reset
+ *         the timer for max.poll.interval.ms. If this queue is forwarded to a
+ *         "destq", polling destq also counts as a consumer poll (this works
+ *         for any number of forwards). However, even if this queue is
+ *         unforwarded or forwarded elsewhere, polling destq will continue
+ *         to count as a consumer poll.
  */
 RD_EXPORT
-rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
+rd_kafka_queue_t *rd_kafka_queue_get_consumer(rd_kafka_t *rk);
 
 /**
  * @returns a reference to the partition's queue, or NULL if
@@ -3238,26 +3450,26 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
  * @remark This function only works on consumers.
  */
 RD_EXPORT
-rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
-                                                const char *topic,
-                                                int32_t partition);
+rd_kafka_queue_t *rd_kafka_queue_get_partition(rd_kafka_t *rk,
+                                               const char *topic,
+                                               int32_t partition);
 
 /**
  * @returns a reference to the background thread queue, or NULL if the
  *          background queue is not enabled.
  *
- * To enable the background thread queue set a generic event handler callback
- * with rd_kafka_conf_set_background_event_cb() on the client instance
- * configuration object (rd_kafka_conf_t).
+ * The background thread queue provides the application with an automatically
+ * polled queue that triggers the event callback in a background thread,
+ * this background thread is completely managed by librdkafka.
+ *
+ * The background thread queue is automatically created if a generic event
+ * handler callback is configured with rd_kafka_conf_set_background_event_cb()
+ * or if rd_kafka_queue_get_background() is called.
  *
  * The background queue is polled and served by librdkafka and MUST NOT be
  * polled, forwarded, or otherwise managed by the application, it may only
  * be used as the destination queue passed to queue-enabled APIs, such as
  * the Admin API.
- *
- * The background thread queue provides the application with an automatically
- * polled queue that triggers the event callback in a background thread,
- * this background thread is completely managed by librdkafka.
  *
  * Use rd_kafka_queue_destroy() to loose the reference.
  *
@@ -3265,7 +3477,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
  *          or forwarded from.
  */
 RD_EXPORT
-rd_kafka_queue_t *rd_kafka_queue_get_background (rd_kafka_t *rk);
+rd_kafka_queue_t *rd_kafka_queue_get_background(rd_kafka_t *rk);
 
 
 /**
@@ -3279,7 +3491,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_background (rd_kafka_t *rk);
  *         queue.
  */
 RD_EXPORT
-void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
+void rd_kafka_queue_forward(rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
 
 /**
  * @brief Forward librdkafka logs (and debug) to the specified queue
@@ -3296,18 +3508,19 @@ void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
  *
  * @remark librdkafka maintains its own reference to the provided queue.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error,
+ * eg RD_KAFKA_RESP_ERR__NOT_CONFIGURED when log.queue is not set to true.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_set_log_queue (rd_kafka_t *rk,
-                                            rd_kafka_queue_t *rkqu);
+rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
+                                           rd_kafka_queue_t *rkqu);
 
 
 /**
  * @returns the current number of elements in queue.
  */
 RD_EXPORT
-size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu);
+size_t rd_kafka_queue_length(rd_kafka_queue_t *rkqu);
 
 
 /**
@@ -3328,8 +3541,10 @@ size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu);
  * @remark The file-descriptor/socket must be set to non-blocking.
  */
 RD_EXPORT
-void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
-                                     const void *payload, size_t size);
+void rd_kafka_queue_io_event_enable(rd_kafka_queue_t *rkqu,
+                                    int fd,
+                                    const void *payload,
+                                    size_t size);
 
 /**
  * @brief Enable callback event triggering for queue.
@@ -3348,10 +3563,10 @@ void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
  *         handle).
  */
 RD_EXPORT
-void rd_kafka_queue_cb_event_enable (rd_kafka_queue_t *rkqu,
-                                     void (*event_cb) (rd_kafka_t *rk,
-                                                       void *qev_opaque),
-                                     void *qev_opaque);
+void rd_kafka_queue_cb_event_enable(rd_kafka_queue_t *rkqu,
+                                    void (*event_cb)(rd_kafka_t *rk,
+                                                     void *qev_opaque),
+                                    void *qev_opaque);
 
 
 /**
@@ -3362,7 +3577,7 @@ void rd_kafka_queue_cb_event_enable (rd_kafka_queue_t *rkqu,
  * Must not be used from signal handlers since that may cause deadlocks.
  */
 RD_EXPORT
-void rd_kafka_queue_yield (rd_kafka_queue_t *rkqu);
+void rd_kafka_queue_yield(rd_kafka_queue_t *rkqu);
 
 
 /**@}*/
@@ -3375,12 +3590,15 @@ void rd_kafka_queue_yield (rd_kafka_queue_t *rkqu);
  */
 
 
-#define RD_KAFKA_OFFSET_BEGINNING -2  /**< Start consuming from beginning of
-				       *   kafka partition queue: oldest msg */
-#define RD_KAFKA_OFFSET_END       -1  /**< Start consuming from end of kafka
-				       *   partition queue: next msg */
-#define RD_KAFKA_OFFSET_STORED -1000  /**< Start consuming from offset retrieved
-				       *   from offset store */
+#define RD_KAFKA_OFFSET_BEGINNING                                              \
+        -2 /**< Start consuming from beginning of                              \
+            *   kafka partition queue: oldest msg */
+#define RD_KAFKA_OFFSET_END                                                    \
+        -1 /**< Start consuming from end of kafka                              \
+            *   partition queue: next msg */
+#define RD_KAFKA_OFFSET_STORED                                                 \
+        -1000 /**< Start consuming from offset retrieved                       \
+               *   from offset store */
 #define RD_KAFKA_OFFSET_INVALID -1001 /**< Invalid offset */
 
 
@@ -3393,7 +3611,7 @@ void rd_kafka_queue_yield (rd_kafka_queue_t *rkqu);
  *
  * That is, if current end offset is 12345 and \p CNT is 200, it will start
  * consuming from offset \c 12345-200 = \c 12145. */
-#define RD_KAFKA_OFFSET_TAIL(CNT)  (RD_KAFKA_OFFSET_TAIL_BASE - (CNT))
+#define RD_KAFKA_OFFSET_TAIL(CNT) (RD_KAFKA_OFFSET_TAIL_BASE - (CNT))
 
 /**
  * @brief Start consuming messages for topic \p rkt and \p partition
@@ -3429,8 +3647,9 @@ void rd_kafka_queue_yield (rd_kafka_queue_t *rkqu);
  * Use `rd_kafka_errno2err()` to convert sytem \c errno to `rd_kafka_resp_err_t`
  */
 RD_EXPORT
-int rd_kafka_consume_start(rd_kafka_topic_t *rkt, int32_t partition,
-			    int64_t offset);
+int rd_kafka_consume_start(rd_kafka_topic_t *rkt,
+                           int32_t partition,
+                           int64_t offset);
 
 /**
  * @brief Same as rd_kafka_consume_start() but re-routes incoming messages to
@@ -3447,8 +3666,10 @@ int rd_kafka_consume_start(rd_kafka_topic_t *rkt, int32_t partition,
  * be combined for the same topic and partition.
  */
 RD_EXPORT
-int rd_kafka_consume_start_queue(rd_kafka_topic_t *rkt, int32_t partition,
-				  int64_t offset, rd_kafka_queue_t *rkqu);
+int rd_kafka_consume_start_queue(rd_kafka_topic_t *rkt,
+                                 int32_t partition,
+                                 int64_t offset,
+                                 rd_kafka_queue_t *rkqu);
 
 /**
  * @brief Stop consuming messages for topic \p rkt and \p partition, purging
@@ -3472,9 +3693,14 @@ int rd_kafka_consume_stop(rd_kafka_topic_t *rkt, int32_t partition);
  * @brief Seek consumer for topic+partition to \p offset which is either an
  *        absolute or logical offset.
  *
- * If \p timeout_ms is not 0 the call will wait this long for the
- * seek to be performed. If the timeout is reached the internal state
- * will be unknown and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ * If \p timeout_ms is specified (not 0) the seek call will wait this long
+ * for the consumer to update its fetcher state for the given partition with
+ * the new offset. This guarantees that no previously fetched messages for the
+ * old offset (or fetch position) will be passed to the application.
+ *
+ * If the timeout is reached the internal state will be unknown to the caller
+ * and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ *
  * If \p timeout_ms is 0 it will initiate the seek but return
  * immediately without any error reporting (e.g., async).
  *
@@ -3492,10 +3718,10 @@ int rd_kafka_consume_stop(rd_kafka_topic_t *rkt, int32_t partition);
  * @deprecated Use rd_kafka_seek_partitions().
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
-                                   int32_t partition,
-                                   int64_t offset,
-                                   int timeout_ms);
+rd_kafka_resp_err_t rd_kafka_seek(rd_kafka_topic_t *rkt,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  int timeout_ms);
 
 
 
@@ -3505,11 +3731,13 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
  *
  * The offset may be either absolute (>= 0) or a logical offset.
  *
- * If \p timeout_ms is not 0 the call will wait this long for the
- * seeks to be performed. If the timeout is reached the internal state
- * will be unknown for the remaining partitions to seek and this function
- * will return an error with the error code set to
- * `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ * If \p timeout_ms is specified (not 0) the seek call will wait this long
+ * for the consumer to update its fetcher state for the given partition with
+ * the new offset. This guarantees that no previously fetched messages for the
+ * old offset (or fetch position) will be passed to the application.
+ *
+ * If the timeout is reached the internal state will be unknown to the caller
+ * and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
  *
  * If \p timeout_ms is 0 it will initiate the seek but return
  * immediately without any error reporting (e.g., async).
@@ -3529,9 +3757,9 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
  * @returns NULL on success or an error object on failure.
  */
 RD_EXPORT rd_kafka_error_t *
-rd_kafka_seek_partitions (rd_kafka_t *rk,
-                          rd_kafka_topic_partition_list_t *partitions,
-                          int timeout_ms);
+rd_kafka_seek_partitions(rd_kafka_t *rk,
+                         rd_kafka_topic_partition_list_t *partitions,
+                         int timeout_ms);
 
 
 /**
@@ -3559,8 +3787,8 @@ rd_kafka_seek_partitions (rd_kafka_t *rk,
  *         passing message to application.
  */
 RD_EXPORT
-rd_kafka_message_t *rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition,
-				      int timeout_ms);
+rd_kafka_message_t *
+rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition, int timeout_ms);
 
 
 
@@ -3590,10 +3818,11 @@ rd_kafka_message_t *rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition,
  *         passing message to application.
  */
 RD_EXPORT
-ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
-				int timeout_ms,
-				rd_kafka_message_t **rkmessages,
-				size_t rkmessages_size);
+ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt,
+                               int32_t partition,
+                               int timeout_ms,
+                               rd_kafka_message_t **rkmessages,
+                               size_t rkmessages_size);
 
 
 
@@ -3631,13 +3860,15 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *             poll/queue based alternatives.
  */
 RD_EXPORT
-int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,
+int rd_kafka_consume_callback(rd_kafka_topic_t *rkt,
+                              int32_t partition,
                               int timeout_ms,
-                              void (*consume_cb) (rd_kafka_message_t
-                                                  *rkmessage,
-                                                  void *commit_opaque),
+                              void (*consume_cb)(rd_kafka_message_t *rkmessage,
+                                                 void *commit_opaque),
                               void *commit_opaque);
 
+
+/**@}*/
 
 /**
  * @name Simple Consumer API (legacy): Queue consumers
@@ -3666,9 +3897,9 @@ rd_kafka_message_t *rd_kafka_consume_queue(rd_kafka_queue_t *rkqu,
  */
 RD_EXPORT
 ssize_t rd_kafka_consume_batch_queue(rd_kafka_queue_t *rkqu,
-				      int timeout_ms,
-				      rd_kafka_message_t **rkmessages,
-				      size_t rkmessages_size);
+                                     int timeout_ms,
+                                     rd_kafka_message_t **rkmessages,
+                                     size_t rkmessages_size);
 
 /**
  * @brief Consume multiple messages from queue with callback
@@ -3680,16 +3911,14 @@ ssize_t rd_kafka_consume_batch_queue(rd_kafka_queue_t *rkqu,
  *             poll/queue based alternatives.
  */
 RD_EXPORT
-int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
-                                     int timeout_ms,
-                                     void (*consume_cb) (rd_kafka_message_t
-                                                         *rkmessage,
-                                                         void *commit_opaque),
-                                     void *commit_opaque);
+int rd_kafka_consume_callback_queue(
+    rd_kafka_queue_t *rkqu,
+    int timeout_ms,
+    void (*consume_cb)(rd_kafka_message_t *rkmessage, void *commit_opaque),
+    void *commit_opaque);
 
 
 /**@}*/
-
 
 
 
@@ -3709,14 +3938,28 @@ int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
  * The \c offset + 1 will be committed (written) to broker (or file) according
  * to \c `auto.commit.interval.ms` or manual offset-less commit()
  *
+ * @deprecated This API lacks support for partition leader epochs, which makes
+ *             it at risk for unclean leader election log truncation issues.
+ *             Use rd_kafka_offsets_store() and rd_kafka_offset_store_message()
+ *             instead.
+ *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
+ *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
+ *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
-					   int32_t partition, int64_t offset);
+rd_kafka_resp_err_t
+rd_kafka_offset_store(rd_kafka_topic_t *rkt, int32_t partition, int64_t offset);
 
 
 /**
@@ -3726,31 +3969,67 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
  * to \c `auto.commit.interval.ms` or manual offset-less commit().
  *
  * Per-partition success/error status propagated through each partition's
- * \c .err field.
+ * \c .err for all return values (even NO_ERROR) except INVALID_ARG.
+ *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
+ *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
  *
  * @remark The \c .offset field is stored as is, it will NOT be + 1.
  *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
- *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if none of the
- *          offsets could be stored, or
+ * @remark The leader epoch, if set, will be used to fence outdated partition
+ *         leaders. See rd_kafka_topic_partition_set_leader_epoch().
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on (partial) success, or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store
- *          is true.
+ *          is true, or
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION or RD_KAFKA_RESP_ERR__STATE
+ *          if none of the offsets could be stored.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_offsets_store (rd_kafka_t *rk,
-                        rd_kafka_topic_partition_list_t *offsets);
-/**@}*/
+rd_kafka_offsets_store(rd_kafka_t *rk,
+                       rd_kafka_topic_partition_list_t *offsets);
 
+
+/**
+ * @brief Store offset +1 for the consumed message.
+ *
+ * The message offset + 1 will be committed to broker according
+ * to \c `auto.commit.interval.ms` or manual offset-less commit()
+ *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
+ *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
+ *
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using
+ *         this API.
+ *
+ * @returns NULL on success or an error object on failure.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_offset_store_message(rd_kafka_message_t *rkmessage);
+
+/**@}*/
 
 
 
 /**
  * @name KafkaConsumer (C)
- * @{
  * @brief High-level KafkaConsumer C API
+ * @{
  *
  *
  *
@@ -3780,7 +4059,8 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *         and then start fetching messages. This cycle may take up to
  *         \c session.timeout.ms * 2 or more to complete.
  *
- * @remark A consumer error will be raised for each unavailable topic in the
+ * @remark After this call returns a consumer error will be returned by
+ *         rd_kafka_consumer_poll (et.al) for each unavailable topic in the
  *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
  *         for non-existent topics, and
  *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
@@ -3796,15 +4076,15 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_subscribe (rd_kafka_t *rk,
-                    const rd_kafka_topic_partition_list_t *topics);
+rd_kafka_subscribe(rd_kafka_t *rk,
+                   const rd_kafka_topic_partition_list_t *topics);
 
 
 /**
  * @brief Unsubscribe from the current subscription set.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);
+rd_kafka_resp_err_t rd_kafka_unsubscribe(rd_kafka_t *rk);
 
 
 /**
@@ -3817,8 +4097,7 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);
  *         rd_kafka_topic_partition_list_destroy on the returned list.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_subscription (rd_kafka_t *rk,
-                       rd_kafka_topic_partition_list_t **topics);
+rd_kafka_subscription(rd_kafka_t *rk, rd_kafka_topic_partition_list_t **topics);
 
 
 
@@ -3852,15 +4131,15 @@ rd_kafka_subscription (rd_kafka_t *rk,
  * @sa rd_kafka_message_t
  */
 RD_EXPORT
-rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
+rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms);
 
 /**
- * @brief Close down the KafkaConsumer.
+ * @brief Close the consumer.
  *
- * @remark This call will block until the consumer has revoked its assignment,
- *         calling the \c rebalance_cb if it is configured, committed offsets
- *         to broker, and left the consumer group.
- *         The maximum blocking time is roughly limited to session.timeout.ms.
+ * This call will block until the consumer has revoked its assignment,
+ * calling the \c rebalance_cb if it is configured, committed offsets
+ * to broker, and left the consumer group (if applicable).
+ * The maximum blocking time is roughly limited to session.timeout.ms.
  *
  * @returns An error code indicating if the consumer close was succesful
  *          or not.
@@ -3872,7 +4151,41 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
  *
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
+rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk);
+
+
+/**
+ * @brief Asynchronously close the consumer.
+ *
+ * Performs the same actions as rd_kafka_consumer_close() but in a
+ * background thread.
+ *
+ * Rebalance events/callbacks (etc) will be forwarded to the
+ * application-provided \p rkqu. The application must poll/serve this queue
+ * until rd_kafka_consumer_closed() returns true.
+ *
+ * @remark Depending on consumer group join state there may or may not be
+ *         rebalance events emitted on \p rkqu.
+ *
+ * @returns an error object if the consumer close failed, else NULL.
+ *
+ * @sa rd_kafka_consumer_closed()
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_consumer_close_queue(rd_kafka_t *rk,
+                                                rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @returns 1 if the consumer is closed, else 0.
+ *
+ * Should be used in conjunction with rd_kafka_consumer_close_queue() to know
+ * when the consumer has been closed.
+ *
+ * @sa rd_kafka_consumer_close_queue()
+ */
+RD_EXPORT
+int rd_kafka_consumer_closed(rd_kafka_t *rk);
 
 
 /**
@@ -3893,9 +4206,8 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
  *         rd_kafka_error_destroy().
  */
 RD_EXPORT rd_kafka_error_t *
-rd_kafka_incremental_assign (rd_kafka_t *rk,
-                             const rd_kafka_topic_partition_list_t
-                             *partitions);
+rd_kafka_incremental_assign(rd_kafka_t *rk,
+                            const rd_kafka_topic_partition_list_t *partitions);
 
 
 /**
@@ -3915,10 +4227,9 @@ rd_kafka_incremental_assign (rd_kafka_t *rk,
  * @remark The returned error object (if not NULL) must be destroyed with
  *         rd_kafka_error_destroy().
  */
-RD_EXPORT rd_kafka_error_t *
-rd_kafka_incremental_unassign (rd_kafka_t *rk,
-                               const rd_kafka_topic_partition_list_t
-                               *partitions);
+RD_EXPORT rd_kafka_error_t *rd_kafka_incremental_unassign(
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *partitions);
 
 
 /**
@@ -3935,7 +4246,7 @@ rd_kafka_incremental_unassign (rd_kafka_t *rk,
  * @returns NULL on error, or one of "NONE", "EAGER", "COOPERATIVE" on success.
  */
 RD_EXPORT
-const char *rd_kafka_rebalance_protocol (rd_kafka_t *rk);
+const char *rd_kafka_rebalance_protocol(rd_kafka_t *rk);
 
 
 /**
@@ -3959,8 +4270,8 @@ const char *rd_kafka_rebalance_protocol (rd_kafka_t *rk);
  *          a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_assign (rd_kafka_t *rk,
-                 const rd_kafka_topic_partition_list_t *partitions);
+rd_kafka_assign(rd_kafka_t *rk,
+                const rd_kafka_topic_partition_list_t *partitions);
 
 /**
  * @brief Returns the current partition assignment as set by rd_kafka_assign()
@@ -3979,8 +4290,8 @@ rd_kafka_assign (rd_kafka_t *rk,
  *         since an application is free to assign any partitions.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_assignment (rd_kafka_t *rk,
-                     rd_kafka_topic_partition_list_t **partitions);
+rd_kafka_assignment(rd_kafka_t *rk,
+                    rd_kafka_topic_partition_list_t **partitions);
 
 
 /**
@@ -3999,8 +4310,7 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * @returns Returns 1 if the current partition assignment is considered
  *          lost, 0 otherwise.
  */
-RD_EXPORT int
-rd_kafka_assignment_lost (rd_kafka_t *rk);
+RD_EXPORT int rd_kafka_assignment_lost(rd_kafka_t *rk);
 
 
 /**
@@ -4024,8 +4334,9 @@ rd_kafka_assignment_lost (rd_kafka_t *rk);
  *          a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
-                 int async);
+rd_kafka_commit(rd_kafka_t *rk,
+                const rd_kafka_topic_partition_list_t *offsets,
+                int async);
 
 
 /**
@@ -4035,8 +4346,9 @@ rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
  * @sa rd_kafka_commit
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
-                         int async);
+rd_kafka_commit_message(rd_kafka_t *rk,
+                        const rd_kafka_message_t *rkmessage,
+                        int async);
 
 
 /**
@@ -4062,14 +4374,14 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
  * @sa rd_kafka_conf_set_offset_commit_cb()
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_commit_queue (rd_kafka_t *rk,
-		       const rd_kafka_topic_partition_list_t *offsets,
-		       rd_kafka_queue_t *rkqu,
-		       void (*cb) (rd_kafka_t *rk,
-				   rd_kafka_resp_err_t err,
-				   rd_kafka_topic_partition_list_t *offsets,
-                                   void *commit_opaque),
-		       void *commit_opaque);
+rd_kafka_commit_queue(rd_kafka_t *rk,
+                      const rd_kafka_topic_partition_list_t *offsets,
+                      rd_kafka_queue_t *rkqu,
+                      void (*cb)(rd_kafka_t *rk,
+                                 rd_kafka_resp_err_t err,
+                                 rd_kafka_topic_partition_list_t *offsets,
+                                 void *commit_opaque),
+                      void *commit_opaque);
 
 
 /**
@@ -4090,9 +4402,9 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
  *          Else returns an error code.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_committed (rd_kafka_t *rk,
-		    rd_kafka_topic_partition_list_t *partitions,
-		    int timeout_ms);
+rd_kafka_committed(rd_kafka_t *rk,
+                   rd_kafka_topic_partition_list_t *partitions,
+                   int timeout_ms);
 
 
 
@@ -4100,8 +4412,8 @@ rd_kafka_committed (rd_kafka_t *rk,
  * @brief Retrieve current positions (offsets) for topics+partitions.
  *
  * The \p offset field of each requested partition will be set to the offset
- * of the last consumed message + 1, or RD_KAFKA_OFFSET_INVALID in case there was
- * no previous message.
+ * of the last consumed message + 1, or RD_KAFKA_OFFSET_INVALID in case there
+ * was no previous message.
  *
  * @remark  In this context the last consumed message is the offset consumed
  *          by the current librdkafka instance and, in case of rebalancing, not
@@ -4113,9 +4425,7 @@ rd_kafka_committed (rd_kafka_t *rk,
  *          Else returns an error code.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_position (rd_kafka_t *rk,
-		   rd_kafka_topic_partition_list_t *partitions);
-
+rd_kafka_position(rd_kafka_t *rk, rd_kafka_topic_partition_list_t *partitions);
 
 
 
@@ -4131,7 +4441,7 @@ rd_kafka_position (rd_kafka_t *rk,
  * @sa rd_kafka_send_offsets_to_transaction()
  */
 RD_EXPORT rd_kafka_consumer_group_metadata_t *
-rd_kafka_consumer_group_metadata (rd_kafka_t *rk);
+rd_kafka_consumer_group_metadata(rd_kafka_t *rk);
 
 
 /**
@@ -4144,7 +4454,7 @@ rd_kafka_consumer_group_metadata (rd_kafka_t *rk);
  *         rd_kafka_consumer_group_metadata_destroy().
  */
 RD_EXPORT rd_kafka_consumer_group_metadata_t *
-rd_kafka_consumer_group_metadata_new (const char *group_id);
+rd_kafka_consumer_group_metadata_new(const char *group_id);
 
 
 /**
@@ -4160,11 +4470,10 @@ rd_kafka_consumer_group_metadata_new (const char *group_id);
  *         rd_kafka_consumer_group_metadata_destroy().
  */
 RD_EXPORT rd_kafka_consumer_group_metadata_t *
-rd_kafka_consumer_group_metadata_new_with_genid (const char *group_id,
-                                                 int32_t generation_id,
-                                                 const char *member_id,
-                                                 const char
-                                                 *group_instance_id);
+rd_kafka_consumer_group_metadata_new_with_genid(const char *group_id,
+                                                int32_t generation_id,
+                                                const char *member_id,
+                                                const char *group_instance_id);
 
 
 /**
@@ -4172,7 +4481,7 @@ rd_kafka_consumer_group_metadata_new_with_genid (const char *group_id,
  *        rd_kafka_consumer_group_metadata().
  */
 RD_EXPORT void
-rd_kafka_consumer_group_metadata_destroy (rd_kafka_consumer_group_metadata_t *);
+rd_kafka_consumer_group_metadata_destroy(rd_kafka_consumer_group_metadata_t *);
 
 
 /**
@@ -4195,10 +4504,10 @@ rd_kafka_consumer_group_metadata_destroy (rd_kafka_consumer_group_metadata_t *);
  *
  * @sa rd_kafka_consumer_group_metadata_read()
  */
-RD_EXPORT rd_kafka_error_t *
-rd_kafka_consumer_group_metadata_write (
-        const rd_kafka_consumer_group_metadata_t *cgmd,
-        void **bufferp, size_t *sizep);
+RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_write(
+    const rd_kafka_consumer_group_metadata_t *cgmd,
+    void **bufferp,
+    size_t *sizep);
 
 /**
  * @brief Reads serialized consumer group metadata and returns a
@@ -4220,10 +4529,10 @@ rd_kafka_consumer_group_metadata_write (
  *
  * @sa rd_kafka_consumer_group_metadata_write()
  */
-RD_EXPORT rd_kafka_error_t *
-rd_kafka_consumer_group_metadata_read (
-        rd_kafka_consumer_group_metadata_t **cgmdp,
-        const void *buffer, size_t size);
+RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
+    rd_kafka_consumer_group_metadata_t **cgmdp,
+    const void *buffer,
+    size_t size);
 
 /**@}*/
 
@@ -4240,21 +4549,27 @@ rd_kafka_consumer_group_metadata_read (
 /**
  * @brief Producer message flags
  */
-#define RD_KAFKA_MSG_F_FREE  0x1 /**< Delegate freeing of payload to rdkafka. */
-#define RD_KAFKA_MSG_F_COPY  0x2 /**< rdkafka will make a copy of the payload. */
-#define RD_KAFKA_MSG_F_BLOCK 0x4 /**< Block produce*() on message queue full.
-				  *   WARNING: If a delivery report callback
-				  *            is used the application MUST
-				  *            call rd_kafka_poll() (or equiv.)
-				  *            to make sure delivered messages
-				  *            are drained from the internal
-				  *            delivery report queue.
-				  *            Failure to do so will result
-				  *            in indefinately blocking on
-				  *            the produce() call when the
-				  *            message queue is full. */
-#define RD_KAFKA_MSG_F_PARTITION 0x8 /**< produce_batch() will honor
-                                      * per-message partition. */
+#define RD_KAFKA_MSG_F_FREE                                                    \
+        0x1 /**< Delegate freeing of payload to rdkafka.                       \
+             */
+#define RD_KAFKA_MSG_F_COPY                                                    \
+        0x2 /**< rdkafka will make a copy of the payload.                      \
+             */
+#define RD_KAFKA_MSG_F_BLOCK                                                   \
+        0x4 /**< Block produce*() on message queue full.                       \
+             *   WARNING: If a delivery report callback                        \
+             *            is used, the application MUST                        \
+             *            call rd_kafka_poll() (or equiv.)                     \
+             *            to make sure delivered messages                      \
+             *            are drained from the internal                        \
+             *            delivery report queue.                               \
+             *            Failure to do so will result                         \
+             *            in indefinitely blocking on                          \
+             *            the produce() call when the                          \
+             *            message queue is full. */
+#define RD_KAFKA_MSG_F_PARTITION                                               \
+        0x8 /**< produce_batch() will honor                                    \
+             * per-message partition. */
 
 
 
@@ -4264,10 +4579,10 @@ rd_kafka_consumer_group_metadata_read (
  * \p rkt is the target topic which must have been previously created with
  * `rd_kafka_topic_new()`.
  *
- * `rd_kafka_produce()` is an asynch non-blocking API.
+ * `rd_kafka_produce()` is an asynchronous non-blocking API.
  * See `rd_kafka_conf_set_dr_msg_cb` on how to setup a callback to be called
  * once the delivery status (success or failure) is known. The delivery report
- * is trigged by the application calling `rd_kafka_poll()` (at regular
+ * is triggered by the application calling `rd_kafka_poll()` (at regular
  * intervals) or `rd_kafka_flush()` (at termination).
  *
  * Since producing is asynchronous, you should call `rd_kafka_flush()` before
@@ -4295,13 +4610,11 @@ rd_kafka_consumer_group_metadata_read (
  *    RD_KAFKA_MSG_F_BLOCK - block \p produce*() call if
  *                           \p queue.buffering.max.messages or
  *                           \p queue.buffering.max.kbytes are exceeded.
- *                           Messages are considered in-queue from the point they
- *                           are accepted by produce() until their corresponding
- *                           delivery report callback/event returns.
- *                           It is thus a requirement to call
- *                           rd_kafka_poll() (or equiv.) from a separate
- *                           thread when F_BLOCK is used.
- *                           See WARNING on \c RD_KAFKA_MSG_F_BLOCK above.
+ *                           Messages are considered in-queue from the point
+ * they are accepted by produce() until their corresponding delivery report
+ * callback/event returns. It is thus a requirement to call rd_kafka_poll() (or
+ * equiv.) from a separate thread when F_BLOCK is used. See WARNING on \c
+ * RD_KAFKA_MSG_F_BLOCK above.
  *
  *    RD_KAFKA_MSG_F_FREE - rdkafka will free(3) \p payload when it is done
  *                          with it.
@@ -4361,11 +4674,14 @@ rd_kafka_consumer_group_metadata_read (
  * @sa Use rd_kafka_errno2err() to convert `errno` to rdkafka error code.
  */
 RD_EXPORT
-int rd_kafka_produce(rd_kafka_topic_t *rkt, int32_t partition,
-		      int msgflags,
-		      void *payload, size_t len,
-		      const void *key, size_t keylen,
-		      void *msg_opaque);
+int rd_kafka_produce(rd_kafka_topic_t *rkt,
+                     int32_t partition,
+                     int msgflags,
+                     void *payload,
+                     size_t len,
+                     const void *key,
+                     size_t keylen,
+                     void *msg_opaque);
 
 
 /**
@@ -4382,7 +4698,7 @@ int rd_kafka_produce(rd_kafka_topic_t *rkt, int32_t partition,
  * @sa rd_kafka_produce, rd_kafka_produceva, RD_KAFKA_V_END
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
+rd_kafka_resp_err_t rd_kafka_producev(rd_kafka_t *rk, ...);
 
 
 /**
@@ -4397,9 +4713,8 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
  * @sa rd_kafka_produce, rd_kafka_producev, RD_KAFKA_V_END
  */
 RD_EXPORT
-rd_kafka_error_t *rd_kafka_produceva (rd_kafka_t *rk,
-                                      const rd_kafka_vu_t *vus,
-                                      size_t cnt);
+rd_kafka_error_t *
+rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt);
 
 
 /**
@@ -4432,10 +4747,11 @@ rd_kafka_error_t *rd_kafka_produceva (rd_kafka_t *rk,
  *         the provided \p rkmessages.
  */
 RD_EXPORT
-int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
-                            int msgflags,
-                            rd_kafka_message_t *rkmessages, int message_cnt);
-
+int rd_kafka_produce_batch(rd_kafka_topic_t *rkt,
+                           int32_t partition,
+                           int msgflags,
+                           rd_kafka_message_t *rkmessages,
+                           int message_cnt);
 
 
 
@@ -4464,7 +4780,7 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
  * @sa rd_kafka_outq_len()
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms);
+rd_kafka_resp_err_t rd_kafka_flush(rd_kafka_t *rk, int timeout_ms);
 
 
 
@@ -4483,7 +4799,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms);
  * RD_KAFKA_RESP_ERR__PURGE_INFLIGHT.
  *
  * @warning Purging messages that are in-flight to or from the broker
- *          will ignore any sub-sequent acknowledgement for these messages
+ *          will ignore any subsequent acknowledgement for these messages
  *          received from the broker, effectively making it impossible
  *          for the application to know if the messages were successfully
  *          produced or not. This may result in duplicate messages if the
@@ -4499,7 +4815,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms);
  *          client instance.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags);
+rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
 
 
 /**
@@ -4531,43 +4847,43 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags);
 
 
 /**
-* @name Metadata API
-* @{
-*
-*
-*/
+ * @name Metadata API
+ * @{
+ *
+ *
+ */
 
 
 /**
  * @brief Broker information
  */
 typedef struct rd_kafka_metadata_broker {
-        int32_t     id;             /**< Broker Id */
-        char       *host;           /**< Broker hostname */
-        int         port;           /**< Broker listening port */
+        int32_t id; /**< Broker Id */
+        char *host; /**< Broker hostname */
+        int port;   /**< Broker listening port */
 } rd_kafka_metadata_broker_t;
 
 /**
  * @brief Partition information
  */
 typedef struct rd_kafka_metadata_partition {
-        int32_t     id;             /**< Partition Id */
-        rd_kafka_resp_err_t err;    /**< Partition error reported by broker */
-        int32_t     leader;         /**< Leader broker */
-        int         replica_cnt;    /**< Number of brokers in \p replicas */
-        int32_t    *replicas;       /**< Replica brokers */
-        int         isr_cnt;        /**< Number of ISR brokers in \p isrs */
-        int32_t    *isrs;           /**< In-Sync-Replica brokers */
+        int32_t id;              /**< Partition Id */
+        rd_kafka_resp_err_t err; /**< Partition error reported by broker */
+        int32_t leader;          /**< Leader broker */
+        int replica_cnt;         /**< Number of brokers in \p replicas */
+        int32_t *replicas;       /**< Replica brokers */
+        int isr_cnt;             /**< Number of ISR brokers in \p isrs */
+        int32_t *isrs;           /**< In-Sync-Replica brokers */
 } rd_kafka_metadata_partition_t;
 
 /**
  * @brief Topic information
  */
 typedef struct rd_kafka_metadata_topic {
-        char       *topic;          /**< Topic name */
-        int         partition_cnt;  /**< Number of partitions in \p partitions*/
+        char *topic;       /**< Topic name */
+        int partition_cnt; /**< Number of partitions in \p partitions*/
         struct rd_kafka_metadata_partition *partitions; /**< Partitions */
-        rd_kafka_resp_err_t err;    /**< Topic error reported by broker */
+        rd_kafka_resp_err_t err; /**< Topic error reported by broker */
 } rd_kafka_metadata_topic_t;
 
 
@@ -4575,16 +4891,15 @@ typedef struct rd_kafka_metadata_topic {
  * @brief Metadata container
  */
 typedef struct rd_kafka_metadata {
-        int         broker_cnt;     /**< Number of brokers in \p brokers */
-        struct rd_kafka_metadata_broker *brokers;  /**< Brokers */
+        int broker_cnt; /**< Number of brokers in \p brokers */
+        struct rd_kafka_metadata_broker *brokers; /**< Brokers */
 
-        int         topic_cnt;      /**< Number of topics in \p topics */
-        struct rd_kafka_metadata_topic *topics;    /**< Topics */
+        int topic_cnt; /**< Number of topics in \p topics */
+        struct rd_kafka_metadata_topic *topics; /**< Topics */
 
-        int32_t     orig_broker_id;   /**< Broker originating this metadata */
-        char       *orig_broker_name; /**< Name of originating broker */
+        int32_t orig_broker_id; /**< Broker originating this metadata */
+        char *orig_broker_name; /**< Name of originating broker */
 } rd_kafka_metadata_t;
-
 
 /**
  * @brief Request Metadata from broker.
@@ -4608,10 +4923,11 @@ typedef struct rd_kafka_metadata {
  */
 RD_EXPORT
 rd_kafka_resp_err_t
-rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
-                   rd_kafka_topic_t *only_rkt,
-                   const struct rd_kafka_metadata **metadatap,
-                   int timeout_ms);
+rd_kafka_metadata(rd_kafka_t *rk,
+                  int all_topics,
+                  rd_kafka_topic_t *only_rkt,
+                  const struct rd_kafka_metadata **metadatap,
+                  int timeout_ms);
 
 /**
  * @brief Release metadata memory.
@@ -4619,17 +4935,54 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
 RD_EXPORT
 void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata);
 
+/**
+ * @brief Node (broker) information.
+ */
+typedef struct rd_kafka_Node_s rd_kafka_Node_t;
+
+/**
+ * @brief Get the id of \p node.
+ *
+ * @param node The Node instance.
+ *
+ * @return The node id.
+ */
+RD_EXPORT
+int rd_kafka_Node_id(const rd_kafka_Node_t *node);
+
+/**
+ * @brief Get the host of \p node.
+ *
+ * @param node The Node instance.
+ *
+ * @return The node host.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p node object.
+ */
+RD_EXPORT
+const char *rd_kafka_Node_host(const rd_kafka_Node_t *node);
+
+/**
+ * @brief Get the port of \p node.
+ *
+ * @param node The Node instance.
+ *
+ * @return The node port.
+ */
+RD_EXPORT
+uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node);
 
 /**@}*/
 
 
 
 /**
-* @name Client group information
-* @{
-*
-*
-*/
+ * @name Client group information
+ * @{
+ *
+ *
+ */
 
 
 /**
@@ -4645,11 +4998,26 @@ struct rd_kafka_group_member_info {
         char *client_host;          /**< Client's hostname */
         void *member_metadata;      /**< Member metadata (binary),
                                      *   format depends on \p protocol_type. */
-        int   member_metadata_size; /**< Member metadata size in bytes */
+        int member_metadata_size;   /**< Member metadata size in bytes */
         void *member_assignment;    /**< Member assignment (binary),
                                      *    format depends on \p protocol_type. */
-        int   member_assignment_size; /**< Member assignment size in bytes */
+        int member_assignment_size; /**< Member assignment size in bytes */
 };
+
+/**
+ * @enum rd_kafka_consumer_group_state_t
+ *
+ * @brief Consumer group state.
+ */
+typedef enum {
+        RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN              = 0,
+        RD_KAFKA_CONSUMER_GROUP_STATE_PREPARING_REBALANCE  = 1,
+        RD_KAFKA_CONSUMER_GROUP_STATE_COMPLETING_REBALANCE = 2,
+        RD_KAFKA_CONSUMER_GROUP_STATE_STABLE               = 3,
+        RD_KAFKA_CONSUMER_GROUP_STATE_DEAD                 = 4,
+        RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY                = 5,
+        RD_KAFKA_CONSUMER_GROUP_STATE__CNT
+} rd_kafka_consumer_group_state_t;
 
 /**
  * @brief Group information
@@ -4662,7 +5030,7 @@ struct rd_kafka_group_info {
         char *protocol_type;                    /**< Group protocol type */
         char *protocol;                         /**< Group protocol */
         struct rd_kafka_group_member_info *members; /**< Group members */
-        int   member_cnt;                       /**< Group member count */
+        int member_cnt;                             /**< Group member count */
 };
 
 /**
@@ -4671,15 +5039,15 @@ struct rd_kafka_group_info {
  * @sa rd_kafka_group_list_destroy() to release list memory.
  */
 struct rd_kafka_group_list {
-        struct rd_kafka_group_info *groups;   /**< Groups */
-        int    group_cnt;                     /**< Group count */
+        struct rd_kafka_group_info *groups; /**< Groups */
+        int group_cnt;                      /**< Group count */
 };
 
 
 /**
  * @brief List and describe client groups in cluster.
  *
- * \p group is an optional group name to describe, otherwise (\p NULL) all
+ * \p group is an optional group name to describe, otherwise (\c NULL) all
  * groups are returned.
  *
  * \p timeout_ms is the (approximate) maximum time to wait for response
@@ -4702,18 +5070,44 @@ struct rd_kafka_group_list {
  *           group list.
  *
  * @sa Use rd_kafka_group_list_destroy() to release list memory.
+ *
+ * @deprecated Use rd_kafka_ListConsumerGroups() and
+ *             rd_kafka_DescribeConsumerGroups() instead.
  */
 RD_EXPORT
 rd_kafka_resp_err_t
-rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
-                      const struct rd_kafka_group_list **grplistp,
-                      int timeout_ms);
+rd_kafka_list_groups(rd_kafka_t *rk,
+                     const char *group,
+                     const struct rd_kafka_group_list **grplistp,
+                     int timeout_ms);
+
+/**
+ * @brief Returns a name for a state code.
+ *
+ * @param state The state value.
+ *
+ * @return The group state name corresponding to the provided group state value.
+ */
+RD_EXPORT
+const char *
+rd_kafka_consumer_group_state_name(rd_kafka_consumer_group_state_t state);
+
+/**
+ * @brief Returns a code for a state name.
+ *
+ * @param name The state name.
+ *
+ * @return The group state value corresponding to the provided group state name.
+ */
+RD_EXPORT
+rd_kafka_consumer_group_state_t
+rd_kafka_consumer_group_state_code(const char *name);
 
 /**
  * @brief Release list memory
  */
 RD_EXPORT
-void rd_kafka_group_list_destroy (const struct rd_kafka_group_list *grplist);
+void rd_kafka_group_list_destroy(const struct rd_kafka_group_list *grplist);
 
 
 /**@}*/
@@ -4764,7 +5158,6 @@ int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist);
 
 
 
-
 /**
  * @brief Set logger function.
  *
@@ -4777,10 +5170,12 @@ int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist);
  *
  * @remark \p rk may be passed as NULL in the callback.
  */
-RD_EXPORT RD_DEPRECATED
-void rd_kafka_set_logger(rd_kafka_t *rk,
-			  void (*func) (const rd_kafka_t *rk, int level,
-					const char *fac, const char *buf));
+RD_EXPORT RD_DEPRECATED void
+rd_kafka_set_logger(rd_kafka_t *rk,
+                    void (*func)(const rd_kafka_t *rk,
+                                 int level,
+                                 const char *fac,
+                                 const char *buf));
 
 
 /**
@@ -4800,8 +5195,10 @@ void rd_kafka_set_log_level(rd_kafka_t *rk, int level);
  * @brief Builtin (default) log sink: print to stderr
  */
 RD_EXPORT
-void rd_kafka_log_print(const rd_kafka_t *rk, int level,
-			 const char *fac, const char *buf);
+void rd_kafka_log_print(const rd_kafka_t *rk,
+                        int level,
+                        const char *fac,
+                        const char *buf);
 
 
 /**
@@ -4810,8 +5207,10 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
  *         with syslog support.
  */
 RD_EXPORT
-void rd_kafka_log_syslog(const rd_kafka_t *rk, int level,
-			  const char *fac, const char *buf);
+void rd_kafka_log_syslog(const rd_kafka_t *rk,
+                         int level,
+                         const char *fac,
+                         const char *buf);
 
 
 /**
@@ -4837,7 +5236,7 @@ void rd_kafka_log_syslog(const rd_kafka_t *rk, int level,
  * @sa rd_kafka_flush()
  */
 RD_EXPORT
-int         rd_kafka_outq_len(rd_kafka_t *rk);
+int rd_kafka_outq_len(rd_kafka_t *rk);
 
 
 
@@ -4893,11 +5292,10 @@ int rd_kafka_wait_destroyed(int timeout_ms);
  * @returns the number of failures, or 0 if all tests passed.
  */
 RD_EXPORT
-int rd_kafka_unittest (void);
+int rd_kafka_unittest(void);
 
 
 /**@}*/
-
 
 
 
@@ -4914,7 +5312,7 @@ int rd_kafka_unittest (void);
  *          main queue with rd_kafka_poll_set_consumer().
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
+rd_kafka_resp_err_t rd_kafka_poll_set_consumer(rd_kafka_t *rk);
 
 
 /**@}*/
@@ -4933,27 +5331,45 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
  * @brief Event types
  */
 typedef int rd_kafka_event_type_t;
-#define RD_KAFKA_EVENT_NONE          0x0  /**< Unset value */
-#define RD_KAFKA_EVENT_DR            0x1  /**< Producer Delivery report batch */
-#define RD_KAFKA_EVENT_FETCH         0x2  /**< Fetched message (consumer) */
-#define RD_KAFKA_EVENT_LOG           0x4  /**< Log message */
-#define RD_KAFKA_EVENT_ERROR         0x8  /**< Error */
-#define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
-#define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
-#define RD_KAFKA_EVENT_STATS         0x40 /**< Stats */
-#define RD_KAFKA_EVENT_CREATETOPICS_RESULT 100 /**< CreateTopics_result_t */
-#define RD_KAFKA_EVENT_DELETETOPICS_RESULT 101 /**< DeleteTopics_result_t */
-#define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
+#define RD_KAFKA_EVENT_NONE                0x0 /**< Unset value */
+#define RD_KAFKA_EVENT_DR                  0x1 /**< Producer Delivery report batch */
+#define RD_KAFKA_EVENT_FETCH               0x2 /**< Fetched message (consumer) */
+#define RD_KAFKA_EVENT_LOG                 0x4 /**< Log message */
+#define RD_KAFKA_EVENT_ERROR               0x8 /**< Error */
+#define RD_KAFKA_EVENT_REBALANCE           0x10 /**< Group rebalance (consumer) */
+#define RD_KAFKA_EVENT_OFFSET_COMMIT       0x20 /**< Offset commit result */
+#define RD_KAFKA_EVENT_STATS               0x40 /**< Stats */
+#define RD_KAFKA_EVENT_CREATETOPICS_RESULT 100  /**< CreateTopics_result_t */
+#define RD_KAFKA_EVENT_DELETETOPICS_RESULT 101  /**< DeleteTopics_result_t */
+#define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT                                 \
+        102                                    /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
-#define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
+#define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT                                  \
+        104                                     /**< DescribeConfigs_result_t */
 #define RD_KAFKA_EVENT_DELETERECORDS_RESULT 105 /**< DeleteRecords_result_t */
-#define RD_KAFKA_EVENT_DELETEGROUPS_RESULT 106 /**< DeleteGroups_result_t */
+#define RD_KAFKA_EVENT_DELETEGROUPS_RESULT  106 /**< DeleteGroups_result_t */
 /** DeleteConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT 107
-#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
-                                                             token needs to be
-                                                             refreshed */
-
+/** SASL/OAUTHBEARER token needs to be refreshed */
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100
+#define RD_KAFKA_EVENT_BACKGROUND                0x200 /**< Enable background thread. */
+#define RD_KAFKA_EVENT_CREATEACLS_RESULT         0x400 /**< CreateAcls_result_t */
+#define RD_KAFKA_EVENT_DESCRIBEACLS_RESULT       0x800 /**< DescribeAcls_result_t */
+#define RD_KAFKA_EVENT_DELETEACLS_RESULT         0x1000 /**< DeleteAcls_result_t */
+/** ListConsumerGroupsResult_t */
+#define RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT 0x2000
+/** DescribeConsumerGroups_result_t */
+#define RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT 0x4000
+/** ListConsumerGroupOffsets_result_t */
+#define RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT 0x8000
+/** AlterConsumerGroupOffsets_result_t */
+#define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x10000
+/** IncrementalAlterConfigs_result_t */
+#define RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT 0x20000
+/** DescribeUserScramCredentials_result_t */
+#define RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT 0x40000
+/** AlterUserScramCredentials_result_t */
+#define RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT 0x80000
 
 /**
  * @returns the event type for the given event.
@@ -4962,7 +5378,7 @@ typedef int rd_kafka_event_type_t;
  *         RD_KAFKA_EVENT_NONE is returned.
  */
 RD_EXPORT
-rd_kafka_event_type_t rd_kafka_event_type (const rd_kafka_event_t *rkev);
+rd_kafka_event_type_t rd_kafka_event_type(const rd_kafka_event_t *rkev);
 
 /**
  * @returns the event type's name for the given event.
@@ -4971,7 +5387,7 @@ rd_kafka_event_type_t rd_kafka_event_type (const rd_kafka_event_t *rkev);
  *         the name for RD_KAFKA_EVENT_NONE is returned.
  */
 RD_EXPORT
-const char *rd_kafka_event_name (const rd_kafka_event_t *rkev);
+const char *rd_kafka_event_name(const rd_kafka_event_t *rkev);
 
 
 /**
@@ -4984,7 +5400,7 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev);
  *         no action is performed.
  */
 RD_EXPORT
-void rd_kafka_event_destroy (rd_kafka_event_t *rkev);
+void rd_kafka_event_destroy(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5003,7 +5419,7 @@ void rd_kafka_event_destroy (rd_kafka_event_t *rkev);
  *         from this function prior to passing message to application.
  */
 RD_EXPORT
-const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
+const rd_kafka_message_t *rd_kafka_event_message_next(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5020,9 +5436,9 @@ const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
  *         from this function prior to passing message to application.
  */
 RD_EXPORT
-size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
-				     const rd_kafka_message_t **rkmessages,
-				     size_t size);
+size_t rd_kafka_event_message_array(rd_kafka_event_t *rkev,
+                                    const rd_kafka_message_t **rkmessages,
+                                    size_t size);
 
 
 /**
@@ -5033,7 +5449,7 @@ size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
  *  - RD_KAFKA_EVENT_DR     (>=1 message(s))
  */
 RD_EXPORT
-size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
+size_t rd_kafka_event_message_count(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5048,7 +5464,7 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH: value of sasl.oauthbearer.config
  */
 RD_EXPORT
-const char *rd_kafka_event_config_string (rd_kafka_event_t *rkev);
+const char *rd_kafka_event_config_string(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5060,7 +5476,7 @@ const char *rd_kafka_event_config_string (rd_kafka_event_t *rkev);
  *  - all
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
+rd_kafka_resp_err_t rd_kafka_event_error(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5072,7 +5488,7 @@ rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
  *  - all
  */
 RD_EXPORT
-const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
+const char *rd_kafka_event_error_string(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5084,7 +5500,7 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
  * @sa rd_kafka_fatal_error()
  */
 RD_EXPORT
-int rd_kafka_event_error_is_fatal (rd_kafka_event_t *rkev);
+int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5096,14 +5512,22 @@ int rd_kafka_event_error_is_fatal (rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_CREATETOPICS_RESULT
  *  - RD_KAFKA_EVENT_DELETETOPICS_RESULT
  *  - RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ *  - RD_KAFKA_EVENT_CREATEACLS_RESULT
+ *  - RD_KAFKA_EVENT_DESCRIBEACLS_RESULT
+ *  - RD_KAFKA_EVENT_DELETEACLS_RESULT
  *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ *  - RD_KAFKA_EVENT_INCREMENTAL_ALTERCONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DELETEGROUPS_RESULT
  *  - RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
  *  - RD_KAFKA_EVENT_DELETERECORDS_RESULT
+ *  - RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT
+ *  - RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT
+ *  - RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
+ *  - RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT
  */
 RD_EXPORT
-void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
+void *rd_kafka_event_opaque(rd_kafka_event_t *rkev);
 
 
 /**
@@ -5115,8 +5539,10 @@ void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
  * @returns 0 on success or -1 if unsupported event type.
  */
 RD_EXPORT
-int rd_kafka_event_log (rd_kafka_event_t *rkev,
-			const char **fac, const char **str, int *level);
+int rd_kafka_event_log(rd_kafka_event_t *rkev,
+                       const char **fac,
+                       const char **str,
+                       int *level);
 
 
 /**
@@ -5131,8 +5557,9 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev,
  *  @returns 0 on success or -1 if unsupported event type.
  */
 RD_EXPORT
-int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
-            char *dst, size_t dstsize);
+int rd_kafka_event_debug_contexts(rd_kafka_event_t *rkev,
+                                  char *dst,
+                                  size_t dstsize);
 
 
 /**
@@ -5143,55 +5570,78 @@ int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
  *
  * @returns stats json string.
  *
- * @remark the returned string will be freed automatically along with the event object
+ * @remark the returned string will be freed automatically along with the event
+ * object
  *
  */
 RD_EXPORT
-const char *rd_kafka_event_stats (rd_kafka_event_t *rkev);
+const char *rd_kafka_event_stats(rd_kafka_event_t *rkev);
 
 
 /**
  * @returns the topic partition list from the event.
  *
- * @remark The list MUST NOT be freed with rd_kafka_topic_partition_list_destroy()
+ * @remark The list MUST NOT be freed with
+ * rd_kafka_topic_partition_list_destroy()
  *
  * Event types:
  *  - RD_KAFKA_EVENT_REBALANCE
  *  - RD_KAFKA_EVENT_OFFSET_COMMIT
  */
 RD_EXPORT rd_kafka_topic_partition_list_t *
-rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev);
+rd_kafka_event_topic_partition_list(rd_kafka_event_t *rkev);
 
 
 /**
- * @returns a newly allocated topic_partition container, if applicable for the event type,
- *          else NULL.
+ * @returns a newly allocated topic_partition container, if applicable for the
+ * event type, else NULL.
  *
- * @remark The returned pointer MUST be freed with rd_kafka_topic_partition_destroy().
+ * @remark The returned pointer MUST be freed with
+ * rd_kafka_topic_partition_destroy().
  *
  * Event types:
  *   RD_KAFKA_EVENT_ERROR  (for partition level errors)
  */
 RD_EXPORT rd_kafka_topic_partition_t *
-rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
+rd_kafka_event_topic_partition(rd_kafka_event_t *rkev);
 
 
 /*! CreateTopics result type */
 typedef rd_kafka_event_t rd_kafka_CreateTopics_result_t;
 /*! DeleteTopics result type */
 typedef rd_kafka_event_t rd_kafka_DeleteTopics_result_t;
+/*! CreateAcls result type */
+typedef rd_kafka_event_t rd_kafka_CreateAcls_result_t;
+/*! DescribeAcls result type */
+typedef rd_kafka_event_t rd_kafka_DescribeAcls_result_t;
+/*! DeleteAcls result type */
+typedef rd_kafka_event_t rd_kafka_DeleteAcls_result_t;
 /*! CreatePartitions result type */
 typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
 /*! AlterConfigs result type */
 typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
+/*! IncrementalAlterConfigs result type */
+typedef rd_kafka_event_t rd_kafka_IncrementalAlterConfigs_result_t;
 /*! CreateTopics result type */
 typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 /*! DeleteRecords result type */
 typedef rd_kafka_event_t rd_kafka_DeleteRecords_result_t;
+/*! ListConsumerGroups result type */
+typedef rd_kafka_event_t rd_kafka_ListConsumerGroups_result_t;
+/*! DescribeConsumerGroups result type */
+typedef rd_kafka_event_t rd_kafka_DescribeConsumerGroups_result_t;
 /*! DeleteGroups result type */
 typedef rd_kafka_event_t rd_kafka_DeleteGroups_result_t;
 /*! DeleteConsumerGroupOffsets result type */
 typedef rd_kafka_event_t rd_kafka_DeleteConsumerGroupOffsets_result_t;
+/*! AlterConsumerGroupOffsets result type */
+typedef rd_kafka_event_t rd_kafka_AlterConsumerGroupOffsets_result_t;
+/*! ListConsumerGroupOffsets result type */
+typedef rd_kafka_event_t rd_kafka_ListConsumerGroupOffsets_result_t;
+/*! DescribeUserScramCredentials result type */
+typedef rd_kafka_event_t rd_kafka_DescribeUserScramCredentials_result_t;
+/*! AlterUserScramCredentials result type */
+typedef rd_kafka_event_t rd_kafka_AlterUserScramCredentials_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -5203,7 +5653,7 @@ typedef rd_kafka_event_t rd_kafka_DeleteConsumerGroupOffsets_result_t;
  *   RD_KAFKA_EVENT_CREATETOPICS_RESULT
  */
 RD_EXPORT const rd_kafka_CreateTopics_result_t *
-rd_kafka_event_CreateTopics_result (rd_kafka_event_t *rkev);
+rd_kafka_event_CreateTopics_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DeleteTopics result.
@@ -5215,7 +5665,7 @@ rd_kafka_event_CreateTopics_result (rd_kafka_event_t *rkev);
  *   RD_KAFKA_EVENT_DELETETOPICS_RESULT
  */
 RD_EXPORT const rd_kafka_DeleteTopics_result_t *
-rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev);
+rd_kafka_event_DeleteTopics_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get CreatePartitions result.
@@ -5227,7 +5677,7 @@ rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev);
  *   RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
  */
 RD_EXPORT const rd_kafka_CreatePartitions_result_t *
-rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev);
+rd_kafka_event_CreatePartitions_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get AlterConfigs result.
@@ -5239,7 +5689,19 @@ rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev);
  *   RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
  */
 RD_EXPORT const rd_kafka_AlterConfigs_result_t *
-rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
+rd_kafka_event_AlterConfigs_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get IncrementalAlterConfigs result.
+ *
+ * @returns the result of a IncrementalAlterConfigs request, or NULL if event is
+ * of different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT
+ */
+RD_EXPORT const rd_kafka_IncrementalAlterConfigs_result_t *
+rd_kafka_event_IncrementalAlterConfigs_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DescribeConfigs result.
@@ -5251,7 +5713,7 @@ rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
  *   RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  */
 RD_EXPORT const rd_kafka_DescribeConfigs_result_t *
-rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev);
+rd_kafka_event_DescribeConfigs_result(rd_kafka_event_t *rkev);
 
 /**
  * @returns the result of a DeleteRecords request, or NULL if event is of
@@ -5261,7 +5723,37 @@ rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev);
  *   RD_KAFKA_EVENT_DELETERECORDS_RESULT
  */
 RD_EXPORT const rd_kafka_DeleteRecords_result_t *
-rd_kafka_event_DeleteRecords_result (rd_kafka_event_t *rkev);
+rd_kafka_event_DeleteRecords_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ListConsumerGroups result.
+ *
+ * @returns the result of a ListConsumerGroups request, or NULL if event is of
+ *          different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT
+ */
+RD_EXPORT const rd_kafka_ListConsumerGroups_result_t *
+rd_kafka_event_ListConsumerGroups_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get DescribeConsumerGroups result.
+ *
+ * @returns the result of a DescribeConsumerGroups request, or NULL if event is
+ * of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeConsumerGroups_result_t *
+rd_kafka_event_DescribeConsumerGroups_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DeleteGroups result.
@@ -5273,7 +5765,7 @@ rd_kafka_event_DeleteRecords_result (rd_kafka_event_t *rkev);
  *   RD_KAFKA_EVENT_DELETEGROUPS_RESULT
  */
 RD_EXPORT const rd_kafka_DeleteGroups_result_t *
-rd_kafka_event_DeleteGroups_result (rd_kafka_event_t *rkev);
+rd_kafka_event_DeleteGroups_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DeleteConsumerGroupOffsets result.
@@ -5285,7 +5777,97 @@ rd_kafka_event_DeleteGroups_result (rd_kafka_event_t *rkev);
  *   RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
  */
 RD_EXPORT const rd_kafka_DeleteConsumerGroupOffsets_result_t *
-rd_kafka_event_DeleteConsumerGroupOffsets_result (rd_kafka_event_t *rkev);
+rd_kafka_event_DeleteConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a CreateAcls request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_CREATEACLS_RESULT
+ */
+RD_EXPORT const rd_kafka_CreateAcls_result_t *
+rd_kafka_event_CreateAcls_result(rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a DescribeAcls request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DESCRIBEACLS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeAcls_result_t *
+rd_kafka_event_DescribeAcls_result(rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a DeleteAcls request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DELETEACLS_RESULT
+ */
+RD_EXPORT const rd_kafka_DeleteAcls_result_t *
+rd_kafka_event_DeleteAcls_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ListConsumerGroupOffsets result.
+ *
+ * @returns the result of a ListConsumerGroupOffsets request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
+ */
+RD_EXPORT const rd_kafka_ListConsumerGroupOffsets_result_t *
+rd_kafka_event_ListConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get AlterConsumerGroupOffsets result.
+ *
+ * @returns the result of a AlterConsumerGroupOffsets request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT
+ */
+RD_EXPORT const rd_kafka_AlterConsumerGroupOffsets_result_t *
+rd_kafka_event_AlterConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get DescribeUserScramCredentials result.
+ *
+ * @returns the result of a DescribeUserScramCredentials request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeUserScramCredentials_result_t *
+rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get AlterUserScramCredentials result.
+ *
+ * @returns the result of a AlterUserScramCredentials request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT
+ */
+RD_EXPORT const rd_kafka_AlterUserScramCredentials_result_t *
+rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -5297,23 +5879,24 @@ rd_kafka_event_DeleteConsumerGroupOffsets_result (rd_kafka_event_t *rkev);
  * @sa rd_kafka_conf_set_background_event_cb()
  */
 RD_EXPORT
-rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms);
+rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms);
 
 /**
-* @brief Poll a queue for events served through callbacks for max \p timeout_ms.
-*
-* @returns the number of events served.
-*
-* @remark This API must only be used for queues with callbacks registered
-*         for all expected event types. E.g., not a message queue.
-*
-* @remark Also see rd_kafka_conf_set_background_event_cb() for triggering
-*         event callbacks from a librdkafka-managed background thread.
-*
-* @sa rd_kafka_conf_set_background_event_cb()
-*/
+ * @brief Poll a queue for events served through callbacks for max \p
+ * timeout_ms.
+ *
+ * @returns the number of events served.
+ *
+ * @remark This API must only be used for queues with callbacks registered
+ *         for all expected event types. E.g., not a message queue.
+ *
+ * @remark Also see rd_kafka_conf_set_background_event_cb() for triggering
+ *         event callbacks from a librdkafka-managed background thread.
+ *
+ * @sa rd_kafka_conf_set_background_event_cb()
+ */
 RD_EXPORT
-int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
+int rd_kafka_queue_poll_callback(rd_kafka_queue_t *rkqu, int timeout_ms);
 
 
 /**@}*/
@@ -5334,6 +5917,7 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
  *          and not statically. Failure to do so will lead to missing symbols
  *          or finding symbols in another librdkafka library than the
  *          application was linked with.
+ * @{
  */
 
 
@@ -5358,10 +5942,11 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_plugin_f_conf_init_t) (rd_kafka_conf_t *conf,
-                                 void **plug_opaquep,
-                                 char *errstr, size_t errstr_size);
+typedef rd_kafka_resp_err_t(rd_kafka_plugin_f_conf_init_t)(
+    rd_kafka_conf_t *conf,
+    void **plug_opaquep,
+    char *errstr,
+    size_t errstr_size);
 
 /**@}*/
 
@@ -5427,6 +6012,7 @@ typedef rd_kafka_resp_err_t
  * @brief on_conf_set() is called from rd_kafka_*_conf_set() in the order
  *        the interceptors were added.
  *
+ * @param conf Configuration object.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  * @param name The configuration property to set.
  * @param val The configuration value to set, or NULL for reverting to default
@@ -5442,11 +6028,13 @@ typedef rd_kafka_resp_err_t
  *          interceptor in the chain, finally ending up at the built-in
  *          configuration handler.
  */
-typedef rd_kafka_conf_res_t
-(rd_kafka_interceptor_f_on_conf_set_t) (rd_kafka_conf_t *conf,
-                                        const char *name, const char *val,
-                                        char *errstr, size_t errstr_size,
-                                        void *ic_opaque);
+typedef rd_kafka_conf_res_t(rd_kafka_interceptor_f_on_conf_set_t)(
+    rd_kafka_conf_t *conf,
+    const char *name,
+    const char *val,
+    char *errstr,
+    size_t errstr_size,
+    void *ic_opaque);
 
 
 /**
@@ -5458,6 +6046,11 @@ typedef rd_kafka_conf_res_t
  *        \p old_conf being copied to \p new_conf.
  *
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ * @param new_conf New configuration object.
+ * @param old_conf Old configuration object to copy properties from.
+ * @param filter_cnt Number of property names to filter in \p filter.
+ * @param filter Property names to filter out (ignore) when setting up
+ *               \p new_conf.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code
  *          on failure (which is logged but otherwise ignored).
@@ -5465,12 +6058,12 @@ typedef rd_kafka_conf_res_t
  * @remark No on_conf_* interceptors are copied to the new configuration
  *         object on rd_kafka_conf_dup().
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_conf_dup_t) (rd_kafka_conf_t *new_conf,
-                                        const rd_kafka_conf_t *old_conf,
-                                        size_t filter_cnt,
-                                        const char **filter,
-                                        void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_conf_dup_t)(
+    rd_kafka_conf_t *new_conf,
+    const rd_kafka_conf_t *old_conf,
+    size_t filter_cnt,
+    const char **filter,
+    void *ic_opaque);
 
 
 /**
@@ -5479,8 +6072,8 @@ typedef rd_kafka_resp_err_t
  *
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_conf_destroy_t) (void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_conf_destroy_t)(
+    void *ic_opaque);
 
 
 /**
@@ -5500,10 +6093,12 @@ typedef rd_kafka_resp_err_t
  *          other rk-specific APIs than rd_kafka_interceptor_add..().
  *
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_new_t) (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
-                                   void *ic_opaque,
-                                   char *errstr, size_t errstr_size);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_new_t)(
+    rd_kafka_t *rk,
+    const rd_kafka_conf_t *conf,
+    void *ic_opaque,
+    char *errstr,
+    size_t errstr_size);
 
 
 /**
@@ -5513,9 +6108,8 @@ typedef rd_kafka_resp_err_t
  * @param rk The client instance.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_destroy_t) (rd_kafka_t *rk, void *ic_opaque);
-
+typedef rd_kafka_resp_err_t(
+    rd_kafka_interceptor_f_on_destroy_t)(rd_kafka_t *rk, void *ic_opaque);
 
 
 
@@ -5539,10 +6133,10 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_send_t) (rd_kafka_t *rk,
-                                    rd_kafka_message_t *rkmessage,
-                                    void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_send_t)(
+    rd_kafka_t *rk,
+    rd_kafka_message_t *rkmessage,
+    void *ic_opaque);
 
 /**
  * @brief on_acknowledgement() is called to inform interceptors that a message
@@ -5566,10 +6160,10 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_acknowledgement_t) (rd_kafka_t *rk,
-                                               rd_kafka_message_t *rkmessage,
-                                               void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_acknowledgement_t)(
+    rd_kafka_t *rk,
+    rd_kafka_message_t *rkmessage,
+    void *ic_opaque);
 
 
 /**
@@ -5588,10 +6182,10 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_consume_t) (rd_kafka_t *rk,
-                                       rd_kafka_message_t *rkmessage,
-                                       void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_consume_t)(
+    rd_kafka_t *rk,
+    rd_kafka_message_t *rkmessage,
+    void *ic_opaque);
 
 /**
  * @brief on_commit() is called on completed or failed offset commit.
@@ -5601,6 +6195,7 @@ typedef rd_kafka_resp_err_t
  * @param offsets List of topic+partition+offset+error that were committed.
  *                The error message of each partition should be checked for
  *                error.
+ * @param err The commit error, if any.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
  * @remark This interceptor is only used by consumer instances.
@@ -5613,11 +6208,11 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_commit_t) (
-        rd_kafka_t *rk,
-        const rd_kafka_topic_partition_list_t *offsets,
-        rd_kafka_resp_err_t err, void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_commit_t)(
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *offsets,
+    rd_kafka_resp_err_t err,
+    void *ic_opaque);
 
 
 /**
@@ -5630,7 +6225,7 @@ typedef rd_kafka_resp_err_t
  * @param brokerid Broker request is being sent to.
  * @param ApiKey Kafka protocol request type.
  * @param ApiVersion Kafka protocol request type version.
- * @param Corrid Kafka protocol request correlation id.
+ * @param CorrId Kafka protocol request correlation id.
  * @param size Size of request.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
@@ -5641,17 +6236,16 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_request_sent_t) (
-        rd_kafka_t *rk,
-        int sockfd,
-        const char *brokername,
-        int32_t brokerid,
-        int16_t ApiKey,
-        int16_t ApiVersion,
-        int32_t CorrId,
-        size_t  size,
-        void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_request_sent_t)(
+    rd_kafka_t *rk,
+    int sockfd,
+    const char *brokername,
+    int32_t brokerid,
+    int16_t ApiKey,
+    int16_t ApiVersion,
+    int32_t CorrId,
+    size_t size,
+    void *ic_opaque);
 
 
 /**
@@ -5666,7 +6260,7 @@ typedef rd_kafka_resp_err_t
  * @param brokerid Broker response was received from.
  * @param ApiKey Kafka protocol request type or -1 on error.
  * @param ApiVersion Kafka protocol request type version or -1 on error.
- * @param Corrid Kafka protocol request correlation id, possibly -1 on error.
+ * @param CorrId Kafka protocol request correlation id, possibly -1 on error.
  * @param size Size of response, possibly 0 on error.
  * @param rtt Request round-trip-time in microseconds, possibly -1 on error.
  * @param err Receive error.
@@ -5679,19 +6273,18 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_response_received_t) (
-        rd_kafka_t *rk,
-        int sockfd,
-        const char *brokername,
-        int32_t brokerid,
-        int16_t ApiKey,
-        int16_t ApiVersion,
-        int32_t CorrId,
-        size_t  size,
-        int64_t rtt,
-        rd_kafka_resp_err_t err,
-        void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_response_received_t)(
+    rd_kafka_t *rk,
+    int sockfd,
+    const char *brokername,
+    int32_t brokerid,
+    int16_t ApiKey,
+    int16_t ApiVersion,
+    int32_t CorrId,
+    size_t size,
+    int64_t rtt,
+    rd_kafka_resp_err_t err,
+    void *ic_opaque);
 
 
 /**
@@ -5710,12 +6303,11 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_thread_start_t) (
-        rd_kafka_t *rk,
-        rd_kafka_thread_type_t thread_type,
-        const char *thread_name,
-        void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_thread_start_t)(
+    rd_kafka_t *rk,
+    rd_kafka_thread_type_t thread_type,
+    const char *thread_name,
+    void *ic_opaque);
 
 
 /**
@@ -5737,13 +6329,35 @@ typedef rd_kafka_resp_err_t
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.
  */
-typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_thread_exit_t) (
-        rd_kafka_t *rk,
-        rd_kafka_thread_type_t thread_type,
-        const char *thread_name,
-        void *ic_opaque);
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_thread_exit_t)(
+    rd_kafka_t *rk,
+    rd_kafka_thread_type_t thread_type,
+    const char *thread_name,
+    void *ic_opaque);
 
+
+/**
+ * @brief on_broker_state_change() is called just after a broker
+ *        has been created or its state has been changed.
+ *
+ * @param rk The client instance.
+ * @param broker_id The broker id (-1 is used for bootstrap brokers).
+ * @param secproto The security protocol.
+ * @param name The original name of the broker.
+ * @param port The port of the broker.
+ * @param state Broker state name.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_broker_state_change_t)(
+    rd_kafka_t *rk,
+    int32_t broker_id,
+    const char *secproto,
+    const char *name,
+    int port,
+    const char *state,
+    void *ic_opaque);
 
 
 /**
@@ -5755,14 +6369,14 @@ typedef rd_kafka_resp_err_t
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_conf_interceptor_add_on_conf_set (
-        rd_kafka_conf_t *conf, const char *ic_name,
-        rd_kafka_interceptor_f_on_conf_set_t *on_conf_set,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_set(
+    rd_kafka_conf_t *conf,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_conf_set_t *on_conf_set,
+    void *ic_opaque);
 
 
 /**
@@ -5774,14 +6388,14 @@ rd_kafka_conf_interceptor_add_on_conf_set (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_conf_interceptor_add_on_conf_dup (
-        rd_kafka_conf_t *conf, const char *ic_name,
-        rd_kafka_interceptor_f_on_conf_dup_t *on_conf_dup,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_dup(
+    rd_kafka_conf_t *conf,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_conf_dup_t *on_conf_dup,
+    void *ic_opaque);
 
 /**
  * @brief Append an on_conf_destroy() interceptor.
@@ -5796,11 +6410,11 @@ rd_kafka_conf_interceptor_add_on_conf_dup (
  * @remark Multiple on_conf_destroy() interceptors are allowed to be added
  *         to the same configuration object.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_conf_interceptor_add_on_conf_destroy (
-        rd_kafka_conf_t *conf, const char *ic_name,
-        rd_kafka_interceptor_f_on_conf_destroy_t *on_conf_destroy,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_destroy(
+    rd_kafka_conf_t *conf,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_conf_destroy_t *on_conf_destroy,
+    void *ic_opaque);
 
 
 /**
@@ -5810,7 +6424,7 @@ rd_kafka_conf_interceptor_add_on_conf_destroy (
  * @param ic_name Interceptor name, used in logging.
  * @param on_new Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
-  *
+ *
  * @remark Since the on_new() interceptor is added to the configuration object
  *         it may be copied by rd_kafka_conf_dup().
  *         An interceptor implementation must thus be able to handle
@@ -5821,14 +6435,14 @@ rd_kafka_conf_interceptor_add_on_conf_destroy (
  *         has not already been added.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_conf_interceptor_add_on_new (
-        rd_kafka_conf_t *conf, const char *ic_name,
-        rd_kafka_interceptor_f_on_new_t *on_new,
-        void *ic_opaque);
+rd_kafka_conf_interceptor_add_on_new(rd_kafka_conf_t *conf,
+                                     const char *ic_name,
+                                     rd_kafka_interceptor_f_on_new_t *on_new,
+                                     void *ic_opaque);
 
 
 
@@ -5841,14 +6455,14 @@ rd_kafka_conf_interceptor_add_on_new (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_destroy (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_destroy_t *on_destroy,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_destroy(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_destroy_t *on_destroy,
+    void *ic_opaque);
 
 
 /**
@@ -5864,10 +6478,10 @@ rd_kafka_interceptor_add_on_destroy (
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_send (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_send_t *on_send,
-        void *ic_opaque);
+rd_kafka_interceptor_add_on_send(rd_kafka_t *rk,
+                                 const char *ic_name,
+                                 rd_kafka_interceptor_f_on_send_t *on_send,
+                                 void *ic_opaque);
 
 /**
  * @brief Append an on_acknowledgement() interceptor.
@@ -5878,14 +6492,14 @@ rd_kafka_interceptor_add_on_send (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_acknowledgement (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_acknowledgement(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement,
+    void *ic_opaque);
 
 
 /**
@@ -5897,14 +6511,14 @@ rd_kafka_interceptor_add_on_acknowledgement (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_consume (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_consume_t *on_consume,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_consume(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_consume_t *on_consume,
+    void *ic_opaque);
 
 
 /**
@@ -5916,14 +6530,14 @@ rd_kafka_interceptor_add_on_consume (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_commit (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_commit_t *on_commit,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_commit(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_commit_t *on_commit,
+    void *ic_opaque);
 
 
 /**
@@ -5935,14 +6549,14 @@ rd_kafka_interceptor_add_on_commit (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_request_sent (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_request_sent(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
+    void *ic_opaque);
 
 
 /**
@@ -5954,14 +6568,14 @@ rd_kafka_interceptor_add_on_request_sent (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_response_received (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_response_received_t *on_response_received,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_response_received(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_response_received_t *on_response_received,
+    void *ic_opaque);
 
 
 /**
@@ -5973,14 +6587,14 @@ rd_kafka_interceptor_add_on_response_received (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_thread_start (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_thread_start_t *on_thread_start,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_start(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_thread_start_t *on_thread_start,
+    void *ic_opaque);
 
 
 /**
@@ -5992,14 +6606,34 @@ rd_kafka_interceptor_add_on_thread_start (
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_interceptor_add_on_thread_exit (
-        rd_kafka_t *rk, const char *ic_name,
-        rd_kafka_interceptor_f_on_thread_exit_t *on_thread_exit,
-        void *ic_opaque);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_exit(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_thread_exit_t *on_thread_exit,
+    void *ic_opaque);
+
+
+/**
+ * @brief Append an on_broker_state_change() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_broker_state_change() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing interceptor with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_interceptor_add_on_broker_state_change(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_broker_state_change_t *on_broker_state_change,
+    void *ic_opaque);
 
 
 
@@ -6024,7 +6658,7 @@ rd_kafka_interceptor_add_on_thread_exit (
  * @returns the error code for the given topic result.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_topic_result_error (const rd_kafka_topic_result_t *topicres);
+rd_kafka_topic_result_error(const rd_kafka_topic_result_t *topicres);
 
 /**
  * @returns the human readable error string for the given topic result,
@@ -6033,7 +6667,7 @@ rd_kafka_topic_result_error (const rd_kafka_topic_result_t *topicres);
  * @remark lifetime of the returned string is the same as the \p topicres.
  */
 RD_EXPORT const char *
-rd_kafka_topic_result_error_string (const rd_kafka_topic_result_t *topicres);
+rd_kafka_topic_result_error_string(const rd_kafka_topic_result_t *topicres);
 
 /**
  * @returns the name of the topic for the given topic result.
@@ -6041,7 +6675,7 @@ rd_kafka_topic_result_error_string (const rd_kafka_topic_result_t *topicres);
  *
  */
 RD_EXPORT const char *
-rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
+rd_kafka_topic_result_name(const rd_kafka_topic_result_t *topicres);
 
 /**
  * @brief Group result provides per-group operation result information.
@@ -6053,7 +6687,7 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
  * @remark lifetime of the returned error is the same as the \p groupres.
  */
 RD_EXPORT const rd_kafka_error_t *
-rd_kafka_group_result_error (const rd_kafka_group_result_t *groupres);
+rd_kafka_group_result_error(const rd_kafka_group_result_t *groupres);
 
 /**
  * @returns the name of the group for the given group result.
@@ -6061,7 +6695,7 @@ rd_kafka_group_result_error (const rd_kafka_group_result_t *groupres);
  *
  */
 RD_EXPORT const char *
-rd_kafka_group_result_name (const rd_kafka_group_result_t *groupres);
+rd_kafka_group_result_name(const rd_kafka_group_result_t *groupres);
 
 /**
  * @returns the partitions/offsets for the given group result, if applicable
@@ -6069,7 +6703,7 @@ rd_kafka_group_result_name (const rd_kafka_group_result_t *groupres);
  * @remark lifetime of the returned list is the same as the \p groupres.
  */
 RD_EXPORT const rd_kafka_topic_partition_list_t *
-rd_kafka_group_result_partitions (const rd_kafka_group_result_t *groupres);
+rd_kafka_group_result_partitions(const rd_kafka_group_result_t *groupres);
 
 
 /**@}*/
@@ -6108,7 +6742,7 @@ rd_kafka_group_result_partitions (const rd_kafka_group_result_t *groupres);
  * Locally triggered errors:
  *  - \c RD_KAFKA_RESP_ERR__TIMED_OUT - (Controller) broker connection did not
  *    become available in the time allowed by AdminOption_set_request_timeout.
-  */
+ */
 
 
 /**
@@ -6129,7 +6763,22 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DELETEGROUPS,     /**< DeleteGroups */
         /** DeleteConsumerGroupOffsets */
         RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,
-        RD_KAFKA_ADMIN_OP__CNT              /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP_CREATEACLS,             /**< CreateAcls */
+        RD_KAFKA_ADMIN_OP_DESCRIBEACLS,           /**< DescribeAcls */
+        RD_KAFKA_ADMIN_OP_DELETEACLS,             /**< DeleteAcls */
+        RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS,     /**< ListConsumerGroups */
+        RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS, /**< DescribeConsumerGroups */
+        /** ListConsumerGroupOffsets */
+        RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS,
+        /** AlterConsumerGroupOffsets */
+        RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS,
+        /** IncrementalAlterConfigs */
+        RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS,
+        /** DescribeUserScramCredentials */
+        RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+        /** AlterUserScramCredentials */
+        RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS,
+        RD_KAFKA_ADMIN_OP__CNT /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**
@@ -6166,13 +6815,13 @@ typedef struct rd_kafka_AdminOptions_s rd_kafka_AdminOptions_t;
  *          an unknown API op type.
  */
 RD_EXPORT rd_kafka_AdminOptions_t *
-rd_kafka_AdminOptions_new (rd_kafka_t *rk, rd_kafka_admin_op_t for_api);
+rd_kafka_AdminOptions_new(rd_kafka_t *rk, rd_kafka_admin_op_t for_api);
 
 
 /**
  * @brief Destroy a AdminOptions object.
  */
-RD_EXPORT void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options);
+RD_EXPORT void rd_kafka_AdminOptions_destroy(rd_kafka_AdminOptions_t *options);
 
 
 /**
@@ -6180,8 +6829,7 @@ RD_EXPORT void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options);
  *        request transmission, operation time on broker, and response.
  *
  * @param options Admin options.
- * @param timeout_ms Timeout in milliseconds, use -1 for indefinite timeout.
- *                   Defaults to `socket.timeout.ms`.
+ * @param timeout_ms Timeout in milliseconds. Defaults to `socket.timeout.ms`.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
  *               The \p errstr is only written in case of error.
@@ -6194,9 +6842,10 @@ RD_EXPORT void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options);
  * @remark This option is valid for all Admin API requests.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
-                                           int timeout_ms,
-                                           char *errstr, size_t errstr_size);
+rd_kafka_AdminOptions_set_request_timeout(rd_kafka_AdminOptions_t *options,
+                                          int timeout_ms,
+                                          char *errstr,
+                                          size_t errstr_size);
 
 
 /**
@@ -6226,9 +6875,10 @@ rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
  *         CreatePartitions, and DeleteRecords.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
-                                             int timeout_ms,
-                                             char *errstr, size_t errstr_size);
+rd_kafka_AdminOptions_set_operation_timeout(rd_kafka_AdminOptions_t *options,
+                                            int timeout_ms,
+                                            char *errstr,
+                                            size_t errstr_size);
 
 
 /**
@@ -6250,9 +6900,10 @@ rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
  *         CreatePartitions, AlterConfigs.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
+rd_kafka_AdminOptions_set_validate_only(rd_kafka_AdminOptions_t *options,
                                         int true_or_false,
-                                        char *errstr, size_t errstr_size);
+                                        char *errstr,
+                                        size_t errstr_size);
 
 
 /**
@@ -6262,6 +6913,8 @@ rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
  * the following exceptions:
  *   - AlterConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
+ *   - IncrementalAlterConfigs with a BROKER resource are sent to the broker id
+ *     set as the resource name.
  *   - DescribeConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
  *
@@ -6281,27 +6934,61 @@ rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
  *         does not know where to send.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_broker (rd_kafka_AdminOptions_t *options,
-                                  int32_t broker_id,
-                                  char *errstr, size_t errstr_size);
+rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
+                                 int32_t broker_id,
+                                 char *errstr,
+                                 size_t errstr_size);
 
 
+/**
+ * @brief Whether broker should return stable offsets
+ *        (transaction-committed).
+ *
+ * @param options Admin options.
+ * @param true_or_false Defaults to false.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListConsumerGroupOffsets.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
+    rd_kafka_AdminOptions_t *options,
+    int true_or_false);
+
+/**
+ * @brief Set consumer groups states to query for.
+ *
+ * @param options Admin options.
+ * @param consumer_group_states Array of consumer group states.
+ * @param consumer_group_states_cnt Size of the \p consumer_group_states array.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListConsumerGroups.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
+    rd_kafka_AdminOptions_t *options,
+    const rd_kafka_consumer_group_state_t *consumer_group_states,
+    size_t consumer_group_states_cnt);
 
 /**
  * @brief Set application opaque value that can be extracted from the
  *        result event using rd_kafka_event_opaque()
  */
 RD_EXPORT void
-rd_kafka_AdminOptions_set_opaque (rd_kafka_AdminOptions_t *options,
-                                  void *ev_opaque);
+rd_kafka_AdminOptions_set_opaque(rd_kafka_AdminOptions_t *options,
+                                 void *ev_opaque);
 
+/**@}*/
 
-
-
-
-
-/*
- * CreateTopics - create topics in cluster.
+/**
+ * @name Admin API - Topics
+ * @brief Topic related operations.
+ * @{
  *
  */
 
@@ -6330,17 +7017,17 @@ typedef struct rd_kafka_NewTopic_s rd_kafka_NewTopic_t;
  *          are invalid.
  *          Use rd_kafka_NewTopic_destroy() to free object when done.
  */
-RD_EXPORT rd_kafka_NewTopic_t *
-rd_kafka_NewTopic_new (const char *topic, int num_partitions,
-                       int replication_factor,
-                       char *errstr, size_t errstr_size);
+RD_EXPORT rd_kafka_NewTopic_t *rd_kafka_NewTopic_new(const char *topic,
+                                                     int num_partitions,
+                                                     int replication_factor,
+                                                     char *errstr,
+                                                     size_t errstr_size);
 
 /**
  * @brief Destroy and free a NewTopic object previously created with
  *        rd_kafka_NewTopic_new()
  */
-RD_EXPORT void
-rd_kafka_NewTopic_destroy (rd_kafka_NewTopic_t *new_topic);
+RD_EXPORT void rd_kafka_NewTopic_destroy(rd_kafka_NewTopic_t *new_topic);
 
 
 /**
@@ -6348,9 +7035,8 @@ rd_kafka_NewTopic_destroy (rd_kafka_NewTopic_t *new_topic);
  *        array (of \p new_topic_cnt elements).
  *        The array itself is not freed.
  */
-RD_EXPORT void
-rd_kafka_NewTopic_destroy_array (rd_kafka_NewTopic_t **new_topics,
-                                 size_t new_topic_cnt);
+RD_EXPORT void rd_kafka_NewTopic_destroy_array(rd_kafka_NewTopic_t **new_topics,
+                                               size_t new_topic_cnt);
 
 
 /**
@@ -6375,11 +7061,12 @@ rd_kafka_NewTopic_destroy_array (rd_kafka_NewTopic_t **new_topics,
  * @sa rd_kafka_AdminOptions_set_validate_only()
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
-                                          int32_t partition,
-                                          int32_t *broker_ids,
-                                          size_t broker_id_cnt,
-                                          char *errstr, size_t errstr_size);
+rd_kafka_NewTopic_set_replica_assignment(rd_kafka_NewTopic_t *new_topic,
+                                         int32_t partition,
+                                         int32_t *broker_ids,
+                                         size_t broker_id_cnt,
+                                         char *errstr,
+                                         size_t errstr_size);
 
 /**
  * @brief Set (broker-side) topic configuration name/value pair.
@@ -6394,8 +7081,9 @@ rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
  * @sa http://kafka.apache.org/documentation.html#topicconfigs
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
-                              const char *name, const char *value);
+rd_kafka_NewTopic_set_config(rd_kafka_NewTopic_t *new_topic,
+                             const char *name,
+                             const char *value);
 
 
 /**
@@ -6416,12 +7104,11 @@ rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_CREATETOPICS_RESULT
  */
-RD_EXPORT void
-rd_kafka_CreateTopics (rd_kafka_t *rk,
-                       rd_kafka_NewTopic_t **new_topics,
-                       size_t new_topic_cnt,
-                       const rd_kafka_AdminOptions_t *options,
-                       rd_kafka_queue_t *rkqu);
+RD_EXPORT void rd_kafka_CreateTopics(rd_kafka_t *rk,
+                                     rd_kafka_NewTopic_t **new_topics,
+                                     size_t new_topic_cnt,
+                                     const rd_kafka_AdminOptions_t *options,
+                                     rd_kafka_queue_t *rkqu);
 
 
 /*
@@ -6436,12 +7123,9 @@ rd_kafka_CreateTopics (rd_kafka_t *rk,
  * @param result Result to get topics from.
  * @param cntp Updated to the number of elements in the array.
  */
-RD_EXPORT const rd_kafka_topic_result_t **
-rd_kafka_CreateTopics_result_topics (
-        const rd_kafka_CreateTopics_result_t *result,
-        size_t *cntp);
-
-
+RD_EXPORT const rd_kafka_topic_result_t **rd_kafka_CreateTopics_result_topics(
+    const rd_kafka_CreateTopics_result_t *result,
+    size_t *cntp);
 
 
 
@@ -6462,15 +7146,13 @@ typedef struct rd_kafka_DeleteTopic_s rd_kafka_DeleteTopic_t;
  * @returns a new allocated DeleteTopic object.
  *          Use rd_kafka_DeleteTopic_destroy() to free object when done.
  */
-RD_EXPORT rd_kafka_DeleteTopic_t *
-rd_kafka_DeleteTopic_new (const char *topic);
+RD_EXPORT rd_kafka_DeleteTopic_t *rd_kafka_DeleteTopic_new(const char *topic);
 
 /**
  * @brief Destroy and free a DeleteTopic object previously created with
  *        rd_kafka_DeleteTopic_new()
  */
-RD_EXPORT void
-rd_kafka_DeleteTopic_destroy (rd_kafka_DeleteTopic_t *del_topic);
+RD_EXPORT void rd_kafka_DeleteTopic_destroy(rd_kafka_DeleteTopic_t *del_topic);
 
 /**
  * @brief Helper function to destroy all DeleteTopic objects in
@@ -6478,8 +7160,8 @@ rd_kafka_DeleteTopic_destroy (rd_kafka_DeleteTopic_t *del_topic);
  *        The array itself is not freed.
  */
 RD_EXPORT void
-rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
-                                    size_t del_topic_cnt);
+rd_kafka_DeleteTopic_destroy_array(rd_kafka_DeleteTopic_t **del_topics,
+                                   size_t del_topic_cnt);
 
 /**
  * @brief Delete topics from cluster as specified by the \p topics
@@ -6495,11 +7177,11 @@ rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
  *         \c RD_KAFKA_EVENT_DELETETOPICS_RESULT
  */
 RD_EXPORT
-void rd_kafka_DeleteTopics (rd_kafka_t *rk,
-                            rd_kafka_DeleteTopic_t **del_topics,
-                            size_t del_topic_cnt,
-                            const rd_kafka_AdminOptions_t *options,
-                            rd_kafka_queue_t *rkqu);
+void rd_kafka_DeleteTopics(rd_kafka_t *rk,
+                           rd_kafka_DeleteTopic_t **del_topics,
+                           size_t del_topic_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
 
 
 
@@ -6515,18 +7197,17 @@ void rd_kafka_DeleteTopics (rd_kafka_t *rk,
  * @param result Result to get topic results from.
  * @param cntp is updated to the number of elements in the array.
  */
-RD_EXPORT const rd_kafka_topic_result_t **
-rd_kafka_DeleteTopics_result_topics (
-        const rd_kafka_DeleteTopics_result_t *result,
-        size_t *cntp);
+RD_EXPORT const rd_kafka_topic_result_t **rd_kafka_DeleteTopics_result_topics(
+    const rd_kafka_DeleteTopics_result_t *result,
+    size_t *cntp);
 
 
+/**@}*/
 
-
-
-
-/*
- * CreatePartitions - add partitions to topic.
+/**
+ * @name Admin API - Partitions
+ * @brief Partition related operations.
+ * @{
  *
  */
 
@@ -6550,15 +7231,17 @@ typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
  *          Use rd_kafka_NewPartitions_destroy() to free object when done.
  */
 RD_EXPORT rd_kafka_NewPartitions_t *
-rd_kafka_NewPartitions_new (const char *topic, size_t new_total_cnt,
-                            char *errstr, size_t errstr_size);
+rd_kafka_NewPartitions_new(const char *topic,
+                           size_t new_total_cnt,
+                           char *errstr,
+                           size_t errstr_size);
 
 /**
  * @brief Destroy and free a NewPartitions object previously created with
  *        rd_kafka_NewPartitions_new()
  */
 RD_EXPORT void
-rd_kafka_NewPartitions_destroy (rd_kafka_NewPartitions_t *new_parts);
+rd_kafka_NewPartitions_destroy(rd_kafka_NewPartitions_t *new_parts);
 
 /**
  * @brief Helper function to destroy all NewPartitions objects in the
@@ -6566,8 +7249,8 @@ rd_kafka_NewPartitions_destroy (rd_kafka_NewPartitions_t *new_parts);
  *        The array itself is not freed.
  */
 RD_EXPORT void
-rd_kafka_NewPartitions_destroy_array (rd_kafka_NewPartitions_t **new_parts,
-                                      size_t new_parts_cnt);
+rd_kafka_NewPartitions_destroy_array(rd_kafka_NewPartitions_t **new_parts,
+                                     size_t new_parts_cnt);
 
 /**
  * @brief Set the replica (broker id) assignment for \p new_partition_idx to the
@@ -6591,13 +7274,13 @@ rd_kafka_NewPartitions_destroy_array (rd_kafka_NewPartitions_t **new_parts,
  *
  * @sa rd_kafka_AdminOptions_set_validate_only()
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_parts,
-                                               int32_t new_partition_idx,
-                                               int32_t *broker_ids,
-                                               size_t broker_id_cnt,
-                                               char *errstr,
-                                               size_t errstr_size);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_NewPartitions_set_replica_assignment(
+    rd_kafka_NewPartitions_t *new_parts,
+    int32_t new_partition_idx,
+    int32_t *broker_ids,
+    size_t broker_id_cnt,
+    char *errstr,
+    size_t errstr_size);
 
 
 /**
@@ -6618,12 +7301,11 @@ rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_par
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
  */
-RD_EXPORT void
-rd_kafka_CreatePartitions (rd_kafka_t *rk,
-                           rd_kafka_NewPartitions_t **new_parts,
-                           size_t new_parts_cnt,
-                           const rd_kafka_AdminOptions_t *options,
-                           rd_kafka_queue_t *rkqu);
+RD_EXPORT void rd_kafka_CreatePartitions(rd_kafka_t *rk,
+                                         rd_kafka_NewPartitions_t **new_parts,
+                                         size_t new_parts_cnt,
+                                         const rd_kafka_AdminOptions_t *options,
+                                         rd_kafka_queue_t *rkqu);
 
 
 
@@ -6640,16 +7322,16 @@ rd_kafka_CreatePartitions (rd_kafka_t *rk,
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_topic_result_t **
-rd_kafka_CreatePartitions_result_topics (
-        const rd_kafka_CreatePartitions_result_t *result,
-        size_t *cntp);
+rd_kafka_CreatePartitions_result_topics(
+    const rd_kafka_CreatePartitions_result_t *result,
+    size_t *cntp);
 
+/**@}*/
 
-
-
-
-/*
- * Cluster, broker, topic configuration entries, sources, etc.
+/**
+ * @name Admin API - Configuration
+ * @brief Cluster, broker, topic configuration entries, sources, etc.
+ * @{
  *
  */
 
@@ -6689,7 +7371,7 @@ typedef enum rd_kafka_ConfigSource_t {
  * @returns a string representation of the \p confsource.
  */
 RD_EXPORT const char *
-rd_kafka_ConfigSource_name (rd_kafka_ConfigSource_t confsource);
+rd_kafka_ConfigSource_name(rd_kafka_ConfigSource_t confsource);
 
 
 /*! Apache Kafka configuration entry. */
@@ -6699,27 +7381,27 @@ typedef struct rd_kafka_ConfigEntry_s rd_kafka_ConfigEntry_t;
  * @returns the configuration property name
  */
 RD_EXPORT const char *
-rd_kafka_ConfigEntry_name (const rd_kafka_ConfigEntry_t *entry);
+rd_kafka_ConfigEntry_name(const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns the configuration value, may be NULL for sensitive or unset
  *          properties.
  */
 RD_EXPORT const char *
-rd_kafka_ConfigEntry_value (const rd_kafka_ConfigEntry_t *entry);
+rd_kafka_ConfigEntry_value(const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns the config source.
  */
 RD_EXPORT rd_kafka_ConfigSource_t
-rd_kafka_ConfigEntry_source (const rd_kafka_ConfigEntry_t *entry);
+rd_kafka_ConfigEntry_source(const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns 1 if the config property is read-only on the broker, else 0.
  * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
  */
 RD_EXPORT int
-rd_kafka_ConfigEntry_is_read_only (const rd_kafka_ConfigEntry_t *entry);
+rd_kafka_ConfigEntry_is_read_only(const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns 1 if the config property is set to its default value on the broker,
@@ -6727,7 +7409,7 @@ rd_kafka_ConfigEntry_is_read_only (const rd_kafka_ConfigEntry_t *entry);
  * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
  */
 RD_EXPORT int
-rd_kafka_ConfigEntry_is_default (const rd_kafka_ConfigEntry_t *entry);
+rd_kafka_ConfigEntry_is_default(const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns 1 if the config property contains sensitive information (such as
@@ -6737,13 +7419,13 @@ rd_kafka_ConfigEntry_is_default (const rd_kafka_ConfigEntry_t *entry);
  * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
  */
 RD_EXPORT int
-rd_kafka_ConfigEntry_is_sensitive (const rd_kafka_ConfigEntry_t *entry);
+rd_kafka_ConfigEntry_is_sensitive(const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns 1 if this entry is a synonym, else 0.
  */
 RD_EXPORT int
-rd_kafka_ConfigEntry_is_synonym (const rd_kafka_ConfigEntry_t *entry);
+rd_kafka_ConfigEntry_is_synonym(const rd_kafka_ConfigEntry_t *entry);
 
 
 /**
@@ -6757,27 +7439,65 @@ rd_kafka_ConfigEntry_is_synonym (const rd_kafka_ConfigEntry_t *entry);
  *         otherwise returns NULL.
  */
 RD_EXPORT const rd_kafka_ConfigEntry_t **
-rd_kafka_ConfigEntry_synonyms (const rd_kafka_ConfigEntry_t *entry,
-                               size_t *cntp);
+rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
+                              size_t *cntp);
 
 
 
-
-/*! Apache Kafka resource types */
+/**
+ * @enum rd_kafka_ResourceType_t
+ * @brief Apache Kafka resource types
+ */
 typedef enum rd_kafka_ResourceType_t {
         RD_KAFKA_RESOURCE_UNKNOWN = 0, /**< Unknown */
-        RD_KAFKA_RESOURCE_ANY = 1,     /**< Any (used for lookups) */
-        RD_KAFKA_RESOURCE_TOPIC = 2,   /**< Topic */
-        RD_KAFKA_RESOURCE_GROUP = 3,   /**< Group */
-        RD_KAFKA_RESOURCE_BROKER = 4,  /**< Broker */
+        RD_KAFKA_RESOURCE_ANY     = 1, /**< Any (used for lookups) */
+        RD_KAFKA_RESOURCE_TOPIC   = 2, /**< Topic */
+        RD_KAFKA_RESOURCE_GROUP   = 3, /**< Group */
+        RD_KAFKA_RESOURCE_BROKER  = 4, /**< Broker */
         RD_KAFKA_RESOURCE__CNT,        /**< Number of resource types defined */
 } rd_kafka_ResourceType_t;
+
+/**
+ * @enum rd_kafka_ResourcePatternType_t
+ * @brief Apache Kafka pattern types
+ */
+typedef enum rd_kafka_ResourcePatternType_t {
+        /** Unknown */
+        RD_KAFKA_RESOURCE_PATTERN_UNKNOWN = 0,
+        /** Any (used for lookups) */
+        RD_KAFKA_RESOURCE_PATTERN_ANY = 1,
+        /** Match: will perform pattern matching */
+        RD_KAFKA_RESOURCE_PATTERN_MATCH = 2,
+        /** Literal: A literal resource name */
+        RD_KAFKA_RESOURCE_PATTERN_LITERAL = 3,
+        /** Prefixed: A prefixed resource name */
+        RD_KAFKA_RESOURCE_PATTERN_PREFIXED = 4,
+        RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT,
+} rd_kafka_ResourcePatternType_t;
+
+/**
+ * @enum rd_kafka_AlterConfigOpType_t
+ * @brief Incremental alter configs operations.
+ */
+typedef enum rd_kafka_AlterConfigOpType_t {
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET      = 0,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_DELETE   = 1,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_APPEND   = 2,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE_SUBTRACT = 3,
+        RD_KAFKA_ALTER_CONFIG_OP_TYPE__CNT,
+} rd_kafka_AlterConfigOpType_t;
+
+/**
+ * @returns a string representation of the \p resource_pattern_type
+ */
+RD_EXPORT const char *rd_kafka_ResourcePatternType_name(
+    rd_kafka_ResourcePatternType_t resource_pattern_type);
 
 /**
  * @returns a string representation of the \p restype
  */
 RD_EXPORT const char *
-rd_kafka_ResourceType_name (rd_kafka_ResourceType_t restype);
+rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype);
 
 /*! Apache Kafka configuration resource. */
 typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
@@ -6792,15 +7512,15 @@ typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
  * @returns a newly allocated object
  */
 RD_EXPORT rd_kafka_ConfigResource_t *
-rd_kafka_ConfigResource_new (rd_kafka_ResourceType_t restype,
-                             const char *resname);
+rd_kafka_ConfigResource_new(rd_kafka_ResourceType_t restype,
+                            const char *resname);
 
 /**
  * @brief Destroy and free a ConfigResource object previously created with
  *        rd_kafka_ConfigResource_new()
  */
 RD_EXPORT void
-rd_kafka_ConfigResource_destroy (rd_kafka_ConfigResource_t *config);
+rd_kafka_ConfigResource_destroy(rd_kafka_ConfigResource_t *config);
 
 
 /**
@@ -6809,8 +7529,8 @@ rd_kafka_ConfigResource_destroy (rd_kafka_ConfigResource_t *config);
  *        The array itself is not freed.
  */
 RD_EXPORT void
-rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
-                                       size_t config_cnt);
+rd_kafka_ConfigResource_destroy_array(rd_kafka_ConfigResource_t **config,
+                                      size_t config_cnt);
 
 
 /**
@@ -6827,8 +7547,34 @@ rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_set_config (rd_kafka_ConfigResource_t *config,
-                                    const char *name, const char *value);
+rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name,
+                                   const char *value);
+
+
+/**
+ * @brief Add the value of the configuration entry for a subsequent
+ *        incremental alter config operation. APPEND and SUBTRACT are
+ *        possible for list-type configuration entries only.
+ *
+ * @param config ConfigResource to add config property to.
+ * @param name Configuration name, depends on resource type.
+ * @param op_type Operation type, one of rd_kafka_AlterConfigOpType_t.
+ * @param value Configuration value, depends on resource type and \p name.
+ *              Set to \c NULL, only with with op_type set to DELETE,
+ *              to revert configuration value to default.
+ *
+ * @returns NULL on success, or an rd_kafka_error_t *
+ *          with the corresponding error code and string.
+ *          Error ownership belongs to the caller.
+ *          Possible error codes:
+ *          - RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_error_t *rd_kafka_ConfigResource_add_incremental_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    rd_kafka_AlterConfigOpType_t op_type,
+    const char *value);
 
 
 /**
@@ -6840,8 +7586,8 @@ rd_kafka_ConfigResource_set_config (rd_kafka_ConfigResource_t *config,
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_ConfigEntry_t **
-rd_kafka_ConfigResource_configs (const rd_kafka_ConfigResource_t *config,
-                                 size_t *cntp);
+rd_kafka_ConfigResource_configs(const rd_kafka_ConfigResource_t *config,
+                                size_t *cntp);
 
 
 
@@ -6849,26 +7595,26 @@ rd_kafka_ConfigResource_configs (const rd_kafka_ConfigResource_t *config,
  * @returns the ResourceType for \p config
  */
 RD_EXPORT rd_kafka_ResourceType_t
-rd_kafka_ConfigResource_type (const rd_kafka_ConfigResource_t *config);
+rd_kafka_ConfigResource_type(const rd_kafka_ConfigResource_t *config);
 
 /**
  * @returns the name for \p config
  */
 RD_EXPORT const char *
-rd_kafka_ConfigResource_name (const rd_kafka_ConfigResource_t *config);
+rd_kafka_ConfigResource_name(const rd_kafka_ConfigResource_t *config);
 
 /**
  * @returns the error for this resource from an AlterConfigs request
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_error (const rd_kafka_ConfigResource_t *config);
+rd_kafka_ConfigResource_error(const rd_kafka_ConfigResource_t *config);
 
 /**
  * @returns the error string for this resource from an AlterConfigs
  *          request, or NULL if no error.
  */
 RD_EXPORT const char *
-rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
+rd_kafka_ConfigResource_error_string(const rd_kafka_ConfigResource_t *config);
 
 
 /*
@@ -6896,13 +7642,15 @@ rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
  *         since these resource requests must be sent to the broker specified
  *         in the resource.
  *
+ * @deprecated Use rd_kafka_IncrementalAlterConfigs().
+ *
  */
 RD_EXPORT
-void rd_kafka_AlterConfigs (rd_kafka_t *rk,
-                            rd_kafka_ConfigResource_t **configs,
-                            size_t config_cnt,
-                            const rd_kafka_AdminOptions_t *options,
-                            rd_kafka_queue_t *rkqu);
+void rd_kafka_AlterConfigs(rd_kafka_t *rk,
+                           rd_kafka_ConfigResource_t **configs,
+                           size_t config_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
 
 
 /*
@@ -6924,12 +7672,69 @@ void rd_kafka_AlterConfigs (rd_kafka_t *rk,
  * @returns an array of ConfigResource elements, or NULL if not available.
  */
 RD_EXPORT const rd_kafka_ConfigResource_t **
-rd_kafka_AlterConfigs_result_resources (
-        const rd_kafka_AlterConfigs_result_t *result,
-        size_t *cntp);
+rd_kafka_AlterConfigs_result_resources(
+    const rd_kafka_AlterConfigs_result_t *result,
+    size_t *cntp);
 
 
 
+/*
+ * IncrementalAlterConfigs - alter cluster configuration incrementally.
+ *
+ */
+
+
+/**
+ * @brief Incrementally update the configuration for the specified resources.
+ *        Updates are not transactional so they may succeed for some resources
+ *        while fail for others. The configs for a particular resource are
+ *        updated atomically, executing the corresponding incremental operations
+ *        on the provided configurations.
+ *
+ * @remark Requires broker version >=2.3.0
+ *
+ * @remark Multiple resources and resource types may be set, but at most one
+ *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
+ *         since these resource requests must be sent to the broker specified
+ *         in the resource. Broker option will be ignored in this case.
+ *
+ * @param rk Client instance.
+ * @param configs Array of config entries to alter.
+ * @param config_cnt Number of elements in \p configs array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ */
+RD_EXPORT
+void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
+                                      rd_kafka_ConfigResource_t **configs,
+                                      size_t config_cnt,
+                                      const rd_kafka_AdminOptions_t *options,
+                                      rd_kafka_queue_t *rkqu);
+
+
+/*
+ * IncrementalAlterConfigs result type and methods
+ */
+
+/**
+ * @brief Get an array of resource results from a IncrementalAlterConfigs
+ * result.
+ *
+ * Use \c rd_kafka_ConfigResource_error() and
+ * \c rd_kafka_ConfigResource_error_string() to extract per-resource error
+ * results on the returned array elements.
+ *
+ * The returned object life-times are the same as the \p result object.
+ *
+ * @param result Result object to get resource results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @returns an array of ConfigResource elements, or NULL if not available.
+ */
+RD_EXPORT const rd_kafka_ConfigResource_t **
+rd_kafka_IncrementalAlterConfigs_result_resources(
+    const rd_kafka_IncrementalAlterConfigs_result_t *result,
+    size_t *cntp);
 
 
 
@@ -6964,12 +7769,11 @@ rd_kafka_AlterConfigs_result_resources (
  *         in the resource.
  */
 RD_EXPORT
-void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
-                               rd_kafka_ConfigResource_t **configs,
-                               size_t config_cnt,
-                               const rd_kafka_AdminOptions_t *options,
-                               rd_kafka_queue_t *rkqu);
-
+void rd_kafka_DescribeConfigs(rd_kafka_t *rk,
+                              rd_kafka_ConfigResource_t **configs,
+                              size_t config_cnt,
+                              const rd_kafka_AdminOptions_t *options,
+                              rd_kafka_queue_t *rkqu);
 
 
 
@@ -6986,14 +7790,17 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_ConfigResource_t **
-rd_kafka_DescribeConfigs_result_resources (
-        const rd_kafka_DescribeConfigs_result_t *result,
-        size_t *cntp);
+rd_kafka_DescribeConfigs_result_resources(
+    const rd_kafka_DescribeConfigs_result_t *result,
+    size_t *cntp);
 
 
-/*
- * DeleteRecords - delete records (messages) from partitions
- *
+/**@}*/
+
+/**
+ * @name Admin API - DeleteRecords
+ * @brief delete records (messages) from partitions.
+ * @{
  *
  */
 
@@ -7016,16 +7823,15 @@ typedef struct rd_kafka_DeleteRecords_s rd_kafka_DeleteRecords_t;
  * @returns a new allocated DeleteRecords object.
  *          Use rd_kafka_DeleteRecords_destroy() to free object when done.
  */
-RD_EXPORT rd_kafka_DeleteRecords_t *
-rd_kafka_DeleteRecords_new (const rd_kafka_topic_partition_list_t *
-                            before_offsets);
+RD_EXPORT rd_kafka_DeleteRecords_t *rd_kafka_DeleteRecords_new(
+    const rd_kafka_topic_partition_list_t *before_offsets);
 
 /**
  * @brief Destroy and free a DeleteRecords object previously created with
  *        rd_kafka_DeleteRecords_new()
  */
 RD_EXPORT void
-rd_kafka_DeleteRecords_destroy (rd_kafka_DeleteRecords_t *del_records);
+rd_kafka_DeleteRecords_destroy(rd_kafka_DeleteRecords_t *del_records);
 
 /**
  * @brief Helper function to destroy all DeleteRecords objects in
@@ -7033,8 +7839,8 @@ rd_kafka_DeleteRecords_destroy (rd_kafka_DeleteRecords_t *del_records);
  *        The array itself is not freed.
  */
 RD_EXPORT void
-rd_kafka_DeleteRecords_destroy_array (rd_kafka_DeleteRecords_t **del_records,
-                                      size_t del_record_cnt);
+rd_kafka_DeleteRecords_destroy_array(rd_kafka_DeleteRecords_t **del_records,
+                                     size_t del_record_cnt);
 
 /**
  * @brief Delete records (messages) in topic partitions older than the
@@ -7057,12 +7863,11 @@ rd_kafka_DeleteRecords_destroy_array (rd_kafka_DeleteRecords_t **del_records,
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_DELETERECORDS_RESULT
  */
-RD_EXPORT void
-rd_kafka_DeleteRecords (rd_kafka_t *rk,
-                        rd_kafka_DeleteRecords_t **del_records,
-                        size_t del_record_cnt,
-                        const rd_kafka_AdminOptions_t *options,
-                        rd_kafka_queue_t *rkqu);
+RD_EXPORT void rd_kafka_DeleteRecords(rd_kafka_t *rk,
+                                      rd_kafka_DeleteRecords_t **del_records,
+                                      size_t del_record_cnt,
+                                      const rd_kafka_AdminOptions_t *options,
+                                      rd_kafka_queue_t *rkqu);
 
 
 /*
@@ -7079,11 +7884,377 @@ rd_kafka_DeleteRecords (rd_kafka_t *rk,
  * The returned object's life-time is the same as the \p result object.
  */
 RD_EXPORT const rd_kafka_topic_partition_list_t *
-rd_kafka_DeleteRecords_result_offsets (
+rd_kafka_DeleteRecords_result_offsets(
     const rd_kafka_DeleteRecords_result_t *result);
 
-/*
- * DeleteGroups - delete groups from cluster
+/**@}*/
+
+/**
+ * @name Admin API - ListConsumerGroups
+ * @{
+ */
+
+
+/**
+ * @brief ListConsumerGroups result for a single group
+ */
+
+/**! ListConsumerGroups result for a single group */
+typedef struct rd_kafka_ConsumerGroupListing_s rd_kafka_ConsumerGroupListing_t;
+
+/**! ListConsumerGroups results and errors */
+typedef struct rd_kafka_ListConsumerGroupsResult_s
+    rd_kafka_ListConsumerGroupsResult_t;
+
+/**
+ * @brief List the consumer groups available in the cluster.
+ *
+ * @param rk Client instance.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_ListConsumerGroups(rd_kafka_t *rk,
+                                 const rd_kafka_AdminOptions_t *options,
+                                 rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Gets the group id for the \p grplist group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return The group id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grplist object.
+ */
+RD_EXPORT
+const char *rd_kafka_ConsumerGroupListing_group_id(
+    const rd_kafka_ConsumerGroupListing_t *grplist);
+
+/**
+ * @brief Is the \p grplist group a simple consumer group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return 1 if the group is a simple consumer group,
+ *         else 0.
+ */
+RD_EXPORT
+int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
+    const rd_kafka_ConsumerGroupListing_t *grplist);
+
+/**
+ * @brief Gets state for the \p grplist group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return A group state.
+ */
+RD_EXPORT
+rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
+    const rd_kafka_ConsumerGroupListing_t *grplist);
+
+/**
+ * @brief Get an array of valid list groups from a ListConsumerGroups result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_ConsumerGroupListing_t **
+rd_kafka_ListConsumerGroups_result_valid(
+    const rd_kafka_ListConsumerGroups_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Get an array of errors from a ListConsumerGroups call result.
+ *
+ * The returned errors life-time is the same as the \p result object.
+ *
+ * @param result ListConsumerGroups result.
+ * @param cntp Is updated to the number of elements in the array.
+ *
+ * @return Array of errors in \p result.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
+    const rd_kafka_ListConsumerGroups_result_t *result,
+    size_t *cntp);
+
+/**@}*/
+
+/**
+ * @name Admin API - DescribeConsumerGroups
+ * @{
+ */
+
+/**
+ * @brief DescribeConsumerGroups result type.
+ *
+ */
+typedef struct rd_kafka_ConsumerGroupDescription_s
+    rd_kafka_ConsumerGroupDescription_t;
+
+/**
+ * @brief Member description included in ConsumerGroupDescription.
+ *
+ */
+typedef struct rd_kafka_MemberDescription_s rd_kafka_MemberDescription_t;
+
+/**
+ * @brief Member assignment included in MemberDescription.
+ *
+ */
+typedef struct rd_kafka_MemberAssignment_s rd_kafka_MemberAssignment_t;
+
+/**
+ * @brief Describe groups from cluster as specified by the \p groups
+ *        array of size \p groups_cnt elements.
+ *
+ * @param rk Client instance.
+ * @param groups Array of groups to describe.
+ * @param groups_cnt Number of elements in \p groups array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
+                                     const char **groups,
+                                     size_t groups_cnt,
+                                     const rd_kafka_AdminOptions_t *options,
+                                     rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Get an array of group results from a DescribeConsumerGroups result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_ConsumerGroupDescription_t **
+rd_kafka_DescribeConsumerGroups_result_groups(
+    const rd_kafka_DescribeConsumerGroups_result_t *result,
+    size_t *cntp);
+
+
+/**
+ * @brief Gets the group id for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return The group id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grpdesc object.
+ */
+RD_EXPORT
+const char *rd_kafka_ConsumerGroupDescription_group_id(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+/**
+ * @brief Gets the error for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return The group description error.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grpdesc object.
+ */
+RD_EXPORT
+const rd_kafka_error_t *rd_kafka_ConsumerGroupDescription_error(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+/**
+ * @brief Is the \p grpdesc group a simple consumer group.
+ *
+ * @param grpdesc The group description.
+ * @return 1 if the group is a simple consumer group,
+ *         else 0.
+ */
+RD_EXPORT
+int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+
+/**
+ * @brief Gets the partition assignor for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return The partition assignor.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grpdesc object.
+ */
+RD_EXPORT
+const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+
+/**
+ * @brief Gets state for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return A group state.
+ */
+RD_EXPORT
+rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+/**
+ * @brief Gets the coordinator for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return The group coordinator.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grpdesc object.
+ */
+RD_EXPORT
+const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+/**
+ * @brief Gets the members count of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return The member count.
+ */
+RD_EXPORT
+size_t rd_kafka_ConsumerGroupDescription_member_count(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+/**
+ * @brief Gets a member of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ * @param idx The member idx.
+ *
+ * @return A member at index \p idx, or NULL if
+ *         \p idx is out of range.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grpdesc object.
+ */
+RD_EXPORT
+const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc,
+    size_t idx);
+
+/**
+ * @brief Gets client id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @return The client id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+RD_EXPORT
+const char *rd_kafka_MemberDescription_client_id(
+    const rd_kafka_MemberDescription_t *member);
+
+/**
+ * @brief Gets group instance id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @return The group instance id, or NULL if not available.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+RD_EXPORT
+const char *rd_kafka_MemberDescription_group_instance_id(
+    const rd_kafka_MemberDescription_t *member);
+
+/**
+ * @brief Gets consumer id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @return The consumer id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+RD_EXPORT
+const char *rd_kafka_MemberDescription_consumer_id(
+    const rd_kafka_MemberDescription_t *member);
+
+/**
+ * @brief Gets host of \p member.
+ *
+ * @param member The group member.
+ *
+ * @return The host.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+RD_EXPORT
+const char *
+rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member);
+
+/**
+ * @brief Gets assignment of \p member.
+ *
+ * @param member The group member.
+ *
+ * @return The member assignment.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+RD_EXPORT
+const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
+    const rd_kafka_MemberDescription_t *member);
+
+/**
+ * @brief Gets assigned partitions of a member \p assignment.
+ *
+ * @param assignment The group member assignment.
+ *
+ * @return The assigned partitions.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p assignment object.
+ */
+RD_EXPORT
+const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
+    const rd_kafka_MemberAssignment_t *assignment);
+
+/**@}*/
+
+/**
+ * @name Admin API - DeleteGroups
+ * @brief Delete groups from cluster
+ * @{
  *
  *
  */
@@ -7100,15 +8271,15 @@ typedef struct rd_kafka_DeleteGroup_s rd_kafka_DeleteGroup_t;
  * @returns a new allocated DeleteGroup object.
  *          Use rd_kafka_DeleteGroup_destroy() to free object when done.
  */
-RD_EXPORT rd_kafka_DeleteGroup_t *
-rd_kafka_DeleteGroup_new (const char *group);
+RD_EXPORT
+rd_kafka_DeleteGroup_t *rd_kafka_DeleteGroup_new(const char *group);
 
 /**
  * @brief Destroy and free a DeleteGroup object previously created with
  *        rd_kafka_DeleteGroup_new()
  */
-RD_EXPORT void
-rd_kafka_DeleteGroup_destroy (rd_kafka_DeleteGroup_t *del_group);
+RD_EXPORT
+void rd_kafka_DeleteGroup_destroy(rd_kafka_DeleteGroup_t *del_group);
 
 /**
  * @brief Helper function to destroy all DeleteGroup objects in
@@ -7116,8 +8287,8 @@ rd_kafka_DeleteGroup_destroy (rd_kafka_DeleteGroup_t *del_group);
  *        The array itself is not freed.
  */
 RD_EXPORT void
-rd_kafka_DeleteGroup_destroy_array (rd_kafka_DeleteGroup_t **del_groups,
-                                    size_t del_group_cnt);
+rd_kafka_DeleteGroup_destroy_array(rd_kafka_DeleteGroup_t **del_groups,
+                                   size_t del_group_cnt);
 
 /**
  * @brief Delete groups from cluster as specified by the \p del_groups
@@ -7131,13 +8302,15 @@ rd_kafka_DeleteGroup_destroy_array (rd_kafka_DeleteGroup_t **del_groups,
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_DELETEGROUPS_RESULT
+ *
+ * @remark This function in called deleteConsumerGroups in the Java client.
  */
 RD_EXPORT
-void rd_kafka_DeleteGroups (rd_kafka_t *rk,
-                            rd_kafka_DeleteGroup_t **del_groups,
-                            size_t del_group_cnt,
-                            const rd_kafka_AdminOptions_t *options,
-                            rd_kafka_queue_t *rkqu);
+void rd_kafka_DeleteGroups(rd_kafka_t *rk,
+                           rd_kafka_DeleteGroup_t **del_groups,
+                           size_t del_group_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
 
 
 
@@ -7153,21 +8326,213 @@ void rd_kafka_DeleteGroups (rd_kafka_t *rk,
  * @param result Result to get group results from.
  * @param cntp is updated to the number of elements in the array.
  */
-RD_EXPORT const rd_kafka_group_result_t **
-rd_kafka_DeleteGroups_result_groups (
-        const rd_kafka_DeleteGroups_result_t *result,
-        size_t *cntp);
+RD_EXPORT const rd_kafka_group_result_t **rd_kafka_DeleteGroups_result_groups(
+    const rd_kafka_DeleteGroups_result_t *result,
+    size_t *cntp);
+
+/**@}*/
+
+/**
+ * @name Admin API - ListConsumerGroupOffsets
+ * @{
+ *
+ *
+ */
+
+/*! Represents consumer group committed offsets to be listed. */
+typedef struct rd_kafka_ListConsumerGroupOffsets_s
+    rd_kafka_ListConsumerGroupOffsets_t;
+
+/**
+ * @brief Create a new ListConsumerGroupOffsets object.
+ *        This object is later passed to rd_kafka_ListConsumerGroupOffsets().
+ *
+ * @param group_id Consumer group id.
+ * @param partitions Partitions to list committed offsets for.
+ *                   Only the topic and partition fields are used.
+ *
+ * @returns a new allocated ListConsumerGroupOffsets object.
+ *          Use rd_kafka_ListConsumerGroupOffsets_destroy() to free
+ *          object when done.
+ */
+RD_EXPORT rd_kafka_ListConsumerGroupOffsets_t *
+rd_kafka_ListConsumerGroupOffsets_new(
+    const char *group_id,
+    const rd_kafka_topic_partition_list_t *partitions);
+
+/**
+ * @brief Destroy and free a ListConsumerGroupOffsets object previously
+ *        created with rd_kafka_ListConsumerGroupOffsets_new()
+ */
+RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy(
+    rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets);
+
+/**
+ * @brief Helper function to destroy all ListConsumerGroupOffsets objects in
+ *        the \p list_grpoffsets array (of \p list_grpoffsets_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    size_t list_grpoffset_cnt);
+
+/**
+ * @brief List committed offsets for a set of partitions in a consumer
+ *        group.
+ *
+ * @param rk Client instance.
+ * @param list_grpoffsets Array of group committed offsets to list.
+ *                       MUST only be one single element.
+ * @param list_grpoffsets_cnt Number of elements in \p list_grpoffsets array.
+ *                           MUST always be 1.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
+ *
+ * @remark The current implementation only supports one group per invocation.
+ */
+RD_EXPORT
+void rd_kafka_ListConsumerGroupOffsets(
+    rd_kafka_t *rk,
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    size_t list_grpoffsets_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
+
 
 
 /*
- * DeleteConsumerGroupOffsets - delete groups from cluster
+ * ListConsumerGroupOffsets result type and methods
+ */
+
+/**
+ * @brief Get an array of results from a ListConsumerGroupOffsets result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT const rd_kafka_group_result_t **
+rd_kafka_ListConsumerGroupOffsets_result_groups(
+    const rd_kafka_ListConsumerGroupOffsets_result_t *result,
+    size_t *cntp);
+
+
+
+/**@}*/
+
+/**
+ * @name Admin API - AlterConsumerGroupOffsets
+ * @{
+ *
+ *
+ */
+
+/*! Represents consumer group committed offsets to be altered. */
+typedef struct rd_kafka_AlterConsumerGroupOffsets_s
+    rd_kafka_AlterConsumerGroupOffsets_t;
+
+/**
+ * @brief Create a new AlterConsumerGroupOffsets object.
+ *        This object is later passed to rd_kafka_AlterConsumerGroupOffsets().
+ *
+ * @param group_id Consumer group id.
+ * @param partitions Partitions to alter committed offsets for.
+ *                   Only the topic and partition fields are used.
+ *
+ * @returns a new allocated AlterConsumerGroupOffsets object.
+ *          Use rd_kafka_AlterConsumerGroupOffsets_destroy() to free
+ *          object when done.
+ */
+RD_EXPORT rd_kafka_AlterConsumerGroupOffsets_t *
+rd_kafka_AlterConsumerGroupOffsets_new(
+    const char *group_id,
+    const rd_kafka_topic_partition_list_t *partitions);
+
+/**
+ * @brief Destroy and free a AlterConsumerGroupOffsets object previously
+ *        created with rd_kafka_AlterConsumerGroupOffsets_new()
+ */
+RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy(
+    rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets);
+
+/**
+ * @brief Helper function to destroy all AlterConsumerGroupOffsets objects in
+ *        the \p alter_grpoffsets array (of \p alter_grpoffsets_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    size_t alter_grpoffset_cnt);
+
+/**
+ * @brief Alter committed offsets for a set of partitions in a consumer
+ *        group. This will succeed at the partition level only if the group
+ *        is not actively subscribed to the corresponding topic.
+ *
+ * @param rk Client instance.
+ * @param alter_grpoffsets Array of group committed offsets to alter.
+ *                       MUST only be one single element.
+ * @param alter_grpoffsets_cnt Number of elements in \p alter_grpoffsets array.
+ *                           MUST always be 1.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT
+ *
+ * @remark The current implementation only supports one group per invocation.
+ */
+RD_EXPORT
+void rd_kafka_AlterConsumerGroupOffsets(
+    rd_kafka_t *rk,
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    size_t alter_grpoffsets_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
+
+
+
+/*
+ * AlterConsumerGroupOffsets result type and methods
+ */
+
+/**
+ * @brief Get an array of results from a AlterConsumerGroupOffsets result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT const rd_kafka_group_result_t **
+rd_kafka_AlterConsumerGroupOffsets_result_groups(
+    const rd_kafka_AlterConsumerGroupOffsets_result_t *result,
+    size_t *cntp);
+
+
+
+/**@}*/
+
+/**
+ * @name Admin API - DeleteConsumerGroupOffsets
+ * @{
  *
  *
  */
 
 /*! Represents consumer group committed offsets to be deleted. */
 typedef struct rd_kafka_DeleteConsumerGroupOffsets_s
-rd_kafka_DeleteConsumerGroupOffsets_t;
+    rd_kafka_DeleteConsumerGroupOffsets_t;
 
 /**
  * @brief Create a new DeleteConsumerGroupOffsets object.
@@ -7182,30 +8547,28 @@ rd_kafka_DeleteConsumerGroupOffsets_t;
  *          object when done.
  */
 RD_EXPORT rd_kafka_DeleteConsumerGroupOffsets_t *
-rd_kafka_DeleteConsumerGroupOffsets_new (const char *group,
-                                         const rd_kafka_topic_partition_list_t
-                                         *partitions);
+rd_kafka_DeleteConsumerGroupOffsets_new(
+    const char *group,
+    const rd_kafka_topic_partition_list_t *partitions);
 
 /**
  * @brief Destroy and free a DeleteConsumerGroupOffsets object previously
  *        created with rd_kafka_DeleteConsumerGroupOffsets_new()
  */
-RD_EXPORT void
-rd_kafka_DeleteConsumerGroupOffsets_destroy (
-        rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets);
+RD_EXPORT void rd_kafka_DeleteConsumerGroupOffsets_destroy(
+    rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets);
 
 /**
  * @brief Helper function to destroy all DeleteConsumerGroupOffsets objects in
  *        the \p del_grpoffsets array (of \p del_grpoffsets_cnt elements).
  *        The array itself is not freed.
  */
-RD_EXPORT void
-rd_kafka_DeleteConsumerGroupOffsets_destroy_array (
-        rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
-        size_t del_grpoffset_cnt);
+RD_EXPORT void rd_kafka_DeleteConsumerGroupOffsets_destroy_array(
+    rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
+    size_t del_grpoffset_cnt);
 
 /**
- * @brief Delete committed offsets for a set of partitions in a conusmer
+ * @brief Delete committed offsets for a set of partitions in a consumer
  *        group. This will succeed at the partition level only if the group
  *        is not actively subscribed to the corresponding topic.
  *
@@ -7223,12 +8586,12 @@ rd_kafka_DeleteConsumerGroupOffsets_destroy_array (
  * @remark The current implementation only supports one group per invocation.
  */
 RD_EXPORT
-void rd_kafka_DeleteConsumerGroupOffsets (
-        rd_kafka_t *rk,
-        rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
-        size_t del_grpoffsets_cnt,
-        const rd_kafka_AdminOptions_t *options,
-        rd_kafka_queue_t *rkqu);
+void rd_kafka_DeleteConsumerGroupOffsets(
+    rd_kafka_t *rk,
+    rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
+    size_t del_grpoffsets_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
 
 
 
@@ -7245,13 +8608,594 @@ void rd_kafka_DeleteConsumerGroupOffsets (
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_group_result_t **
-rd_kafka_DeleteConsumerGroupOffsets_result_groups (
-        const rd_kafka_DeleteConsumerGroupOffsets_result_t *result,
-        size_t *cntp);
-
+rd_kafka_DeleteConsumerGroupOffsets_result_groups(
+    const rd_kafka_DeleteConsumerGroupOffsets_result_t *result,
+    size_t *cntp);
 
 /**@}*/
 
+
+/**
+ * @name Admin API - User SCRAM credentials
+ * @{
+ */
+
+/**
+ * @enum rd_kafka_ScramMechanism_t
+ * @brief Apache Kafka ScramMechanism values.
+ */
+typedef enum rd_kafka_ScramMechanism_t {
+        RD_KAFKA_SCRAM_MECHANISM_UNKNOWN = 0,
+        RD_KAFKA_SCRAM_MECHANISM_SHA_256 = 1,
+        RD_KAFKA_SCRAM_MECHANISM_SHA_512 = 2,
+        RD_KAFKA_SCRAM_MECHANISM__CNT
+} rd_kafka_ScramMechanism_t;
+
+/**
+ * @brief Scram credential info.
+ *        Mechanism and iterations for a SASL/SCRAM
+ *        credential associated with a user.
+ */
+typedef struct rd_kafka_ScramCredentialInfo_s rd_kafka_ScramCredentialInfo_t;
+
+/**
+ * @brief Returns the mechanism of a given ScramCredentialInfo.
+ */
+RD_EXPORT
+rd_kafka_ScramMechanism_t rd_kafka_ScramCredentialInfo_mechanism(
+    const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
+
+/**
+ * @brief Returns the iterations of a given ScramCredentialInfo.
+ */
+RD_EXPORT
+int32_t rd_kafka_ScramCredentialInfo_iterations(
+    const rd_kafka_ScramCredentialInfo_t *scram_credential_info);
+
+/**
+ * @brief Representation of all SASL/SCRAM credentials associated
+ *        with a user that can be retrieved,
+ *        or an error indicating why credentials
+ *        could not be retrieved.
+ */
+typedef struct rd_kafka_UserScramCredentialsDescription_s
+    rd_kafka_UserScramCredentialsDescription_t;
+
+/**
+ * @brief Returns the username of a UserScramCredentialsDescription.
+ */
+RD_EXPORT
+const char *rd_kafka_UserScramCredentialsDescription_user(
+    const rd_kafka_UserScramCredentialsDescription_t *description);
+
+/**
+ * @brief Returns the error associated with a UserScramCredentialsDescription.
+ */
+RD_EXPORT
+const rd_kafka_error_t *rd_kafka_UserScramCredentialsDescription_error(
+    const rd_kafka_UserScramCredentialsDescription_t *description);
+
+/**
+ * @brief Returns the count of ScramCredentialInfos of a
+ * UserScramCredentialsDescription.
+ */
+RD_EXPORT
+size_t rd_kafka_UserScramCredentialsDescription_scramcredentialinfo_count(
+    const rd_kafka_UserScramCredentialsDescription_t *description);
+
+/**
+ * @brief Returns the ScramCredentialInfo at index idx of
+ * UserScramCredentialsDescription.
+ */
+RD_EXPORT
+const rd_kafka_ScramCredentialInfo_t *
+rd_kafka_UserScramCredentialsDescription_scramcredentialinfo(
+    const rd_kafka_UserScramCredentialsDescription_t *description,
+    size_t idx);
+
+/**
+ * @brief Get an array of descriptions from a DescribeUserScramCredentials
+ * result.
+ *
+ * The returned value life-time is the same as the \p result object.
+ *
+ * @param result Result to get descriptions from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT
+const rd_kafka_UserScramCredentialsDescription_t **
+rd_kafka_DescribeUserScramCredentials_result_descriptions(
+    const rd_kafka_DescribeUserScramCredentials_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Describe SASL/SCRAM credentials.
+ *        This operation is supported by brokers with version 2.7.0 or higher.
+ *
+ * @param rk Client instance.
+ * @param users The users for which credentials are to be described.
+ *              All users' credentials are described if NULL.
+ * @param user_cnt Number of elements in \p users array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ */
+RD_EXPORT
+void rd_kafka_DescribeUserScramCredentials(
+    rd_kafka_t *rk,
+    const char **users,
+    size_t user_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief A request to alter a user's SASL/SCRAM credentials.
+ */
+typedef struct rd_kafka_UserScramCredentialAlteration_s
+    rd_kafka_UserScramCredentialAlteration_t;
+
+/**
+ * @brief Allocates a new UserScramCredentialUpsertion given its fields.
+ *        If salt isn't given a 64 B salt is generated using OpenSSL
+ *        RAND_priv_bytes, if available.
+ *
+ * @param username The username (not empty).
+ * @param mechanism SASL/SCRAM mechanism.
+ * @param iterations SASL/SCRAM iterations.
+ * @param password Password bytes (not empty).
+ * @param password_size Size of \p password (greater than 0).
+ * @param salt Salt bytes (optional).
+ * @param salt_size Size of \p salt (optional).
+ *
+ * @remark A random salt is generated, when NULL, only if OpenSSL >= 1.1.1.
+ *         Otherwise it's a required param.
+ *
+ * @return A newly created instance of rd_kafka_UserScramCredentialAlteration_t.
+ *         Ownership belongs to the caller, use
+ *         rd_kafka_UserScramCredentialAlteration_destroy to destroy.
+ */
+RD_EXPORT
+rd_kafka_UserScramCredentialAlteration_t *
+rd_kafka_UserScramCredentialUpsertion_new(const char *username,
+                                          rd_kafka_ScramMechanism_t mechanism,
+                                          int32_t iterations,
+                                          const unsigned char *password,
+                                          size_t password_size,
+                                          const unsigned char *salt,
+                                          size_t salt_size);
+
+/**
+ * @brief Allocates a new UserScramCredentialDeletion given its fields.
+ *
+ * @param username The username (not empty).
+ * @param mechanism SASL/SCRAM mechanism.
+ * @return A newly created instance of rd_kafka_UserScramCredentialAlteration_t.
+ *         Ownership belongs to the caller, use
+ *         rd_kafka_UserScramCredentialAlteration_destroy to destroy.
+ */
+RD_EXPORT
+rd_kafka_UserScramCredentialAlteration_t *
+rd_kafka_UserScramCredentialDeletion_new(const char *username,
+                                         rd_kafka_ScramMechanism_t mechanism);
+
+
+/**
+ * @brief Destroys a UserScramCredentialAlteration given its pointer
+ */
+RD_EXPORT
+void rd_kafka_UserScramCredentialAlteration_destroy(
+    rd_kafka_UserScramCredentialAlteration_t *alteration);
+
+/**
+ * @brief Destroys an array of UserScramCredentialAlteration
+ */
+RD_EXPORT
+void rd_kafka_UserScramCredentialAlteration_destroy_array(
+    rd_kafka_UserScramCredentialAlteration_t **alterations,
+    size_t alteration_cnt);
+
+/**
+ * @brief Result of a single user SCRAM alteration.
+ */
+typedef struct rd_kafka_AlterUserScramCredentials_result_response_s
+    rd_kafka_AlterUserScramCredentials_result_response_t;
+
+/**
+ * @brief Returns the username for a
+ * rd_kafka_AlterUserScramCredentials_result_response.
+ */
+RD_EXPORT
+const char *rd_kafka_AlterUserScramCredentials_result_response_user(
+    const rd_kafka_AlterUserScramCredentials_result_response_t *response);
+
+/**
+ * @brief Returns the error of a
+ * rd_kafka_AlterUserScramCredentials_result_response.
+ */
+RD_EXPORT
+const rd_kafka_error_t *
+rd_kafka_AlterUserScramCredentials_result_response_error(
+    const rd_kafka_AlterUserScramCredentials_result_response_t *response);
+
+/**
+ * @brief Get an array of responses from a AlterUserScramCredentials result.
+ *
+ * The returned value life-time is the same as the \p result object.
+ *
+ * @param result Result to get responses from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT
+const rd_kafka_AlterUserScramCredentials_result_response_t **
+rd_kafka_AlterUserScramCredentials_result_responses(
+    const rd_kafka_AlterUserScramCredentials_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Alter SASL/SCRAM credentials.
+ *        This operation is supported by brokers with version 2.7.0 or higher.
+ *
+ * @remark For upsertions to be processed, librdkfka must be build with
+ *         OpenSSL support. It's needed to calculate the HMAC.
+ *
+ * @param rk Client instance.
+ * @param alterations The alterations to be applied.
+ * @param alteration_cnt Number of elements in \p alterations array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ */
+RD_EXPORT
+void rd_kafka_AlterUserScramCredentials(
+    rd_kafka_t *rk,
+    rd_kafka_UserScramCredentialAlteration_t **alterations,
+    size_t alteration_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
+
+/**@}*/
+
+/**
+ * @name Admin API - ACL operations
+ * @{
+ */
+
+/**
+ * @brief ACL Binding is used to create access control lists.
+ *
+ *
+ */
+typedef struct rd_kafka_AclBinding_s rd_kafka_AclBinding_t;
+
+/**
+ * @brief ACL Binding filter is used to filter access control lists.
+ *
+ */
+typedef rd_kafka_AclBinding_t rd_kafka_AclBindingFilter_t;
+
+/**
+ * @returns the error object for the given acl result, or NULL on success.
+ */
+RD_EXPORT const rd_kafka_error_t *
+rd_kafka_acl_result_error(const rd_kafka_acl_result_t *aclres);
+
+
+/**
+ * @enum rd_kafka_AclOperation_t
+ * @brief Apache Kafka ACL operation types.
+ */
+typedef enum rd_kafka_AclOperation_t {
+        RD_KAFKA_ACL_OPERATION_UNKNOWN = 0, /**< Unknown */
+        RD_KAFKA_ACL_OPERATION_ANY =
+            1, /**< In a filter, matches any AclOperation */
+        RD_KAFKA_ACL_OPERATION_ALL      = 2, /**< ALL operation */
+        RD_KAFKA_ACL_OPERATION_READ     = 3, /**< READ operation */
+        RD_KAFKA_ACL_OPERATION_WRITE    = 4, /**< WRITE operation */
+        RD_KAFKA_ACL_OPERATION_CREATE   = 5, /**< CREATE operation */
+        RD_KAFKA_ACL_OPERATION_DELETE   = 6, /**< DELETE operation */
+        RD_KAFKA_ACL_OPERATION_ALTER    = 7, /**< ALTER operation */
+        RD_KAFKA_ACL_OPERATION_DESCRIBE = 8, /**< DESCRIBE operation */
+        RD_KAFKA_ACL_OPERATION_CLUSTER_ACTION =
+            9, /**< CLUSTER_ACTION operation */
+        RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS =
+            10, /**< DESCRIBE_CONFIGS operation */
+        RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS =
+            11, /**< ALTER_CONFIGS  operation */
+        RD_KAFKA_ACL_OPERATION_IDEMPOTENT_WRITE =
+            12, /**< IDEMPOTENT_WRITE operation */
+        RD_KAFKA_ACL_OPERATION__CNT
+} rd_kafka_AclOperation_t;
+
+/**
+ * @returns a string representation of the \p acl_operation
+ */
+RD_EXPORT const char *
+rd_kafka_AclOperation_name(rd_kafka_AclOperation_t acl_operation);
+
+/**
+ * @enum rd_kafka_AclPermissionType_t
+ * @brief Apache Kafka ACL permission types.
+ */
+typedef enum rd_kafka_AclPermissionType_t {
+        RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN = 0, /**< Unknown */
+        RD_KAFKA_ACL_PERMISSION_TYPE_ANY =
+            1, /**< In a filter, matches any AclPermissionType */
+        RD_KAFKA_ACL_PERMISSION_TYPE_DENY  = 2, /**< Disallows access */
+        RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW = 3, /**< Grants access. */
+        RD_KAFKA_ACL_PERMISSION_TYPE__CNT
+} rd_kafka_AclPermissionType_t;
+
+/**
+ * @returns a string representation of the \p acl_permission_type
+ */
+RD_EXPORT const char *rd_kafka_AclPermissionType_name(
+    rd_kafka_AclPermissionType_t acl_permission_type);
+
+/**
+ * @brief Create a new AclBinding object. This object is later passed to
+ *        rd_kafka_CreateAcls().
+ *
+ * @param restype The ResourceType.
+ * @param name The resource name.
+ * @param resource_pattern_type The pattern type.
+ * @param principal A principal, following the kafka specification.
+ * @param host An hostname or ip.
+ * @param operation A Kafka operation.
+ * @param permission_type A Kafka permission type.
+ * @param errstr An error string for returning errors or NULL to not use it.
+ * @param errstr_size The \p errstr size or 0 to not use it.
+ *
+ * @returns a new allocated AclBinding object, or NULL if the input parameters
+ *          are invalid.
+ *          Use rd_kafka_AclBinding_destroy() to free object when done.
+ */
+RD_EXPORT rd_kafka_AclBinding_t *
+rd_kafka_AclBinding_new(rd_kafka_ResourceType_t restype,
+                        const char *name,
+                        rd_kafka_ResourcePatternType_t resource_pattern_type,
+                        const char *principal,
+                        const char *host,
+                        rd_kafka_AclOperation_t operation,
+                        rd_kafka_AclPermissionType_t permission_type,
+                        char *errstr,
+                        size_t errstr_size);
+
+/**
+ * @brief Create a new AclBindingFilter object. This object is later passed to
+ *        rd_kafka_DescribeAcls() or
+ *        rd_kafka_DeletesAcls() in order to filter
+ *        the acls to retrieve or to delete.
+ *        Use the same rd_kafka_AclBinding functions to query or destroy it.
+ *
+ * @param restype The ResourceType or \c RD_KAFKA_RESOURCE_ANY if
+ *                not filtering by this field.
+ * @param name The resource name or NULL if not filtering by this field.
+ * @param resource_pattern_type The pattern type or \c
+ * RD_KAFKA_RESOURCE_PATTERN_ANY if not filtering by this field.
+ * @param principal A principal or NULL if not filtering by this field.
+ * @param host An hostname or ip or NULL if not filtering by this field.
+ * @param operation A Kafka operation or \c RD_KAFKA_ACL_OPERATION_ANY if not
+ * filtering by this field.
+ * @param permission_type A Kafka permission type or \c
+ * RD_KAFKA_ACL_PERMISSION_TYPE_ANY if not filtering by this field.
+ * @param errstr An error string for returning errors or NULL to not use it.
+ * @param errstr_size The \p errstr size or 0 to not use it.
+ *
+ * @returns a new allocated AclBindingFilter object, or NULL if the input
+ * parameters are invalid. Use rd_kafka_AclBinding_destroy() to free object when
+ * done.
+ */
+RD_EXPORT rd_kafka_AclBindingFilter_t *rd_kafka_AclBindingFilter_new(
+    rd_kafka_ResourceType_t restype,
+    const char *name,
+    rd_kafka_ResourcePatternType_t resource_pattern_type,
+    const char *principal,
+    const char *host,
+    rd_kafka_AclOperation_t operation,
+    rd_kafka_AclPermissionType_t permission_type,
+    char *errstr,
+    size_t errstr_size);
+
+/**
+ * @returns the resource type for the given acl binding.
+ */
+RD_EXPORT rd_kafka_ResourceType_t
+rd_kafka_AclBinding_restype(const rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the resource name for the given acl binding.
+ *
+ * @remark lifetime of the returned string is the same as the \p acl.
+ */
+RD_EXPORT const char *
+rd_kafka_AclBinding_name(const rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the principal for the given acl binding.
+ *
+ * @remark lifetime of the returned string is the same as the \p acl.
+ */
+RD_EXPORT const char *
+rd_kafka_AclBinding_principal(const rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the host for the given acl binding.
+ *
+ * @remark lifetime of the returned string is the same as the \p acl.
+ */
+RD_EXPORT const char *
+rd_kafka_AclBinding_host(const rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the acl operation for the given acl binding.
+ */
+RD_EXPORT rd_kafka_AclOperation_t
+rd_kafka_AclBinding_operation(const rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the permission type for the given acl binding.
+ */
+RD_EXPORT rd_kafka_AclPermissionType_t
+rd_kafka_AclBinding_permission_type(const rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the resource pattern type for the given acl binding.
+ */
+RD_EXPORT rd_kafka_ResourcePatternType_t
+rd_kafka_AclBinding_resource_pattern_type(const rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the error object for the given acl binding, or NULL on success.
+ */
+RD_EXPORT const rd_kafka_error_t *
+rd_kafka_AclBinding_error(const rd_kafka_AclBinding_t *acl);
+
+
+/**
+ * @brief Destroy and free an AclBinding object previously created with
+ *        rd_kafka_AclBinding_new()
+ */
+RD_EXPORT void rd_kafka_AclBinding_destroy(rd_kafka_AclBinding_t *acl_binding);
+
+
+/**
+ * @brief Helper function to destroy all AclBinding objects in
+ *        the \p acl_bindings array (of \p acl_bindings_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_AclBinding_destroy_array(rd_kafka_AclBinding_t **acl_bindings,
+                                  size_t acl_bindings_cnt);
+
+/**
+ * @brief Get an array of acl results from a CreateAcls result.
+ *
+ * The returned \p acl result life-time is the same as the \p result object.
+ * @param result CreateAcls result to get acl results from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_acl_result_t **
+rd_kafka_CreateAcls_result_acls(const rd_kafka_CreateAcls_result_t *result,
+                                size_t *cntp);
+
+/**
+ * @brief Create acls as specified by the \p new_acls
+ *        array of size \p new_topic_cnt elements.
+ *
+ * @param rk Client instance.
+ * @param new_acls Array of new acls to create.
+ * @param new_acls_cnt Number of elements in \p new_acls array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_CREATEACLS_RESULT
+ */
+RD_EXPORT void rd_kafka_CreateAcls(rd_kafka_t *rk,
+                                   rd_kafka_AclBinding_t **new_acls,
+                                   size_t new_acls_cnt,
+                                   const rd_kafka_AdminOptions_t *options,
+                                   rd_kafka_queue_t *rkqu);
+
+/**
+ * DescribeAcls - describe access control lists.
+ *
+ *
+ */
+
+/**
+ * @brief Get an array of resource results from a DescribeAcls result.
+ *
+ * The returned \p resources life-time is the same as the \p result object.
+ * @param result DescribeAcls result to get acls from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_AclBinding_t **
+rd_kafka_DescribeAcls_result_acls(const rd_kafka_DescribeAcls_result_t *result,
+                                  size_t *cntp);
+
+/**
+ * @brief Describe acls matching the filter provided in \p acl_filter
+ *
+ * @param rk Client instance.
+ * @param acl_filter Filter for the returned acls.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBEACLS_RESULT
+ */
+RD_EXPORT void rd_kafka_DescribeAcls(rd_kafka_t *rk,
+                                     rd_kafka_AclBindingFilter_t *acl_filter,
+                                     const rd_kafka_AdminOptions_t *options,
+                                     rd_kafka_queue_t *rkqu);
+
+/**
+ * DeleteAcls - delete access control lists.
+ *
+ *
+ */
+
+typedef struct rd_kafka_DeleteAcls_result_response_s
+    rd_kafka_DeleteAcls_result_response_t;
+
+/**
+ * @brief Get an array of DeleteAcls result responses from a DeleteAcls result.
+ *
+ * The returned \p responses life-time is the same as the \p result object.
+ * @param result DeleteAcls result to get responses from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_DeleteAcls_result_response_t **
+rd_kafka_DeleteAcls_result_responses(const rd_kafka_DeleteAcls_result_t *result,
+                                     size_t *cntp);
+
+/**
+ * @returns the error object for the given DeleteAcls result response,
+ *          or NULL on success.
+ */
+RD_EXPORT const rd_kafka_error_t *rd_kafka_DeleteAcls_result_response_error(
+    const rd_kafka_DeleteAcls_result_response_t *result_response);
+
+
+/**
+ * @returns the matching acls array for the given DeleteAcls result response.
+ *
+ * @remark lifetime of the returned acl bindings is the same as the \p
+ * result_response.
+ */
+RD_EXPORT const rd_kafka_AclBinding_t **
+rd_kafka_DeleteAcls_result_response_matching_acls(
+    const rd_kafka_DeleteAcls_result_response_t *result_response,
+    size_t *matching_acls_cntp);
+
+/**
+ * @brief Delete acls matching the filteres provided in \p del_acls
+ * array of size \p del_acls_cnt.
+ *
+ * @param rk Client instance.
+ * @param del_acls Filters for the acls to delete.
+ * @param del_acls_cnt Number of elements in \p del_acls array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DELETEACLS_RESULT
+ */
+RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
+                                   rd_kafka_AclBindingFilter_t **del_acls,
+                                   size_t del_acls_cnt,
+                                   const rd_kafka_AdminOptions_t *options,
+                                   rd_kafka_queue_t *rkqu);
+
+/**@}*/
 
 /**
  * @name Security APIs
@@ -7305,12 +9249,14 @@ rd_kafka_DeleteConsumerGroupOffsets_result_groups (
  */
 RD_EXPORT
 rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
-                                const char *token_value,
-                                int64_t md_lifetime_ms,
-                                const char *md_principal_name,
-                                const char **extensions, size_t extension_size,
-                                char *errstr, size_t errstr_size);
+rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
+                               const char *token_value,
+                               int64_t md_lifetime_ms,
+                               const char *md_principal_name,
+                               const char **extensions,
+                               size_t extension_size,
+                               char *errstr,
+                               size_t errstr_size);
 
 /**
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
@@ -7333,8 +9279,8 @@ rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
  * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
  */
 RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
+                                                           const char *errstr);
 
 /**@}*/
 
@@ -7424,7 +9370,7 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * the global rd_kafka_fatal_error() code.
  * Fatal errors are raised by triggering the \c error_cb (see the
  * Fatal error chapter in INTRODUCTION.md for more information), and any
- * sub-sequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
+ * subsequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
  * or have the fatal flag set (see rd_kafka_error_is_fatal()).
  * The originating fatal error code can be retrieved by calling
  * rd_kafka_fatal_error().
@@ -7484,8 +9430,14 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call init_transactions() again.
+ *                   If an infinite timeout (-1) is passed, the timeout will
+ *                   be adjusted to 2 * \c transaction.timeout.ms.
  *
  * @remark This function may block up to \p timeout_ms milliseconds.
+ *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -7517,8 +9469,7 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms);
+rd_kafka_error_t *rd_kafka_init_transactions(rd_kafka_t *rk, int timeout_ms);
 
 
 
@@ -7567,7 +9518,7 @@ rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms);
  *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk);
+rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
 
 
 /**
@@ -7603,8 +9554,17 @@ rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk);
  *
  * @remark Logical and invalid offsets (such as RD_KAFKA_OFFSET_INVALID) in
  *         \p offsets will be ignored, if there are no valid offsets in
- *         \p offsets the function will return RD_KAFKA_RESP_ERR_NO_ERROR
- *         and no action will be taken.
+ *         \p offsets the function will return NULL and no action will be taken.
+ *
+ * @remark This call is retriable but not resumable, which means a new request
+ *         with a new set of provided offsets and group metadata will be
+ *         sent to the transaction coordinator if the call is retried.
+ *
+ * @remark It is highly recommended to retry the call (upon retriable error)
+ *         with identical \p offsets and \p cgmetadata parameters.
+ *         Failure to do so risks inconsistent state between what is actually
+ *         included in the transaction and what the application thinks is
+ *         included in the transaction.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -7625,9 +9585,7 @@ rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk);
  *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
  *          configured for the producer instance,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
- *          or if the \p consumer_group_id or \p offsets are empty,
- *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous
- *          rd_kafka_send_offsets_to_transaction() call is still in progress.
+ *          or if the \p consumer_group_id or \p offsets are empty.
  *          Other error codes not listed here may be returned, depending on
  *          broker version.
  *
@@ -7635,12 +9593,11 @@ rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk);
  *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_send_offsets_to_transaction (
-        rd_kafka_t *rk,
-        const rd_kafka_topic_partition_list_t *offsets,
-        const rd_kafka_consumer_group_metadata_t *cgmetadata,
-        int timeout_ms);
+rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *offsets,
+    const rd_kafka_consumer_group_metadata_t *cgmetadata,
+    int timeout_ms);
 
 
 /**
@@ -7681,6 +9638,10 @@ rd_kafka_send_offsets_to_transaction (
  *         serve the event queue in a separate thread since rd_kafka_flush()
  *         will not serve delivery reports in this mode.
  *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
+ *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
  *          by calling rd_kafka_error_is_retriable(), or whether an abortable
@@ -7707,8 +9668,7 @@ rd_kafka_send_offsets_to_transaction (
  *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms);
+rd_kafka_error_t *rd_kafka_commit_transaction(rd_kafka_t *rk, int timeout_ms);
 
 
 /**
@@ -7741,7 +9701,10 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms);
  *         If the application has enabled RD_KAFKA_EVENT_DR it must
  *         serve the event queue in a separate thread since rd_kafka_flush()
  *         will not serve delivery reports in this mode.
-
+ *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -7767,8 +9730,7 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms);
  *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms);
+rd_kafka_error_t *rd_kafka_abort_transaction(rd_kafka_t *rk, int timeout_ms);
 
 
 /**@}*/

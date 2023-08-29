@@ -16,6 +16,7 @@ Begin with the following examples:
  * [transactions-older-broker.c](transactions-older-broker.c) - Same as
    `transactions.c` but for Apache Kafka versions 2.4.x and older which
    lack KIP-447 support.
+ * [misc.c](misc.c) - a collection of miscellaneous usage examples.
 
 
 For more complex uses, see:
@@ -27,3 +28,13 @@ For more complex uses, see:
  * [rdkafka_performance.c](rdkafka_performance.c) - performance, benchmark, latency producer and consumer tool.
  * [kafkatest_verifiable_client.cpp](kafkatest_verifiable_client.cpp) - for use with the official Apache Kafka client system tests.
  * [openssl_engine_example.cpp](openssl_engine_example.cpp) - metadata listing in C++ over SSL channel established using OpenSSL engine.
+
+
+ For Admin API examples see:
+ * [delete_records.c](delete_records.c) - Delete records.
+ * [list_consumer_groups.c](list_consumer_groups.c) - List consumer groups.
+ * [describe_consumer_groups.c](describe_consumer_groups.c) - Describe consumer groups.
+ * [list_consumer_group_offsets.c](list_consumer_group_offsets.c) - List offsets of a consumer group.
+ * [alter_consumer_group_offsets.c](alter_consumer_group_offsets.c) - Alter offsets of a consumer group.
+ * [incremental_alter_configs.c](incremental_alter_configs.c) - Incrementally alter resource configurations.
+ * [user_scram.c](user_scram.c) - Describe or alter user SCRAM credentials.

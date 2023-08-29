@@ -1,3 +1,576 @@
+# librdkafka v2.2.1
+
+librdkafka v2.2.1 is a maintenance release:
+
+ * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+ * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
+
+
+
+# librdkafka v2.2.0
+
+librdkafka v2.2.0 is a feature release:
+
+ * Fix a segmentation fault when subscribing to non-existent topics and
+   using the consume batch functions (#4273).
+ * Store offset commit metadata in `rd_kafka_offsets_store` (@mathispesch, #4084).
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse (#4278).
+ * Fix a bug where topic leader is not refreshed in the same metadata call even if the leader is
+   present.
+ * [KIP-881](https://cwiki.apache.org/confluence/display/KAFKA/KIP-881%3A+Rack-aware+Partition+Assignment+for+Kafka+Consumers):
+   Add support for rack-aware partition assignment for consumers
+   (#4184, #4291, #4252).
+ * Fix several bugs with sticky assignor in case of partition ownership
+   changing between members of the consumer group (#4252).
+ * [KIP-368](https://cwiki.apache.org/confluence/display/KAFKA/KIP-368%3A+Allow+SASL+Connections+to+Periodically+Re-Authenticate):
+   Allow SASL Connections to Periodically Re-Authenticate
+   (#4301, started by @vctoriawu).
+ * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
+   closes as normal ones (#4294).
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off next fetch attempt. (@bitemyapp, @edenhill, #2879)
+ * [KIP-235](https://cwiki.apache.org/confluence/display/KAFKA/KIP-235%3A+Add+DNS+alias+support+for+secured+connection):
+   Add DNS alias support for secured connection (#4292).
+ * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
+   IncrementalAlterConfigs API (started by @PrasanthV454, #4110).
+ * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
+
+
+## Enhancements
+
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off next fetch attempt. When the pre-fetch queue
+   has exceeded its queuing thresholds: `queued.min.messages` and
+   `queued.max.messages.kbytes` it backs off for 1 seconds.
+   If those parameters have to be set too high to hold 1 s of data,
+   this new parameter allows to back off the fetch earlier, reducing memory
+   requirements.
+
+
+## Fixes
+
+### General fixes
+
+ * Fix a bug that happens when skipping tags, causing buffer underflow in
+   MetadataResponse. This is triggered since RPC version 9 (v2.1.0),
+   when using Confluent Platform, only when racks are set,
+   observers are activated and there is more than one partition.
+   Fixed by skipping the correct amount of bytes when tags are received.
+ * Avoid treating an OpenSSL error as a permanent error and treat unclean SSL
+   closes as normal ones. When SSL connections are closed without `close_notify`,
+   in OpenSSL 3.x a new type of error is set and it was interpreted as permanent
+   in librdkafka. It can cause a different issue depending on the RPC.
+   If received when waiting for OffsetForLeaderEpoch response, it triggers
+   an offset reset following the configured policy.
+   Solved by treating SSL errors as transport errors and
+   by setting an OpenSSL flag that allows to treat unclean SSL closes as normal
+   ones. These types of errors can happen it the other side doesn't support `close_notify` or if there's a TCP connection reset.
+
+
+### Consumer fixes
+
+  * In case of multiple owners of a partition with different generations, the
+    sticky assignor would pick the earliest (lowest generation) member as the
+    current owner, which would lead to stickiness violations. Fixed by
+    choosing the latest (highest generation) member.
+  * In case where the same partition is owned by two members with the same
+    generation, it indicates an issue. The sticky assignor had some code to
+    handle this, but it was non-functional, and did not have parity with the
+    Java assignor. Fixed by invalidating any such partition from the current
+    assignment completely.
+
+
+
+# librdkafka v2.1.1
+
+librdkafka v2.1.1 is a maintenance release:
+
+ * Avoid duplicate messages when a fetch response is received
+   in the middle of an offset validation request (#4261).
+ * Fix segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
+ * Fix a segmentation fault when fetching from follower and the partition lease
+   expires while waiting for the result of a list offsets operation (#4254).
+ * Fix documentation for the admin request timeout, incorrectly stating -1 for infinite
+   timeout. That timeout can't be infinite.
+ * Fix CMake pkg-config cURL require and use
+   pkg-config `Requires.private` field (@FantasqueX, @stertingen, #4180).
+ * Fixes certain cases where polling would not keep the consumer
+   in the group or make it rejoin it (#4256).
+ * Fix to the C++ set_leader_epoch method of TopicPartitionImpl,
+   that wasn't storing the passed value (@pavel-pimenov, #4267).
+
+## Fixes
+
+### Consumer fixes
+
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request. Solved by avoiding
+   a restart from last application offset when offset validation succeeds.
+ * When fetching from follower, if the partition lease expires after 5 minutes,
+   and a list offsets operation was requested to retrieve the earliest
+   or latest offset, it resulted in segmentation fault. This was fixed by
+   allowing threads different from the main one to call
+   the `rd_kafka_toppar_set_fetch_state` function, given they hold
+   the lock on the `rktp`.
+ * In v2.1.0, a bug was fixed which caused polling any queue to reset the
+   `max.poll.interval.ms`. Only certain functions were made to reset the timer,
+   but it is possible for the user to obtain the queue with messages from
+   the broker, skipping these functions. This was fixed by encoding information
+   in a queue itself, that, whether polling, resets the timer.
+
+
+
+# librdkafka v2.1.0
+
+librdkafka v2.1.0 is a feature release:
+
+* [KIP-320](https://cwiki.apache.org/confluence/display/KAFKA/KIP-320%3A+Allow+fetchers+to+detect+and+handle+log+truncation)
+  Allow fetchers to detect and handle log truncation (#4122).
+* Fix a reference count issue blocking the consumer from closing (#4187).
+* Fix a protocol issue with ListGroups API, where an extra
+  field was appended for API Versions greater than or equal to 3 (#4207).
+* Fix an issue with `max.poll.interval.ms`, where polling any queue would cause
+  the timeout to be reset (#4176).
+* Fix seek partition timeout, was one thousand times lower than the passed
+  value (#4230).
+* Fix multiple inconsistent behaviour in batch APIs during **pause** or **resume** operations (#4208).
+  See **Consumer fixes** section below for more information.
+* Update lz4.c from upstream. Fixes [CVE-2021-3520](https://github.com/advisories/GHSA-gmc7-pqv9-966m)
+  (by @filimonov, #4232).
+* Upgrade OpenSSL to v3.0.8 with various security fixes,
+  check the [release notes](https://www.openssl.org/news/cl30.txt) (#4215).
+
+## Enhancements
+
+ * Added `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`).
+ * Added partition leader epoch APIs:
+   - `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`)
+   - `rd_kafka_message_leader_epoch()`
+   - `rd_kafka_*assign()` and `rd_kafka_seek_partitions()` now supports
+     partitions with a leader epoch set.
+   - `rd_kafka_offsets_for_times()` will return per-partition leader-epochs.
+   - `leader_epoch`, `stored_leader_epoch`, and `committed_leader_epoch`
+     added to per-partition statistics.
+
+
+## Fixes
+
+### OpenSSL fixes
+
+ * Fixed OpenSSL static build not able to use external modules like FIPS
+   provider module.
+
+### Consumer fixes
+
+ * A reference count issue was blocking the consumer from closing.
+   The problem would happen when a partition is lost, because forcibly
+   unassigned from the consumer or if the corresponding topic is deleted.
+ * When using `rd_kafka_seek_partitions`, the remaining timeout was
+   converted from microseconds to milliseconds but the expected unit
+   for that parameter is microseconds.
+ * Fixed known issues related to Batch Consume APIs mentioned in v2.0.0
+   release notes.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently updating `app_offset` and `store_offset` incorrectly when
+   **pause** or **resume** was being used for a partition.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently skipping offsets when **pause** or **resume** was being
+   used for a partition.
+
+
+## Known Issues
+
+### Consume Batch API
+
+ * When `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` APIs are used with
+   any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
+   interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
+
+### Consume API
+
+ * Duplicate messages can be emitted when a fetch response is received
+   in the middle of an offset validation request.
+ * Segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage`.
+
+
+
+# librdkafka v2.0.2
+
+librdkafka v2.0.2 is a maintenance release:
+
+* Fix OpenSSL version in Win32 nuget package (#4152).
+
+
+
+# librdkafka v2.0.1
+
+librdkafka v2.0.1 is a maintenance release:
+
+* Fixed nuget package for Linux ARM64 release (#4150).
+
+
+
+# librdkafka v2.0.0
+
+librdkafka v2.0.0 is a feature release:
+
+ * [KIP-88](https://cwiki.apache.org/confluence/display/KAFKA/KIP-88%3A+OffsetFetch+Protocol+Update)
+   OffsetFetch Protocol Update (#3995).
+ * [KIP-222](https://cwiki.apache.org/confluence/display/KAFKA/KIP-222+-+Add+Consumer+Group+operations+to+Admin+API)
+   Add Consumer Group operations to Admin API (started by @lesterfan, #3995).
+ * [KIP-518](https://cwiki.apache.org/confluence/display/KAFKA/KIP-518%3A+Allow+listing+consumer+groups+per+state)
+   Allow listing consumer groups per state (#3995).
+ * [KIP-396](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=97551484)
+   Partially implemented: support for AlterConsumerGroupOffsets
+   (started by @lesterfan, #3995).
+ * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
+ * Fixes to the transactional and idempotent producer.
+
+
+## Upgrade considerations
+
+### OpenSSL 3.0.x
+
+#### OpenSSL default ciphers
+
+The introduction of OpenSSL 3.0.x in the self-contained librdkafka bundles
+changes the default set of available ciphers, in particular all obsolete
+or insecure ciphers and algorithms as listed in the
+OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html)
+manual page are now disabled by default.
+
+**WARNING**: These ciphers are disabled for security reasons and it is
+highly recommended NOT to use them.
+
+Should you need to use any of these old ciphers you'll need to explicitly
+enable the `legacy` provider by configuring `ssl.providers=default,legacy`
+on the librdkafka client.
+
+#### OpenSSL engines and providers
+
+OpenSSL 3.0.x deprecates the use of engines, which is being replaced by
+providers. As such librdkafka will emit a deprecation warning if
+`ssl.engine.location` is configured.
+
+OpenSSL providers may be configured with the new `ssl.providers`
+configuration property.
+
+### Broker TLS certificate hostname verification
+
+The default value for `ssl.endpoint.identification.algorithm` has been
+changed from `none` (no hostname verification) to `https`, which enables
+broker hostname verification (to counter man-in-the-middle
+impersonation attacks) by default.
+
+To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` to `none`.
+
+## Known Issues
+
+### Poor Consumer batch API messaging guarantees
+
+The Consumer Batch APIs `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+are not thread safe if `rkmessages_size` is greater than 1 and any of the **seek**,
+**pause**, **resume** or **rebalancing** operation is performed in parallel with any of
+the above APIs. Some of the messages might be lost, or erroneously returned to the
+application, in the above scenario.
+
+It is strongly recommended to use the Consumer Batch APIs and the mentioned
+operations in sequential order in order to get consistent result.
+
+For **rebalancing** operation to work in sequencial manner, please set `rebalance_cb`
+configuration property (refer [examples/rdkafka_complex_consumer_example.c]
+(examples/rdkafka_complex_consumer_example.c) for the help with the usage) for the consumer.
+
+## Enhancements
+
+ * Self-contained static libraries can now be built on Linux arm64 (#4005).
+ * Updated to zlib 1.2.13, zstd 1.5.2, and curl 7.86.0 in self-contained
+   librdkafka bundles.
+ * Added `on_broker_state_change()` interceptor
+ * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
+ * Added `rd_kafka_sasl_set_credentials()` API to update SASL credentials.
+ * Setting `allow.auto.create.topics` will no longer give a warning if used by a producer, since that is an expected use case.
+  Improvement in documentation for this property.
+ * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
+ * Added `rd_kafka_mock_broker_error_stack_cnt()`.
+ * The librdkafka.redist NuGet package has been updated to have fewer external
+   dependencies for its bundled librdkafka builds, as everything but cyrus-sasl
+   is now built-in. There are bundled builds with and without linking to
+   cyrus-sasl for maximum compatibility.
+ * Admin API DescribeGroups() now provides the group instance id
+   for static members [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances) (#3995).
+
+
+## Fixes
+
+### General fixes
+
+ * Windows: couldn't read a PKCS#12 keystore correctly because binary mode
+   wasn't explicitly set and Windows defaults to text mode.
+ * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
+ * Load all CA certificates from `ssl.ca.pem`, not just the first one.
+ * Each HTTP request made when using OAUTHBEARER OIDC would leak a small
+   amount of memory.
+
+### Transactional producer fixes
+
+ * When a PID epoch bump is requested and the producer is waiting
+   to reconnect to the transaction coordinator, a failure in a find coordinator
+   request could cause an assert to fail. This is fixed by retrying when the
+   coordinator is known (#4020).
+ * Transactional APIs (except `send_offsets_for_transaction()`) that
+   timeout due to low timeout_ms may now be resumed by calling the same API
+   again, as the operation continues in the background.
+ * For fatal idempotent producer errors that may be recovered by bumping the
+   epoch the current transaction must first be aborted prior to the epoch bump.
+   This is now handled correctly, which fixes issues seen with fenced
+   transactional producers on fatal idempotency errors.
+ * Timeouts for EndTxn requests (transaction commits and aborts) are now
+   automatically retried and the error raised to the application is also
+   a retriable error.
+ * TxnOffsetCommitRequests were retried immediately upon temporary errors in
+   `send_offsets_to_transactions()`, causing excessive network requests.
+   These retries are now delayed 500ms.
+ * If `init_transactions()` is called with an infinite timeout (-1),
+   the timeout will be limited to 2 * `transaction.timeout.ms`.
+   The application may retry and resume the call if a retriable error is
+   returned.
+
+
+### Consumer fixes
+
+ * Back-off and retry JoinGroup request if coordinator load is in progress.
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` skipping
+   other partitions' offsets intermittently when **seek**, **pause**, **resume**
+   or **rebalancing** is used for a partition.
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently returing incorrect partitions' messages if **rebalancing**
+   happens during these operations.
+
+# librdkafka v1.9.2
+
+librdkafka v1.9.2 is a maintenance release:
+
+ * The SASL OAUTHBEAR OIDC POST field was sometimes truncated by one byte (#3192).
+ * The bundled version of OpenSSL has been upgraded to version 1.1.1q for non-Windows builds. Windows builds remain on OpenSSL 1.1.1n for the time being.
+ * The bundled version of Curl has been upgraded to version 7.84.0.
+
+
+
+# librdkafka v1.9.1
+
+librdkafka v1.9.1 is a maintenance release:
+
+ * The librdkafka.redist NuGet package now contains OSX M1/arm64 builds.
+ * Self-contained static libraries can now be built on OSX M1 too, thanks to
+   disabling curl's configure runtime check.
+
+
+
+# librdkafka v1.9.0
+
+librdkafka v1.9.0 is a feature release:
+
+ * Added KIP-768 OUATHBEARER OIDC support (by @jliunyu, #3560)
+ * Added KIP-140 Admin API ACL support (by @emasab, #2676)
+
+
+## Upgrade considerations
+
+ * Consumer:
+   `rd_kafka_offsets_store()` (et.al) will now return an error for any
+   partition that is not currently assigned (through `rd_kafka_*assign()`).
+   This prevents a race condition where an application would store offsets
+   after the assigned partitions had been revoked (which resets the stored
+   offset), that could cause these old stored offsets to be committed later
+   when the same partitions were assigned to this consumer again - effectively
+   overwriting any committed offsets by any consumers that were assigned the
+   same partitions previously. This would typically result in the offsets
+   rewinding and messages to be reprocessed.
+   As an extra effort to avoid this situation the stored offset is now
+   also reset when partitions are assigned (through `rd_kafka_*assign()`).
+   Applications that explicitly call `..offset*_store()` will now need
+   to handle the case where `RD_KAFKA_RESP_ERR__STATE` is returned
+   in the per-partition `.err` field - meaning the partition is no longer
+   assigned to this consumer and the offset could not be stored for commit.
+
+
+## Enhancements
+
+ * Improved producer queue scheduling. Fixes the performance regression
+   introduced in v1.7.0 for some produce patterns. (#3538, #2912)
+ * Windows: Added native Win32 IO/Queue scheduling. This removes the
+   internal TCP loopback connections that were previously used for timely
+   queue wakeups.
+ * Added `socket.connection.setup.timeout.ms` (default 30s).
+   The maximum time allowed for broker connection setups (TCP connection as
+   well as SSL and SASL handshakes) is now limited to this value.
+   This fixes the issue with stalled broker connections in the case of network
+   or load balancer problems.
+   The Java clients has an exponential backoff to this timeout which is
+   limited by `socket.connection.setup.timeout.max.ms` - this was not
+   implemented in librdkafka due to differences in connection handling and
+   `ERR__ALL_BROKERS_DOWN` error reporting. Having a lower initial connection
+   setup timeout and then increase the timeout for the next attempt would
+   yield possibly false-positive `ERR__ALL_BROKERS_DOWN` too early.
+ * SASL OAUTHBEARER refresh callbacks can now be scheduled for execution
+   on librdkafka's background thread. This solves the problem where an
+   application has a custom SASL OAUTHBEARER refresh callback and thus needs to
+   call `rd_kafka_poll()` (et.al.) at least once to trigger the
+   refresh callback before being able to connect to brokers.
+   With the new `rd_kafka_conf_enable_sasl_queue()` configuration API and
+   `rd_kafka_sasl_background_callbacks_enable()` the refresh callbacks
+   can now be triggered automatically on the librdkafka background thread.
+ * `rd_kafka_queue_get_background()` now creates the background thread
+   if not already created.
+ * Added `rd_kafka_consumer_close_queue()` and `rd_kafka_consumer_closed()`.
+   This allow applications and language bindings to implement asynchronous
+   consumer close.
+ * Bundled zlib upgraded to version 1.2.12.
+ * Bundled OpenSSL upgraded to 1.1.1n.
+ * Added `test.mock.broker.rtt` to simulate RTT/latency for mock brokers.
+
+
+## Fixes
+
+### General fixes
+
+ * Fix various 1 second delays due to internal broker threads blocking on IO
+   even though there are events to handle.
+   These delays could be seen randomly in any of the non produce/consume
+   request APIs, such as `commit_transaction()`, `list_groups()`, etc.
+ * Windows: some applications would crash with an error message like
+   `no OPENSSL_Applink()` written to the console if `ssl.keystore.location`
+   was configured.
+   This regression was introduced in v1.8.0 due to use of vcpkgs and how
+   keystore file was read. #3554.
+ * Windows 32-bit only: 64-bit atomic reads were in fact not atomic and could
+   in rare circumstances yield incorrect values.
+   One manifestation of this issue was the `max.poll.interval.ms` consumer
+   timer expiring even though the application was polling according to profile.
+   Fixed by @WhiteWind (#3815).
+ * `rd_kafka_clusterid()` would previously fail with timeout if
+   called on cluster with no visible topics (#3620).
+   The clusterid is now returned as soon as metadata has been retrieved.
+ * Fix hang in `rd_kafka_list_groups()` if there are no available brokers
+   to connect to (#3705).
+ * Millisecond timeouts (`timeout_ms`) in various APIs, such as `rd_kafka_poll()`,
+   was limited to roughly 36 hours before wrapping. (#3034)
+ * If a metadata request triggered by `rd_kafka_metadata()` or consumer group rebalancing
+   encountered a non-retriable error it would not be propagated to the caller and thus
+   cause a stall or timeout, this has now been fixed. (@aiquestion, #3625)
+ * AdminAPI `DeleteGroups()` and `DeleteConsumerGroupOffsets()`:
+   if the given coordinator connection was not up by the time these calls were
+   initiated and the first connection attempt failed then no further connection
+   attempts were performed, ulimately leading to the calls timing out.
+   This is now fixed by keep retrying to connect to the group coordinator
+   until the connection is successful or the call times out.
+   Additionally, the coordinator will be now re-queried once per second until
+   the coordinator comes up or the call times out, to detect change in
+   coordinators.
+ * Mock cluster `rd_kafka_mock_broker_set_down()` would previously
+   accept and then disconnect new connections, it now refuses new connections.
+
+
+### Consumer fixes
+
+ * `rd_kafka_offsets_store()` (et.al) will now return an error for any
+   partition that is not currently assigned (through `rd_kafka_*assign()`).
+   See **Upgrade considerations** above for more information.
+ * `rd_kafka_*assign()` will now reset/clear the stored offset.
+   See **Upgrade considerations** above for more information.
+ * `seek()` followed by `pause()` would overwrite the seeked offset when
+   later calling `resume()`. This is now fixed. (#3471).
+   **Note**: Avoid storing offsets (`offsets_store()`) after calling
+   `seek()` as this may later interfere with resuming a paused partition,
+   instead store offsets prior to calling seek.
+ * A `ERR_MSG_SIZE_TOO_LARGE` consumer error would previously be raised
+   if the consumer received a maximum sized FetchResponse only containing
+   (transaction) aborted messages with no control messages. The fetching did
+   not stop, but some applications would terminate upon receiving this error.
+   No error is now raised in this case. (#2993)
+   Thanks to @jacobmikesell for providing an application to reproduce the
+   issue.
+ * The consumer no longer backs off the next fetch request (default 500ms) when
+   the parsed fetch response is truncated (which is a valid case).
+   This should speed up the message fetch rate in case of maximum sized
+   fetch responses.
+ * Fix consumer crash (`assert: rkbuf->rkbuf_rkb`) when parsing
+   malformed JoinGroupResponse consumer group metadata state.
+ * Fix crash (`cant handle op type`) when using `consume_batch_queue()` (et.al)
+   and an OAUTHBEARER refresh callback was set.
+   The callback is now triggered by the consume call. (#3263)
+ * Fix `partition.assignment.strategy` ordering when multiple strategies are configured.
+   If there is more than one eligible strategy, preference is determined by the
+   configured order of strategies. The partitions are assigned to group members according
+   to the strategy order preference now. (#3818)
+ * Any form of unassign*() (absolute or incremental) is now allowed during
+   consumer close rebalancing and they're all treated as absolute unassigns.
+   (@kevinconaway)
+
+
+### Transactional producer fixes
+
+ * Fix message loss in idempotent/transactional producer.
+   A corner case has been identified that may cause idempotent/transactional
+   messages to be lost despite being reported as successfully delivered:
+   During cluster instability a restarting broker may report existing topics
+   as non-existent for some time before it is able to acquire up to date
+   cluster and topic metadata.
+   If an idempotent/transactional producer updates its topic metadata cache
+   from such a broker the producer will consider the topic to be removed from
+   the cluster and thus remove its local partition objects for the given topic.
+   This also removes the internal message sequence number counter for the given
+   partitions.
+   If the producer later receives proper topic metadata for the cluster the
+   previously "removed" topics will be rediscovered and new partition objects
+   will be created in the producer. These new partition objects, with no
+   knowledge of previous incarnations, would start counting partition messages
+   at zero again.
+   If new messages were produced for these partitions by the same producer
+   instance, the same message sequence numbers would be sent to the broker.
+   If the broker still maintains state for the producer's PID and Epoch it could
+   deem that these messages with reused sequence numbers had already been
+   written to the log and treat them as legit duplicates.
+   This would seem to the producer that these new messages were successfully
+   written to the partition log by the broker when they were in fact discarded
+   as duplicates, leading to silent message loss.
+   The fix included in this release is to save the per-partition idempotency
+   state when a partition is removed, and then recover and use that saved
+   state if the partition comes back at a later time.
+ * The transactional producer would retry (re)initializing its PID if a
+   `PRODUCER_FENCED` error was returned from the
+   broker (added in Apache Kafka 2.8), which could cause the producer to
+   seemingly hang.
+   This error code is now correctly handled by raising a fatal error.
+ * If the given group coordinator connection was not up by the time
+   `send_offsets_to_transactions()` was called, and the first connection
+   attempt failed then no further connection attempts were performed, ulimately
+   leading to `send_offsets_to_transactions()` timing out, and possibly
+   also the transaction timing out on the transaction coordinator.
+   This is now fixed by keep retrying to connect to the group coordinator
+   until the connection is successful or the call times out.
+   Additionally, the coordinator will be now re-queried once per second until
+   the coordinator comes up or the call times out, to detect change in
+   coordinators.
+
+
+### Producer fixes
+
+ * Improved producer queue wakeup scheduling. This should significantly
+   decrease the number of wakeups and thus syscalls for high message rate
+   producers. (#3538, #2912)
+ * The logic for enforcing that `message.timeout.ms` is greather than
+   an explicitly configured `linger.ms` was incorrect and instead of
+   erroring out early the lingering time was automatically adjusted to the
+   message timeout, ignoring the configured `linger.ms`.
+   This has now been fixed so that an error is returned when instantiating the
+   producer. Thanks to @larry-cdn77 for analysis and test-cases. (#3709)
+
+
 # librdkafka v1.8.2
 
 librdkafka v1.8.2 is a maintenance release.
@@ -60,7 +633,7 @@ librdkafka v1.8.0 is a security release:
  * Upgrade bundled zlib version from 1.2.8 to 1.2.11 in the `librdkafka.redist`
    NuGet package. The updated zlib version fixes CVEs:
    CVE-2016-9840, CVE-2016-9841, CVE-2016-9842, CVE-2016-9843
-   See https://github.com/edenhill/librdkafka/issues/2934 for more information.
+   See https://github.com/confluentinc/librdkafka/issues/2934 for more information.
  * librdkafka now uses [vcpkg](https://vcpkg.io/) for up-to-date Windows
    dependencies in the `librdkafka.redist` NuGet package:
    OpenSSL 1.1.1l, zlib 1.2.11, zstd 1.5.0.
@@ -773,4 +1346,4 @@ v1.4.2 is a maintenance release with the following fixes and enhancements:
 
 # Older releases
 
-See https://github.com/edenhill/librdkafka/releases
+See https://github.com/confluentinc/librdkafka/releases

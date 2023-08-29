@@ -17,6 +17,8 @@ SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
+SRCS_$(WITH_CURL) += rdhttp.c
+SRCS_$(WITH_OAUTHBEARER_OIDC) += rdkafka_sasl_oauthbearer_oidc.c
 
 SRCS_LZ4 = rdxxhash.c
 ifneq ($(WITH_LZ4_EXT), y)
@@ -41,7 +43,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c rdkafka_sticky_assignor.c \
 		rdkafka_feature.c \
-		rdcrc32.c crc32c.c rdmurmur2.c rdfnv1a.c \
+		rdcrc32.c crc32c.c rdmurmur2.c rdfnv1a.c cJSON.c \
 		rdaddr.c rdrand.c rdlist.c \
 		tinycthread.c tinycthread_extra.c \
 		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \
@@ -50,10 +52,10 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_msgset_writer.c rdkafka_msgset_reader.c \
 		rdkafka_header.c rdkafka_admin.c rdkafka_aux.c \
 		rdkafka_background.c rdkafka_idempotence.c rdkafka_cert.c \
-		rdkafka_txnmgr.c rdkafka_coord.c \
+		rdkafka_txnmgr.c rdkafka_coord.c rdbase64.c \
 		rdvarint.c rdbuf.c rdmap.c rdunittest.c \
 		rdkafka_mock.c rdkafka_mock_handlers.c rdkafka_mock_cgrp.c \
-		rdkafka_error.c \
+		rdkafka_error.c rdkafka_fetcher.c \
 		$(SRCS_y)
 
 HDRS=		rdkafka.h rdkafka_mock.h

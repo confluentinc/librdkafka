@@ -28,8 +28,11 @@
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='x64'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\OpenSSL-Win64\include</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\OpenSSL-Win64\lib\VC\static</LibraryPath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -111,11 +114,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\cJSON.h" />
     <ClInclude Include="..\src\crc32c.h" />
     <ClInclude Include="..\src\queue.h" />
     <ClInclude Include="..\src\rdatomic.h" />
     <ClInclude Include="..\src\rdavg.h" />
     <ClInclude Include="..\src\rdbuf.h" />
+    <ClInclude Include="..\src\rdbase64.h" />
     <ClInclude Include="..\src\rdendian.h" />
     <ClInclude Include="..\src\rdfloat.h" />
     <ClInclude Include="..\src\rdgz.h" />
@@ -128,6 +133,7 @@
     <ClInclude Include="..\src\rdkafka_confval.h" />
     <ClInclude Include="..\src\rdkafka_event.h" />
     <ClInclude Include="..\src\rdkafka_feature.h" />
+    <ClInclude Include="..\src\rdhttp.h" />
     <ClInclude Include="..\src\rdkafka_lz4.h" />
     <ClInclude Include="..\src\rdkafka_mock.h" />
     <ClInclude Include="..\src\rdkafka_mock_int.h" />
@@ -140,6 +146,7 @@
     <ClInclude Include="..\src\rdkafka_request.h" />
     <ClInclude Include="..\src\rdkafka_sasl.h" />
     <ClInclude Include="..\src\rdkafka_sasl_int.h" />
+    <ClInclude Include="..\src\rdkafka_sasl_oauthbearer_oidc.h" />
     <ClInclude Include="..\src\rdkafka_transport_int.h" />
     <ClInclude Include="..\src\rdlist.h" />
     <ClInclude Include="..\src\rdposix.h" />
@@ -182,9 +189,11 @@
     <ClInclude Include="..\src\rddl.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\cJSON.c" />
     <ClCompile Include="..\src\crc32c.c" />
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
+    <ClCompile Include="..\src\rdbase64.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
     <ClCompile Include="..\src\rdfnv1a.c" />
     <ClCompile Include="..\src\rdgz.c" />
@@ -195,6 +204,7 @@
     <ClCompile Include="..\src\rdkafka_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_conf.c" />
     <ClCompile Include="..\src\rdkafka_event.c" />
+    <ClCompile Include="..\src\rdhttp.c" />
     <ClCompile Include="..\src\rdkafka_lz4.c" />
     <ClCompile Include="..\src\rdkafka_msg.c" />
     <ClCompile Include="..\src\rdkafka_msgset_reader.c" />
@@ -213,6 +223,7 @@
     <ClCompile Include="..\src\rdkafka_sasl_plain.c" />
     <ClCompile Include="..\src\rdkafka_sasl_scram.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer.c" />
+    <ClCompile Include="..\src\rdkafka_sasl_oauthbearer_oidc.c" />
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_assignment.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />
@@ -238,6 +249,7 @@
     <ClCompile Include="..\src\rdkafka_mock_handlers.c" />
     <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_error.c" />
+    <ClCompile Include="..\src\rdkafka_fetcher.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />
@@ -258,9 +270,6 @@
     <ClCompile Include="..\src\lz4frame.c" />
     <ClCompile Include="..\src\lz4hc.c" />
     <ClCompile Include="..\src\rddl.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="..\LICENSE..txt" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.win32" />

@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,8 +37,8 @@
  * @{
  *
  */
-void rd_kafka_coord_cache_entry_destroy (rd_kafka_coord_cache_t *cc,
-                                         rd_kafka_coord_cache_entry_t *cce) {
+void rd_kafka_coord_cache_entry_destroy(rd_kafka_coord_cache_t *cc,
+                                        rd_kafka_coord_cache_entry_t *cce) {
         rd_assert(cc->cc_cnt > 0);
         rd_free(cce->cce_coordkey);
         rd_kafka_broker_destroy(cce->cce_rkb);
@@ -53,7 +53,7 @@ void rd_kafka_coord_cache_entry_destroy (rd_kafka_coord_cache_t *cc,
  *
  * @locality rdkafka main thread
  */
-void rd_kafka_coord_cache_expire (rd_kafka_coord_cache_t *cc) {
+void rd_kafka_coord_cache_expire(rd_kafka_coord_cache_t *cc) {
         rd_kafka_coord_cache_entry_t *cce, *next;
         rd_ts_t expire = rd_clock() - cc->cc_expire_thres;
 
@@ -71,9 +71,9 @@ void rd_kafka_coord_cache_expire (rd_kafka_coord_cache_t *cc) {
 
 
 static rd_kafka_coord_cache_entry_t *
-rd_kafka_coord_cache_find (rd_kafka_coord_cache_t *cc,
-                           rd_kafka_coordtype_t coordtype,
-                           const char *coordkey) {
+rd_kafka_coord_cache_find(rd_kafka_coord_cache_t *cc,
+                          rd_kafka_coordtype_t coordtype,
+                          const char *coordkey) {
         rd_kafka_coord_cache_entry_t *cce;
 
         TAILQ_FOREACH(cce, &cc->cc_entries, cce_link) {
@@ -83,10 +83,9 @@ rd_kafka_coord_cache_find (rd_kafka_coord_cache_t *cc,
                         cce->cce_ts_used = rd_clock();
                         if (TAILQ_FIRST(&cc->cc_entries) != cce) {
                                 /* Move to head of list */
-                                TAILQ_REMOVE(&cc->cc_entries,
-                                             cce, cce_link);
-                                TAILQ_INSERT_HEAD(&cc->cc_entries,
-                                                  cce, cce_link);
+                                TAILQ_REMOVE(&cc->cc_entries, cce, cce_link);
+                                TAILQ_INSERT_HEAD(&cc->cc_entries, cce,
+                                                  cce_link);
                         }
                         return cce;
                 }
@@ -96,9 +95,9 @@ rd_kafka_coord_cache_find (rd_kafka_coord_cache_t *cc,
 }
 
 
-rd_kafka_broker_t *rd_kafka_coord_cache_get (rd_kafka_coord_cache_t *cc,
-                                             rd_kafka_coordtype_t coordtype,
-                                             const char *coordkey) {
+rd_kafka_broker_t *rd_kafka_coord_cache_get(rd_kafka_coord_cache_t *cc,
+                                            rd_kafka_coordtype_t coordtype,
+                                            const char *coordkey) {
         rd_kafka_coord_cache_entry_t *cce;
 
         cce = rd_kafka_coord_cache_find(cc, coordtype, coordkey);
@@ -111,25 +110,24 @@ rd_kafka_broker_t *rd_kafka_coord_cache_get (rd_kafka_coord_cache_t *cc,
 
 
 
-static void rd_kafka_coord_cache_add (rd_kafka_coord_cache_t *cc,
-                                      rd_kafka_coordtype_t coordtype,
-                                      const char *coordkey,
-                                      rd_kafka_broker_t *rkb) {
+static void rd_kafka_coord_cache_add(rd_kafka_coord_cache_t *cc,
+                                     rd_kafka_coordtype_t coordtype,
+                                     const char *coordkey,
+                                     rd_kafka_broker_t *rkb) {
         rd_kafka_coord_cache_entry_t *cce;
 
         if (!(cce = rd_kafka_coord_cache_find(cc, coordtype, coordkey))) {
                 if (cc->cc_cnt > 10) {
                         /* Not enough room in cache, remove least used entry */
-                        rd_kafka_coord_cache_entry_t *rem =
-                                TAILQ_LAST(&cc->cc_entries,
-                                           rd_kafka_coord_cache_head_s);
+                        rd_kafka_coord_cache_entry_t *rem = TAILQ_LAST(
+                            &cc->cc_entries, rd_kafka_coord_cache_head_s);
                         rd_kafka_coord_cache_entry_destroy(cc, rem);
                 }
 
-                cce = rd_calloc(1, sizeof(*cce));
+                cce                = rd_calloc(1, sizeof(*cce));
                 cce->cce_coordtype = coordtype;
-                cce->cce_coordkey = rd_strdup(coordkey);
-                cce->cce_ts_used = rd_clock();
+                cce->cce_coordkey  = rd_strdup(coordkey);
+                cce->cce_ts_used   = rd_clock();
 
                 TAILQ_INSERT_HEAD(&cc->cc_entries, cce, cce_link);
                 cc->cc_cnt++;
@@ -152,8 +150,8 @@ static void rd_kafka_coord_cache_add (rd_kafka_coord_cache_t *cc,
  * @locality rdkafka main thread
  * @locks none
  */
-void rd_kafka_coord_cache_evict (rd_kafka_coord_cache_t *cc,
-                                 rd_kafka_broker_t *rkb) {
+void rd_kafka_coord_cache_evict(rd_kafka_coord_cache_t *cc,
+                                rd_kafka_broker_t *rkb) {
         rd_kafka_coord_cache_entry_t *cce, *tmp;
 
         TAILQ_FOREACH_SAFE(cce, &cc->cc_entries, cce_link, tmp) {
@@ -165,7 +163,7 @@ void rd_kafka_coord_cache_evict (rd_kafka_coord_cache_t *cc,
 /**
  * @brief Destroy all coord cache entries.
  */
-void rd_kafka_coord_cache_destroy (rd_kafka_coord_cache_t *cc) {
+void rd_kafka_coord_cache_destroy(rd_kafka_coord_cache_t *cc) {
         rd_kafka_coord_cache_entry_t *cce;
 
         while ((cce = TAILQ_FIRST(&cc->cc_entries)))
@@ -178,10 +176,10 @@ void rd_kafka_coord_cache_destroy (rd_kafka_coord_cache_t *cc) {
  *
  * Locking of the coord-cache is up to the owner.
  */
-void rd_kafka_coord_cache_init (rd_kafka_coord_cache_t *cc,
-                                int expire_thres_ms) {
+void rd_kafka_coord_cache_init(rd_kafka_coord_cache_t *cc,
+                               int expire_thres_ms) {
         TAILQ_INIT(&cc->cc_entries);
-        cc->cc_cnt = 0;
+        cc->cc_cnt          = 0;
         cc->cc_expire_thres = expire_thres_ms * 1000;
 }
 
@@ -196,9 +194,16 @@ void rd_kafka_coord_cache_init (rd_kafka_coord_cache_t *cc,
 
 
 
-static void rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq);
+static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq);
 
+/**
+ * @brief Timer callback for delayed coord requests.
+ */
+static void rd_kafka_coord_req_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
+        rd_kafka_coord_req_t *creq = arg;
 
+        rd_kafka_coord_req_fsm(rkts->rkts_rk, creq);
+}
 
 
 /**
@@ -210,37 +215,48 @@ static void rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq);
  *        These steps may be performed by this function, or asynchronously
  *        at a later time.
  *
+ * @param delay_ms If non-zero, delay scheduling of the coord request
+ *                 for this long. The passed \p timeout_ms is automatically
+ *                 adjusted to + \p delay_ms.
+ *
  * Response, or error, is sent on \p replyq with callback \p rkbuf_cb.
  *
  * @locality rdkafka main thread
  * @locks none
  */
-void rd_kafka_coord_req (rd_kafka_t *rk,
-                         rd_kafka_coordtype_t coordtype,
-                         const char *coordkey,
-                         rd_kafka_send_req_cb_t *send_req_cb,
-                         rd_kafka_op_t *rko,
-                         int timeout_ms,
-                         rd_kafka_replyq_t replyq,
-                         rd_kafka_resp_cb_t *resp_cb,
-                         void *reply_opaque) {
+void rd_kafka_coord_req(rd_kafka_t *rk,
+                        rd_kafka_coordtype_t coordtype,
+                        const char *coordkey,
+                        rd_kafka_send_req_cb_t *send_req_cb,
+                        rd_kafka_op_t *rko,
+                        int delay_ms,
+                        int timeout_ms,
+                        rd_kafka_replyq_t replyq,
+                        rd_kafka_resp_cb_t *resp_cb,
+                        void *reply_opaque) {
         rd_kafka_coord_req_t *creq;
 
-        creq = rd_calloc(1, sizeof(*creq));
-        creq->creq_coordtype = coordtype;
-        creq->creq_coordkey = rd_strdup(coordkey);
-        creq->creq_ts_timeout = rd_timeout_init(timeout_ms);
-        creq->creq_send_req_cb = send_req_cb;
-        creq->creq_rko = rko;
-        creq->creq_replyq = replyq;
-        creq->creq_resp_cb = resp_cb;
+        creq                    = rd_calloc(1, sizeof(*creq));
+        creq->creq_coordtype    = coordtype;
+        creq->creq_coordkey     = rd_strdup(coordkey);
+        creq->creq_ts_timeout   = rd_timeout_init(delay_ms + timeout_ms);
+        creq->creq_send_req_cb  = send_req_cb;
+        creq->creq_rko          = rko;
+        creq->creq_replyq       = replyq;
+        creq->creq_resp_cb      = resp_cb;
         creq->creq_reply_opaque = reply_opaque;
-        creq->creq_refcnt = 1;
-        creq->creq_done = rd_false;
+        creq->creq_refcnt       = 1;
+        creq->creq_done         = rd_false;
+        rd_interval_init(&creq->creq_query_intvl);
 
         TAILQ_INSERT_TAIL(&rk->rk_coord_reqs, creq, creq_link);
 
-        rd_kafka_coord_req_fsm(rk, creq);
+        if (delay_ms)
+                rd_kafka_timer_start_oneshot(&rk->rk_timers, &creq->creq_tmr,
+                                             rd_true, (rd_ts_t)delay_ms * 1000,
+                                             rd_kafka_coord_req_tmr_cb, creq);
+        else
+                rd_kafka_coord_req_fsm(rk, creq);
 }
 
 
@@ -252,9 +268,9 @@ void rd_kafka_coord_req (rd_kafka_t *rk,
  *
  * @returns true if creq was destroyed, else false.
  */
-static rd_bool_t
-rd_kafka_coord_req_destroy (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
-                            rd_bool_t done) {
+static rd_bool_t rd_kafka_coord_req_destroy(rd_kafka_t *rk,
+                                            rd_kafka_coord_req_t *creq,
+                                            rd_bool_t done) {
 
         rd_assert(creq->creq_refcnt > 0);
 
@@ -265,12 +281,24 @@ rd_kafka_coord_req_destroy (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
                 rd_dassert(!creq->creq_done);
                 TAILQ_REMOVE(&rk->rk_coord_reqs, creq, creq_link);
                 creq->creq_done = rd_true;
+
+                rd_kafka_timer_stop(&rk->rk_timers, &creq->creq_tmr,
+                                    RD_DO_LOCK);
         }
 
         if (--creq->creq_refcnt > 0)
                 return rd_false;
 
         rd_dassert(creq->creq_done);
+
+        /* Clear out coordinator we were waiting for. */
+        if (creq->creq_rkb) {
+                rd_kafka_broker_persistent_connection_del(
+                    creq->creq_rkb, &creq->creq_rkb->rkb_persistconn.coord);
+                rd_kafka_broker_destroy(creq->creq_rkb);
+                creq->creq_rkb = NULL;
+        }
+
         rd_kafka_replyq_destroy(&creq->creq_replyq);
         rd_free(creq->creq_coordkey);
         rd_free(creq);
@@ -278,41 +306,41 @@ rd_kafka_coord_req_destroy (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
         return rd_true;
 }
 
-static void rd_kafka_coord_req_keep (rd_kafka_coord_req_t *creq) {
+static void rd_kafka_coord_req_keep(rd_kafka_coord_req_t *creq) {
         creq->creq_refcnt++;
 }
 
-static void rd_kafka_coord_req_fail (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
-                                     rd_kafka_resp_err_t err) {
+static void rd_kafka_coord_req_fail(rd_kafka_t *rk,
+                                    rd_kafka_coord_req_t *creq,
+                                    rd_kafka_resp_err_t err) {
         rd_kafka_op_t *reply;
         rd_kafka_buf_t *rkbuf;
 
-        reply = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
-        reply->rko_rk = rk;  /* Set rk since the rkbuf will not have a rkb
-                              * to reach it. */
+        reply         = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
+        reply->rko_rk = rk; /* Set rk since the rkbuf will not have a rkb
+                             * to reach it. */
         reply->rko_err = err;
 
         /* Need a dummy rkbuf to pass state to the buf resp_cb */
-        rkbuf = rd_kafka_buf_new(0, 0);
-        rkbuf->rkbuf_cb = creq->creq_resp_cb;
-        rkbuf->rkbuf_opaque = creq->creq_reply_opaque;
+        rkbuf                   = rd_kafka_buf_new(0, 0);
+        rkbuf->rkbuf_cb         = creq->creq_resp_cb;
+        rkbuf->rkbuf_opaque     = creq->creq_reply_opaque;
         reply->rko_u.xbuf.rkbuf = rkbuf;
 
         rd_kafka_replyq_enq(&creq->creq_replyq, reply, 0);
 
-        rd_kafka_coord_req_destroy(rk, creq, rd_true/*done*/);
+        rd_kafka_coord_req_destroy(rk, creq, rd_true /*done*/);
 }
 
 
-static void
-rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
-                                           rd_kafka_broker_t *rkb,
-                                           rd_kafka_resp_err_t err,
-                                           rd_kafka_buf_t *rkbuf,
-                                           rd_kafka_buf_t *request,
-                                           void *opaque) {
+static void rd_kafka_coord_req_handle_FindCoordinator(rd_kafka_t *rk,
+                                                      rd_kafka_broker_t *rkb,
+                                                      rd_kafka_resp_err_t err,
+                                                      rd_kafka_buf_t *rkbuf,
+                                                      rd_kafka_buf_t *request,
+                                                      void *opaque) {
         const int log_decode_errors = LOG_ERR;
-        rd_kafka_coord_req_t *creq = opaque;
+        rd_kafka_coord_req_t *creq  = opaque;
         int16_t ErrorCode;
         rd_kafkap_str_t Host;
         int32_t NodeId, Port;
@@ -339,8 +367,8 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
                 rd_kafkap_str_t ErrorMsg;
                 rd_kafka_buf_read_str(rkbuf, &ErrorMsg);
                 if (ErrorCode)
-                        rd_snprintf(errstr, sizeof(errstr),
-                                    "%.*s", RD_KAFKAP_STR_PR(&ErrorMsg));
+                        rd_snprintf(errstr, sizeof(errstr), "%.*s",
+                                    RD_KAFKAP_STR_PR(&ErrorMsg));
         }
 
         if ((err = ErrorCode))
@@ -366,44 +394,37 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
         }
 
 
-        rd_kafka_coord_cache_add(&rk->rk_coord_cache,
-                                 creq->creq_coordtype,
-                                 creq->creq_coordkey,
-                                 coord);
+        rd_kafka_coord_cache_add(&rk->rk_coord_cache, creq->creq_coordtype,
+                                 creq->creq_coordkey, coord);
         rd_kafka_broker_destroy(coord); /* refcnt from broker_update() */
 
         rd_kafka_coord_req_fsm(rk, creq);
 
         /* Drop refcount from req_fsm() */
-        rd_kafka_coord_req_destroy(rk, creq, rd_false/*!done*/);
+        rd_kafka_coord_req_destroy(rk, creq, rd_false /*!done*/);
 
         return;
 
- err_parse:
+err_parse:
         err = rkbuf->rkbuf_err;
- err:
+err:
         actions = rd_kafka_err_action(
-                rkb, err, request,
+            rkb, err, request,
 
-                RD_KAFKA_ERR_ACTION_SPECIAL,
-                RD_KAFKA_RESP_ERR__DESTROY,
+            RD_KAFKA_ERR_ACTION_SPECIAL, RD_KAFKA_RESP_ERR__DESTROY,
 
-                RD_KAFKA_ERR_ACTION_PERMANENT,
-                RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED,
+            RD_KAFKA_ERR_ACTION_PERMANENT,
+            RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED,
 
-                RD_KAFKA_ERR_ACTION_PERMANENT,
-                RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED,
+            RD_KAFKA_ERR_ACTION_PERMANENT,
+            RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED,
 
-                RD_KAFKA_ERR_ACTION_REFRESH,
-                RD_KAFKA_RESP_ERR__TRANSPORT,
+            RD_KAFKA_ERR_ACTION_REFRESH, RD_KAFKA_RESP_ERR__TRANSPORT,
 
-                RD_KAFKA_ERR_ACTION_RETRY,
-                RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_ERR_ACTION_RETRY,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
 
-                RD_KAFKA_ERR_ACTION_RETRY,
-                RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS,
-
-                RD_KAFKA_ERR_ACTION_END);
+            RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
                 rd_kafka_coord_req_fail(rk, creq, err);
@@ -417,11 +438,8 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
         /* Rely on state broadcast to trigger retry */
 
         /* Drop refcount from req_fsm() */
-        rd_kafka_coord_req_destroy(rk, creq, rd_false/*!done*/);
+        rd_kafka_coord_req_destroy(rk, creq, rd_false /*!done*/);
 }
-
-
-
 
 
 
@@ -433,8 +451,7 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
  * @locality any
  * @locks none
  */
-static void
-rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
+static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
         rd_kafka_broker_t *rkb;
         rd_kafka_resp_err_t err;
 
@@ -449,15 +466,29 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                 return;
         }
 
+        /* Do nothing if creq is delayed and the delay time hasn't expired yet.
+         * We will be called again by the timer once it expires.*/
+        if (rd_kafka_timer_next(&rk->rk_timers, &creq->creq_tmr, RD_DO_LOCK) >
+            0)
+                return;
+
         /* Check cache first */
-        rkb = rd_kafka_coord_cache_get(&rk->rk_coord_cache,
-                                       creq->creq_coordtype,
-                                       creq->creq_coordkey);
+        rkb = rd_kafka_coord_cache_get(
+            &rk->rk_coord_cache, creq->creq_coordtype, creq->creq_coordkey);
 
         if (rkb) {
                 if (rd_kafka_broker_is_up(rkb)) {
                         /* Cached coordinator is up, send request */
                         rd_kafka_replyq_t replyq;
+
+                        /* Clear out previous coordinator we waited for. */
+                        if (creq->creq_rkb) {
+                                rd_kafka_broker_persistent_connection_del(
+                                    creq->creq_rkb,
+                                    &creq->creq_rkb->rkb_persistconn.coord);
+                                rd_kafka_broker_destroy(creq->creq_rkb);
+                                creq->creq_rkb = NULL;
+                        }
 
                         rd_kafka_replyq_copy(&replyq, &creq->creq_replyq);
                         err = creq->creq_send_req_cb(rkb, creq->creq_rko,
@@ -471,19 +502,56 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                                 rd_kafka_coord_req_fail(rk, creq, err);
                         } else {
                                 rd_kafka_coord_req_destroy(rk, creq,
-                                                           rd_true/*done*/);
+                                                           rd_true /*done*/);
+                        }
+
+                } else if (creq->creq_rkb == rkb) {
+                        /* No change in coordinator, but it is still not up.
+                         * Query for coordinator if at least a second has
+                         * passed since this coord_req was created or the
+                         * last time we queried. */
+                        if (rd_interval(&creq->creq_query_intvl,
+                                        1000 * 1000 /* 1s */, 0) > 0) {
+                                rd_rkb_dbg(rkb, BROKER, "COORD",
+                                           "Coordinator connection is "
+                                           "still down: "
+                                           "querying for new coordinator");
+                                rd_kafka_broker_destroy(rkb);
+                                goto query_coord;
                         }
 
                 } else {
-                        /* No connection yet. We'll be re-triggered on
-                         * broker state broadcast. */
-                        rd_kafka_broker_schedule_connection(rkb);
+                        /* No connection yet.
+                         * Let broker thread know we need a connection.
+                         * We'll be re-triggered on broker state broadcast. */
+
+                        if (creq->creq_rkb) {
+                                /* Clear previous */
+                                rd_kafka_broker_persistent_connection_del(
+                                    creq->creq_rkb,
+                                    &creq->creq_rkb->rkb_persistconn.coord);
+                                rd_kafka_broker_destroy(creq->creq_rkb);
+                        }
+
+                        rd_kafka_broker_keep(rkb);
+                        creq->creq_rkb = rkb;
+                        rd_kafka_broker_persistent_connection_add(
+                            rkb, &rkb->rkb_persistconn.coord);
                 }
 
                 rd_kafka_broker_destroy(rkb);
                 return;
+
+        } else if (creq->creq_rkb) {
+                /* No coordinator information, clear out the previous
+                 * coordinator we waited for. */
+                rd_kafka_broker_persistent_connection_del(
+                    creq->creq_rkb, &creq->creq_rkb->rkb_persistconn.coord);
+                rd_kafka_broker_destroy(creq->creq_rkb);
+                creq->creq_rkb = NULL;
         }
 
+query_coord:
         /* Get any usable broker to look up the coordinator */
         rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, RD_DO_LOCK,
                                          RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
@@ -500,17 +568,16 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
          * the state machine. */
         rd_kafka_coord_req_keep(creq);
         err = rd_kafka_FindCoordinatorRequest(
-                rkb, creq->creq_coordtype, creq->creq_coordkey,
-                RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                rd_kafka_coord_req_handle_FindCoordinator,
-                creq);
+            rkb, creq->creq_coordtype, creq->creq_coordkey,
+            RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+            rd_kafka_coord_req_handle_FindCoordinator, creq);
 
         rd_kafka_broker_destroy(rkb);
 
         if (err) {
                 rd_kafka_coord_req_fail(rk, creq, err);
                 /* from keep() above */
-                rd_kafka_coord_req_destroy(rk, creq, rd_false/*!done*/);
+                rd_kafka_coord_req_destroy(rk, creq, rd_false /*!done*/);
         }
 }
 
@@ -523,14 +590,14 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
  * @locality rdkafka main thread
  * @locks none
  */
-void rd_kafka_coord_rkb_monitor_cb (rd_kafka_broker_t *rkb) {
+void rd_kafka_coord_rkb_monitor_cb(rd_kafka_broker_t *rkb) {
         rd_kafka_t *rk = rkb->rkb_rk;
         rd_kafka_coord_req_t *creq, *tmp;
 
         /* Run through all coord_req fsms */
-
-        TAILQ_FOREACH_SAFE(creq, &rk->rk_coord_reqs, creq_link, tmp)
+        TAILQ_FOREACH_SAFE(creq, &rk->rk_coord_reqs, creq_link, tmp) {
                 rd_kafka_coord_req_fsm(rk, creq);
+        }
 }
 
 
@@ -538,7 +605,7 @@ void rd_kafka_coord_rkb_monitor_cb (rd_kafka_broker_t *rkb) {
 /**
  * @brief Instance is terminating: destroy all coord reqs
  */
-void rd_kafka_coord_reqs_term (rd_kafka_t *rk) {
+void rd_kafka_coord_reqs_term(rd_kafka_t *rk) {
         rd_kafka_coord_req_t *creq;
 
         while ((creq = TAILQ_FIRST(&rk->rk_coord_reqs)))
@@ -549,7 +616,7 @@ void rd_kafka_coord_reqs_term (rd_kafka_t *rk) {
 /**
  * @brief Initialize coord reqs list.
  */
-void rd_kafka_coord_reqs_init (rd_kafka_t *rk) {
+void rd_kafka_coord_reqs_init(rd_kafka_t *rk) {
         TAILQ_INIT(&rk->rk_coord_reqs);
 }
 

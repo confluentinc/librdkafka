@@ -27,6 +27,8 @@
 #cmakedefine01 WITH_PKGCONFIG
 #cmakedefine01 WITH_HDRHISTOGRAM
 #cmakedefine01 WITH_ZLIB
+#cmakedefine01 WITH_CURL
+#cmakedefine01 WITH_OAUTHBEARER_OIDC
 #cmakedefine01 WITH_ZSTD
 #cmakedefine01 WITH_LIBDL
 #cmakedefine01 WITH_PLUGINS

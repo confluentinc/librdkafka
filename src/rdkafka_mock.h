@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,9 +68,6 @@ extern "C" {
  *  - High-level balanced consumer groups with offset commits
  *  - Topic Metadata and auto creation
  *
- * @remark High-level consumers making use of the balanced consumer groups
- *         are not supported.
- *
  * @remark This is an experimental public API that is NOT covered by the
  *         librdkafka API or ABI stability guarantees.
  *
@@ -92,15 +89,15 @@ typedef struct rd_kafka_mock_cluster_s rd_kafka_mock_cluster_t;
  * to operate as usual.
  */
 RD_EXPORT
-rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
-                                                    int broker_cnt);
+rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
+                                                   int broker_cnt);
 
 
 /**
  * @brief Destroy mock cluster.
  */
 RD_EXPORT
-void rd_kafka_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster);
+void rd_kafka_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 
 
 
@@ -109,7 +106,7 @@ void rd_kafka_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster);
  *          rd_kafka_mock_cluster_new().
  */
 RD_EXPORT rd_kafka_t *
-rd_kafka_mock_cluster_handle (const rd_kafka_mock_cluster_t *mcluster);
+rd_kafka_mock_cluster_handle(const rd_kafka_mock_cluster_t *mcluster);
 
 
 /**
@@ -118,7 +115,7 @@ rd_kafka_mock_cluster_handle (const rd_kafka_mock_cluster_t *mcluster);
  *          or NULL if no such instance.
  */
 RD_EXPORT rd_kafka_mock_cluster_t *
-rd_kafka_handle_mock_cluster (const rd_kafka_t *rk);
+rd_kafka_handle_mock_cluster(const rd_kafka_t *rk);
 
 
 
@@ -126,15 +123,15 @@ rd_kafka_handle_mock_cluster (const rd_kafka_t *rk);
  * @returns the mock cluster's bootstrap.servers list
  */
 RD_EXPORT const char *
-rd_kafka_mock_cluster_bootstraps (const rd_kafka_mock_cluster_t *mcluster);
+rd_kafka_mock_cluster_bootstraps(const rd_kafka_mock_cluster_t *mcluster);
 
 
 /**
  * @brief Clear the cluster's error state for the given \p ApiKey.
  */
 RD_EXPORT
-void rd_kafka_mock_clear_request_errors (rd_kafka_mock_cluster_t *mcluster,
-                                         int16_t ApiKey);
+void rd_kafka_mock_clear_request_errors(rd_kafka_mock_cluster_t *mcluster,
+                                        int16_t ApiKey);
 
 
 /**
@@ -152,8 +149,10 @@ void rd_kafka_mock_clear_request_errors (rd_kafka_mock_cluster_t *mcluster,
  * requests.
  */
 RD_EXPORT
-void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
-                                        int16_t ApiKey, size_t cnt, ...);
+void rd_kafka_mock_push_request_errors(rd_kafka_mock_cluster_t *mcluster,
+                                       int16_t ApiKey,
+                                       size_t cnt,
+                                       ...);
 
 
 /**
@@ -161,10 +160,10 @@ void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
  *        an array of errors.
  */
 RD_EXPORT void
-rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
-                                         int16_t ApiKey,
-                                         size_t cnt,
-                                         const rd_kafka_resp_err_t *errors);
+rd_kafka_mock_push_request_errors_array(rd_kafka_mock_cluster_t *mcluster,
+                                        int16_t ApiKey,
+                                        size_t cnt,
+                                        const rd_kafka_resp_err_t *errors);
 
 
 /**
@@ -184,9 +183,32 @@ rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
  * @remark The broker errors take precedence over the cluster errors.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_broker_push_request_error_rtts (rd_kafka_mock_cluster_t *mcluster,
-                                              int32_t broker_id,
-                                              int16_t ApiKey, size_t cnt, ...);
+rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
+                                             int32_t broker_id,
+                                             int16_t ApiKey,
+                                             size_t cnt,
+                                             ...);
+
+
+
+/**
+ * @brief Get the count of errors in the broker's error stack for
+ *        the given \p ApiKey.
+ *
+ * @param mcluster the mock cluster.
+ * @param broker_id id of the broker in the cluster.
+ * @param ApiKey is the Kafka protocol request type, e.g., ProduceRequest (0).
+ * @param cntp pointer for receiving the count.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR if the count was retrieved,
+ * \c RD_KAFKA_RESP_ERR__UNKNOWN_BROKER if there was no broker with this id,
+ * \c RD_KAFKA_RESP_ERR__INVALID_ARG if some of the parameters are not valid.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_error_stack_cnt(rd_kafka_mock_cluster_t *mcluster,
+                                     int32_t broker_id,
+                                     int16_t ApiKey,
+                                     size_t *cntp);
 
 
 /**
@@ -195,9 +217,9 @@ rd_kafka_mock_broker_push_request_error_rtts (rd_kafka_mock_cluster_t *mcluster,
  * Currently only used for TopicMetadataRequest and AddPartitionsToTxnRequest.
  */
 RD_EXPORT
-void rd_kafka_mock_topic_set_error (rd_kafka_mock_cluster_t *mcluster,
-                                    const char *topic,
-                                    rd_kafka_resp_err_t err);
+void rd_kafka_mock_topic_set_error(rd_kafka_mock_cluster_t *mcluster,
+                                   const char *topic,
+                                   rd_kafka_resp_err_t err);
 
 
 /**
@@ -210,9 +232,10 @@ void rd_kafka_mock_topic_set_error (rd_kafka_mock_cluster_t *mcluster,
  *         mock broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_topic_create (rd_kafka_mock_cluster_t *mcluster,
-                            const char *topic, int partition_cnt,
-                            int replication_factor);
+rd_kafka_mock_topic_create(rd_kafka_mock_cluster_t *mcluster,
+                           const char *topic,
+                           int partition_cnt,
+                           int replication_factor);
 
 
 /**
@@ -224,9 +247,10 @@ rd_kafka_mock_topic_create (rd_kafka_mock_cluster_t *mcluster,
  * partition leader-less.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_partition_set_leader (rd_kafka_mock_cluster_t *mcluster,
-                                    const char *topic, int32_t partition,
-                                    int32_t broker_id);
+rd_kafka_mock_partition_set_leader(rd_kafka_mock_cluster_t *mcluster,
+                                   const char *topic,
+                                   int32_t partition,
+                                   int32_t broker_id);
 
 /**
  * @brief Sets the partition's preferred replica / follower.
@@ -236,9 +260,10 @@ rd_kafka_mock_partition_set_leader (rd_kafka_mock_cluster_t *mcluster,
  * \p broker_id does not need to point to an existing broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
-                                      const char *topic, int32_t partition,
-                                      int32_t broker_id);
+rd_kafka_mock_partition_set_follower(rd_kafka_mock_cluster_t *mcluster,
+                                     const char *topic,
+                                     int32_t partition,
+                                     int32_t broker_id);
 
 /**
  * @brief Sets the partition's preferred replica / follower low and high
@@ -250,42 +275,57 @@ rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
  * watermark.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_partition_set_follower_wmarks (rd_kafka_mock_cluster_t *mcluster,
-                                             const char *topic,
-                                             int32_t partition,
-                                             int64_t lo, int64_t hi);
+rd_kafka_mock_partition_set_follower_wmarks(rd_kafka_mock_cluster_t *mcluster,
+                                            const char *topic,
+                                            int32_t partition,
+                                            int64_t lo,
+                                            int64_t hi);
 
 
 /**
  * @brief Disconnects the broker and disallows any new connections.
  *        This does NOT trigger leader change.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_broker_set_down (rd_kafka_mock_cluster_t *mcluster,
-                               int32_t broker_id);
+rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
+                              int32_t broker_id);
 
 /**
  * @brief Makes the broker accept connections again.
  *        This does NOT trigger leader change.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_broker_set_up (rd_kafka_mock_cluster_t *mcluster,
-                             int32_t broker_id);
+rd_kafka_mock_broker_set_up(rd_kafka_mock_cluster_t *mcluster,
+                            int32_t broker_id);
 
 
 /**
  * @brief Set broker round-trip-time delay in milliseconds.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_broker_set_rtt (rd_kafka_mock_cluster_t *mcluster,
-                              int32_t broker_id, int rtt_ms);
+rd_kafka_mock_broker_set_rtt(rd_kafka_mock_cluster_t *mcluster,
+                             int32_t broker_id,
+                             int rtt_ms);
 
 /**
  * @brief Sets the broker's rack as reported in Metadata to the client.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
-                               int32_t broker_id, const char *rack);
+rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
+                              int32_t broker_id,
+                              const char *rack);
 
 
 
@@ -298,9 +338,10 @@ rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
  * @param broker_id The new coordinator, does not have to be a valid broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_coordinator_set (rd_kafka_mock_cluster_t *mcluster,
-                               const char *key_type, const char *key,
-                               int32_t broker_id);
+rd_kafka_mock_coordinator_set(rd_kafka_mock_cluster_t *mcluster,
+                              const char *key_type,
+                              const char *key,
+                              int32_t broker_id);
 
 
 
@@ -318,9 +359,10 @@ rd_kafka_mock_coordinator_set (rd_kafka_mock_cluster_t *mcluster,
  * @param MinVersion Maximum version supported (or -1 to disable).
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_set_apiversion (rd_kafka_mock_cluster_t *mcluster,
-                              int16_t ApiKey,
-                              int16_t MinVersion, int16_t MaxVersion);
+rd_kafka_mock_set_apiversion(rd_kafka_mock_cluster_t *mcluster,
+                             int16_t ApiKey,
+                             int16_t MinVersion,
+                             int16_t MaxVersion);
 
 
 /**@}*/

@@ -6,6 +6,10 @@ if(@WITH_ZLIB@)
   find_dependency(ZLIB)
 endif()
 
+if(@WITH_CURL@)
+  find_dependency(CURL)
+endif()
+
 if(@WITH_ZSTD@)
   find_library(ZSTD zstd)
   if(NOT ZSTD)

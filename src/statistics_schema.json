@@ -1,5 +1,5 @@
 { "$schema": "http://json-schema.org/schema#",
-  "id": "https://github.com/edenhill/librdkafka/src/statistics_schema.json",
+  "id": "https://github.com/confluentinc/librdkafka/src/statistics_schema.json",
   "title": "librdkafka statistics schema - INCOMPLETE - WORK IN PROGRESS",
   "definitions": {
       "window": {
@@ -297,12 +297,19 @@
                                       "stored_offset": {
                                           "type": "integer"
                                       },
+                                      "stored_leader_epoch": {
+                                          "type": "integer"
+                                      },
                                       "commited_offset": {
                                           "type": "integer"
                                       },
                                       "committed_offset": {
                                           "type": "integer"
                                       },
+                                      "committed_leader_epoch": {
+                                          "type": "integer"
+                                      },
+
                                       "eof_offset": {
                                           "type": "integer"
                                       },
@@ -316,6 +323,9 @@
                                           "type": "integer"
                                       },
                                       "consumer_lag_stored": {
+                                          "type": "integer"
+                                      },
+                                      "leader_epoch": {
                                           "type": "integer"
                                       },
                                       "txmsgs": {

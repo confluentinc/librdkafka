@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2014 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,10 +30,14 @@
 
 using namespace RdKafka;
 
-BrokerMetadata::~BrokerMetadata() {};
-PartitionMetadata::~PartitionMetadata() {};
-TopicMetadata::~TopicMetadata() {};
-Metadata::~Metadata() {};
+BrokerMetadata::~BrokerMetadata() {
+}
+PartitionMetadata::~PartitionMetadata() {
+}
+TopicMetadata::~TopicMetadata() {
+}
+Metadata::~Metadata() {
+}
 
 
 /**
@@ -41,15 +45,23 @@ Metadata::~Metadata() {};
  */
 class BrokerMetadataImpl : public BrokerMetadata {
  public:
-  BrokerMetadataImpl(const rd_kafka_metadata_broker_t *broker_metadata)
-  :broker_metadata_(broker_metadata),host_(broker_metadata->host) {}
+  BrokerMetadataImpl(const rd_kafka_metadata_broker_t *broker_metadata) :
+      broker_metadata_(broker_metadata), host_(broker_metadata->host) {
+  }
 
-  int32_t      id() const{return broker_metadata_->id;}
+  int32_t id() const {
+    return broker_metadata_->id;
+  }
 
-  const std::string host() const {return host_;}
-  int port() const {return broker_metadata_->port;}
+  std::string host() const {
+    return host_;
+  }
+  int port() const {
+    return broker_metadata_->port;
+  }
 
-  virtual ~BrokerMetadataImpl() {}
+  virtual ~BrokerMetadataImpl() {
+  }
 
  private:
   const rd_kafka_metadata_broker_t *broker_metadata_;
@@ -61,91 +73,98 @@ class BrokerMetadataImpl : public BrokerMetadata {
  */
 class PartitionMetadataImpl : public PartitionMetadata {
  public:
-  // @TODO too much memory copy? maybe we should create a new vector class that read directly from C arrays?
+  // @TODO too much memory copy? maybe we should create a new vector class that
+  // read directly from C arrays?
   // @TODO use auto_ptr?
-  PartitionMetadataImpl(const rd_kafka_metadata_partition_t *partition_metadata)
-  :partition_metadata_(partition_metadata) {
+  PartitionMetadataImpl(
+      const rd_kafka_metadata_partition_t *partition_metadata) :
+      partition_metadata_(partition_metadata) {
     replicas_.reserve(partition_metadata->replica_cnt);
-    for(int i=0;i<partition_metadata->replica_cnt;++i)
+    for (int i = 0; i < partition_metadata->replica_cnt; ++i)
       replicas_.push_back(partition_metadata->replicas[i]);
 
     isrs_.reserve(partition_metadata->isr_cnt);
-    for(int i=0;i<partition_metadata->isr_cnt;++i)
+    for (int i = 0; i < partition_metadata->isr_cnt; ++i)
       isrs_.push_back(partition_metadata->isrs[i]);
   }
 
-  int32_t                    id() const {
+  int32_t id() const {
     return partition_metadata_->id;
   }
-  int32_t                    leader() const {
+  int32_t leader() const {
     return partition_metadata_->leader;
   }
-  ErrorCode                  err() const {
+  ErrorCode err() const {
     return static_cast<ErrorCode>(partition_metadata_->err);
   }
 
-  const std::vector<int32_t> *replicas() const {return &replicas_;}
-  const std::vector<int32_t> *isrs() const {return &isrs_;}
+  const std::vector<int32_t> *replicas() const {
+    return &replicas_;
+  }
+  const std::vector<int32_t> *isrs() const {
+    return &isrs_;
+  }
 
-  ~PartitionMetadataImpl() {};
+  ~PartitionMetadataImpl() {
+  }
 
  private:
   const rd_kafka_metadata_partition_t *partition_metadata_;
-  std::vector<int32_t> replicas_,isrs_;
+  std::vector<int32_t> replicas_, isrs_;
 };
 
 /**
  * Metadata: Topic information handler
  */
-class TopicMetadataImpl : public TopicMetadata{
+class TopicMetadataImpl : public TopicMetadata {
  public:
-  TopicMetadataImpl(const rd_kafka_metadata_topic_t *topic_metadata)
-  :topic_metadata_(topic_metadata),topic_(topic_metadata->topic) {
+  TopicMetadataImpl(const rd_kafka_metadata_topic_t *topic_metadata) :
+      topic_metadata_(topic_metadata), topic_(topic_metadata->topic) {
     partitions_.reserve(topic_metadata->partition_cnt);
-    for(int i=0;i<topic_metadata->partition_cnt;++i)
+    for (int i = 0; i < topic_metadata->partition_cnt; ++i)
       partitions_.push_back(
-        new PartitionMetadataImpl(&topic_metadata->partitions[i])
-      );
+          new PartitionMetadataImpl(&topic_metadata->partitions[i]));
   }
 
-  ~TopicMetadataImpl(){
-    for(size_t i=0;i<partitions_.size();++i)
+  ~TopicMetadataImpl() {
+    for (size_t i = 0; i < partitions_.size(); ++i)
       delete partitions_[i];
   }
 
-  const std::string topic() const {return topic_;}
+  std::string topic() const {
+    return topic_;
+  }
   const std::vector<const PartitionMetadata *> *partitions() const {
     return &partitions_;
   }
-  ErrorCode err() const {return static_cast<ErrorCode>(topic_metadata_->err);}
+  ErrorCode err() const {
+    return static_cast<ErrorCode>(topic_metadata_->err);
+  }
 
  private:
   const rd_kafka_metadata_topic_t *topic_metadata_;
   const std::string topic_;
   std::vector<const PartitionMetadata *> partitions_;
-
 };
 
-MetadataImpl::MetadataImpl(const rd_kafka_metadata_t *metadata)
-:metadata_(metadata)
-{
+MetadataImpl::MetadataImpl(const rd_kafka_metadata_t *metadata) :
+    metadata_(metadata) {
   brokers_.reserve(metadata->broker_cnt);
-  for(int i=0;i<metadata->broker_cnt;++i)
+  for (int i = 0; i < metadata->broker_cnt; ++i)
     brokers_.push_back(new BrokerMetadataImpl(&metadata->brokers[i]));
 
   topics_.reserve(metadata->topic_cnt);
-  for(int i=0;i<metadata->topic_cnt;++i)
+  for (int i = 0; i < metadata->topic_cnt; ++i)
     topics_.push_back(new TopicMetadataImpl(&metadata->topics[i]));
-
 }
 
 MetadataImpl::~MetadataImpl() {
-  for(size_t i=0;i<brokers_.size();++i)
+  for (size_t i = 0; i < brokers_.size(); ++i)
     delete brokers_[i];
-  for(size_t i=0;i<topics_.size();++i)
+  for (size_t i = 0; i < topics_.size(); ++i)
     delete topics_[i];
 
 
-  if(metadata_)
+  if (metadata_)
     rd_kafka_metadata_destroy(metadata_);
 }

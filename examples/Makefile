@@ -3,7 +3,14 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	kafkatest_verifiable_client \
 	producer consumer idempotent_producer transactions \
 	delete_records \
-	openssl_engine_example_cpp
+	openssl_engine_example_cpp \
+	list_consumer_groups \
+	describe_consumer_groups \
+	list_consumer_group_offsets \
+	alter_consumer_group_offsets \
+	incremental_alter_configs \
+	user_scram \
+	misc
 
 all: $(EXAMPLES)
 
@@ -59,6 +66,26 @@ delete_records: ../src/librdkafka.a delete_records.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 
+list_consumer_groups: ../src/librdkafka.a list_consumer_groups.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+describe_consumer_groups: ../src/librdkafka.a describe_consumer_groups.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+list_consumer_group_offsets: ../src/librdkafka.a list_consumer_group_offsets.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+alter_consumer_group_offsets: ../src/librdkafka.a alter_consumer_group_offsets.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+incremental_alter_configs: ../src/librdkafka.a incremental_alter_configs.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
 rdkafka_complex_consumer_example: ../src/librdkafka.a rdkafka_complex_consumer_example.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_complex_consumer_example.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
@@ -106,6 +133,14 @@ rdkafka_consume_batch: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_con
 openssl_engine_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a openssl_engine_example.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) openssl_engine_example.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
+
+user_scram: ../src/librdkafka.a user_scram.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+misc: ../src/librdkafka.a misc.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
 
 clean:
 	rm -f $(EXAMPLES)

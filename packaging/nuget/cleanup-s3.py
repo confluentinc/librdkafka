@@ -4,7 +4,6 @@
 # This also covers python builds.
 
 import re
-import os
 from datetime import datetime, timezone
 import boto3
 import argparse
@@ -59,7 +58,8 @@ def may_delete(path):
     if tag is None:
         return True
 
-    if re.match(r'^v?\d+\.\d+\.\d+(-?RC\d+)?$', tag, flags=re.IGNORECASE) is None:
+    if re.match(r'^v?\d+\.\d+\.\d+(-?RC\d+)?$', tag,
+                flags=re.IGNORECASE) is None:
         return True
 
     return False
@@ -81,7 +81,7 @@ def collect_s3(s3, min_age_days=60):
         else:
             res = s3.list_objects_v2(Bucket=s3_bucket)
 
-        if res.get('IsTruncated') == True:
+        if res.get('IsTruncated') is True:
             cont_token = res.get('NextContinuationToken')
         else:
             more = False
@@ -101,11 +101,13 @@ def chunk_list(lst, cnt):
     for i in range(0, len(lst), cnt):
         yield lst[i:i + cnt]
 
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--delete",
-                        help="WARNING! Don't just check, actually delete S3 objects.",
+                        help="WARNING! Don't just check, actually delete "
+                        "S3 objects.",
                         action="store_true")
     parser.add_argument("--age", help="Minimum object age in days.",
                         type=int, default=360)

@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2015 Magnus Edenhill
+ * Copyright (c) 2015-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,24 +32,26 @@
 
 #include "rdkafkacpp_int.h"
 
-RdKafka::TopicPartition::~TopicPartition () {
+RdKafka::TopicPartition::~TopicPartition() {
 }
 
-RdKafka::TopicPartition *
-RdKafka::TopicPartition::create (const std::string &topic, int partition) {
+RdKafka::TopicPartition *RdKafka::TopicPartition::create(
+    const std::string &topic,
+    int partition) {
   return new TopicPartitionImpl(topic, partition);
 }
 
-RdKafka::TopicPartition *
-RdKafka::TopicPartition::create (const std::string &topic, int partition,
-                                 int64_t offset) {
+RdKafka::TopicPartition *RdKafka::TopicPartition::create(
+    const std::string &topic,
+    int partition,
+    int64_t offset) {
   return new TopicPartitionImpl(topic, partition, offset);
 }
 
-void
-RdKafka::TopicPartition::destroy (std::vector<TopicPartition*> &partitions) {
-  for (std::vector<TopicPartition*>::iterator it = partitions.begin() ;
+void RdKafka::TopicPartition::destroy(
+    std::vector<TopicPartition *> &partitions) {
+  for (std::vector<TopicPartition *>::iterator it = partitions.begin();
        it != partitions.end(); ++it)
-    delete(*it);
+    delete (*it);
   partitions.clear();
 }

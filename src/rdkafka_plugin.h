@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2017-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,9 +29,13 @@
 #ifndef _RDKAFKA_PLUGIN_H
 #define _RDKAFKA_PLUGIN_H
 
-rd_kafka_conf_res_t rd_kafka_plugins_conf_set (
-        int scope, void *conf, const char *name, const char *value,
-        void *dstptr, rd_kafka_conf_set_mode_t set_mode,
-        char *errstr, size_t errstr_size);
+rd_kafka_conf_res_t rd_kafka_plugins_conf_set(int scope,
+                                              void *conf,
+                                              const char *name,
+                                              const char *value,
+                                              void *dstptr,
+                                              rd_kafka_conf_set_mode_t set_mode,
+                                              char *errstr,
+                                              size_t errstr_size);
 
 #endif /* _RDKAFKA_PLUGIN_H */

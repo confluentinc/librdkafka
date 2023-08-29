@@ -28,7 +28,7 @@ fi
 set -u
 
 apt-get update
-apt-get install -y gcc g++ zlib1g-dev python3 git-core make
+apt-get install -y gcc g++ zlib1g-dev python3 git-core make patch
 
 
 # Copy the librdkafka git archive to a new location to avoid messing
@@ -40,6 +40,11 @@ pushd $BUILD_DIR
 
 DEST_DIR=$PWD/dest
 mkdir -p $DEST_DIR
+
+# Workaround for newer Git not allowing clone directory to be owned by
+# another user (which is a questionable limitation for the read-only archive
+# command..)
+git config --global --add safe.directory /v
 
 (cd $LRK_DIR ; git archive --format tar HEAD) | tar xf -
 

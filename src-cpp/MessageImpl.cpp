@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2014 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,5 +34,5 @@
 #include "rdkafkacpp_int.h"
 
 
-RdKafka::Message::~Message() {}
-
+RdKafka::Message::~Message() {
+}

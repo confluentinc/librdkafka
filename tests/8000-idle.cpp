@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2016, Magnus Edenhill
+ * Copyright (c) 2016-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,8 +35,7 @@
  */
 
 
-static void do_test_idle_producer () {
-
+static void do_test_idle_producer() {
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 0);
 
@@ -54,8 +53,8 @@ static void do_test_idle_producer () {
 
 
 extern "C" {
-  int main_8000_idle (int argc, char **argv) {
-    do_test_idle_producer();
-    return 0;
-  }
+int main_8000_idle(int argc, char **argv) {
+  do_test_idle_producer();
+  return 0;
+}
 }

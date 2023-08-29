@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018 Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 #ifndef __RDMURMUR2___H__
 #define __RDMURMUR2___H__
 
-uint32_t rd_murmur2 (const void *key, size_t len);
-int unittest_murmur2 (void);
+uint32_t rd_murmur2(const void *key, size_t len);
+int unittest_murmur2(void);
 
-#endif // __RDMURMUR2___H__
+#endif  // __RDMURMUR2___H__

@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2020 Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,20 +54,20 @@ typedef struct rd_kafka_assignment_s {
 } rd_kafka_assignment_t;
 
 
-int rd_kafka_assignment_clear (rd_kafka_t *rk);
+int rd_kafka_assignment_clear(rd_kafka_t *rk);
 rd_kafka_error_t *
-rd_kafka_assignment_add (rd_kafka_t *rk,
-                         rd_kafka_topic_partition_list_t *partitions);
+rd_kafka_assignment_add(rd_kafka_t *rk,
+                        rd_kafka_topic_partition_list_t *partitions);
 rd_kafka_error_t *
-rd_kafka_assignment_subtract (rd_kafka_t *rk,
-                              rd_kafka_topic_partition_list_t *partitions);
-void rd_kafka_assignment_partition_stopped (rd_kafka_t *rk,
-                                            rd_kafka_toppar_t *rktp);
-void rd_kafka_assignment_pause (rd_kafka_t *rk, const char *reason);
-void rd_kafka_assignment_resume (rd_kafka_t *rk, const char *reason);
-void rd_kafka_assignment_serve (rd_kafka_t *rk);
-rd_bool_t rd_kafka_assignment_in_progress (rd_kafka_t *rk);
-void rd_kafka_assignment_destroy (rd_kafka_t *rk);
-void rd_kafka_assignment_init (rd_kafka_t *rk);
+rd_kafka_assignment_subtract(rd_kafka_t *rk,
+                             rd_kafka_topic_partition_list_t *partitions);
+void rd_kafka_assignment_partition_stopped(rd_kafka_t *rk,
+                                           rd_kafka_toppar_t *rktp);
+void rd_kafka_assignment_pause(rd_kafka_t *rk, const char *reason);
+void rd_kafka_assignment_resume(rd_kafka_t *rk, const char *reason);
+void rd_kafka_assignment_serve(rd_kafka_t *rk);
+rd_bool_t rd_kafka_assignment_in_progress(rd_kafka_t *rk);
+void rd_kafka_assignment_destroy(rd_kafka_t *rk);
+void rd_kafka_assignment_init(rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_ASSIGNMENT_H_ */

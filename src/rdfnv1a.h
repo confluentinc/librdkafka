@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2020 Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 #ifndef __RDFNV1A___H__
 #define __RDFNV1A___H__
 
-uint32_t rd_fnv1a (const void *key, size_t len);
-int unittest_fnv1a (void);
+uint32_t rd_fnv1a(const void *key, size_t len);
+int unittest_fnv1a(void);
 
-#endif // __RDFNV1A___H__
+#endif  // __RDFNV1A___H__

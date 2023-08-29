@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2019 Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,26 +30,35 @@
 #ifndef _RDKAFKA_SSL_H_
 #define _RDKAFKA_SSL_H_
 
-void rd_kafka_transport_ssl_close (rd_kafka_transport_t *rktrans);
-int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
-                                    rd_kafka_transport_t *rktrans,
-                                    char *errstr, size_t errstr_size);
-int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans);
-ssize_t rd_kafka_transport_ssl_send (rd_kafka_transport_t *rktrans,
-                                     rd_slice_t *slice,
-                                     char *errstr, size_t errstr_size);
-ssize_t rd_kafka_transport_ssl_recv (rd_kafka_transport_t *rktrans,
-                                     rd_buf_t *rbuf,
-                                     char *errstr, size_t errstr_size);
+void rd_kafka_transport_ssl_close(rd_kafka_transport_t *rktrans);
+int rd_kafka_transport_ssl_connect(rd_kafka_broker_t *rkb,
+                                   rd_kafka_transport_t *rktrans,
+                                   char *errstr,
+                                   size_t errstr_size);
+int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans);
+ssize_t rd_kafka_transport_ssl_send(rd_kafka_transport_t *rktrans,
+                                    rd_slice_t *slice,
+                                    char *errstr,
+                                    size_t errstr_size);
+ssize_t rd_kafka_transport_ssl_recv(rd_kafka_transport_t *rktrans,
+                                    rd_buf_t *rbuf,
+                                    char *errstr,
+                                    size_t errstr_size);
 
 
-void rd_kafka_ssl_ctx_term (rd_kafka_t *rk);
-int rd_kafka_ssl_ctx_init (rd_kafka_t *rk,
-                           char *errstr, size_t errstr_size);
+void rd_kafka_ssl_ctx_term(rd_kafka_t *rk);
+int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size);
 
-void rd_kafka_ssl_term (void);
+void rd_kafka_ssl_term(void);
 void rd_kafka_ssl_init(void);
 
-const char *rd_kafka_ssl_last_error_str (void);
+const char *rd_kafka_ssl_last_error_str(void);
+
+int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
+                      const EVP_MD *evp,
+                      const rd_chariov_t *in,
+                      const rd_chariov_t *salt,
+                      int itcnt,
+                      rd_chariov_t *out);
 
 #endif /* _RDKAFKA_SSL_H_ */

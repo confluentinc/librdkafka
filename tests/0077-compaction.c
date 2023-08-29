@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,17 +48,16 @@
  * @brief Get low watermark in partition, we use this see if compaction
  *        has kicked in.
  */
-static int64_t get_low_wmark (rd_kafka_t *rk, const char *topic,
-                              int32_t partition) {
+static int64_t
+get_low_wmark(rd_kafka_t *rk, const char *topic, int32_t partition) {
         rd_kafka_resp_err_t err;
         int64_t low, high;
 
-        err = rd_kafka_query_watermark_offsets(rk, topic, partition,
-                                               &low, &high,
-                                               tmout_multip(10000));
+        err = rd_kafka_query_watermark_offsets(rk, topic, partition, &low,
+                                               &high, tmout_multip(10000));
 
-        TEST_ASSERT(!err, "query_warmark_offsets(%s, %d) failed: %s",
-                    topic, (int)partition, rd_kafka_err2str(err));
+        TEST_ASSERT(!err, "query_warmark_offsets(%s, %d) failed: %s", topic,
+                    (int)partition, rd_kafka_err2str(err));
 
         return low;
 }
@@ -67,22 +66,25 @@ static int64_t get_low_wmark (rd_kafka_t *rk, const char *topic,
 /**
  * @brief Wait for compaction by checking for
  *        partition low-watermark increasing */
-static void wait_compaction (rd_kafka_t *rk,
-                             const char *topic, int32_t partition,
-                             int64_t low_offset,
-                             int timeout_ms) {
-        int64_t low = -1;
+static void wait_compaction(rd_kafka_t *rk,
+                            const char *topic,
+                            int32_t partition,
+                            int64_t low_offset,
+                            int timeout_ms) {
+        int64_t low      = -1;
         int64_t ts_start = test_clock();
 
-        TEST_SAY("Waiting for compaction to kick in and increase the "
-                 "Low watermark offset from %"PRId64" on %s [%"PRId32"]\n",
-                 low_offset, topic, partition);
+        TEST_SAY(
+            "Waiting for compaction to kick in and increase the "
+            "Low watermark offset from %" PRId64 " on %s [%" PRId32 "]\n",
+            low_offset, topic, partition);
 
         while (1) {
                 low = get_low_wmark(rk, topic, partition);
 
-                TEST_SAY("Low watermark offset for %s [%"PRId32"] is "
-                         "%"PRId64" (want > %"PRId64")\n",
+                TEST_SAY("Low watermark offset for %s [%" PRId32
+                         "] is "
+                         "%" PRId64 " (want > %" PRId64 ")\n",
                          topic, partition, low, low_offset);
 
                 if (low > low_offset)
@@ -95,9 +97,11 @@ static void wait_compaction (rd_kafka_t *rk,
         }
 }
 
-static void produce_compactable_msgs (const char *topic, int32_t partition,
-                                      uint64_t testid,
-                                      int msgcnt, size_t msgsize) {
+static void produce_compactable_msgs(const char *topic,
+                                     int32_t partition,
+                                     uint64_t testid,
+                                     int msgcnt,
+                                     size_t msgsize) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         int i;
@@ -113,8 +117,10 @@ static void produce_compactable_msgs (const char *topic, int32_t partition,
 
         val = calloc(1, msgsize);
 
-        TEST_SAY("Producing %d messages (total of %"PRIusz" bytes) of "
-                 "compactable messages\n", msgcnt, (size_t)msgcnt*msgsize);
+        TEST_SAY("Producing %d messages (total of %" PRIusz
+                 " bytes) of "
+                 "compactable messages\n",
+                 msgcnt, (size_t)msgcnt * msgsize);
 
         test_conf_init(&conf, NULL, 0);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
@@ -124,11 +130,10 @@ static void produce_compactable_msgs (const char *topic, int32_t partition,
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        for (i = 0 ; i < msgcnt-1 ; i++) {
-                err = rd_kafka_producev(rk,
-                                        RD_KAFKA_V_TOPIC(topic),
+        for (i = 0; i < msgcnt - 1; i++) {
+                err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC(topic),
                                         RD_KAFKA_V_PARTITION(partition),
-                                        RD_KAFKA_V_KEY(key, sizeof(key)-1),
+                                        RD_KAFKA_V_KEY(key, sizeof(key) - 1),
                                         RD_KAFKA_V_VALUE(val, msgsize),
                                         RD_KAFKA_V_OPAQUE(&msgcounter),
                                         RD_KAFKA_V_END);
@@ -136,12 +141,10 @@ static void produce_compactable_msgs (const char *topic, int32_t partition,
         }
 
         /* Final message is the tombstone */
-        err = rd_kafka_producev(rk,
-                                RD_KAFKA_V_TOPIC(topic),
+        err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC(topic),
                                 RD_KAFKA_V_PARTITION(partition),
-                                RD_KAFKA_V_KEY(key, sizeof(key)-1),
-                                RD_KAFKA_V_OPAQUE(&msgcounter),
-                                RD_KAFKA_V_END);
+                                RD_KAFKA_V_KEY(key, sizeof(key) - 1),
+                                RD_KAFKA_V_OPAQUE(&msgcounter), RD_KAFKA_V_END);
         TEST_ASSERT(!err, "producev(): %s", rd_kafka_err2str(err));
 
         test_flush(rk, tmout_multip(10000));
@@ -154,37 +157,42 @@ static void produce_compactable_msgs (const char *topic, int32_t partition,
 
 
 
-static void do_test_compaction (int msgs_per_key, const char *compression) {
+static void do_test_compaction(int msgs_per_key, const char *compression) {
         const char *topic = test_mk_topic_name(__FILE__, 1);
 #define _KEY_CNT 4
-        const char *keys[_KEY_CNT] = { "k1", "k2", "k3", NULL/*generate unique*/ };
-        int msgcnt = msgs_per_key * _KEY_CNT;
+        const char *keys[_KEY_CNT] = {"k1", "k2", "k3",
+                                      NULL /*generate unique*/};
+        int msgcnt                 = msgs_per_key * _KEY_CNT;
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;
         uint64_t testid;
         int32_t partition = 0;
-        int cnt = 0;
+        int cnt           = 0;
         test_msgver_t mv;
         test_msgver_t mv_correct;
-        int msgcounter = 0;
+        int msgcounter    = 0;
         const int fillcnt = 20;
 
         testid = test_id_generate();
 
-        TEST_SAY(_C_MAG "Test compaction on topic %s with %s compression (%d messages)\n",
-                 topic, compression ? compression : "no", msgcnt);
+        TEST_SAY(
+            _C_MAG
+            "Test compaction on topic %s with %s compression (%d messages)\n",
+            topic, compression ? compression : "no", msgcnt);
 
-        test_kafka_topics("--create --topic \"%s\" "
-                          "--partitions %d "
-                          "--replication-factor 1 "
-                          "--config cleanup.policy=compact "
-                          "--config segment.ms=10000 "
-                          "--config segment.bytes=10000 "
-                          "--config min.cleanable.dirty.ratio=0.01 "
-                          "--config delete.retention.ms=86400 "
-                          "--config file.delete.delay.ms=10000",
-                          topic, partition+1);
+        test_kafka_topics(
+            "--create --topic \"%s\" "
+            "--partitions %d "
+            "--replication-factor 1 "
+            "--config cleanup.policy=compact "
+            "--config segment.ms=10000 "
+            "--config segment.bytes=10000 "
+            "--config min.cleanable.dirty.ratio=0.01 "
+            "--config delete.retention.ms=86400 "
+            "--config file.delete.delay.ms=10000 "
+            "--config max.compaction.lag.ms=100",
+            topic, partition + 1);
 
         test_conf_init(&conf, NULL, 120);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
@@ -194,7 +202,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
          * to accumulate into a batch that will be rejected by the broker. */
         test_conf_set(conf, "message.max.bytes", "6000");
         test_conf_set(conf, "linger.ms", "10");
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = rd_kafka_topic_new(rk, topic, NULL);
 
         /* The low watermark is not updated on message deletion(compaction)
@@ -206,10 +214,10 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
         test_msgver_init(&mv_correct, testid);
 
         TEST_SAY("Producing %d messages for %d keys\n", msgcnt, _KEY_CNT);
-        for (cnt = 0 ; cnt < msgcnt ; ) {
+        for (cnt = 0; cnt < msgcnt;) {
                 int k;
 
-                for (k = 0 ; k < _KEY_CNT ; k++) {
+                for (k = 0; k < _KEY_CNT; k++) {
                         rd_kafka_resp_err_t err;
                         int is_last = cnt + _KEY_CNT >= msgcnt;
                         /* Let keys[0] have some tombstones */
@@ -222,14 +230,14 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                         size_t keysize;
                         int64_t offset = fillcnt + cnt;
 
-                        test_msg_fmt(rdk_msgid, sizeof(rdk_msgid),
-                                     testid, partition, cnt);
+                        test_msg_fmt(rdk_msgid, sizeof(rdk_msgid), testid,
+                                     partition, cnt);
 
                         if (is_tombstone) {
-                                valp = NULL;
+                                valp    = NULL;
                                 valsize = 0;
                         } else {
-                                valp = rdk_msgid;
+                                valp    = rdk_msgid;
                                 valsize = strlen(valp);
                         }
 
@@ -247,32 +255,29 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                                           "Add to correct msgvec: "
                                           "msgid: %d: %s is_last=%d, "
                                           "is_tomb=%d\n",
-                                          cnt, (const char *)key,
-                                          is_last, is_tombstone);
-                                test_msgver_add_msg00(__FUNCTION__, __LINE__,
-                                                      rd_kafka_name(rk),
-                                                      &mv_correct, testid,
-                                                      topic, partition,
-                                                      offset, -1, -1, 0, cnt);
+                                          cnt, (const char *)key, is_last,
+                                          is_tombstone);
+                                test_msgver_add_msg00(
+                                    __FUNCTION__, __LINE__, rd_kafka_name(rk),
+                                    &mv_correct, testid, topic, partition,
+                                    offset, -1, -1, 0, cnt);
                         }
 
 
                         msgcounter++;
                         err = rd_kafka_producev(
-                                rk,
-                                RD_KAFKA_V_TOPIC(topic),
-                                RD_KAFKA_V_PARTITION(0),
-                                RD_KAFKA_V_KEY(key, keysize),
-                                RD_KAFKA_V_VALUE(valp, valsize),
-                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_HEADER("rdk_msgid", rdk_msgid, -1),
-                                /* msgcounter as msg_opaque is used
-                                 * by test delivery report callback to
-                                 * count number of messages. */
-                                RD_KAFKA_V_OPAQUE(&msgcounter),
-                                RD_KAFKA_V_END);
-                        TEST_ASSERT(!err, "producev(#%d) failed: %s",
-                                    cnt, rd_kafka_err2str(err));
+                            rk, RD_KAFKA_V_TOPIC(topic),
+                            RD_KAFKA_V_PARTITION(0),
+                            RD_KAFKA_V_KEY(key, keysize),
+                            RD_KAFKA_V_VALUE(valp, valsize),
+                            RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                            RD_KAFKA_V_HEADER("rdk_msgid", rdk_msgid, -1),
+                            /* msgcounter as msg_opaque is used
+                             * by test delivery report callback to
+                             * count number of messages. */
+                            RD_KAFKA_V_OPAQUE(&msgcounter), RD_KAFKA_V_END);
+                        TEST_ASSERT(!err, "producev(#%d) failed: %s", cnt,
+                                    rd_kafka_err2str(err));
 
                         cnt++;
                 }
@@ -296,7 +301,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
          * is not updated on compaction if the first segment is not deleted.
          * But it serves as a pause to let compaction kick in
          * which is triggered by the dummy produce above. */
-        wait_compaction(rk, topic, partition, 0, 20*1000);
+        wait_compaction(rk, topic, partition, 0, 20 * 1000);
 
         TEST_SAY(_C_YEL "Verify messages after compaction\n");
         /* After compaction we expect the following messages:
@@ -305,7 +310,8 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
         mv.msgid_hdr = "rdk_msgid";
         test_consume_msgs_easy_mv(NULL, topic, -1, testid, 1, -1, NULL, &mv);
         test_msgver_verify_compare("post-compaction", &mv, &mv_correct,
-                                   TEST_MSGVER_BY_MSGID|TEST_MSGVER_BY_OFFSET);
+                                   TEST_MSGVER_BY_MSGID |
+                                       TEST_MSGVER_BY_OFFSET);
         test_msgver_clear(&mv);
 
         test_msgver_clear(&mv_correct);
@@ -317,16 +323,22 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                  compression ? compression : "no");
 }
 
-int main_0077_compaction (int argc, char **argv) {
+int main_0077_compaction(int argc, char **argv) {
 
         if (!test_can_create_topics(1))
                 return 0;
 
+        if (test_needs_auth()) {
+                TEST_SKIP("Test cluster requires authentication/SSL\n");
+                return 0;
+        }
+
         do_test_compaction(10, NULL);
 
         if (test_quick) {
-                TEST_SAY("Skipping further compaction tests "
-                         "due to quick mode\n");
+                TEST_SAY(
+                    "Skipping further compaction tests "
+                    "due to quick mode\n");
                 return 0;
         }
 

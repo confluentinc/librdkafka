@@ -30,6 +30,8 @@ function manual_checks {
         # Add brew's OpenSSL pkg-config path on OSX
         # to avoid picking up the outdated system-provided openssl/libcrypto.
         mkl_env_append PKG_CONFIG_PATH "/usr/local/opt/openssl/lib/pkgconfig" ":"
+	# and similar path for M1 brew location
+        mkl_env_append PKG_CONFIG_PATH "/opt/homebrew/opt/openssl/lib/pkgconfig" ":"
     fi
 
     # OpenSSL provides both libcrypto and libssl
@@ -68,6 +70,16 @@ function manual_checks {
 #if OPENSSL_VERSION_NUMBER < 0x1000100fL
 #error \"Requires OpenSSL version >= v1.0.1\"
 #endif"
+
+    # Silence OpenSSL 3.0.0 deprecation warnings since they'll make
+    # -Werror fail.
+    if ! mkl_compile_check --sub "libcrypto" "" "" CC "-lcrypto" "
+#include <openssl/ssl.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#error \"OpenSSL version >= v3.0.0 needs OPENSSL_SUPPRESS_DEPRECATED\"
+#endif"; then
+            mkl_define_set "libcrypto" OPENSSL_SUPPRESS_DEPRECATED
+    fi
 }
 
 
@@ -79,13 +91,25 @@ function manual_checks {
 function libcrypto_install_source {
     local name=$1
     local destdir=$2
-    local ver=1.1.1l
-    local checksum="0b7a3e5e59c34827fe0c3a74b7ec8baef302b98fa80088d7f9153aa16fa76bd1"
+    local ver=3.0.8
+    local checksum="6c13d2bf38fdf31eac3ce2a347073673f5d63263398f1f69d0df4a41253e4b3e"
     local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
 
-    local conf_args="--prefix=/usr --openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
+    local conf_args="--prefix=/usr --openssldir=/usr/lib/ssl no-shared no-zlib"
+
     if [[ $ver == 1.0.* ]]; then
         conf_args="${conf_args} no-krb5"
+    fi
+
+    if [[ $ver != 3.* ]]; then
+        # OpenSSL 3 deprecates ENGINE support, but we still need it, so only
+        # add no-deprecated to non-3.x builds.
+        conf_args="${conf_args} no-deprecated"
+    fi
+
+    # 1.1.1q tests fail to build on OSX/M1, so disable them.
+    if [[ $MKL_DISTRO == osx && $ver == 1.1.1q ]]; then
+        conf_args="${conf_args} no-tests"
     fi
 
     echo "### Installing $name $ver from source ($url) to $destdir"

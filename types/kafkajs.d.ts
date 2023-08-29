@@ -417,6 +417,7 @@ export type Consumer = {
   describeGroup(): Promise<GroupDescription>
   pause(topics: Array<{ topic: string; partitions?: number[] }>): void
   paused(): TopicPartitions[]
+  assignment(): TopicPartitions[]
   resume(topics: Array<{ topic: string; partitions?: number[] }>): void
   on(
     eventName: ConsumerEvents['HEARTBEAT'],

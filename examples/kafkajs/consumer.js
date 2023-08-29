@@ -3,6 +3,8 @@ const { Kafka } = require('../..').KafkaJS
 
 async function consumerStart() {
     let consumer;
+    var stopped = false;
+
     const kafka = new Kafka({
         brokers: ['<fill>'],
         ssl: true,
@@ -12,23 +14,27 @@ async function consumerStart() {
             username: '<fill>',
             password: '<fill>',
         },
-        rebalanceListener: {
-          onPartitionsAssigned: async (assignment) => {
-            console.log(`Assigned partitions ${JSON.stringify(assignment)}`);
-          },
-          onPartitionsRevoked: async (assignment) => {
-            console.log(`Revoked partitions ${JSON.stringify(assignment)}`);
+    });
+
+    consumer = kafka.consumer({
+      groupId: 'test-group',
+      rebalanceListener: {
+        onPartitionsAssigned: async (assignment) => {
+          console.log(`Assigned partitions ${JSON.stringify(assignment)}`);
+        },
+        onPartitionsRevoked: async (assignment) => {
+          console.log(`Revoked partitions ${JSON.stringify(assignment)}`);
+          if (!stopped) {
             await consumer.commitOffsets().catch((e) => {
               console.error(`Failed to commit ${e}`);
             })
           }
-        },
-        rdKafka: {
-          'enable.auto.commit': false
         }
+      },
+      rdKafka: {
+        'enable.auto.commit': false
+      }
     });
-
-    consumer = kafka.consumer({ groupId: 'test-group' });
 
     await consumer.connect();
     console.log("Connected successfully");
@@ -39,6 +45,7 @@ async function consumerStart() {
       ]
     })
 
+    // Batch consumer, commit and seek example
     var batch = 0;
     consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
@@ -62,12 +69,48 @@ async function consumerStart() {
       },
     });
 
+    // Pause/Resume example
+    const pauseResumeLoop = async () => {
+      let paused = false;
+      let ticks = 0;
+      while (!stopped) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (stopped)
+          break;
+
+        ticks++;
+        if (ticks == 200) {
+          ticks = 0;
+          const assignment = consumer.assignment();
+          if (paused) {
+            console.log(`Resuming partitions ${JSON.stringify(assignment)}`)
+            consumer.resume(assignment);
+          } else {
+            console.log(`Pausing partitions ${JSON.stringify(assignment)}`);
+            consumer.pause(assignment);
+          }
+          paused = !paused;
+        }
+      }
+    }
+
+    if (consumer.assignment) {
+      // KafkaJS doesn't have assignment()
+      pauseResumeLoop()
+    }
+
+    // Disconnect example
     const disconnect = () => {
       process.off('SIGINT', disconnect);
       process.off('SIGTERM', disconnect);
-      consumer.disconnect().finally(() => {
-        console.log("Disconnected successfully");
-      });
+      stopped = true;
+      consumer.commitOffsets()
+      .finally(() =>
+        consumer.disconnect()
+      )
+      .finally(() =>
+        console.log("Disconnected successfully")
+      );
     }
     process.on('SIGINT', disconnect);
     process.on('SIGTERM', disconnect);

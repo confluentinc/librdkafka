@@ -115,10 +115,10 @@
 #define RD_KAFKAP_AllocateProducerIds          67
 
 /* Using dummy numbers for now. */
-#define RD_KAFKAP_GetTelemetrySubscriptions 68
-#define RD_KAFKAP_PushTelemetry             69
+#define RD_KAFKAP_GetTelemetrySubscriptions 69
+#define RD_KAFKAP_PushTelemetry             70
 
-#define RD_KAFKAP__NUM 70
+#define RD_KAFKAP__NUM 71
 
 
 #endif /* _RDKAFKA_PROTOCOL_H_ */

@@ -5238,7 +5238,7 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
                               rd_kafka_uuid_t *client_instance_id,
                               int32_t subscription_id,
                               rd_bool_t terminating,
-                              const char *compression_type,
+                              const rd_kafka_compression_t compression_type,
                               const void *metrics,
                               size_t metrics_size,
                               char *errstr,
@@ -5259,7 +5259,7 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         }
 
         size_t len = sizeof(rd_kafka_uuid_t) + sizeof(int32_t) +
-                     sizeof(rd_bool_t) + strlen(compression_type) +
+                     sizeof(rd_bool_t) + sizeof(compression_type) +
                      metrics_size;
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_PushTelemetry,
                                                  1, len, rd_true);
@@ -5267,8 +5267,7 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
         rd_kafka_buf_write_i32(rkbuf, subscription_id);
         rd_kafka_buf_write_bool(rkbuf, terminating);
-        rd_kafka_buf_write_str(rkbuf, compression_type,
-                               strlen(compression_type));
+        rd_kafka_buf_write_i8(rkbuf, compression_type);
 
         rd_kafkap_bytes_t *metric_bytes =
             rd_kafkap_bytes_new(metrics, metrics_size);

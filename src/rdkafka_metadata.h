@@ -57,6 +57,7 @@ typedef struct rd_kafka_metadata_topic_internal_s {
         rd_kafka_uuid_t topic_id;
         int32_t topic_authorized_operations; /**< ACL operations allowed
                                                      for topic */
+        rd_bool_t is_internal;               /**< Is topic internal to Kafka? */
 } rd_kafka_metadata_topic_internal_t;
 
 

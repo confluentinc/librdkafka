@@ -3146,6 +3146,29 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 }                                                              \
         } while (0)
 
+static void
+xtest_match_authorized_operations(const rd_kafka_AclOperation_t *expected,
+                                  size_t expected_cnt,
+                                  const rd_kafka_AclOperation_t *actual,
+                                  size_t actual_cnt) {
+        size_t i, j;
+        TEST_ASSERT(expected_cnt == actual_cnt,
+                    "Expected %" PRIusz " authorized operations, got %" PRIusz,
+                    expected_cnt, actual_cnt);
+
+        for (i = 0; i < expected_cnt; i++) {
+                for (j = 0; j < actual_cnt; j++)
+                        if (expected[i] == actual[j])
+                                break;
+
+                if (j == actual_cnt)
+                        TEST_FAIL(
+                            "Did not find expected authorized operation in "
+                            "result %s\n",
+                            rd_kafka_AclOperation_name(expected[i]));
+        }
+}
+
 /**
  * @brief Test DescribeTopics: create a topic, describe it, and then
  * delete it.
@@ -3161,7 +3184,8 @@ static void do_test_DescribeTopics(const char *what,
                                    rd_bool_t include_authorized_operations) {
         rd_kafka_queue_t *q;
 #define TEST_DESCRIBE_TOPICS_CNT 3
-        char *topics[TEST_DESCRIBE_TOPICS_CNT];
+        char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
+        rd_kafka_TopicCollection_t *topics;
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
         const rd_kafka_error_t *error;
@@ -3169,6 +3193,8 @@ static void do_test_DescribeTopics(const char *what,
         test_timing_t timing;
         const rd_kafka_DescribeTopics_result_t *res;
         const rd_kafka_TopicDescription_t **result_topics;
+        const rd_kafka_TopicPartitionInfo_t **partitions;
+        size_t partitions_cnt;
         size_t result_topics_cnt;
         char errstr[128];
         const char *errstr2;
@@ -3177,7 +3203,8 @@ static void do_test_DescribeTopics(const char *what,
         const char *principal;
         rd_kafka_AclBinding_t *acl_bindings[1];
         int i;
-        int authorized_operations_cnt;
+        const rd_kafka_AclOperation_t *authorized_operations;
+        size_t authorized_operations_cnt;
 
         SUB_TEST_QUICK(
             "%s DescribeTopics with %s, request_timeout %d, "
@@ -3189,10 +3216,14 @@ static void do_test_DescribeTopics(const char *what,
 
         /* Only create one topic, the others will be non-existent. */
         for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
-                rd_strdupa(&topics[i], test_mk_topic_name(__FUNCTION__, 1));
+                rd_strdupa(&topic_names[i],
+                           test_mk_topic_name(__FUNCTION__, 1));
         }
-        test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
-        test_wait_topic_exists(rk, topics[0], 10000);
+        topics = rd_kafka_TopicCollection_new_from_names(
+            (const char **)topic_names, TEST_DESCRIBE_TOPICS_CNT);
+
+        test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);
+        test_wait_topic_exists(rk, topic_names[0], 10000);
 
         /* Call DescribeTopics. */
         options =
@@ -3204,8 +3235,7 @@ static void do_test_DescribeTopics(const char *what,
                 options, include_authorized_operations));
 
         TIMING_START(&timing, "DescribeTopics");
-        rd_kafka_DescribeTopics(rk, (const char **)topics,
-                                TEST_DESCRIBE_TOPICS_CNT, options, q);
+        rd_kafka_DescribeTopics(rk, topics, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
         rd_kafka_AdminOptions_destroy(options);
 
@@ -3251,35 +3281,39 @@ static void do_test_DescribeTopics(const char *what,
         }
 
         /* Check fields inside the first (existent) topic. */
-        TEST_ASSERT(
-            strcmp(rd_kafka_TopicDescription_topic_name(result_topics[0]),
-                   topics[0]) == 0,
-            "Expected topic name %s, got %s", topics[0],
-            rd_kafka_TopicDescription_topic_name(result_topics[0]));
-        TEST_ASSERT(
-            rd_kafka_TopicDescription_topic_partition_count(result_topics[0]) ==
-                1,
-            "Expected %d partitions, got %d", 1,
-            rd_kafka_TopicDescription_topic_partition_count(result_topics[0]));
+        TEST_ASSERT(strcmp(rd_kafka_TopicDescription_name(result_topics[0]),
+                           topic_names[0]) == 0,
+                    "Expected topic name %s, got %s", topic_names[0],
+                    rd_kafka_TopicDescription_name(result_topics[0]));
+
+        partitions = rd_kafka_TopicDescription_partitions(result_topics[0],
+                                                          &partitions_cnt);
+
+        TEST_ASSERT(partitions_cnt == 1, "Expected %d partitions, got %" PRIusz,
+                    1, partitions_cnt);
+
+        TEST_ASSERT(rd_kafka_TopicPartitionInfo_partition(partitions[0]) == 0,
+                    "Expected partion id to be %d, got %d", 0,
+                    rd_kafka_TopicPartitionInfo_partition(partitions[0]));
 
         if (include_authorized_operations) {
-                authorized_operations_cnt =
-                    rd_kafka_TopicDescription_topic_authorized_operation_count(
-                        result_topics[0]);
-                TEST_ASSERT(authorized_operations_cnt == 8,
-                            "Expected 8 operations allowed before creating "
-                            "ACLs, got %d.",
-                            authorized_operations_cnt);
-                test_match_authorized_operations(
-                    authorized_operations_cnt, result_topics[0],
-                    rd_kafka_TopicDescription_authorized_operation, 8,
+                const rd_kafka_AclOperation_t expected[] = {
                     RD_KAFKA_ACL_OPERATION_ALTER,
                     RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS,
                     RD_KAFKA_ACL_OPERATION_CREATE,
                     RD_KAFKA_ACL_OPERATION_DELETE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_OPERATION_WRITE);
+                    RD_KAFKA_ACL_OPERATION_READ,
+                    RD_KAFKA_ACL_OPERATION_WRITE};
+
+                authorized_operations =
+                    rd_kafka_TopicDescription_authorized_operations(
+                        result_topics[0], &authorized_operations_cnt);
+
+                xtest_match_authorized_operations(expected, 8,
+                                                  authorized_operations,
+                                                  authorized_operations_cnt);
         }
         rd_kafka_event_destroy(rkev);
 
@@ -3303,7 +3337,7 @@ static void do_test_DescribeTopics(const char *what,
         /* Change authorized operations for the principal which we're
          * using to connect to the broker. */
         acl_bindings[0] = rd_kafka_AclBinding_new(
-            RD_KAFKA_RESOURCE_TOPIC, topics[0],
+            RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
             RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
@@ -3321,8 +3355,7 @@ static void do_test_DescribeTopics(const char *what,
                                                                     1));
 
         TIMING_START(&timing, "DescribeTopics");
-        rd_kafka_DescribeTopics(rk, (const char **)topics,
-                                TEST_DESCRIBE_TOPICS_CNT, options, q);
+        rd_kafka_DescribeTopics(rk, topics, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
         rd_kafka_AdminOptions_destroy(options);
 
@@ -3356,17 +3389,18 @@ static void do_test_DescribeTopics(const char *what,
                     rd_kafka_error_string(error));
 
         /* Check if ACLs changed. */
-        authorized_operations_cnt =
-            rd_kafka_TopicDescription_topic_authorized_operation_count(
-                result_topics[0]);
-        TEST_ASSERT(authorized_operations_cnt == 2,
-                    "Expected 2 operations allowed after creating "
-                    "ACLs, got %d.",
-                    authorized_operations_cnt);
-        test_match_authorized_operations(
-            authorized_operations_cnt, result_topics[0],
-            rd_kafka_TopicDescription_authorized_operation, 2,
-            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_OPERATION_DESCRIBE);
+        {
+                const rd_kafka_AclOperation_t expected[] = {
+                    RD_KAFKA_ACL_OPERATION_READ,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE};
+                authorized_operations =
+                    rd_kafka_TopicDescription_authorized_operations(
+                        result_topics[0], &authorized_operations_cnt);
+
+                xtest_match_authorized_operations(expected, 2,
+                                                  authorized_operations,
+                                                  authorized_operations_cnt);
+        }
         rd_kafka_event_destroy(rkev);
 
         /*
@@ -3375,7 +3409,7 @@ static void do_test_DescribeTopics(const char *what,
          * and describe.
          */
         acl_bindings[0] = rd_kafka_AclBinding_new(
-            RD_KAFKA_RESOURCE_TOPIC, topics[0],
+            RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
             RD_KAFKA_ACL_OPERATION_DELETE, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
@@ -3384,9 +3418,11 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
 done:
-        test_DeleteTopics_simple(rk, NULL, topics, 1, NULL);
+        test_DeleteTopics_simple(rk, NULL, topic_names, 1, NULL);
         if (!rkqu)
                 rd_kafka_queue_destroy(q);
+
+        rd_kafka_TopicCollection_destroy(topics);
 
 
         TEST_LATER_CHECK();

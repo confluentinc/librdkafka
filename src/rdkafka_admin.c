@@ -7860,6 +7860,97 @@ rd_kafka_DescribeConsumerGroups_result_groups(
  *
  */
 
+rd_kafka_TopicCollection_t *
+rd_kafka_TopicCollection_new_from_names(const char **topics,
+                                        size_t topics_cnt) {
+        size_t i;
+        rd_kafka_TopicCollection_t *ret =
+            rd_calloc(1, sizeof(rd_kafka_TopicCollection_t));
+
+        ret->topics_cnt = topics_cnt;
+        if (!ret->topics_cnt)
+                return ret;
+
+        ret->topics = rd_calloc(sizeof(char *), topics_cnt);
+        for (i = 0; i < topics_cnt; i++)
+                ret->topics[i] = rd_strdup(topics[i]);
+
+        return ret;
+}
+
+void rd_kafka_TopicCollection_destroy(rd_kafka_TopicCollection_t *topics) {
+        size_t i;
+
+        for (i = 0; i < topics->topics_cnt; i++)
+                rd_free(topics->topics[i]);
+
+        RD_IF_FREE(topics->topics, rd_free);
+        rd_free(topics);
+}
+
+/**
+ * @brief Create a new TopicPartitionInfo object.
+ *
+ * @return A newly allocated TopicPartitionInfo. Use
+ * rd_kafka_TopicPartitionInfo_destroy() to free when done.
+ */
+static rd_kafka_TopicPartitionInfo_t *rd_kafka_TopicPartitionInfo_new(
+    const struct rd_kafka_metadata_partition *partition,
+    const struct rd_kafka_metadata_broker *brokers,
+    const rd_kafka_metadata_broker_internal_t *brokers_internal,
+    int broker_cnt) {
+        size_t i;
+        rd_kafka_TopicPartitionInfo_t *pinfo =
+            rd_calloc(1, sizeof(rd_kafka_TopicPartitionInfo_t));
+
+        pinfo->partition   = partition->id;
+        pinfo->isr_cnt     = partition->isr_cnt;
+        pinfo->replica_cnt = partition->replica_cnt;
+
+        if (partition->leader >= 0) {
+                pinfo->leader = rd_kafka_Node_new_from_brokers(
+                    partition->leader, brokers, brokers_internal, broker_cnt);
+        }
+
+        if (pinfo->isr_cnt > 0) {
+                pinfo->isr =
+                    rd_calloc(pinfo->isr_cnt, sizeof(rd_kafka_Node_t *));
+                for (i = 0; i < pinfo->isr_cnt; i++)
+                        pinfo->isr[i] = rd_kafka_Node_new_from_brokers(
+                            partition->isrs[i], brokers, brokers_internal,
+                            broker_cnt);
+        }
+
+        if (pinfo->replica_cnt > 0) {
+                pinfo->replicas =
+                    rd_calloc(sizeof(rd_kafka_Node_t *), pinfo->replica_cnt);
+                for (i = 0; i < pinfo->replica_cnt; i++)
+                        pinfo->replicas[i] = rd_kafka_Node_new_from_brokers(
+                            partition->replicas[i], brokers, brokers_internal,
+                            broker_cnt);
+        }
+
+        return pinfo;
+}
+
+/**
+ * @brief Destroy and deallocate a TopicPartitionInfo.
+ */
+static void
+rd_kafka_TopicPartitionInfo_destroy(rd_kafka_TopicPartitionInfo_t *pinfo) {
+        int i;
+        RD_IF_FREE(pinfo->leader, rd_kafka_Node_destroy);
+
+        for (i = 0; i < pinfo->isr_cnt; i++)
+                rd_kafka_Node_destroy(pinfo->isr[i]);
+        RD_IF_FREE(pinfo->isr, rd_free);
+
+        for (i = 0; i < pinfo->replica_cnt; i++)
+                rd_kafka_Node_destroy(pinfo->replicas[i]);
+        RD_IF_FREE(pinfo->replicas, rd_free);
+
+        rd_free(pinfo);
+}
 
 /**
  * @brief Create a new TopicDescription object.
@@ -7872,36 +7963,45 @@ rd_kafka_DescribeConsumerGroups_result_groups(
  * @return A newly allocated TopicDescription object.
  *         Use rd_kafka_TopicDescription_destroy() to free when done.
  */
-static rd_kafka_TopicDescription_t *
-rd_kafka_TopicDescription_new(const char *topic,
-                              struct rd_kafka_metadata_partition *partitions,
-                              int partition_cnt,
-                              const rd_list_t *topic_authorized_operations,
-                              rd_kafka_error_t *error) {
+static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
+    const char *topic,
+    const struct rd_kafka_metadata_partition *partitions,
+    int partition_cnt,
+    const struct rd_kafka_metadata_broker *brokers,
+    const rd_kafka_metadata_broker_internal_t *brokers_internal,
+    int broker_cnt,
+    const rd_list_t *topic_authorized_operations,
+    rd_bool_t is_internal,
+    rd_kafka_error_t *error) {
         rd_kafka_TopicDescription_t *topicdesc;
         int i;
         topicdesc                = rd_calloc(1, sizeof(*topicdesc));
         topicdesc->topic         = rd_strdup(topic);
         topicdesc->partition_cnt = partition_cnt;
+        topicdesc->is_internal   = is_internal;
         if (error)
                 topicdesc->error = rd_kafka_error_copy(error);
 
-        if (topic_authorized_operations == NULL)
-                rd_list_init(&topicdesc->authorized_operations, 0, rd_free);
-        else {
-                rd_list_init_copy(&topicdesc->authorized_operations,
-                                  topic_authorized_operations);
-                rd_list_copy_to(&topicdesc->authorized_operations,
-                                topic_authorized_operations,
-                                rd_kafka_AclOperation_copy, NULL);
+        if (topic_authorized_operations) {
+                rd_kafka_AclOperation_t *acl_operation;
+                topicdesc->authorized_operations_cnt =
+                    rd_list_cnt(topic_authorized_operations);
+                topicdesc->authorized_operations =
+                    rd_malloc(sizeof(rd_kafka_AclOperation_t) *
+                              topicdesc->authorized_operations_cnt);
+                RD_LIST_FOREACH(acl_operation, topic_authorized_operations, i) {
+                        topicdesc->authorized_operations[i] = *acl_operation;
+                }
         }
 
         if (partitions) {
                 topicdesc->partitions =
                     rd_calloc(sizeof(*partitions), partition_cnt);
                 for (i = 0; i < partition_cnt; i++)
-                        rd_kafka_copy_metadata_partition(
-                            &partitions[i], &topicdesc->partitions[i]);
+                        topicdesc->partitions[i] =
+                            rd_kafka_TopicPartitionInfo_new(
+                                &partitions[i], brokers, brokers_internal,
+                                broker_cnt);
         }
         return topicdesc;
 }
@@ -7917,7 +8017,8 @@ rd_kafka_TopicDescription_new(const char *topic,
 static rd_kafka_TopicDescription_t *
 rd_kafka_TopicDescription_new_error(const char *topic,
                                     rd_kafka_error_t *error) {
-        return rd_kafka_TopicDescription_new(topic, NULL, 0, NULL, error);
+        return rd_kafka_TopicDescription_new(topic, NULL, 0, NULL, NULL, 0,
+                                             NULL, rd_false, error);
 }
 
 static void
@@ -7926,12 +8027,11 @@ rd_kafka_TopicDescription_destroy(rd_kafka_TopicDescription_t *topicdesc) {
 
         RD_IF_FREE(topicdesc->topic, rd_free);
         RD_IF_FREE(topicdesc->error, rd_kafka_error_destroy);
+        RD_IF_FREE(topicdesc->authorized_operations, rd_free);
 
         for (i = 0; i < topicdesc->partition_cnt; i++)
-                rd_kafka_metadata_partition_clear(&topicdesc->partitions[i]);
+                rd_kafka_TopicPartitionInfo_destroy(topicdesc->partitions[i]);
 
-        RD_IF_FREE(topicdesc->partitions, rd_free);
-        rd_list_destroy(&topicdesc->authorized_operations);
         rd_free(topicdesc);
 }
 
@@ -7939,71 +8039,54 @@ static void rd_kafka_TopicDescription_free(void *ptr) {
         rd_kafka_TopicDescription_destroy(ptr);
 }
 
-const rd_kafka_AclOperation_t rd_kafka_TopicDescription_authorized_operation(
+const int rd_kafka_TopicPartitionInfo_partition(
+    const rd_kafka_TopicPartitionInfo_t *partition) {
+        return partition->partition;
+}
+
+const rd_kafka_Node_t *rd_kafka_TopicPartitionInfo_leader(
+    const rd_kafka_TopicPartitionInfo_t *partition) {
+        return partition->leader;
+}
+
+
+const rd_kafka_Node_t **
+rd_kafka_TopicPartitionInfo_isr(const rd_kafka_TopicPartitionInfo_t *partition,
+                                size_t *cntp) {
+        *cntp = partition->isr_cnt;
+        return partition->isr;
+}
+
+const rd_kafka_Node_t **rd_kafka_TopicPartitionInfo_replicas(
+    const rd_kafka_TopicPartitionInfo_t *partition,
+    size_t *cntp) {
+        *cntp = partition->replica_cnt;
+        return partition->replicas;
+}
+
+const rd_kafka_TopicPartitionInfo_t **rd_kafka_TopicDescription_partitions(
     const rd_kafka_TopicDescription_t *topicdesc,
-    size_t idx) {
-        rd_kafka_AclOperation_t *entry =
-            rd_list_elem(&topicdesc->authorized_operations, idx);
-        return *entry;
+    size_t *cntp) {
+        *cntp = topicdesc->partition_cnt;
+        return topicdesc->partitions;
 }
 
-const int rd_kafka_TopicDescription_topic_authorized_operation_count(
-    const rd_kafka_TopicDescription_t *topicdesc) {
-        return rd_list_cnt(&topicdesc->authorized_operations);
-}
-
-const int rd_kafka_TopicDescription_partition_id(
+const rd_kafka_AclOperation_t *rd_kafka_TopicDescription_authorized_operations(
     const rd_kafka_TopicDescription_t *topicdesc,
-    int idx) {
-        return topicdesc->partitions[idx].id;
+    size_t *cntp) {
+        *cntp = topicdesc->authorized_operations_cnt;
+        return topicdesc->authorized_operations;
 }
 
-const int rd_kafka_TopicDescription_partition_leader(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    int idx) {
-        return topicdesc->partitions[idx].leader;
-}
 
-const int rd_kafka_TopicDescription_partition_isr_count(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    int idx) {
-        return topicdesc->partitions[idx].isr_cnt;
-}
-
-const int rd_kafka_TopicDescription_partition_replica_count(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    int idx) {
-        return topicdesc->partitions[idx].replica_cnt;
-}
-
-const int rd_kafka_TopicDescription_partition_isr(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    int partition_idx,
-    int isr_idx) {
-        return topicdesc->partitions[partition_idx].isrs[isr_idx];
-}
-
-const int rd_kafka_TopicDescription_partition_replica(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    int partition_idx,
-    int replica_idx) {
-        return topicdesc->partitions[partition_idx].replicas[replica_idx];
-}
-
-const rd_kafka_resp_err_t rd_kafka_TopicDescription_partition_error(
-    const rd_kafka_TopicDescription_t *topicdesc,
-    int idx) {
-        return topicdesc->partitions[idx].err;
-}
-
-const int rd_kafka_TopicDescription_topic_partition_count(
-    const rd_kafka_TopicDescription_t *topicdesc) {
-        return topicdesc->partition_cnt;
-}
-
-const char *rd_kafka_TopicDescription_topic_name(
-    const rd_kafka_TopicDescription_t *topicdesc) {
+const char *
+rd_kafka_TopicDescription_name(const rd_kafka_TopicDescription_t *topicdesc) {
         return topicdesc->topic;
+}
+
+int rd_kafka_TopicDescription_is_internal(
+    const rd_kafka_TopicDescription_t *topicdesc) {
+        return topicdesc->is_internal;
 }
 
 const rd_kafka_error_t *
@@ -8105,8 +8188,9 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                                 mdi->topics[i].topic_authorized_operations);
                         topicdesc = rd_kafka_TopicDescription_new(
                             md->topics[i].topic, md->topics[i].partitions,
-                            md->topics[i].partition_cnt, authorized_operations,
-                            NULL);
+                            md->topics[i].partition_cnt, md->brokers,
+                            mdi->brokers, md->broker_cnt, authorized_operations,
+                            mdi->topics[i].is_internal, NULL);
                         if (authorized_operations)
                                 rd_list_destroy(authorized_operations);
                 } else {
@@ -8132,8 +8216,7 @@ err:
 }
 
 void rd_kafka_DescribeTopics(rd_kafka_t *rk,
-                             const char **topics,
-                             size_t topics_cnt,
+                             const rd_kafka_TopicCollection_t *topics,
                              const rd_kafka_AdminOptions_t *options,
                              rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
@@ -8151,7 +8234,7 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
             rk, RD_KAFKA_OP_DESCRIBETOPICS,
             RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT, &cbs, options, rkqu->rkqu_q);
 
-        if (topics_cnt == 0) {
+        if (topics->topics_cnt == 0) {
                 rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                                            "No topics to describe");
                 rd_kafka_admin_common_worker_destroy(rk, rko,
@@ -8159,10 +8242,11 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
                 return;
         }
 
-        rd_list_init(&rko->rko_u.admin_request.args, (int)topics_cnt, rd_free);
-        for (i = 0; i < topics_cnt; i++)
+        rd_list_init(&rko->rko_u.admin_request.args, (int)topics->topics_cnt,
+                     rd_free);
+        for (i = 0; i < topics->topics_cnt; i++)
                 rd_list_add(&rko->rko_u.admin_request.args,
-                            rd_strdup(topics[i]));
+                            rd_strdup(topics->topics[i]));
 
         /* Check for duplicates.
          * Make a temporary copy of the topic list and sort it to check for

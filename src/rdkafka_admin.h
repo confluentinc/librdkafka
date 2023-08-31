@@ -494,17 +494,42 @@ struct rd_kafka_ConsumerGroupDescription_s {
  * @name DescribeTopics
  * @{
  */
+
+/**
+ * @brief TopicCollection contains a list of topics.
+ *
+ */
+struct rd_kafka_TopicCollection_s {
+        char **topics;     /**< List of topic names. */
+        size_t topics_cnt; /**< Count of topic names. */
+};
+
+/**
+ * @brief TopicPartition result type in DescribeTopics result.
+ *
+ */
+struct rd_kafka_TopicPartitionInfo_s {
+        int partition;              /**< Partition id. */
+        rd_kafka_Node_t *leader;    /**< Leader of the partition. */
+        size_t isr_cnt;             /**< Count of insync replicas. */
+        rd_kafka_Node_t **isr;      /**< List of in sync replica nodes. */
+        size_t replica_cnt;         /**< Count of partition replicas. */
+        rd_kafka_Node_t **replicas; /**< List of replica nodes. */
+};
+
 /**
  * @struct DescribeTopics result
  */
 struct rd_kafka_TopicDescription_s {
-        char *topic;       /**< Topic name */
-        int partition_cnt; /**< Number of partitions in \p partitions*/
-        struct rd_kafka_metadata_partition *partitions; /**< Partitions */
-        rd_kafka_error_t *error; /**< Topic error reported by broker */
-        rd_list_t
-            authorized_operations; /**< Operations allowed for topic.
-                                       Type: (rd_kafka_AclOperation_t *) */
+        char *topic;           /**< Topic name */
+        int partition_cnt;     /**< Number of partitions in \p partitions*/
+        rd_bool_t is_internal; /**< Is the topic is internal to Kafka? */
+        rd_kafka_TopicPartitionInfo_t **partitions; /**< Partitions */
+        rd_kafka_error_t *error;          /**< Topic error reported by broker */
+        size_t authorized_operations_cnt; /**< Count of operations allowed for
+                                             topic.*/
+        rd_kafka_AclOperation_t
+            *authorized_operations; /**< Operations allowed for topic. */
 };
 
 /**@}*/

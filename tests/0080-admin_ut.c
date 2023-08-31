@@ -774,6 +774,7 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_queue_t *q;
 #define TEST_DESCRIBE_TOPICS_CNT 4
         const char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
+        rd_kafka_TopicCollection_t *topics;
         rd_kafka_AdminOptions_t *options = NULL;
         int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
         int i;
@@ -796,6 +797,9 @@ static void do_test_DescribeTopics(const char *what,
         for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
                 topic_names[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         }
+
+        topics = rd_kafka_TopicCollection_new_from_names(
+            topic_names, TEST_DESCRIBE_TOPICS_CNT);
 
         if (with_options) {
                 options = rd_kafka_AdminOptions_new(
@@ -825,8 +829,7 @@ static void do_test_DescribeTopics(const char *what,
 
         TIMING_START(&timing, "DescribeTopics");
         TEST_SAY("Call DescribeTopics, timeout is %dms\n", exp_timeout);
-        rd_kafka_DescribeTopics(rk, topic_names, TEST_DESCRIBE_TOPICS_CNT,
-                                options, q);
+        rd_kafka_DescribeTopics(rk, topics, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Poll result queue */
@@ -865,6 +868,7 @@ static void do_test_DescribeTopics(const char *what,
         for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
                 rd_free((char *)topic_names[i]);
         }
+        rd_kafka_TopicCollection_destroy(topics);
 
         if (options)
                 rd_kafka_AdminOptions_destroy(options);

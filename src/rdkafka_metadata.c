@@ -1533,10 +1533,10 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
                  * since the intervalled querier will do the job for us. */
                 if (rk->rk_conf.metadata_refresh_interval_ms > 0 &&
                     rtmr->rtmr_interval * 2 / 1000 >=
-                        rk->rk_conf.metadata_refresh_interval_ms)
+                        rk->rk_conf.retry_backoff_max_ms)
                         rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
                 else
-                        rd_kafka_timer_exp_backoff(rkts, rtmr);
+                        rd_kafka_timer_exp_backoff(rkts, rtmr, rk->rk_conf.retry_backoff_ms*1000,rk->rk_conf.retry_backoff_max_ms*1000,15);
         }
 
         rd_list_destroy(&topics);

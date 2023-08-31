@@ -30,6 +30,7 @@
 #define _RDINTERVAL_H_
 
 #include "rd.h"
+#include "rdrand.h"
 
 typedef struct rd_interval_s {
         rd_ts_t ri_ts_last; /* last interval timestamp */
@@ -107,6 +108,16 @@ static RD_INLINE RD_UNUSED void rd_interval_reset_to_now(rd_interval_t *ri,
 
         ri->ri_ts_last = now;
         ri->ri_backoff = 0;
+}
+
+/**
+ * Reset the interval to 'now' with the given maxjitterpercentage. If now is 0, the time will be gathered
+ * automatically.
+ */
+static RD_INLINE RD_UNUSED void rd_interval_reset_to_now_with_jitter(rd_interval_t *ri,
+                                                         rd_ts_t now, int maxjitterpercentage) {
+        rd_interval_reset_to_now(ri, now);
+        ri->ri_ts_last = (ri->ri_ts_last*rd_jitter(100-maxjitterpercentage, 100+maxjitterpercentage))/100;
 }
 
 /**

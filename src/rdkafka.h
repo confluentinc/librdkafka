@@ -8205,12 +8205,6 @@ rd_kafka_TopicDescription_error(const rd_kafka_TopicDescription_t *topicdesc);
  * @{
  */
 
-
-/**
- * @brief DescribeCluster result type.
- */
-typedef struct rd_kafka_ClusterDescription_s rd_kafka_ClusterDescription_t;
-
 /**
  * @brief Describes the cluster.
  *
@@ -8229,96 +8223,59 @@ void rd_kafka_DescribeCluster(rd_kafka_t *rk,
                               rd_kafka_queue_t *rkqu);
 
 /**
- * @brief Get the DescribeCluster result.
+ * @brief Gets the broker nodes for the \p result cluster.
  *
- * @param result Result to get cluster result from.
+ * @param result The result of DescribeCluster.
+ * @param cntp is updated with the count of broker nodes.
  *
+ * @return An array of broker nodes.
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p result object.
  */
 RD_EXPORT
-const rd_kafka_ClusterDescription_t *
-rd_kafka_DescribeCluster_result_description(
-    const rd_kafka_DescribeCluster_result_t *result);
-
-
-/**
- * @brief Gets the node count for the \p clusterdesc cluster.
- *
- * @param clusterdesc The cluster description.
- *
- * @return The node count.
- */
-RD_EXPORT
-const int rd_kafka_ClusterDescription_node_count(
-    const rd_kafka_ClusterDescription_t *clusterdesc);
+const rd_kafka_Node_t **rd_kafka_DescribeCluster_result_nodes(
+    const rd_kafka_DescribeTopics_result_t *result,
+    size_t *cntp);
 
 /**
- * @brief Gets the node for the \p clusterdesc cluster at \p idx position.
+ * @brief Gets the authorized ACL operations for the \p result cluster.
  *
- * @param clusterdesc The cluster description.
- * @param idx the index at which to return the node.
- *
- * @return The node at idx position.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p clusterdesc object.
- */
-RD_EXPORT
-const rd_kafka_Node_t *rd_kafka_ClusterDescription_node(
-    const rd_kafka_ClusterDescription_t *clusterdesc,
-    int idx);
-
-/**
- * @brief Gets the cluster authorized acl operations for the \p clusterdesc
- * cluster.
- *
- * @param clusterdesc The cluster description.
+ * @param result The result of DescribeCluster.
+ * @param cntp is updated with authorized ACL operations count.
  *
  * @return The cluster authorized operations.
- */
-RD_EXPORT
-const int rd_kafka_ClusterDescription_cluster_authorized_operation_count(
-    const rd_kafka_ClusterDescription_t *clusterdesc);
-
-/**
- * @brief Gets operation at index \p idx of cluster authorized operations for
- * the \p clusterdesc cluster.
- *
- * @param clusterdesc The cluster description.
- * @param idx The index for which element is needed.
- *
- * @return Authorized operation at given index.
- */
-RD_EXPORT
-const rd_kafka_AclOperation_t rd_kafka_ClusterDescription_authorized_operation(
-    const rd_kafka_ClusterDescription_t *clusterdesc,
-    size_t idx);
-
-/**
- * @brief Gets the cluster current controller id for the \p clusterdesc cluster.
- *
- * @param clusterdesc The cluster description.
- *
- * @return The cluster current controller id.
- */
-RD_EXPORT
-const int rd_kafka_ClusterDescription_controller_id(
-    const rd_kafka_ClusterDescription_t *clusterdesc);
-
-/**
- * @brief Gets the cluster current cluster id for the \p clusterdesc cluster.
- *
- * @param clusterdesc The cluster description.
- *
- * @return The cluster current cluster id (char*).
- *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p clusterdesc object.
+ *         as the lifetime of the \p result object.
  */
 RD_EXPORT
-const char *rd_kafka_ClusterDescription_cluster_id(
-    const rd_kafka_ClusterDescription_t *clusterdesc);
+const rd_kafka_AclOperation_t *
+rd_kafka_DescribeCluster_result_authorized_operations(
+    const rd_kafka_DescribeTopics_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Gets the current controller for the \p result cluster.
+ *
+ * @param result The result of DescribeCluster.
+ *
+ * @return The cluster current controller.
+ */
+RD_EXPORT
+const rd_kafka_Node_t* rd_kafka_DescribeCluster_result_controller(
+    const rd_kafka_DescribeTopics_result_t *result);
+
+/**
+ * @brief Gets the cluster id for the \p result cluster.
+ *
+ * @param result The result of DescribeCluster.
+ *
+ * @return The cluster id.
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const char *rd_kafka_DescribeCluster_result_cluster_id(
+    const rd_kafka_DescribeTopics_result_t *result);
 
 /**@}*/
 
@@ -8548,30 +8505,21 @@ const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
- * @brief Gets count of authorized operations for the \p grpdesc group.
+ * @brief Gets the authorized ACL operations for the \p grpdesc group.
  *
  * @param grpdesc The group description.
+ * @param cntp is updated with authorized ACL operations count.
  *
- * @return count of Authorized operations allowed, 0 if authorized operations
- * list is NULL or empty.
+ * @return The group authorized operations.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grpdesc object.
  */
 RD_EXPORT
-size_t rd_kafka_ConsumerGroupDescription_authorized_operation_count(
-    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
-
-/**
- * @brief Gets operation at index \p idx of authorized operations for the
- * \p grpdesc group.
- *
- * @param grpdesc The group description.
- * @param idx The index for which element is needed.
- *
- * @return Authorized operation at given index.
- */
-RD_EXPORT
-rd_kafka_AclOperation_t rd_kafka_ConsumerGroupDescription_authorized_operation(
+const rd_kafka_AclOperation_t *
+rd_kafka_ConsumerGroupDescription_authorized_operations(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc,
-    size_t idx);
+    size_t *cntp);
 
 /**
  * @brief Gets state for the \p grpdesc group.

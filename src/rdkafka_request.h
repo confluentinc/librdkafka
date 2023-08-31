@@ -272,6 +272,7 @@ rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,
                                rd_bool_t include_topic_authorized_operations,
                                rd_bool_t force_racks,
                                rd_kafka_resp_cb_t *resp_cb,
+                               rd_kafka_replyq_t replyq,
                                void *opaque);
 
 rd_kafka_resp_err_t

@@ -723,6 +723,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         /* The returned groups should be in the original order, and
          * should all have timed out. */
         for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                size_t authorized_operation_cnt;
                 TEST_ASSERT(
                     !strcmp(group_names[i],
                             rd_kafka_ConsumerGroupDescription_group_id(
@@ -737,11 +738,12 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     group_names[i],
                     rd_kafka_error_string(
                         rd_kafka_ConsumerGroupDescription_error(resgroups[i])));
-                TEST_ASSERT(
-                    rd_kafka_ConsumerGroupDescription_authorized_operation_count(
-                        resgroups[i]) == 0,
-                    "Got authorized operations"
-                    "when not requested");
+
+                rd_kafka_ConsumerGroupDescription_authorized_operations(
+                    resgroups[i], &authorized_operation_cnt);
+                TEST_ASSERT(authorized_operation_cnt == 0,
+                            "Got authorized operations"
+                            "when not requested");
         }
 
         rd_kafka_event_destroy(rkev);

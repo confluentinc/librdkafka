@@ -2203,6 +2203,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                           rd_bool_t force_racks,
                           rd_kafka_op_t *rko,
                           rd_kafka_resp_cb_t *resp_cb,
+                          rd_kafka_replyq_t replyq,
                           rd_bool_t force,
                           void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -2213,6 +2214,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         int *full_incr = NULL;
         void *handler_arg;
         rd_kafka_resp_cb_t *handler_cb = rd_kafka_handle_Metadata;
+        rd_kafka_replyq_t use_replyq   = replyq;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_Metadata, 0, 12, &features);
@@ -2377,12 +2379,15 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         else
                 handler_arg = rko;
 
+        /* If a custom replyq is provided (and is valid), the response is
+         * handled through on that replyq. By default, response is handled on
+         * rk_ops, and the default handler (rd_kafka_handle_Metadata) forwards
+         * the parsed result to rko's replyq when done. */
+        if (!use_replyq.q)
+                use_replyq = RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0);
+
         rd_kafka_broker_buf_enq_replyq(
-            rkb, rkbuf,
-            /* Handle response thru rk_ops,
-             * but forward parsed result to
-             * rko's replyq when done. */
-            RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
+            rkb, rkbuf, use_replyq,
             /* The default response handler is rd_kafka_handle_Metadata, but we
                allow alternate handlers to be configured. */
             handler_cb, handler_arg);
@@ -2433,6 +2438,9 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
             /* In all other situations apart from admin ops, we use
                rd_kafka_handle_Metadata rather than a custom resp_cb */
             NULL,
+            /* Use default replyq which works with the default handler
+               rd_kafka_handle_Metadata. */
+            RD_KAFKA_NO_REPLYQ,
             /* If the request needs to be forced, rko_u.metadata.force will be
                set. */
             rd_false, NULL);
@@ -2458,6 +2466,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
  * @param force_racks - Force partition to rack mapping computation in
  *                      parse_Metadata (see comment there).
  * @param resp_cb - callback to be used for handling response.
+ * @param replyq - replyq on which response is handled.
  * @param opaque - (optional) parameter to be passed to resp_cb.
  */
 rd_kafka_resp_err_t
@@ -2468,6 +2477,7 @@ rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,
                                rd_bool_t include_topic_authorized_operations,
                                rd_bool_t force_racks,
                                rd_kafka_resp_cb_t *resp_cb,
+                               rd_kafka_replyq_t replyq,
                                void *opaque) {
         return rd_kafka_MetadataRequest0(
             rkb, topics, reason,
@@ -2476,6 +2486,7 @@ rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,
             include_topic_authorized_operations,
             rd_false /* No admin operation should update cgrp. */, force_racks,
             NULL /* Admin options don't require us to track the op. */, resp_cb,
+            replyq,
             rd_true /* Admin operation metadata requests are always forced. */,
             opaque);
 }

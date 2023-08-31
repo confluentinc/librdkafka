@@ -141,34 +141,31 @@ int64_t parse_int(const char *what, const char *str) {
  */
 static int
 print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
-        int j, acl_operation;
-        const rd_kafka_ClusterDescription_t *desc;
-        int controller_id, node_cnt, cluster_authorized_operations_cnt;
-        const char *cluster_id;
-
-        desc = rd_kafka_DescribeCluster_result_description(clusterdesc);
-
-        controller_id = rd_kafka_ClusterDescription_controller_id(desc);
-        node_cnt      = rd_kafka_ClusterDescription_node_count(desc);
-        cluster_authorized_operations_cnt =
-            rd_kafka_ClusterDescription_cluster_authorized_operation_count(
-                desc);
-        cluster_id = rd_kafka_ClusterDescription_cluster_id(desc);
+        size_t j;
+        size_t node_cnt;
+        size_t authorized_operations_cnt;
+        const char *cluster_id =
+            rd_kafka_DescribeCluster_result_cluster_id(clusterdesc);
+        const rd_kafka_Node_t **nodes =
+            rd_kafka_DescribeCluster_result_nodes(clusterdesc, &node_cnt);
+        const rd_kafka_AclOperation_t *authorized_operations =
+            rd_kafka_DescribeCluster_result_authorized_operations(
+                clusterdesc, &authorized_operations_cnt);
+        const rd_kafka_Node_t *controller =
+            rd_kafka_DescribeCluster_result_controller(clusterdesc);
 
         printf(
-            "Cluster id: %s\t Controller id: %d\t ACL operations count "
+            "Cluster id: %s\t Controller id: %d\t authorized operations count "
             "allowed: %d\n",
-            cluster_id, controller_id, cluster_authorized_operations_cnt);
-        for (j = 0; j < cluster_authorized_operations_cnt; j++) {
-                acl_operation =
-                    rd_kafka_ClusterDescription_authorized_operation(desc, j);
+            cluster_id, controller ? rd_kafka_Node_id(controller) : -1, (int)authorized_operations_cnt);
+
+        for (j = 0; j < authorized_operations_cnt; j++) {
                 printf("\t%s operation is allowed\n",
-                       rd_kafka_AclOperation_name(acl_operation));
+                       rd_kafka_AclOperation_name(authorized_operations[j]));
         }
 
         for (j = 0; j < node_cnt; j++) {
-                const rd_kafka_Node_t *node = NULL;
-                node = rd_kafka_ClusterDescription_node(desc, j);
+                const rd_kafka_Node_t *node = nodes[j];
                 printf("Node [id: %" PRId32
                        ", host: %s"
                        ", port: %" PRIu16 "]\n",

@@ -2187,13 +2187,13 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_kafka_uuid_t ClientInstanceId;
         int32_t SubscriptionId;
         rd_bool_t terminating;
-        rd_kafkap_str_t compression_type;
+        rd_kafka_compression_t compression_type;
         rd_kafkap_bytes_t metrics;
 
         rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
         rd_kafka_buf_read_i32(rkbuf, &SubscriptionId);
         rd_kafka_buf_read_bool(rkbuf, &terminating);
-        rd_kafka_buf_read_str(rkbuf, &compression_type);
+        rd_kafka_buf_read_i8(rkbuf, &compression_type);
         rd_kafka_buf_read_kbytes(rkbuf, &metrics);
 
         rd_kafka_telemetry_decode_metrics((void *)metrics.data, metrics.len);

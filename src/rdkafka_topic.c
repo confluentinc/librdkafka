@@ -1260,6 +1260,12 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         rd_kafka_broker_t **partbrokers;
         int leader_cnt = 0;
         int old_state;
+        int32_t leader_change = 0;
+        int32_t updated_leader_epoch = 0;
+        int32_t no_leader_epoch = 0;
+        rd_bool_t topic_exists_with_no_leader_epoch;
+        rd_bool_t topic_exists_with_updated_leader_epoch;
+        rd_bool_t topic_exists_with_leader_change;
 
         if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR)
                 rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
@@ -1325,6 +1331,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                 int r;
                 rd_kafka_broker_t *leader;
                 int32_t leader_epoch = mdit->partitions[j].leader_epoch;
+                rd_kafka_toppar_t *rktp = rd_kafka_toppar_get(rkt, mdt->partitions[j].id, 0);
 
                 rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
                              "  Topic %s partition %i Leader %" PRId32
@@ -1334,6 +1341,14 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
 
                 leader         = partbrokers[j];
                 partbrokers[j] = NULL;
+
+                if(leader_epoch == -1)
+                        no_leader_epoch++;
+                else if (rktp->rktp_leader_epoch < leader_epoch)
+                        updated_leader_epoch++;
+                
+                if(rktp->rktp_leader_id != mdt->partitions[j].leader || rktp->rktp_leader != leader)
+                        leader_change++;
 
                 /* Update leader for partition */
                 r = rd_kafka_toppar_leader_update(rkt, mdt->partitions[j].id,
@@ -1349,9 +1364,11 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                         rd_kafka_broker_destroy(leader);
                 }
         }
-
+        /* Deduce the bools based on the int32_t values */
+        
         /* If all partitions have leaders we can turn off fast leader query. */
-        if (mdt->partition_cnt > 0 && leader_cnt == mdt->partition_cnt)
+        if (mdt->partition_cnt > 0 && leader_cnt == mdt->partition_cnt && 
+                (topic_exists_with_no_leader_epoch || topic_exists_with_updated_leader_epoch || topic_exists_with_leader_change))
                 rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
         if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR && rkt->rkt_partition_cnt) {

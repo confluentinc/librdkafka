@@ -7917,7 +7917,7 @@ void rd_kafka_TopicCollection_destroy(rd_kafka_TopicCollection_t *topics) {
  */
 static rd_kafka_TopicPartitionInfo_t *rd_kafka_TopicPartitionInfo_new(
     const struct rd_kafka_metadata_partition *partition,
-    const struct rd_kafka_metadata_broker *brokers,
+    const struct rd_kafka_metadata_broker *brokers_sorted,
     const rd_kafka_metadata_broker_internal_t *brokers_internal,
     int broker_cnt) {
         size_t i;
@@ -7930,7 +7930,8 @@ static rd_kafka_TopicPartitionInfo_t *rd_kafka_TopicPartitionInfo_new(
 
         if (partition->leader >= 0) {
                 pinfo->leader = rd_kafka_Node_new_from_brokers(
-                    partition->leader, brokers, brokers_internal, broker_cnt);
+                    partition->leader, brokers_sorted, brokers_internal,
+                    broker_cnt);
         }
 
         if (pinfo->isr_cnt > 0) {
@@ -7938,8 +7939,8 @@ static rd_kafka_TopicPartitionInfo_t *rd_kafka_TopicPartitionInfo_new(
                     rd_calloc(pinfo->isr_cnt, sizeof(rd_kafka_Node_t *));
                 for (i = 0; i < pinfo->isr_cnt; i++)
                         pinfo->isr[i] = rd_kafka_Node_new_from_brokers(
-                            partition->isrs[i], brokers, brokers_internal,
-                            broker_cnt);
+                            partition->isrs[i], brokers_sorted,
+                            brokers_internal, broker_cnt);
         }
 
         if (pinfo->replica_cnt > 0) {
@@ -7947,8 +7948,8 @@ static rd_kafka_TopicPartitionInfo_t *rd_kafka_TopicPartitionInfo_new(
                     rd_calloc(pinfo->replica_cnt, sizeof(rd_kafka_Node_t *));
                 for (i = 0; i < pinfo->replica_cnt; i++)
                         pinfo->replicas[i] = rd_kafka_Node_new_from_brokers(
-                            partition->replicas[i], brokers, brokers_internal,
-                            broker_cnt);
+                            partition->replicas[i], brokers_sorted,
+                            brokers_internal, broker_cnt);
         }
 
         return pinfo;
@@ -7988,7 +7989,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
     const char *topic,
     const struct rd_kafka_metadata_partition *partitions,
     int partition_cnt,
-    const struct rd_kafka_metadata_broker *brokers,
+    const struct rd_kafka_metadata_broker *brokers_sorted,
     const rd_kafka_metadata_broker_internal_t *brokers_internal,
     int broker_cnt,
     const rd_kafka_AclOperation_t *authorized_operations,
@@ -8020,8 +8021,8 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
                 for (i = 0; i < partition_cnt; i++)
                         topicdesc->partitions[i] =
                             rd_kafka_TopicPartitionInfo_new(
-                                &partitions[i], brokers, brokers_internal,
-                                broker_cnt);
+                                &partitions[i], brokers_sorted,
+                                brokers_internal, broker_cnt);
         }
         return topicdesc;
 }
@@ -8211,7 +8212,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                                 &authorized_operation_cnt);
                         topicdesc = rd_kafka_TopicDescription_new(
                             md->topics[i].topic, md->topics[i].partitions,
-                            md->topics[i].partition_cnt, md->brokers,
+                            md->topics[i].partition_cnt, mdi->brokers_sorted,
                             mdi->brokers, md->broker_cnt, authorized_operations,
                             authorized_operation_cnt,
                             mdi->topics[i].is_internal, NULL);
@@ -8372,7 +8373,7 @@ rd_kafka_ClusterDescription_new(const rd_kafka_metadata_internal_t *mdi) {
 
         if (mdi->controller_id >= 0)
                 clusterdesc->controller = rd_kafka_Node_new_from_brokers(
-                    mdi->controller_id, md->brokers, mdi->brokers,
+                    mdi->controller_id, mdi->brokers_sorted, mdi->brokers,
                     md->broker_cnt);
 
         clusterdesc->authorized_operations =

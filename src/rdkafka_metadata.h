@@ -81,6 +81,8 @@ typedef struct rd_kafka_metadata_internal_s {
                            be kept the first field so the pointer
                            can be cast to *rd_kafka_metadata_internal_t
                            when needed */
+        /* Identical to metadata->brokers, but sorted by broker id. */
+        struct rd_kafka_metadata_broker *brokers_sorted;
         /* Internal metadata brokers. Same count as metadata.broker_cnt.
          * Sorted by broker id. */
         rd_kafka_metadata_broker_internal_t *brokers;
@@ -176,6 +178,8 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
 int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
 int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
+
+int rd_kafka_metadata_broker_cmp(const void *_a, const void *_b);
 
 void rd_kafka_metadata_partition_clear(
     struct rd_kafka_metadata_partition *rkmp);

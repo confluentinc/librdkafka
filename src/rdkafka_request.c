@@ -2218,7 +2218,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         rd_kafka_replyq_t use_replyq   = replyq;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 10, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 12, &features);
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
                                                  4 + (50 * topic_cnt) + 1,

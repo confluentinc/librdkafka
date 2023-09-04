@@ -254,45 +254,38 @@ rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
  *
  * @return A new allocated Node object.
  *         Use rd_kafka_Node_destroy() to free when done.
- * @remark The \p brokers_internal array is asumed to be sorted by node id,
- *         while the \p brokers array is not. This is the current default from
- *         Metadata response parsing.
+ * @remark The \p brokers_sorted and \p brokers_internal arrays are asumed to be
+ * sorted by id.
  */
 rd_kafka_Node_t *rd_kafka_Node_new_from_brokers(
     int32_t id,
-    const struct rd_kafka_metadata_broker *brokers,
+    const struct rd_kafka_metadata_broker *brokers_sorted,
     const rd_kafka_metadata_broker_internal_t *brokers_internal,
     int broker_cnt) {
-        int i;
         rd_kafka_Node_t *node = rd_calloc(1, sizeof(*node));
-        node->id              = id;
+        struct rd_kafka_metadata_broker key_sorted       = {.id = id};
+        rd_kafka_metadata_broker_internal_t key_internal = {.id = id};
 
-        /* Brokers are not sorted, so we must iterate through all of them.
-         * However, the amount of brokers is small, and this function is only
-         * called while using the Admin API. */
-        for (i = 0; i < broker_cnt; i++) {
-                rd_kafka_metadata_broker_internal_t key = {.id = id};
-                rd_kafka_metadata_broker_internal_t *broker_internal = NULL;
-                char *rack_id                                        = NULL;
+        struct rd_kafka_metadata_broker *broker =
+            bsearch(&key_sorted, brokers_sorted, broker_cnt,
+                    sizeof(struct rd_kafka_metadata_broker),
+                    rd_kafka_metadata_broker_cmp);
 
-                if (id != brokers[i].id)
-                        continue;
+        rd_kafka_metadata_broker_internal_t *broker_internal =
+            bsearch(&key_internal, brokers_internal, broker_cnt,
+                    sizeof(rd_kafka_metadata_broker_internal_t),
+                    rd_kafka_metadata_broker_internal_cmp);
 
-                node->host = rd_strdup(brokers[i].host);
-                node->port = brokers[i].port;
+        node->id = id;
 
-                broker_internal =
-                    bsearch(&key, brokers_internal, broker_cnt,
-                            sizeof(rd_kafka_metadata_broker_internal_t),
-                            rd_kafka_metadata_broker_internal_cmp);
+        if (!broker)
+                return node;
 
-                if (broker_internal)
-                        rack_id = broker_internal->rack_id;
+        node->host = rd_strdup(broker->host);
+        node->port = broker->port;
+        if (broker_internal && broker_internal->rack_id)
+                node->rack_id = rd_strdup(broker_internal->rack_id);
 
-                if (rack_id)
-                        node->rack_id = rd_strdup(rack_id);
-                break;
-        }
         return node;
 }
 

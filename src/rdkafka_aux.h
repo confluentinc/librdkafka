@@ -118,7 +118,7 @@ rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
 
 rd_kafka_Node_t *rd_kafka_Node_new_from_brokers(
     int32_t id,
-    const struct rd_kafka_metadata_broker *brokers,
+    const struct rd_kafka_metadata_broker *brokers_sorted,
     const rd_kafka_metadata_broker_internal_t *brokers_internal,
     int broker_cnt);
 

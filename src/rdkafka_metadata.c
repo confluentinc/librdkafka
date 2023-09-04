@@ -48,6 +48,17 @@ int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b) {
         return RD_CMP(a->id, b->id);
 }
 
+
+/**
+ * @brief Id comparator for struct rd_kafka_metadata_broker*
+ */
+int rd_kafka_metadata_broker_cmp(const void *_a, const void *_b) {
+        const struct rd_kafka_metadata_broker *a = _a;
+        const struct rd_kafka_metadata_broker *b = _b;
+        return RD_CMP(a->id, b->id);
+}
+
+
 /**
  * @brief Id comparator for rd_kafka_metadata_partition_internal_t
  */
@@ -549,6 +560,12 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                     rkbuf, "%d internal brokers: tmpabuf memory shortage",
                     md->broker_cnt);
 
+        if (!(mdi->brokers_sorted = rd_tmpabuf_alloc(
+                  &tbuf, md->broker_cnt * sizeof(*mdi->brokers_sorted))))
+                rd_kafka_buf_parse_fail(
+                    rkbuf, "%d sorted brokers: tmpabuf memory shortage",
+                    md->broker_cnt);
+
         for (i = 0; i < md->broker_cnt; i++) {
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].id);
                 rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf,
@@ -585,6 +602,10 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
 
         qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[i]),
               rd_kafka_metadata_broker_internal_cmp);
+        memcpy(mdi->brokers_sorted, md->brokers,
+               sizeof(*mdi->brokers_sorted) * md->broker_cnt);
+        qsort(mdi->brokers_sorted, md->broker_cnt, sizeof(*mdi->brokers_sorted),
+              rd_kafka_metadata_broker_cmp);
 
         /* Read TopicMetadata */
         rd_kafka_buf_read_arraycnt(rkbuf, &md->topic_cnt, RD_KAFKAP_TOPICS_MAX);

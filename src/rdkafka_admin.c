@@ -8238,8 +8238,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err:
-        if (rko_result)
-                rd_kafka_op_destroy(rko_result);
+        RD_IF_FREE(rko_result, rd_kafka_op_destroy);
         rd_snprintf(errstr, errstr_size,
                     "DescribeTopics response protocol parse failure: %s",
                     rd_kafka_err2str(reply->rkbuf_err));
@@ -8491,8 +8490,7 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err:
-        if (rko_result)
-                rd_kafka_op_destroy(rko_result);
+        RD_IF_FREE(rko_result, rd_kafka_op_destroy);
         rd_snprintf(errstr, errstr_size,
                     "DescribeCluster response protocol parse failure: %s",
                     rd_kafka_err2str(reply->rkbuf_err));

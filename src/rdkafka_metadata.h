@@ -56,7 +56,8 @@ typedef struct rd_kafka_metadata_topic_internal_s {
         rd_kafka_metadata_partition_internal_t *partitions;
         rd_kafka_uuid_t topic_id;
         int32_t topic_authorized_operations; /**< ACL operations allowed
-                                                     for topic */
+                                              * for topic, -1 if not
+                                              * supported by broker */
         rd_bool_t is_internal;               /**< Is topic internal to Kafka? */
 } rd_kafka_metadata_topic_internal_t;
 
@@ -85,10 +86,12 @@ typedef struct rd_kafka_metadata_internal_s {
         rd_kafka_metadata_broker_internal_t *brokers;
         /* Internal metadata topics. Same count as metadata.topic_cnt. */
         rd_kafka_metadata_topic_internal_t *topics;
-        char *cluster_id;  /**< current cluster id in \p cluster*/
-        int controller_id; /**< current controller id in \p cluster*/
+        char *cluster_id;  /**< Cluster id (optionally populated)*/
+        int controller_id; /**< current controller id for cluster, -1 if not
+                            * supported by broker. */
         int32_t cluster_authorized_operations; /**< ACL operations allowed
-                                                     for cluster */
+                                                * for cluster, -1 if not
+                                                * supported by broker */
 } rd_kafka_metadata_internal_t;
 
 /**
@@ -173,9 +176,6 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
 int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
 int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
-
-void rd_kafka_copy_metadata_partition(struct rd_kafka_metadata_partition *src,
-                                      struct rd_kafka_metadata_partition *dst);
 
 void rd_kafka_metadata_partition_clear(
     struct rd_kafka_metadata_partition *rkmp);

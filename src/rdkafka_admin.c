@@ -7106,7 +7106,8 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
  * - DescribeCluster
  * @returns list of authorized operations (rd_kafka_AclOperation_t *)
  */
-rd_list_t *rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations) {
+static rd_list_t *
+rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations) {
         int i;
         rd_list_t *authorized_operations_list = NULL;
 
@@ -7900,7 +7901,7 @@ rd_kafka_TopicCollection_new_from_names(const char **topics,
         if (!ret->topics_cnt)
                 return ret;
 
-        ret->topics = rd_calloc(sizeof(char *), topics_cnt);
+        ret->topics = rd_calloc(topics_cnt, sizeof(char *));
         for (i = 0; i < topics_cnt; i++)
                 ret->topics[i] = rd_strdup(topics[i]);
 
@@ -7952,7 +7953,7 @@ static rd_kafka_TopicPartitionInfo_t *rd_kafka_TopicPartitionInfo_new(
 
         if (pinfo->replica_cnt > 0) {
                 pinfo->replicas =
-                    rd_calloc(sizeof(rd_kafka_Node_t *), pinfo->replica_cnt);
+                    rd_calloc(pinfo->replica_cnt, sizeof(rd_kafka_Node_t *));
                 for (i = 0; i < pinfo->replica_cnt; i++)
                         pinfo->replicas[i] = rd_kafka_Node_new_from_brokers(
                             partition->replicas[i], brokers, brokers_internal,
@@ -8025,7 +8026,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
 
         if (partitions) {
                 topicdesc->partitions =
-                    rd_calloc(sizeof(*partitions), partition_cnt);
+                    rd_calloc(partition_cnt, sizeof(*partitions));
                 for (i = 0; i < partition_cnt; i++)
                         topicdesc->partitions[i] =
                             rd_kafka_TopicPartitionInfo_new(
@@ -8171,9 +8172,9 @@ rd_kafka_admin_DescribeTopicsRequest(rd_kafka_broker_t *rkb,
 
         err = rd_kafka_admin_MetadataRequest(
             rkb, topics, "describe topics",
-            rd_false /* include_topic_authorized_operations */,
-            include_topic_authorized_operations, rd_false /* force_racks */,
-            resp_cb, replyq, opaque);
+            rd_false /* don't include_topic_authorized_operations */,
+            include_topic_authorized_operations,
+            rd_false /* don't force_racks */, resp_cb, replyq, opaque);
 
         if (err) {
                 rd_snprintf(errstr, errstr_size, "%s", rd_kafka_err2str(err));
@@ -8221,11 +8222,11 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                             md->topics[i].partition_cnt, md->brokers,
                             mdi->brokers, md->broker_cnt, authorized_operations,
                             mdi->topics[i].is_internal, NULL);
-                        if (authorized_operations)
-                                rd_list_destroy(authorized_operations);
+                        RD_IF_FREE(authorized_operations, rd_list_destroy);
                 } else {
-                        rd_kafka_error_t *error =
-                            rd_kafka_error_new(md->topics[i].err, NULL);
+                        rd_kafka_error_t *error = rd_kafka_error_new(
+                            md->topics[i].err,
+                            rd_kafka_err2str(md->topics[i].err));
                         topicdesc = rd_kafka_TopicDescription_new_error(
                             md->topics[i].topic, error);
                         rd_kafka_error_destroy(error);
@@ -8447,8 +8448,8 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeClusterRequest(
         err = rd_kafka_admin_MetadataRequest(
             rkb, NULL /* topics */, "describe cluster",
             include_cluster_authorized_operations,
-            rd_false /* include_topic_authorized_operations */,
-            rd_false /* force_racks */, resp_cb, replyq, opaque);
+            rd_false /* don't include_topic_authorized_operations */,
+            rd_false /* don't force racks */, resp_cb, replyq, opaque);
 
         if (err) {
                 rd_snprintf(errstr, errstr_size, "%s", rd_kafka_err2str(err));

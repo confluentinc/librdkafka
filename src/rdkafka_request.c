@@ -2211,9 +2211,9 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
         size_t of_TopicArrayCnt;
         int features;
-        int topic_cnt  = topics ? rd_list_cnt(topics) : 0;
-        int *full_incr = NULL;
-        void *handler_arg;
+        int topic_cnt                  = topics ? rd_list_cnt(topics) : 0;
+        int *full_incr                 = NULL;
+        void *handler_arg              = NULL;
         rd_kafka_resp_cb_t *handler_cb = rd_kafka_handle_Metadata;
         rd_kafka_replyq_t use_replyq   = replyq;
 

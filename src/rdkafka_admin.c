@@ -7990,7 +7990,7 @@ rd_kafka_TopicPartitionInfo_destroy(rd_kafka_TopicPartitionInfo_t *pinfo) {
  * @param authorized_operations acl operations allowed for topic.
  * @param error Topic error reported by the broker.
  * @return A newly allocated TopicDescription object.
- *         Use rd_kafka_TopicDescription_destroy() to free when done.
+ * @remark Use rd_kafka_TopicDescription_destroy() to free when done.
  */
 static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
     const char *topic,
@@ -8041,7 +8041,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
  * @param topic topic name
  * @param error Topic error reported by the broker.
  * @return A newly allocated TopicDescription with the passed error.
- *         Use rd_kafka_TopicDescription_destroy() to free when done.
+ * @remark Use rd_kafka_TopicDescription_destroy() to free when done.
  */
 static rd_kafka_TopicDescription_t *
 rd_kafka_TopicDescription_new_error(const char *topic,
@@ -8364,7 +8364,8 @@ const rd_kafka_Node_t *rd_kafka_DescribeCluster_result_controller(
  * @param controller_id current controller_id.
  * @param md metadata struct returned by parse_metadata().
  *
- * @returns new ClusterDescription object.
+ * @returns newly allocated ClusterDescription object.
+ * @remark Use rd_kafka_ClusterDescription_destroy() to free when done.
  */
 static rd_kafka_ClusterDescription_t *
 rd_kafka_ClusterDescription_new(const rd_kafka_metadata_internal_t *mdi) {

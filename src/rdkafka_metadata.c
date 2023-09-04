@@ -488,15 +488,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_metadata_internal_t *mdi = NULL;
         rd_kafka_metadata_t *md           = NULL;
         size_t rkb_namelen;
-        const int log_decode_errors = LOG_ERR;
-        rd_list_t *missing_topics   = NULL;
-        const rd_list_t *requested_topics =
-            request ? request->rkbuf_u.Metadata.topics : request_topics;
-        rd_bool_t all_topics =
-            request ? request->rkbuf_u.Metadata.all_topics : rd_false;
-        rd_bool_t cgrp_update =
-            request ? (request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp)
-                    : rd_false;
+        const int log_decode_errors       = LOG_ERR;
+        rd_list_t *missing_topics         = NULL;
+        const rd_list_t *requested_topics = request_topics;
+        rd_bool_t all_topics              = rd_false;
+        rd_bool_t cgrp_update             = rd_false;
         rd_bool_t has_reliable_leader_epochs =
             rd_kafka_has_reliable_leader_epochs(rkb);
         int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
@@ -510,11 +506,15 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
          * to contain the partition to rack map. */
         rd_bool_t has_client_rack = rk->rk_conf.client_rack &&
                                     RD_KAFKAP_STR_LEN(rk->rk_conf.client_rack);
-        /* If force_racks is true, the outptr mdip has to contain the partition
-         * to rack map. */
-        rd_bool_t force_rack_computation =
-            request ? request->rkbuf_u.Metadata.force_racks : rd_false;
-        rd_bool_t compute_racks = has_client_rack || force_rack_computation;
+        rd_bool_t compute_racks = has_client_rack;
+
+        if (request) {
+                requested_topics = request->rkbuf_u.Metadata.topics;
+                all_topics       = request->rkbuf_u.Metadata.all_topics;
+                cgrp_update =
+                    request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp;
+                compute_racks |= request->rkbuf_u.Metadata.force_racks;
+        }
 
         /* If there's reason is NULL, set it to a human-readable string. */
         if (!reason)
@@ -1024,10 +1024,12 @@ err:
  *
  * @param request Initial Metadata request, containing the topic information.
  *                Must not be NULL.
+ *                We require the topic information while parsing to make sure
+ *                that there are no missing topics.
  * @param mdip A pointer to (rd_kafka_metadata_internal_t *) into which the
  *             metadata will be marshalled (set to NULL on error.)
  *
- * @returns an error code on parse failure, else NO_ERRRO.
+ * @returns an error code on parse failure, else NO_ERROR.
  *
  * @locality rdkafka main thread
  */
@@ -1044,12 +1046,16 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 /**
  * @brief Handle a Metadata response message for admin requests.
  *
- * @param request_topics List containing topics in Metadata request. Must not be
- *                       NULL.
+ * @param request_topics List containing topics in Metadata request. Must not
+ *                       be NULL. It is more convenient in the Admin flow to
+ *                       preserve the topic names rather than the initial
+ *                       Metadata request.
+ *                       We require the topic information while parsing to make
+ *                      sure that there are no missing topics.
  * @param mdip A pointer to (rd_kafka_metadata_internal_t *) into which the
  *             metadata will be marshalled (set to NULL on error.)
  *
- * @returns an error code on parse failure, else NO_ERRRO.
+ * @returns an error code on parse failure, else NO_ERROR.
  *
  * @locality rdkafka main thread
  */

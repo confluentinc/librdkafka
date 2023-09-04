@@ -2180,11 +2180,12 @@ done:
 /**
  * @brief Internal implementation of MetadataRequest (does not send).
  *
- * @param force - 1: force a full request (including all topics and brokers)
- *                   even if there is such a request already in flight.
- *              - 0: check if there are multiple outstanding full requests, and
- *                   don't send one if there is already one present.
- *               (See note below.)
+ * @param force - rd_true: force a full request (including all topics and
+ *                         brokers) even if there is such a request already
+ *                         in flight.
+ *              - rd_false: check if there are multiple outstanding full
+ *                          requests, and don't send one if there is already
+ *                          one present. (See note below.)
  *
  * If full metadata for all topics is requested (or
  * all brokers, which results in all-topics on older brokers) and there is

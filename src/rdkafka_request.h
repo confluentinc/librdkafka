@@ -264,16 +264,19 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko);
 
-rd_kafka_resp_err_t
-rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,
-                               const rd_list_t *topics,
-                               const char *reason,
-                               rd_bool_t include_cluster_authorized_operations,
-                               rd_bool_t include_topic_authorized_operations,
-                               rd_bool_t force_racks,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               rd_kafka_replyq_t replyq,
-                               void *opaque);
+rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *topics,
+    const char *reason,
+    rd_bool_t allow_auto_create_topics,
+    rd_bool_t include_cluster_authorized_operations,
+    rd_bool_t include_topic_authorized_operations,
+    rd_bool_t cgrp_update,
+    rd_bool_t force_racks,
+    rd_kafka_resp_cb_t *resp_cb,
+    rd_kafka_replyq_t replyq,
+    rd_bool_t force,
+    void *opaque);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_ApiVersion(rd_kafka_t *rk,

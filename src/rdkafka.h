@@ -8261,7 +8261,7 @@ rd_kafka_DescribeCluster_result_authorized_operations(
  * @return The cluster current controller.
  */
 RD_EXPORT
-const rd_kafka_Node_t* rd_kafka_DescribeCluster_result_controller(
+const rd_kafka_Node_t *rd_kafka_DescribeCluster_result_controller(
     const rd_kafka_DescribeTopics_result_t *result);
 
 /**

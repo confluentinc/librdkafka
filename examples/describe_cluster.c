@@ -157,7 +157,8 @@ print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
         printf(
             "Cluster id: %s\t Controller id: %d\t authorized operations count "
             "allowed: %d\n",
-            cluster_id, controller ? rd_kafka_Node_id(controller) : -1, (int)authorized_operations_cnt);
+            cluster_id, controller ? rd_kafka_Node_id(controller) : -1,
+            (int)authorized_operations_cnt);
 
         for (j = 0; j < authorized_operations_cnt; j++) {
                 printf("\t%s operation is allowed\n",

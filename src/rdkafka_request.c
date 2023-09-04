@@ -2217,7 +2217,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         rd_kafka_replyq_t use_replyq   = replyq;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 12, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 10, &features);
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
                                                  4 + (50 * topic_cnt) + 1,
@@ -2397,6 +2397,36 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
 
 
 /**
+ * @brief Construct a MetadataRequest which uses an optional rko, and the
+ * default handler callback.
+ * @sa rd_kafka_MetadataRequest.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_MetadataRequest_op(rd_kafka_broker_t *rkb,
+                            const rd_list_t *topics,
+                            const char *reason,
+                            rd_bool_t allow_auto_create_topics,
+                            rd_bool_t include_cluster_authorized_operations,
+                            rd_bool_t include_topic_authorized_operations,
+                            rd_bool_t cgrp_update,
+                            rd_bool_t force_racks,
+                            rd_kafka_op_t *rko) {
+        return rd_kafka_MetadataRequest0(
+            rkb, topics, reason, allow_auto_create_topics,
+            include_cluster_authorized_operations,
+            include_topic_authorized_operations, cgrp_update, force_racks, rko,
+            /* We use the default rd_kafka_handle_Metadata rather than a custom
+               resp_cb */
+            NULL,
+            /* Use default replyq which works with the default handler
+               rd_kafka_handle_Metadata. */
+            RD_KAFKA_NO_REPLYQ,
+            /* If the request needs to be forced, rko_u.metadata.force will be
+               set. We don't provide an explicit parameter force. */
+            rd_false, NULL);
+}
+
+/**
  * @brief Construct MetadataRequest (does not send)
  *
  * \p topics is a list of topic names (char *) to request.
@@ -2430,20 +2460,11 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_bool_t cgrp_update,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko) {
-        return rd_kafka_MetadataRequest0(
+        return rd_kafka_MetadataRequest_op(
             rkb, topics, reason, allow_auto_create_topics,
             /* cluster and topic authorized operations are used by admin
                operations only. */
-            rd_false, rd_false, cgrp_update, force_racks, rko,
-            /* In all other situations apart from admin ops, we use
-               rd_kafka_handle_Metadata rather than a custom resp_cb */
-            NULL,
-            /* Use default replyq which works with the default handler
-               rd_kafka_handle_Metadata. */
-            RD_KAFKA_NO_REPLYQ,
-            /* If the request needs to be forced, rko_u.metadata.force will be
-               set. */
-            rd_false, NULL);
+            rd_false, rd_false, cgrp_update, force_racks, rko);
 }
 
 
@@ -2469,24 +2490,24 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
  * @param replyq - replyq on which response is handled.
  * @param opaque - (optional) parameter to be passed to resp_cb.
  */
-rd_kafka_resp_err_t
-rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,
-                               const rd_list_t *topics,
-                               const char *reason,
-                               rd_bool_t include_cluster_authorized_operations,
-                               rd_bool_t include_topic_authorized_operations,
-                               rd_bool_t force_racks,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               rd_kafka_replyq_t replyq,
-                               void *opaque) {
+rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *topics,
+    const char *reason,
+    rd_bool_t allow_auto_create_topics,
+    rd_bool_t include_cluster_authorized_operations,
+    rd_bool_t include_topic_authorized_operations,
+    rd_bool_t cgrp_update,
+    rd_bool_t force_racks,
+    rd_kafka_resp_cb_t *resp_cb,
+    rd_kafka_replyq_t replyq,
+    rd_bool_t force,
+    void *opaque) {
         return rd_kafka_MetadataRequest0(
-            rkb, topics, reason,
-            /* No admin operation requires topic creation. */
-            rd_false, include_cluster_authorized_operations,
-            include_topic_authorized_operations,
-            rd_false /* No admin operation should update cgrp. */, force_racks,
-            NULL /* Admin options don't require us to track the op. */, resp_cb,
-            replyq,
+            rkb, topics, reason, allow_auto_create_topics,
+            include_cluster_authorized_operations,
+            include_topic_authorized_operations, cgrp_update, force_racks,
+            NULL /* No op - using custom resp_cb. */, resp_cb, replyq,
             rd_true /* Admin operation metadata requests are always forced. */,
             opaque);
 }

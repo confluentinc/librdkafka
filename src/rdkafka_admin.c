@@ -1482,6 +1482,34 @@ static rd_kafka_op_t *rd_kafka_admin_request_op_target_all_new(
         return rko;
 }
 
+
+/**
+ * @brief Construct MetadataRequest for use with AdminAPI (does not send).
+ *        Common for DescribeTopics and DescribeCluster.
+ *
+ * @sa rd_kafka_MetadataRequest_resp_cb.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_MetadataRequest(rd_kafka_broker_t *rkb,
+                               const rd_list_t *topics,
+                               const char *reason,
+                               rd_bool_t include_cluster_authorized_operations,
+                               rd_bool_t include_topic_authorized_operations,
+                               rd_bool_t force_racks,
+                               rd_kafka_resp_cb_t *resp_cb,
+                               rd_kafka_replyq_t replyq,
+                               void *opaque) {
+        return rd_kafka_MetadataRequest_resp_cb(
+            rkb, topics, reason,
+            rd_false /* No admin operation requires topic creation. */,
+            include_cluster_authorized_operations,
+            include_topic_authorized_operations,
+            rd_false /* No admin operation should update cgrp. */, force_racks,
+            resp_cb, replyq,
+            rd_true /* Admin operation metadata requests are always forced. */,
+            opaque);
+}
+
 /**@}*/
 
 
@@ -8056,7 +8084,7 @@ const rd_kafka_Node_t **
 rd_kafka_TopicPartitionInfo_isr(const rd_kafka_TopicPartitionInfo_t *partition,
                                 size_t *cntp) {
         *cntp = partition->isr_cnt;
-        return (const rd_kafka_Node_t **) partition->isr;
+        return (const rd_kafka_Node_t **)partition->isr;
 }
 
 const rd_kafka_Node_t **rd_kafka_TopicPartitionInfo_replicas(
@@ -8070,7 +8098,7 @@ const rd_kafka_TopicPartitionInfo_t **rd_kafka_TopicDescription_partitions(
     const rd_kafka_TopicDescription_t *topicdesc,
     size_t *cntp) {
         *cntp = topicdesc->partition_cnt;
-        return (const rd_kafka_TopicPartitionInfo_t**) topicdesc->partitions;
+        return (const rd_kafka_TopicPartitionInfo_t **)topicdesc->partitions;
 }
 
 const rd_kafka_AclOperation_t *rd_kafka_TopicDescription_authorized_operations(
@@ -8141,7 +8169,7 @@ rd_kafka_admin_DescribeTopicsRequest(rd_kafka_broker_t *rkb,
         int include_topic_authorized_operations =
             rd_kafka_confval_get_int(&options->include_authorized_operations);
 
-        err = rd_kafka_MetadataRequest_admin(
+        err = rd_kafka_admin_MetadataRequest(
             rkb, topics, "describe topics",
             rd_false /* include_topic_authorized_operations */,
             include_topic_authorized_operations, rd_false /* force_racks */,
@@ -8325,11 +8353,9 @@ const char *rd_kafka_DescribeCluster_result_cluster_id(
         return rd_kafka_DescribeCluster_result_description(result)->cluster_id;
 }
 
-const rd_kafka_Node_t* rd_kafka_DescribeCluster_result_controller(
+const rd_kafka_Node_t *rd_kafka_DescribeCluster_result_controller(
     const rd_kafka_DescribeTopics_result_t *result) {
-        return
-            rd_kafka_DescribeCluster_result_description(result)
-                ->controller;
+        return rd_kafka_DescribeCluster_result_description(result)->controller;
 }
 
 /**
@@ -8418,7 +8444,7 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeClusterRequest(
         int include_cluster_authorized_operations =
             rd_kafka_confval_get_int(&options->include_authorized_operations);
 
-        err = rd_kafka_MetadataRequest_admin(
+        err = rd_kafka_admin_MetadataRequest(
             rkb, NULL /* topics */, "describe cluster",
             include_cluster_authorized_operations,
             rd_false /* include_topic_authorized_operations */,

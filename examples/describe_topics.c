@@ -147,7 +147,7 @@ static void print_node_info(const rd_kafka_Node_t *node) {
 
         printf("\t\tNode [id: %" PRId32
                ", host: %s"
-               ", port: %" PRIu16 ", rack %s ]\n",
+               ", port: %" PRIu16 ", rack %s]\n",
                rd_kafka_Node_id(node), rd_kafka_Node_host(node),
                rd_kafka_Node_port(node), rd_kafka_Node_rack_id(node));
 }

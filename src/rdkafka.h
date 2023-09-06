@@ -8234,7 +8234,7 @@ void rd_kafka_DescribeCluster(rd_kafka_t *rk,
  */
 RD_EXPORT
 const rd_kafka_Node_t **rd_kafka_DescribeCluster_result_nodes(
-    const rd_kafka_DescribeTopics_result_t *result,
+    const rd_kafka_DescribeCluster_result_t *result,
     size_t *cntp);
 
 /**
@@ -8250,7 +8250,7 @@ const rd_kafka_Node_t **rd_kafka_DescribeCluster_result_nodes(
 RD_EXPORT
 const rd_kafka_AclOperation_t *
 rd_kafka_DescribeCluster_result_authorized_operations(
-    const rd_kafka_DescribeTopics_result_t *result,
+    const rd_kafka_DescribeCluster_result_t *result,
     size_t *cntp);
 
 /**
@@ -8262,7 +8262,7 @@ rd_kafka_DescribeCluster_result_authorized_operations(
  */
 RD_EXPORT
 const rd_kafka_Node_t *rd_kafka_DescribeCluster_result_controller(
-    const rd_kafka_DescribeTopics_result_t *result);
+    const rd_kafka_DescribeCluster_result_t *result);
 
 /**
  * @brief Gets the cluster id for the \p result cluster.
@@ -8275,7 +8275,7 @@ const rd_kafka_Node_t *rd_kafka_DescribeCluster_result_controller(
  */
 RD_EXPORT
 const char *rd_kafka_DescribeCluster_result_cluster_id(
-    const rd_kafka_DescribeTopics_result_t *result);
+    const rd_kafka_DescribeCluster_result_t *result);
 
 /**@}*/
 

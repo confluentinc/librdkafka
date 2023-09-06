@@ -8307,7 +8307,7 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
 
 static const rd_kafka_ClusterDescription_t *
 rd_kafka_DescribeCluster_result_description(
-    const rd_kafka_DescribeTopics_result_t *result) {
+    const rd_kafka_DescribeCluster_result_t *result) {
         int cluster_result_cnt;
         const rd_kafka_ClusterDescription_t *clusterdesc;
         const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
@@ -8324,7 +8324,7 @@ rd_kafka_DescribeCluster_result_description(
 
 
 const rd_kafka_Node_t **rd_kafka_DescribeCluster_result_nodes(
-    const rd_kafka_DescribeTopics_result_t *result,
+    const rd_kafka_DescribeCluster_result_t *result,
     size_t *cntp) {
         const rd_kafka_ClusterDescription_t *clusterdesc =
             rd_kafka_DescribeCluster_result_description(result);
@@ -8334,7 +8334,7 @@ const rd_kafka_Node_t **rd_kafka_DescribeCluster_result_nodes(
 
 const rd_kafka_AclOperation_t *
 rd_kafka_DescribeCluster_result_authorized_operations(
-    const rd_kafka_DescribeTopics_result_t *result,
+    const rd_kafka_DescribeCluster_result_t *result,
     size_t *cntp) {
         const rd_kafka_ClusterDescription_t *clusterdesc =
             rd_kafka_DescribeCluster_result_description(result);
@@ -8343,12 +8343,12 @@ rd_kafka_DescribeCluster_result_authorized_operations(
 }
 
 const char *rd_kafka_DescribeCluster_result_cluster_id(
-    const rd_kafka_DescribeTopics_result_t *result) {
+    const rd_kafka_DescribeCluster_result_t *result) {
         return rd_kafka_DescribeCluster_result_description(result)->cluster_id;
 }
 
 const rd_kafka_Node_t *rd_kafka_DescribeCluster_result_controller(
-    const rd_kafka_DescribeTopics_result_t *result) {
+    const rd_kafka_DescribeCluster_result_t *result) {
         return rd_kafka_DescribeCluster_result_description(result)->controller;
 }
 

@@ -234,7 +234,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         opentelemetry_proto_metrics_v1_Metric **metrics;
         opentelemetry_proto_metrics_v1_NumberDataPoint **data_points;
         rd_kafka_telemetry_metrics_repeated_t metrics_repeated;
-        rd_ts_t now = rd_clock();
+        rd_ts_t now_ns = rd_clock() * 1000;
 
         //    TODO: Add resource attributes as needed
         //    opentelemetry_proto_common_v1_KeyValue resource_attribute =
@@ -301,7 +301,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                                     .doubleValue;
                 }
 
-                data_points[i]->time_unix_nano = now;
+                data_points[i]->time_unix_nano = now_ns;
+                data_points[i]->start_time_unix_nano = now_ns;
 
                 //    TODO: Add data point attributes as needed
                 //    opentelemetry_proto_common_v1_KeyValue attribute =

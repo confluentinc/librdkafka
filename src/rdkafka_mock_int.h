@@ -187,6 +187,15 @@ typedef struct rd_kafka_mock_connection_s {
 
 
 /**
+ * @struct Represents a request to the mock cluster along with a timestamp.
+ */
+struct rd_kafka_mock_request_s {
+        int32_t id;      /**< Broker id */
+        int16_t api_key; /**< API Key of request */
+        rd_ts_t timestamp /**< Timestamp at which request was received */;
+};
+
+/**
  * @struct Mock broker
  */
 typedef struct rd_kafka_mock_broker_s {
@@ -209,7 +218,6 @@ typedef struct rd_kafka_mock_broker_s {
 
         struct rd_kafka_mock_cluster_s *cluster;
 } rd_kafka_mock_broker_t;
-
 
 /**
  * @struct A Kafka-serialized MessageSet
@@ -399,9 +407,15 @@ struct rd_kafka_mock_cluster_s {
         /** < Requested metric count. */
         size_t metrics_cnt;
 
+        /**< List of API requests for this broker. Type:
+         * rd_kafka_mock_request_t*
+         */
+        rd_list_t request_list;
+
         /**< Mutex for:
          *   .errstacks
          *   .apiversions
+         *   .request_list
          */
         mtx_t lock;
 
@@ -534,7 +548,9 @@ rd_kafka_mock_cgrp_get(rd_kafka_mock_cluster_t *mcluster,
                        const rd_kafkap_str_t *ProtocolType);
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);
-
+rd_kafka_mock_request_t *
+rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp);
+void rd_kafka_mock_request_free(void *mreq);
 
 /**
  *@}

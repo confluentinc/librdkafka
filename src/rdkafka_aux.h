@@ -116,6 +116,12 @@ rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
                                    uint16_t port,
                                    const char *rack_id);
 
+rd_kafka_Node_t *rd_kafka_Node_new_from_brokers(
+    int32_t id,
+    const struct rd_kafka_metadata_broker *brokers_sorted,
+    const rd_kafka_metadata_broker_internal_t *brokers_internal,
+    int broker_cnt);
+
 rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
 
 void rd_kafka_Node_destroy(rd_kafka_Node_t *node);

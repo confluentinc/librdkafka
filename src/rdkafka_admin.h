@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2018-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -481,9 +482,10 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_consumer_group_state_t state;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
-        /** List of authorized operations allowed for group.
-         * Type: rd_kafka_AclOperation_t* */
-        rd_list_t authorized_operations;
+        /** Count of operations allowed for topic.*/
+        size_t authorized_operations_cnt;
+        /** Operations allowed for topic. */
+        rd_kafka_AclOperation_t *authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;
 };
@@ -494,17 +496,42 @@ struct rd_kafka_ConsumerGroupDescription_s {
  * @name DescribeTopics
  * @{
  */
+
+/**
+ * @brief TopicCollection contains a list of topics.
+ *
+ */
+struct rd_kafka_TopicCollection_s {
+        char **topics;     /**< List of topic names. */
+        size_t topics_cnt; /**< Count of topic names. */
+};
+
+/**
+ * @brief TopicPartition result type in DescribeTopics result.
+ *
+ */
+struct rd_kafka_TopicPartitionInfo_s {
+        int partition;              /**< Partition id. */
+        rd_kafka_Node_t *leader;    /**< Leader of the partition. */
+        size_t isr_cnt;             /**< Count of insync replicas. */
+        rd_kafka_Node_t **isr;      /**< List of in sync replica nodes. */
+        size_t replica_cnt;         /**< Count of partition replicas. */
+        rd_kafka_Node_t **replicas; /**< List of replica nodes. */
+};
+
 /**
  * @struct DescribeTopics result
  */
 struct rd_kafka_TopicDescription_s {
-        char *topic;       /**< Topic name */
-        int partition_cnt; /**< Number of partitions in \p partitions*/
-        struct rd_kafka_metadata_partition *partitions; /**< Partitions */
-        rd_kafka_error_t *error; /**< Topic error reported by broker */
-        rd_list_t
-            authorized_operations; /**< Operations allowed for topic.
-                                       Type: (rd_kafka_AclOperation_t *) */
+        char *topic;           /**< Topic name */
+        int partition_cnt;     /**< Number of partitions in \p partitions*/
+        rd_bool_t is_internal; /**< Is the topic is internal to Kafka? */
+        rd_kafka_TopicPartitionInfo_t **partitions; /**< Partitions */
+        rd_kafka_error_t *error;          /**< Topic error reported by broker */
+        size_t authorized_operations_cnt; /**< Count of operations allowed for
+                                             topic.*/
+        rd_kafka_AclOperation_t
+            *authorized_operations; /**< Operations allowed for topic. */
 };
 
 /**@}*/
@@ -514,17 +541,19 @@ struct rd_kafka_TopicDescription_s {
  * @{
  */
 /**
- * @struct DescribeCluster result
+ * @struct DescribeCluster result - internal type.
  */
-struct rd_kafka_ClusterDescription_s {
-        char *cluster_id;  /**< current cluster id in \p cluster*/
-        int controller_id; /**< current controller id in \p cluster*/
-        rd_list_t
-            nodes; /**< Brokers in the cluster. Type: (rd_kafka_Node_t *) */
-        rd_list_t
-            authorized_operations; /**< Operations allowed for cluster.
-                                       Type: (rd_kafka_AclOperation_t *) */
-};
+typedef struct rd_kafka_ClusterDescription_s {
+        char *cluster_id;            /**< Cluster id */
+        rd_kafka_Node_t *controller; /**< Current controller. */
+        size_t node_cnt;             /**< Count of brokers in the cluster. */
+        rd_kafka_Node_t **nodes;     /**< Brokers in the cluster. */
+        size_t authorized_operations_cnt; /**< Count of operations allowed for
+                                     cluster.*/
+        rd_kafka_AclOperation_t
+            *authorized_operations; /**< Operations allowed for cluster. */
+
+} rd_kafka_ClusterDescription_t;
 
 /**@}*/
 

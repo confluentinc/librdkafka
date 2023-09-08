@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -180,7 +181,10 @@ print_group_member_info(const rd_kafka_MemberDescription_t *member) {
  * @brief Print group information.
  */
 static void print_group_info(const rd_kafka_ConsumerGroupDescription_t *group) {
-        int j, member_cnt, authorized_operation_count, acl_operation;
+        int member_cnt;
+        size_t j;
+        size_t authorized_operations_cnt;
+        const rd_kafka_AclOperation_t *authorized_operations;
         const rd_kafka_error_t *error;
         char coordinator_desc[512];
         const rd_kafka_Node_t *coordinator = NULL;
@@ -190,8 +194,9 @@ static void print_group_info(const rd_kafka_ConsumerGroupDescription_t *group) {
             rd_kafka_ConsumerGroupDescription_partition_assignor(group);
         rd_kafka_consumer_group_state_t state =
             rd_kafka_ConsumerGroupDescription_state(group);
-        authorized_operation_count =
-            rd_kafka_ConsumerGroupDescription_authorized_operation_count(group);
+        authorized_operations =
+            rd_kafka_ConsumerGroupDescription_authorized_operations(
+                group, &authorized_operations_cnt);
         member_cnt  = rd_kafka_ConsumerGroupDescription_member_count(group);
         error       = rd_kafka_ConsumerGroupDescription_error(group);
         coordinator = rd_kafka_ConsumerGroupDescription_coordinator(group);
@@ -212,18 +217,15 @@ static void print_group_info(const rd_kafka_ConsumerGroupDescription_t *group) {
             group_id, partition_assignor,
             rd_kafka_consumer_group_state_name(state), coordinator_desc,
             member_cnt);
-        for (j = 0; j < authorized_operation_count; j++) {
-                acl_operation =
-                    rd_kafka_ConsumerGroupDescription_authorized_operation(
-                        group, j);
+        for (j = 0; j < authorized_operations_cnt; j++) {
                 printf("%s operation is allowed\n",
-                       rd_kafka_AclOperation_name(acl_operation));
+                       rd_kafka_AclOperation_name(authorized_operations[j]));
         }
         if (error)
                 printf(" error[%" PRId32 "]: %s", rd_kafka_error_code(error),
                        rd_kafka_error_string(error));
         printf("\n");
-        for (j = 0; j < member_cnt; j++) {
+        for (j = 0; j < (size_t)member_cnt; j++) {
                 const rd_kafka_MemberDescription_t *member =
                     rd_kafka_ConsumerGroupDescription_member(group, j);
                 print_group_member_info(member);

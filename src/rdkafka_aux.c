@@ -249,6 +249,47 @@ rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
 }
 
 /**
+ * @brief Create a new Node object given a node id, and use broker information
+ * to populate other fields.
+ *
+ * @return A new allocated Node object.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ * @remark The \p brokers_sorted and \p brokers_internal arrays are asumed to be
+ * sorted by id.
+ */
+rd_kafka_Node_t *rd_kafka_Node_new_from_brokers(
+    int32_t id,
+    const struct rd_kafka_metadata_broker *brokers_sorted,
+    const rd_kafka_metadata_broker_internal_t *brokers_internal,
+    int broker_cnt) {
+        rd_kafka_Node_t *node = rd_calloc(1, sizeof(*node));
+        struct rd_kafka_metadata_broker key_sorted       = {.id = id};
+        rd_kafka_metadata_broker_internal_t key_internal = {.id = id};
+
+        struct rd_kafka_metadata_broker *broker =
+            bsearch(&key_sorted, brokers_sorted, broker_cnt,
+                    sizeof(struct rd_kafka_metadata_broker),
+                    rd_kafka_metadata_broker_cmp);
+
+        rd_kafka_metadata_broker_internal_t *broker_internal =
+            bsearch(&key_internal, brokers_internal, broker_cnt,
+                    sizeof(rd_kafka_metadata_broker_internal_t),
+                    rd_kafka_metadata_broker_internal_cmp);
+
+        node->id = id;
+
+        if (!broker)
+                return node;
+
+        node->host = rd_strdup(broker->host);
+        node->port = broker->port;
+        if (broker_internal && broker_internal->rack_id)
+                node->rack_id = rd_strdup(broker_internal->rack_id);
+
+        return node;
+}
+
+/**
  * @brief Copy \p src Node object
  *
  * @param src The Node to copy.
@@ -286,4 +327,8 @@ const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
 
 uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node) {
         return node->port;
+}
+
+const char *rd_kafka_Node_rack_id(const rd_kafka_Node_t *node) {
+        return node->rack_id;
 }

@@ -2180,11 +2180,12 @@ done:
 /**
  * @brief Internal implementation of MetadataRequest (does not send).
  *
- * @param force - 1: force a full request (including all topics and brokers)
- *                   even if there is such a request already in flight.
- *              - 0: check if there are multiple outstanding full requests, and
- *                   don't send one if there is already one present.
- *               (See note below.)
+ * @param force - rd_true: force a full request (including all topics and
+ *                         brokers) even if there is such a request already
+ *                         in flight.
+ *              - rd_false: check if there are multiple outstanding full
+ *                          requests, and don't send one if there is already
+ *                          one present. (See note below.)
  *
  * If full metadata for all topics is requested (or
  * all brokers, which results in all-topics on older brokers) and there is
@@ -2207,6 +2208,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                           rd_bool_t force_racks,
                           rd_kafka_op_t *rko,
                           rd_kafka_resp_cb_t *resp_cb,
+                          rd_kafka_replyq_t replyq,
                           rd_bool_t force,
                           void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -2218,6 +2220,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         void *handler_arg              = NULL;
         rd_kafka_resp_cb_t *handler_cb = rd_kafka_handle_Metadata;
         int16_t metadata_max_version   = 12;
+        rd_kafka_replyq_t use_replyq   = replyq;
 
         /* In case we want cluster authorized operations in the Metadata
          * request, we must send a request with version not exceeding 10 because
@@ -2388,12 +2391,15 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         else
                 handler_arg = rko;
 
+        /* If a custom replyq is provided (and is valid), the response is
+         * handled through on that replyq. By default, response is handled on
+         * rk_ops, and the default handler (rd_kafka_handle_Metadata) forwards
+         * the parsed result to rko's replyq when done. */
+        if (!use_replyq.q)
+                use_replyq = RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0);
+
         rd_kafka_broker_buf_enq_replyq(
-            rkb, rkbuf,
-            /* Handle response thru rk_ops,
-             * but forward parsed result to
-             * rko's replyq when done. */
-            RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
+            rkb, rkbuf, use_replyq,
             /* The default response handler is rd_kafka_handle_Metadata, but we
                allow alternate handlers to be configured. */
             handler_cb, handler_arg);
@@ -2401,6 +2407,36 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+/**
+ * @brief Construct a MetadataRequest which uses an optional rko, and the
+ * default handler callback.
+ * @sa rd_kafka_MetadataRequest.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_MetadataRequest_op(rd_kafka_broker_t *rkb,
+                            const rd_list_t *topics,
+                            const char *reason,
+                            rd_bool_t allow_auto_create_topics,
+                            rd_bool_t include_cluster_authorized_operations,
+                            rd_bool_t include_topic_authorized_operations,
+                            rd_bool_t cgrp_update,
+                            rd_bool_t force_racks,
+                            rd_kafka_op_t *rko) {
+        return rd_kafka_MetadataRequest0(
+            rkb, topics, reason, allow_auto_create_topics,
+            include_cluster_authorized_operations,
+            include_topic_authorized_operations, cgrp_update, force_racks, rko,
+            /* We use the default rd_kafka_handle_Metadata rather than a custom
+               resp_cb */
+            NULL,
+            /* Use default replyq which works with the default handler
+               rd_kafka_handle_Metadata. */
+            RD_KAFKA_NO_REPLYQ,
+            /* If the request needs to be forced, rko_u.metadata.force will be
+               set. We don't provide an explicit parameter force. */
+            rd_false, NULL);
+}
 
 /**
  * @brief Construct MetadataRequest (does not send)
@@ -2436,19 +2472,13 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_bool_t cgrp_update,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko) {
-        return rd_kafka_MetadataRequest0(
+        return rd_kafka_MetadataRequest_op(
             rkb, topics, reason, allow_auto_create_topics,
             /* Cluster and Topic authorized operations are used by admin
-               operations only. For non-admin operation cases, NEVER set them to
-               true, since it changes the metadata max version to be 10, until
-               KIP-700 can be implemented. */
-            rd_false, rd_false, cgrp_update, force_racks, rko,
-            /* In all other situations apart from admin ops, we use
-               rd_kafka_handle_Metadata rather than a custom resp_cb */
-            NULL,
-            /* If the request needs to be forced, rko_u.metadata.force will be
-               set. */
-            rd_false, NULL);
+             * operations only. For non-admin operation cases, NEVER set them to
+             * true, since it changes the metadata max version to be 10, until
+             * KIP-700 can be implemented. */
+            rd_false, rd_false, cgrp_update, force_racks, rko);
 }
 
 
@@ -2471,24 +2501,27 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
  * @param force_racks - Force partition to rack mapping computation in
  *                      parse_Metadata (see comment there).
  * @param resp_cb - callback to be used for handling response.
+ * @param replyq - replyq on which response is handled.
  * @param opaque - (optional) parameter to be passed to resp_cb.
  */
-rd_kafka_resp_err_t
-rd_kafka_MetadataRequest_admin(rd_kafka_broker_t *rkb,
-                               const rd_list_t *topics,
-                               const char *reason,
-                               rd_bool_t include_cluster_authorized_operations,
-                               rd_bool_t include_topic_authorized_operations,
-                               rd_bool_t force_racks,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque) {
+rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *topics,
+    const char *reason,
+    rd_bool_t allow_auto_create_topics,
+    rd_bool_t include_cluster_authorized_operations,
+    rd_bool_t include_topic_authorized_operations,
+    rd_bool_t cgrp_update,
+    rd_bool_t force_racks,
+    rd_kafka_resp_cb_t *resp_cb,
+    rd_kafka_replyq_t replyq,
+    rd_bool_t force,
+    void *opaque) {
         return rd_kafka_MetadataRequest0(
-            rkb, topics, reason,
-            /* No admin operation requires topic creation. */
-            rd_false, include_cluster_authorized_operations,
-            include_topic_authorized_operations,
-            rd_false /* No admin operation should update cgrp. */, force_racks,
-            NULL /* Admin options don't require us to track the op. */, resp_cb,
+            rkb, topics, reason, allow_auto_create_topics,
+            include_cluster_authorized_operations,
+            include_topic_authorized_operations, cgrp_update, force_racks,
+            NULL /* No op - using custom resp_cb. */, resp_cb, replyq,
             rd_true /* Admin operation metadata requests are always forced. */,
             opaque);
 }

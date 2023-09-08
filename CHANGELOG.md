@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # librdkafka v2.3.0
 
 librdkafka v2.3.0 is a feature release:

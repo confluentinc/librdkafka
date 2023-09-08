@@ -2866,6 +2866,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         char client_ids[TEST_DESCRIBE_CONSUMER_GROUPS_CNT][512];
         rd_kafka_t *rks[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
         const rd_kafka_DescribeConsumerGroups_result_t *res;
+        size_t authorized_operation_cnt;
         rd_bool_t has_group_instance_id =
             test_broker_version >= TEST_BRKVER(2, 4, 0, 0);
 
@@ -2986,9 +2987,10 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     rd_kafka_ConsumerGroupDescription_error(act));
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(act);
+                rd_kafka_ConsumerGroupDescription_authorized_operations(
+                    act, &authorized_operation_cnt);
                 TEST_ASSERT(
-                    rd_kafka_ConsumerGroupDescription_authorized_operation_count(
-                        act) == 0,
+                    authorized_operation_cnt == 0,
                     "Authorized operations returned when not requested\n");
                 TEST_ASSERT(
                     strcmp(exp->group_id,
@@ -3112,39 +3114,30 @@ static void do_test_DescribeConsumerGroups(const char *what,
         SUB_TEST_PASS();
 }
 
-/* Helper macro to check if an authorized operation `acl_to_check` is contained
- * within the `acl_struct`, for which the acl at index i is accessed with
- * `idx_fn(acl_struct, i)`.*/
-#define test_match_authorized_operation(acl_cnt, acl_struct, idx_fn,           \
-                                        acl_to_check)                          \
-        do {                                                                   \
-                int i;                                                         \
-                rd_bool_t found = rd_false;                                    \
-                for (i = 0; i < acl_cnt; i++) {                                \
-                        if (idx_fn(acl_struct, i) == acl_to_check) {           \
-                                found = rd_true;                               \
-                                break;                                         \
-                        }                                                      \
-                }                                                              \
-                if (!found)                                                    \
-                        TEST_FAIL("Expected to find operation %s in result\n", \
-                                  rd_kafka_AclOperation_name(acl_to_check));   \
-        } while (0)
+/** @brief Helper function to check whether \p expected and \p actual contain
+ * the same values. */
+static void
+test_match_authorized_operations(const rd_kafka_AclOperation_t *expected,
+                                 size_t expected_cnt,
+                                 const rd_kafka_AclOperation_t *actual,
+                                 size_t actual_cnt) {
+        size_t i, j;
+        TEST_ASSERT(expected_cnt == actual_cnt,
+                    "Expected %" PRIusz " authorized operations, got %" PRIusz,
+                    expected_cnt, actual_cnt);
 
-/* Helper macro to check whether all the authorized operations in the var-args
- * are present within the `acl_struct`. */
-#define test_match_authorized_operations(acl_cnt, acl_struct, idx_fn,          \
-                                         acl_to_check_cnt, ...)                \
-        do {                                                                   \
-                rd_kafka_AclOperation_t operations[acl_to_check_cnt] = {       \
-                    __VA_ARGS__};                                              \
-                size_t i;                                                      \
-                for (i = 0; i < acl_to_check_cnt; i++) {                       \
-                        rd_kafka_AclOperation_t operation = operations[i];     \
-                        test_match_authorized_operation(acl_cnt, acl_struct,   \
-                                                        idx_fn, operation);    \
-                }                                                              \
-        } while (0)
+        for (i = 0; i < expected_cnt; i++) {
+                for (j = 0; j < actual_cnt; j++)
+                        if (expected[i] == actual[j])
+                                break;
+
+                if (j == actual_cnt)
+                        TEST_FAIL(
+                            "Did not find expected authorized operation in "
+                            "result %s\n",
+                            rd_kafka_AclOperation_name(expected[i]));
+        }
+}
 
 /**
  * @brief Test DescribeTopics: create a topic, describe it, and then
@@ -3161,7 +3154,8 @@ static void do_test_DescribeTopics(const char *what,
                                    rd_bool_t include_authorized_operations) {
         rd_kafka_queue_t *q;
 #define TEST_DESCRIBE_TOPICS_CNT 3
-        char *topics[TEST_DESCRIBE_TOPICS_CNT];
+        char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
+        rd_kafka_TopicCollection_t *topics;
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
         const rd_kafka_error_t *error;
@@ -3169,6 +3163,8 @@ static void do_test_DescribeTopics(const char *what,
         test_timing_t timing;
         const rd_kafka_DescribeTopics_result_t *res;
         const rd_kafka_TopicDescription_t **result_topics;
+        const rd_kafka_TopicPartitionInfo_t **partitions;
+        size_t partitions_cnt;
         size_t result_topics_cnt;
         char errstr[128];
         const char *errstr2;
@@ -3177,7 +3173,8 @@ static void do_test_DescribeTopics(const char *what,
         const char *principal;
         rd_kafka_AclBinding_t *acl_bindings[1];
         int i;
-        int authorized_operations_cnt;
+        const rd_kafka_AclOperation_t *authorized_operations;
+        size_t authorized_operations_cnt;
 
         SUB_TEST_QUICK(
             "%s DescribeTopics with %s, request_timeout %d, "
@@ -3189,10 +3186,14 @@ static void do_test_DescribeTopics(const char *what,
 
         /* Only create one topic, the others will be non-existent. */
         for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
-                rd_strdupa(&topics[i], test_mk_topic_name(__FUNCTION__, 1));
+                rd_strdupa(&topic_names[i],
+                           test_mk_topic_name(__FUNCTION__, 1));
         }
-        test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
-        test_wait_topic_exists(rk, topics[0], 10000);
+        topics = rd_kafka_TopicCollection_new_from_names(
+            (const char **)topic_names, TEST_DESCRIBE_TOPICS_CNT);
+
+        test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);
+        test_wait_topic_exists(rk, topic_names[0], 10000);
 
         /* Call DescribeTopics. */
         options =
@@ -3204,8 +3205,7 @@ static void do_test_DescribeTopics(const char *what,
                 options, include_authorized_operations));
 
         TIMING_START(&timing, "DescribeTopics");
-        rd_kafka_DescribeTopics(rk, (const char **)topics,
-                                TEST_DESCRIBE_TOPICS_CNT, options, q);
+        rd_kafka_DescribeTopics(rk, topics, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
         rd_kafka_AdminOptions_destroy(options);
 
@@ -3251,35 +3251,39 @@ static void do_test_DescribeTopics(const char *what,
         }
 
         /* Check fields inside the first (existent) topic. */
-        TEST_ASSERT(
-            strcmp(rd_kafka_TopicDescription_topic_name(result_topics[0]),
-                   topics[0]) == 0,
-            "Expected topic name %s, got %s", topics[0],
-            rd_kafka_TopicDescription_topic_name(result_topics[0]));
-        TEST_ASSERT(
-            rd_kafka_TopicDescription_topic_partition_count(result_topics[0]) ==
-                1,
-            "Expected %d partitions, got %d", 1,
-            rd_kafka_TopicDescription_topic_partition_count(result_topics[0]));
+        TEST_ASSERT(strcmp(rd_kafka_TopicDescription_name(result_topics[0]),
+                           topic_names[0]) == 0,
+                    "Expected topic name %s, got %s", topic_names[0],
+                    rd_kafka_TopicDescription_name(result_topics[0]));
+
+        partitions = rd_kafka_TopicDescription_partitions(result_topics[0],
+                                                          &partitions_cnt);
+
+        TEST_ASSERT(partitions_cnt == 1, "Expected %d partitions, got %" PRIusz,
+                    1, partitions_cnt);
+
+        TEST_ASSERT(rd_kafka_TopicPartitionInfo_partition(partitions[0]) == 0,
+                    "Expected partion id to be %d, got %d", 0,
+                    rd_kafka_TopicPartitionInfo_partition(partitions[0]));
 
         if (include_authorized_operations) {
-                authorized_operations_cnt =
-                    rd_kafka_TopicDescription_topic_authorized_operation_count(
-                        result_topics[0]);
-                TEST_ASSERT(authorized_operations_cnt == 8,
-                            "Expected 8 operations allowed before creating "
-                            "ACLs, got %d.",
-                            authorized_operations_cnt);
-                test_match_authorized_operations(
-                    authorized_operations_cnt, result_topics[0],
-                    rd_kafka_TopicDescription_authorized_operation, 8,
+                const rd_kafka_AclOperation_t expected[] = {
                     RD_KAFKA_ACL_OPERATION_ALTER,
                     RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS,
                     RD_KAFKA_ACL_OPERATION_CREATE,
                     RD_KAFKA_ACL_OPERATION_DELETE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_OPERATION_WRITE);
+                    RD_KAFKA_ACL_OPERATION_READ,
+                    RD_KAFKA_ACL_OPERATION_WRITE};
+
+                authorized_operations =
+                    rd_kafka_TopicDescription_authorized_operations(
+                        result_topics[0], &authorized_operations_cnt);
+
+                test_match_authorized_operations(expected, 8,
+                                                 authorized_operations,
+                                                 authorized_operations_cnt);
         }
         rd_kafka_event_destroy(rkev);
 
@@ -3303,7 +3307,7 @@ static void do_test_DescribeTopics(const char *what,
         /* Change authorized operations for the principal which we're
          * using to connect to the broker. */
         acl_bindings[0] = rd_kafka_AclBinding_new(
-            RD_KAFKA_RESOURCE_TOPIC, topics[0],
+            RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
             RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
@@ -3321,8 +3325,7 @@ static void do_test_DescribeTopics(const char *what,
                                                                     1));
 
         TIMING_START(&timing, "DescribeTopics");
-        rd_kafka_DescribeTopics(rk, (const char **)topics,
-                                TEST_DESCRIBE_TOPICS_CNT, options, q);
+        rd_kafka_DescribeTopics(rk, topics, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
         rd_kafka_AdminOptions_destroy(options);
 
@@ -3356,17 +3359,18 @@ static void do_test_DescribeTopics(const char *what,
                     rd_kafka_error_string(error));
 
         /* Check if ACLs changed. */
-        authorized_operations_cnt =
-            rd_kafka_TopicDescription_topic_authorized_operation_count(
-                result_topics[0]);
-        TEST_ASSERT(authorized_operations_cnt == 2,
-                    "Expected 2 operations allowed after creating "
-                    "ACLs, got %d.",
-                    authorized_operations_cnt);
-        test_match_authorized_operations(
-            authorized_operations_cnt, result_topics[0],
-            rd_kafka_TopicDescription_authorized_operation, 2,
-            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_OPERATION_DESCRIBE);
+        {
+                const rd_kafka_AclOperation_t expected[] = {
+                    RD_KAFKA_ACL_OPERATION_READ,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE};
+                authorized_operations =
+                    rd_kafka_TopicDescription_authorized_operations(
+                        result_topics[0], &authorized_operations_cnt);
+
+                test_match_authorized_operations(expected, 2,
+                                                 authorized_operations,
+                                                 authorized_operations_cnt);
+        }
         rd_kafka_event_destroy(rkev);
 
         /*
@@ -3375,7 +3379,7 @@ static void do_test_DescribeTopics(const char *what,
          * and describe.
          */
         acl_bindings[0] = rd_kafka_AclBinding_new(
-            RD_KAFKA_RESOURCE_TOPIC, topics[0],
+            RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
             RD_KAFKA_ACL_OPERATION_DELETE, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
@@ -3384,9 +3388,11 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
 done:
-        test_DeleteTopics_simple(rk, NULL, topics, 1, NULL);
+        test_DeleteTopics_simple(rk, NULL, topic_names, 1, NULL);
         if (!rkqu)
                 rd_kafka_queue_destroy(q);
+
+        rd_kafka_TopicCollection_destroy(topics);
 
 
         TEST_LATER_CHECK();
@@ -3412,16 +3418,17 @@ static void do_test_DescribeCluster(const char *what,
         rd_kafka_resp_err_t err;
         test_timing_t timing;
         const rd_kafka_DescribeCluster_result_t *res;
-        const rd_kafka_ClusterDescription_t *result_cluster;
+        const rd_kafka_Node_t **nodes;
+        size_t node_cnt;
         char errstr[128];
         const char *errstr2;
         rd_kafka_AclBinding_t *acl_bindings[1];
         rd_kafka_AclBindingFilter_t *acl_bindings_delete;
-        int authorized_operations_cnt;
+        const rd_kafka_AclOperation_t *authorized_operations;
+        size_t authorized_operations_cnt;
         const char *sasl_username;
         const char *sasl_mechanism;
         const char *principal;
-        const rd_kafka_Node_t *node;
 
         SUB_TEST_QUICK(
             "%s DescribeCluster with %s, request_timeout %d, %s authorized "
@@ -3460,40 +3467,35 @@ static void do_test_DescribeCluster(const char *what,
         TEST_ASSERT(!err, "Expected success, not %s: %s",
                     rd_kafka_err2name(err), errstr2);
 
-        result_cluster = rd_kafka_DescribeCluster_result_description(res);
-
         /* Sanity checks on fields inside the result. There's not much we can
          * say here deterministically, since it depends on the test environment.
          */
-        TEST_ASSERT(
-            strlen(rd_kafka_ClusterDescription_cluster_id(result_cluster)),
-            "Length of cluster id should be non-null.");
-        TEST_ASSERT(rd_kafka_ClusterDescription_node_count(result_cluster),
-                    "Expected non-zero node count in cluster.");
-        node = rd_kafka_ClusterDescription_node(result_cluster, 0);
-        TEST_ASSERT(rd_kafka_Node_host(node),
+        TEST_ASSERT(strlen(rd_kafka_DescribeCluster_result_cluster_id(res)),
+                    "Length of cluster id should be non-null.");
+
+        nodes = rd_kafka_DescribeCluster_result_nodes(res, &node_cnt);
+        TEST_ASSERT(node_cnt, "Expected non-zero node count for cluster.");
+
+        TEST_ASSERT(rd_kafka_Node_host(nodes[0]),
                     "Expected first node of cluster to have a hostname");
-        TEST_ASSERT(rd_kafka_Node_port(node),
+        TEST_ASSERT(rd_kafka_Node_port(nodes[0]),
                     "Expected first node of cluster to have a port");
 
         if (include_authorized_operations) {
-                authorized_operations_cnt =
-                    rd_kafka_ClusterDescription_cluster_authorized_operation_count(
-                        result_cluster);
-                TEST_ASSERT(
-                    authorized_operations_cnt == 7,
-                    "Expected 7 cluster operations allowed by ACLs, actual %d",
-                    authorized_operations_cnt);
-                test_match_authorized_operations(
-                    authorized_operations_cnt, result_cluster,
-                    rd_kafka_ClusterDescription_authorized_operation, 7,
+                const rd_kafka_AclOperation_t expected[] = {
                     RD_KAFKA_ACL_OPERATION_ALTER,
                     RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS,
                     RD_KAFKA_ACL_OPERATION_CLUSTER_ACTION,
                     RD_KAFKA_ACL_OPERATION_CREATE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_IDEMPOTENT_WRITE);
+                    RD_KAFKA_ACL_OPERATION_IDEMPOTENT_WRITE};
+                authorized_operations =
+                    rd_kafka_DescribeCluster_result_authorized_operations(
+                        res, &authorized_operations_cnt);
+                test_match_authorized_operations(expected, 7,
+                                                 authorized_operations,
+                                                 authorized_operations_cnt);
         }
 
         rd_kafka_event_destroy(rkev);
@@ -3554,24 +3556,23 @@ static void do_test_DescribeCluster(const char *what,
         TEST_ASSERT(!err, "Expected success, not %s: %s",
                     rd_kafka_err2name(err), errstr2);
 
-        result_cluster = rd_kafka_DescribeCluster_result_description(res);
-
-        authorized_operations_cnt =
-            rd_kafka_ClusterDescription_cluster_authorized_operation_count(
-                result_cluster);
-
         /*
          * After CreateAcls call with
          * only RD_KAFKA_ACL_OPERATION_ALTER allowed, the allowed operations
          * should be 2 (DESCRIBE is implicitly derived from ALTER).
          */
-        TEST_ASSERT(authorized_operations_cnt == 2,
-                    "Expected 2 cluster operations allowed by ACLs, actual %d",
-                    authorized_operations_cnt);
-        test_match_authorized_operations(
-            authorized_operations_cnt, result_cluster,
-            rd_kafka_ClusterDescription_authorized_operation, 2,
-            RD_KAFKA_ACL_OPERATION_ALTER, RD_KAFKA_ACL_OPERATION_DESCRIBE);
+        {
+                const rd_kafka_AclOperation_t expected[] = {
+                    RD_KAFKA_ACL_OPERATION_ALTER,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE};
+                authorized_operations =
+                    rd_kafka_DescribeCluster_result_authorized_operations(
+                        res, &authorized_operations_cnt);
+
+                test_match_authorized_operations(expected, 2,
+                                                 authorized_operations,
+                                                 authorized_operations_cnt);
+        }
 
         rd_kafka_event_destroy(rkev);
 
@@ -3622,7 +3623,8 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         size_t results_cnt;
         const rd_kafka_DescribeConsumerGroups_result_t *res;
         const char *principal, *sasl_mechanism, *sasl_username;
-        int authorized_operations_cnt;
+        const rd_kafka_AclOperation_t *authorized_operations;
+        size_t authorized_operations_cnt;
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
@@ -3691,17 +3693,18 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         TEST_ASSERT(!error, "Expected no error in describing group, got: %s",
                     rd_kafka_error_string(error));
 
-        authorized_operations_cnt =
-            rd_kafka_ConsumerGroupDescription_authorized_operation_count(
-                results[0]);
-        TEST_ASSERT(authorized_operations_cnt == 3,
-                    "Expected 2 group operations allowed by ACLs, actual %d",
-                    authorized_operations_cnt);
-        test_match_authorized_operations(
-            authorized_operations_cnt, results[0],
-            rd_kafka_ConsumerGroupDescription_authorized_operation, 3,
-            RD_KAFKA_ACL_OPERATION_DELETE, RD_KAFKA_ACL_OPERATION_DESCRIBE,
-            RD_KAFKA_ACL_OPERATION_READ);
+        {
+                const rd_kafka_AclOperation_t expected[] = {
+                    RD_KAFKA_ACL_OPERATION_DELETE,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                    RD_KAFKA_ACL_OPERATION_READ};
+                authorized_operations =
+                    rd_kafka_ConsumerGroupDescription_authorized_operations(
+                        results[0], &authorized_operations_cnt);
+                test_match_authorized_operations(expected, 3,
+                                                 authorized_operations,
+                                                 authorized_operations_cnt);
+        }
 
         rd_kafka_event_destroy(rkev);
 
@@ -3756,16 +3759,18 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         TEST_ASSERT(!error, "Expected no error in describing group, got: %s",
                     rd_kafka_error_string(error));
 
-        authorized_operations_cnt =
-            rd_kafka_ConsumerGroupDescription_authorized_operation_count(
-                results[0]);
-        TEST_ASSERT(authorized_operations_cnt == 2,
-                    "Expected 2 group operations allowed by ACLs, actual %d",
-                    authorized_operations_cnt);
-        test_match_authorized_operations(
-            authorized_operations_cnt, results[0],
-            rd_kafka_ConsumerGroupDescription_authorized_operation, 2,
-            RD_KAFKA_ACL_OPERATION_DESCRIBE, RD_KAFKA_ACL_OPERATION_READ);
+
+        {
+                const rd_kafka_AclOperation_t expected[] = {
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                    RD_KAFKA_ACL_OPERATION_READ};
+                authorized_operations =
+                    rd_kafka_ConsumerGroupDescription_authorized_operations(
+                        results[0], &authorized_operations_cnt);
+                test_match_authorized_operations(expected, 2,
+                                                 authorized_operations,
+                                                 authorized_operations_cnt);
+        }
 
         rd_kafka_event_destroy(rkev);
 

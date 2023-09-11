@@ -2851,10 +2851,16 @@ void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
         rd_atomic64_add(&rkb->rkb_c.tx_retries, 1);
 
-        int64_t backoff = (1<<(rkbuf->rkbuf_retries))*(rkb->rkb_rk->rk_conf.retry_backoff_ms);
+        int64_t backoff = 0;
+        if (rkbuf->rkbuf_retries > 0)
+                backoff = (1<<(rkbuf->rkbuf_retries - 1))*(rkb->rkb_rk->rk_conf.retry_backoff_ms);
+        else
+                backoff = (1<<(rkbuf->rkbuf_retries))*(rkb->rkb_rk->rk_conf.retry_backoff_ms);
+
         if (backoff > rkb->rkb_rk->rk_conf.retry_backoff_max_ms)
                 backoff = rkb->rkb_rk->rk_conf.retry_backoff_max_ms;
-        backoff = backoff * 1000;
+
+        backoff = rd_jitter(80,120) * backoff * 10;
         rkbuf->rkbuf_ts_retry = rd_clock() + backoff;
         // 
         /* Precaution: time out the request if it hasn't moved from the

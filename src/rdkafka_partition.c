@@ -904,9 +904,6 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                 rd_kafka_msgq_enq(&retryable, rkm);
 
                 rkm->rkm_u.producer.retries += incr_retry;
-                fprintf(stderr,"incr_retry is %d\n",incr_retry);
-                fprintf(stderr,"producer.retries is %d\n",rkm->rkm_u.producer.retries);
-                fprintf(stderr,"The backoff was %ld\n",backoff);
                 if(exponential_backoff == rd_true){
                         if(rkm->rkm_u.producer.retries > 0)
                                 backoff = (1<<(rkm->rkm_u.producer.retries -1))*retry_ms;
@@ -914,12 +911,9 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                                 backoff = (1<<(rkm->rkm_u.producer.retries))*retry_ms;
                         if(backoff > retry_max_ms)
                                 backoff = retry_max_ms;
-                        backoff = backoff/100;
-                        backoff = rd_jitter(80,120)*backoff;
-                        fprintf(stderr,"The backoff in ms is %ld\n",backoff);
-                        backoff = rd_clock() + backoff*1000;
+                        backoff = rd_jitter(80,120) * backoff * 10;
+                        backoff = rd_clock() + backoff;
                 }
-                fprintf(stderr,"The backoff came out to be %ld\n",backoff);
                 rkm->rkm_u.producer.ts_backoff = backoff;
 
                 /* Don't downgrade a message from any form of PERSISTED

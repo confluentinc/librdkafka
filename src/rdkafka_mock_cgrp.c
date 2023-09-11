@@ -706,20 +706,4 @@ void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                 }
         }
 }
-/**
- * @brief Copies and returns all the mock request made to a mock broker 
- */
-rd_list_t *rd_kafka_mock_request_list(rd_kafka_mock_broker_t *mbroker){
-        mtx_lock(&mbroker->cluster->lock);
-        rd_list_t *request_list = rd_list_copy(mbroker->request_list,rd_kafka_mock_request_copy,NULL);
-        mtx_unlock(&mbroker->cluster->lock);
-        return request_list;
-}
-/**
- * @brief Clears all the mock request made to the mock broker
- */
-void rd_kafka_mock_request_list_clear(rd_kafka_mock_broker_t *mbroker){
-        mtx_lock(&mbroker->cluster->lock);
-        rd_list_clear(mbroker->request_list);
-        mtx_unlock(&mbroker->cluster->lock);
-}
+

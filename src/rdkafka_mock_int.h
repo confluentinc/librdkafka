@@ -184,31 +184,7 @@ typedef struct rd_kafka_mock_connection_s {
         struct rd_kafka_mock_broker_s *broker;
         rd_kafka_timer_t write_tmr; /**< Socket write delay timer */
 } rd_kafka_mock_connection_t;
-/**
- * @struct A real TCP connection from the client to a mock broker.
- */
-typedef struct rd_kafka_mock_request_s {
-        int16_t api_key;
-        rd_ts_t timestamp;
-} rd_kafka_mock_request_t;
 
-rd_kafka_mock_request_t *rd_kafka_mock_request_new(int16_t api_key,rd_ts_t timestamp){
-        rd_kafka_mock_request_t *request;
-        request = rd_malloc(sizeof(*request));
-        request->api_key = api_key;
-        request->timestamp = timestamp;
-        return request;
-}
-rd_kafka_mock_request_t *rd_kafka_mock_request_copy(rd_kafka_mock_request_t *mrequest){
-        rd_kafka_mock_request_t *request;
-        request = rd_malloc(sizeof(*request));
-        request->api_key = mrequest->api_key;
-        request->timestamp = mrequest->timestamp;
-        return request;
-}
-void rd_kafka_mock_request_free(rd_kafka_mock_request_t *element){
-        rd_free(element);
-}
 
 /**
  * @struct Mock broker
@@ -232,15 +208,8 @@ typedef struct rd_kafka_mock_broker_s {
         rd_kafka_mock_error_stack_head_t errstacks;
 
         struct rd_kafka_mock_cluster_s *cluster;
-        rd_list_t *request_list;
 } rd_kafka_mock_broker_t;
 
-const rd_list_t *rd_kafka_mock_broker_fetch_requests(rd_kafka_mock_broker_t *mrkb){
-        return mrkb->request_list;
-}
-void rd_kafka_mock_broker_clear_requests(rd_kafka_mock_broker_t *mrkb){
-        rd_list_clear(mrkb->request_list);
-}
 
 /**
  * @struct A Kafka-serialized MessageSet
@@ -424,6 +393,11 @@ struct rd_kafka_mock_cluster_s {
         /**< Request handlers */
         struct rd_kafka_mock_api_handler api_handlers[RD_KAFKAP__NUM];
 
+         /**< List of API requests for this broker. Type:
+         * rd_kafka_mock_request_t*
+         */
+        rd_list_t request_list;
+
         /**< Mutex for:
          *   .errstacks
          *   .apiversions
@@ -559,8 +533,6 @@ rd_kafka_mock_cgrp_get(rd_kafka_mock_cluster_t *mcluster,
                        const rd_kafkap_str_t *ProtocolType);
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);
-rd_list_t *rd_kafka_mock_request_list(rd_kafka_mock_broker_t *mbroker);
-void rd_kafka_mock_request_list_clear(rd_kafka_mock_broker_t *mbroker);
 /**
  *@}
  */

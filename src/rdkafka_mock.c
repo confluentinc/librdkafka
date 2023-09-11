@@ -38,7 +38,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_mock_int.h"
 #include "rdkafka_transport_int.h"
-
+#include "rdkafka_mock.h"
 #include <stdarg.h>
 
 static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster);
@@ -1128,7 +1128,7 @@ rd_kafka_mock_connection_parse_request(rd_kafka_mock_connection_t *mconn,
                 return -1;
         }
         mtx_lock(&mcluster->lock);
-        rd_list_add(broker->request_list,rd_kafka_mock_request_new(rkbuf->rkbuf_reqhdr.ApiKey,rd_clock())); 
+        rd_list_add(&mcluster->request_list, rd_kafka_mock_request_new(mconn->broker->id, rkbuf->rkbuf_reqhdr.ApiKey, rd_clock())); 
         mtx_unlock(&mcluster->lock);
         rd_kafka_dbg(rk, MOCK, "MOCK",
                      "Broker %" PRId32 ": Received %sRequestV%hd from %s",
@@ -1494,8 +1494,6 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 
         TAILQ_REMOVE(&mrkb->cluster->brokers, mrkb, link);
         mrkb->cluster->broker_cnt--;
-        rd_list_destroy_free(mrkb->request_list);
-
         rd_free(mrkb);
 }
 
@@ -1615,7 +1613,6 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
         mrkb->listen_s = listen_s;
         mrkb->sin      = sin;
         mrkb->port     = ntohs(sin.sin_port);
-        mrkb->request_list = rd_list_new(10,rd_kafka_mock_request_free);
         rd_snprintf(mrkb->advertised_listener,
                     sizeof(mrkb->advertised_listener), "%s",
                     rd_sockaddr2str(&sin, 0));
@@ -2602,8 +2599,76 @@ rd_kafka_mock_cluster_t *rd_kafka_handle_mock_cluster(const rd_kafka_t *rk) {
         return (rd_kafka_mock_cluster_t *)rk->rk_mock.cluster;
 }
 
-
 const char *
 rd_kafka_mock_cluster_bootstraps(const rd_kafka_mock_cluster_t *mcluster) {
         return mcluster->bootstraps;
+}
+/**
+ * @struct Represents a request to the mock cluster along with a timestamp.
+ */
+struct rd_kafka_mock_request_s {
+        int32_t id;      /**< Broker id */
+        int16_t api_key; /**< API Key of request */
+        rd_ts_t timestamp /**< Timestamp at which request was received */;
+};
+
+rd_kafka_mock_request_t *rd_kafka_mock_request_new(int32_t id,int16_t api_key,rd_ts_t timestamp){
+        rd_kafka_mock_request_t *request;
+        request = rd_malloc(sizeof(*request));
+        request->id = id;
+        request->api_key = api_key;
+        request->timestamp = timestamp;
+        return request;
+}
+
+rd_kafka_mock_request_t *rd_kafka_mock_request_copy(rd_kafka_mock_request_t *mrequest){
+        rd_kafka_mock_request_t *request;
+        request = rd_malloc(sizeof(*request));
+        request->id = mrequest->id;
+        request->api_key = mrequest->api_key;
+        request->timestamp = mrequest->timestamp;
+        return request;
+}
+
+void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *element){
+        rd_free(element);
+}
+
+rd_kafka_mock_request_t **
+rd_kafka_mock_get_requests(rd_kafka_mock_cluster_t *mcluster, size_t *cntp) {
+        size_t i;
+        rd_kafka_mock_request_t **ret = NULL;
+
+        mtx_lock(&mcluster->lock);
+        *cntp = rd_list_cnt(&mcluster->request_list);
+        if (*cntp > 0) {
+                ret = rd_calloc(*cntp, sizeof(rd_kafka_mock_request_t *));
+                for (i = 0; i < *cntp; i++) {
+                        rd_kafka_mock_request_t *mreq =
+                            rd_list_elem(&mcluster->request_list, i);
+                        ret[i] = rd_kafka_mock_request_copy(mreq);
+                }
+        }
+
+        mtx_unlock(&mcluster->lock);
+        return ret;
+}
+
+void rd_kafka_mock_clear_requests(rd_kafka_mock_cluster_t *mcluster) {
+        mtx_lock(&mcluster->lock);
+        rd_list_clear(&mcluster->request_list);
+        mtx_unlock(&mcluster->lock);
+}
+
+int32_t rd_kafka_mock_request_id(rd_kafka_mock_request_t *mreq) {
+        return mreq->id;
+}
+
+int16_t rd_kafka_mock_request_api_key(rd_kafka_mock_request_t *mreq) {
+        return mreq->api_key;
+}
+
+rd_ts_t
+rd_kafka_mock_request_timestamp(rd_kafka_mock_request_t *mreq) {
+        return mreq->timestamp;
 }

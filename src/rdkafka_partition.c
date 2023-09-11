@@ -905,7 +905,10 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
 
                 rkm->rkm_u.producer.retries += incr_retry;
                 if(exponential_backoff == rd_true){
-                        backoff = rd_clock() + min((1<<(rkm->rkm_u.producer.retries))*retry_ms,retry_max_ms)*1000;
+                        backoff = (1<<(rkm->rkm_u.producer.retries))*retry_ms;
+                        if(backoff > retry_max_ms)
+                                backoff = retry_max_ms;
+                        backoff = rd_clock() + backoff*1000;
                 }
                 rkm->rkm_u.producer.ts_backoff = backoff;
 

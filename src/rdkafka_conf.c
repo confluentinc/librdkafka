@@ -1376,7 +1376,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(retry_backoff_ms),
      "The backoff time in milliseconds before retrying a protocol request.", 1,
      300 * 1000, 100},
-
+     {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
+     _RK(retry_backoff_max_ms),
+     "The max backoff time in milliseconds before retrying a protocol request.", 1,
+     300 * 1000, 1000},
     {_RK_GLOBAL | _RK_PRODUCER, "queue.buffering.backpressure.threshold",
      _RK_C_INT, _RK(queue_backpressure_thres),
      "The threshold of outstanding not yet transmitted broker requests "

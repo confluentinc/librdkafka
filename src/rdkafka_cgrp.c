@@ -753,9 +753,9 @@ void rd_kafka_cgrp_coord_query(rd_kafka_cgrp_t *rkcg, const char *reason) {
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_COORD);
 
         rd_kafka_broker_destroy(rkb);
-
+        
         /* Back off the next intervalled query with a jitter since we just sent one. */
-        rd_interval_reset_to_now_with_jitter(&rkcg->rkcg_coord_query_intvl, 0, 15);
+        rd_interval_reset_to_now_with_backoff_and_jitter(&rkcg->rkcg_coord_query_intvl, 0, 500, 20);
 }
 
 /**

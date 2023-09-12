@@ -114,10 +114,12 @@ static RD_INLINE RD_UNUSED void rd_interval_reset_to_now(rd_interval_t *ri,
  * Reset the interval to 'now' with the given maxjitterpercentage. If now is 0, the time will be gathered
  * automatically.
  */
-static RD_INLINE RD_UNUSED void rd_interval_reset_to_now_with_jitter(rd_interval_t *ri,
-                                                         rd_ts_t now, int maxjitterpercentage) {
+static RD_INLINE RD_UNUSED void rd_interval_reset_to_now_with_backoff_and_jitter(rd_interval_t *ri,
+                                                         rd_ts_t now,int64_t backoff_ms, int maxjitterpercentage) {
         rd_interval_reset_to_now(ri, now);
-        ri->ri_ts_last = (ri->ri_ts_last*rd_jitter(100-maxjitterpercentage, 100+maxjitterpercentage))/100;
+        int32_t jitter = rd_jitter(100-maxjitterpercentage, 100+maxjitterpercentage);
+        fprintf(stderr,"Backoff ms is %d and jitter came out to be %d percentage\n",backoff_ms,jitter);
+        ri->ri_ts_last = ri->ri_ts_last +  backoff_ms * jitter * 10;
 }
 
 /**

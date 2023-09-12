@@ -117,9 +117,7 @@ static RD_INLINE RD_UNUSED void rd_interval_reset_to_now(rd_interval_t *ri,
 static RD_INLINE RD_UNUSED void rd_interval_reset_to_now_with_backoff_and_jitter(rd_interval_t *ri,
                                                          rd_ts_t now,int64_t backoff_ms, int maxjitterpercentage) {
         rd_interval_reset_to_now(ri, now);
-        int32_t jitter = rd_jitter(100-maxjitterpercentage, 100+maxjitterpercentage);
-        fprintf(stderr,"Backoff ms is %d and jitter came out to be %d percentage\n",backoff_ms,jitter);
-        ri->ri_ts_last = ri->ri_ts_last +  backoff_ms * jitter * 10;
+        ri->ri_ts_last = ri->ri_ts_last +  backoff_ms * rd_jitter(100-maxjitterpercentage, 100+maxjitterpercentage) * 10;
 }
 
 /**

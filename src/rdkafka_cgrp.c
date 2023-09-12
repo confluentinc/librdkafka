@@ -729,7 +729,6 @@ void rd_kafka_cgrp_coord_query(rd_kafka_cgrp_t *rkcg, const char *reason) {
                              RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
                 return;
         }
-
         rd_rkb_dbg(rkb, CGRP, "CGRPQUERY",
                    "Group \"%.*s\": querying for coordinator: %s",
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
@@ -5244,12 +5243,11 @@ retry:
 
         case RD_KAFKA_CGRP_STATE_QUERY_COORD:
                 /* Query for coordinator. */
-                /* We think the time is 4 seconds after , so we retry at 3 seconds */
                 if (rd_interval_immediate(&rkcg->rkcg_coord_query_intvl,
                                           500 * 1000, now) > 0)
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in "
-                                                  "state query-coord");
+                                                  "state query-coord"); 
                 break;
 
         case RD_KAFKA_CGRP_STATE_WAIT_COORD:

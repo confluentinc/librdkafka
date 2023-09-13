@@ -360,19 +360,25 @@ done:
  * should suffice.
  * We test with the result of rd_kafka_queue_get_consumer, and an arbitrary
  * queue that is forwarded to by the result of rd_kafka_queue_get_consumer.
+ * We also test with an arbitrary queue that is forwarded to the the result of
+ * rd_kafka_queue_get_consumer.
  */
 static void
-do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q) {
+do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
+                                     rd_bool_t forward_to_consumer_q) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         rd_kafka_conf_t *conf;
         char groupid[64];
-        rd_kafka_t *rk                   = NULL;
-        rd_kafka_queue_t *consumer_queue = NULL;
-        rd_kafka_event_t *event          = NULL;
-        rd_kafka_queue_t *polling_queue  = NULL;
+        rd_kafka_t *rk                    = NULL;
+        rd_kafka_queue_t *consumer_queue  = NULL;
+        rd_kafka_queue_t *forwarder_queue = NULL;
+        rd_kafka_event_t *event           = NULL;
+        rd_kafka_queue_t *polling_queue   = NULL;
 
-        SUB_TEST("Testing with forward_to_another_q = %d",
-                 forward_to_another_q);
+        SUB_TEST(
+            "Testing with forward_to_another_q = %d, forward_to_consumer_q = "
+            "%d",
+            forward_to_another_q, forward_to_consumer_q);
 
         test_create_topic(NULL, topic, 1, 1);
 
@@ -393,6 +399,10 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q) {
         if (forward_to_another_q) {
                 polling_queue = rd_kafka_queue_new(rk);
                 rd_kafka_queue_forward(consumer_queue, polling_queue);
+        } else if (forward_to_consumer_q) {
+                forwarder_queue = rd_kafka_queue_new(rk);
+                rd_kafka_queue_forward(forwarder_queue, consumer_queue);
+                polling_queue = forwarder_queue;
         } else
                 polling_queue = consumer_queue;
 
@@ -430,6 +440,8 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q) {
 
         if (forward_to_another_q)
                 rd_kafka_queue_destroy(polling_queue);
+        if (forward_to_consumer_q)
+                rd_kafka_queue_destroy(forwarder_queue);
         rd_kafka_queue_destroy(consumer_queue);
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
@@ -440,7 +452,8 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q) {
 int main_0089_max_poll_interval(int argc, char **argv) {
         do_test();
         do_test_with_log_queue();
-        do_test_rejoin_after_interval_expire(rd_false);
-        do_test_rejoin_after_interval_expire(rd_true);
+        do_test_rejoin_after_interval_expire(rd_false, rd_false);
+        do_test_rejoin_after_interval_expire(rd_true, rd_false);
+        do_test_rejoin_after_interval_expire(rd_false, rd_true);
         return 0;
 }

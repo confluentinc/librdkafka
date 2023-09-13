@@ -1238,6 +1238,7 @@ err_parse:
  */
 static int rd_kafka_mock_handle_Heartbeat(rd_kafka_mock_connection_t *mconn,
                                           rd_kafka_buf_t *rkbuf) {
+        fprintf(stderr,"Heartbeat was called!\n");
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_mock_broker_t *mrkb;
         const rd_bool_t log_decode_errors = rd_true;

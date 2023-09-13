@@ -1522,6 +1522,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
 
         if (rd_list_cnt(&topics) == 0) {
                 /* No leader-less topics+partitions, stop the timer. */
+                fprintf(stderr,"Timer Stopped because  No leader-less topics+partitions!\n");
                 rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
         } else {
                 rd_kafka_metadata_refresh_topics(
@@ -1533,10 +1534,13 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
                  * since the intervalled querier will do the job for us. */
                 if (rk->rk_conf.metadata_refresh_interval_ms > 0 &&
                     rtmr->rtmr_interval * 2 / 1000 >=
-                        rk->rk_conf.retry_backoff_max_ms)
-                        rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
-                else
-                        rd_kafka_timer_exp_backoff(rkts, rtmr, rk->rk_conf.retry_backoff_ms*1000,rk->rk_conf.retry_backoff_max_ms*1000,15);
+                        rk->rk_conf.retry_backoff_max_ms){
+                                fprintf(stderr,"Timer Stopped!\n");
+                                rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
+                }else{
+                        fprintf(stderr,"Exponential Backoff Tried!\n");
+                        rd_kafka_timer_exp_backoff(rkts, rtmr, rk->rk_conf.retry_backoff_ms*1000,rk->rk_conf.retry_backoff_max_ms*1000,20);
+                }
         }
 
         rd_list_destroy(&topics);
@@ -1562,6 +1566,7 @@ void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
         if (next == -1 /* not started */ ||
             next >
                 (rd_ts_t)rk->rk_conf.metadata_refresh_fast_interval_ms * 1000) {
+                fprintf(stderr,"Timer Start function called.\n");
                 rd_kafka_dbg(rk, METADATA | RD_KAFKA_DBG_TOPIC, "FASTQUERY",
                              "Starting fast leader query");
                 rd_kafka_timer_start(

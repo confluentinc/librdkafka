@@ -1263,9 +1263,9 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         int32_t leader_change = 0;
         int32_t updated_leader_epoch = 0;
         int32_t no_leader_epoch = 0;
-        rd_bool_t topic_exists_with_no_leader_epoch;
-        rd_bool_t topic_exists_with_updated_leader_epoch;
-        rd_bool_t topic_exists_with_leader_change;
+        rd_bool_t topic_exists_with_no_leader_epoch = rd_false;
+        rd_bool_t topic_exists_with_updated_leader_epoch = rd_false;
+        rd_bool_t topic_exists_with_leader_change = rd_false;
 
         if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR)
                 rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
@@ -1347,7 +1347,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                 else if (rktp->rktp_leader_epoch < leader_epoch)
                         updated_leader_epoch++;
                 
-                if(rktp->rktp_leader_id != mdt->partitions[j].leader || rktp->rktp_leader != leader)
+                if(rktp->rktp_leader_id != mdt->partitions[j].leader)
                         leader_change++;
 
                 /* Update leader for partition */
@@ -1365,6 +1365,14 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                 }
         }
         /* Deduce the bools based on the int32_t values */
+        if(no_leader_epoch > 0)
+                topic_exists_with_no_leader_epoch = rd_true;
+        
+        if(updated_leader_epoch > 0)
+                topic_exists_with_updated_leader_epoch = rd_true;
+        
+        if(leader_change > 0)
+                topic_exists_with_leader_change = rd_true;
         
         /* If all partitions have leaders we can turn off fast leader query. */
         if (mdt->partition_cnt > 0 && leader_cnt == mdt->partition_cnt && 

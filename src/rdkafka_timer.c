@@ -196,7 +196,6 @@ void rd_kafka_timer_start0(rd_kafka_timers_t *rkts,
 
         rd_kafka_timers_unlock(rkts);
 }
-
 /**
  * Delay the next timer invocation by '2 * rtmr->rtmr_interval'
  */
@@ -205,11 +204,13 @@ void rd_kafka_timer_exp_backoff(rd_kafka_timers_t *rkts,
         rd_kafka_timers_lock(rkts);
         if (rd_kafka_timer_scheduled(rtmr)) {
                 rtmr->rtmr_interval *= 2;
+                fprintf(stderr,"The 2 times interval is %lld.\n",rtmr->rtmr_interval);
                 if (rtmr->rtmr_interval < minimum)
                         rtmr->rtmr_interval = minimum;
-                else if ( (rtmr->rtmr_interval > maximum) && (maximum != -1) )
+                rtmr->rtmr_interval = ( rd_jitter(100-jitterpercentage, 100+jitterpercentage) * rtmr->rtmr_interval ) / 100;               
+                if ((rtmr->rtmr_interval > maximum) && (maximum != -1))
                         rtmr->rtmr_interval = maximum;
-                rtmr->rtmr_interval = ( rd_jitter(100-jitterpercentage, 100+jitterpercentage) * rtmr->rtmr_interval ) / 100;
+                fprintf(stderr,"The final interval is %lld.\n",rtmr->rtmr_interval);     
                 rd_kafka_timer_unschedule(rkts, rtmr);
         }
         rd_kafka_timer_schedule(rkts, rtmr, 0);

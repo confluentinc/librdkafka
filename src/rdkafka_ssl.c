@@ -625,24 +625,25 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
 
         } else if (rd_kafka_transport_ssl_io_update(rktrans, r, errstr,
                                                     sizeof(errstr)) == -1) {
-                const char *extra       = "";
+                char extra[512];
                 rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__SSL;
 
                 if (strstr(errstr, "unexpected message"))
-                        extra =
-                            ": client SSL authentication might be "
-                            "required (see ssl.key.location and "
-                            "ssl.certificate.location and consult the "
-                            "broker logs for more information)";
+                        rd_snprintf(extra, sizeof(extra),
+                                    ": client SSL authentication might be "
+                                    "required (see ssl.key.location and "
+                                    "ssl.certificate.location and consult the "
+                                    "broker logs for more information)");
                 else if (strstr(errstr,
                                 "tls_process_server_certificate:"
                                 "certificate verify failed") ||
                          strstr(errstr, "error:0A000086") /*openssl3*/ ||
                          strstr(errstr,
                                 "get_server_certificate:"
-                                "certificate verify failed"))
-                        extra =
-                            ": broker certificate could not be verified, "
+                                "certificate verify failed")) {
+                        rd_snprintf(
+                            extra, sizeof(extra),
+                            ": broker certificate could not be verified (%s), "
                             "verify that ssl.ca.location is correctly "
                             "configured or root CA certificates are "
                             "installed"
@@ -654,9 +655,13 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
 #else
                             " (install ca-certificates package)"
 #endif
-                            ;
-                else if (!strcmp(errstr, "Disconnected")) {
-                        extra = ": connecting to a PLAINTEXT broker listener?";
+                            ,
+                            X509_verify_cert_error_string(
+                                SSL_get_verify_result(rktrans->rktrans_ssl)));
+                } else if (!strcmp(errstr, "Disconnected")) {
+                        rd_snprintf(
+                            extra, sizeof(extra),
+                            ": connecting to a PLAINTEXT broker listener?");
                         /* Disconnects during handshake are most likely
                          * not due to SSL, but rather at the transport level */
                         err = RD_KAFKA_RESP_ERR__TRANSPORT;

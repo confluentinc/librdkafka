@@ -1532,15 +1532,17 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
                 /* Back off next query exponentially until we reach
                  * the standard query interval - then stop the timer
                  * since the intervalled querier will do the job for us. */
-                if (rk->rk_conf.metadata_refresh_interval_ms > 0 &&
-                    rtmr->rtmr_interval * 2 / 1000 >=
-                        rk->rk_conf.retry_backoff_max_ms){
-                                fprintf(stderr,"Timer Stopped!\n");
-                                rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
-                }else{
-                        fprintf(stderr,"Exponential Backoff Tried!\n");
-                        rd_kafka_timer_exp_backoff(rkts, rtmr, rk->rk_conf.retry_backoff_ms*1000,rk->rk_conf.retry_backoff_max_ms*1000,20);
-                }
+                fprintf(stderr,"Exponential Backoff Tried!\n");
+                rd_kafka_timer_exp_backoff(rkts, rtmr, rk->rk_conf.retry_backoff_ms*1000,rk->rk_conf.retry_backoff_max_ms*1000,20);
+                // if (rk->rk_conf.metadata_refresh_interval_ms > 0 &&
+                //     rtmr->rtmr_interval * 2 / 1000 >=
+                //         rk->rk_conf.retry_backoff_max_ms){
+                //                 fprintf(stderr,"Timer Stopped!\n");
+                //                 rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
+                // }else{
+                //         fprintf(stderr,"Exponential Backoff Tried!\n");
+                //         rd_kafka_timer_exp_backoff(rkts, rtmr, rk->rk_conf.retry_backoff_ms*1000,rk->rk_conf.retry_backoff_max_ms*1000,20);
+                // }
         }
 
         rd_list_destroy(&topics);
@@ -1571,7 +1573,7 @@ void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
                              "Starting fast leader query");
                 rd_kafka_timer_start(
                     &rk->rk_timers, &rk->rk_metadata_cache.rkmc_query_tmr,
-                    rk->rk_conf.metadata_refresh_fast_interval_ms * 1000,
+                    0,
                     rd_kafka_metadata_leader_query_tmr_cb, NULL);
         }
 }

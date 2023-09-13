@@ -625,7 +625,7 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
 
         } else if (rd_kafka_transport_ssl_io_update(rktrans, r, errstr,
                                                     sizeof(errstr)) == -1) {
-                char extra[512];
+                char extra[512]         = "";
                 rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__SSL;
 
                 if (strstr(errstr, "unexpected message"))

@@ -747,11 +747,11 @@ rd_kafka_op_call(rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 rd_kafka_op_t *rd_kafka_op_new_ctrl_msg(rd_kafka_toppar_t *rktp,
                                         int32_t version,
                                         rd_kafka_buf_t *rkbuf,
-                                        int64_t offset) {
+                                        rd_kafka_fetch_pos_t pos) {
         rd_kafka_msg_t *rkm;
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new_fetch_msg(&rkm, rktp, version, rkbuf, offset, 0,
+        rko = rd_kafka_op_new_fetch_msg(&rkm, rktp, version, rkbuf, pos, 0,
                                         NULL, 0, NULL);
 
         rkm->rkm_flags |= RD_KAFKA_MSG_F_CONTROL;
@@ -770,7 +770,7 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
                                          rd_kafka_toppar_t *rktp,
                                          int32_t version,
                                          rd_kafka_buf_t *rkbuf,
-                                         int64_t offset,
+                                         rd_kafka_fetch_pos_t pos,
                                          size_t key_len,
                                          const void *key,
                                          size_t val_len,
@@ -792,7 +792,8 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
         rko->rko_u.fetch.rkbuf = rkbuf;
         rd_kafka_buf_keep(rkbuf);
 
-        rkm->rkm_offset = offset;
+        rkm->rkm_offset                  = pos.offset;
+        rkm->rkm_u.consumer.leader_epoch = pos.leader_epoch;
 
         rkm->rkm_key     = (void *)key;
         rkm->rkm_key_len = key_len;

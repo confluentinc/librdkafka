@@ -4,6 +4,8 @@ librdkafka v2.2.1 is a maintenance release:
 
  * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
+ * Fix to add leader epoch to control messages, to make sure they're stored
+   for committing even without a subsequent fetch message (#4434).
 
 
 

@@ -238,13 +238,13 @@ void rd_kafka_acl_result_free(void *ptr) {
 rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
                                    const char *host,
                                    uint16_t port,
-                                   const char *rack_id) {
+                                   const char *rack) {
         rd_kafka_Node_t *ret = rd_calloc(1, sizeof(*ret));
         ret->id              = id;
         ret->port            = port;
         ret->host            = rd_strdup(host);
-        if (rack_id != NULL)
-                ret->rack_id = rd_strdup(rack_id);
+        if (rack != NULL)
+                ret->rack = rd_strdup(rack);
         return ret;
 }
 
@@ -284,7 +284,7 @@ rd_kafka_Node_t *rd_kafka_Node_new_from_brokers(
         node->host = rd_strdup(broker->host);
         node->port = broker->port;
         if (broker_internal && broker_internal->rack_id)
-                node->rack_id = rd_strdup(broker_internal->rack_id);
+                node->rack = rd_strdup(broker_internal->rack_id);
 
         return node;
 }
@@ -297,13 +297,13 @@ rd_kafka_Node_t *rd_kafka_Node_new_from_brokers(
  *         Use rd_kafka_Node_destroy() to free when done.
  */
 rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
-        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack_id);
+        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack);
 }
 
 void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
         rd_free(node->host);
-        if (node->rack_id)
-                rd_free(node->rack_id);
+        if (node->rack)
+                rd_free(node->rack);
         rd_free(node);
 }
 
@@ -329,6 +329,6 @@ uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node) {
         return node->port;
 }
 
-const char *rd_kafka_Node_rack_id(const rd_kafka_Node_t *node) {
-        return node->rack_id;
+const char *rd_kafka_Node_rack(const rd_kafka_Node_t *node) {
+        return node->rack;
 }

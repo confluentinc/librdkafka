@@ -4981,7 +4981,7 @@ uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node);
  * @return The node rack id. May be NULL.
  */
 RD_EXPORT
-const char *rd_kafka_Node_rack_id(const rd_kafka_Node_t *node);
+const char *rd_kafka_Node_rack(const rd_kafka_Node_t *node);
 
 /**@}*/
 

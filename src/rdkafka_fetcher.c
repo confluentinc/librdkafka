@@ -192,7 +192,7 @@ static void rd_kafka_fetch_reply_handle_partition_error(
                    rktp->rktp_partition,
                    rd_kafka_fetch_pos2str(rktp->rktp_offsets.fetch_pos),
                    rd_kafka_err2name(err));
-
+        fprintf(stderr,"error name is : %s.\n",rd_kafka_err2name(err));
         /* Some errors should be passed to the
          * application while some handled by rdkafka */
         switch (err) {

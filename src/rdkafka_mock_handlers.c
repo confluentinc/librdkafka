@@ -274,7 +274,7 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                                 err =
                                     rd_kafka_mock_partition_leader_epoch_check(
                                         mpart, CurrentLeaderEpoch);
-
+                        fprintf(stderr,"error name in mock handler : %s.\n",rd_kafka_err2name(err));
                         /* Find MessageSet for FetchOffset */
                         if (!err && FetchOffset != mpart->end_offset) {
                                 /* Kafka currently only returns

@@ -27,15 +27,15 @@
  */
 
 
-#include "../src/rdkafka_proto.h"
 #include "test.h"
+#include "../src/rdkafka_proto.h"
 #include "../src/rdkafka_mock.h"
 /**
  * @name Verify that the builtin mock cluster works by producing to a topic
  *       and then consuming from it.
  */
 const int32_t retry_ms = 100;
-const int32_t retry_max_ms = 1000; 
+const int32_t retry_max_ms = 1000;
 
 void test_FindCoordinator(rd_kafka_mock_cluster_t *mcluster, const char *topic, rd_kafka_conf_t *conf){
         rd_kafka_mock_request_t **requests = NULL;
@@ -48,25 +48,28 @@ void test_FindCoordinator(rd_kafka_mock_cluster_t *mcluster, const char *topic, 
         int32_t buffer = 200; // 200 ms buffer added
         rd_kafka_t *consumer, *producer;
         rd_kafka_topic_t *rkt;
+        rd_kafka_message_t *rkm;
 
         test_conf_set(conf, "topic.metadata.refresh.interval.ms","-1");
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         producer = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
         rkt = test_create_producer_topic(producer, topic, NULL);
-        
+
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.auto.commit", "false");
 
         consumer = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
-        
+
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_FindCoordinator, num_retries,
                                           RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
                                           RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
                                           RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
                                           RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE);
-        
-        rd_kafka_consumer_poll(consumer,10*1000);
+
+        rkm = rd_kafka_consumer_poll(consumer,10*1000);
+        if (rkm)
+                rd_kafka_message_destroy(rkm);
         rd_sleep(4);
         requests = rd_kafka_mock_get_requests(mcluster,&request_cnt);
         for(int i = 0; (i < request_cnt) && (retry_count < num_retries); i++){
@@ -93,6 +96,7 @@ void test_OffsetCommit(rd_kafka_mock_cluster_t *mcluster,const char *topic, rd_k
         int64_t previous_request_ts = -1;
         int32_t retry_count = 0;
         rd_kafka_t *consumer;
+        rd_kafka_message_t *rkm;
 
         test_conf_set(conf, "topic.metadata.refresh.interval.ms","-1");
         test_conf_set(conf, "debug" ,"generic,cgrp");
@@ -101,7 +105,9 @@ void test_OffsetCommit(rd_kafka_mock_cluster_t *mcluster,const char *topic, rd_k
 
         consumer = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
         test_consumer_subscribe(consumer,topic);
-        rd_kafka_consumer_poll(consumer,10*1000);
+        rkm = rd_kafka_consumer_poll(consumer,10*1000);
+        if (rkm)
+                rd_kafka_message_destroy(rkm);
         rd_sleep(4);
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_OffsetCommit, 2,
                                             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS,
@@ -119,7 +125,7 @@ void test_OffsetCommit(rd_kafka_mock_cluster_t *mcluster,const char *topic, rd_k
                         TEST_SAY("Broker Id : %d API Key : %d Timestamp : %ld\n",rd_kafka_mock_request_id(requests[i]), rd_kafka_mock_request_api_key(requests[i]), rd_kafka_mock_request_timestamp(requests[i]));
                         if(previous_request_ts != -1){
                                 int64_t time_difference = (rd_kafka_mock_request_timestamp(requests[i]) - previous_request_ts)/1000;
-                                int64_t low = ((1<<retry_count)*(retry_ms)*75)/100; 
+                                int64_t low = ((1<<retry_count)*(retry_ms)*75)/100;
                                 int64_t high = ((1<<retry_count)*(retry_ms)*125)/100;
                                 if (high > ((retry_max_ms*125)/100))
                                         high = (retry_max_ms*125)/100;
@@ -129,7 +135,7 @@ void test_OffsetCommit(rd_kafka_mock_cluster_t *mcluster,const char *topic, rd_k
                                 retry_count++;
                         }
                         previous_request_ts = rd_kafka_mock_request_timestamp(requests[i]);
-                }        
+                }
         }
         rd_kafka_destroy(consumer);
         rd_kafka_mock_clear_requests(mcluster);
@@ -158,7 +164,7 @@ void test_Produce(rd_kafka_mock_cluster_t *mcluster,const char *topic, rd_kafka_
                                             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS,
                                             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS,
                                             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
-        
+
         test_produce_msgs(producer, rkt, 0, RD_KAFKA_PARTITION_UA, 0, 1, "hello",5);
         rd_sleep(3);
 
@@ -168,7 +174,7 @@ void test_Produce(rd_kafka_mock_cluster_t *mcluster,const char *topic, rd_kafka_
                         TEST_SAY("Broker Id : %d API Key : %d Timestamp : %ld\n",rd_kafka_mock_request_id(requests[i]), rd_kafka_mock_request_api_key(requests[i]), rd_kafka_mock_request_timestamp(requests[i]));
                         if(previous_request_ts != -1){
                                 int64_t time_difference = (rd_kafka_mock_request_timestamp(requests[i]) - previous_request_ts)/1000;
-                                int64_t low = ((1<<retry_count)*(retry_ms)*75)/100; 
+                                int64_t low = ((1<<retry_count)*(retry_ms)*75)/100;
                                 int64_t high = ((1<<retry_count)*(retry_ms)*125)/100;
                                 if (high > ((retry_max_ms*125)/100))
                                         high = (retry_max_ms*125)/100;
@@ -193,19 +199,22 @@ void test_Heartbeat_FindCoordinator(rd_kafka_mock_cluster_t *mcluster,const char
         int32_t retry_count = 0;
         int32_t num_heartbeat = 0;
         rd_kafka_t *consumer;
+        rd_kafka_message_t *rkm;
 
         test_conf_set(conf, "topic.metadata.refresh.interval.ms","-1");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.auto.commit", "false");
 
         consumer = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
-        
+
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_Heartbeat,  1,
                                             RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP);
 
         rd_kafka_mock_clear_requests(mcluster);
         test_consumer_subscribe(consumer,topic);
-        rd_kafka_consumer_poll(consumer,10*1000);
+        rkm = rd_kafka_consumer_poll(consumer,10*1000);
+        if (rkm)
+                rd_kafka_message_destroy(rkm);
         rd_sleep(6);
         requests = rd_kafka_mock_get_requests(mcluster,&request_cnt);
         for(int i = 0; i < request_cnt; i++){
@@ -237,6 +246,7 @@ void test_JoinGroup_FindCoordinator(rd_kafka_mock_cluster_t *mcluster,const char
         int32_t retry_count = 0;
         int32_t num_joingroup = 0;
         rd_kafka_t *consumer;
+        rd_kafka_message_t *rkm;
 
         test_conf_set(conf, "topic.metadata.refresh.interval.ms","-1");
         test_conf_set(conf, "auto.offset.reset", "earliest");
@@ -247,7 +257,9 @@ void test_JoinGroup_FindCoordinator(rd_kafka_mock_cluster_t *mcluster,const char
                                             RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP);
         rd_kafka_mock_clear_requests(mcluster);
         test_consumer_subscribe(consumer,topic);
-        rd_kafka_consumer_poll(consumer,10*1000);
+        rkm = rd_kafka_consumer_poll(consumer,10*1000);
+        if (rkm)
+                rd_kafka_message_destroy(rkm);
         rd_sleep(4);
         requests = rd_kafka_mock_get_requests(mcluster,&request_cnt);
         for(int i = 0; i < request_cnt; i++){
@@ -284,14 +296,14 @@ void test_Produce_FastleaderQuery(rd_kafka_mock_cluster_t *mcluster,const char *
 
         rd_kafka_t *producer = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
         rd_kafka_topic_t *rkt = test_create_producer_topic(producer, topic, NULL);
-        
+
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_Produce,  1,
                                             RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER);
         rd_kafka_mock_clear_requests(mcluster);
         test_produce_msgs(producer, rkt, 0, RD_KAFKA_PARTITION_UA, 0, 1, "hello",1);
         rd_sleep(10);
         requests = rd_kafka_mock_get_requests(mcluster,&request_cnt);
-        
+
         for(int i = 0; i < request_cnt; i++){
                 TEST_SAY("Broker Id : %d API Key : %d Timestamp : %ld\n",rd_kafka_mock_request_id(requests[i]), rd_kafka_mock_request_api_key(requests[i]), rd_kafka_mock_request_timestamp(requests[i]));
                 if(!produced && rd_kafka_mock_request_api_key(requests[i])==RD_KAFKAP_Produce)
@@ -299,7 +311,7 @@ void test_Produce_FastleaderQuery(rd_kafka_mock_cluster_t *mcluster,const char *
                 if(rd_kafka_mock_request_api_key(requests[i]) == RD_KAFKAP_Metadata && produced){
                         if(previous_request_ts != -1){
                                 int64_t time_difference = (rd_kafka_mock_request_timestamp(requests[i]) - previous_request_ts)/1000;
-                                int64_t low = ((1<<retry_count)*(retry_ms)*75)/100; 
+                                int64_t low = ((1<<retry_count)*(retry_ms)*75)/100;
                                 int64_t high = ((1<<retry_count)*(retry_ms)*125)/100;
                                 TEST_ASSERT((time_difference < high) && (time_difference > low),"Time difference is not respected!\n");
                                 retry_count++;
@@ -309,7 +321,7 @@ void test_Produce_FastleaderQuery(rd_kafka_mock_cluster_t *mcluster,const char *
                 }
         }
         rd_kafka_topic_destroy(rkt);
-        rd_kafka_destroy(producer); 
+        rd_kafka_destroy(producer);
         rd_kafka_mock_clear_requests(mcluster);
         TEST_SAY("Produce-FastLeaderQuery Finished Successfully!\n");
 }
@@ -321,19 +333,24 @@ void test_Fetch_FastLeaderQuery(rd_kafka_mock_cluster_t *mcluster,const char *to
         int32_t retry_count = 0;
         rd_bool_t fetched = rd_false;
         rd_kafka_t *consumer;
+        rd_kafka_message_t *rkm;
 
         test_conf_set(conf, "topic.metadata.refresh.interval.ms","-1");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.auto.commit", "false");
 
         consumer = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
-        
+
         test_consumer_subscribe(consumer,topic);
-        rd_kafka_consumer_poll(consumer,10*1000);
+        rkm = rd_kafka_consumer_poll(consumer,10*1000);
+        if (rkm)
+                rd_kafka_message_destroy(rkm);
         rd_kafka_mock_clear_requests(mcluster);
-        
+
         rd_kafka_mock_partition_set_leader(mcluster,topic,0,1);
-        rd_kafka_consumer_poll(consumer,10*1000);
+        rkm = rd_kafka_consumer_poll(consumer,10*1000);
+        if (rkm)
+                rd_kafka_message_destroy(rkm);
         rd_sleep(3);
         requests = rd_kafka_mock_get_requests(mcluster,&request_cnt);
         for(int i = 0; i < request_cnt; i++){
@@ -342,9 +359,9 @@ void test_Fetch_FastLeaderQuery(rd_kafka_mock_cluster_t *mcluster,const char *to
                         fetched = rd_true;
                 else if(rd_kafka_mock_request_api_key(requests[i]) == RD_KAFKAP_Metadata && fetched){
                         break;
-                } 
+                }
         }
-        rd_kafka_destroy(consumer); 
+        rd_kafka_destroy(consumer);
         rd_kafka_mock_clear_requests(mcluster);
         TEST_SAY("Fetch-FastLeaderQuery Finished Successfully!\n");
 }
@@ -365,14 +382,14 @@ int main_0009_mock_cluster(int argc, char **argv) {
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
-        
+
         test_Produce(mcluster,topic,rd_kafka_conf_dup(conf));
-        test_Produce_FastleaderQuery(mcluster,topic,rd_kafka_conf_dup(conf)); // Needs Consumer to be destroyed 
+        test_Produce_FastleaderQuery(mcluster,topic,rd_kafka_conf_dup(conf)); // Needs Consumer to be destroyed
         test_FindCoordinator(mcluster,topic,rd_kafka_conf_dup(conf));
-        // test_OffsetCommit(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
-        // test_Heartbeat_FindCoordinator(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
-        // test_JoinGroup_FindCoordinator(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
-        // test_Fetch_FastLeaderQuery(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
+        test_OffsetCommit(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
+        test_Heartbeat_FindCoordinator(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
+        test_JoinGroup_FindCoordinator(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
+        test_Fetch_FastLeaderQuery(mcluster,topic,rd_kafka_conf_dup(conf)); // blocks on consumer destroy
 
         TEST_SAY("All Tests Passed!\n");
         test_mock_cluster_destroy(mcluster);

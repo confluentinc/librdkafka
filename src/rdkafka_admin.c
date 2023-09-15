@@ -8190,11 +8190,12 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_t topics       = rko_req->rko_u.admin_request.args;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
         int i;
-        rd_kafka_op_t *rko_result = NULL;
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
 
         err = rd_kafka_parse_Metadata_admin(rkb, reply, &topics, &mdi);
         if (err)
-                goto err;
+                goto err_parse;
 
         rko_result = rd_kafka_admin_result_new(rko_req);
         md         = &mdi->metadata;
@@ -8203,6 +8204,8 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
 
         for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_TopicDescription_t *topicdesc = NULL;
+                int orig_pos;
+
                 if (md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                         rd_kafka_AclOperation_t *authorized_operations;
                         size_t authorized_operation_cnt;
@@ -8225,14 +8228,35 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                             md->topics[i].topic, error);
                         rd_kafka_error_destroy(error);
                 }
-                rd_list_add(&rko_result->rko_u.admin_result.results, topicdesc);
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
+                                         topicdesc->topic,
+                                         rd_kafka_DescribeTopics_cmp);
+                if (orig_pos == -1) {
+                        rd_kafka_TopicDescription_destroy(topicdesc);
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Broker returned topic %s that was not "
+                            "included in the original request",
+                            topicdesc->topic);
+                }
+
+                if (rd_list_elem(&rko_result->rko_u.admin_result.results,
+                                 orig_pos) != NULL) {
+                        rd_kafka_TopicDescription_destroy(topicdesc);
+                        rd_kafka_buf_parse_fail(
+                            reply, "Broker returned topic %s multiple times",
+                            topicdesc->topic);
+                }
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
+                            topicdesc);
         }
         rd_free(mdi);
 
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-err:
+err_parse:
         RD_IF_FREE(rko_result, rd_kafka_op_destroy);
         rd_snprintf(errstr, errstr_size,
                     "DescribeTopics response protocol parse failure: %s",

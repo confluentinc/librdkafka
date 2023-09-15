@@ -1363,6 +1363,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                         /* Drop reference to broker (from find()) */
                         rd_kafka_broker_destroy(leader);
                 }
+                RD_IF_FREE(rktp, rd_kafka_toppar_destroy);
         }
         /* Deduce the bools based on the int32_t values */
         if(no_leader_epoch > 0)

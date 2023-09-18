@@ -193,6 +193,8 @@ create_idempo_producer(rd_kafka_mock_cluster_t **mclusterp,
  * @brief A possibly persisted error should treat the message as not persisted,
  *        avoid increasing next expected sequence an causing a possible fatal
  *        error.
+ *        n = 1 triggered the "sequence desynchronization" fatal
+ *        error, n > 1 triggered the "rewound sequence number" fatal error.
  *        See #3584.
  *
  * @param n Number of messages (1 to 5) to send before disconnection. These

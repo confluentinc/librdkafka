@@ -4,6 +4,23 @@ librdkafka v2.2.1 is a maintenance release:
 
  * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
+ * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
+
+
+## Fixes
+
+### Idempotent producer fixes
+
+ * After a possibly persisted error, such as a disconnection or a timeout, next expected sequence
+   was increased, leading to a fatal error if the message wasn't persisted and
+   the second one in queue failed with an `OUT_OF_ORDER_SEQUENCE_NUMBER`.
+   The error could contain the message "sequence desynchronization" with
+   just one possibly persisted error or "rewound sequence number" in case of
+   multiple errored messages.
+   Solved by treating the possible persisted message as _not_ persisted,
+   and expecting a `DUPLICATE_SEQUENCE_NUMBER` error in case it was or
+   `NO_ERROR` in case it wasn't, in both cases the message will be considered
+   delivered.
 
 
 

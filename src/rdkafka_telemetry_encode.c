@@ -301,7 +301,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                                     .doubleValue;
                 }
 
-                data_points[i]->time_unix_nano = now_ns;
+                data_points[i]->time_unix_nano       = now_ns;
                 data_points[i]->start_time_unix_nano = now_ns;
 
                 //    TODO: Add data point attributes as needed

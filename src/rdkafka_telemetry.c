@@ -32,6 +32,8 @@
 #include "rdkafka_telemetry.h"
 #include "rdkafka_request.h"
 
+#define RD_KAFKA_TELEMETRY_PUSH_JITTER 20
+
 /**
  * @brief Filters broker by availability of GetTelemetrySubscription.
  *
@@ -158,8 +160,10 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR &&
             rk->rk_telemetry.requested_metrics_cnt) {
                 /* Some metrics are requested. Start the timer accordingly */
-                next_scheduled = rd_jitter(0.8, 1.2) * 1000 *
-                                 rk->rk_telemetry.push_interval_ms;
+                next_scheduled =
+                    rd_jitter(100 - RD_KAFKA_TELEMETRY_PUSH_JITTER,
+                              100 + RD_KAFKA_TELEMETRY_PUSH_JITTER) *
+                    1000 / 100 * rk->rk_telemetry.push_interval_ms;
 
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
         } else {

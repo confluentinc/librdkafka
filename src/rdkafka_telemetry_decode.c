@@ -32,6 +32,10 @@
 #include "nanopb/pb_encode.h"
 #include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
+#include "rdkafka.h"
+#include "rdkafka_int.h"
+#include "rdkafka_telemetry_encode.h"
+#include "rdunittest.h"
 
 #define _NANOPB_STRING_DECODE_MAX_BUFFER_SIZE 1024
 
@@ -170,7 +174,7 @@ static bool decode_and_print_resource_metrics(pb_istream_t *stream,
  * opentelemetry_proto_metrics_v1_MetricsData datatype. Used for testing and
  * debugging.
  */
-void rd_kafka_telemetry_decode_metrics(void *buffer, size_t size) {
+int rd_kafka_telemetry_decode_metrics(void *buffer, size_t size) {
         opentelemetry_proto_metrics_v1_MetricsData metricsData =
             opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 
@@ -185,4 +189,77 @@ void rd_kafka_telemetry_decode_metrics(void *buffer, size_t size) {
                 fprintf(stderr, "Failed to decode MetricsData: %s\n",
                         PB_GET_ERROR(&stream));
         }
+        return status;
+}
+
+bool ut_telemetry_gauge() {
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
+        rk->rk_type = RD_KAFKA_PRODUCER;
+        rk->rk_telemetry.matched_metrics_cnt = 1;
+        rk->rk_telemetry.matched_metrics =
+            rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) *
+                      rk->rk_telemetry.matched_metrics_cnt);
+        rk->rk_telemetry.matched_metrics[0] =
+            RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_RATE;
+        rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
+        TAILQ_INIT(&rk->rk_brokers);
+
+        rd_kafka_broker_t *rkb = rd_calloc(1, sizeof(*rkb));
+        rkb->rkb_c.connects.val = 1;
+        TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
+
+        size_t metrics_payload_size = 0, metrics_payload_size_expected = 162;
+
+        void *metrics_payload = rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
+        RD_UT_SAY("metrics_payload_size: %zu", metrics_payload_size);
+
+        RD_UT_ASSERT(metrics_payload_size == metrics_payload_size_expected , "Metrics payload size mismatch. Expected: %zu, Actual: %zu", metrics_payload_size_expected, metrics_payload_size);
+
+        bool decode_status = rd_kafka_telemetry_decode_metrics(metrics_payload, metrics_payload_size);
+
+        RD_UT_ASSERT(decode_status == 1, "Decoding failed");
+        rd_free(metrics_payload);
+        rd_free(rkb);
+        rd_free(rk);
+        RD_UT_PASS();
+}
+
+bool ut_test_sum() {
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
+        rk->rk_type = RD_KAFKA_PRODUCER;
+        rk->rk_telemetry.matched_metrics_cnt = 1;
+        rk->rk_telemetry.matched_metrics =
+            rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) *
+                      rk->rk_telemetry.matched_metrics_cnt);
+        rk->rk_telemetry.matched_metrics[0] =
+            RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_TOTAL;
+        rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
+        TAILQ_INIT(&rk->rk_brokers);
+
+        rd_kafka_broker_t *rkb = rd_calloc(1, sizeof(*rkb));
+        rkb->rkb_c.connects.val = 1;
+        TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
+
+        size_t metrics_payload_size = 0, metrics_payload_size_expected = 164;
+
+        void *metrics_payload = rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
+        RD_UT_SAY("metrics_payload_size: %zu", metrics_payload_size);
+
+        RD_UT_ASSERT(metrics_payload_size == metrics_payload_size_expected , "Metrics payload size mismatch. Expected: %zu, Actual: %zu", metrics_payload_size_expected, metrics_payload_size);
+
+        bool decode_status = rd_kafka_telemetry_decode_metrics(metrics_payload, metrics_payload_size);
+
+        RD_UT_ASSERT(decode_status == 1, "Decoding failed");
+        rd_free(metrics_payload);
+        rd_free(rkb);
+        rd_free(rk);
+        RD_UT_PASS();
+
+}
+
+int unittest_telemetry_decode(void) {
+        int fails = 0;
+        fails += ut_telemetry_gauge();
+        fails += ut_test_sum();
+        return fails;
 }

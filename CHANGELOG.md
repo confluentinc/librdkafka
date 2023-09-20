@@ -4,6 +4,18 @@ librdkafka v2.2.1 is a maintenance release:
 
  * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
+ * Fix for stored offsets not being committed if they lacked the leader epoch (#4442).
+
+
+## Fixes
+
+### Consumer fixes
+
+  * Stored offsets where excluded from the commit if the leader epoch was
+    less than committed epoch, as it's possible if leader epoch is the default -1.
+    This didn't happen in Python, Go and .NET bindings when stored position was
+    taken from the message. Solved by only checking that offset is greater
+    than committed one.
 
 
 

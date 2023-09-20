@@ -2174,6 +2174,18 @@ rd_kafka_mock_telemetry_set_requested_metrics(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
+                                          int64_t push_interval_ms) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.hi  = push_interval_ms;
+        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
 
 
 /**
@@ -2408,6 +2420,10 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 for (i = 0; i < mcluster->metrics_cnt; i++)
                         mcluster->metrics[i] =
                             rd_strdup(rko->rko_u.mock.metrics[i]);
+                break;
+
+        case RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET:
+                mcluster->telemetry_push_interval_ms = rko->rko_u.mock.hi;
                 break;
 
         default:

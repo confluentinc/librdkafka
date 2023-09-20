@@ -384,6 +384,17 @@ rd_kafka_mock_telemetry_set_requested_metrics(rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
+ * @brief Set push frequency to be sent to the client for telemetry collection.
+ *        when the broker receives GetTelemetrySubscription requests.
+ *
+ * @param push_interval_ms time for push in milliseconds. Must be more than 0.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
+                                          int64_t push_interval_ms);
+
+
+/**
  * @name Represents a request to the mock cluster along with a timestamp.
  */
 typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;

@@ -8410,9 +8410,9 @@ rd_kafka_ClusterDescription_new(const rd_kafka_metadata_internal_t *mdi) {
             rd_calloc(clusterdesc->node_cnt, sizeof(rd_kafka_Node_t *));
 
         for (i = 0; i < md->broker_cnt; i++)
-                clusterdesc->nodes[i] =
-                    rd_kafka_Node_new(md->brokers[i].id, md->brokers[i].host,
-                                      md->brokers[i].port, NULL);
+                clusterdesc->nodes[i] = rd_kafka_Node_new_from_brokers(
+                    md->brokers[i].id, mdi->brokers_sorted, mdi->brokers,
+                    md->broker_cnt);
 
         return clusterdesc;
 }

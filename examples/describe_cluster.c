@@ -169,9 +169,9 @@ print_cluster_info(const rd_kafka_DescribeCluster_result_t *clusterdesc) {
                 const rd_kafka_Node_t *node = nodes[j];
                 printf("Node [id: %" PRId32
                        ", host: %s"
-                       ", port: %" PRIu16 "]\n",
+                       ", port: %" PRIu16 ", rack: %s]\n",
                        rd_kafka_Node_id(node), rd_kafka_Node_host(node),
-                       rd_kafka_Node_port(node));
+                       rd_kafka_Node_port(node), rd_kafka_Node_rack(node));
         }
         return 0;
 }

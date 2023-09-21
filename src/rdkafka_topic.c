@@ -677,6 +677,7 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                              rktp->rktp_leader_epoch);
                 if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
                         rd_kafka_toppar_unlock(rktp);
+                        rd_kafka_toppar_destroy(rktp); /* from get() */
                         return 0;
                 }
         }

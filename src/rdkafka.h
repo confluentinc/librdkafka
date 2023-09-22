@@ -8037,8 +8037,7 @@ rd_kafka_TopicCollection_destroy(rd_kafka_TopicCollection_t *topics);
  *        array of size \p topics_cnt elements.
  *
  * @param rk Client instance.
- * @param topics Array of topics to describe.
- * @param topics_cnt Number of elements in \p topics array.
+ * @param topics Collection of topics to describe.
  * @param options Optional admin options, or NULL for defaults.
  *                Valid options:
  *                 - include_authorized_operations

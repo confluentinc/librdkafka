@@ -3189,7 +3189,7 @@ static void do_test_DescribeTopics(const char *what,
                 rd_strdupa(&topic_names[i],
                            test_mk_topic_name(__FUNCTION__, 1));
         }
-        topics = rd_kafka_TopicCollection_new_from_names(
+        topics = rd_kafka_TopicCollection_of_topic_names(
             (const char **)topic_names, TEST_DESCRIBE_TOPICS_CNT);
 
         test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);

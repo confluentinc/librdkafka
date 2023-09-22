@@ -108,7 +108,7 @@ typedef struct rd_kafka_Node_s {
         int id;        /*< Node id */
         char *host;    /*< Node host */
         uint16_t port; /*< Node port */
-        char *rack_id; /*< (optional) Node rack id */
+        char *rack;    /*< (optional) Node rack id */
 } rd_kafka_Node_t;
 
 rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,

@@ -149,7 +149,7 @@ static void print_node_info(const rd_kafka_Node_t *node) {
                ", host: %s"
                ", port: %" PRIu16 ", rack %s]\n",
                rd_kafka_Node_id(node), rd_kafka_Node_host(node),
-               rd_kafka_Node_port(node), rd_kafka_Node_rack_id(node));
+               rd_kafka_Node_port(node), rd_kafka_Node_rack(node));
 }
 
 /**
@@ -294,7 +294,7 @@ static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
         topic_names = (const char **)&argv[1];
         topics_cnt  = argc - 1;
         topics =
-            rd_kafka_TopicCollection_new_from_names(topic_names, topics_cnt);
+            rd_kafka_TopicCollection_of_topic_names(topic_names, topics_cnt);
 
         /*
          * Create producer instance

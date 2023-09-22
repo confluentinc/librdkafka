@@ -4981,7 +4981,7 @@ uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node);
  * @return The node rack id. May be NULL.
  */
 RD_EXPORT
-const char *rd_kafka_Node_rack_id(const rd_kafka_Node_t *node);
+const char *rd_kafka_Node_rack(const rd_kafka_Node_t *node);
 
 /**@}*/
 
@@ -8023,7 +8023,7 @@ typedef struct rd_kafka_TopicDescription_s rd_kafka_TopicDescription_t;
  */
 RD_EXPORT
 rd_kafka_TopicCollection_t *
-rd_kafka_TopicCollection_new_from_names(const char **topics, size_t topics_cnt);
+rd_kafka_TopicCollection_of_topic_names(const char **topics, size_t topics_cnt);
 
 /**
  * @brief Destroy and free a TopicCollection object created with

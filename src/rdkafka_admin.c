@@ -7882,7 +7882,7 @@ rd_kafka_DescribeConsumerGroups_result_groups(
  */
 
 rd_kafka_TopicCollection_t *
-rd_kafka_TopicCollection_new_from_names(const char **topics,
+rd_kafka_TopicCollection_of_topic_names(const char **topics,
                                         size_t topics_cnt) {
         size_t i;
         rd_kafka_TopicCollection_t *ret =
@@ -8190,11 +8190,12 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_t topics       = rko_req->rko_u.admin_request.args;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
         int i;
-        rd_kafka_op_t *rko_result = NULL;
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
 
         err = rd_kafka_parse_Metadata_admin(rkb, reply, &topics, &mdi);
         if (err)
-                goto err;
+                goto err_parse;
 
         rko_result = rd_kafka_admin_result_new(rko_req);
         md         = &mdi->metadata;
@@ -8203,6 +8204,8 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
 
         for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_TopicDescription_t *topicdesc = NULL;
+                int orig_pos;
+
                 if (md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                         rd_kafka_AclOperation_t *authorized_operations;
                         size_t authorized_operation_cnt;
@@ -8225,14 +8228,35 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                             md->topics[i].topic, error);
                         rd_kafka_error_destroy(error);
                 }
-                rd_list_add(&rko_result->rko_u.admin_result.results, topicdesc);
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
+                                         topicdesc->topic,
+                                         rd_kafka_DescribeTopics_cmp);
+                if (orig_pos == -1) {
+                        rd_kafka_TopicDescription_destroy(topicdesc);
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Broker returned topic %s that was not "
+                            "included in the original request",
+                            topicdesc->topic);
+                }
+
+                if (rd_list_elem(&rko_result->rko_u.admin_result.results,
+                                 orig_pos) != NULL) {
+                        rd_kafka_TopicDescription_destroy(topicdesc);
+                        rd_kafka_buf_parse_fail(
+                            reply, "Broker returned topic %s multiple times",
+                            topicdesc->topic);
+                }
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
+                            topicdesc);
         }
         rd_free(mdi);
 
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-err:
+err_parse:
         RD_IF_FREE(rko_result, rd_kafka_op_destroy);
         rd_snprintf(errstr, errstr_size,
                     "DescribeTopics response protocol parse failure: %s",
@@ -8386,9 +8410,9 @@ rd_kafka_ClusterDescription_new(const rd_kafka_metadata_internal_t *mdi) {
             rd_calloc(clusterdesc->node_cnt, sizeof(rd_kafka_Node_t *));
 
         for (i = 0; i < md->broker_cnt; i++)
-                clusterdesc->nodes[i] =
-                    rd_kafka_Node_new(md->brokers[i].id, md->brokers[i].host,
-                                      md->brokers[i].port, NULL);
+                clusterdesc->nodes[i] = rd_kafka_Node_new_from_brokers(
+                    md->brokers[i].id, mdi->brokers_sorted, mdi->brokers,
+                    md->broker_cnt);
 
         return clusterdesc;
 }

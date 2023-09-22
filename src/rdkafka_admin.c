@@ -7882,7 +7882,7 @@ rd_kafka_DescribeConsumerGroups_result_groups(
  */
 
 rd_kafka_TopicCollection_t *
-rd_kafka_TopicCollection_new_from_names(const char **topics,
+rd_kafka_TopicCollection_of_topic_names(const char **topics,
                                         size_t topics_cnt) {
         size_t i;
         rd_kafka_TopicCollection_t *ret =

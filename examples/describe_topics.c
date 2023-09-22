@@ -294,7 +294,7 @@ static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
         topic_names = (const char **)&argv[1];
         topics_cnt  = argc - 1;
         topics =
-            rd_kafka_TopicCollection_new_from_names(topic_names, topics_cnt);
+            rd_kafka_TopicCollection_of_topic_names(topic_names, topics_cnt);
 
         /*
          * Create producer instance

@@ -800,7 +800,7 @@ static void do_test_DescribeTopics(const char *what,
                 topic_names[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         }
 
-        topics = rd_kafka_TopicCollection_new_from_names(
+        topics = rd_kafka_TopicCollection_of_topic_names(
             topic_names, TEST_DESCRIBE_TOPICS_CNT);
 
         if (with_options) {

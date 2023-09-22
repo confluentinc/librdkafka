@@ -59,9 +59,6 @@ target_link_libraries(describe_topics PUBLIC rdkafka)
 add_executable(describe_cluster describe_cluster.c ${win32_sources})
 target_link_libraries(describe_cluster PUBLIC rdkafka)
 
-add_executable(user_scram user_scram.c ${win32_sources})
-target_link_libraries(user_scram PUBLIC rdkafka)
-
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)
     add_executable(rdkafka_example rdkafka_example.c)

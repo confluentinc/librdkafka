@@ -7107,12 +7107,12 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
  *
  * @param authorized_operations returned by RPC, containing operations encoded
  *                              per-bit.
- * @param cntp is set to the count of the operations.
- * @returns rd_kafka_AclOperation_t *
+ * @param cntp is set to the count of the operations, or -1 if the operations
+ *        were not requested.
+ * @returns rd_kafka_AclOperation_t *. May be NULL.
  */
 static rd_kafka_AclOperation_t *
-rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations,
-                                    size_t *cntp) {
+rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations, int *cntp) {
         rd_kafka_AclOperation_t i;
         int j                               = 0;
         int count                           = 0;
@@ -7120,7 +7120,7 @@ rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations,
 
         /* In case of authorized_operations not requested, return NULL. */
         if (authorized_operations < 0) {
-                *cntp = 0;
+                *cntp = -1;
                 return NULL;
         }
 
@@ -7131,11 +7131,14 @@ rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations,
                 count += ((authorized_operations >> i) & 1);
         *cntp = count;
 
-        if (!count)
-                return operations;
+        /* In case no operations exist, allocate 1 byte so that the returned
+         * pointer is non-NULL. A NULL pointer implies that authorized
+         * operations were not requested. */
+        if (count == 0)
+                return rd_malloc(1);
 
-        j          = 0;
         operations = rd_malloc(sizeof(rd_kafka_AclOperation_t) * count);
+        j          = 0;
         for (i = RD_KAFKA_ACL_OPERATION_READ; i < RD_KAFKA_ACL_OPERATION__CNT;
              i++) {
                 if ((authorized_operations >> i) & 1) {
@@ -7145,6 +7148,38 @@ rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations,
         }
 
         return operations;
+}
+
+/**
+ * @brief Copy a list of rd_kafka_AclOperation_t.
+ *
+ * @param src Array of rd_kafka_AclOperation_t to copy from. May be NULL if
+ *            authorized operations were not requested.
+ * @param authorized_operations_cnt Count of \p src. May be -1 if authorized
+ *                                  operations were not requested.
+ * @returns Copy of \p src. May be NULL.
+ */
+static rd_kafka_AclOperation_t *
+rd_kafka_AuthorizedOperations_copy(const rd_kafka_AclOperation_t *src,
+                                   int authorized_operations_cnt) {
+        size_t copy_bytes            = 0;
+        rd_kafka_AclOperation_t *dst = NULL;
+
+        if (authorized_operations_cnt == -1 || src == NULL)
+                return NULL;
+
+        /* Allocate and copy 1 byte so that the returned pointer
+         * is non-NULL. A NULL pointer implies that authorized operations were
+         * not requested. */
+        if (authorized_operations_cnt == 0)
+                copy_bytes = 1;
+        else
+                copy_bytes =
+                    sizeof(rd_kafka_AclOperation_t) * authorized_operations_cnt;
+
+        dst = rd_malloc(copy_bytes);
+        memcpy(dst, src, copy_bytes);
+        return dst;
 }
 
 /**
@@ -7279,7 +7314,7 @@ rd_kafka_ConsumerGroupDescription_new(
     const rd_list_t *members,
     const char *partition_assignor,
     const rd_kafka_AclOperation_t *authorized_operations,
-    size_t authorized_operations_cnt,
+    int authorized_operations_cnt,
     rd_kafka_consumer_group_state_t state,
     const rd_kafka_Node_t *coordinator,
     rd_kafka_error_t *error) {
@@ -7300,14 +7335,8 @@ rd_kafka_ConsumerGroupDescription_new(
                                           : rd_strdup(partition_assignor);
 
         grpdesc->authorized_operations_cnt = authorized_operations_cnt;
-        if (authorized_operations_cnt) {
-                grpdesc->authorized_operations =
-                    rd_malloc(sizeof(rd_kafka_AclOperation_t) *
-                              authorized_operations_cnt);
-                memcpy(grpdesc->authorized_operations, authorized_operations,
-                       sizeof(rd_kafka_AclOperation_t) *
-                           authorized_operations_cnt);
-        }
+        grpdesc->authorized_operations     = rd_kafka_AuthorizedOperations_copy(
+            authorized_operations, authorized_operations_cnt);
 
         grpdesc->state = state;
         if (coordinator != NULL)
@@ -7406,7 +7435,7 @@ const rd_kafka_AclOperation_t *
 rd_kafka_ConsumerGroupDescription_authorized_operations(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc,
     size_t *cntp) {
-        *cntp = grpdesc->authorized_operations_cnt;
+        *cntp = RD_MAX(grpdesc->authorized_operations_cnt, 0);
         return grpdesc->authorized_operations;
 }
 
@@ -7557,7 +7586,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         char *group_id = NULL, *group_state = NULL, *proto_type = NULL,
              *proto = NULL, *host = NULL;
         rd_kafka_AclOperation_t *operations = NULL;
-        size_t operation_cnt;
+        int operation_cnt;
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         if (api_version >= 1) {
@@ -7579,7 +7608,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         node = rd_kafka_Node_new(nodeid, host, port, NULL);
         while (cnt-- > 0) {
                 int16_t error_code;
-                int32_t authorized_operations = 0;
+                int32_t authorized_operations = -1;
                 rd_kafkap_str_t GroupId, GroupState, ProtocolType, ProtocolData;
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
                 int32_t member_cnt;
@@ -7996,7 +8025,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
     const rd_kafka_metadata_broker_internal_t *brokers_internal,
     int broker_cnt,
     const rd_kafka_AclOperation_t *authorized_operations,
-    size_t authorized_operations_cnt,
+    int authorized_operations_cnt,
     rd_bool_t is_internal,
     rd_kafka_error_t *error) {
         rd_kafka_TopicDescription_t *topicdesc;
@@ -8009,14 +8038,8 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
                 topicdesc->error = rd_kafka_error_copy(error);
 
         topicdesc->authorized_operations_cnt = authorized_operations_cnt;
-        if (authorized_operations_cnt) {
-                topicdesc->authorized_operations =
-                    rd_malloc(sizeof(rd_kafka_AclOperation_t) *
-                              authorized_operations_cnt);
-                memcpy(topicdesc->authorized_operations, authorized_operations,
-                       sizeof(rd_kafka_AclOperation_t) *
-                           authorized_operations_cnt);
-        }
+        topicdesc->authorized_operations = rd_kafka_AuthorizedOperations_copy(
+            authorized_operations, authorized_operations_cnt);
 
         if (partitions) {
                 topicdesc->partitions =
@@ -8099,7 +8122,7 @@ const rd_kafka_TopicPartitionInfo_t **rd_kafka_TopicDescription_partitions(
 const rd_kafka_AclOperation_t *rd_kafka_TopicDescription_authorized_operations(
     const rd_kafka_TopicDescription_t *topicdesc,
     size_t *cntp) {
-        *cntp = topicdesc->authorized_operations_cnt;
+        *cntp = RD_MAX(topicdesc->authorized_operations_cnt, 0);
         return topicdesc->authorized_operations;
 }
 
@@ -8211,7 +8234,7 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
 
                 if (md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                         rd_kafka_AclOperation_t *authorized_operations;
-                        size_t authorized_operation_cnt;
+                        int authorized_operation_cnt;
                         authorized_operations =
                             rd_kafka_AuthorizedOperations_parse(
                                 mdi->topics[i].topic_authorized_operations,
@@ -8365,7 +8388,7 @@ rd_kafka_DescribeCluster_result_authorized_operations(
     size_t *cntp) {
         const rd_kafka_ClusterDescription_t *clusterdesc =
             rd_kafka_DescribeCluster_result_description(result);
-        *cntp = clusterdesc->authorized_operations_cnt;
+        *cntp = RD_MAX(clusterdesc->authorized_operations_cnt, 0);
         return clusterdesc->authorized_operations;
 }
 

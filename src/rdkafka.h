@@ -8147,7 +8147,8 @@ const rd_kafka_Node_t **rd_kafka_TopicPartitionInfo_replicas(
  * @param topicdesc The topic description.
  * @param cntp is updated with authorized ACL operations count.
  *
- * @return The topic authorized operations.
+ * @return The topic authorized operations. Is NULL if operations were not
+ *         requested.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p topicdesc object.
@@ -8242,7 +8243,8 @@ const rd_kafka_Node_t **rd_kafka_DescribeCluster_result_nodes(
  * @param result The result of DescribeCluster.
  * @param cntp is updated with authorized ACL operations count.
  *
- * @return The cluster authorized operations.
+ * @return The cluster authorized operations. Is NULL if operations were not
+ *         requested.
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p result object.
  */
@@ -8509,7 +8511,8 @@ const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
  * @param grpdesc The group description.
  * @param cntp is updated with authorized ACL operations count.
  *
- * @return The group authorized operations.
+ * @return The group authorized operations. Is NULL if operations were not
+ *         requested.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p grpdesc object.

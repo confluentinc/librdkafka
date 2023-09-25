@@ -7114,9 +7114,9 @@ static rd_kafka_AclOperation_t *
 rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations,
                                     size_t *cntp) {
         rd_kafka_AclOperation_t i;
-        int j     = 0;
-        int count = 0;
-        rd_kafka_AclOperation_t *operations;
+        int j                               = 0;
+        int count                           = 0;
+        rd_kafka_AclOperation_t *operations = NULL;
 
         /* In case of authorized_operations not requested, return NULL. */
         if (authorized_operations < 0) {
@@ -7129,6 +7129,10 @@ rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations,
         for (i = RD_KAFKA_ACL_OPERATION_READ; i < RD_KAFKA_ACL_OPERATION__CNT;
              i++)
                 count += ((authorized_operations >> i) & 1);
+        *cntp = count;
+
+        if (!count)
+                return operations;
 
         j          = 0;
         operations = rd_malloc(sizeof(rd_kafka_AclOperation_t) * count);
@@ -7140,7 +7144,6 @@ rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations,
                 }
         }
 
-        *cntp = count;
         return operations;
 }
 

@@ -7586,7 +7586,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         char *group_id = NULL, *group_state = NULL, *proto_type = NULL,
              *proto = NULL, *host = NULL;
         rd_kafka_AclOperation_t *operations = NULL;
-        int operation_cnt;
+        int operation_cnt                   = 0;
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         if (api_version >= 1) {

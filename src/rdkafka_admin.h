@@ -482,9 +482,11 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_consumer_group_state_t state;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
-        /** Count of operations allowed for topic.*/
-        size_t authorized_operations_cnt;
-        /** Operations allowed for topic. */
+        /** Count of operations allowed for topic. -1 indicates operations not
+         * requested.*/
+        int authorized_operations_cnt;
+        /** Operations allowed for topic. May be NULL if operations were not
+         * requested */
         rd_kafka_AclOperation_t *authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;
@@ -527,11 +529,13 @@ struct rd_kafka_TopicDescription_s {
         int partition_cnt;     /**< Number of partitions in \p partitions*/
         rd_bool_t is_internal; /**< Is the topic is internal to Kafka? */
         rd_kafka_TopicPartitionInfo_t **partitions; /**< Partitions */
-        rd_kafka_error_t *error;          /**< Topic error reported by broker */
-        size_t authorized_operations_cnt; /**< Count of operations allowed for
-                                             topic.*/
+        rd_kafka_error_t *error;       /**< Topic error reported by broker */
+        int authorized_operations_cnt; /**< Count of operations allowed for
+                                        * topic. -1 indicates operations not
+                                        * requested. */
         rd_kafka_AclOperation_t
-            *authorized_operations; /**< Operations allowed for topic. */
+            *authorized_operations; /**< Operations allowed for topic. May be
+                                     * NULL if operations were not requested */
 };
 
 /**@}*/
@@ -544,14 +548,16 @@ struct rd_kafka_TopicDescription_s {
  * @struct DescribeCluster result - internal type.
  */
 typedef struct rd_kafka_ClusterDescription_s {
-        char *cluster_id;            /**< Cluster id */
-        rd_kafka_Node_t *controller; /**< Current controller. */
-        size_t node_cnt;             /**< Count of brokers in the cluster. */
-        rd_kafka_Node_t **nodes;     /**< Brokers in the cluster. */
-        size_t authorized_operations_cnt; /**< Count of operations allowed for
-                                     cluster.*/
+        char *cluster_id;              /**< Cluster id */
+        rd_kafka_Node_t *controller;   /**< Current controller. */
+        size_t node_cnt;               /**< Count of brokers in the cluster. */
+        rd_kafka_Node_t **nodes;       /**< Brokers in the cluster. */
+        int authorized_operations_cnt; /**< Count of operations allowed for
+                                        * cluster. -1 indicates operations not
+                                        * requested. */
         rd_kafka_AclOperation_t
-            *authorized_operations; /**< Operations allowed for cluster. */
+            *authorized_operations; /**< Operations allowed for cluster. May be
+                                     * NULL if operations were not requested */
 
 } rd_kafka_ClusterDescription_t;
 

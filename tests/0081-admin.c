@@ -2987,11 +2987,16 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     rd_kafka_ConsumerGroupDescription_error(act));
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(act);
-                rd_kafka_ConsumerGroupDescription_authorized_operations(
-                    act, &authorized_operation_cnt);
+                const rd_kafka_AclOperation_t *authorized_operations =
+                    rd_kafka_ConsumerGroupDescription_authorized_operations(
+                        act, &authorized_operation_cnt);
                 TEST_ASSERT(
                     authorized_operation_cnt == 0,
-                    "Authorized operations returned when not requested\n");
+                    "Authorized operation count should be 0, is %" PRIusz,
+                    authorized_operation_cnt);
+                TEST_ASSERT(
+                    authorized_operations == NULL,
+                    "Authorized operations should be NULL when not requested");
                 TEST_ASSERT(
                     strcmp(exp->group_id,
                            rd_kafka_ConsumerGroupDescription_group_id(act)) ==
@@ -3266,6 +3271,8 @@ static void do_test_DescribeTopics(const char *what,
                     "Expected partion id to be %d, got %d", 0,
                     rd_kafka_TopicPartitionInfo_partition(partitions[0]));
 
+        authorized_operations = rd_kafka_TopicDescription_authorized_operations(
+            result_topics[0], &authorized_operations_cnt);
         if (include_authorized_operations) {
                 const rd_kafka_AclOperation_t expected[] = {
                     RD_KAFKA_ACL_OPERATION_ALTER,
@@ -3277,14 +3284,19 @@ static void do_test_DescribeTopics(const char *what,
                     RD_KAFKA_ACL_OPERATION_READ,
                     RD_KAFKA_ACL_OPERATION_WRITE};
 
-                authorized_operations =
-                    rd_kafka_TopicDescription_authorized_operations(
-                        result_topics[0], &authorized_operations_cnt);
-
                 test_match_authorized_operations(expected, 8,
                                                  authorized_operations,
                                                  authorized_operations_cnt);
+        } else {
+                TEST_ASSERT(
+                    authorized_operations_cnt == 0,
+                    "Authorized operation count should be 0, is %" PRIusz,
+                    authorized_operations_cnt);
+                TEST_ASSERT(
+                    authorized_operations == NULL,
+                    "Authorized operations should be NULL when not requested");
         }
+
         rd_kafka_event_destroy(rkev);
 
         /* If we don't have authentication/authorization set up in our
@@ -3481,6 +3493,9 @@ static void do_test_DescribeCluster(const char *what,
         TEST_ASSERT(rd_kafka_Node_port(nodes[0]),
                     "Expected first node of cluster to have a port");
 
+        authorized_operations =
+            rd_kafka_DescribeCluster_result_authorized_operations(
+                res, &authorized_operations_cnt);
         if (include_authorized_operations) {
                 const rd_kafka_AclOperation_t expected[] = {
                     RD_KAFKA_ACL_OPERATION_ALTER,
@@ -3490,12 +3505,18 @@ static void do_test_DescribeCluster(const char *what,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
                     RD_KAFKA_ACL_OPERATION_IDEMPOTENT_WRITE};
-                authorized_operations =
-                    rd_kafka_DescribeCluster_result_authorized_operations(
-                        res, &authorized_operations_cnt);
+
                 test_match_authorized_operations(expected, 7,
                                                  authorized_operations,
                                                  authorized_operations_cnt);
+        } else {
+                TEST_ASSERT(
+                    authorized_operations_cnt == 0,
+                    "Authorized operation count should be 0, is %" PRIusz,
+                    authorized_operations_cnt);
+                TEST_ASSERT(
+                    authorized_operations == NULL,
+                    "Authorized operations should be NULL when not requested");
         }
 
         rd_kafka_event_destroy(rkev);

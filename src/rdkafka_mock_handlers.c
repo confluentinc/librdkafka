@@ -2196,7 +2196,8 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_i8(rkbuf, &compression_type);
         rd_kafka_buf_read_kbytes(rkbuf, &metrics);
 
-        rd_kafka_telemetry_decode_metrics((void *)metrics.data, metrics.len);
+        rd_kafka_telemetry_decode_metrics((void *)metrics.data, metrics.len,
+                                          rd_false);
 
         // ThrottleTime
         rd_kafka_buf_write_i32(resp, 0);

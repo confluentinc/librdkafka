@@ -8,6 +8,18 @@ librdkafka v2.2.1 is a maintenance release:
    are partition leader changes and a stale leader epoch is received (#4429).
  * Fix a segmentation fault when closing a consumer using the
    cooperative-sticky assignor before the first assignment (#4381).
+ * Fix to ensure permanent errors during offset validation continue being retried and
+   don't cause an offset reset (#).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * During offset validation a permanent error like host resolution failure
+   would cause an offset reset.
+   This isn't what's expected or what the Java implementation does.
+   Solved by retrying even in case of permanent errors.
 
 
 

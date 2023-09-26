@@ -140,10 +140,11 @@ static void do_test_no_duplicates_during_offset_validation(void) {
 
 
 /**
- * @brief Test that an SSL error doesn't cause an offset reset.
- *        See issue #4293.
+ * @brief Test that a permanent error doesn't cause an offset reset.
+ *        See issues #4293, #4427.
+ * @param err The error OffsetForLeaderEpoch fails with.
  */
-static void do_test_ssl_error_retried(void) {
+static void do_test_permanent_error_retried(rd_kafka_resp_err_t err) {
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
         const char *bootstraps;
@@ -155,7 +156,7 @@ static void do_test_ssl_error_retried(void) {
         int msg_count   = 5;
         uint64_t testid = test_id_generate();
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("err: %s", rd_kafka_err2name(err));
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
@@ -165,10 +166,9 @@ static void do_test_ssl_error_retried(void) {
                                  "bootstrap.servers", bootstraps,
                                  "batch.num.messages", "1", NULL);
 
-        /* Make OffsetForLeaderEpoch fail with the _SSL error */
-        rd_kafka_mock_push_request_errors(mcluster,
-                                          RD_KAFKAP_OffsetForLeaderEpoch, 1,
-                                          RD_KAFKA_RESP_ERR__SSL);
+        /* Make OffsetForLeaderEpoch fail with the corresponding error code */
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_OffsetForLeaderEpoch, 1, err);
 
         test_conf_init(&conf, NULL, 60);
 
@@ -221,7 +221,8 @@ int main_0139_offset_validation_mock(int argc, char **argv) {
 
         do_test_no_duplicates_during_offset_validation();
 
-        do_test_ssl_error_retried();
+        do_test_permanent_error_retried(RD_KAFKA_RESP_ERR__SSL);
+        do_test_permanent_error_retried(RD_KAFKA_RESP_ERR__RESOLVE);
 
         return 0;
 }

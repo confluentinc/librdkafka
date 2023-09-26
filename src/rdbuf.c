@@ -905,8 +905,7 @@ size_t rd_slice_peeker(const rd_slice_t *slice, const void **p) {
  * @remark If \p dst is NULL only the read position is updated.
  */
 size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size) {
-        size_t remains = size;
-        char *d        = (char *)dst; /* Possibly NULL */
+        char *d = (char *)dst; /* Possibly NULL */
         size_t rlen;
         const void *p;
         size_t orig_end = slice->end;
@@ -918,15 +917,11 @@ size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size) {
         slice->end = rd_slice_abs_offset(slice) + size;
 
         while ((rlen = rd_slice_reader(slice, &p))) {
-                rd_dassert(remains >= rlen);
                 if (dst) {
                         memcpy(d, p, rlen);
                         d += rlen;
                 }
-                remains -= rlen;
         }
-
-        rd_dassert(remains == 0);
 
         /* Restore original size */
         slice->end = orig_end;

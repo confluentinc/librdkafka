@@ -77,6 +77,7 @@ int test_rusage              = 0; /**< Check resource usage */
  *   <1.0: CPU is faster than base line system. */
 double test_rusage_cpu_calibration = 1.0;
 static const char *tests_to_run    = NULL; /* all */
+static const char *skip_tests_till = NULL; /* all */
 static const char *subtests_to_run = NULL; /* all */
 static const char *tests_to_skip   = NULL; /* none */
 int test_write_report              = 0;    /**< Write test report file */
@@ -1341,6 +1342,13 @@ static void run_tests(int argc, char **argv) {
                         skip_silent = rd_true;
                 } else if (tests_to_skip && strstr(tests_to_skip, testnum))
                         skip_reason = "included in TESTS_SKIP list";
+                else if (skip_tests_till) {
+                        if (!strcmp(skip_tests_till, testnum))
+                                skip_tests_till = NULL;
+                        else
+                                skip_reason =
+                                    "ignoring test before TESTS_SKIP_BEFORE";
+                }
 
                 if (!skip_reason) {
                         run_test(test, argc, argv);
@@ -1666,6 +1674,8 @@ int main(int argc, char **argv) {
         subtests_to_run = test_getenv("SUBTESTS", NULL);
         tests_to_skip   = test_getenv("TESTS_SKIP", NULL);
         tmpver          = test_getenv("TEST_KAFKA_VERSION", NULL);
+        skip_tests_till = test_getenv("TESTS_SKIP_BEFORE", NULL);
+
         if (!tmpver)
                 tmpver = test_getenv("KAFKA_VERSION", test_broker_version_str);
         test_broker_version_str = tmpver;
@@ -1840,11 +1850,14 @@ int main(int argc, char **argv) {
         if (test_concurrent_max > 1)
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
-        TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
+        TEST_SAY("Tests to run     : %s\n",
+                 tests_to_run ? tests_to_run : "all");
         if (subtests_to_run)
-                TEST_SAY("Sub tests    : %s\n", subtests_to_run);
+                TEST_SAY("Sub tests        : %s\n", subtests_to_run);
         if (tests_to_skip)
-                TEST_SAY("Skip tests   : %s\n", tests_to_skip);
+                TEST_SAY("Skip tests       : %s\n", tests_to_skip);
+        if (skip_tests_till)
+                TEST_SAY("Skip tests before: %s\n", skip_tests_till);
         TEST_SAY("Test mode    : %s%s%s\n", test_quick ? "quick, " : "",
                  test_mode, test_on_ci ? ", CI" : "");
         TEST_SAY("Test scenario: %s\n", test_scenario);

@@ -8,7 +8,7 @@ librdkafka v2.2.1 is a maintenance release:
    are partition leader changes and a stale leader epoch is received (#4429).
  * Fix a segmentation fault when closing a consumer using the
    cooperative-sticky assignor before the first assignment (#4381).
- * Fix for insufficient buffer allocation when allocating rack information (#).
+ * Fix for insufficient buffer allocation when allocating rack information (@wolfchimneyrock, #4449).
 
 
 ## Fixes

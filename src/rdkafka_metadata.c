@@ -48,6 +48,17 @@ int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b) {
         return RD_CMP(a->id, b->id);
 }
 
+
+/**
+ * @brief Id comparator for struct rd_kafka_metadata_broker*
+ */
+int rd_kafka_metadata_broker_cmp(const void *_a, const void *_b) {
+        const struct rd_kafka_metadata_broker *a = _a;
+        const struct rd_kafka_metadata_broker *b = _b;
+        return RD_CMP(a->id, b->id);
+}
+
+
 /**
  * @brief Id comparator for rd_kafka_metadata_partition_internal_t
  */
@@ -56,6 +67,19 @@ static int rd_kafka_metadata_partition_internal_cmp(const void *_a,
         const rd_kafka_metadata_partition_internal_t *a = _a;
         const rd_kafka_metadata_partition_internal_t *b = _b;
         return RD_CMP(a->id, b->id);
+}
+
+/**
+ * @brief Helper function to clear a rd_kafka_metadata_partition.
+ *
+ * @note Does not deallocate the rd_kafka_metadata_partition itself.
+ * @note Should not be used if there is an metadata struct allocated with
+ * tmpabuf in which rd_kafka_metadata_partition is contained.
+ */
+void rd_kafka_metadata_partition_clear(
+    struct rd_kafka_metadata_partition *rkmp) {
+        RD_IF_FREE(rkmp->isrs, rd_free);
+        RD_IF_FREE(rkmp->replicas, rd_free);
 }
 
 
@@ -434,25 +458,14 @@ rd_kafka_populate_metadata_topic_racks(rd_tmpabuf_t *tbuf,
         }
 }
 
-
-/**
- * @brief Handle a Metadata response message.
- *
- * @param topics are the requested topics (may be NULL)
- *
- * The metadata will be marshalled into 'rd_kafka_metadata_internal_t *'.
- *
- * The marshalled metadata is returned in \p *mdip, (NULL on error).
- *
- * @returns an error code on parse failure, else NO_ERRRO.
- *
- * @locality rdkafka main thread
- */
-rd_kafka_resp_err_t
-rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
-                        rd_kafka_buf_t *request,
-                        rd_kafka_buf_t *rkbuf,
-                        rd_kafka_metadata_internal_t **mdip) {
+/* Internal implementation for parsing Metadata. */
+static rd_kafka_resp_err_t
+rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
+                         rd_kafka_buf_t *request,
+                         rd_kafka_buf_t *rkbuf,
+                         rd_kafka_metadata_internal_t **mdip,
+                         rd_list_t *request_topics,
+                         const char *reason) {
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
@@ -461,16 +474,12 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         size_t rkb_namelen;
         const int log_decode_errors       = LOG_ERR;
         rd_list_t *missing_topics         = NULL;
-        const rd_list_t *requested_topics = request->rkbuf_u.Metadata.topics;
-        rd_bool_t all_topics = request->rkbuf_u.Metadata.all_topics;
-        rd_bool_t cgrp_update =
-            request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp;
+        const rd_list_t *requested_topics = request_topics;
+        rd_bool_t all_topics              = rd_false;
+        rd_bool_t cgrp_update             = rd_false;
         rd_bool_t has_reliable_leader_epochs =
             rd_kafka_has_reliable_leader_epochs(rkb);
-        const char *reason = request->rkbuf_u.Metadata.reason
-                                 ? request->rkbuf_u.Metadata.reason
-                                 : "(no reason)";
-        int ApiVersion             = request->rkbuf_reqhdr.ApiVersion;
+        int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id      = -1;
         rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -481,11 +490,19 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
          * to contain the partition to rack map. */
         rd_bool_t has_client_rack = rk->rk_conf.client_rack &&
                                     RD_KAFKAP_STR_LEN(rk->rk_conf.client_rack);
-        /* If force_racks is true, the outptr mdip has to contain the partition
-         * to rack map. */
-        rd_bool_t force_rack_computation =
-            request->rkbuf_u.Metadata.force_racks;
-        rd_bool_t compute_racks = has_client_rack || force_rack_computation;
+        rd_bool_t compute_racks = has_client_rack;
+
+        if (request) {
+                requested_topics = request->rkbuf_u.Metadata.topics;
+                all_topics       = request->rkbuf_u.Metadata.all_topics;
+                cgrp_update =
+                    request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp;
+                compute_racks |= request->rkbuf_u.Metadata.force_racks;
+        }
+
+        /* If there's reason is NULL, set it to a human-readable string. */
+        if (!reason)
+                reason = "(no reason)";
 
         /* Ignore metadata updates when terminating */
         if (rd_kafka_terminating(rkb->rkb_rk)) {
@@ -543,6 +560,12 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                     rkbuf, "%d internal brokers: tmpabuf memory shortage",
                     md->broker_cnt);
 
+        if (!(mdi->brokers_sorted = rd_tmpabuf_alloc(
+                  &tbuf, md->broker_cnt * sizeof(*mdi->brokers_sorted))))
+                rd_kafka_buf_parse_fail(
+                    rkbuf, "%d sorted brokers: tmpabuf memory shortage",
+                    md->broker_cnt);
+
         for (i = 0; i < md->broker_cnt; i++) {
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].id);
                 rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf,
@@ -560,11 +583,18 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
-        if (ApiVersion >= 2)
+        mdi->cluster_id = NULL;
+        if (ApiVersion >= 2) {
                 rd_kafka_buf_read_str(rkbuf, &cluster_id);
+                if (cluster_id.str)
+                        mdi->cluster_id =
+                            rd_tmpabuf_write_str(&tbuf, cluster_id.str);
+        }
 
+        mdi->controller_id = -1;
         if (ApiVersion >= 1) {
                 rd_kafka_buf_read_i32(rkbuf, &controller_id);
+                mdi->controller_id = controller_id;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "ClusterId: %.*s, ControllerId: %" PRId32,
                            RD_KAFKAP_STR_PR(&cluster_id), controller_id);
@@ -572,6 +602,10 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
         qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[i]),
               rd_kafka_metadata_broker_internal_cmp);
+        memcpy(mdi->brokers_sorted, md->brokers,
+               sizeof(*mdi->brokers_sorted) * md->broker_cnt);
+        qsort(mdi->brokers_sorted, md->broker_cnt, sizeof(*mdi->brokers_sorted),
+              rd_kafka_metadata_broker_cmp);
 
         /* Read TopicMetadata */
         rd_kafka_buf_read_arraycnt(rkbuf, &md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
@@ -598,10 +632,9 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_read_uuid(rkbuf, &mdi->topics[i].topic_id);
                 }
 
-                if (ApiVersion >= 1) {
-                        int8_t is_internal;
-                        rd_kafka_buf_read_i8(rkbuf, &is_internal);
-                }
+                if (ApiVersion >= 1)
+                        rd_kafka_buf_read_bool(rkbuf,
+                                               &mdi->topics[i].is_internal);
 
                 /* PartitionMetadata */
                 rd_kafka_buf_read_arraycnt(rkbuf, &md->topics[i].partition_cnt,
@@ -720,20 +753,26 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_skip_tags(rkbuf);
                 }
 
+                mdi->topics[i].topic_authorized_operations = -1;
                 if (ApiVersion >= 8) {
                         int32_t TopicAuthorizedOperations;
                         /* TopicAuthorizedOperations */
                         rd_kafka_buf_read_i32(rkbuf,
                                               &TopicAuthorizedOperations);
+                        mdi->topics[i].topic_authorized_operations =
+                            TopicAuthorizedOperations;
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
+        mdi->cluster_authorized_operations = -1;
         if (ApiVersion >= 8 && ApiVersion <= 10) {
                 int32_t ClusterAuthorizedOperations;
                 /* ClusterAuthorizedOperations */
                 rd_kafka_buf_read_i32(rkbuf, &ClusterAuthorizedOperations);
+                mdi->cluster_authorized_operations =
+                    ClusterAuthorizedOperations;
         }
 
         rd_kafka_buf_skip_tags(rkbuf);
@@ -974,6 +1013,56 @@ err:
         rd_tmpabuf_destroy(&tbuf);
 
         return err;
+}
+
+
+/**
+ * @brief Handle a Metadata response message.
+ *
+ * @param request Initial Metadata request, containing the topic information.
+ *                Must not be NULL.
+ *                We require the topic information while parsing to make sure
+ *                that there are no missing topics.
+ * @param mdip A pointer to (rd_kafka_metadata_internal_t *) into which the
+ *             metadata will be marshalled (set to NULL on error.)
+ *
+ * @returns an error code on parse failure, else NO_ERROR.
+ *
+ * @locality rdkafka main thread
+ */
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                        rd_kafka_buf_t *request,
+                        rd_kafka_buf_t *rkbuf,
+                        rd_kafka_metadata_internal_t **mdip) {
+        const char *reason = request->rkbuf_u.Metadata.reason;
+        return rd_kafka_parse_Metadata0(rkb, request, rkbuf, mdip, NULL,
+                                        reason);
+}
+
+/**
+ * @brief Handle a Metadata response message for admin requests.
+ *
+ * @param request_topics List containing topics in Metadata request. Must not
+ *                       be NULL. It is more convenient in the Admin flow to
+ *                       preserve the topic names rather than the initial
+ *                       Metadata request.
+ *                       We require the topic information while parsing to make
+ *                      sure that there are no missing topics.
+ * @param mdip A pointer to (rd_kafka_metadata_internal_t *) into which the
+ *             metadata will be marshalled (set to NULL on error.)
+ *
+ * @returns an error code on parse failure, else NO_ERROR.
+ *
+ * @locality rdkafka main thread
+ */
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
+                              rd_kafka_buf_t *rkbuf,
+                              rd_list_t *request_topics,
+                              rd_kafka_metadata_internal_t **mdip) {
+        return rd_kafka_parse_Metadata0(rkb, NULL, rkbuf, mdip, request_topics,
+                                        "(admin request)");
 }
 
 

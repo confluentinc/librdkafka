@@ -1,9 +1,14 @@
-# librdkafka v2.2.1
+# librdkafka v2.3.0
 
-librdkafka v2.2.1 is a maintenance release:
+librdkafka v2.3.0 is a feature release:
 
  * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
+ * Add support for AdminAPI `DescribeCluster()` and `DescribeTopics()`
+  (#4240, @jainruchir).
+ * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):
+   Return authorized operations in Describe Responses.
+   (#4240, @jainruchir).
  * Add missing destroy that leads to leaking partition structure memory when there
    are partition leader changes and a stale leader epoch is received (#4429).
  * Fix a segmentation fault when closing a consumer using the

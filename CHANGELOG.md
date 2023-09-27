@@ -9,7 +9,7 @@ librdkafka v2.2.1 is a maintenance release:
  * Fix a segmentation fault when closing a consumer using the
    cooperative-sticky assignor before the first assignment (#4381).
  * Fix to ensure permanent errors during offset validation continue being retried and
-   don't cause an offset reset (#).
+   don't cause an offset reset (#4447).
 
 
 ## Fixes

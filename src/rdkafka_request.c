@@ -2192,6 +2192,10 @@ done:
  * already a full request in transit then this function will return
  * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
  * If \p rko is non-NULL or if \p force is true, the request is sent regardless.
+ *
+ * \p include_cluster_authorized_operations should not be set unless this
+ * MetadataRequest is for an admin operation. \sa
+ * rd_kafka_MetadataRequest_admin().
  */
 static rd_kafka_resp_err_t
 rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
@@ -2215,10 +2219,17 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         int *full_incr                 = NULL;
         void *handler_arg              = NULL;
         rd_kafka_resp_cb_t *handler_cb = rd_kafka_handle_Metadata;
+        int16_t metadata_max_version   = 12;
         rd_kafka_replyq_t use_replyq   = replyq;
 
+        /* In case we want cluster authorized operations in the Metadata
+         * request, we must send a request with version not exceeding 10 because
+         * KIP-700 deprecates those fields from the Metadata RPC. */
+        if (include_cluster_authorized_operations)
+                metadata_max_version = RD_MIN(metadata_max_version, 10);
+
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 12, &features);
+            rkb, RD_KAFKAP_Metadata, 0, metadata_max_version, &features);
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
                                                  4 + (50 * topic_cnt) + 1,
@@ -2463,8 +2474,10 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_kafka_op_t *rko) {
         return rd_kafka_MetadataRequest_op(
             rkb, topics, reason, allow_auto_create_topics,
-            /* cluster and topic authorized operations are used by admin
-               operations only. */
+            /* Cluster and Topic authorized operations are used by admin
+             * operations only. For non-admin operation cases, NEVER set them to
+             * true, since it changes the metadata max version to be 10, until
+             * KIP-700 can be implemented. */
             rd_false, rd_false, cgrp_update, force_racks, rko);
 }
 

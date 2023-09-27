@@ -19,7 +19,7 @@ librdkafka v2.2.1 is a maintenance release:
  * During offset validation a permanent error like host resolution failure
    would cause an offset reset.
    This isn't what's expected or what the Java implementation does.
-   Solved by retrying even in case of permanent errors.
+   Solved by retrying even in case of permanent errors (#4447).
 
 
 

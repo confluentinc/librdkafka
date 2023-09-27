@@ -17,7 +17,7 @@ librdkafka v2.2.1 is a maintenance release:
 
  * An assertion failed with insufficient buffer size when allocating
    rack information on 32bit architectures.
-   Solved by aligning all allocations to the maximum allowed word size.
+   Solved by aligning all allocations to the maximum allowed word size (#4449).
 
 
 

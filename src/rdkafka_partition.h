@@ -74,12 +74,7 @@ struct rd_kafka_toppar_err {
 static RD_UNUSED RD_INLINE int
 rd_kafka_fetch_pos_cmp_offset(const rd_kafka_fetch_pos_t *a,
                               const rd_kafka_fetch_pos_t *b) {
-        if (a->offset < b->offset)
-                return -1;
-        else if (a->offset > b->offset)
-                return 1;
-        else
-                return 0;
+        return (RD_CMP(a->offset, b->offset));
 }
 
 /**

@@ -11,11 +11,12 @@ librdkafka v2.2.1 is a maintenance release:
 
 ### Consumer fixes
 
-  * Stored offsets where excluded from the commit if the leader epoch was
+  * Stored offsets were excluded from the commit if the leader epoch was
     less than committed epoch, as it's possible if leader epoch is the default -1.
     This didn't happen in Python, Go and .NET bindings when stored position was
-    taken from the message. Solved by only checking that offset is greater
-    than committed one.
+    taken from the message.
+    Solved by checking only that the stored offset is greater
+    than committed one, if either stored or committed leader epoch is -1 (#4442).
 
 
 

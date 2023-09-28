@@ -946,7 +946,6 @@ int32_t rd_kafka_topic_partition_get_leader_epoch(
  * @brief A growable list of Topic+Partitions.
  *
  */
-
 typedef struct rd_kafka_topic_partition_list_s {
         int cnt;                           /**< Current number of elements */
         int size;                          /**< Current allocated size */
@@ -5386,8 +5385,7 @@ typedef int rd_kafka_event_type_t;
 /** DescribeCluster_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT 0x200000
 /** ListOffsets_result_t */
-#define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x100000
-
+#define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x400000
 
 /**
  * @returns the event type for the given event.
@@ -6853,7 +6851,7 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
         /** ListOffsets */
         RD_KAFKA_ADMIN_OP_LISTOFFSETS,
-        RD_KAFKA_ADMIN_OP__CNT /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**

@@ -3950,6 +3950,10 @@ err_parse:
         return reply->rkbuf_err;
 }
 
+/**
+ * @brief Creates a ListOffsetResultInfo with the topic and parition and returns the
+ * ListOffsetResultInfo.
+*/
 rd_kafka_ListOffsetResultInfo_t *rd_kafka_ListOffsetResultInfo_new(const char *topic,int32_t partition){
         rd_kafka_ListOffsetResultInfo_t *element;
         element = rd_calloc(1,sizeof(*element));
@@ -3977,25 +3981,28 @@ void *rd_kafka_ListOffsetResultInfo_copy_opaque(const void *element, void *opaqu
 }
 
 /**
- * Returns the rd_kafka_topic_partition_t of the rd_kafka_ListOffsetResultInfo_t passed.
+ * @brief Returns the rd_kafka_topic_partition_t of the rd_kafka_ListOffsetResultInfo_t passed.
 */
 const rd_kafka_topic_partition_t *rd_kafka_ListOffsetResultInfo_topic_partition(const rd_kafka_ListOffsetResultInfo_t *result_info){
     return result_info->topic_partition;
 }
 
 /**
- * Returns the timestamp specified for the offset of the rd_kafka_ListOffsetResultInfo_t.
+ * @brief Returns the timestamp specified for the offset of the rd_kafka_ListOffsetResultInfo_t.
 */
 int64_t rd_kafka_ListOffsetResultInfo_timestamp(const rd_kafka_ListOffsetResultInfo_t *result_info){
     return result_info->timestamp;
 }
+
 void rd_kafka_ListOffsetResultInfo_destroy(rd_kafka_ListOffsetResultInfo_t *element){
         rd_kafka_topic_partition_destroy(element->topic_partition);
         rd_free(element);
 }
+
 void rd_kafka_ListOffsetResultInfo_destroy_free(void *element){
         rd_kafka_ListOffsetResultInfo_destroy(element);
 }
+
 /**
  * @brief Merges the response of the partial request made for ListOffsets via the rko_partial
  *        into the rko_fanout responsible for the ListOffsets request.

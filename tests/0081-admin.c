@@ -5255,7 +5255,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 do_test_UserScramCredentials("main queue", rk, mainq, rd_true);
         }
 
-        
         rd_kafka_queue_destroy(mainq);
 
         rd_kafka_destroy(rk);

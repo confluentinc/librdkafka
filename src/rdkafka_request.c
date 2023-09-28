@@ -476,85 +476,6 @@ rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
 }
 
 
-
-/**
- * @brief Parses a ListOffsets reply.
- *
- * Returns the parsed offsets (and errors) in \p offsets which must have been
- * initialized by caller.
- *
- * @returns 0 on success, else an error (\p offsets may be completely or
- *          partially updated, depending on the nature of the error, and per
- *          partition error codes should be checked by the caller).
- */
-rd_kafka_resp_err_t
-rd_kafka_parse_ListOffsets(rd_kafka_buf_t *rkbuf,
-                           rd_kafka_topic_partition_list_t *offsets) {
-        const int log_decode_errors = LOG_ERR;
-        int32_t TopicArrayCnt;
-        int16_t api_version;
-        rd_kafka_resp_err_t all_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-
-        api_version = rkbuf->rkbuf_reqhdr.ApiVersion;
-
-        if (api_version >= 2)
-                rd_kafka_buf_read_throttle_time(rkbuf);
-
-        /* NOTE:
-         * Broker may return offsets in a different constellation than
-         * in the original request .*/
-
-        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
-        while (TopicArrayCnt-- > 0) {
-                rd_kafkap_str_t ktopic;
-                int32_t PartArrayCnt;
-                char *topic_name;
-
-                rd_kafka_buf_read_str(rkbuf, &ktopic);
-                rd_kafka_buf_read_i32(rkbuf, &PartArrayCnt);
-
-                RD_KAFKAP_STR_DUPA(&topic_name, &ktopic);
-
-                while (PartArrayCnt-- > 0) {
-                        int32_t kpartition;
-                        int16_t ErrorCode;
-                        int32_t OffsetArrayCnt;
-                        int64_t Offset      = -1;
-                        rd_kafka_topic_partition_t *rktpar;
-
-                        rd_kafka_buf_read_i32(rkbuf, &kpartition);
-                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-
-                        if (api_version >= 1) {
-                                int64_t Timestamp;
-                                rd_kafka_buf_read_i64(rkbuf, &Timestamp);
-                                rd_kafka_buf_read_i64(rkbuf, &Offset);
-                        } else if (api_version == 0) {
-                                rd_kafka_buf_read_i32(rkbuf, &OffsetArrayCnt);
-                                /* We only request one offset so just grab
-                                 * the first one. */
-                                while (OffsetArrayCnt-- > 0)
-                                        rd_kafka_buf_read_i64(rkbuf, &Offset);
-                        } else {
-                                rd_kafka_assert(NULL, !*"NOTREACHED");
-                        }
-
-                        rktpar = rd_kafka_topic_partition_list_add(
-                            offsets, topic_name, kpartition);
-                        rktpar->err    = ErrorCode;
-                        rktpar->offset = Offset;
-
-                        if (ErrorCode && !all_err)
-                                all_err = ErrorCode;
-                }
-        }
-
-        return all_err;
-
-err_parse:
-        return rkbuf->rkbuf_err;
-}
-
 /**
  * @brief Parses the response given the rd_kafka_buf_t and returns the rd_list_t with the element
  *        as rd_kafka_ListOffsetResultInfo which encapsulates all the Info about a topic_partition offset for 
@@ -847,7 +768,6 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                  void *make_opaque) {
         const rd_kafka_topic_partition_list_t *partitions =
             (const rd_kafka_topic_partition_list_t *)make_opaque;
-        
         int i;
         size_t of_TopicArrayCnt = 0, of_PartArrayCnt = 0;
         const char *last_topic = "";

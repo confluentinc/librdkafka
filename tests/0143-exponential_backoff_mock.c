@@ -517,7 +517,7 @@ static void test_fetch_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
  * intervalled queries where jitter is added and backed off queries where both
  * jitter and exponential backoff is applied with the max being retry_max_ms.
  */
-int main_0143_exponential_backoff(int argc, char **argv) {
+int main_0143_exponential_backoff_mock(int argc, char **argv) {
         const char *topic = test_mk_topic_name("topic", 1);
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;

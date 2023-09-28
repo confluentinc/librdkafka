@@ -198,16 +198,21 @@ print_partition_info(const rd_kafka_TopicPartitionInfo_t *partition) {
  */
 static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
         size_t j;
-        const rd_kafka_error_t *error;
-        const char *topic_name = rd_kafka_TopicDescription_name(topic);
-        error                  = rd_kafka_TopicDescription_error(topic);
+        const char *topic_name        = rd_kafka_TopicDescription_name(topic);
+        const rd_kafka_error_t *error = rd_kafka_TopicDescription_error(topic);
         const rd_kafka_AclOperation_t *authorized_operations;
         size_t authorized_operations_cnt;
         const rd_kafka_TopicPartitionInfo_t **partitions;
         size_t partition_cnt;
+        rd_kafka_uuid_t *topic_id = rd_kafka_TopicDescription_topic_id(topic);
+        char *topic_id_str        = rd_kafka_uuid_base64str(topic_id);
+        int64_t topic_id_msb = rd_kafka_uuid_most_significant_bits(topic_id);
+        int64_t topic_id_lsb = rd_kafka_uuid_least_significant_bits(topic_id);
 
         if (rd_kafka_error_code(error)) {
-                printf("Topic: %s has error[%" PRId32 "]: %s\n", topic_name,
+                printf("Topic: %s [LSB : %" PRId64 "MSB : %" PRId64
+                       " Base64String : %s] has error[%" PRId32 "]: %s\n",
+                       topic_name, topic_id_lsb, topic_id_msb, topic_id_str,
                        rd_kafka_error_code(error),
                        rd_kafka_error_string(error));
                 return;
@@ -216,10 +221,11 @@ static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
         authorized_operations = rd_kafka_TopicDescription_authorized_operations(
             topic, &authorized_operations_cnt);
 
-        printf(
-            "Topic: %s succeeded, has %d topic authorized operations "
-            "allowed, they are:\n",
-            topic_name, (int)authorized_operations_cnt);
+        printf("Topic: %s [LSB : %" PRId64 " MSB : %" PRId64
+               " Base64String : %s] succeeded, has %ld authorized operations "
+               "allowed, they are:\n",
+               topic_name, topic_id_lsb, topic_id_msb, topic_id_str,
+               authorized_operations_cnt);
 
         for (j = 0; j < authorized_operations_cnt; j++)
                 printf("\t%s operation is allowed\n",

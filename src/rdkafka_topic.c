@@ -1831,38 +1831,44 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
     const rd_kafka_metadata_partition_internal_t *mdpi) {
         rd_kafka_topic_info_t *ti;
         rd_tmpabuf_t tbuf;
-        size_t tlen             = RD_ROUNDUP(strlen(topic) + 1, 8);
-        size_t total_racks_size = 0;
         int i;
+        rd_bool_t has_racks = rd_false;
 
+        rd_tmpabuf_new(&tbuf, 0, rd_true /* assert on fail */);
+
+        rd_tmpabuf_add_alloc(&tbuf, sizeof(*ti));
+        rd_tmpabuf_add_alloc(&tbuf, strlen(topic) + 1);
         for (i = 0; i < partition_cnt; i++) {
                 size_t j;
                 if (!mdpi[i].racks)
                         continue;
 
+                if (unlikely(!has_racks))
+                        has_racks = rd_true;
+
                 for (j = 0; j < mdpi[i].racks_cnt; j++) {
-                        total_racks_size +=
-                            RD_ROUNDUP(strlen(mdpi[i].racks[j]) + 1, 8);
+                        rd_tmpabuf_add_alloc(&tbuf,
+                                             strlen(mdpi[i].racks[j]) + 1);
                 }
-                total_racks_size +=
-                    RD_ROUNDUP(sizeof(char *) * mdpi[i].racks_cnt, 8);
+                rd_tmpabuf_add_alloc(&tbuf, sizeof(char *) * mdpi[i].racks_cnt);
         }
 
-        if (total_racks_size) /* Only bother allocating this if at least one
-                                 rack is there. */
-                total_racks_size +=
-                    RD_ROUNDUP(sizeof(rd_kafka_metadata_partition_internal_t) *
-                                   partition_cnt,
-                               8);
+        /* Only bother allocating this if at least one
+         * rack is there. */
+        if (has_racks) {
+                rd_tmpabuf_add_alloc(
+                    &tbuf, sizeof(rd_kafka_metadata_partition_internal_t) *
+                               partition_cnt);
+        }
 
-        rd_tmpabuf_new(&tbuf, sizeof(*ti) + tlen + total_racks_size,
-                       1 /* assert on fail */);
+        rd_tmpabuf_finalize(&tbuf);
+
         ti                      = rd_tmpabuf_alloc(&tbuf, sizeof(*ti));
         ti->topic               = rd_tmpabuf_write_str(&tbuf, topic);
         ti->partition_cnt       = partition_cnt;
         ti->partitions_internal = NULL;
 
-        if (total_racks_size) {
+        if (has_racks) {
                 ti->partitions_internal = rd_tmpabuf_alloc(
                     &tbuf, sizeof(*ti->partitions_internal) * partition_cnt);
 

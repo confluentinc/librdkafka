@@ -393,6 +393,12 @@ struct rd_kafka_mock_cluster_s {
         /**< Request handlers */
         struct rd_kafka_mock_api_handler api_handlers[RD_KAFKAP__NUM];
 
+        rd_bool_t track_requests;
+        /**< List of API requests for this broker. Type:
+         * rd_kafka_mock_request_t*
+         */
+        rd_list_t request_list;
+
         /**< Mutex for:
          *   .errstacks
          *   .apiversions

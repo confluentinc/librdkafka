@@ -445,6 +445,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "metadata is refreshed in order to proactively discover any new "
      "brokers, topics, partitions or partition leader changes. "
      "Use -1 to disable the intervalled refresh (not recommended). "
+     "If not set explicitly, it will be defaulted to `retry.backoff.ms`. "
      "If there are no locally referenced topics "
      "(no topic objects created, no messages produced, "
      "no subscription or no assignment) then only the broker list will "
@@ -1372,10 +1373,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      0, INT32_MAX, INT32_MAX},
     {_RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
      .sdef = "message.send.max.retries"},
+     
     {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.ms", _RK_C_INT,
      _RK(retry_backoff_ms),
-     "The backoff time in milliseconds before retrying a protocol request.", 1,
-     300 * 1000, 100},
+     "The backoff time in milliseconds before retrying a protocol request, "
+     "this is the first backoff time, "
+     "and will be backed off exponentially until number of retries is "
+     "exhausted, and it's capped by retry.backoff.max.ms.",
+     1, 300 * 1000, 100},
+
+    {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
+     _RK(retry_backoff_max_ms),
+     "The max backoff time in milliseconds before retrying a protocol request, "
+     "this is the atmost backoff allowed for exponentially backed off "
+     "requests.",
+     1, 300 * 1000, 1000},
 
     {_RK_GLOBAL | _RK_PRODUCER, "queue.buffering.backpressure.threshold",
      _RK_C_INT, _RK(queue_backpressure_thres),
@@ -3928,6 +3940,10 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                 conf->sparse_connect_intvl =
                     RD_MAX(11, RD_MIN(conf->reconnect_backoff_ms / 2, 1000));
         }
+        if (!rd_kafka_conf_is_modified(
+                conf, "topic.metadata.refresh.fast.interval.ms"))
+                conf->metadata_refresh_fast_interval_ms =
+                    conf->retry_backoff_ms;
 
         if (!rd_kafka_conf_is_modified(conf, "connections.max.idle.ms") &&
             conf->brokerlist && rd_strcasestr(conf->brokerlist, "azure")) {
@@ -4116,6 +4132,31 @@ int rd_kafka_conf_warn(rd_kafka_t *rk) {
                              "recommend not using set_default_topic_conf");
 
         /* Additional warnings */
+        if (rk->rk_conf.retry_backoff_ms > rk->rk_conf.retry_backoff_max_ms) {
+                rd_kafka_log(
+                    rk, LOG_WARNING, "CONFWARN",
+                    "Configuration `retry.backoff.ms` with value %d is greater "
+                    "than configuration `retry.backoff.max.ms` with value %d. "
+                    "A static backoff with value `retry.backoff.max.ms` will "
+                    "be applied.",
+                    rk->rk_conf.retry_backoff_ms,
+                    rk->rk_conf.retry_backoff_max_ms);
+        }
+
+        if (rd_kafka_conf_is_modified(
+                &rk->rk_conf, "topic.metadata.refresh.fast.interval.ms") &&
+            rk->rk_conf.metadata_refresh_fast_interval_ms >
+                rk->rk_conf.retry_backoff_max_ms) {
+                rd_kafka_log(
+                    rk, LOG_WARNING, "CONFWARN",
+                    "Configuration `topic.metadata.refresh.fast.interval.ms` "
+                    "with value %d is greater than configuration "
+                    "`retry.backoff.max.ms` with value %d. "
+                    "A static backoff with value `retry.backoff.max.ms` will "
+                    "be applied.",
+                    rk->rk_conf.metadata_refresh_fast_interval_ms,
+                    rk->rk_conf.retry_backoff_max_ms);
+        }
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 if (rk->rk_conf.fetch_wait_max_ms + 1000 >
                     rk->rk_conf.socket_timeout_ms)

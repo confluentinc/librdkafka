@@ -49,7 +49,9 @@ librdkafka v2.2.0 is a feature release:
  * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
    IncrementalAlterConfigs API (started by @PrasanthV454, #4110).
  * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
-
+ * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for  
+   retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
+   maximum backoff, with jitter `RD_KAFKA_RETRY_JITTER_PERCENT`(#4422).
 
 ## Enhancements
 

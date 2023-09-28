@@ -25,9 +25,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <stdarg.h>
-
 #include "test.h"
 
 #include "../src/rdkafka_proto.h"
@@ -48,9 +45,9 @@ static void test_telemetry_check_protocol_request_times(
     size_t expected_cnt) {
         int64_t prev_timestamp = -1;
         int64_t curr_timestamp = -1;
-        size_t i            = 0;
-        size_t j            = 0;
-        const int buffer = 200 /* constant buffer time. */;
+        size_t expected_idx    = 0;
+        size_t actual_idx      = 0;
+        const int buffer       = 200 /* constant buffer time. */;
 
         if (expected_cnt < 1)
                 return;
@@ -59,13 +56,16 @@ static void test_telemetry_check_protocol_request_times(
                     "Expected at least %" PRIusz " requests, have %" PRIusz,
                     expected_cnt, actual_cnt);
 
-        for (i = 0, j = 0; i < expected_cnt && j < actual_cnt; j++) {
-                rd_kafka_mock_request_t *request_actual = requests_actual[j];
+        for (expected_idx = 0, actual_idx = 0;
+             expected_idx < expected_cnt && actual_idx < actual_cnt;
+             actual_idx++) {
+                rd_kafka_mock_request_t *request_actual =
+                    requests_actual[actual_idx];
                 int16_t actual_ApiKey =
                     rd_kafka_mock_request_api_key(request_actual);
                 int actual_broker_id = rd_kafka_mock_request_id(request_actual);
                 rd_kafka_telemetry_expected_request_t request_expected =
-                    requests_expected[i];
+                    requests_expected[expected_idx];
 
                 if (actual_ApiKey != RD_KAFKAP_GetTelemetrySubscriptions &&
                     actual_ApiKey != RD_KAFKAP_PushTelemetry)
@@ -101,16 +101,18 @@ static void test_telemetry_check_protocol_request_times(
 
                         TEST_ASSERT(
                             diff_ms > expected_diff_low,
-                            "Expected difference to be more than %" PRId64 ", was "
+                            "Expected difference to be more than %" PRId64
+                            ", was "
                             "%" PRId64,
                             expected_diff_low, diff_ms);
                         TEST_ASSERT(
                             diff_ms < expected_diff_hi,
-                            "Expected difference to be less than %" PRId64 ", was "
+                            "Expected difference to be less than %" PRId64
+                            ", was "
                             "%" PRId64,
                             expected_diff_hi, diff_ms);
                 }
-                i++;
+                expected_idx++;
         }
 }
 
@@ -362,9 +364,9 @@ void do_test_telemetry_preferred_broker_change(void) {
              .broker_id        = 1,
              .expected_diff_ms = push_interval,
              .jitter_percent   = 0},
-            /* T = 3*push_interval + jitter: The preferred broker is set down,
-             * and this is the first PushTelemetry request to the new preferred
-             * broker.
+            /* T = 3*push_interval + jitter: The old preferred broker is set
+             * down, and this is the first PushTelemetry request to the new
+             * preferred broker.
              */
             {.ApiKey           = RD_KAFKAP_PushTelemetry,
              .broker_id        = 2,
@@ -395,7 +397,7 @@ void do_test_telemetry_preferred_broker_change(void) {
         test_conf_set(conf, "debug", "telemetry");
         // rd_kafka_conf_set_error_cb(conf, test_error_is_not_fatal_cb);
         test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
-        producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        producer               = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         /* Poll for enough time that the initial GetTelemetrySubscription can be
          * sent and the first PushTelemetry request can be scheduled. */

@@ -213,13 +213,15 @@ void rd_kafka_timer_exp_backoff(rd_kafka_timers_t *rkts,
                 rd_kafka_timer_unschedule(rkts, rtmr);
         }
         rtmr->rtmr_interval *= 2;
-        jitter = ( rd_jitter(-max_jitter, max_jitter) * rtmr->rtmr_interval ) / 100;
+        jitter =
+            (rd_jitter(-max_jitter, max_jitter) * rtmr->rtmr_interval) / 100;
         if (rtmr->rtmr_interval + jitter < minimum_backoff) {
                 rtmr->rtmr_interval = minimum_backoff;
-                jitter = 0;
-        } else if ((maximum_backoff != -1) && (rtmr->rtmr_interval + jitter) > maximum_backoff) {
+                jitter              = 0;
+        } else if ((maximum_backoff != -1) &&
+                   (rtmr->rtmr_interval + jitter) > maximum_backoff) {
                 rtmr->rtmr_interval = maximum_backoff;
-                jitter = 0;
+                jitter              = 0;
         }
         rd_kafka_timer_schedule(rkts, rtmr, jitter);
         rd_kafka_timers_unlock(rkts);

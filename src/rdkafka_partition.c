@@ -894,7 +894,7 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
         int64_t jitter = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
-                                      100 + RD_KAFKA_RETRY_JITTER_PERCENT);
+                                   100 + RD_KAFKA_RETRY_JITTER_PERCENT);
         /* Scan through messages to see which ones are eligible for retry,
          * move the retryable ones to temporary queue and
          * set backoff time for first message and optionally
@@ -910,14 +910,17 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
 
                 rkm->rkm_u.producer.retries += incr_retry;
                 if (exponential_backoff) {
-                        /* In some cases, like failed Produce requests do not increment the retry count, see rd_kafka_handle_Produce_error. */
+                        /* In some cases, like failed Produce requests do not
+                         * increment the retry count, see
+                         * rd_kafka_handle_Produce_error. */
                         if (rkm->rkm_u.producer.retries > 0)
                                 backoff =
                                     (1 << (rkm->rkm_u.producer.retries - 1)) *
                                     retry_ms;
                         else
                                 backoff = retry_ms;
-                        /* Multiplied by 10 as backoff should be in nano seconds. */
+                        /* Multiplied by 10 as backoff should be in nano
+                         * seconds. */
                         backoff = jitter * backoff * 10;
                         if (backoff > retry_max_ms * 1000)
                                 backoff = retry_max_ms * 1000;
@@ -962,7 +965,7 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                                rd_kafka_msgq_t *rkmq,
                                int incr_retry,
                                rd_kafka_msg_status_t status) {
-        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+        rd_kafka_t *rk   = rktp->rktp_rkt->rkt_rk;
         int retry_ms     = rk->rk_conf.retry_backoff_ms;
         int retry_max_ms = rk->rk_conf.retry_backoff_max_ms;
         int r;
@@ -973,7 +976,8 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_lock(rktp);
         /* Exponential backoff applied. */
         r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq, incr_retry,
-                                rk->rk_conf.max_retries, 0 /* backoff will be calculated */, status,
+                                rk->rk_conf.max_retries,
+                                0 /* backoff will be calculated */, status,
                                 rktp->rktp_rkt->rkt_conf.msg_order_cmp, rd_true,
                                 retry_ms, retry_max_ms);
         rd_kafka_toppar_unlock(rktp);

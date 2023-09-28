@@ -1373,7 +1373,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      0, INT32_MAX, INT32_MAX},
     {_RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
      .sdef = "message.send.max.retries"},
-     
+
     {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.ms", _RK_C_INT,
      _RK(retry_backoff_ms),
      "The backoff time in milliseconds before retrying a protocol request, "

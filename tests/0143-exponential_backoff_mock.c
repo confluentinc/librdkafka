@@ -33,9 +33,10 @@
 const int32_t retry_ms     = 100;
 const int32_t retry_max_ms = 1000;
 
-static void free_mock_requests(rd_kafka_mock_request_t **requests, size_t request_cnt){
+static void free_mock_requests(rd_kafka_mock_request_t **requests,
+                               size_t request_cnt) {
         size_t i;
-        for(i=0;i<request_cnt;i++)
+        for (i = 0; i < request_cnt; i++)
                 rd_kafka_mock_request_destroy(requests[i]);
         rd_free(requests);
 }
@@ -46,14 +47,14 @@ static void free_mock_requests(rd_kafka_mock_request_t **requests, size_t reques
  * is done at 500 ms, with a 20% jitter. However, the actual code to retry the
  * request runs inside rd_kafka_cgrp_serve that is called every one second,
  * hence, the retry actually happens always in 1 second, no matter what the
- * jitter is. This will be fixed once rd_kafka_cgrp_serve is timer triggered. The
- * exponential backoff does not apply in this case we just apply the jitter to
- * the backoff of intervalled query The retry count is non - deterministic as
+ * jitter is. This will be fixed once rd_kafka_cgrp_serve is timer triggered.
+ * The exponential backoff does not apply in this case we just apply the jitter
+ * to the backoff of intervalled query The retry count is non - deterministic as
  * fresh request spawned on its own.
  */
 static void test_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
-                           const char *topic,
-                           rd_kafka_conf_t *conf) {
+                                  const char *topic,
+                                  rd_kafka_conf_t *conf) {
         rd_kafka_mock_request_t **requests = NULL;
         size_t request_cnt                 = 0;
         int64_t previous_request_ts        = -1;
@@ -90,29 +91,28 @@ static void test_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
                          rd_kafka_mock_request_api_key(requests[i]),
                          rd_kafka_mock_request_timestamp(requests[i]));
 
-                if (rd_kafka_mock_request_api_key(requests[i]) != RD_KAFKAP_FindCoordinator)
-                    continue;
+                if (rd_kafka_mock_request_api_key(requests[i]) !=
+                    RD_KAFKAP_FindCoordinator)
+                        continue;
 
                 if (previous_request_ts != -1) {
                         int64_t time_difference =
-                                (rd_kafka_mock_request_timestamp(
-                                        requests[i]) -
-                                previous_request_ts) /
-                                1000;
+                            (rd_kafka_mock_request_timestamp(requests[i]) -
+                             previous_request_ts) /
+                            1000;
                         TEST_ASSERT(((time_difference > low - buffer) &&
-                                        (time_difference < low + buffer)),
-                                        "Time difference should be close "
-                                        "to 1 second, it is %" PRId64
-                                        " ms instead.\n",
-                                        time_difference);
+                                     (time_difference < low + buffer)),
+                                    "Time difference should be close "
+                                    "to 1 second, it is %" PRId64
+                                    " ms instead.\n",
+                                    time_difference);
                         retry_count++;
                 }
                 previous_request_ts =
-                        rd_kafka_mock_request_timestamp(requests[i]);
-                
+                    rd_kafka_mock_request_timestamp(requests[i]);
         }
         rd_kafka_destroy(consumer);
-        free_mock_requests(requests,request_cnt);
+        free_mock_requests(requests, request_cnt);
         rd_kafka_mock_clear_requests(mcluster);
         SUB_TEST_PASS();
 }
@@ -123,7 +123,7 @@ static void test_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
  * execution.
  */
 static void helper_exponential_backoff(rd_kafka_mock_cluster_t *mcluster,
-                               int32_t request_type) {
+                                       int32_t request_type) {
         rd_kafka_mock_request_t **requests = NULL;
         size_t request_cnt                 = 0;
         int64_t previous_request_ts        = -1;
@@ -131,42 +131,42 @@ static void helper_exponential_backoff(rd_kafka_mock_cluster_t *mcluster,
         size_t i;
         requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
         for (i = 0; i < request_cnt; i++) {
-                TEST_SAY(
-                        "Broker Id : %d API Key : %d Timestamp : %" PRId64
-                        "\n",
-                        rd_kafka_mock_request_id(requests[i]),
-                        rd_kafka_mock_request_api_key(requests[i]),
-                        rd_kafka_mock_request_timestamp(requests[i]));
+                TEST_SAY("Broker Id : %d API Key : %d Timestamp : %" PRId64
+                         "\n",
+                         rd_kafka_mock_request_id(requests[i]),
+                         rd_kafka_mock_request_api_key(requests[i]),
+                         rd_kafka_mock_request_timestamp(requests[i]));
 
                 if (rd_kafka_mock_request_api_key(requests[i]) != request_type)
-                    continue;
+                        continue;
 
                 if (previous_request_ts != -1) {
                         int64_t time_difference =
-                                (rd_kafka_mock_request_timestamp(
-                                        requests[i]) -
-                                previous_request_ts) /
-                                1000;
-                        /* Max Jitter is 20 percent each side so buffer chosen is 25 percent to account for latency delays */
+                            (rd_kafka_mock_request_timestamp(requests[i]) -
+                             previous_request_ts) /
+                            1000;
+                        /* Max Jitter is 20 percent each side so buffer chosen
+                         * is 25 percent to account for latency delays */
                         int64_t low =
-                                ((1 << retry_count) * (retry_ms)*75) / 100;
+                            ((1 << retry_count) * (retry_ms)*75) / 100;
                         int64_t high =
-                                ((1 << retry_count) * (retry_ms)*125) / 100;
+                            ((1 << retry_count) * (retry_ms)*125) / 100;
                         if (high > ((retry_max_ms * 125) / 100))
                                 high = (retry_max_ms * 125) / 100;
                         if (low > ((retry_max_ms * 75) / 100))
                                 low = (retry_max_ms * 75) / 100;
-                        TEST_ASSERT(
-                                (time_difference < high) &&
-                                (time_difference > low),
-                                "Time difference is not respected, should be between %" PRId64 " and %" PRId64 " where time difference is %" PRId64 "\n",low,high,time_difference);
+                        TEST_ASSERT((time_difference < high) &&
+                                        (time_difference > low),
+                                    "Time difference is not respected, should "
+                                    "be between %" PRId64 " and %" PRId64
+                                    " where time difference is %" PRId64 "\n",
+                                    low, high, time_difference);
                         retry_count++;
                 }
                 previous_request_ts =
-                        rd_kafka_mock_request_timestamp(requests[i]);
-                
+                    rd_kafka_mock_request_timestamp(requests[i]);
         }
-        free_mock_requests(requests,request_cnt);
+        free_mock_requests(requests, request_cnt);
 }
 /**
  * @brief offset_commit test
@@ -178,8 +178,8 @@ static void helper_exponential_backoff(rd_kafka_mock_cluster_t *mcluster,
  * spawned on its own. Also the max retries is 2 for Offset Commit.
  */
 static void test_offset_commit(rd_kafka_mock_cluster_t *mcluster,
-                        const char *topic,
-                        rd_kafka_conf_t *conf) {
+                               const char *topic,
+                               rd_kafka_conf_t *conf) {
         rd_kafka_t *consumer;
         rd_kafka_message_t *rkm;
         rd_kafka_topic_partition_list_t *offsets;
@@ -224,8 +224,8 @@ static void test_offset_commit(rd_kafka_mock_cluster_t *mcluster,
  * deterministic i.e no fresh requests are spawned on its own.
  */
 static void test_produce(rd_kafka_mock_cluster_t *mcluster,
-                  const char *topic,
-                  rd_kafka_conf_t *conf) {
+                         const char *topic,
+                         rd_kafka_conf_t *conf) {
         rd_kafka_t *producer;
         rd_kafka_topic_t *rkt;
         SUB_TEST();
@@ -249,7 +249,7 @@ static void test_produce(rd_kafka_mock_cluster_t *mcluster,
         rd_sleep(3);
 
         helper_exponential_backoff(mcluster, RD_KAFKAP_Produce);
-        
+
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(producer);
@@ -259,10 +259,11 @@ static void test_produce(rd_kafka_mock_cluster_t *mcluster,
 
 /**
  * Helper function for find coordinator trigger with the given request_type, the
- * find coordinator request should be triggered after a failing request of request_type.
+ * find coordinator request should be triggered after a failing request of
+ * request_type.
  */
 static void helper_find_coordinator_trigger(rd_kafka_mock_cluster_t *mcluster,
-                                    int32_t request_type) {
+                                            int32_t request_type) {
         rd_kafka_mock_request_t **requests = NULL;
         size_t request_cnt                 = 0;
         int32_t num_request                = 0;
@@ -290,11 +291,13 @@ static void helper_find_coordinator_trigger(rd_kafka_mock_cluster_t *mcluster,
                         } else if (rd_kafka_mock_request_api_key(requests[i]) ==
                                    request_type) {
                                 num_request++;
-                                TEST_FAIL("Second request made without any FindCoordinator request.");
+                                TEST_FAIL(
+                                    "Second request made without any "
+                                    "FindCoordinator request.");
                         }
                 }
         }
-        free_mock_requests(requests,request_cnt);
+        free_mock_requests(requests, request_cnt);
         if (num_request != 1)
                 TEST_FAIL("No request was made.");
 }
@@ -304,8 +307,8 @@ static void helper_find_coordinator_trigger(rd_kafka_mock_cluster_t *mcluster,
  * the FindCoordinator request is triggered.
  */
 static void test_heartbeat_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
-                                     const char *topic,
-                                     rd_kafka_conf_t *conf) {
+                                            const char *topic,
+                                            rd_kafka_conf_t *conf) {
         rd_kafka_t *consumer;
         rd_kafka_message_t *rkm;
         SUB_TEST();
@@ -328,7 +331,7 @@ static void test_heartbeat_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
 
 
         helper_find_coordinator_trigger(mcluster, RD_KAFKAP_Heartbeat);
-        
+
 
         rd_kafka_destroy(consumer);
         rd_kafka_mock_clear_requests(mcluster);
@@ -341,8 +344,8 @@ static void test_heartbeat_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
  * the FindCoordinator request is triggered.
  */
 static void test_joingroup_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
-                                     const char *topic,
-                                     rd_kafka_conf_t *conf) {
+                                            const char *topic,
+                                            rd_kafka_conf_t *conf) {
         rd_kafka_t *consumer;
         rd_kafka_message_t *rkm;
         SUB_TEST();
@@ -378,8 +381,8 @@ static void test_joingroup_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
  * request is non deterministic as it will keep retrying till the leader change.
  */
 static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
-                                    const char *topic,
-                                    rd_kafka_conf_t *conf) {
+                                           const char *topic,
+                                           rd_kafka_conf_t *conf) {
         rd_kafka_mock_request_t **requests = NULL;
         size_t request_cnt                 = 0;
         int64_t previous_request_ts        = -1;
@@ -414,15 +417,17 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
                                      RD_KAFKAP_Produce)
                         produced = rd_true;
                 else if (rd_kafka_mock_request_api_key(requests[i]) ==
-                        RD_KAFKAP_Metadata &&
-                    produced) {
+                             RD_KAFKAP_Metadata &&
+                         produced) {
                         if (previous_request_ts != -1) {
                                 int64_t time_difference =
                                     (rd_kafka_mock_request_timestamp(
                                          requests[i]) -
                                      previous_request_ts) /
                                     1000;
-                                /* Max Jitter is 20 percent each side so buffer chosen is 25 percent to account for latency delays */
+                                /* Max Jitter is 20 percent each side so buffer
+                                 * chosen is 25 percent to account for latency
+                                 * delays */
                                 int64_t low =
                                     ((1 << retry_count) * (retry_ms)*75) / 100;
                                 int64_t high =
@@ -434,7 +439,10 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
                                 TEST_ASSERT(
                                     (time_difference < high) &&
                                         (time_difference > low),
-                                    "Time difference is not respected, should be between %" PRId64 " and %" PRId64 " where time difference is %" PRId64 "\n",low,high,time_difference);
+                                    "Time difference is not respected, should "
+                                    "be between %" PRId64 " and %" PRId64
+                                    " where time difference is %" PRId64 "\n",
+                                    low, high, time_difference);
                                 retry_count++;
                         }
                         previous_request_ts =
@@ -443,7 +451,7 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
         }
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(producer);
-        free_mock_requests(requests,request_cnt);
+        free_mock_requests(requests, request_cnt);
         rd_kafka_mock_clear_requests(mcluster);
         SUB_TEST_PASS();
 }
@@ -456,8 +464,8 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
  * fast leader query terminates after one Metadata request.
  */
 static void test_fetch_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
-                                  const char *topic,
-                                  rd_kafka_conf_t *conf) {
+                                         const char *topic,
+                                         rd_kafka_conf_t *conf) {
         rd_kafka_mock_request_t **requests   = NULL;
         size_t request_cnt                   = 0;
         rd_bool_t previous_request_was_Fetch = rd_false;
@@ -503,7 +511,7 @@ static void test_fetch_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
                         previous_request_was_Fetch = rd_false;
         }
         rd_kafka_destroy(consumer);
-        free_mock_requests(requests,request_cnt);
+        free_mock_requests(requests, request_cnt);
         rd_kafka_mock_clear_requests(mcluster);
         TEST_ASSERT(
             Metadata_after_Fetch,

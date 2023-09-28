@@ -282,7 +282,7 @@ static void do_test_store_offset_without_leader_epoch(void) {
         rd_kafka_offsets_store(c1, rktpars);
         rd_kafka_topic_partition_list_destroy(rktpars);
 
-        rd_kafka_commit(c1, NULL, rd_false);
+        TEST_CALL_ERR__(rd_kafka_commit(c1, NULL, rd_false));
 
         rktpars = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(rktpars, topic, 0);

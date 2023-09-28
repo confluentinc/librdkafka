@@ -1107,7 +1107,8 @@ static void do_test_empty_txn(rd_bool_t send_offsets, rd_bool_t do_commit) {
 /**
  * @brief A control message should increase stored offset and
  *        that stored offset should have correct leader epoch
- *        an be included in commit.
+ *        and be included in commit.
+ *        See #4384.
  */
 static void do_test_txn_abort_control_message_leader_epoch(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);

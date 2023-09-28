@@ -963,8 +963,6 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                                int incr_retry,
                                rd_kafka_msg_status_t status) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
-
-        rd_ts_t backoff  = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
         int retry_ms     = rk->rk_conf.retry_backoff_ms;
         int retry_max_ms = rk->rk_conf.retry_backoff_max_ms;
         int r;
@@ -975,7 +973,7 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_lock(rktp);
         /* Exponential backoff applied. */
         r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq, incr_retry,
-                                rk->rk_conf.max_retries, 0 /* backoff */, status,
+                                rk->rk_conf.max_retries, 0 /* backoff will be calculated */, status,
                                 rktp->rktp_rkt->rkt_conf.msg_order_cmp, rd_true,
                                 retry_ms, retry_max_ms);
         rd_kafka_toppar_unlock(rktp);

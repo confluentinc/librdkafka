@@ -89,25 +89,27 @@ static void test_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
                          rd_kafka_mock_request_id(requests[i]),
                          rd_kafka_mock_request_api_key(requests[i]),
                          rd_kafka_mock_request_timestamp(requests[i]));
-                if (rd_kafka_mock_request_api_key(requests[i]) ==
-                    RD_KAFKAP_FindCoordinator) {
-                        if (previous_request_ts != -1) {
-                                int64_t time_difference =
-                                    (rd_kafka_mock_request_timestamp(
-                                         requests[i]) -
-                                     previous_request_ts) /
-                                    1000;
-                                TEST_ASSERT(((time_difference > low - buffer) &&
-                                             (time_difference < low + buffer)),
-                                            "Time difference should be close "
-                                            "to 1 second, it is %" PRId64
-                                            " ms instead.\n",
-                                            time_difference);
-                                retry_count++;
-                        }
-                        previous_request_ts =
-                            rd_kafka_mock_request_timestamp(requests[i]);
+
+                if (rd_kafka_mock_request_api_key(requests[i]) != RD_KAFKAP_FindCoordinator)
+                    continue;
+
+                if (previous_request_ts != -1) {
+                        int64_t time_difference =
+                                (rd_kafka_mock_request_timestamp(
+                                        requests[i]) -
+                                previous_request_ts) /
+                                1000;
+                        TEST_ASSERT(((time_difference > low - buffer) &&
+                                        (time_difference < low + buffer)),
+                                        "Time difference should be close "
+                                        "to 1 second, it is %" PRId64
+                                        " ms instead.\n",
+                                        time_difference);
+                        retry_count++;
                 }
+                previous_request_ts =
+                        rd_kafka_mock_request_timestamp(requests[i]);
+                
         }
         rd_kafka_destroy(consumer);
         free_mock_requests(requests,request_cnt);
@@ -129,38 +131,40 @@ static void helper_exponential_backoff(rd_kafka_mock_cluster_t *mcluster,
         size_t i;
         requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
         for (i = 0; i < request_cnt; i++) {
-                if (rd_kafka_mock_request_api_key(requests[i]) ==
-                    request_type) {
-                        TEST_SAY(
-                            "Broker Id : %d API Key : %d Timestamp : %" PRId64
-                            "\n",
-                            rd_kafka_mock_request_id(requests[i]),
-                            rd_kafka_mock_request_api_key(requests[i]),
-                            rd_kafka_mock_request_timestamp(requests[i]));
-                        if (previous_request_ts != -1) {
-                                int64_t time_difference =
-                                    (rd_kafka_mock_request_timestamp(
-                                         requests[i]) -
-                                     previous_request_ts) /
-                                    1000;
-                                /* Max Jitter is 20 percent each side so buffer chosen is 25 percent to account for latency delays */
-                                int64_t low =
-                                    ((1 << retry_count) * (retry_ms)*75) / 100;
-                                int64_t high =
-                                    ((1 << retry_count) * (retry_ms)*125) / 100;
-                                if (high > ((retry_max_ms * 125) / 100))
-                                        high = (retry_max_ms * 125) / 100;
-                                if (low > ((retry_max_ms * 75) / 100))
-                                        low = (retry_max_ms * 75) / 100;
-                                if ((time_difference > high) ||
-                                    (time_difference < low)) {
-                                        TEST_FAIL("Time Difference is not respected.");
-                                }
-                                retry_count++;
-                        }
-                        previous_request_ts =
-                            rd_kafka_mock_request_timestamp(requests[i]);
+                TEST_SAY(
+                        "Broker Id : %d API Key : %d Timestamp : %" PRId64
+                        "\n",
+                        rd_kafka_mock_request_id(requests[i]),
+                        rd_kafka_mock_request_api_key(requests[i]),
+                        rd_kafka_mock_request_timestamp(requests[i]));
+
+                if (rd_kafka_mock_request_api_key(requests[i]) != request_type)
+                    continue;
+
+                if (previous_request_ts != -1) {
+                        int64_t time_difference =
+                                (rd_kafka_mock_request_timestamp(
+                                        requests[i]) -
+                                previous_request_ts) /
+                                1000;
+                        /* Max Jitter is 20 percent each side so buffer chosen is 25 percent to account for latency delays */
+                        int64_t low =
+                                ((1 << retry_count) * (retry_ms)*75) / 100;
+                        int64_t high =
+                                ((1 << retry_count) * (retry_ms)*125) / 100;
+                        if (high > ((retry_max_ms * 125) / 100))
+                                high = (retry_max_ms * 125) / 100;
+                        if (low > ((retry_max_ms * 75) / 100))
+                                low = (retry_max_ms * 75) / 100;
+                        TEST_ASSERT(
+                                (time_difference < high) &&
+                                (time_difference > low),
+                                "Time difference is not respected, should be between %" PRId64 " and %" PRId64 " where time difference is %" PRId64 "\n",low,high,time_difference);
+                        retry_count++;
                 }
+                previous_request_ts =
+                        rd_kafka_mock_request_timestamp(requests[i]);
+                
         }
         free_mock_requests(requests,request_cnt);
 }
@@ -297,12 +301,11 @@ static void helper_find_coordinator_trigger(rd_kafka_mock_cluster_t *mcluster,
 /**
  * @brief heartbeat-find_coordinator test
  * We fail the request with RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP so that
- * the FindCoordinator request is trigerred.
+ * the FindCoordinator request is triggered.
  */
 static void test_heartbeat_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
                                      const char *topic,
                                      rd_kafka_conf_t *conf) {
-        int32_t err = 0;
         rd_kafka_t *consumer;
         rd_kafka_message_t *rkm;
         SUB_TEST();
@@ -335,7 +338,7 @@ static void test_heartbeat_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
 /**
  * @brief joingroup-find_coordinator test
  * We fail the request with RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP so that
- * the FindCoordinator request is trigerred.
+ * the FindCoordinator request is triggered.
  */
 static void test_joingroup_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
                                      const char *topic,
@@ -406,10 +409,11 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
                          rd_kafka_mock_request_id(requests[i]),
                          rd_kafka_mock_request_api_key(requests[i]),
                          rd_kafka_mock_request_timestamp(requests[i]));
+
                 if (!produced && rd_kafka_mock_request_api_key(requests[i]) ==
                                      RD_KAFKAP_Produce)
                         produced = rd_true;
-                if (rd_kafka_mock_request_api_key(requests[i]) ==
+                else if (rd_kafka_mock_request_api_key(requests[i]) ==
                         RD_KAFKAP_Metadata &&
                     produced) {
                         if (previous_request_ts != -1) {
@@ -430,7 +434,7 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
                                 TEST_ASSERT(
                                     (time_difference < high) &&
                                         (time_difference > low),
-                                    "Time difference is not respected!\n");
+                                    "Time difference is not respected, should be between %" PRId64 " and %" PRId64 " where time difference is %" PRId64 "\n",low,high,time_difference);
                                 retry_count++;
                         }
                         previous_request_ts =
@@ -486,6 +490,7 @@ static void test_fetch_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
                          rd_kafka_mock_request_id(requests[i]),
                          rd_kafka_mock_request_api_key(requests[i]),
                          rd_kafka_mock_request_timestamp(requests[i]));
+
                 if (rd_kafka_mock_request_api_key(requests[i]) ==
                     RD_KAFKAP_Fetch)
                         previous_request_was_Fetch = rd_true;

@@ -141,7 +141,14 @@ typedef enum {
         RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,  /**< Admin:
                                               *   DescribeConsumerGroups
                                               *   u.admin_request */
-        RD_KAFKA_OP_DELETEGROUPS, /**< Admin: DeleteGroups: u.admin_request*/
+        RD_KAFKA_OP_DESCRIBECLUSTER,         /**< Admin:
+                                              *   DescribeCluster
+                                              *   u.admin_request */
+
+        RD_KAFKA_OP_DESCRIBETOPICS, /**< Admin:
+                                     *   DescribeTopics
+                                     *   u.admin_request */
+        RD_KAFKA_OP_DELETEGROUPS,   /**< Admin: DeleteGroups: u.admin_request*/
         RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS, /**< Admin:
                                                  *   DeleteConsumerGroupOffsets
                                                  *   u.admin_request */

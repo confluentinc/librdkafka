@@ -1,8 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2022, Magnus Edenhill
- *               2023, Confluent Inc.
+ * Copyright (c) 2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,7 +27,7 @@
  */
 
 /**
- * DescribeConsumerGroups usage example.
+ * DescribeTopics usage example.
  */
 
 #include <stdio.h>
@@ -50,7 +49,6 @@
 
 
 const char *argv0;
-
 static rd_kafka_queue_t *queue = NULL; /** Admin result queue.
                                         *  This is a global so we can
                                         *  yield in stop() */
@@ -65,7 +63,6 @@ static void stop(int sig) {
                 exit(2);
         }
         run = 0;
-
         if (queue)
                 rd_kafka_queue_yield(queue);
 }
@@ -74,10 +71,10 @@ static void stop(int sig) {
 static void usage(const char *reason, ...) {
 
         fprintf(stderr,
-                "Describe groups usage examples\n"
+                "Describe topics usage examples\n"
                 "\n"
-                "Usage: %s <options> <include_authorized_operations> <group1> "
-                "<group2> ...\n"
+                "Usage: %s <options> <include_topic_authorized_operations> "
+                "<topic1> <topic2> ...\n"
                 "\n"
                 "Options:\n"
                 "   -b <brokers>    Bootstrap server list to connect to.\n"
@@ -123,144 +120,6 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 }
 
 
-static void
-print_partition_list(FILE *fp,
-                     const rd_kafka_topic_partition_list_t *partitions,
-                     int print_offset,
-                     const char *prefix) {
-        int i;
-
-        if (partitions->cnt == 0) {
-                fprintf(fp, "%sNo partition found", prefix);
-        }
-        for (i = 0; i < partitions->cnt; i++) {
-                char offset_string[512] = {};
-                *offset_string          = '\0';
-                if (print_offset) {
-                        snprintf(offset_string, sizeof(offset_string),
-                                 " offset %" PRId64,
-                                 partitions->elems[i].offset);
-                }
-                fprintf(fp, "%s%s %s [%" PRId32 "]%s error %s",
-                        i > 0 ? "\n" : "", prefix, partitions->elems[i].topic,
-                        partitions->elems[i].partition, offset_string,
-                        rd_kafka_err2str(partitions->elems[i].err));
-        }
-        fprintf(fp, "\n");
-}
-
-
-/**
- * @brief Print group member information.
- */
-static void
-print_group_member_info(const rd_kafka_MemberDescription_t *member) {
-        printf(
-            "  Member \"%s\" with client-id %s,"
-            " group instance id: %s, host %s\n",
-            rd_kafka_MemberDescription_consumer_id(member),
-            rd_kafka_MemberDescription_client_id(member),
-            rd_kafka_MemberDescription_group_instance_id(member),
-            rd_kafka_MemberDescription_host(member));
-        const rd_kafka_MemberAssignment_t *assignment =
-            rd_kafka_MemberDescription_assignment(member);
-        const rd_kafka_topic_partition_list_t *topic_partitions =
-            rd_kafka_MemberAssignment_partitions(assignment);
-        if (!topic_partitions) {
-                printf("    No assignment\n");
-        } else if (topic_partitions->cnt == 0) {
-                printf("    Empty assignment\n");
-        } else {
-                printf("    Assignment:\n");
-                print_partition_list(stdout, topic_partitions, 0, "      ");
-        }
-}
-
-
-/**
- * @brief Print group information.
- */
-static void print_group_info(const rd_kafka_ConsumerGroupDescription_t *group) {
-        int member_cnt;
-        size_t j;
-        size_t authorized_operations_cnt;
-        const rd_kafka_AclOperation_t *authorized_operations;
-        const rd_kafka_error_t *error;
-        char coordinator_desc[512];
-        const rd_kafka_Node_t *coordinator = NULL;
-        const char *group_id =
-            rd_kafka_ConsumerGroupDescription_group_id(group);
-        const char *partition_assignor =
-            rd_kafka_ConsumerGroupDescription_partition_assignor(group);
-        rd_kafka_consumer_group_state_t state =
-            rd_kafka_ConsumerGroupDescription_state(group);
-        authorized_operations =
-            rd_kafka_ConsumerGroupDescription_authorized_operations(
-                group, &authorized_operations_cnt);
-        member_cnt  = rd_kafka_ConsumerGroupDescription_member_count(group);
-        error       = rd_kafka_ConsumerGroupDescription_error(group);
-        coordinator = rd_kafka_ConsumerGroupDescription_coordinator(group);
-        *coordinator_desc = '\0';
-
-        if (coordinator != NULL) {
-                snprintf(coordinator_desc, sizeof(coordinator_desc),
-                         ", coordinator [id: %" PRId32
-                         ", host: %s"
-                         ", port: %" PRIu16 "]",
-                         rd_kafka_Node_id(coordinator),
-                         rd_kafka_Node_host(coordinator),
-                         rd_kafka_Node_port(coordinator));
-        }
-        printf(
-            "Group \"%s\", partition assignor \"%s\", "
-            " state %s%s, with %" PRId32 " member(s)\n",
-            group_id, partition_assignor,
-            rd_kafka_consumer_group_state_name(state), coordinator_desc,
-            member_cnt);
-        for (j = 0; j < authorized_operations_cnt; j++) {
-                printf("%s operation is allowed\n",
-                       rd_kafka_AclOperation_name(authorized_operations[j]));
-        }
-        if (error)
-                printf(" error[%" PRId32 "]: %s", rd_kafka_error_code(error),
-                       rd_kafka_error_string(error));
-        printf("\n");
-        for (j = 0; j < (size_t)member_cnt; j++) {
-                const rd_kafka_MemberDescription_t *member =
-                    rd_kafka_ConsumerGroupDescription_member(group, j);
-                print_group_member_info(member);
-        }
-}
-
-
-/**
- * @brief Print groups information.
- */
-static int
-print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
-                  int groups_cnt) {
-        size_t i;
-        const rd_kafka_ConsumerGroupDescription_t **result_groups;
-        size_t result_groups_cnt;
-        result_groups = rd_kafka_DescribeConsumerGroups_result_groups(
-            grpdesc, &result_groups_cnt);
-
-        if (result_groups_cnt == 0) {
-                if (groups_cnt > 0) {
-                        fprintf(stderr, "No matching groups found\n");
-                        return 1;
-                } else {
-                        fprintf(stderr, "No groups in cluster\n");
-                }
-        }
-
-        for (i = 0; i < result_groups_cnt; i++) {
-                print_group_info(result_groups[i]);
-                printf("\n");
-        }
-        return 0;
-}
-
 /**
  * @brief Parse an integer or fail.
  */
@@ -278,72 +137,201 @@ int64_t parse_int(const char *what, const char *str) {
 }
 
 /**
- * @brief Call rd_kafka_DescribeConsumerGroups() with a list of
- * groups.
+ * @brief Print node information.
+ */
+static void print_node_info(const rd_kafka_Node_t *node) {
+        if (!node) {
+                printf("\t\t(null)\n");
+                return;
+        }
+
+        printf("\t\tNode [id: %" PRId32
+               ", host: %s"
+               ", port: %" PRIu16 ", rack %s]\n",
+               rd_kafka_Node_id(node), rd_kafka_Node_host(node),
+               rd_kafka_Node_port(node), rd_kafka_Node_rack(node));
+}
+
+/**
+ * @brief Print partition information.
  */
 static void
-cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
-        rd_kafka_t *rk      = NULL;
-        const char **groups = NULL;
+print_partition_info(const rd_kafka_TopicPartitionInfo_t *partition) {
+        size_t k;
+        int id;
+        const rd_kafka_Node_t **isr;
+        size_t isr_cnt;
+        const rd_kafka_Node_t **replicas;
+        size_t replica_cnt;
+
+        id = rd_kafka_TopicPartitionInfo_partition(partition);
+        printf("\tPartition id: %d\n", id);
+
+        printf("\tPartition leader: \n");
+        print_node_info(rd_kafka_TopicPartitionInfo_leader(partition));
+
+        isr = rd_kafka_TopicPartitionInfo_isr(partition, &isr_cnt);
+        if (isr_cnt) {
+                printf(
+                    "\tThe in-sync replica count is: %d, they "
+                    "are: \n",
+                    (int)isr_cnt);
+                for (k = 0; k < isr_cnt; k++)
+                        print_node_info(isr[k]);
+        } else
+                printf("\tThe in-sync replica count is 0\n");
+
+        replicas = rd_kafka_TopicPartitionInfo_isr(partition, &replica_cnt);
+        if (replica_cnt) {
+                printf(
+                    "\tThe replica count is: %d, they "
+                    "are: \n",
+                    (int)replica_cnt);
+                for (k = 0; k < replica_cnt; k++)
+                        print_node_info(replicas[k]);
+        } else
+                printf("\tThe replica count is 0\n");
+}
+
+/**
+ * @brief Print topic information.
+ */
+static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
+        size_t j;
+        const rd_kafka_error_t *error;
+        const char *topic_name = rd_kafka_TopicDescription_name(topic);
+        error                  = rd_kafka_TopicDescription_error(topic);
+        const rd_kafka_AclOperation_t *authorized_operations;
+        size_t authorized_operations_cnt;
+        const rd_kafka_TopicPartitionInfo_t **partitions;
+        size_t partition_cnt;
+
+        if (rd_kafka_error_code(error)) {
+                printf("Topic: %s has error[%" PRId32 "]: %s\n", topic_name,
+                       rd_kafka_error_code(error),
+                       rd_kafka_error_string(error));
+                return;
+        }
+
+        authorized_operations = rd_kafka_TopicDescription_authorized_operations(
+            topic, &authorized_operations_cnt);
+
+        printf(
+            "Topic: %s succeeded, has %d topic authorized operations "
+            "allowed, they are:\n",
+            topic_name, (int)authorized_operations_cnt);
+
+        for (j = 0; j < authorized_operations_cnt; j++)
+                printf("\t%s operation is allowed\n",
+                       rd_kafka_AclOperation_name(authorized_operations[j]));
+
+
+        partitions =
+            rd_kafka_TopicDescription_partitions(topic, &partition_cnt);
+
+        printf("partition count is: %d\n", (int)partition_cnt);
+        for (j = 0; j < partition_cnt; j++) {
+                print_partition_info(partitions[j]);
+                printf("\n");
+        }
+}
+
+
+/**
+ * @brief Print topics information.
+ */
+static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
+                             int topic_cnt) {
+        size_t i;
+        const rd_kafka_TopicDescription_t **result_topics;
+        size_t result_topics_cnt;
+        result_topics = rd_kafka_DescribeTopics_result_topics(
+            topicdesc, &result_topics_cnt);
+
+        if (result_topics_cnt == 0) {
+                if (topic_cnt > 0) {
+                        fprintf(stderr, "No matching topics found\n");
+                        return 1;
+                } else {
+                        fprintf(stderr, "No topics in cluster\n");
+                }
+        }
+
+        for (i = 0; i < result_topics_cnt; i++) {
+                print_topic_info(result_topics[i]);
+                printf("\n");
+        }
+        return 0;
+}
+
+
+/**
+ * @brief Call rd_kafka_DescribeTopics() with a list of
+ * topics.
+ */
+static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
+        rd_kafka_t *rk                     = NULL;
+        const char **topic_names           = NULL;
+        rd_kafka_TopicCollection_t *topics = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options = NULL;
         rd_kafka_event_t *event          = NULL;
         rd_kafka_error_t *error;
         int retval         = 0;
-        int groups_cnt     = 0;
+        int topics_cnt     = 0;
         const int min_argc = 2;
-        int include_authorized_operations;
+        int include_topic_authorized_operations;
 
         if (argc < min_argc)
                 usage("Wrong number of arguments");
 
-        include_authorized_operations =
-            parse_int("include_authorized_operations", argv[0]);
-        if (include_authorized_operations < 0 ||
-            include_authorized_operations > 1)
-                usage("include_authorized_operations not a 0-1 int");
+        include_topic_authorized_operations =
+            parse_int("include_topic_authorized_operations", argv[0]);
+        if (include_topic_authorized_operations < 0 ||
+            include_topic_authorized_operations > 1)
+                usage("include_topic_authorized_operations not a 0-1 int");
 
-        groups     = (const char **)&argv[1];
-        groups_cnt = argc - 1;
+        topic_names = (const char **)&argv[1];
+        topics_cnt  = argc - 1;
+        topics =
+            rd_kafka_TopicCollection_of_topic_names(topic_names, topics_cnt);
 
         /*
-         * Create consumer instance
+         * Create producer instance
          * NOTE: rd_kafka_new() takes ownership of the conf object
          *       and the application must not reference it again after
          *       this call.
          */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         if (!rk)
-                fatal("Failed to create new consumer: %s", errstr);
+                fatal("Failed to create new producer: %s", errstr);
 
-        /*
-         * Describe consumer groups
-         */
         queue = rd_kafka_queue_new(rk);
 
         /* Signal handler for clean shutdown */
         signal(SIGINT, stop);
 
-        options = rd_kafka_AdminOptions_new(
-            rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
                 options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
-                retval = 1;
                 goto exit;
         }
         if ((error = rd_kafka_AdminOptions_set_include_authorized_operations(
-                 options, include_authorized_operations))) {
+                 options, include_topic_authorized_operations))) {
                 fprintf(stderr,
-                        "%% Failed to set require authorized operations: %s\n",
+                        "%% Failed to set require topic authorized operations: "
+                        "%s\n",
                         rd_kafka_error_string(error));
                 rd_kafka_error_destroy(error);
                 retval = 1;
                 goto exit;
         }
 
-        rd_kafka_DescribeConsumerGroups(rk, groups, groups_cnt, options, queue);
+        /* Call DescribeTopics */
+        rd_kafka_DescribeTopics(rk, topics, options, queue);
 
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by
@@ -357,25 +345,27 @@ cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         } else if (rd_kafka_event_error(event)) {
                 rd_kafka_resp_err_t err = rd_kafka_event_error(event);
-                /* DescribeConsumerGroups request failed */
-                fprintf(stderr,
-                        "%% DescribeConsumerGroups failed[%" PRId32 "]: %s\n",
+                /* DescribeTopics request failed */
+                fprintf(stderr, "%% DescribeTopics failed[%" PRId32 "]: %s\n",
                         err, rd_kafka_event_error_string(event));
                 retval = 1;
+                goto exit;
 
         } else {
-                /* DescribeConsumerGroups request succeeded, but individual
+                /* DescribeTopics request succeeded, but individual
                  * groups may have errors. */
-                const rd_kafka_DescribeConsumerGroups_result_t *result;
+                const rd_kafka_DescribeTopics_result_t *result;
 
-                result = rd_kafka_event_DescribeConsumerGroups_result(event);
-                printf("DescribeConsumerGroups results:\n");
-                retval = print_groups_info(result, groups_cnt);
+                result = rd_kafka_event_DescribeTopics_result(event);
+                printf("DescribeTopics results:\n");
+                retval = print_topics_info(result, topics_cnt);
         }
 
 
 exit:
         /* Cleanup. */
+        if (topics)
+                rd_kafka_TopicCollection_destroy(topics);
         if (event)
                 rd_kafka_event_destroy(event);
         if (options)
@@ -388,6 +378,7 @@ exit:
         exit(retval);
 }
 
+
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
         int opt;
@@ -397,7 +388,6 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
-
 
         /*
          * Parse common options
@@ -430,7 +420,6 @@ int main(int argc, char **argv) {
                 }
         }
 
-        cmd_describe_consumer_groups(conf, argc - optind, &argv[optind]);
-
+        cmd_describe_topics(conf, argc - optind, &argv[optind]);
         return 0;
 }

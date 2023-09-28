@@ -2914,6 +2914,57 @@ static void r_lost_partitions_commit_illegal_generation_test_local() {
   test_mock_cluster_destroy(mcluster);
 }
 
+/**
+ * @brief Test that the consumer is destroyed without segfault if
+ *        it happens before first rebalance and there is no assignor
+ *        state. See #4312
+ */
+static void s_no_segfault_before_first_rebalance(void) {
+  rd_kafka_t *c;
+  rd_kafka_conf_t *conf;
+  rd_kafka_mock_cluster_t *mcluster;
+  const char *topic;
+  const char *bootstraps;
+
+  SUB_TEST_QUICK();
+
+  TEST_SAY("Creating mock cluster\n");
+  mcluster = test_mock_cluster_new(1, &bootstraps);
+
+  topic = test_mk_topic_name("0113_s", 1);
+
+  test_conf_init(&conf, NULL, 60);
+  test_conf_set(conf, "bootstrap.servers", bootstraps);
+  test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+
+  TEST_SAY("Creating topic %s\n", topic);
+  TEST_CALL_ERR__(rd_kafka_mock_topic_create(
+      mcluster, topic, 2 /* partition_cnt */, 1 /* replication_factor */));
+
+  c = test_create_consumer(topic, NULL, conf, NULL);
+
+  /* Add a 1s delay to the SyncGroup response so next condition can happen. */
+  rd_kafka_mock_broker_push_request_error_rtts(
+      mcluster, 1 /*Broker 1*/, RD_KAFKAP_SyncGroup /*FetchRequest*/, 1,
+      RD_KAFKA_RESP_ERR_NOT_COORDINATOR, 1000);
+
+  test_consumer_subscribe(c, topic);
+
+  /* Wait for initial rebalance 3000 ms (default) + 500 ms for processing
+   * the JoinGroup response. Consumer close must come between the JoinGroup
+   * response and the SyncGroup response, so that rkcg_assignor is set,
+   * but rkcg_assignor_state isn't. */
+  TEST_ASSERT(!test_consumer_poll_once(c, NULL, 3500), "poll should timeout");
+
+  rd_kafka_consumer_close(c);
+
+  rd_kafka_destroy(c);
+
+  TEST_SAY("Destroying mock cluster\n");
+  test_mock_cluster_destroy(mcluster);
+
+  SUB_TEST_PASS();
+}
 
 /**
  * @brief Rebalance callback for the v_.. test below.
@@ -3117,6 +3168,7 @@ int main_0113_cooperative_rebalance_local(int argc, char **argv) {
   q_lost_partitions_illegal_generation_test(rd_false /*joingroup*/);
   q_lost_partitions_illegal_generation_test(rd_true /*syncgroup*/);
   r_lost_partitions_commit_illegal_generation_test_local();
+  s_no_segfault_before_first_rebalance();
   return 0;
 }
 

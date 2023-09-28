@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2016-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -70,6 +71,10 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "ListConsumerGroupsResult";
         case RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT:
                 return "DescribeConsumerGroupsResult";
+        case RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT:
+                return "DescribeTopicsResult";
+        case RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT:
+                return "DescribeClusterResult";
         case RD_KAFKA_EVENT_DELETEGROUPS_RESULT:
                 return "DeleteGroupsResult";
         case RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT:
@@ -377,6 +382,22 @@ rd_kafka_event_DescribeConsumerGroups_result(rd_kafka_event_t *rkev) {
                 return NULL;
         else
                 return (const rd_kafka_DescribeConsumerGroups_result_t *)rkev;
+}
+
+const rd_kafka_DescribeTopics_result_t *
+rd_kafka_event_DescribeTopics_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeTopics_result_t *)rkev;
+}
+
+const rd_kafka_DescribeCluster_result_t *
+rd_kafka_event_DescribeCluster_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeCluster_result_t *)rkev;
 }
 
 const rd_kafka_DeleteGroups_result_t *

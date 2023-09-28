@@ -249,8 +249,6 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
     rd_kafka_metadata_broker_internal_t *brokers_internal,
     size_t broker_cnt) {
         struct rd_kafka_metadata_cache_entry *rkmce, *old;
-        size_t topic_len;
-        size_t racks_size = 0;
         rd_tmpabuf_t tbuf;
         int i;
 
@@ -261,34 +259,32 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
          * any pointer fields needs to be copied explicitly to update
          * the pointer address.
          * See also rd_kafka_metadata_cache_delete which frees this. */
-        topic_len = strlen(mtopic->topic) + 1;
+        rd_tmpabuf_new(&tbuf, 0, rd_true /*assert on fail*/);
+
+        rd_tmpabuf_add_alloc(&tbuf, sizeof(*rkmce));
+        rd_tmpabuf_add_alloc(&tbuf, strlen(mtopic->topic) + 1);
+        rd_tmpabuf_add_alloc(&tbuf, mtopic->partition_cnt *
+                                        sizeof(*mtopic->partitions));
+        rd_tmpabuf_add_alloc(&tbuf,
+                             mtopic->partition_cnt *
+                                 sizeof(*metadata_internal_topic->partitions));
 
         for (i = 0; include_racks && i < mtopic->partition_cnt; i++) {
                 size_t j;
-                racks_size += RD_ROUNDUP(
-                    metadata_internal_topic->partitions[i].racks_cnt *
-                        sizeof(char *),
-                    8);
+                rd_tmpabuf_add_alloc(
+                    &tbuf, metadata_internal_topic->partitions[i].racks_cnt *
+                               sizeof(char *));
                 for (j = 0;
                      j < metadata_internal_topic->partitions[i].racks_cnt;
                      j++) {
-                        racks_size += RD_ROUNDUP(
-                            strlen(metadata_internal_topic->partitions[i]
-                                       .racks[j]) +
-                                1,
-                            8);
+                        rd_tmpabuf_add_alloc(
+                            &tbuf, strlen(metadata_internal_topic->partitions[i]
+                                              .racks[j]) +
+                                       1);
                 }
         }
 
-        rd_tmpabuf_new(
-            &tbuf,
-            RD_ROUNDUP(sizeof(*rkmce), 8) + RD_ROUNDUP(topic_len, 8) +
-                (mtopic->partition_cnt *
-                 RD_ROUNDUP(sizeof(*mtopic->partitions), 8)) +
-                (mtopic->partition_cnt *
-                 RD_ROUNDUP(sizeof(*metadata_internal_topic->partitions), 8)) +
-                racks_size,
-            1 /*assert on fail*/);
+        rd_tmpabuf_finalize(&tbuf);
 
         rkmce = rd_tmpabuf_alloc(&tbuf, sizeof(*rkmce));
 

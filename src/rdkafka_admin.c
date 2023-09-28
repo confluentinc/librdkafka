@@ -8020,7 +8020,7 @@ rd_kafka_TopicPartitionInfo_destroy(rd_kafka_TopicPartitionInfo_t *pinfo) {
  */
 static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
     const char *topic,
-    const rd_kafka_uuid_t *topic_id,
+    rd_kafka_uuid_t *topic_id,
     const struct rd_kafka_metadata_partition *partitions,
     int partition_cnt,
     const struct rd_kafka_metadata_broker *brokers_sorted,
@@ -8066,7 +8066,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
  */
 static rd_kafka_TopicDescription_t *
 rd_kafka_TopicDescription_new_error(const char *topic,
-                                    const rd_kafka_uuid_t *topic_id,
+                                    rd_kafka_uuid_t *topic_id,
                                     rd_kafka_error_t *error) {
         return rd_kafka_TopicDescription_new(topic, topic_id, NULL, 0, NULL,
                                              NULL, 0, NULL, 0, rd_false, error);

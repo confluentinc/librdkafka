@@ -407,6 +407,9 @@ struct rd_kafka_mock_cluster_s {
         /** < Requested metric count. */
         size_t metrics_cnt;
 
+        /**< Telemetry push interval ms. Default is 5 min */
+        int64_t telemetry_push_interval_ms;
+
         /**< List of API requests for this broker. Type:
          * rd_kafka_mock_request_t*
          */

@@ -5347,22 +5347,22 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
 
-        if (arraycnt)
+        if (arraycnt) {
                 rk->rk_telemetry.requested_metrics_cnt = arraycnt;
+                rk->rk_telemetry.requested_metrics =
+                    rd_calloc(arraycnt, sizeof(char *));
+
+                for (i = 0; i < (size_t)arraycnt; i++) {
+                        rd_kafkap_str_t Metric;
+                        rd_kafka_buf_read_str(rkbuf, &Metric);
+                        rk->rk_telemetry.requested_metrics[i] =
+                            rd_strdup(Metric.str);
+                }
+        }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETPARSE",
                      "Parsing:: metrics size %lu, %d",
                      rk->rk_telemetry.requested_metrics_cnt, arraycnt);
-
-
-        rk->rk_telemetry.requested_metrics =
-            rd_calloc(arraycnt, sizeof(char *));
-
-        for (i = 0; i < (size_t)arraycnt; i++) {
-                rd_kafkap_str_t Metric;
-                rd_kafka_buf_read_str(rkbuf, &Metric);
-                rk->rk_telemetry.requested_metrics[i] = rd_strdup(Metric.str);
-        }
 
         rd_kafka_handle_get_telemetry_subscriptions(rk, err);
         return;
@@ -5610,7 +5610,8 @@ static int unittest_idempotent_producer(void) {
                      "Expected %d messages in retry queue, not %d",
                      retry_msg_cnt, rd_kafka_msgq_len(&rkmq));
 
-        /* Sleep a short while to make sure the retry backoff expires. */
+        /* Sleep a short while to make sure the retry backoff expires.
+         */
         rd_usleep(5 * 1000, NULL); /* 5ms */
 
         /*
@@ -5668,7 +5669,8 @@ static int unittest_idempotent_producer(void) {
         r = rd_kafka_outq_len(rk);
         RD_UT_ASSERT(r == 0, "expected outq to return 0, not %d", r);
 
-        /* Verify the expected number of good delivery reports were seen */
+        /* Verify the expected number of good delivery reports were seen
+         */
         RD_UT_ASSERT(drcnt == msgcnt, "expected %d DRs, not %d", msgcnt, drcnt);
 
         rd_kafka_queue_destroy(rkqu);

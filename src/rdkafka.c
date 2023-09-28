@@ -5027,3 +5027,38 @@ int rd_kafka_errno(void) {
 int rd_kafka_unittest(void) {
         return rd_unittest();
 }
+
+char *rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
+        if (*uuid->base64str)
+                return uuid->base64str;
+
+        rd_chariov_t in_base64;
+        char *out_base64_str;
+        char *uuid_bytes;
+        uint64_t input_uuid[2];
+
+        input_uuid[0]  = htobe64(uuid->most_significant_bits);
+        input_uuid[1]  = htobe64(uuid->least_significant_bits);
+        uuid_bytes     = (char *)input_uuid;
+        in_base64.ptr  = uuid_bytes;
+        in_base64.size = sizeof(uuid->most_significant_bits) +
+                         sizeof(uuid->least_significant_bits);
+
+        out_base64_str = rd_base64_encode_str(&in_base64);
+        if (!out_base64_str)
+                return NULL;
+
+        rd_strlcpy(uuid->base64str, out_base64_str,
+                   23 /* Removing extra ('=') padding */);
+        rd_free(out_base64_str);
+        return uuid->base64str;
+}
+
+int64_t rd_kafka_uuid_least_significant_bits(rd_kafka_uuid_t *uuid) {
+        return uuid->least_significant_bits;
+}
+
+
+int64_t rd_kafka_uuid_most_significant_bits(rd_kafka_uuid_t *uuid) {
+        return uuid->most_significant_bits;
+}

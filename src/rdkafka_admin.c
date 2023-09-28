@@ -8010,6 +8010,7 @@ rd_kafka_TopicPartitionInfo_destroy(rd_kafka_TopicPartitionInfo_t *pinfo) {
  * @brief Create a new TopicDescription object.
  *
  * @param topic topic name
+ * @param topic_id topic id
  * @param partitions Array of partition metadata (rd_kafka_metadata_partition).
  * @param partition_cnt Number of partitions in partition metadata.
  * @param authorized_operations acl operations allowed for topic.
@@ -8019,6 +8020,7 @@ rd_kafka_TopicPartitionInfo_destroy(rd_kafka_TopicPartitionInfo_t *pinfo) {
  */
 static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
     const char *topic,
+    const rd_kafka_uuid_t *topic_id,
     const struct rd_kafka_metadata_partition *partitions,
     int partition_cnt,
     const struct rd_kafka_metadata_broker *brokers_sorted,
@@ -8032,6 +8034,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
         int i;
         topicdesc                = rd_calloc(1, sizeof(*topicdesc));
         topicdesc->topic         = rd_strdup(topic);
+        topicdesc->topic_id      = rd_kafka_uuid_copy(topic_id);
         topicdesc->partition_cnt = partition_cnt;
         topicdesc->is_internal   = is_internal;
         if (error)
@@ -8063,9 +8066,10 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
  */
 static rd_kafka_TopicDescription_t *
 rd_kafka_TopicDescription_new_error(const char *topic,
+                                    const rd_kafka_uuid_t *topic_id,
                                     rd_kafka_error_t *error) {
-        return rd_kafka_TopicDescription_new(topic, NULL, 0, NULL, NULL, 0,
-                                             NULL, 0, rd_false, error);
+        return rd_kafka_TopicDescription_new(topic, topic_id, NULL, 0, NULL,
+                                             NULL, 0, NULL, 0, rd_false, error);
 }
 
 static void
@@ -8075,7 +8079,7 @@ rd_kafka_TopicDescription_destroy(rd_kafka_TopicDescription_t *topicdesc) {
         RD_IF_FREE(topicdesc->topic, rd_free);
         RD_IF_FREE(topicdesc->error, rd_kafka_error_destroy);
         RD_IF_FREE(topicdesc->authorized_operations, rd_free);
-
+        RD_IF_FREE(topicdesc->topic_id, rd_kafka_uuid_destroy);
         for (i = 0; i < topicdesc->partition_cnt; i++)
                 rd_kafka_TopicPartitionInfo_destroy(topicdesc->partitions[i]);
         rd_free(topicdesc->partitions);
@@ -8140,6 +8144,11 @@ int rd_kafka_TopicDescription_is_internal(
 const rd_kafka_error_t *
 rd_kafka_TopicDescription_error(const rd_kafka_TopicDescription_t *topicdesc) {
         return topicdesc->error;
+}
+
+rd_kafka_uuid_t *rd_kafka_TopicDescription_topic_id(
+    const rd_kafka_TopicDescription_t *topicdesc) {
+        return topicdesc->topic_id;
 }
 
 const rd_kafka_TopicDescription_t **rd_kafka_DescribeTopics_result_topics(
@@ -8240,7 +8249,8 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                                 mdi->topics[i].topic_authorized_operations,
                                 &authorized_operation_cnt);
                         topicdesc = rd_kafka_TopicDescription_new(
-                            md->topics[i].topic, md->topics[i].partitions,
+                            md->topics[i].topic, &mdi->topics[i].topic_id,
+                            md->topics[i].partitions,
                             md->topics[i].partition_cnt, mdi->brokers_sorted,
                             mdi->brokers, md->broker_cnt, authorized_operations,
                             authorized_operation_cnt,
@@ -8251,7 +8261,8 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                             md->topics[i].err, "%s",
                             rd_kafka_err2str(md->topics[i].err));
                         topicdesc = rd_kafka_TopicDescription_new_error(
-                            md->topics[i].topic, error);
+                            md->topics[i].topic, &mdi->topics[i].topic_id,
+                            error);
                         rd_kafka_error_destroy(error);
                 }
                 orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,

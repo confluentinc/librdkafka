@@ -109,6 +109,11 @@ struct rd_kafka_AdminOptions_s {
                                           *   Valid for: ListConsumerGroups.
                                           */
 
+        rd_kafka_confval_t isolation_level; /**< INT:Isolation Level needed for list Offset
+                                             *   to query for.
+                                             *   Default Set to RD_KAFKA_READ_UNCOMMITTED
+                                            */
+        
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
                                     *   Valid for all. */
 };
@@ -492,6 +497,18 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_error_t *error;
 };
 
+struct rd_kafka_ListOffsetResultInfo_s {
+        rd_kafka_topic_partition_t *topic_partition;
+        int64_t timestamp;
+};
+
+rd_kafka_ListOffsetResultInfo_t *rd_kafka_ListOffsetResultInfo_new(const char *topic,int32_t partition);
+
+rd_kafka_ListOffsetResultInfo_t *rd_kafka_ListOffsetResultInfo_copy(const rd_kafka_ListOffsetResultInfo_t *element);
+
+void *rd_kafka_ListOffsetResultInfo_copy_opaque(const void *src, void *opaque);
+
+void rd_kafka_ListOffsetResultInfo_destroy_free(void *element);
 /**@}*/
 
 /**

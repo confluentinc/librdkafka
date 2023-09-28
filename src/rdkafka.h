@@ -946,6 +946,7 @@ int32_t rd_kafka_topic_partition_get_leader_epoch(
  * @brief A growable list of Topic+Partitions.
  *
  */
+
 typedef struct rd_kafka_topic_partition_list_s {
         int cnt;                           /**< Current number of elements */
         int size;                          /**< Current allocated size */
@@ -5384,6 +5385,9 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT 0x100000
 /** DescribeCluster_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT 0x200000
+/** ListOffsets_result_t */
+#define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x100000
+
 
 /**
  * @returns the event type for the given event.
@@ -5662,6 +5666,8 @@ typedef rd_kafka_event_t rd_kafka_DescribeCluster_result_t;
 typedef rd_kafka_event_t rd_kafka_DescribeUserScramCredentials_result_t;
 /*! AlterUserScramCredentials result type */
 typedef rd_kafka_event_t rd_kafka_AlterUserScramCredentials_result_t;
+/*! ListOffsets result type */
+typedef rd_kafka_event_t rd_kafka_ListOffsets_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -5887,6 +5893,22 @@ rd_kafka_event_ListConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_AlterConsumerGroupOffsets_result_t *
 rd_kafka_event_AlterConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ListOffsets result.
+ *
+ * @returns the result of a ListOffsets request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_LISTOFFSETS_RESULT
+ */
+RD_EXPORT const rd_kafka_ListOffsets_result_t *
+rd_kafka_event_ListOffsets_result(rd_kafka_event_t *rkev);
+
 
 /**
  * @brief Get DescribeUserScramCredentials result.
@@ -6829,7 +6851,9 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS,
         RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
         RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
-        RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
+        /** ListOffsets */
+        RD_KAFKA_ADMIN_OP_LISTOFFSETS,
+        RD_KAFKA_ADMIN_OP__CNT /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**
@@ -6845,6 +6869,18 @@ typedef enum rd_kafka_admin_op_t {
 
 
 typedef struct rd_kafka_AdminOptions_s rd_kafka_AdminOptions_t;
+
+/**
+ * @enum rd_kafka_IsolationLevel_t
+ *
+ * @brief IsolationLevel enum name for use with rd_kafka_AdminOptions_new()
+ *
+ * @sa rd_kafka_AdminOptions_new()
+ */
+typedef enum rd_kafka_IsolationLevel_t{
+        RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED = 0,
+        RD_KAFKA_ISOLATION_LEVEL_READ_COMMITTED = 1
+}rd_kafka_IsolationLevel_t;
 
 /**
  * @brief Create a new AdminOptions object.
@@ -7046,6 +7082,14 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
     size_t consumer_group_states_cnt);
 
 /**
+ * @brief Set Isolation Level to an allowed `rd_kafka_IsolationLevel_t` value.
+*/
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_AdminOptions_set_isolation_level(rd_kafka_AdminOptions_t *options,
+                                 rd_kafka_IsolationLevel_t value,
+                                 char *errstr,
+                                 size_t errstr_size);
+/**
  * @brief Set application opaque value that can be extracted from the
  *        result event using rd_kafka_event_opaque()
  */
@@ -7084,6 +7128,46 @@ typedef enum rd_kafka_AclOperation_t {
 
 /**@}*/
 
+
+/**
+ * @name ListOffsets API
+ * @brief Given a topic_partition list, provides the offset information.
+ * @{
+*/
+
+/**
+ * OffsetSpec for Earliest, Latest and Timestamp of the Offset to list via ListOffsets.
+*/
+typedef enum rd_kafka_OffsetSpec_t{
+    RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP = -3,
+    RD_KAFKA_OFFSET_SPEC_EARLIEST = -2,
+    RD_KAFKA_OFFSET_SPEC_LATEST = -1,
+}rd_kafka_OffsetSpec_t;
+
+/**
+ * Defines a ListOffsetResultInfo to be created.
+*/
+typedef struct rd_kafka_ListOffsetResultInfo_s rd_kafka_ListOffsetResultInfo_t;
+
+/**
+ * Returns the rd_kafka_topic_partition_t of the rd_kafka_ListOffsetResultInfo_t passed.
+*/
+RD_EXPORT
+const rd_kafka_topic_partition_t *rd_kafka_ListOffsetResultInfo_topic_partition(const rd_kafka_ListOffsetResultInfo_t *result_info);
+
+/**
+ * Returns the timestamp specified for the offset of the rd_kafka_ListOffsetResultInfo_t.
+*/
+RD_EXPORT
+int64_t rd_kafka_ListOffsetResultInfo_timestamp(const rd_kafka_ListOffsetResultInfo_t *result_info);
+
+/**
+ * Returns the array of pointers of rd_kafka_ListOffsetResultInfo_t given rd_kafka_ListOffsets_result_t and populates the size of the array.
+*/
+RD_EXPORT
+rd_kafka_ListOffsetResultInfo_t **rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,size_t *cnt);
+
+/**@}*/
 
 /**
  * @name Admin API - Topics
@@ -8724,6 +8808,21 @@ void rd_kafka_DeleteGroups(rd_kafka_t *rk,
                            rd_kafka_queue_t *rkqu);
 
 
+/**
+ * @brief List offset for the specified \p topic_partitions.
+ *             This operation enables to find the beginning offset,
+ *             end offset as well as the offset matching a timestamp in partitions
+ *             or the offset with max timestamp.
+ * @param rk Client instance.
+ * @param topic_partitions topic_partition_list_t for the offsets to list.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+*/
+RD_EXPORT 
+void rd_kafka_ListOffsets(rd_kafka_t *rk,
+                           rd_kafka_topic_partition_list_t *topic_partitions,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
 
 /*
  * DeleteGroups result type and methods

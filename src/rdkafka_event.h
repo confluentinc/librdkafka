@@ -115,6 +115,7 @@ static RD_UNUSED RD_INLINE int rd_kafka_event_setup(rd_kafka_t *rk,
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
         case RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT:
         case RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT:
+        case RD_KAFKA_EVENT_LISTOFFSETS_RESULT:
                 return 1;
 
         default:

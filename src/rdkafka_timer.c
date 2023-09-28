@@ -30,6 +30,7 @@
 #include "rd.h"
 #include "rdtime.h"
 #include "rdsysqueue.h"
+#include "rdunittest.h"
 
 #include "rdkafka_queue.h"
 
@@ -202,11 +203,9 @@ void rd_kafka_timer_start0(rd_kafka_timers_t *rkts,
 void rd_kafka_timer_exp_backoff(rd_kafka_timers_t *rkts,
                                 rd_kafka_timer_t *rtmr) {
         rd_kafka_timers_lock(rkts);
-        if (rd_kafka_timer_scheduled(rtmr)) {
-                rtmr->rtmr_interval *= 2;
-                rd_kafka_timer_unschedule(rkts, rtmr);
-        }
-        rd_kafka_timer_schedule(rkts, rtmr, 0);
+        rd_kafka_timer_unschedule(rkts, rtmr);
+        rtmr->rtmr_interval *= 2;
+        rd_kafka_timer_schedule(rkts, rtmr, rtmr->rtmr_interval);
         rd_kafka_timers_unlock(rkts);
 }
 
@@ -313,7 +312,7 @@ void rd_kafka_timers_run(rd_kafka_timers_t *rkts, int timeout_us) {
                         if (sleeptime > 0) {
                                 cnd_timedwait_ms(&rkts->rkts_cond,
                                                  &rkts->rkts_lock,
-                                                 (int)(sleeptime / 1000));
+                                                 (int)(sleeptime / 1000) + 1);
                         }
                 }
 
@@ -381,4 +380,64 @@ void rd_kafka_timers_init(rd_kafka_timers_t *rkts,
         cnd_init(&rkts->rkts_cond);
         rkts->rkts_enabled = 1;
         rkts->rkts_wakeq   = wakeq;
+}
+
+
+struct ut_timer_backoff {
+        rd_kafka_timers_t timers;
+        rd_kafka_timer_t timer;
+        int callback_count;
+};
+
+static void ut_timer_backoff_callback(rd_kafka_timers_t *rkts, void *arg) {
+        struct ut_timer_backoff *ctx = (struct ut_timer_backoff *)arg;
+
+        ctx->callback_count += 1;
+        rd_kafka_timer_exp_backoff(&ctx->timers, &ctx->timer);
+}
+
+static rd_kafka_t *ut_timer_backoff_instance(void) {
+        rd_kafka_conf_t *conf;
+
+        conf = rd_kafka_conf_new();
+        rd_kafka_conf_set(conf, "debug", rd_getenv("TEST_DEBUG", NULL), NULL,
+                          0);
+        return rd_kafka_new(RD_KAFKA_CONSUMER, conf, NULL, 0);
+}
+
+
+/**
+ * @brief Unittest for backoff
+ */
+static int ut_timer_backoff(void) {
+        struct ut_timer_backoff ctx;
+        rd_kafka_t *rk;
+
+        RD_MEMZERO(ctx);
+
+        /* An instance is mainly needed by rd_kafka_timers_run to do its
+         * terminating check. */
+        rk = ut_timer_backoff_instance();
+        RD_UT_ASSERT(rk != NULL, "Failed to create instance");
+
+        rd_kafka_timers_init(&ctx.timers, rk, NULL);
+        rd_kafka_timer_start(&ctx.timers, &ctx.timer, 10000,
+                             ut_timer_backoff_callback, &ctx);
+        rd_kafka_timers_run(&ctx.timers, 1000000);
+
+        RD_UT_ASSERT(ctx.callback_count == 6, "Unexpected callback count %d",
+                     ctx.callback_count);
+
+        rd_kafka_timers_destroy(&ctx.timers);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+
+/**
+ * @brief Unit tests for backoff
+ */
+int unittest_timer_backoff(void) {
+        return ut_timer_backoff();
 }

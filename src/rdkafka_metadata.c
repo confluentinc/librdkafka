@@ -188,7 +188,8 @@ static rd_kafka_metadata_internal_t *rd_kafka_metadata_copy_internal(
          * Because of this we copy all the structs verbatim but
          * any pointer fields needs to be copied explicitly to update
          * the pointer address. */
-        rd_tmpabuf_new(&tbuf, size, 1 /*assert on fail*/);
+        rd_tmpabuf_new(&tbuf, size, rd_true /*assert on fail*/);
+        rd_tmpabuf_finalize(&tbuf);
         mdi = rd_tmpabuf_write(&tbuf, src, sizeof(*mdi));
         md  = &mdi->metadata;
 
@@ -523,11 +524,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
          * no more than 4 times larger than the wire representation.
          * This is increased to 5 times in case if we want to compute partition
          * to rack mapping. */
-        rd_tmpabuf_new(&tbuf,
-                       sizeof(*mdi) + rkb_namelen +
-                           (rkbuf->rkbuf_totlen * 4 +
-                            (compute_racks ? rkbuf->rkbuf_totlen : 0)),
-                       0 /*dont assert on fail*/);
+        rd_tmpabuf_new(&tbuf, 0, rd_false /*dont assert on fail*/);
+        rd_tmpabuf_add_alloc(&tbuf, sizeof(*mdi));
+        rd_tmpabuf_add_alloc(&tbuf, rkb_namelen);
+        rd_tmpabuf_add_alloc(&tbuf, rkbuf->rkbuf_totlen *
+                                        (4 + (compute_racks ? 1 : 0)));
+
+        rd_tmpabuf_finalize(&tbuf);
 
         if (!(mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi)))) {
                 rd_kafka_broker_unlock(rkb);
@@ -1689,35 +1692,37 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
         rd_kafka_metadata_internal_t *mdi;
         rd_kafka_metadata_t *md;
         rd_tmpabuf_t tbuf;
-        size_t topic_names_size = 0;
-        int total_partition_cnt = 0;
         size_t i;
         int curr_broker = 0;
-
-        /* Calculate total partition count and topic names size before
-         * allocating memory. */
-        for (i = 0; i < topic_cnt; i++) {
-                topic_names_size += 1 + strlen(topics[i].topic);
-                total_partition_cnt += topics[i].partition_cnt;
-        }
 
         /* If the replication factor is given, num_brokers must also be given */
         rd_assert(replication_factor <= 0 || num_brokers > 0);
 
         /* Allocate contiguous buffer which will back all the memory
          * needed by the final metadata_t object */
-        rd_tmpabuf_new(
-            &tbuf,
-            sizeof(*mdi) + (sizeof(*md->topics) * topic_cnt) +
-                topic_names_size + (64 /*topic name size..*/ * topic_cnt) +
-                (sizeof(*md->topics[0].partitions) * total_partition_cnt) +
-                (sizeof(*mdi->topics) * topic_cnt) +
-                (sizeof(*mdi->topics[0].partitions) * total_partition_cnt) +
-                (sizeof(*mdi->brokers) * RD_ROUNDUP(num_brokers, 8)) +
-                (replication_factor > 0 ? RD_ROUNDUP(replication_factor, 8) *
-                                              total_partition_cnt * sizeof(int)
-                                        : 0),
-            1 /*assert on fail*/);
+        rd_tmpabuf_new(&tbuf, sizeof(*mdi), rd_true /*assert on fail*/);
+
+        rd_tmpabuf_add_alloc(&tbuf, topic_cnt * sizeof(*md->topics));
+        rd_tmpabuf_add_alloc(&tbuf, topic_cnt * sizeof(*mdi->topics));
+        rd_tmpabuf_add_alloc(&tbuf, num_brokers * sizeof(*md->brokers));
+
+        /* Calculate total partition count and topic names size before
+         * allocating memory. */
+        for (i = 0; i < topic_cnt; i++) {
+                rd_tmpabuf_add_alloc(&tbuf, 1 + strlen(topics[i].topic));
+                rd_tmpabuf_add_alloc(&tbuf,
+                                     topics[i].partition_cnt *
+                                         sizeof(*md->topics[i].partitions));
+                rd_tmpabuf_add_alloc(&tbuf,
+                                     topics[i].partition_cnt *
+                                         sizeof(*mdi->topics[i].partitions));
+                if (replication_factor > 0)
+                        rd_tmpabuf_add_alloc_times(
+                            &tbuf, replication_factor * sizeof(int),
+                            topics[i].partition_cnt);
+        }
+
+        rd_tmpabuf_finalize(&tbuf);
 
         mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi));
         memset(mdi, 0, sizeof(*mdi));

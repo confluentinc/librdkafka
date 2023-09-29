@@ -49,20 +49,35 @@ typedef struct rd_tmpabuf_s {
         size_t of;
         char *buf;
         int failed;
-        int assert_on_fail;
+        rd_bool_t assert_on_fail;
 } rd_tmpabuf_t;
 
 /**
- * @brief Allocate new tmpabuf with \p size bytes pre-allocated.
+ * @brief Initialize new tmpabuf of non-final \p size bytes.
  */
 static RD_UNUSED void
-rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, int assert_on_fail) {
-        tab->buf            = rd_malloc(size);
-        tab->size           = size;
+rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, rd_bool_t assert_on_fail) {
+        tab->buf            = NULL;
+        tab->size           = RD_ROUNDUP(size, 8);
         tab->of             = 0;
         tab->failed         = 0;
         tab->assert_on_fail = assert_on_fail;
 }
+
+/**
+ * @brief Add a new allocation of \p _size bytes,
+ *        rounded up to maximum word size,
+ *        for \p _times times.
+ */
+#define rd_tmpabuf_add_alloc_times(_tab, _size, _times)                        \
+        (_tab)->size += RD_ROUNDUP(_size, 8) * _times
+
+#define rd_tmpabuf_add_alloc(_tab, _size)                                      \
+        rd_tmpabuf_add_alloc_times(_tab, _size, 1)
+/**
+ * @brief Finalize tmpabuf pre-allocating tab->size bytes.
+ */
+#define rd_tmpabuf_finalize(_tab) (_tab)->buf = rd_malloc((_tab)->size)
 
 /**
  * @brief Free memory allocated by tmpabuf

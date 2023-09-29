@@ -25,7 +25,8 @@ librdkafka v2.2.0 is a feature release:
    Add DNS alias support for secured connection (#4292).
  * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
    IncrementalAlterConfigs API (started by @PrasanthV454, #4110).
- * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
+ * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241). 
+ * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
 
 
 ## Enhancements
@@ -70,6 +71,20 @@ librdkafka v2.2.0 is a feature release:
     handle this, but it was non-functional, and did not have parity with the
     Java assignor. Fixed by invalidating any such partition from the current
     assignment completely.
+
+
+### Idempotent producer fixes
+
+* After a possibly persisted error, such as a disconnection or a timeout, next expected sequence
+  used to increase, leading to a fatal error if the message wasn't persisted and
+  the second one in queue failed with an `OUT_OF_ORDER_SEQUENCE_NUMBER`.
+  The error could contain the message "sequence desynchronization" with
+  just one possibly persisted error or "rewound sequence number" in case of
+  multiple errored messages.
+  Solved by treating the possible persisted message as _not_ persisted,
+  and expecting a `DUPLICATE_SEQUENCE_NUMBER` error in case it was or
+  `NO_ERROR` in case it wasn't, in both cases the message will be considered
+  delivered (#4438).
 
 
 

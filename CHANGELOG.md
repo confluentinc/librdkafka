@@ -52,6 +52,7 @@ librdkafka v2.3.0 is a feature release:
    would cause an offset reset.
    This isn't what's expected or what the Java implementation does.
    Solved by retrying even in case of permanent errors (#4447).
+ * Fix to ensure max.poll.interval.ms is reset when rd_kafka_poll is called with consume_cb (#4431).
 
 
 

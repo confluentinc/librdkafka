@@ -458,7 +458,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
      _RK(metadata_refresh_fast_interval_ms),
      "When a topic loses its leader a new metadata request will be "
-     "enqueued immediately and then with this initial interval, exponentially increasing upto `retry.backoff.max.ms`, "
+     "enqueued immediately and then with this initial interval, exponentially "
+     "increasing upto `retry.backoff.max.ms`, "
      "until the topic metadata has been refreshed. "
      "If not set explicitly, it will be defaulted to `retry.backoff.ms`. "
      "This is used to recover quickly from transitioning leader brokers.",

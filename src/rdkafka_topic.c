@@ -1340,7 +1340,8 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                 leader         = partbrokers[j];
                 partbrokers[j] = NULL;
 
-                /* If broker does not support leaderEpoch(KIP 320) then it is set to -1, we assume that metadata is not stale. */
+                /* If broker does not support leaderEpoch(KIP 320) then it is
+                 * set to -1, we assume that metadata is not stale. */
                 if (leader_epoch == -1)
                         partition_exists_with_no_leader_epoch = rd_true;
                 else if (rktp->rktp_leader_epoch < leader_epoch)

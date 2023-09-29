@@ -177,6 +177,7 @@ static void do_test_low_socket_timeout(const char *topic) {
         test_conf_set(conf, "socket.timeout.ms", "1000");
         test_conf_set(conf, "socket.max.fails", "12345");
         test_conf_set(conf, "retry.backoff.ms", "5000");
+        test_conf_set(conf, "retry.backoff.max.ms", "5000");
         /* Avoid api version requests (with their own timeout) to get in
          * the way of our test */
         test_conf_set(conf, "api.version.request", "false");

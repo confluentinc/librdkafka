@@ -23,6 +23,8 @@ librdkafka v2.3.0 is a feature release:
  * Fix to add leader epoch to control messages, to make sure they're stored
    for committing even without a subsequent fetch message (#4434).
  * Fix for stored offsets not being committed if they lacked the leader epoch (#4442).
+ * Fix to ensure permanent errors during offset validation continue being retried and
+   don't cause an offset reset (#4447).
 
 
 ## Fixes
@@ -35,20 +37,21 @@ librdkafka v2.3.0 is a feature release:
 
 ### Consumer fixes
 
-  * Stored offsets were excluded from the commit if the leader epoch was
-    less than committed epoch, as it's possible if leader epoch is the default -1.
-    This didn't happen in Python, Go and .NET bindings when stored position was
-    taken from the message.
-    Solved by checking only that the stored offset is greater
-    than committed one, if either stored or committed leader epoch is -1 (#4442).
-
-
-### Consumer Fixes
-
+ * Stored offsets were excluded from the commit if the leader epoch was
+   less than committed epoch, as it's possible if leader epoch is the default -1.
+   This didn't happen in Python, Go and .NET bindings when stored position was
+   taken from the message.
+   Solved by checking only that the stored offset is greater
+   than committed one, if either stored or committed leader epoch is -1 (#4442).
  * If an OffsetForLeaderEpoch request was being retried, and the leader changed
    while the retry was in-flight, an infinite loop of requests was triggered,
    because we weren't updating the leader epoch correctly.
    Fixed by updating the leader epoch before sending the request (#4433).
+ * During offset validation a permanent error like host resolution failure
+   would cause an offset reset.
+   This isn't what's expected or what the Java implementation does.
+   Solved by retrying even in case of permanent errors (#4447).
+
 
 
 # librdkafka v2.2.0

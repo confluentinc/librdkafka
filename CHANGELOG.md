@@ -13,6 +13,9 @@ librdkafka v2.3.0 is a feature release:
  * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):
    Return authorized operations in Describe Responses.
    (#4240, @jainruchir).
+ * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for  
+   retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
+   maximum backoff, with 20% jitter(#4422).
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
  * Add missing destroy that leads to leaking partition structure memory when there
    are partition leader changes and a stale leader epoch is received (#4429).
@@ -30,6 +33,20 @@ librdkafka v2.3.0 is a feature release:
    don't cause an offset reset (#4447).
  * Fix to ensure max.poll.interval.ms is reset when rd_kafka_poll is called with
    consume_cb (#4431).
+ * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
+
+
+## Upgrade considerations
+
+ * `retry.backoff.ms`:
+   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
+   To change this behaviour make sure that `retry.backoff.ms` is always less than `retry.backoff.max.ms`.
+   If equal then the backoff will be linear instead of exponential.
+   
+ * `topic.metadata.refresh.fast.interval.ms`:
+   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
+   To change this behaviour make sure that `topic.metadata.refresh.fast.interval.ms` is always less than `retry.backoff.max.ms`.
+   If equal then the backoff will be linear instead of exponential.
 
 
 ## Fixes
@@ -40,6 +57,18 @@ librdkafka v2.3.0 is a feature release:
    rack information on 32bit architectures.
    Solved by aligning all allocations to the maximum allowed word size (#4449).
 
+### Idempotent producer fixes
+
+ * After a possibly persisted error, such as a disconnection or a timeout, next expected sequence
+   used to increase, leading to a fatal error if the message wasn't persisted and
+   the second one in queue failed with an `OUT_OF_ORDER_SEQUENCE_NUMBER`.
+   The error could contain the message "sequence desynchronization" with
+   just one possibly persisted error or "rewound sequence number" in case of
+   multiple errored messages.
+   Solved by treating the possible persisted message as _not_ persisted,
+   and expecting a `DUPLICATE_SEQUENCE_NUMBER` error in case it was or
+   `NO_ERROR` in case it wasn't, in both cases the message will be considered
+   delivered (#4438).
 
 ### Consumer fixes
 
@@ -64,18 +93,6 @@ librdkafka v2.3.0 is a feature release:
     services the queue forwarded to from `rk_rep`, which is `rkcg_q`.
     Solved by moving the `max.poll.interval.ms` check into `rd_kafka_q_serve` (#4431).
 
-
-## Upgrade considerations
-
- * `retry.backoff.ms`:
-   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
-   To change this behaviour make sure that `retry.backoff.ms` is always less than `retry.backoff.max.ms`.
-   If equal then the backoff will be linear instead of exponential.
-   
- * `topic.metadata.refresh.fast.interval.ms`:
-   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
-   To change this behaviour make sure that `topic.metadata.refresh.fast.interval.ms` is always less than `retry.backoff.max.ms`.
-   If equal then the backoff will be linear instead of exponential.
 
 
 # librdkafka v2.2.0
@@ -106,9 +123,7 @@ librdkafka v2.2.0 is a feature release:
  * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
    IncrementalAlterConfigs API (started by @PrasanthV454, #4110).
  * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
- * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for  
-   retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
-   maximum backoff, with 20% jitter(#4422).
+
 
 ## Enhancements
 

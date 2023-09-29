@@ -19,6 +19,7 @@ librdkafka v2.3.0 is a feature release:
  * Fix a segmentation fault when closing a consumer using the
    cooperative-sticky assignor before the first assignment (#4381).
  * Fix for insufficient buffer allocation when allocating rack information (@wolfchimneyrock, #4449).
+ * Fix for infinite loop of OffsetForLeaderEpoch requests on quick leader changes. (#4433).
  * Fix to add leader epoch to control messages, to make sure they're stored
    for committing even without a subsequent fetch message (#4434).
  * Fix for stored offsets not being committed if they lacked the leader epoch (#4442).
@@ -41,6 +42,10 @@ librdkafka v2.3.0 is a feature release:
     taken from the message.
     Solved by checking only that the stored offset is greater
     than committed one, if either stored or committed leader epoch is -1 (#4442).
+  * If an OffsetForLeaderEpoch request was being retried, and the leader changed
+    while the retry was in-flight, an infinite loop of requests was triggered,
+    because we weren't updating the leader epoch correctly.
+    Fixed by updating the leader epoch before sending the request (#4433).
 
 
 ## Upgrade considerations

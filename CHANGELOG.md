@@ -19,6 +19,8 @@ librdkafka v2.3.0 is a feature release:
  * Fix a segmentation fault when closing a consumer using the
    cooperative-sticky assignor before the first assignment (#4381).
  * Fix for insufficient buffer allocation when allocating rack information (@wolfchimneyrock, #4449).
+ * Fix to add leader epoch to control messages, to make sure they're stored
+   for committing even without a subsequent fetch message (#4434).
  * Fix for stored offsets not being committed if they lacked the leader epoch (#4442).
 
 

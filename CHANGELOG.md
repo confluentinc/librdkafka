@@ -28,6 +28,8 @@ librdkafka v2.3.0 is a feature release:
    (#4454, started by @migarc1).
  * Fix to ensure permanent errors during offset validation continue being retried and
    don't cause an offset reset (#4447).
+ * Fix to ensure max.poll.interval.ms is reset when rd_kafka_poll is called with
+   consume_cb (#4431).
 
 
 ## Fixes
@@ -55,6 +57,12 @@ librdkafka v2.3.0 is a feature release:
     would cause an offset reset.
     This isn't what's expected or what the Java implementation does.
     Solved by retrying even in case of permanent errors (#4447).
+  * If using `rd_kafka_poll_set_consumer`, along with a consume callback, and then
+    calling `rd_kafka_poll` to service the callbacks, would not reset
+    `max.poll.interval.ms.` This was because we were only checking `rk_rep` for
+    consumer messages, while the method to service the queue internally also
+    services the queue forwarded to from `rk_rep`, which is `rkcg_q`.
+    Solved by moving the `max.poll.interval.ms` check into `rd_kafka_q_serve` (#4431).
 
 
 ## Upgrade considerations

@@ -325,6 +325,39 @@ do_test_idempo_duplicate_sequence_number_after_possibly_persisted(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief When a message fails on the broker with a possibly persisted error
+ *        NOT_ENOUGH_REPLICAS_AFTER_APPEND, in case next messages
+ *        succeed, it should be implicitly acked.
+ */
+static void do_test_idempo_success_after_possibly_persisted(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+
+        SUB_TEST_QUICK();
+
+        rk = create_idempo_producer(&mcluster, 1, "batch.num.messages", "1",
+                                    "linger.ms", "0", NULL);
+        test_curr->ignore_dr_err = rd_true;
+        test_curr->is_fatal_cb   = error_is_fatal_cb;
+
+        /* Make sure first response fails with possibly persisted
+         * error NOT_ENOUGH_REPLICAS_AFTER_APPEND next messages
+         * will succeed. */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_Produce, 1,
+            RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND, 0);
+
+        /* Produce 5 messages, msgids 1-5. */
+        test_produce_msgs2(rk, "mytopic", 0, 0, 0, 5, NULL, 64);
+
+        /* All done. */
+        rd_kafka_flush(rk, -1);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
 int main_0143_idempotence_mock(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -336,6 +369,8 @@ int main_0143_idempotence_mock(int argc, char **argv) {
                 do_test_idempo_possibly_persisted_not_causing_fatal_error(i);
 
         do_test_idempo_duplicate_sequence_number_after_possibly_persisted();
+
+        do_test_idempo_success_after_possibly_persisted();
 
         return 0;
 }

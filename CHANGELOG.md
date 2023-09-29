@@ -23,6 +23,9 @@ librdkafka v2.3.0 is a feature release:
  * Fix to add leader epoch to control messages, to make sure they're stored
    for committing even without a subsequent fetch message (#4434).
  * Fix for stored offsets not being committed if they lacked the leader epoch (#4442).
+ * Upgrade OpenSSL to v3.0.11 (while building from source) with various security fixes,
+   check the [release notes](https://www.openssl.org/news/cl30.txt)
+   (#4454, started by @migarc1).
  * Fix to ensure permanent errors during offset validation continue being retried and
    don't cause an offset reset (#4447).
 

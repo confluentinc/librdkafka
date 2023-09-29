@@ -2612,6 +2612,7 @@ const char *
 rd_kafka_mock_cluster_bootstraps(const rd_kafka_mock_cluster_t *mcluster) {
         return mcluster->bootstraps;
 }
+
 /**
  * @struct Represents a request to the mock cluster along with a timestamp.
  */

@@ -520,6 +520,8 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         rd_kafka_q_t *fwdq;
         int cnt = 0;
         struct timespec timeout_tspec;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
 
         rd_dassert(cb_type);
 
@@ -537,8 +539,6 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
                 return ret;
         }
 
-        const rd_bool_t can_q_contain_fetched_msgs =
-            rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
 
         rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
 

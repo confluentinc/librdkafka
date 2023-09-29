@@ -25,6 +25,7 @@ librdkafka v2.3.0 is a feature release:
  * Fix for stored offsets not being committed if they lacked the leader epoch (#4442).
  * Fix to ensure permanent errors during offset validation continue being retried and
    don't cause an offset reset (#4447).
+ * Fix to ensure max.poll.interval.ms is reset when rd_kafka_poll is called with consume_cb (#4431).
 
 
 ## Fixes

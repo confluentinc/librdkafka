@@ -20,6 +20,8 @@ librdkafka v2.3.0 is a feature release:
    cooperative-sticky assignor before the first assignment (#4381).
  * Fix for insufficient buffer allocation when allocating rack information (@wolfchimneyrock, #4449).
  * Fix for infinite loop of OffsetForLeaderEpoch requests on quick leader changes. (#4433).
+ * Fix to add leader epoch to control messages, to make sure they're stored
+   for committing even without a subsequent fetch message (#4434).
 
 
 ## Fixes
@@ -29,6 +31,7 @@ librdkafka v2.3.0 is a feature release:
  * An assertion failed with insufficient buffer size when allocating
    rack information on 32bit architectures.
    Solved by aligning all allocations to the maximum allowed word size (#4449).
+
 
 ### Consumer Fixes
 

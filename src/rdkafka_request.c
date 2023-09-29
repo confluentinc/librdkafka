@@ -2231,9 +2231,11 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_Metadata, 0, metadata_max_version, &features);
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
-                                                 4 + (50 * topic_cnt) + 1,
-                                                 ApiVersion >= 9);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_Metadata, 1,
+            4 + (66 /* 50 for topic name and 16 for topic id */ * topic_cnt) +
+                1,
+            ApiVersion >= 9);
 
         if (!reason)
                 reason = "";

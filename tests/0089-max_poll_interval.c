@@ -449,11 +449,59 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
         SUB_TEST_PASS();
 }
 
+static void consume_cb(rd_kafka_message_t *rkmessage, void *opaque) {
+        TEST_SAY("Consume callback\n");
+}
+
+static void do_test_max_poll_reset_with_consumer_cb(void ) {
+        const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
+        rd_kafka_conf_t *conf;
+        char groupid[64];
+        rd_kafka_t *rk                    = NULL;
+        rd_kafka_queue_t *consumer_queue  = NULL;
+        rd_kafka_queue_t *forwarder_queue = NULL;
+        rd_kafka_event_t *event           = NULL;
+        rd_kafka_queue_t *polling_queue   = NULL;
+
+        SUB_TEST();
+
+        test_create_topic(NULL, topic, 1, 1);
+        uint64_t testid = test_id_generate();
+
+
+        test_produce_msgs_easy(topic, testid, -1, 100);
+
+
+        test_str_id_generate(groupid, sizeof(groupid));
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "session.timeout.ms", "10000");
+        test_conf_set(conf, "max.poll.interval.ms", "10000" /*10s*/);
+        test_conf_set(conf, "partition.assignment.strategy", "range");
+        rd_kafka_conf_set_consume_cb(conf, consume_cb);
+
+        rk = test_create_consumer(groupid, NULL, conf, NULL);
+        rd_kafka_poll_set_consumer(rk);
+
+        test_consumer_subscribe(rk, topic);
+        TEST_SAY("Subscribed to %s and sleeping for 5 s\n", topic);
+        rd_sleep(5);
+        rd_kafka_poll(rk, 10);
+        TEST_SAY("Polled and sleeping again for 6s. Max poll should be reset\n");
+        rd_sleep(6);
+
+        // Poll should work
+        rd_kafka_poll(rk, 10);
+        rd_kafka_event_destroy(event);
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
+}
+
 int main_0089_max_poll_interval(int argc, char **argv) {
-        do_test();
-        do_test_with_log_queue();
-        do_test_rejoin_after_interval_expire(rd_false, rd_false);
-        do_test_rejoin_after_interval_expire(rd_true, rd_false);
-        do_test_rejoin_after_interval_expire(rd_false, rd_true);
+                do_test();
+                do_test_with_log_queue();
+                do_test_rejoin_after_interval_expire(rd_false, rd_false);
+                do_test_rejoin_after_interval_expire(rd_true, rd_false);
+                do_test_rejoin_after_interval_expire(rd_false, rd_true);
+                do_test_max_poll_reset_with_consumer_cb();
         return 0;
 }

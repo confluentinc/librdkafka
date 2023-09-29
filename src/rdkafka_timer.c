@@ -196,6 +196,7 @@ void rd_kafka_timer_start0(rd_kafka_timers_t *rkts,
 
         rd_kafka_timers_unlock(rkts);
 }
+
 /**
  * Delay the next timer invocation by '2 * rtmr->rtmr_interval'
  * @param minimum_backoff the minimum backoff to be applied

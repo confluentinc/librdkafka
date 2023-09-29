@@ -1630,7 +1630,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
                  * the retry backoff max ms */
                 rd_kafka_timer_exp_backoff(
                     rkts, rtmr, rk->rk_conf.retry_backoff_ms * 1000,
-                    rk->rk_conf.retry_backoff_max_ms * 1000, 20);
+                    rk->rk_conf.retry_backoff_max_ms * 1000, RD_KAFKA_RETRY_JITTER_PERCENT);
         }
 
         rd_list_destroy(&topics);

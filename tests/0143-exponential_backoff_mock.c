@@ -538,11 +538,10 @@ int main_0143_exponential_backoff_mock(int argc, char **argv) {
         rd_kafka_mock_start_request_tracking(mcluster);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
 
+        test_conf_init(&conf, NULL, 30);
         /* This test may be slower when running with CI or Helgrind,
          * restart the timeout. */
         test_timeout_set(100);
-
-        test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "-1");
 

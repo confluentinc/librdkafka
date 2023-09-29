@@ -68,24 +68,30 @@ struct rd_kafka_toppar_err {
                                   *   last msg sequence */
 };
 
-
+/**
+ * @brief Fetchpos comparator, only offset is compared.
+ */
+static RD_UNUSED RD_INLINE int
+rd_kafka_fetch_pos_cmp_offset(const rd_kafka_fetch_pos_t *a,
+                              const rd_kafka_fetch_pos_t *b) {
+        return (RD_CMP(a->offset, b->offset));
+}
 
 /**
- * @brief Fetchpos comparator, leader epoch has precedence.
+ * @brief Fetchpos comparator, leader epoch has precedence
+ *        iff both values are not null.
  */
 static RD_UNUSED RD_INLINE int
 rd_kafka_fetch_pos_cmp(const rd_kafka_fetch_pos_t *a,
                        const rd_kafka_fetch_pos_t *b) {
+        if (a->leader_epoch == -1 || b->leader_epoch == -1)
+                return rd_kafka_fetch_pos_cmp_offset(a, b);
         if (a->leader_epoch < b->leader_epoch)
                 return -1;
         else if (a->leader_epoch > b->leader_epoch)
                 return 1;
-        else if (a->offset < b->offset)
-                return -1;
-        else if (a->offset > b->offset)
-                return 1;
         else
-                return 0;
+                return rd_kafka_fetch_pos_cmp_offset(a, b);
 }
 
 

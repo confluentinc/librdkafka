@@ -248,10 +248,8 @@ static void do_test_two_leader_changes(void) {
                                  "batch.num.messages", "1", NULL);
 
         test_conf_init(&conf, NULL, 60);
-
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "auto.offset.reset", "earliest");
-        test_conf_set(conf, "debug", "protocol");
 
         c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
         test_consumer_subscribe(c1, topic);
@@ -264,11 +262,8 @@ static void do_test_two_leader_changes(void) {
          * an error, and then give enough time to change the leader before
          * returning a success. */
         rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, 2, RD_KAFKAP_OffsetForLeaderEpoch, 1,
-            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR, 900);
-
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, 2, RD_KAFKAP_OffsetForLeaderEpoch, 1,
+            mcluster, 2, RD_KAFKAP_OffsetForLeaderEpoch, 2,
+            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR, 900,
             RD_KAFKA_RESP_ERR_NO_ERROR, 1000);
 
         rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
@@ -293,7 +288,6 @@ static void do_test_two_leader_changes(void) {
 
 
         rd_kafka_destroy(c1);
-
         test_mock_cluster_destroy(mcluster);
 
         TEST_LATER_CHECK();

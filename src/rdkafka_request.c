@@ -3629,7 +3629,7 @@ static void rd_kafka_msgbatch_handle_Produce_result(
                     .err             = err,
                     .incr_retry      = 1,
                     .status          = status,
-                    .update_next_ack = rd_true,
+                    .update_next_ack = rd_false,
                     .update_next_err = rd_true,
                     .last_seq        = (batch->first_seq +
                                  rd_kafka_msgq_len(&batch->msgq) - 1)};

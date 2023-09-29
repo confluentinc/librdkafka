@@ -1625,15 +1625,13 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
                     rk, NULL, &topics, rd_true /*force*/,
                     rk->rk_conf.allow_auto_create_topics,
                     rd_false /*!cgrp_update*/, "partition leader query");
-                /* Back off next query exponentially until we reach
-                 * the standard query interval - then stop the timer
-                 * since the intervalled querier will do the job for us. */
-                if (rk->rk_conf.metadata_refresh_interval_ms > 0 &&
-                    rtmr->rtmr_interval * 2 / 1000 >=
-                        rk->rk_conf.metadata_refresh_interval_ms)
-                        rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
-                else
-                        rd_kafka_timer_exp_backoff(rkts, rtmr);
+
+                /* Back off next query exponentially till we reach
+                 * the retry backoff max ms */
+                rd_kafka_timer_exp_backoff(
+                    rkts, rtmr, rk->rk_conf.retry_backoff_ms * 1000,
+                    rk->rk_conf.retry_backoff_max_ms * 1000,
+                    RD_KAFKA_RETRY_JITTER_PERCENT);
         }
 
         rd_list_destroy(&topics);
@@ -1663,7 +1661,7 @@ void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
                              "Starting fast leader query");
                 rd_kafka_timer_start(
                     &rk->rk_timers, &rk->rk_metadata_cache.rkmc_query_tmr,
-                    rk->rk_conf.metadata_refresh_fast_interval_ms * 1000,
+                    0 /* First request should be tried immediately */,
                     rd_kafka_metadata_leader_query_tmr_cb, NULL);
         }
 }

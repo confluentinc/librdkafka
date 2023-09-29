@@ -38,23 +38,36 @@ librdkafka v2.3.0 is a feature release:
    rack information on 32bit architectures.
    Solved by aligning all allocations to the maximum allowed word size (#4449).
 
+
 ### Consumer fixes
 
- * Stored offsets were excluded from the commit if the leader epoch was
-   less than committed epoch, as it's possible if leader epoch is the default -1.
-   This didn't happen in Python, Go and .NET bindings when stored position was
-   taken from the message.
-   Solved by checking only that the stored offset is greater
-   than committed one, if either stored or committed leader epoch is -1 (#4442).
- * If an OffsetForLeaderEpoch request was being retried, and the leader changed
-   while the retry was in-flight, an infinite loop of requests was triggered,
-   because we weren't updating the leader epoch correctly.
-   Fixed by updating the leader epoch before sending the request (#4433).
- * During offset validation a permanent error like host resolution failure
-   would cause an offset reset.
-   This isn't what's expected or what the Java implementation does.
-   Solved by retrying even in case of permanent errors (#4447).
+  * Stored offsets were excluded from the commit if the leader epoch was
+    less than committed epoch, as it's possible if leader epoch is the default -1.
+    This didn't happen in Python, Go and .NET bindings when stored position was
+    taken from the message.
+    Solved by checking only that the stored offset is greater
+    than committed one, if either stored or committed leader epoch is -1 (#4442).
+  * If an OffsetForLeaderEpoch request was being retried, and the leader changed
+    while the retry was in-flight, an infinite loop of requests was triggered,
+    because we weren't updating the leader epoch correctly.
+    Fixed by updating the leader epoch before sending the request (#4433).
+  * During offset validation a permanent error like host resolution failure
+    would cause an offset reset.
+    This isn't what's expected or what the Java implementation does.
+    Solved by retrying even in case of permanent errors (#4447).
 
+
+## Upgrade considerations
+
+ * `retry.backoff.ms`:
+   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
+   To change this behaviour make sure that `retry.backoff.ms` is always less than `retry.backoff.max.ms`.
+   If equal then the backoff will be linear instead of exponential.
+   
+ * `topic.metadata.refresh.fast.interval.ms`:
+   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
+   To change this behaviour make sure that `topic.metadata.refresh.fast.interval.ms` is always less than `retry.backoff.max.ms`.
+   If equal then the backoff will be linear instead of exponential.
 
 
 # librdkafka v2.2.0
@@ -85,7 +98,9 @@ librdkafka v2.2.0 is a feature release:
  * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
    IncrementalAlterConfigs API (started by @PrasanthV454, #4110).
  * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
-
+ * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for  
+   retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
+   maximum backoff, with 20% jitter(#4422).
 
 ## Enhancements
 

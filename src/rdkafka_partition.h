@@ -566,7 +566,10 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         int max_retries,
                         rd_ts_t backoff,
                         rd_kafka_msg_status_t status,
-                        int (*cmp)(const void *a, const void *b));
+                        int (*cmp)(const void *a, const void *b),
+                        rd_bool_t exponential_backoff,
+                        int retry_ms,
+                        int retry_max_ms);
 void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
                                rd_kafka_msgq_t *srcq,
                                int (*cmp)(const void *a, const void *b));

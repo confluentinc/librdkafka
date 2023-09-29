@@ -2823,6 +2823,7 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
  */
 void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
+        int64_t backoff = 0;
         /* Restore original replyq since replyq.q will have been NULLed
          * by buf_callback()/replyq_enq(). */
         if (!rkbuf->rkbuf_replyq.q && rkbuf->rkbuf_orig_replyq.q) {
@@ -2850,9 +2851,24 @@ void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
                    rkb->rkb_rk->rk_conf.retry_backoff_ms);
 
         rd_atomic64_add(&rkb->rkb_c.tx_retries, 1);
+        /* In some cases, failed Produce requests do not increment the retry
+         * count, see rd_kafka_handle_Produce_error. */
+        if (rkbuf->rkbuf_retries > 0)
+                backoff = (1 << (rkbuf->rkbuf_retries - 1)) *
+                          (rkb->rkb_rk->rk_conf.retry_backoff_ms);
+        else
+                backoff = rkb->rkb_rk->rk_conf.retry_backoff_ms;
 
-        rkbuf->rkbuf_ts_retry =
-            rd_clock() + (rkb->rkb_rk->rk_conf.retry_backoff_ms * 1000);
+        /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->
+         * backoff_ms * jitter * 10 */
+        backoff = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
+                            100 + RD_KAFKA_RETRY_JITTER_PERCENT) *
+                  backoff * 10;
+
+        if (backoff > rkb->rkb_rk->rk_conf.retry_backoff_max_ms * 1000)
+                backoff = rkb->rkb_rk->rk_conf.retry_backoff_max_ms * 1000;
+
+        rkbuf->rkbuf_ts_retry = rd_clock() + backoff;
         /* Precaution: time out the request if it hasn't moved from the
          * retry queue within the retry interval (such as when the broker is
          * down). */

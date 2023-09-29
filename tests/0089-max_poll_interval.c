@@ -456,7 +456,7 @@ static void consume_cb(rd_kafka_message_t *rkmessage, void *opaque) {
 /**
  * @brief Test that max.poll.interval.ms is reset when
  * rd_kafka_poll is called with consume_cb.
- * Issue reported in https://github.com/confluentinc/librdkafka/issues/4421
+ * See issue #4421.
  */
 static void do_test_max_poll_reset_with_consumer_cb(void) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
@@ -491,7 +491,6 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
 
         /* Poll should work */
         rd_kafka_poll(rk, 10);
-        rd_kafka_event_destroy(event);
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 }

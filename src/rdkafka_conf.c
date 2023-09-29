@@ -445,7 +445,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "metadata is refreshed in order to proactively discover any new "
      "brokers, topics, partitions or partition leader changes. "
      "Use -1 to disable the intervalled refresh (not recommended). "
-     "If not set explicitly, it will be defaulted to `retry.backoff.ms`. "
      "If there are no locally referenced topics "
      "(no topic objects created, no messages produced, "
      "no subscription or no assignment) then only the broker list will "
@@ -458,10 +457,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
      _RK(metadata_refresh_fast_interval_ms),
      "When a topic loses its leader a new metadata request will be "
-     "enqueued with this initial interval, exponentially increasing "
+     "enqueued immediately and then with this initial interval, exponentially increasing upto `retry.backoff.max.ms`, "
      "until the topic metadata has been refreshed. "
+     "If not set explicitly, it will be defaulted to `retry.backoff.ms`. "
      "This is used to recover quickly from transitioning leader brokers.",
-     1, 60 * 1000, 250},
+     1, 60 * 1000, 100},
     {_RK_GLOBAL | _RK_DEPRECATED, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
      _RK(metadata_refresh_fast_cnt), "No longer used.", 0, 1000, 10},
     {_RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,

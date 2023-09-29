@@ -123,8 +123,7 @@ rd_interval_reset_to_now_with_jitter(rd_interval_t *ri,
         rd_interval_reset_to_now(ri, now);
         /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->
          * backoff_ms * jitter * 10 */
-        ri->ri_ts_last = ri->ri_ts_last +
-                         backoff_ms * rd_jitter(-max_jitter, max_jitter) * 10;
+        ri->ri_backoff = backoff_ms * rd_jitter(-max_jitter, max_jitter) * 10;
 }
 
 /**

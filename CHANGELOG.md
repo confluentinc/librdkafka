@@ -31,6 +31,17 @@ librdkafka v2.3.0 is a feature release:
    rack information on 32bit architectures.
    Solved by aligning all allocations to the maximum allowed word size (#4449).
 
+## Upgrade considerations
+
+ * `retry.backoff.ms`:
+   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
+   To change this behaviour make sure that `retry.backoff.ms` is always less than `retry.backoff.max.ms`.
+   If equal then the backoff will be linear instead of exponential.
+   
+ * `topic.metadata.refresh.fast.interval.ms`:
+   If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
+   To change this behaviour make sure that `topic.metadata.refresh.fast.interval.ms` is always less than `retry.backoff.max.ms`.
+   If equal then the backoff will be linear instead of exponential.
 
 
 # librdkafka v2.2.0
@@ -63,7 +74,7 @@ librdkafka v2.2.0 is a feature release:
  * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
  * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for  
    retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
-   maximum backoff, with jitter `RD_KAFKA_RETRY_JITTER_PERCENT`(#4422).
+   maximum backoff, with 20% jitter(#4422).
 
 ## Enhancements
 

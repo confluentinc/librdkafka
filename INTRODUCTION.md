@@ -1951,7 +1951,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-559 - Make the Kafka Protocol Friendlier with L7 Proxies             | 2.5.0                       | Not supported                                                                                 |
 | KIP-568 - Explicit rebalance triggering on the Consumer                  | 2.6.0                       | Not supported                                                                                 |
 | KIP-659 - Add metadata to DescribeConfigsResponse                        | 2.6.0                       | Not supported                                                                                 |
-| KIP-580 - Exponential backoff for Kafka clients                          | 3.7.0 (WIP)                 | Supported supported                                                                           |
+| KIP-580 - Exponential backoff for Kafka clients                          | 3.7.0 (WIP)                 | supported                                                                           |
 | KIP-584 - Versioning scheme for features                                 | WIP                         | Not supported                                                                                 |
 | KIP-588 - Allow producers to recover gracefully from txn timeouts        | 2.8.0 (WIP)                 | Not supported                                                                                 |
 | KIP-601 - Configurable socket connection timeout                         | 2.7.0                       | Supported                                                                                     |

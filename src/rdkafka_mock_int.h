@@ -393,9 +393,10 @@ struct rd_kafka_mock_cluster_s {
         /**< Request handlers */
         struct rd_kafka_mock_api_handler api_handlers[RD_KAFKAP__NUM];
 
+        /**< Appends the requests recieved to mock cluster if set to true, defaulted to false for less memory usage. */
         rd_bool_t track_requests;
         /**< List of API requests for this broker. Type:
-         * rd_kafka_mock_request_t*
+         *   rd_kafka_mock_request_t*
          */
         rd_list_t request_list;
 

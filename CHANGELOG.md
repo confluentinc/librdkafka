@@ -21,6 +21,7 @@ librdkafka v2.3.0 is a feature release:
  * Fix for insufficient buffer allocation when allocating rack information (@wolfchimneyrock, #4449).
  * Fix to add leader epoch to control messages, to make sure they're stored
    for committing even without a subsequent fetch message (#4434).
+ * Fix for stored offsets not being committed if they lacked the leader epoch (#4442).
 
 
 ## Fixes
@@ -30,6 +31,15 @@ librdkafka v2.3.0 is a feature release:
  * An assertion failed with insufficient buffer size when allocating
    rack information on 32bit architectures.
    Solved by aligning all allocations to the maximum allowed word size (#4449).
+
+### Consumer fixes
+
+  * Stored offsets were excluded from the commit if the leader epoch was
+    less than committed epoch, as it's possible if leader epoch is the default -1.
+    This didn't happen in Python, Go and .NET bindings when stored position was
+    taken from the message.
+    Solved by checking only that the stored offset is greater
+    than committed one, if either stored or committed leader epoch is -1 (#4442).
 
 
 

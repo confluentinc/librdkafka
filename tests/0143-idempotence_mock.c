@@ -223,12 +223,13 @@ do_test_idempo_possibly_persisted_not_causing_fatal_error(size_t n) {
         rd_kafka_flush(rk, -1);
 
         /* First sequence is for the immediately produced reply,
-         * never delivered because of the disconnection. */
+         * response is never delivered because of the disconnection. */
         for (i = 0; i < n; i++) {
                 rd_kafka_mock_broker_push_request_error_rtts(
                     mcluster, 1, RD_KAFKAP_Produce, 1,
                     RD_KAFKA_RESP_ERR_NO_ERROR, 750);
         }
+
         /* After disconnection: first message fails with NOT_ENOUGH_REPLICAS,
          * rest with OUT_OF_ORDER_SEQUENCE_NUMBER. */
         for (i = 0; i < 5; i++) {
@@ -248,8 +249,9 @@ do_test_idempo_possibly_persisted_not_causing_fatal_error(size_t n) {
                                   &remains);
 
         /* Wait that messages are sent, then set it down and up again.
-         * Causing a "possibly persisted" error that increased next_ack,
-         * with subsequent fatal error when retrying the same sequences. */
+         * "possibly persisted" errors won't increase next_ack,
+         * but it will be increased when receiving a NO_ERROR
+         * during the second retry after broker is set up again. */
         rd_usleep(250000, 0);
         rd_kafka_mock_broker_set_down(mcluster, 1);
         rd_usleep(250000, 0);

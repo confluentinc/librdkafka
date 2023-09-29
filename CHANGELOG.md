@@ -12,7 +12,7 @@ librdkafka v2.2.1 is a maintenance release:
 ### Idempotent producer fixes
 
  * After a possibly persisted error, such as a disconnection or a timeout, next expected sequence
-   was increased, leading to a fatal error if the message wasn't persisted and
+   used to increase, leading to a fatal error if the message wasn't persisted and
    the second one in queue failed with an `OUT_OF_ORDER_SEQUENCE_NUMBER`.
    The error could contain the message "sequence desynchronization" with
    just one possibly persisted error or "rewound sequence number" in case of

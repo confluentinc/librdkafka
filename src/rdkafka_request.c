@@ -3347,10 +3347,7 @@ static int rd_kafka_handle_Produce_error(rd_kafka_broker_t *rkb,
                          * we still treat it as not persisted,
                          * expecting DUPLICATE_SEQUENCE_NUMBER
                          * in case it was persisted or NO_ERROR in case
-                         * it wasn't. Increasing next expected sequence
-                         * prematurely can lead to fatal errors in case
-                         * it wasn't persisted and the second one to retry
-                         * fails with OUT_OF_ORDER_SEQUENCE_NUMBER. */
+                         * it wasn't. */
                         perr->update_next_ack = rd_false;
                         perr->update_next_err = rd_true;
 

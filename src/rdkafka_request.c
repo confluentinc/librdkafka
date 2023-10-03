@@ -478,7 +478,7 @@ rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
 
 /**
  * @brief Parses the response given the rd_kafka_buf_t and returns the rd_list_t with the element
- *        as rd_kafka_ListOffsetResultInfo which encapsulates all the Info about a topic_partition offset for 
+ *        as rd_kafka_ListOffsetsResultInfo_t which encapsulates all the Info about a topic_partition offset for 
  *        which ListOffset request was made.
  * @param reply The rd_kafka_buf_t to be parsed for the response of ListOffsets.
  * @param errstr The errstr to be populated if the parser fails.
@@ -495,7 +495,7 @@ rd_list_t *rd_kafka_ListOffsetsResponseParser(rd_kafka_buf_t *reply,char *errstr
                 rd_kafka_buf_read_throttle_time(reply);
         
         rd_kafka_buf_read_i32(reply,&num_topics);
-        result_list = rd_list_new(num_topics,rd_kafka_ListOffsetResultInfo_destroy_free);
+        result_list = rd_list_new(num_topics,rd_kafka_ListOffsetsResultInfo_destroy_free);
         for(i=0;i<num_topics;i++){
                 rd_kafkap_str_t topic;
                 rd_kafka_buf_read_str(reply,&topic);
@@ -510,7 +510,7 @@ rd_list_t *rd_kafka_ListOffsetsResponseParser(rd_kafka_buf_t *reply,char *errstr
                         int32_t leader_epoch;
                         int itr ;
                         rd_kafka_buf_read_i32(reply,&partition);
-                        rd_kafka_ListOffsetResultInfo_t *element = rd_kafka_ListOffsetResultInfo_new(topic.str,partition);
+                        rd_kafka_ListOffsetsResultInfo_t *element = rd_kafka_ListOffsetsResultInfo_new(topic.str,partition);
                         rd_kafka_buf_read_i16(reply,&errorcode);
                         element->topic_partition->err = errorcode;
 
@@ -553,7 +553,10 @@ err_parse:
  * @brief Writes the request of ListOffsets Admin OP.
  *        returns a rd_kafka_buf_t with the request or NULL on error.
  * @param rkb The broker.
- * @param topic_partitions The topic partition list to list the offsets for with OffsetSpec set in place of offset.
+ * @param topic_partitions topic_partition_list_t with the partitions and offsets to list.
+ *                         Each topic partition offset can be a value of the `rd_kafka_OffsetSpec_t`
+ *                         enum or a non-negative value, representing a timestamp, to query for the first
+ *                         offset after the given timestamp.
  * @param isolation_level The provided rd_kafka_IsolationLevel_t for the request.
  * @param replyq The reply queue.
  * @param errstr The character errstr to be populated.
@@ -676,7 +679,7 @@ rd_kafka_handle_ListOffsets(rd_kafka_t *rk,
         }
         if(result_list){
                 for(i=0;i<rd_list_cnt(result_list);i++){
-                        rd_kafka_ListOffsetResultInfo_t *element = rd_list_elem(result_list,i);
+                        rd_kafka_ListOffsetsResultInfo_t *element = rd_list_elem(result_list,i);
                         rd_kafka_topic_partition_t *topic_partition = rd_kafka_topic_partition_list_add(offsets,element->topic_partition->topic,element->topic_partition->partition);
                         topic_partition->err = element->topic_partition->err;
                         topic_partition->offset = element->topic_partition->offset;

@@ -231,15 +231,15 @@ int main(int argc, char **argv) {
                 /* ListOffsets request succeeded, but individual
                  * partitions may have errors. */
                 const rd_kafka_ListOffsets_result_t *result;
-                rd_kafka_ListOffsetResultInfo_t **result_infos;
+                rd_kafka_ListOffsetsResultInfo_t **result_infos;
                 size_t cnt;
                 size_t i;
                 result  = rd_kafka_event_ListOffsets_result(event);
                 result_infos = rd_kafka_ListOffsets_result_infos(result,&cnt);
                 printf("ListOffsets results:\n");
                 for (i = 0; i < cnt; i++){
-                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetResultInfo_topic_partition(result_infos[i]);
-                        int64_t timestamp = rd_kafka_ListOffsetResultInfo_timestamp(result_infos[i]);
+                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[i]);
+                        int64_t timestamp = rd_kafka_ListOffsetsResultInfo_timestamp(result_infos[i]);
                         printf("Topic : %s PartitionIndex : %d ErrorCode : %d Offset : %" PRId64 " Timestamp : %" PRId64 "\n",
                                 topic_partition->topic,
                                 topic_partition->partition,

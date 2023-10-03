@@ -3951,20 +3951,21 @@ err_parse:
 }
 
 /**
- * @brief Creates a ListOffsetResultInfo with the topic and parition and returns the
- * ListOffsetResultInfo.
-*/
-rd_kafka_ListOffsetResultInfo_t *rd_kafka_ListOffsetResultInfo_new(const char *topic,int32_t partition){
-        rd_kafka_ListOffsetResultInfo_t *element;
+ * @brief Creates a ListOffsetsResultInfo with the topic and parition and returns the
+ * ListOffsetsResultInfo.
+ */
+rd_kafka_ListOffsetsResultInfo_t *rd_kafka_ListOffsetsResultInfo_new(const char *topic,int32_t partition){
+        rd_kafka_ListOffsetsResultInfo_t *element;
         element = rd_calloc(1,sizeof(*element));
         element->topic_partition = rd_kafka_topic_partition_new(topic,partition);
         return element;
 }
+
 /**
- * @brief Copies the ListOffsetResultInfo.
-*/
-rd_kafka_ListOffsetResultInfo_t *rd_kafka_ListOffsetResultInfo_copy(const rd_kafka_ListOffsetResultInfo_t *element){
-        rd_kafka_ListOffsetResultInfo_t *copiedelement;
+ * @brief Copies the ListOffsetsResultInfo.
+ */
+rd_kafka_ListOffsetsResultInfo_t *rd_kafka_ListOffsetsResultInfo_copy(const rd_kafka_ListOffsetsResultInfo_t *element){
+        rd_kafka_ListOffsetsResultInfo_t *copiedelement;
         copiedelement = rd_calloc(1,sizeof(*copiedelement));
         copiedelement->topic_partition = rd_kafka_topic_partition_copy(element->topic_partition);
         copiedelement->topic_partition->err = element->topic_partition->err;
@@ -3973,34 +3974,34 @@ rd_kafka_ListOffsetResultInfo_t *rd_kafka_ListOffsetResultInfo_copy(const rd_kaf
         return copiedelement;
 }
 /**
- * @brief Same as rd_kafka_ListOffsetResultInfo_copy() but suitable for
+ * @brief Same as rd_kafka_ListOffsetsResultInfo_copy() but suitable for
  *        rd_list_copy(). The \p opaque is ignored.
-*/
-void *rd_kafka_ListOffsetResultInfo_copy_opaque(const void *element, void *opaque) {
-        return rd_kafka_ListOffsetResultInfo_copy(element);
+ */
+void *rd_kafka_ListOffsetsResultInfo_copy_opaque(const void *element, void *opaque) {
+        return rd_kafka_ListOffsetsResultInfo_copy(element);
 }
 
 /**
- * @brief Returns the rd_kafka_topic_partition_t of the rd_kafka_ListOffsetResultInfo_t passed.
-*/
-const rd_kafka_topic_partition_t *rd_kafka_ListOffsetResultInfo_topic_partition(const rd_kafka_ListOffsetResultInfo_t *result_info){
+ * @brief Returns the topic partition of the passed \p result_info.
+ */
+const rd_kafka_topic_partition_t *rd_kafka_ListOffsetsResultInfo_topic_partition(const rd_kafka_ListOffsetsResultInfo_t *result_info){
     return result_info->topic_partition;
 }
 
 /**
- * @brief Returns the timestamp specified for the offset of the rd_kafka_ListOffsetResultInfo_t.
-*/
-int64_t rd_kafka_ListOffsetResultInfo_timestamp(const rd_kafka_ListOffsetResultInfo_t *result_info){
+ * @brief Returns the timestamp specified for the offset of the rd_kafka_ListOffsetsResultInfo_t.
+ */
+int64_t rd_kafka_ListOffsetsResultInfo_timestamp(const rd_kafka_ListOffsetsResultInfo_t *result_info){
     return result_info->timestamp;
 }
 
-void rd_kafka_ListOffsetResultInfo_destroy(rd_kafka_ListOffsetResultInfo_t *element){
+void rd_kafka_ListOffsetsResultInfo_destroy(rd_kafka_ListOffsetsResultInfo_t *element){
         rd_kafka_topic_partition_destroy(element->topic_partition);
         rd_free(element);
 }
 
-void rd_kafka_ListOffsetResultInfo_destroy_free(void *element){
-        rd_kafka_ListOffsetResultInfo_destroy(element);
+void rd_kafka_ListOffsetsResultInfo_destroy_free(void *element){
+        rd_kafka_ListOffsetsResultInfo_destroy(element);
 }
 
 /**
@@ -4008,7 +4009,7 @@ void rd_kafka_ListOffsetResultInfo_destroy_free(void *element){
  *        into the rko_fanout responsible for the ListOffsets request.
  * @param rko_fanout The rd_kafka_op_t corresponding to the whole original ListOffsets request.
  * @param rko_partial The rd_kafka_op_t corresponding to the leader specific ListOffset request after leaders querying.
-*/
+ */
 void rd_kafka_ListOffsets_response_merge(rd_kafka_op_t *rko_fanout,
                                       const rd_kafka_op_t *rko_partial){
         size_t partition_cnt;    
@@ -4021,9 +4022,9 @@ void rd_kafka_ListOffsets_response_merge(rd_kafka_op_t *rko_fanout,
         total_partitions = rd_list_cnt(&rko_fanout->rko_u.admin_request.fanout.results);
 
         for(i=0;i<partition_cnt;i++){
-                rd_kafka_ListOffsetResultInfo_t *element = rd_list_elem(&rko_partial->rko_u.admin_result.results,i);
+                rd_kafka_ListOffsetsResultInfo_t *element = rd_list_elem(&rko_partial->rko_u.admin_result.results,i);
                 for(j=0;j<total_partitions;j++){
-                        rd_kafka_ListOffsetResultInfo_t *result_element = rd_list_elem(&rko_fanout->rko_u.admin_request.fanout.results,j);
+                        rd_kafka_ListOffsetsResultInfo_t *result_element = rd_list_elem(&rko_fanout->rko_u.admin_request.fanout.results,j);
                         if((result_element->topic_partition->partition == element->topic_partition->partition) && (strcasecmp(element->topic_partition->topic,result_element->topic_partition->topic)==0)){
                                 result_element->timestamp = element->timestamp;
                                 result_element->topic_partition->err = element->topic_partition->err;
@@ -4041,10 +4042,10 @@ size_t rd_kafka_ListOffsets_result_get_count(const rd_kafka_ListOffsets_result_t
 }
 
 /**
- * Returns the array of pointers of rd_kafka_ListOffsetResultInfo_t given rd_kafka_ListOffsets_result_t and populates the size of the array.
+ * Returns the array of pointers of rd_kafka_ListOffsetsResultInfo_t given rd_kafka_ListOffsets_result_t and populates the size of the array.
 */
-rd_kafka_ListOffsetResultInfo_t **rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,size_t *cnt){
-        rd_kafka_ListOffsetResultInfo_t **result_infos;
+rd_kafka_ListOffsetsResultInfo_t **rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,size_t *cnt){
+        rd_kafka_ListOffsetsResultInfo_t **result_infos;
         size_t i;
         rd_kafka_op_type_t reqtype = result->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
         rd_assert(reqtype == RD_KAFKA_OP_LISTOFFSETS);
@@ -4071,10 +4072,10 @@ rd_kafka_ListOffsetsResponse_parse0(rd_kafka_op_t *rko_req,
 
         rko_result = rd_kafka_admin_result_new(rko_req);
         rd_list_init(&rko_result->rko_u.admin_result.results, rd_list_cnt(result_list),
-                     rd_kafka_ListOffsetResultInfo_destroy_free);
+                     rd_kafka_ListOffsetsResultInfo_destroy_free);
         for(i=0;i<rd_list_cnt(result_list);i++){
-                rd_kafka_ListOffsetResultInfo_t *element = rd_list_elem(result_list,i);
-                rd_list_add(&rko_result->rko_u.admin_result.results,rd_kafka_ListOffsetResultInfo_copy(element));
+                rd_kafka_ListOffsetsResultInfo_t *element = rd_list_elem(result_list,i);
+                rd_list_add(&rko_result->rko_u.admin_result.results,rd_kafka_ListOffsetsResultInfo_copy(element));
         }
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -4130,18 +4131,18 @@ rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
 
         rd_kafka_topic_partition_list_t *topic_partitions = rd_list_elem(&rko_fanout->rko_u.admin_request.args,0);
         size_t partition_cnt = topic_partitions->cnt;
-        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,partition_cnt,rd_kafka_ListOffsetResultInfo_destroy_free);
+        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,partition_cnt,rd_kafka_ListOffsetsResultInfo_destroy_free);
 
         // first make the result as 
         for(i=0;i<partition_cnt;i++){
                 rd_kafka_topic_partition_t *topic_partition = &topic_partitions->elems[i];
-                rd_kafka_ListOffsetResultInfo_t *result_element = rd_kafka_ListOffsetResultInfo_new(topic_partition->topic,topic_partition->partition);
+                rd_kafka_ListOffsetsResultInfo_t *result_element = rd_kafka_ListOffsetsResultInfo_new(topic_partition->topic,topic_partition->partition);
                 rd_list_add(&rko_fanout->rko_u.admin_request.fanout.results,result_element);
         }
         RD_KAFKA_TPLIST_FOREACH(rktpar, partitions) {
                 if (!rktpar->err)
                         continue;
-                rd_kafka_ListOffsetResultInfo_t *result_element = NULL;
+                rd_kafka_ListOffsetsResultInfo_t *result_element = NULL;
                 for(i=0;i<partition_cnt;i++){
                         result_element = rd_list_elem(&rko_fanout->rko_u.admin_request.fanout.results,i);
                         if(result_element->topic_partition->partition == rktpar->partition && strcasecmp(result_element->topic_partition->topic,rktpar->topic)==0){
@@ -4375,7 +4376,7 @@ void rd_kafka_DeleteRecords(rd_kafka_t *rk,
             rd_kafka_DeleteRecords_leaders_queried_cb, rko_fanout);
 }
 
-/*ListOffsets*/
+
 void rd_kafka_ListOffsets(rd_kafka_t *rk,
                           rd_kafka_topic_partition_list_t *topic_partitions,
                           const rd_kafka_AdminOptions_t *options,
@@ -4421,7 +4422,7 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
 
         static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
             rd_kafka_ListOffsets_response_merge,
-            rd_kafka_ListOffsetResultInfo_copy_opaque,
+            rd_kafka_ListOffsetsResultInfo_copy_opaque,
             rd_kafka_topic_partition_list_copy_opaque
         };
 

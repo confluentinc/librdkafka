@@ -5023,13 +5023,13 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
                 TEST_FAIL("Event Failed.\n");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
-                rd_kafka_ListOffsetResultInfo_t **result_infos;
+                rd_kafka_ListOffsetsResultInfo_t **result_infos;
                 size_t cnt;
                 size_t i;
                 result  = rd_kafka_event_ListOffsets_result(event);
                 result_infos = rd_kafka_ListOffsets_result_infos(result,&cnt);
                 for (i = 0; i < cnt; i++){
-                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetResultInfo_topic_partition(result_infos[i]);
+                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[i]);
                         TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 0),"Offset should be 0\n");
                 }
         }
@@ -5046,13 +5046,13 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
                 TEST_FAIL("Event Failed\n");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
-                rd_kafka_ListOffsetResultInfo_t **result_infos;
+                rd_kafka_ListOffsetsResultInfo_t **result_infos;
                 size_t cnt;
                 size_t i;
                 result  = rd_kafka_event_ListOffsets_result(event);
                 result_infos = rd_kafka_ListOffsets_result_infos(result,&cnt);
                 for (i = 0; i < cnt; i++){
-                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetResultInfo_topic_partition(result_infos[i]);
+                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[i]);
                         TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 3),"Offset should be 3\n");
                 }
         }
@@ -5070,13 +5070,13 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
                 TEST_FAIL("Event Failed\n");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
-                rd_kafka_ListOffsetResultInfo_t **result_infos;
+                rd_kafka_ListOffsetsResultInfo_t **result_infos;
                 size_t cnt;
                 size_t i;
                 result  = rd_kafka_event_ListOffsets_result(event);
                 result_infos = rd_kafka_ListOffsets_result_infos(result,&cnt);
                 for (i = 0; i < cnt; i++){
-                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetResultInfo_topic_partition(result_infos[i]);
+                        const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[i]);
                         TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 1),"Offset should be 1\n");
                 }
         }

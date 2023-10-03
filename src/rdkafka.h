@@ -1666,6 +1666,35 @@ RD_EXPORT int64_t rd_kafka_uuid_least_significant_bits(rd_kafka_uuid_t *uuid);
  */
 RD_EXPORT int64_t rd_kafka_uuid_most_significant_bits(rd_kafka_uuid_t *uuid);
 
+
+/**
+ * @brief Creates a new UUID.
+ *
+ * @param most_significant_bits most significant 64 bits of the 128 bits UUID.
+ * @param least_significant_bits least significant 64 bits of the 128 bits UUID.
+ *
+ * @return A newly allocated UUID.
+ * @remark Must be freed after use using rd_kafka_uuid_destroy()
+ */
+RD_EXPORT rd_kafka_uuid_t *rd_kafka_uuid_new(int64_t most_significant_bits, int64_t least_significant_bits);
+
+/**
+ * @brief Copies the given UUID.
+ *
+ * @param uuid UUID to be copied.
+ *
+ * @return A newly allocated copy of the provided UUID.
+ * @remark Must be freed after use using rd_kafka_uuid_destroy()
+ */
+RD_EXPORT rd_kafka_uuid_t *rd_kafka_uuid_copy(rd_kafka_uuid_t *uuid);
+
+/**
+ * @brief Destroy the provided uuid.
+ *
+ * @param uuid UUID
+ */
+RD_EXPORT void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid);
+
 /**@}*/
 
 

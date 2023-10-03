@@ -591,53 +591,6 @@ typedef struct rd_kafka_uuid_s {
 
 
 /**
- * Creates a new UUID.
- *
- * @return A newly allocated UUID.
- */
-static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
-        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t));
-        return uuid;
-}
-
-/**
- * Initialize given UUID to zero UUID.
- *
- * @param uuid UUID to initialize.
- */
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_uuid_t *uuid) {
-        memset(uuid, 0, sizeof(*uuid));
-}
-
-/**
- * Returns a newly allocated copy of the given UUID.
- *
- * @param uuid UUID to copy.
- * @return Copy of the provided UUID.
- *
- * @remark Dynamically allocated. Deallocate (free) after use.
- */
-static RD_INLINE RD_UNUSED rd_kafka_uuid_t *
-rd_kafka_uuid_copy(rd_kafka_uuid_t *uuid) {
-        rd_kafka_uuid_t *copy_uuid        = rd_kafka_uuid_new();
-        copy_uuid->most_significant_bits  = uuid->most_significant_bits;
-        copy_uuid->least_significant_bits = uuid->least_significant_bits;
-        if (*uuid->base64str)
-                memcpy(copy_uuid->base64str, uuid->base64str, 23);
-        return copy_uuid;
-}
-
-/**
- * @brief Destroy the provided uuid.
- *
- * @param uuid UUID
- */
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid) {
-        rd_free(uuid);
-}
-
-
-/**
  * @name Producer ID and Epoch for the Idempotent Producer
  * @{
  *

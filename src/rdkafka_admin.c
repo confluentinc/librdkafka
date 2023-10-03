@@ -3973,6 +3973,7 @@ rd_kafka_ListOffsetsResultInfo_t *rd_kafka_ListOffsetsResultInfo_copy(const rd_k
         copiedelement->timestamp = element->timestamp;
         return copiedelement;
 }
+
 /**
  * @brief Same as rd_kafka_ListOffsetsResultInfo_copy() but suitable for
  *        rd_list_copy(). The \p opaque is ignored.
@@ -4103,6 +4104,7 @@ rd_kafka_resp_err_t rd_kafka_ListOffsetsRequest0(rd_kafka_broker_t *rkb,
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+
 /**
  * @brief Call when leaders have been queried to progress the ListOffsets
  *        admin op to its next phase, sending ListOffsets to partition

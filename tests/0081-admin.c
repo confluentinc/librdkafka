@@ -5006,7 +5006,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
         
         if (rd_kafka_AdminOptions_set_request_timeout(options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))
                 || rd_kafka_AdminOptions_set_isolation_level(options, RD_KAFKA_ISOLATION_LEVEL_READ_COMMITTED, errstr, sizeof(errstr))) {
-                TEST_FAIL("Unable to set the options\n");
+                TEST_FAIL("Unable to set the options.");
         }
 
         rd_kafka_topic_partition_list_t *topic_partitions;
@@ -5020,7 +5020,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (!event  || rd_kafka_event_error(event)) {
-                TEST_FAIL("Event Failed.\n");
+                TEST_FAIL("Event Failed.");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
                 rd_kafka_ListOffsetsResultInfo_t **result_infos;
@@ -5030,7 +5030,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
                 result_infos = rd_kafka_ListOffsets_result_infos(result,&cnt);
                 for (i = 0; i < cnt; i++){
                         const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[i]);
-                        TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 0),"Offset should be 0\n");
+                        TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 0),"Offset should be 0.");
                 }
         }
 
@@ -5043,7 +5043,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
         if (!event  || rd_kafka_event_error(event)) {
-                TEST_FAIL("Event Failed\n");
+                TEST_FAIL("Event Failed.");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
                 rd_kafka_ListOffsetsResultInfo_t **result_infos;
@@ -5053,7 +5053,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
                 result_infos = rd_kafka_ListOffsets_result_infos(result,&cnt);
                 for (i = 0; i < cnt; i++){
                         const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[i]);
-                        TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 3),"Offset should be 3\n");
+                        TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 3),"Offset should be 3.");
                 }
         }
         rd_kafka_event_destroy(event);
@@ -5067,7 +5067,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
 
         if (!event || rd_kafka_event_error(event)) {
-                TEST_FAIL("Event Failed\n");
+                TEST_FAIL("Event Failed.");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
                 rd_kafka_ListOffsetsResultInfo_t **result_infos;
@@ -5077,7 +5077,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue){
                 result_infos = rd_kafka_ListOffsets_result_infos(result,&cnt);
                 for (i = 0; i < cnt; i++){
                         const rd_kafka_topic_partition_t *topic_partition = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[i]);
-                        TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 1),"Offset should be 1\n");
+                        TEST_ASSERT((topic_partition->err == 0) && (topic_partition->offset == 1),"Offset should be 1.");
                 }
         }
         rd_kafka_event_destroy(event);

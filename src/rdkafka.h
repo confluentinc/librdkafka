@@ -8837,6 +8837,7 @@ void rd_kafka_DeleteGroups(rd_kafka_t *rk,
                            rd_kafka_queue_t *rkqu);
 
 
+
 /*
  * DeleteGroups result type and methods
  */

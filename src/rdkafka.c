@@ -5034,9 +5034,10 @@ int rd_kafka_unittest(void) {
  *
  * @return A newly allocated UUID.
  */
-rd_kafka_uuid_t *rd_kafka_uuid_new(int64_t most_significant_bits, int64_t least_significant_bits) {
-        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t));
-        uuid->most_significant_bits = most_significant_bits;
+rd_kafka_uuid_t *rd_kafka_uuid_new(int64_t most_significant_bits,
+                                   int64_t least_significant_bits) {
+        rd_kafka_uuid_t *uuid        = rd_calloc(1, sizeof(rd_kafka_uuid_t));
+        uuid->most_significant_bits  = most_significant_bits;
         uuid->least_significant_bits = least_significant_bits;
         return uuid;
 }
@@ -5049,10 +5050,9 @@ rd_kafka_uuid_t *rd_kafka_uuid_new(int64_t most_significant_bits, int64_t least_
  *
  * @remark Dynamically allocated. Deallocate (free) after use.
  */
-rd_kafka_uuid_t *
-rd_kafka_uuid_copy(rd_kafka_uuid_t *uuid) {
-        rd_kafka_uuid_t *copy_uuid        = rd_kafka_uuid_new(uuid->most_significant_bits,
-                                                       uuid->least_significant_bits);
+rd_kafka_uuid_t *rd_kafka_uuid_copy(rd_kafka_uuid_t *uuid) {
+        rd_kafka_uuid_t *copy_uuid = rd_kafka_uuid_new(
+            uuid->most_significant_bits, uuid->least_significant_bits);
         if (*uuid->base64str)
                 memcpy(copy_uuid->base64str, uuid->base64str, 23);
         return copy_uuid;

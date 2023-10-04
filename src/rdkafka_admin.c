@@ -27,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rdkafka.h"
 #include "rdkafka_int.h"
 #include "rdkafka_admin.h"
 #include "rdkafka_request.h"

@@ -476,12 +476,10 @@ rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev) {
 
 const rd_kafka_ListOffsets_result_t *
 rd_kafka_event_ListOffsets_result(rd_kafka_event_t *rkev) {
-        if (!rkev ||
-            rkev->rko_evtype != RD_KAFKA_EVENT_LISTOFFSETS_RESULT)
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_LISTOFFSETS_RESULT)
                 return NULL;
         else
-                return (
-                    const rd_kafka_ListOffsets_result_t *)rkev;
+                return (const rd_kafka_ListOffsets_result_t *)rkev;
 }
 
 const rd_kafka_ListConsumerGroupOffsets_result_t *

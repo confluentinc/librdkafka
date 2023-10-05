@@ -319,7 +319,8 @@ error code set.
 
 The application should typically not attempt to retry producing the message
 on failure, but instead configure librdkafka to perform these retries
-using the `retries` and `retry.backoff.ms` configuration properties.
+using the `retries`, `retry.backoff.ms` and `retry.backoff.max.ms` 
+configuration properties.
 
 
 #### Error: Timed out in transmission queue
@@ -1926,7 +1927,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-412 - AdminAPI: adjust log levels                                    | 2.4.0                       | Not supported                                                                                 |
 | KIP-421 - Variables in client config files                               | 2.3.0                       | Not applicable (librdkafka, et.al, does not provide a config file interface, and shouldn't)   |
 | KIP-429 - Consumer: incremental rebalance protocol                       | 2.4.0                       | Supported                                                                                     |
-| KIP-430 - AdminAPI: return authorized operations in Describe.. responses | 2.3.0                       | Not supported                                                                                 |
+| KIP-430 - AdminAPI: return authorized operations in Describe.. responses | 2.3.0                       | Supported                                                                                     |
 | KIP-436 - Start time in stats                                            | 2.3.0                       | Supported                                                                                     |
 | KIP-447 - Producer scalability for EOS                                   | 2.5.0                       | Supported                                                                                     |
 | KIP-455 - AdminAPI: Replica assignment                                   | 2.4.0 (WIP)                 | Not supported                                                                                 |
@@ -1950,7 +1951,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-559 - Make the Kafka Protocol Friendlier with L7 Proxies             | 2.5.0                       | Not supported                                                                                 |
 | KIP-568 - Explicit rebalance triggering on the Consumer                  | 2.6.0                       | Not supported                                                                                 |
 | KIP-659 - Add metadata to DescribeConfigsResponse                        | 2.6.0                       | Not supported                                                                                 |
-| KIP-580 - Exponential backoff for Kafka clients                          | WIP                         | Partially supported                                                                           |
+| KIP-580 - Exponential backoff for Kafka clients                          | 3.7.0 (WIP)                 | supported                                                                           |
 | KIP-584 - Versioning scheme for features                                 | WIP                         | Not supported                                                                                 |
 | KIP-588 - Allow producers to recover gracefully from txn timeouts        | 2.8.0 (WIP)                 | Not supported                                                                                 |
 | KIP-601 - Configurable socket connection timeout                         | 2.7.0                       | Supported                                                                                     |

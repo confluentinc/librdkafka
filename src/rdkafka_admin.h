@@ -505,14 +505,8 @@ struct rd_kafka_ListOffsetsResultInfo_s {
 };
 
 rd_kafka_ListOffsetsResultInfo_t *
-rd_kafka_ListOffsetsResultInfo_new(const char *topic, int32_t partition);
-
-rd_kafka_ListOffsetsResultInfo_t *rd_kafka_ListOffsetsResultInfo_copy(
-    const rd_kafka_ListOffsetsResultInfo_t *element);
-
-void *rd_kafka_ListOffsetsResultInfo_copy_opaque(const void *src, void *opaque);
-
-void rd_kafka_ListOffsetsResultInfo_destroy_free(void *element);
+rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
+                                   rd_ts_t timestamp);
 /**@}*/
 
 /**

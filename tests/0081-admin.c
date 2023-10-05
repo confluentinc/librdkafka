@@ -5005,13 +5005,11 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue) {
         /* Set timeout (optional) */
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTOFFSETS);
 
-        if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)) ||
-            rd_kafka_AdminOptions_set_isolation_level(
-                options, RD_KAFKA_ISOLATION_LEVEL_READ_COMMITTED, errstr,
-                sizeof(errstr))) {
-                TEST_FAIL("Unable to set the options.");
-        }
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        TEST_CALL_ERROR__(rd_kafka_AdminOptions_set_isolation_level(
+            options, RD_KAFKA_ISOLATION_LEVEL_READ_COMMITTED));
 
         rd_kafka_topic_partition_list_t *topic_partitions;
         topic_partitions = rd_kafka_topic_partition_list_new(1);
@@ -5030,7 +5028,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue) {
                 TEST_FAIL("Event Failed.");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
-                rd_kafka_ListOffsetsResultInfo_t **result_infos;
+                const rd_kafka_ListOffsetsResultInfo_t **result_infos;
                 size_t cnt;
                 size_t i;
                 result       = rd_kafka_event_ListOffsets_result(event);
@@ -5059,7 +5057,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue) {
                 TEST_FAIL("Event Failed.");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
-                rd_kafka_ListOffsetsResultInfo_t **result_infos;
+                const rd_kafka_ListOffsetsResultInfo_t **result_infos;
                 size_t cnt;
                 size_t i;
                 result       = rd_kafka_event_ListOffsets_result(event);
@@ -5089,7 +5087,7 @@ static void do_test_ListOffsets(rd_kafka_t *rk, rd_kafka_queue_t *queue) {
                 TEST_FAIL("Event Failed.");
         } else {
                 const rd_kafka_ListOffsets_result_t *result;
-                rd_kafka_ListOffsetsResultInfo_t **result_infos;
+                const rd_kafka_ListOffsetsResultInfo_t **result_infos;
                 size_t cnt;
                 size_t i;
                 result       = rd_kafka_event_ListOffsets_result(event);

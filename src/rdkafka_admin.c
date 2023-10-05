@@ -1563,14 +1563,14 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
                                          &ibroker_id, errstr, errstr_size);
 }
 
-rd_kafka_resp_err_t
+rd_kafka_error_t *
 rd_kafka_AdminOptions_set_isolation_level(rd_kafka_AdminOptions_t *options,
-                                          rd_kafka_IsolationLevel_t value,
-                                          char *errstr,
-                                          size_t errstr_size) {
-        return rd_kafka_confval_set_type(&options->isolation_level,
-                                         RD_KAFKA_CONFVAL_INT, &value, errstr,
-                                         errstr_size);
+                                          rd_kafka_IsolationLevel_t value) {
+        char errstr[512];
+        rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+            &options->isolation_level, RD_KAFKA_CONFVAL_INT, &value, errstr,
+            sizeof(errstr));
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
 
 rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
@@ -3956,36 +3956,30 @@ err_parse:
  * returns the ListOffsetsResultInfo.
  */
 rd_kafka_ListOffsetsResultInfo_t *
-rd_kafka_ListOffsetsResultInfo_new(const char *topic, int32_t partition) {
-        rd_kafka_ListOffsetsResultInfo_t *element;
-        element = rd_calloc(1, sizeof(*element));
-        element->topic_partition =
-            rd_kafka_topic_partition_new(topic, partition);
-        return element;
+rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
+                                   rd_ts_t timestamp) {
+        rd_kafka_ListOffsetsResultInfo_t *result_info;
+        result_info                  = rd_calloc(1, sizeof(*result_info));
+        result_info->timestamp       = timestamp;
+        result_info->topic_partition = rd_kafka_topic_partition_copy(rktpar);
+        return result_info;
 }
 
 /**
  * @brief Copies the ListOffsetsResultInfo.
  */
-rd_kafka_ListOffsetsResultInfo_t *rd_kafka_ListOffsetsResultInfo_copy(
-    const rd_kafka_ListOffsetsResultInfo_t *element) {
-        rd_kafka_ListOffsetsResultInfo_t *copiedelement;
-        copiedelement = rd_calloc(1, sizeof(*copiedelement));
-        copiedelement->topic_partition =
-            rd_kafka_topic_partition_copy(element->topic_partition);
-        copiedelement->topic_partition->err = element->topic_partition->err;
-        copiedelement->topic_partition->offset =
-            element->topic_partition->offset;
-        copiedelement->timestamp = element->timestamp;
-        return copiedelement;
+static rd_kafka_ListOffsetsResultInfo_t *rd_kafka_ListOffsetsResultInfo_copy(
+    const rd_kafka_ListOffsetsResultInfo_t *result_info) {
+        return rd_kafka_ListOffsetsResultInfo_new(result_info->topic_partition,
+                                                  result_info->timestamp);
 }
 
 /**
  * @brief Same as rd_kafka_ListOffsetsResultInfo_copy() but suitable for
  *        rd_list_copy(). The \p opaque is ignored.
  */
-void *rd_kafka_ListOffsetsResultInfo_copy_opaque(const void *element,
-                                                 void *opaque) {
+static void *rd_kafka_ListOffsetsResultInfo_copy_opaque(const void *element,
+                                                        void *opaque) {
         return rd_kafka_ListOffsetsResultInfo_copy(element);
 }
 
@@ -4007,13 +4001,13 @@ int64_t rd_kafka_ListOffsetsResultInfo_timestamp(
         return result_info->timestamp;
 }
 
-void rd_kafka_ListOffsetsResultInfo_destroy(
+static void rd_kafka_ListOffsetsResultInfo_destroy(
     rd_kafka_ListOffsetsResultInfo_t *element) {
         rd_kafka_topic_partition_destroy(element->topic_partition);
         rd_free(element);
 }
 
-void rd_kafka_ListOffsetsResultInfo_destroy_free(void *element) {
+static void rd_kafka_ListOffsetsResultInfo_destroy_free(void *element) {
         rd_kafka_ListOffsetsResultInfo_destroy(element);
 }
 
@@ -4037,112 +4031,66 @@ void rd_kafka_ListOffsets_response_merge(rd_kafka_op_t *rko_fanout,
             rd_list_cnt(&rko_fanout->rko_u.admin_request.fanout.results);
 
         for (i = 0; i < partition_cnt; i++) {
-                rd_kafka_ListOffsetsResultInfo_t *element =
+                rd_kafka_ListOffsetsResultInfo_t *partial_result_info =
                     rd_list_elem(&rko_partial->rko_u.admin_result.results, i);
                 for (j = 0; j < total_partitions; j++) {
-                        rd_kafka_ListOffsetsResultInfo_t *result_element =
+                        rd_kafka_ListOffsetsResultInfo_t *result_info =
                             rd_list_elem(
                                 &rko_fanout->rko_u.admin_request.fanout.results,
                                 j);
-                        if ((result_element->topic_partition->partition ==
-                             element->topic_partition->partition) &&
-                            (strcasecmp(
-                                 element->topic_partition->topic,
-                                 result_element->topic_partition->topic) ==
-                             0)) {
-                                result_element->timestamp = element->timestamp;
-                                result_element->topic_partition->err =
-                                    element->topic_partition->err;
-                                result_element->topic_partition->offset =
-                                    element->topic_partition->offset;
+                        if (rd_kafka_topic_partition_cmp(
+                                result_info->topic_partition,
+                                partial_result_info->topic_partition) == 0) {
+                                result_info->timestamp =
+                                    partial_result_info->timestamp;
+                                rd_kafka_topic_partition_destroy(
+                                    result_info->topic_partition);
+                                result_info->topic_partition =
+                                    rd_kafka_topic_partition_copy(
+                                        partial_result_info->topic_partition);
                                 break;
                         }
                 }
         }
 }
 
-size_t rd_kafka_ListOffsets_result_get_count(
-    const rd_kafka_ListOffsets_result_t *result) {
-        rd_kafka_op_type_t reqtype =
-            result->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
-        rd_assert(reqtype == RD_KAFKA_OP_LISTOFFSETS);
-        return rd_list_cnt(&result->rko_u.admin_result.results);
-}
-
 /**
  * Returns the array of pointers of rd_kafka_ListOffsetsResultInfo_t given
  * rd_kafka_ListOffsets_result_t and populates the size of the array.
  */
-rd_kafka_ListOffsetsResultInfo_t **
+const rd_kafka_ListOffsetsResultInfo_t **
 rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,
-                                  size_t *cnt) {
-        rd_kafka_ListOffsetsResultInfo_t **result_infos;
-        size_t i;
-        rd_kafka_op_type_t reqtype =
-            result->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
-        rd_assert(reqtype == RD_KAFKA_OP_LISTOFFSETS);
-        *cnt         = rd_list_cnt(&result->rko_u.admin_result.results);
-        result_infos = rd_malloc((*cnt) * (sizeof(*result_infos)));
-        for (i = 0; i < *cnt; i++) {
-                result_infos[i] =
-                    rd_list_elem(&result->rko_u.admin_result.results, i);
-        }
-        return result_infos;
+                                  size_t *cntp) {
+        *cntp = rd_list_cnt(&result->rko_u.admin_result.results);
+        return (const rd_kafka_ListOffsetsResultInfo_t **)
+            result->rko_u.admin_result.results.rl_elems;
 }
 
 static rd_kafka_resp_err_t
-rd_kafka_ListOffsetsResponse_parse0(rd_kafka_op_t *rko_req,
-                                    rd_kafka_op_t **rko_resultp,
-                                    rd_kafka_buf_t *reply,
-                                    char *errstr,
-                                    size_t errstr_size) {
-        rd_list_t *result_list;
+rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
+                                   rd_kafka_op_t **rko_resultp,
+                                   rd_kafka_buf_t *reply,
+                                   char *errstr,
+                                   size_t errstr_size) {
+        rd_kafka_resp_err_t err;
+        rd_list_t *result_list =
+            rd_list_new(1, rd_kafka_ListOffsetsResultInfo_destroy_free);
         rd_kafka_op_t *rko_result;
-        int i;
-        result_list =
-            rd_kafka_ListOffsetsResponseParser(reply, errstr, errstr_size);
-        if (!result_list)
-                return reply->rkbuf_err;
+        err = rd_kafka_parse_ListOffsets(reply, NULL, result_list);
+        if (err) {
+                rd_snprintf(errstr, errstr_size,
+                            "Error parsing ListOffsets response: %s",
+                            rd_kafka_err2str(err));
+                return err;
+        }
 
         rko_result = rd_kafka_admin_result_new(rko_req);
-        rd_list_init(&rko_result->rko_u.admin_result.results,
-                     rd_list_cnt(result_list),
-                     rd_kafka_ListOffsetsResultInfo_destroy_free);
-        for (i = 0; i < rd_list_cnt(result_list); i++) {
-                rd_kafka_ListOffsetsResultInfo_t *element =
-                    rd_list_elem(result_list, i);
-                rd_list_add(&rko_result->rko_u.admin_result.results,
-                            rd_kafka_ListOffsetsResultInfo_copy(element));
-        }
+        rd_list_init_copy(&rko_result->rko_u.admin_result.results, result_list);
+        rd_list_copy_to(&rko_result->rko_u.admin_result.results, result_list,
+                        rd_kafka_ListOffsetsResultInfo_copy_opaque, NULL);
+        rd_list_destroy(result_list);
+
         *rko_resultp = rko_result;
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
-rd_kafka_resp_err_t rd_kafka_ListOffsetsRequest0(
-    rd_kafka_broker_t *rkb,
-    const rd_list_t *offsets /* rd_kafka_topic_partition_list_t*/,
-    rd_kafka_AdminOptions_t *options,
-    char *errstr,
-    size_t errstr_size,
-    rd_kafka_replyq_t replyq,
-    rd_kafka_resp_cb_t *resp_cb,
-    void *opaque) {
-        rd_kafka_topic_partition_list_t *topic_partitions;
-        rd_kafka_buf_t *rkbuf;
-        topic_partitions = rd_list_elem(offsets, 0);
-        rd_kafka_IsolationLevel_t isolation_level =
-            RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED;
-        if (options && options->isolation_level.u.INT.v)
-                isolation_level = options->isolation_level.u.INT.v;
-        rkbuf = rd_kafka_ListOffsetsRequestWriter(rkb, topic_partitions,
-                                                  isolation_level, replyq,
-                                                  errstr, errstr_size);
-        if (rkbuf)
-                rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb,
-                                               opaque);
-        else
-                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
-
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -4158,6 +4106,7 @@ rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
                                         rd_kafka_q_t *rkq,
                                         rd_kafka_op_t *reply) {
 
+        rd_kafka_resp_err_t err = reply->rko_err;
         const rd_list_t *leaders =
             reply->rko_u.leaders.leaders; /* Possibly NULL (on err) */
         rd_kafka_topic_partition_list_t *partitions =
@@ -4167,13 +4116,24 @@ rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
         const struct rd_kafka_partition_leader *leader;
         size_t i;
         static const struct rd_kafka_admin_worker_cbs cbs = {
-            rd_kafka_ListOffsetsRequest0,
-            rd_kafka_ListOffsetsResponse_parse0,
+            rd_kafka_ListOffsetsRequest_admin,
+            rd_kafka_ListOffsetsResponse_parse,
         };
 
         rd_assert((rko_fanout->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
                   RD_KAFKA_OP_ADMIN_FANOUT);
 
+        if (err) {
+                rd_kafka_admin_result_fail(
+                    rko_fanout, err, "Failed to query partition leaders: %s",
+                    err == RD_KAFKA_RESP_ERR__NOENT ? "No leaders found"
+                                                    : rd_kafka_err2str(err));
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        /* Create fanout results */
         rd_kafka_topic_partition_list_t *topic_partitions =
             rd_list_elem(&rko_fanout->rko_u.admin_request.args, 0);
         size_t partition_cnt = topic_partitions->cnt;
@@ -4181,16 +4141,21 @@ rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
                      partition_cnt,
                      rd_kafka_ListOffsetsResultInfo_destroy_free);
 
-        // first make the result as
         for (i = 0; i < partition_cnt; i++) {
                 rd_kafka_topic_partition_t *topic_partition =
                     &topic_partitions->elems[i];
                 rd_kafka_ListOffsetsResultInfo_t *result_element =
-                    rd_kafka_ListOffsetsResultInfo_new(
-                        topic_partition->topic, topic_partition->partition);
+                    rd_kafka_ListOffsetsResultInfo_new(topic_partition, -1);
+                rd_kafka_topic_partition_set_from_fetch_pos(
+                    result_element->topic_partition,
+                    RD_KAFKA_FETCH_POS(RD_KAFKA_OFFSET_INVALID, -1));
+                result_element->topic_partition->err =
+                    RD_KAFKA_RESP_ERR_NO_ERROR;
                 rd_list_add(&rko_fanout->rko_u.admin_request.fanout.results,
                             result_element);
         }
+
+        /* Set errors to corresponding result partitions */
         RD_KAFKA_TPLIST_FOREACH(rktpar, partitions) {
                 if (!rktpar->err)
                         continue;
@@ -4198,42 +4163,18 @@ rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
                 for (i = 0; i < partition_cnt; i++) {
                         result_element = rd_list_elem(
                             &rko_fanout->rko_u.admin_request.fanout.results, i);
-                        if (result_element->topic_partition->partition ==
-                                rktpar->partition &&
-                            strcasecmp(result_element->topic_partition->topic,
-                                       rktpar->topic) == 0) {
+                        if (rd_kafka_topic_partition_cmp(
+                                result_element->topic_partition, rktpar) == 0) {
                                 break;
                         }
                 }
-                result_element->topic_partition->err    = rktpar->err;
-                result_element->topic_partition->offset = -1;
-                result_element->timestamp               = -2;
+                result_element->topic_partition->err = rktpar->err;
         }
 
-        if (!leaders) {
-                rko_fanout->rko_u.admin_request.fanout.outstanding = 1;
-                rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
-                    rk, RD_KAFKA_OP_LISTOFFSETS,
-                    RD_KAFKA_EVENT_LISTOFFSETS_RESULT, &cbs,
-                    &rko_fanout->rko_u.admin_request.options, rk->rk_ops);
-
-                rko->rko_u.admin_request.fanout_parent = rko_fanout;
-
-                rd_list_init(&rko->rko_u.admin_request.args, 1,
-                             rd_kafka_topic_partition_list_destroy_free);
-                rd_kafka_topic_partition_list_t *dummy_partitions =
-                    rd_kafka_topic_partition_list_new(1);
-                rd_list_add(&rko->rko_u.admin_request.args, dummy_partitions);
-                /* Enqueue op for admin_worker() to transition to next state */
-                rd_kafka_q_enq(rk->rk_ops, rko);
-                return RD_KAFKA_OP_RES_HANDLED;
-        }
-
+        /* For each leader send a request for its partitions */
         rko_fanout->rko_u.admin_request.fanout.outstanding =
             rd_list_cnt(leaders);
 
-
-        /* For each leader send a request for its partitions */
         RD_LIST_FOREACH(leader, leaders, i) {
                 rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
                     rk, RD_KAFKA_OP_LISTOFFSETS,
@@ -4244,10 +4185,8 @@ rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
                 rko->rko_u.admin_request.broker_id = leader->rkb->rkb_nodeid;
 
                 rd_kafka_topic_partition_list_sort_by_topic(leader->partitions);
-
                 rd_list_init(&rko->rko_u.admin_request.args, 1,
                              rd_kafka_topic_partition_list_destroy_free);
-
                 rd_list_add(
                     &rko->rko_u.admin_request.args,
                     rd_kafka_topic_partition_list_copy(leader->partitions));
@@ -4441,64 +4380,49 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
         rd_kafka_op_t *rko_fanout;
         rd_kafka_topic_partition_list_t *copied_topic_partitions;
 
-        if (topic_partitions->cnt == 0) {
-                error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
-        }
-
-        if (topic_partitions->cnt > 1) {
-                rd_list_t *topic_partition_list =
-                    rd_list_new(topic_partitions->cnt,
-                                rd_kafka_topic_partition_destroy_free);
-                for (i = 0; i < topic_partitions->cnt; i++) {
-                        rd_list_add(topic_partition_list,
-                                    rd_kafka_topic_partition_copy(
-                                        &topic_partitions->elems[i]));
-                }
-                rd_list_sort(topic_partition_list,
-                             rd_kafka_topic_partition_cmp);
-                if (rd_list_find_duplicate(topic_partition_list,
-                                           rd_kafka_topic_partition_cmp)) {
-                        error_code = RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE;
-                }
-                rd_list_destroy(topic_partition_list);
-        }
-
-        for (i = 0; i < topic_partitions->cnt; i++) {
-                if (error_code != RD_KAFKA_RESP_ERR_NO_ERROR) {
-                        break;
-                }
-                rd_kafka_topic_partition_t *partition =
-                    &topic_partitions->elems[i];
-                if (partition->offset < 0) {
-                        switch (partition->offset) {
-                        case RD_KAFKA_OFFSET_SPEC_EARLIEST:
-                        case RD_KAFKA_OFFSET_SPEC_LATEST:
-                        case RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP:
-                                break;
-                        default:
-                                error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
-                                break;
-                        }
-                }
-        }
-
         static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
             rd_kafka_ListOffsets_response_merge,
             rd_kafka_ListOffsetsResultInfo_copy_opaque,
             rd_kafka_topic_partition_list_copy_opaque};
 
-        rd_assert(rkqu);
         rko_fanout = rd_kafka_admin_fanout_op_new(
             rk, RD_KAFKA_OP_LISTOFFSETS, RD_KAFKA_EVENT_LISTOFFSETS_RESULT,
             &fanout_cbs, options, rkqu->rkqu_q);
 
-        if (error_code) {
-                rd_kafka_admin_result_fail(rko_fanout, error_code, "%s",
-                                           rd_kafka_err2str(error_code));
-                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
-                                                     rd_true /*destroy*/);
-                return;
+        if (topic_partitions->cnt == 0) {
+                error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                goto err;
         }
+
+        rd_list_t *topic_partitions_sorted = rd_list_new(
+            topic_partitions->cnt, rd_kafka_topic_partition_destroy_free);
+        for (i = 0; i < topic_partitions->cnt; i++) {
+                rd_list_add(
+                    topic_partitions_sorted,
+                    rd_kafka_topic_partition_copy(&topic_partitions->elems[i]));
+        }
+        rd_list_sort(topic_partitions_sorted, rd_kafka_topic_partition_cmp);
+        if (rd_list_find_duplicate(topic_partitions_sorted,
+                                   rd_kafka_topic_partition_cmp)) {
+                error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        rd_list_destroy(topic_partitions_sorted);
+
+        if (error_code)
+                goto err;
+
+        for (i = 0; i < topic_partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *partition =
+                    &topic_partitions->elems[i];
+                if (partition->offset < RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP) {
+                        error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                        break;
+                }
+        }
+
+        if (error_code)
+                goto err;
+
         copied_topic_partitions =
             rd_kafka_topic_partition_list_copy(topic_partitions);
         rd_list_init(&rko_fanout->rko_u.admin_request.args, 1,
@@ -4513,6 +4437,11 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
             RD_KAFKA_REPLYQ(rk->rk_ops, 0),
             rd_kafka_ListOffsets_leaders_queried_cb, rko_fanout);
         return;
+err:
+        rd_kafka_admin_result_fail(rko_fanout, error_code, "%s",
+                                   rd_kafka_err2str(error_code));
+        rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                             rd_true /*destroy*/);
 }
 
 /**

@@ -948,6 +948,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request0(rd_kafka_broker_t *rkb,
 #define rd_kafka_buf_new_flexver_request(rkb, ApiKey, segcnt, size,            \
                                          is_flexver)                           \
         rd_kafka_buf_new_request0(rkb, ApiKey, segcnt, size, is_flexver)
+void rd_kafka_buf_upgrade_flexver_request(rd_kafka_buf_t *rkbuf);
 
 rd_kafka_buf_t *
 rd_kafka_buf_new_shadow(const void *ptr, size_t size, void (*free_cb)(void *));

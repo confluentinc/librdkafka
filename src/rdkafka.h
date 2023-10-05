@@ -7084,11 +7084,9 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
  * @brief Set Isolation Level to an allowed `rd_kafka_IsolationLevel_t` value.
  */
 RD_EXPORT
-rd_kafka_resp_err_t
+rd_kafka_error_t *
 rd_kafka_AdminOptions_set_isolation_level(rd_kafka_AdminOptions_t *options,
-                                          rd_kafka_IsolationLevel_t value,
-                                          char *errstr,
-                                          size_t errstr_size);
+                                          rd_kafka_IsolationLevel_t value);
 
 /**
  * @brief Set application opaque value that can be extracted from the
@@ -7181,9 +7179,9 @@ int64_t rd_kafka_ListOffsetsResultInfo_timestamp(
  * rd_kafka_ListOffsets_result_t and populates the size of the array.
  */
 RD_EXPORT
-rd_kafka_ListOffsetsResultInfo_t **
+const rd_kafka_ListOffsetsResultInfo_t **
 rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,
-                                  size_t *cnt);
+                                  size_t *cntp);
 
 /**
  * @brief List offsets for the specified \p topic_partitions.

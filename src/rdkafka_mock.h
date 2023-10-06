@@ -365,19 +365,23 @@ rd_kafka_mock_set_apiversion(rd_kafka_mock_cluster_t *mcluster,
                              int16_t MaxVersion);
 
 /**
- * @name Represents a request to the mock cluster along with a timestamp.
+ * @brief Start tracking RPC requests for this mock cluster.
+ * @sa rd_kafka_mock_get_requests to get the requests.
  */
-typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
-
-RD_EXPORT
-rd_kafka_mock_request_t *
-rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp);
-
 RD_EXPORT
 void rd_kafka_mock_start_request_tracking(rd_kafka_mock_cluster_t *mcluster);
 
+/**
+ * @brief Stop tracking RPC requests for this mock cluster.
+ *        Does not clear already tracked requests.
+ */
 RD_EXPORT
 void rd_kafka_mock_stop_request_tracking(rd_kafka_mock_cluster_t *mcluster);
+
+/**
+ * @name Represents a request to the mock cluster along with a timestamp.
+ */
+typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
 
 /**
  * @brief Destroy a rd_kafka_mock_request_t * and deallocate memory.
@@ -395,9 +399,9 @@ RD_EXPORT int32_t rd_kafka_mock_request_id(rd_kafka_mock_request_t *mreq);
 RD_EXPORT int16_t rd_kafka_mock_request_api_key(rd_kafka_mock_request_t *mreq);
 
 /**
- * @brief Get the timestamp at which \p mreq was sent.
+ * @brief Get the timestamp in micros at which \p mreq was sent.
  */
-RD_EXPORT rd_ts_t
+RD_EXPORT int64_t
 rd_kafka_mock_request_timestamp(rd_kafka_mock_request_t *mreq);
 
 /**
@@ -412,7 +416,8 @@ RD_EXPORT rd_kafka_mock_request_t **
 rd_kafka_mock_get_requests(rd_kafka_mock_cluster_t *mcluster, size_t *cntp);
 
 /**
- * @brief Clear the list of requests sent to this mock broker.
+ * @brief Clear the list of requests sent to this mock broker, in case request
+ *        tracking is/was turned on.
  */
 RD_EXPORT void rd_kafka_mock_clear_requests(rd_kafka_mock_cluster_t *mcluster);
 

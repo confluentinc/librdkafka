@@ -41,7 +41,11 @@
 #include "rdkafka_mock.h"
 #include <stdarg.h>
 
+typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
+
 static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster);
+static rd_kafka_mock_request_t *
+rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp);
 
 
 static rd_kafka_mock_broker_t *
@@ -2622,7 +2626,10 @@ struct rd_kafka_mock_request_s {
         rd_ts_t timestamp /**< Timestamp at which request was received */;
 };
 
-rd_kafka_mock_request_t *
+/**
+ * @brief Allocate and initialize a rd_kafka_mock_request_t *
+ */
+static rd_kafka_mock_request_t *
 rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp) {
         rd_kafka_mock_request_t *request;
         request            = rd_malloc(sizeof(*request));
@@ -2632,7 +2639,7 @@ rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp) {
         return request;
 }
 
-rd_kafka_mock_request_t *
+static rd_kafka_mock_request_t *
 rd_kafka_mock_request_copy(rd_kafka_mock_request_t *mrequest) {
         rd_kafka_mock_request_t *request;
         request            = rd_malloc(sizeof(*request));
@@ -2646,7 +2653,7 @@ void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *element) {
         rd_free(element);
 }
 
-void rd_kafka_mock_request_free(void *element) {
+static void rd_kafka_mock_request_free(void *element) {
         rd_kafka_mock_request_destroy(element);
 }
 

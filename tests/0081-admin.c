@@ -4952,10 +4952,13 @@ static void do_test_ListOffsets(const char *what,
         struct test_fixture_s {
                 int64_t query;
                 int64_t expected;
+                int min_broker_version;
         } test_fixtures[] = {
             {.query = RD_KAFKA_OFFSET_SPEC_EARLIEST, .expected = 0},
             {.query = RD_KAFKA_OFFSET_SPEC_LATEST, .expected = 3},
-            {.query = RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP, .expected = 1},
+            {.query              = RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP,
+             .expected           = 1,
+             .min_broker_version = TEST_BRKVER(3, 0, 0, 0)},
             {.query = basetimestamp + 50, .expected = 0},
             {.query = basetimestamp + 300, .expected = 1},
             {.query = basetimestamp + 150, .expected = 1},
@@ -5010,6 +5013,15 @@ static void do_test_ListOffsets(const char *what,
                 rd_bool_t retry = rd_true;
 
                 struct test_fixture_s test_fixture = test_fixtures[i];
+                if (test_fixture.min_broker_version &&
+                    test_broker_version < test_fixture.min_broker_version) {
+                        TEST_SAY("Skipping offset %" PRId64
+                                 ", as not supported\n",
+                                 test_fixture.query);
+                        continue;
+                }
+
+                TEST_SAY("Testing offset %" PRId64 "\n", test_fixture.query);
 
                 rd_kafka_topic_partition_list_t *topic_partitions_copy =
                     rd_kafka_topic_partition_list_copy(topic_partitions);

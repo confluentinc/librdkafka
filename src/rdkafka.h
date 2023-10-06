@@ -7153,8 +7153,8 @@ typedef enum rd_kafka_OffsetSpec_t {
 } rd_kafka_OffsetSpec_t;
 
 /**
- * Information returned from a ListOffsets call for a specific
- * `rd_kafka_topic_partition_t`.
+ * @brief Information returned from a ListOffsets call for a specific
+ *        `rd_kafka_topic_partition_t`.
  */
 typedef struct rd_kafka_ListOffsetsResultInfo_s
     rd_kafka_ListOffsetsResultInfo_t;
@@ -7168,15 +7168,15 @@ rd_kafka_ListOffsetsResultInfo_topic_partition(
     const rd_kafka_ListOffsetsResultInfo_t *result_info);
 
 /**
- * Returns the timestamp corresponding to the offset in \p result_info.
+ * @brief Returns the timestamp corresponding to the offset in \p result_info.
  */
 RD_EXPORT
 int64_t rd_kafka_ListOffsetsResultInfo_timestamp(
     const rd_kafka_ListOffsetsResultInfo_t *result_info);
 
 /**
- * Returns the array of pointers of rd_kafka_ListOffsetsResultInfo_t given
- * rd_kafka_ListOffsets_result_t and populates the size of the array.
+ * @brief Returns the array of ListOffsetsResultInfo in \p result
+ *        and populates the size of the array in \p cntp.
  */
 RD_EXPORT
 const rd_kafka_ListOffsetsResultInfo_t **
@@ -7188,8 +7188,14 @@ rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,
  *        This operation enables to find the beginning offset,
  *        end offset as well as the offset matching a timestamp in partitions
  *        or the offset with max timestamp.
+ *
  * @param rk Client instance.
- * @param topic_partitions topic_partition_list_t for the offsets to list.
+ * @param topic_partitions topic_partition_list_t with the partitions and
+ *                         offsets to list. Each topic partition offset can be
+ *                         a value of the `rd_kafka_OffsetSpec_t` enum or
+ *                         a non-negative value, representing a timestamp,
+ *                         to query for the first offset after the
+ *                         given timestamp.
  * @param options Optional admin options, or NULL for defaults.
  * @param rkqu Queue to emit result on.
  *

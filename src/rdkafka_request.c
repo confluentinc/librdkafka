@@ -543,7 +543,8 @@ rd_kafka_ListOffsetRequest_buf_new(rd_kafka_broker_t *rkb,
  * @brief Parses a ListOffsets reply.
  *
  * Returns the parsed offsets (and errors) in \p offsets which must have been
- * initialized by caller.
+ * initialized by caller. If \p result_info is passed instead,
+ * it's populated with rd_kafka_ListOffsetsResultInfo_t instances.
  *
  * Either \p offsets or \p result_info must be passed.
  * and the one that is passed is populated.
@@ -789,6 +790,11 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
 
+/**
+ * @brief Send ListOffsetsRequest for offsets contained in the first
+ *        element of  \p offsets, that is a rd_kafka_topic_partition_list_t.
+ *        AdminClient compatible request callback.
+ */
 rd_kafka_resp_err_t rd_kafka_ListOffsetsRequest_admin(
     rd_kafka_broker_t *rkb,
     const rd_list_t *offsets /* rd_kafka_topic_partition_list_t*/,

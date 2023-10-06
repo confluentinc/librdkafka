@@ -1708,7 +1708,8 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
                 rd_kafka_confval_disable(&options->match_consumer_group_states,
                                          "match_consumer_group_states");
 
-        if (options->for_api == RD_KAFKA_ADMIN_OP_LISTOFFSETS)
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_LISTOFFSETS)
                 rd_kafka_confval_init_int(&options->isolation_level,
                                           "isolation_level", 0, 1, 0);
         else
@@ -3953,7 +3954,7 @@ err_parse:
 
 /**
  * @brief Creates a ListOffsetsResultInfo with the topic and parition and
- * returns the ListOffsetsResultInfo.
+ *        returns the ListOffsetsResultInfo.
  */
 rd_kafka_ListOffsetsResultInfo_t *
 rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
@@ -3994,7 +3995,7 @@ rd_kafka_ListOffsetsResultInfo_topic_partition(
 
 /**
  * @brief Returns the timestamp specified for the offset of the
- * rd_kafka_ListOffsetsResultInfo_t.
+ *        rd_kafka_ListOffsetsResultInfo_t.
  */
 int64_t rd_kafka_ListOffsetsResultInfo_timestamp(
     const rd_kafka_ListOffsetsResultInfo_t *result_info) {
@@ -4013,11 +4014,12 @@ static void rd_kafka_ListOffsetsResultInfo_destroy_free(void *element) {
 
 /**
  * @brief Merges the response of the partial request made for ListOffsets via
- * the rko_partial into the rko_fanout responsible for the ListOffsets request.
+ *        the \p rko_partial into the \p rko_fanout responsible for the
+ *        ListOffsets request.
  * @param rko_fanout The rd_kafka_op_t corresponding to the whole original
- * ListOffsets request.
+ *                   ListOffsets request.
  * @param rko_partial The rd_kafka_op_t corresponding to the leader specific
- * ListOffset request after leaders querying.
+ *                    ListOffset request sent after leaders querying.
  */
 void rd_kafka_ListOffsets_response_merge(rd_kafka_op_t *rko_fanout,
                                          const rd_kafka_op_t *rko_partial) {
@@ -4055,8 +4057,8 @@ void rd_kafka_ListOffsets_response_merge(rd_kafka_op_t *rko_fanout,
 }
 
 /**
- * Returns the array of pointers of rd_kafka_ListOffsetsResultInfo_t given
- * rd_kafka_ListOffsets_result_t and populates the size of the array.
+ * @brief Returns the array of pointers of rd_kafka_ListOffsetsResultInfo_t
+ * given rd_kafka_ListOffsets_result_t and populates the size of the array.
  */
 const rd_kafka_ListOffsetsResultInfo_t **
 rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,
@@ -4066,6 +4068,10 @@ rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,
             result->rko_u.admin_result.results.rl_elems;
 }
 
+/**
+ * @brief Admin compatible API to parse the ListOffsetResponse buffer
+ *        provided in \p reply.
+ */
 static rd_kafka_resp_err_t
 rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
                                    rd_kafka_op_t **rko_resultp,
@@ -4098,8 +4104,6 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
  * @brief Call when leaders have been queried to progress the ListOffsets
  *        admin op to its next phase, sending ListOffsets to partition
  *        leaders.
- *
- * @param rko Reply op (RD_KAFKA_OP_LEADERS).
  */
 static rd_kafka_op_res_t
 rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
@@ -4202,8 +4206,6 @@ rd_kafka_ListOffsets_leaders_queried_cb(rd_kafka_t *rk,
  * @brief Call when leaders have been queried to progress the DeleteRecords
  *        admin op to its next phase, sending DeleteRecords to partition
  *        leaders.
- *
- * @param rko Reply op (RD_KAFKA_OP_LEADERS).
  */
 static rd_kafka_op_res_t
 rd_kafka_DeleteRecords_leaders_queried_cb(rd_kafka_t *rk,

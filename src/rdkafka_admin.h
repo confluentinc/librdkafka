@@ -314,6 +314,47 @@ struct rd_kafka_DeleteRecords_s {
 
 /**@}*/
 
+/**
+ * @name ListConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief ListConsumerGroupOffsets result
+ */
+struct rd_kafka_ListConsumerGroupOffsets_result_s {
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_ListConsumerGroupOffsets_s {
+        char *group_id; /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
+};
+
+/**@}*/
+
+/**
+ * @name AlterConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief AlterConsumerGroupOffsets result
+ */
+struct rd_kafka_AlterConsumerGroupOffsets_result_s {
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_AlterConsumerGroupOffsets_s {
+        char *group_id; /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
+};
+
+/**@}*/
 
 /**
  * @name DeleteConsumerGroupOffsets
@@ -334,6 +375,24 @@ struct rd_kafka_DeleteConsumerGroupOffsets_s {
                        *   the struct here. */
 };
 
+/**@}*/
+
+/**
+ * @name ListOffsets
+ * @{
+ */
+
+/**
+ * @struct ListOffsets result about a single partition
+ */
+struct rd_kafka_ListOffsetsResultInfo_s {
+        rd_kafka_topic_partition_t *topic_partition;
+        int64_t timestamp;
+};
+
+rd_kafka_ListOffsetsResultInfo_t *
+rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
+                                   rd_ts_t timestamp);
 /**@}*/
 
 /**
@@ -369,50 +428,6 @@ struct rd_kafka_AclBinding_s {
 struct rd_kafka_DeleteAcls_result_response_s {
         rd_kafka_error_t *error; /**< Response error object, or NULL */
         rd_list_t matching_acls; /**< Type (rd_kafka_AclBinding_t *) */
-};
-
-/**@}*/
-
-
-/**
- * @name AlterConsumerGroupOffsets
- * @{
- */
-
-/**
- * @brief AlterConsumerGroupOffsets result
- */
-struct rd_kafka_AlterConsumerGroupOffsets_result_s {
-        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
-};
-
-struct rd_kafka_AlterConsumerGroupOffsets_s {
-        char *group_id; /**< Points to data */
-        rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group id is allocated along with
-                       *   the struct here. */
-};
-
-/**@}*/
-
-
-/**
- * @name ListConsumerGroupOffsets
- * @{
- */
-
-/**
- * @brief ListConsumerGroupOffsets result
- */
-struct rd_kafka_ListConsumerGroupOffsets_result_s {
-        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
-};
-
-struct rd_kafka_ListConsumerGroupOffsets_s {
-        char *group_id; /**< Points to data */
-        rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group id is allocated along with
-                       *   the struct here. */
 };
 
 /**@}*/
@@ -499,14 +514,6 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_error_t *error;
 };
 
-struct rd_kafka_ListOffsetsResultInfo_s {
-        rd_kafka_topic_partition_t *topic_partition;
-        int64_t timestamp;
-};
-
-rd_kafka_ListOffsetsResultInfo_t *
-rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
-                                   rd_ts_t timestamp);
 /**@}*/
 
 /**

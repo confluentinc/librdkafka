@@ -7127,94 +7127,6 @@ typedef enum rd_kafka_AclOperation_t {
 
 /**@}*/
 
-
-/**
- * @name ListOffsets API
- * @brief Given a topic_partition list, provides the offset information.
- * @{
- */
-
-/**
- * @enum rd_kafka_OffsetSpec_t
- * @brief Allows to specify the desired offsets when using ListOffsets.
- */
-typedef enum rd_kafka_OffsetSpec_t {
-        /* Used to retrieve the offset with the largest timestamp of a partition
-         * as message timestamps can be specified client side this may not match
-         * the log end offset returned by SPEC_LATEST.
-         */
-        RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP = -3,
-        /* Used to retrieve the offset with the earliest timestamp of a
-           partition. */
-        RD_KAFKA_OFFSET_SPEC_EARLIEST = -2,
-        /* Used to retrieve the offset with the latest timestamp of a partition.
-         */
-        RD_KAFKA_OFFSET_SPEC_LATEST = -1,
-} rd_kafka_OffsetSpec_t;
-
-/**
- * @brief Information returned from a ListOffsets call for a specific
- *        `rd_kafka_topic_partition_t`.
- */
-typedef struct rd_kafka_ListOffsetsResultInfo_s
-    rd_kafka_ListOffsetsResultInfo_t;
-
-/**
- * @brief Returns the topic partition of the passed \p result_info.
- */
-RD_EXPORT
-const rd_kafka_topic_partition_t *
-rd_kafka_ListOffsetsResultInfo_topic_partition(
-    const rd_kafka_ListOffsetsResultInfo_t *result_info);
-
-/**
- * @brief Returns the timestamp corresponding to the offset in \p result_info.
- */
-RD_EXPORT
-int64_t rd_kafka_ListOffsetsResultInfo_timestamp(
-    const rd_kafka_ListOffsetsResultInfo_t *result_info);
-
-/**
- * @brief Returns the array of ListOffsetsResultInfo in \p result
- *        and populates the size of the array in \p cntp.
- */
-RD_EXPORT
-const rd_kafka_ListOffsetsResultInfo_t **
-rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,
-                                  size_t *cntp);
-
-/**
- * @brief List offsets for the specified \p topic_partitions.
- *        This operation enables to find the beginning offset,
- *        end offset as well as the offset matching a timestamp in partitions
- *        or the offset with max timestamp.
- *
- * @param rk Client instance.
- * @param topic_partitions topic_partition_list_t with the partitions and
- *                         offsets to list. Each topic partition offset can be
- *                         a value of the `rd_kafka_OffsetSpec_t` enum or
- *                         a non-negative value, representing a timestamp,
- *                         to query for the first offset after the
- *                         given timestamp.
- * @param options Optional admin options, or NULL for defaults.
- * @param rkqu Queue to emit result on.
- *
- * Supported admin options:
- *  - rd_kafka_AdminOptions_set_isolation_level() - default  \c
- * RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED
- *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
- *
- * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_LISTOFFSETS_RESULT
- */
-RD_EXPORT
-void rd_kafka_ListOffsets(rd_kafka_t *rk,
-                          rd_kafka_topic_partition_list_t *topic_partitions,
-                          const rd_kafka_AdminOptions_t *options,
-                          rd_kafka_queue_t *rkqu);
-
-/**@}*/
-
 /**
  * @name Admin API - Topics
  * @brief Topic related operations.
@@ -9155,6 +9067,92 @@ rd_kafka_DeleteConsumerGroupOffsets_result_groups(
 
 /**@}*/
 
+/**
+ * @name Admin API - ListOffsets
+ * @brief Given a topic_partition list, provides the offset information.
+ * @{
+ */
+
+/**
+ * @enum rd_kafka_OffsetSpec_t
+ * @brief Allows to specify the desired offsets when using ListOffsets.
+ */
+typedef enum rd_kafka_OffsetSpec_t {
+        /* Used to retrieve the offset with the largest timestamp of a partition
+         * as message timestamps can be specified client side this may not match
+         * the log end offset returned by SPEC_LATEST.
+         */
+        RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP = -3,
+        /* Used to retrieve the offset with the earliest timestamp of a
+           partition. */
+        RD_KAFKA_OFFSET_SPEC_EARLIEST = -2,
+        /* Used to retrieve the offset with the latest timestamp of a partition.
+         */
+        RD_KAFKA_OFFSET_SPEC_LATEST = -1,
+} rd_kafka_OffsetSpec_t;
+
+/**
+ * @brief Information returned from a ListOffsets call for a specific
+ *        `rd_kafka_topic_partition_t`.
+ */
+typedef struct rd_kafka_ListOffsetsResultInfo_s
+    rd_kafka_ListOffsetsResultInfo_t;
+
+/**
+ * @brief Returns the topic partition of the passed \p result_info.
+ */
+RD_EXPORT
+const rd_kafka_topic_partition_t *
+rd_kafka_ListOffsetsResultInfo_topic_partition(
+    const rd_kafka_ListOffsetsResultInfo_t *result_info);
+
+/**
+ * @brief Returns the timestamp corresponding to the offset in \p result_info.
+ */
+RD_EXPORT
+int64_t rd_kafka_ListOffsetsResultInfo_timestamp(
+    const rd_kafka_ListOffsetsResultInfo_t *result_info);
+
+/**
+ * @brief Returns the array of ListOffsetsResultInfo in \p result
+ *        and populates the size of the array in \p cntp.
+ */
+RD_EXPORT
+const rd_kafka_ListOffsetsResultInfo_t **
+rd_kafka_ListOffsets_result_infos(const rd_kafka_ListOffsets_result_t *result,
+                                  size_t *cntp);
+
+/**
+ * @brief List offsets for the specified \p topic_partitions.
+ *        This operation enables to find the beginning offset,
+ *        end offset as well as the offset matching a timestamp in partitions
+ *        or the offset with max timestamp.
+ *
+ * @param rk Client instance.
+ * @param topic_partitions topic_partition_list_t with the partitions and
+ *                         offsets to list. Each topic partition offset can be
+ *                         a value of the `rd_kafka_OffsetSpec_t` enum or
+ *                         a non-negative value, representing a timestamp,
+ *                         to query for the first offset after the
+ *                         given timestamp.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_isolation_level() - default  \c
+ * RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_LISTOFFSETS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_ListOffsets(rd_kafka_t *rk,
+                          rd_kafka_topic_partition_list_t *topic_partitions,
+                          const rd_kafka_AdminOptions_t *options,
+                          rd_kafka_queue_t *rkqu);
+
+/**@}*/
 
 /**
  * @name Admin API - User SCRAM credentials

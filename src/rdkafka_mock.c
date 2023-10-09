@@ -45,7 +45,7 @@ typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
 
 static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster);
 static rd_kafka_mock_request_t *
-rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp);
+rd_kafka_mock_request_new(int32_t id, int16_t api_key, int64_t timestamp_us);
 
 
 static rd_kafka_mock_broker_t *
@@ -2630,12 +2630,12 @@ struct rd_kafka_mock_request_s {
  * @brief Allocate and initialize a rd_kafka_mock_request_t *
  */
 static rd_kafka_mock_request_t *
-rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp) {
+rd_kafka_mock_request_new(int32_t id, int16_t api_key, int64_t timestamp_us) {
         rd_kafka_mock_request_t *request;
         request            = rd_malloc(sizeof(*request));
         request->id        = id;
         request->api_key   = api_key;
-        request->timestamp = timestamp;
+        request->timestamp = timestamp_us;
         return request;
 }
 

@@ -526,7 +526,7 @@ struct rd_kafka_TopicPartitionInfo_s {
  */
 struct rd_kafka_TopicDescription_s {
         char *topic;               /**< Topic name */
-        rd_kafka_uuid_t *topic_id; /**< Topic Id */
+        rd_kafka_Uuid_t *topic_id; /**< Topic Id */
         int partition_cnt;         /**< Number of partitions in \p partitions*/
         rd_bool_t is_internal;     /**< Is the topic is internal to Kafka? */
         rd_kafka_TopicPartitionInfo_t **partitions; /**< Partitions */

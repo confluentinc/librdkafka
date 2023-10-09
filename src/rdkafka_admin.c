@@ -8020,7 +8020,7 @@ rd_kafka_TopicPartitionInfo_destroy(rd_kafka_TopicPartitionInfo_t *pinfo) {
  */
 static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
     const char *topic,
-    rd_kafka_uuid_t *topic_id,
+    rd_kafka_Uuid_t *topic_id,
     const struct rd_kafka_metadata_partition *partitions,
     int partition_cnt,
     const struct rd_kafka_metadata_broker *brokers_sorted,
@@ -8034,7 +8034,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
         int i;
         topicdesc                = rd_calloc(1, sizeof(*topicdesc));
         topicdesc->topic         = rd_strdup(topic);
-        topicdesc->topic_id      = rd_kafka_uuid_copy(topic_id);
+        topicdesc->topic_id      = rd_kafka_Uuid_copy(topic_id);
         topicdesc->partition_cnt = partition_cnt;
         topicdesc->is_internal   = is_internal;
         if (error)
@@ -8066,7 +8066,7 @@ static rd_kafka_TopicDescription_t *rd_kafka_TopicDescription_new(
  */
 static rd_kafka_TopicDescription_t *
 rd_kafka_TopicDescription_new_error(const char *topic,
-                                    rd_kafka_uuid_t *topic_id,
+                                    rd_kafka_Uuid_t *topic_id,
                                     rd_kafka_error_t *error) {
         return rd_kafka_TopicDescription_new(topic, topic_id, NULL, 0, NULL,
                                              NULL, 0, NULL, 0, rd_false, error);
@@ -8079,7 +8079,7 @@ rd_kafka_TopicDescription_destroy(rd_kafka_TopicDescription_t *topicdesc) {
         RD_IF_FREE(topicdesc->topic, rd_free);
         RD_IF_FREE(topicdesc->error, rd_kafka_error_destroy);
         RD_IF_FREE(topicdesc->authorized_operations, rd_free);
-        RD_IF_FREE(topicdesc->topic_id, rd_kafka_uuid_destroy);
+        RD_IF_FREE(topicdesc->topic_id, rd_kafka_Uuid_destroy);
         for (i = 0; i < topicdesc->partition_cnt; i++)
                 rd_kafka_TopicPartitionInfo_destroy(topicdesc->partitions[i]);
         rd_free(topicdesc->partitions);
@@ -8146,7 +8146,7 @@ rd_kafka_TopicDescription_error(const rd_kafka_TopicDescription_t *topicdesc) {
         return topicdesc->error;
 }
 
-rd_kafka_uuid_t *rd_kafka_TopicDescription_topic_id(
+rd_kafka_Uuid_t *rd_kafka_TopicDescription_topic_id(
     const rd_kafka_TopicDescription_t *topicdesc) {
         return topicdesc->topic_id;
 }

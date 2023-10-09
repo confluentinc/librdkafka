@@ -5034,9 +5034,9 @@ int rd_kafka_unittest(void) {
  *
  * @return A newly allocated UUID.
  */
-rd_kafka_uuid_t *rd_kafka_uuid_new(int64_t most_significant_bits,
+rd_kafka_Uuid_t *rd_kafka_Uuid_new(int64_t most_significant_bits,
                                    int64_t least_significant_bits) {
-        rd_kafka_uuid_t *uuid        = rd_calloc(1, sizeof(rd_kafka_uuid_t));
+        rd_kafka_Uuid_t *uuid        = rd_calloc(1, sizeof(rd_kafka_Uuid_t));
         uuid->most_significant_bits  = most_significant_bits;
         uuid->least_significant_bits = least_significant_bits;
         return uuid;
@@ -5050,8 +5050,8 @@ rd_kafka_uuid_t *rd_kafka_uuid_new(int64_t most_significant_bits,
  *
  * @remark Dynamically allocated. Deallocate (free) after use.
  */
-rd_kafka_uuid_t *rd_kafka_uuid_copy(rd_kafka_uuid_t *uuid) {
-        rd_kafka_uuid_t *copy_uuid = rd_kafka_uuid_new(
+rd_kafka_Uuid_t *rd_kafka_Uuid_copy(rd_kafka_Uuid_t *uuid) {
+        rd_kafka_Uuid_t *copy_uuid = rd_kafka_Uuid_new(
             uuid->most_significant_bits, uuid->least_significant_bits);
         if (*uuid->base64str)
                 memcpy(copy_uuid->base64str, uuid->base64str, 23);
@@ -5063,11 +5063,11 @@ rd_kafka_uuid_t *rd_kafka_uuid_copy(rd_kafka_uuid_t *uuid) {
  *
  * @param uuid UUID
  */
-void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid) {
+void rd_kafka_Uuid_destroy(rd_kafka_Uuid_t *uuid) {
         rd_free(uuid);
 }
 
-char *rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
+char *rd_kafka_Uuid_base64str(rd_kafka_Uuid_t *uuid) {
         if (*uuid->base64str)
                 return uuid->base64str;
 
@@ -5093,11 +5093,11 @@ char *rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
         return uuid->base64str;
 }
 
-int64_t rd_kafka_uuid_least_significant_bits(rd_kafka_uuid_t *uuid) {
+int64_t rd_kafka_Uuid_least_significant_bits(rd_kafka_Uuid_t *uuid) {
         return uuid->least_significant_bits;
 }
 
 
-int64_t rd_kafka_uuid_most_significant_bits(rd_kafka_uuid_t *uuid) {
+int64_t rd_kafka_Uuid_most_significant_bits(rd_kafka_Uuid_t *uuid) {
         return uuid->most_significant_bits;
 }

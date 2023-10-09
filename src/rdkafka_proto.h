@@ -572,16 +572,16 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 /**
  * @struct Struct representing UUID protocol primitive type.
  */
-typedef struct rd_kafka_uuid_s {
+typedef struct rd_kafka_Uuid_s {
         int64_t
             most_significant_bits; /**< Most significant 64 bits for the UUID */
         int64_t least_significant_bits; /**< Least significant 64 bits for the
                                            UUID */
         char base64str[23]; /**< base64 encoding for the uuid. By default, it is
                                lazy loaded. Use function
-                               `rd_kafka_uuid_base64str()` as a getter for this
+                               `rd_kafka_Uuid_base64str()` as a getter for this
                                field. */
-} rd_kafka_uuid_t;
+} rd_kafka_Uuid_t;
 
 #define RD_KAFKA_UUID_ZERO                                                     \
         { 0, 0, "" }

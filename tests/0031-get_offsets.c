@@ -38,7 +38,7 @@
 /**
  * Verify that rd_kafka_(query|get)_watermark_offsets() works.
  */
-void do_test_query_then_get_offsets(void) {
+static void do_test_query_then_get_offsets(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         const int msgcnt  = test_quick ? 10 : 100;
         rd_kafka_t *rk;

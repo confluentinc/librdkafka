@@ -3544,6 +3544,7 @@ rd_kafka_resp_err_t rd_kafka_query_watermark_offsets(rd_kafka_t *rk,
         struct rd_kafka_partition_leader *leader;
         rd_list_t leaders;
         rd_kafka_resp_err_t err;
+        int tmout;
 
         partitions = rd_kafka_topic_partition_list_new(1);
         rktpar =
@@ -3591,14 +3592,17 @@ rd_kafka_resp_err_t rd_kafka_query_watermark_offsets(rd_kafka_t *rk,
 
         /* Wait for reply (or timeout) */
         while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS &&
-               rd_kafka_q_serve(rkq, 100, 0, RD_KAFKA_Q_CB_CALLBACK,
+               !rd_timeout_expired((tmout = rd_timeout_remains(ts_end))) &&
+               rd_kafka_q_serve(rkq, tmout, 0, RD_KAFKA_Q_CB_CALLBACK,
                                 rd_kafka_poll_cb,
                                 NULL) != RD_KAFKA_OP_RES_YIELD)
                 ;
 
         rd_kafka_q_destroy_owner(rkq);
 
-        if (state.err)
+        if (state.err && rd_timeout_expired((rd_timeout_remains(ts_end))))
+                return RD_KAFKA_RESP_ERR__TIMED_OUT;
+        else if (state.err)
                 return state.err;
         else if (state.offidx != 2)
                 return RD_KAFKA_RESP_ERR__FAIL;

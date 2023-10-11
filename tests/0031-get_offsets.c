@@ -38,7 +38,9 @@
 /**
  * Verify that rd_kafka_(query|get)_watermark_offsets() works.
  */
-static void do_test_query_then_get_offsets(void) {
+
+
+int main_0031_get_offsets(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         const int msgcnt  = test_quick ? 10 : 100;
         rd_kafka_t *rk;
@@ -48,11 +50,6 @@ static void do_test_query_then_get_offsets(void) {
         rd_kafka_resp_err_t err;
         test_timing_t t_qry, t_get;
         uint64_t testid;
-
-        if (test_quick)
-                SUB_TEST_QUICK();
-        else
-                SUB_TEST();
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, 0, msgcnt);
@@ -119,14 +116,14 @@ static void do_test_query_then_get_offsets(void) {
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
 
-        SUB_TEST_PASS();
+        return 0;
 }
 
 /*
  * Verify that rd_kafka_query_watermark_offsets times out in case we're unable
  * to fetch offsets within the timeout (Issue #2588).
  */
-static void do_test_query_offsets_timeout_mock(void) {
+int main_0031_get_offsets_mock(int argc, char **argv) {
         int64_t qry_low, qry_high;
         rd_kafka_resp_err_t err;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
@@ -136,11 +133,9 @@ static void do_test_query_offsets_timeout_mock(void) {
         const char *bootstraps;
         const int timeout_ms = 1000;
 
-        SUB_TEST_QUICK();
-
         if (test_needs_auth()) {
-                SUB_TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return;
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
+                return 0;
         }
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -166,12 +161,5 @@ static void do_test_query_offsets_timeout_mock(void) {
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(mcluster);
 
-        SUB_TEST_PASS();
-}
-
-
-int main_0031_get_offsets(int argc, char **argv) {
-        do_test_query_then_get_offsets();
-        do_test_query_offsets_timeout_mock();
         return 0;
 }

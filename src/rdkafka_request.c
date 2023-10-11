@@ -494,7 +494,7 @@ typedef struct rd_kafka_ListOffsetRequest_parameters_s {
 static rd_kafka_ListOffsetRequest_parameters_t
 rd_kafka_ListOffsetRequest_parameters_make(
     rd_kafka_topic_partition_list_t *rktpars,
-    rd_kafka_isolation_level_t isolation_level,
+    rd_kafka_IsolationLevel_t isolation_level,
     char *errstr,
     size_t errstr_size) {
         rd_kafka_ListOffsetRequest_parameters_t params = RD_ZERO_INIT;
@@ -508,7 +508,7 @@ rd_kafka_ListOffsetRequest_parameters_make(
 static rd_kafka_ListOffsetRequest_parameters_t *
 rd_kafka_ListOffsetRequest_parameters_new(
     rd_kafka_topic_partition_list_t *rktpars,
-    rd_kafka_isolation_level_t isolation_level,
+    rd_kafka_IsolationLevel_t isolation_level,
     char *errstr,
     size_t errstr_size) {
         rd_kafka_ListOffsetRequest_parameters_t *params =
@@ -777,7 +777,7 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_topic_partition_list_sort_by_topic(rktpars);
 
         params = rd_kafka_ListOffsetRequest_parameters_new(
-            rktpars, rkb->rkb_rk->rk_conf.isolation_level, NULL, 0);
+            rktpars, (rd_kafka_IsolationLevel_t)rkb->rkb_rk->rk_conf.isolation_level, NULL, 0);
 
         rkbuf = rd_kafka_ListOffsetRequest_buf_new(rkb, partitions);
 

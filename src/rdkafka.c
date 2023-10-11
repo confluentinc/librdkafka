@@ -5050,7 +5050,7 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_new(int64_t most_significant_bits,
  *
  * @remark Dynamically allocated. Deallocate (free) after use.
  */
-rd_kafka_Uuid_t *rd_kafka_Uuid_copy(rd_kafka_Uuid_t *uuid) {
+rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
         rd_kafka_Uuid_t *copy_uuid = rd_kafka_Uuid_new(
             uuid->most_significant_bits, uuid->least_significant_bits);
         if (*uuid->base64str)
@@ -5067,7 +5067,7 @@ void rd_kafka_Uuid_destroy(rd_kafka_Uuid_t *uuid) {
         rd_free(uuid);
 }
 
-char *rd_kafka_Uuid_base64str(rd_kafka_Uuid_t *uuid) {
+const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
         if (*uuid->base64str)
                 return uuid->base64str;
 
@@ -5087,17 +5087,17 @@ char *rd_kafka_Uuid_base64str(rd_kafka_Uuid_t *uuid) {
         if (!out_base64_str)
                 return NULL;
 
-        rd_strlcpy(uuid->base64str, out_base64_str,
+        rd_strlcpy((char *) uuid->base64str, out_base64_str,
                    23 /* Removing extra ('=') padding */);
         rd_free(out_base64_str);
         return uuid->base64str;
 }
 
-int64_t rd_kafka_Uuid_least_significant_bits(rd_kafka_Uuid_t *uuid) {
+int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid) {
         return uuid->least_significant_bits;
 }
 
 
-int64_t rd_kafka_Uuid_most_significant_bits(rd_kafka_Uuid_t *uuid) {
+int64_t rd_kafka_Uuid_most_significant_bits(const rd_kafka_Uuid_t *uuid) {
         return uuid->most_significant_bits;
 }

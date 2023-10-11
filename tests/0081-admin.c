@@ -3169,7 +3169,7 @@ static void do_test_DescribeTopics(const char *what,
         const rd_kafka_DescribeTopics_result_t *res;
         const rd_kafka_TopicDescription_t **result_topics;
         const rd_kafka_TopicPartitionInfo_t **partitions;
-        rd_kafka_Uuid_t *topic_id;
+        const rd_kafka_Uuid_t *topic_id;
         size_t partitions_cnt;
         size_t result_topics_cnt;
         char errstr[128];

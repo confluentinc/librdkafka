@@ -1645,7 +1645,7 @@ rd_kafka_message_leader_epoch(const rd_kafka_message_t *rkmessage);
  * @return base64 encoded string for the given UUID or NULL in case of some
  *         issue with the conversion or the conversion is not supported.
  */
-RD_EXPORT char *rd_kafka_Uuid_base64str(rd_kafka_Uuid_t *uuid);
+RD_EXPORT const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid);
 
 /**
  * @brief Gets least significant 64 bits for the given UUID.
@@ -1654,7 +1654,7 @@ RD_EXPORT char *rd_kafka_Uuid_base64str(rd_kafka_Uuid_t *uuid);
  *
  * @return least significant 64 bits for the given UUID.
  */
-RD_EXPORT int64_t rd_kafka_Uuid_least_significant_bits(rd_kafka_Uuid_t *uuid);
+RD_EXPORT int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid);
 
 
 /**
@@ -1664,7 +1664,7 @@ RD_EXPORT int64_t rd_kafka_Uuid_least_significant_bits(rd_kafka_Uuid_t *uuid);
  *
  * @return most significant 64 bits for the given UUID.
  */
-RD_EXPORT int64_t rd_kafka_Uuid_most_significant_bits(rd_kafka_Uuid_t *uuid);
+RD_EXPORT int64_t rd_kafka_Uuid_most_significant_bits(const rd_kafka_Uuid_t *uuid);
 
 
 /**
@@ -1687,7 +1687,7 @@ RD_EXPORT rd_kafka_Uuid_t *rd_kafka_Uuid_new(int64_t most_significant_bits,
  * @return A newly allocated copy of the provided UUID.
  * @remark Must be freed after use using rd_kafka_Uuid_destroy()
  */
-RD_EXPORT rd_kafka_Uuid_t *rd_kafka_Uuid_copy(rd_kafka_Uuid_t *uuid);
+RD_EXPORT rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid);
 
 /**
  * @brief Destroy the provided uuid.
@@ -8249,7 +8249,7 @@ rd_kafka_TopicDescription_name(const rd_kafka_TopicDescription_t *topicdesc);
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p topicdesc object.
  */
-RD_EXPORT rd_kafka_Uuid_t *rd_kafka_TopicDescription_topic_id(
+RD_EXPORT const rd_kafka_Uuid_t *rd_kafka_TopicDescription_topic_id(
     const rd_kafka_TopicDescription_t *topicdesc);
 
 /**

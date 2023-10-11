@@ -34,7 +34,7 @@ librdkafka v2.3.0 is a feature release:
  * Fix to ensure max.poll.interval.ms is reset when rd_kafka_poll is called with
    consume_cb (#4431).
  * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
- * Fix `rd_kafka_query_watermark_offsets` hanging forever (#4460).
+ * Fix `rd_kafka_query_watermark_offsets` continuing beyond timeout expiry (#4460).
 
 
 ## Upgrade considerations

@@ -5087,7 +5087,7 @@ const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
         if (!out_base64_str)
                 return NULL;
 
-        rd_strlcpy((char *) uuid->base64str, out_base64_str,
+        rd_strlcpy((char *)uuid->base64str, out_base64_str,
                    23 /* Removing extra ('=') padding */);
         rd_free(out_base64_str);
         return uuid->base64str;

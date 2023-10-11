@@ -204,8 +204,9 @@ static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
         size_t authorized_operations_cnt;
         const rd_kafka_TopicPartitionInfo_t **partitions;
         size_t partition_cnt;
-        const rd_kafka_Uuid_t *topic_id = rd_kafka_TopicDescription_topic_id(topic);
-        const char *topic_id_str        = rd_kafka_Uuid_base64str(topic_id);
+        const rd_kafka_Uuid_t *topic_id =
+            rd_kafka_TopicDescription_topic_id(topic);
+        const char *topic_id_str = rd_kafka_Uuid_base64str(topic_id);
 
         if (rd_kafka_error_code(error)) {
                 printf("Topic: %s (Topic Id: %s) has error[%" PRId32 "]: %s\n",

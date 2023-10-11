@@ -32,15 +32,14 @@
 #include <openssl/ssl.h>
 #else
 
-# define conv_bin2ascii(a, table)       ((table)[(a)&0x3f])
+#define conv_bin2ascii(a, table) ((table)[(a)&0x3f])
 
 static const unsigned char data_bin2ascii[65] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static int base64_encoding_conversion(unsigned char *out,
                                       const unsigned char *in,
-                                      int dlen)
-{
+                                      int dlen) {
         int i, ret = 0;
         unsigned long l;
 
@@ -59,7 +58,9 @@ static int base64_encoding_conversion(unsigned char *out,
 
                         *(out++) = conv_bin2ascii(l >> 18L, data_bin2ascii);
                         *(out++) = conv_bin2ascii(l >> 12L, data_bin2ascii);
-                        *(out++) = (i == 1) ? '=' : conv_bin2ascii(l >> 6L, data_bin2ascii);
+                        *(out++) =
+                            (i == 1) ? '='
+                                     : conv_bin2ascii(l >> 6L, data_bin2ascii);
                         *(out++) = '=';
                 }
                 ret += 4;
@@ -96,8 +97,8 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
         out->size = EVP_EncodeBlock((unsigned char *)out->ptr,
                                     (unsigned char *)in->ptr, (int)in->size);
 #else
-        out->size = base64_encoding_conversion((unsigned char *)out->ptr,
-                                               (unsigned char *)in->ptr, (int)in->size);
+        out->size = base64_encoding_conversion(
+            (unsigned char *)out->ptr, (unsigned char *)in->ptr, (int)in->size);
 #endif
 
         rd_assert(out->size < max_len);

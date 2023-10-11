@@ -1654,7 +1654,8 @@ RD_EXPORT const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid);
  *
  * @return least significant 64 bits for the given UUID.
  */
-RD_EXPORT int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid);
+RD_EXPORT int64_t
+rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid);
 
 
 /**
@@ -1664,7 +1665,8 @@ RD_EXPORT int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uu
  *
  * @return most significant 64 bits for the given UUID.
  */
-RD_EXPORT int64_t rd_kafka_Uuid_most_significant_bits(const rd_kafka_Uuid_t *uuid);
+RD_EXPORT int64_t
+rd_kafka_Uuid_most_significant_bits(const rd_kafka_Uuid_t *uuid);
 
 
 /**

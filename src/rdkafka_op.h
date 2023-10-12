@@ -530,6 +530,9 @@ struct rd_kafka_op_s {
                         char *errstr; /**< Error string, if rko_err
                                        *   is set, else NULL. */
 
+                        /** Result cb for this op */
+                        void (*result_cb)(rd_kafka_op_t *);
+
                         rd_list_t results; /**< Type depends on request type:
                                             *
                                             * (rd_kafka_topic_result_t *):

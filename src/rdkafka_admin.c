@@ -428,6 +428,8 @@ static RD_UNUSED RD_FORMAT(printf, 3, 4) void rd_kafka_admin_result_set_err(
  */
 static RD_INLINE void rd_kafka_admin_result_enq(rd_kafka_op_t *rko_req,
                                                 rd_kafka_op_t *rko_result) {
+        if (rko_req->rko_u.admin_result.result_cb)
+                rko_req->rko_u.admin_result.result_cb(rko_result);
         rd_kafka_replyq_enq(&rko_req->rko_u.admin_request.replyq, rko_result,
                             rko_req->rko_u.admin_request.replyq.version);
 }
@@ -658,6 +660,12 @@ rd_kafka_admin_request_op_new(rd_kafka_t *rk,
 
         rko->rko_u.admin_request.state = RD_KAFKA_ADMIN_STATE_INIT;
         return rko;
+}
+
+static void
+rd_kafka_admin_request_op_result_cb_set(rd_kafka_op_t *op,
+                                        void (*result_cb)(rd_kafka_op_t *)) {
+        op->rko_u.admin_result.result_cb = result_cb;
 }
 
 
@@ -1428,8 +1436,7 @@ static rd_kafka_op_res_t rd_kafka_admin_fanout_worker(rd_kafka_t *rk,
                         NULL);
 
         /* Enqueue result on application queue, we're done. */
-        rd_kafka_replyq_enq(&rko_fanout->rko_u.admin_request.replyq, rko_result,
-                            rko_fanout->rko_u.admin_request.replyq.version);
+        rd_kafka_admin_result_enq(rko_fanout, rko_result);
 
         /* FALLTHRU */
         if (rko_fanout->rko_u.admin_request.fanout.outstanding == 0)
@@ -4021,8 +4028,9 @@ static void rd_kafka_ListOffsetsResultInfo_destroy_free(void *element) {
  * @param rko_partial The rd_kafka_op_t corresponding to the leader specific
  *                    ListOffset request sent after leaders querying.
  */
-void rd_kafka_ListOffsets_response_merge(rd_kafka_op_t *rko_fanout,
-                                         const rd_kafka_op_t *rko_partial) {
+static void
+rd_kafka_ListOffsets_response_merge(rd_kafka_op_t *rko_fanout,
+                                    const rd_kafka_op_t *rko_partial) {
         size_t partition_cnt;
         size_t total_partitions;
         size_t i, j;
@@ -4078,16 +4086,15 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
                                    rd_kafka_buf_t *reply,
                                    char *errstr,
                                    size_t errstr_size) {
-        rd_kafka_resp_err_t err;
         rd_list_t *result_list =
             rd_list_new(1, rd_kafka_ListOffsetsResultInfo_destroy_free);
         rd_kafka_op_t *rko_result;
-        err = rd_kafka_parse_ListOffsets(reply, NULL, result_list);
-        if (err) {
+        rd_kafka_parse_ListOffsets(reply, NULL, result_list);
+        if (reply->rkbuf_err) {
                 rd_snprintf(errstr, errstr_size,
                             "Error parsing ListOffsets response: %s",
-                            rd_kafka_err2str(err));
-                return err;
+                            rd_kafka_err2str(reply->rkbuf_err));
+                return reply->rkbuf_err;
         }
 
         rko_result = rd_kafka_admin_result_new(rko_req);
@@ -4098,6 +4105,53 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
 
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Should the received error code cause a metadata refresh?
+ */
+static rd_bool_t rd_kafka_admin_result_err_refresh(rd_kafka_resp_err_t err) {
+        switch (err) {
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
+        case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+                return rd_true;
+        default:
+                return rd_false;
+        }
+}
+
+/**
+ * @brief ListOffsets result handler for internal side effects.
+ */
+static void rd_kafka_ListOffsets_handle_result(rd_kafka_op_t *rko_result) {
+        rd_kafka_topic_partition_list_t *rktpars;
+        rd_kafka_ListOffsetsResultInfo_t *result_info;
+        rd_kafka_t *rk;
+        rd_kafka_resp_err_t err, rktpar_err;
+        rd_kafka_topic_partition_t *rktpar;
+        size_t i;
+
+        err = rko_result->rko_err;
+        if (rd_list_empty(&rko_result->rko_u.admin_result.args) ||
+            rd_list_empty(&rko_result->rko_u.admin_result.results))
+                return;
+
+        rk      = rko_result->rko_rk;
+        rktpars = rd_list_elem(&rko_result->rko_u.admin_result.args, 0);
+        rd_kafka_wrlock(rk);
+        i = 0;
+        RD_KAFKA_TPLIST_FOREACH(rktpar, rktpars) {
+                result_info =
+                    rd_list_elem(&rko_result->rko_u.admin_result.results, i);
+                rktpar_err = err ? err : result_info->topic_partition->err;
+
+                if (rd_kafka_admin_result_err_refresh(rktpar_err)) {
+                        rd_kafka_metadata_cache_delete_by_name(rk,
+                                                               rktpar->topic);
+                }
+                i++;
+        }
+        rd_kafka_wrunlock(rk);
 }
 
 /**
@@ -4390,6 +4444,9 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
         rko_fanout = rd_kafka_admin_fanout_op_new(
             rk, RD_KAFKA_OP_LISTOFFSETS, RD_KAFKA_EVENT_LISTOFFSETS_RESULT,
             &fanout_cbs, options, rkqu->rkqu_q);
+
+        rd_kafka_admin_request_op_result_cb_set(
+            rko_fanout, rd_kafka_ListOffsets_handle_result);
 
         if (topic_partitions->cnt == 0) {
                 error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;

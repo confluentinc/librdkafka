@@ -763,11 +763,13 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
 
 /**
  * @brief Send ListOffsetsRequest for partitions in \p partitions.
+ *        Set absolute timeout \p timeout_ms if >= 0.
  */
 void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_topic_partition_list_t *partitions,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
+                                 int timeout_ms,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_topic_partition_list_t *rktpars;
@@ -777,9 +779,14 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_topic_partition_list_sort_by_topic(rktpars);
 
         params = rd_kafka_ListOffsetRequest_parameters_new(
-            rktpars, (rd_kafka_IsolationLevel_t)rkb->rkb_rk->rk_conf.isolation_level, NULL, 0);
+            rktpars,
+            (rd_kafka_IsolationLevel_t)rkb->rkb_rk->rk_conf.isolation_level,
+            NULL, 0);
 
         rkbuf = rd_kafka_ListOffsetRequest_buf_new(rkb, partitions);
+
+        if (timeout_ms >= 0)
+                rd_kafka_buf_set_abs_timeout(rkbuf, timeout_ms, 0);
 
         /* Postpone creating the request contents until time to send,
          * at which time the ApiVersion is known. */

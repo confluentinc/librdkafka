@@ -115,6 +115,7 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_topic_partition_list_t *offsets,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
+                                 int timeout_ms,
                                  void *opaque);
 
 rd_kafka_resp_err_t

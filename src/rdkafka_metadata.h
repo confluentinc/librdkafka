@@ -268,6 +268,7 @@ struct rd_kafka_metadata_cache {
 
 
 
+int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic);
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
 int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
 void rd_kafka_metadata_cache_topic_update(

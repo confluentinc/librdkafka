@@ -32,6 +32,7 @@ librdkafka v2.3.0 is a feature release:
    consume_cb (#4431).
  * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
  * Fix `rd_kafka_query_watermark_offsets` continuing beyond timeout expiry (#4460).
+ * Add support for managing Transactional ID and Delegation token resource types.
 
 
 ## Upgrade considerations

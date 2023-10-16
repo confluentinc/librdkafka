@@ -32,6 +32,7 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h" /* for Kafka driver */
+#include "../src/rdkafka_proto.h"
 
 
 /**
@@ -114,6 +115,51 @@ int main_0031_get_offsets(int argc, char **argv) {
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
+
+        return 0;
+}
+
+/*
+ * Verify that rd_kafka_query_watermark_offsets times out in case we're unable
+ * to fetch offsets within the timeout (Issue #2588).
+ */
+int main_0031_get_offsets_mock(int argc, char **argv) {
+        int64_t qry_low, qry_high;
+        rd_kafka_resp_err_t err;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const char *bootstraps;
+        const int timeout_ms = 1000;
+
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
+                return 0;
+        }
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ListOffsets, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            (int)(timeout_ms * 1.2));
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+
+        err = rd_kafka_query_watermark_offsets(rk, topic, 0, &qry_low,
+                                               &qry_high, timeout_ms);
+
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Querying watermark offsets should fail with %s when RTT > "
+                    "timeout, instead got %s",
+                    rd_kafka_err2name(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2name(err));
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
 
         return 0;
 }

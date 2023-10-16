@@ -13,7 +13,7 @@ librdkafka v2.3.0 is a feature release:
  * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):
    Return authorized operations in Describe Responses.
    (#4240, @jainruchir).
- * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for  
+ * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for
    retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
    maximum backoff, with 20% jitter(#4422).
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
@@ -34,6 +34,7 @@ librdkafka v2.3.0 is a feature release:
  * Fix to ensure max.poll.interval.ms is reset when rd_kafka_poll is called with
    consume_cb (#4431).
  * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
+ * Fix `rd_kafka_query_watermark_offsets` continuing beyond timeout expiry (#4460).
 
 
 ## Upgrade considerations
@@ -42,7 +43,7 @@ librdkafka v2.3.0 is a feature release:
    If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
    To change this behaviour make sure that `retry.backoff.ms` is always less than `retry.backoff.max.ms`.
    If equal then the backoff will be linear instead of exponential.
-   
+
  * `topic.metadata.refresh.fast.interval.ms`:
    If it is set greater than `retry.backoff.max.ms` which has the default value of 1000 ms then it is assumes the value of `retry.backoff.max.ms`.
    To change this behaviour make sure that `topic.metadata.refresh.fast.interval.ms` is always less than `retry.backoff.max.ms`.
@@ -56,6 +57,9 @@ librdkafka v2.3.0 is a feature release:
  * An assertion failed with insufficient buffer size when allocating
    rack information on 32bit architectures.
    Solved by aligning all allocations to the maximum allowed word size (#4449).
+ * The timeout for `rd_kafka_query_watermark_offsets` was not checked after
+   making the necessary ListOffsets requests, and thus, it never timed out in
+   case of broker/network issues. Fixed by checking timeout expiry (#4460).
 
 ### Idempotent producer fixes
 

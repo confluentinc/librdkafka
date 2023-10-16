@@ -134,6 +134,7 @@ _TEST_DECL(0028_long_topicnames);
 _TEST_DECL(0029_assign_offset);
 _TEST_DECL(0030_offset_commit);
 _TEST_DECL(0031_get_offsets);
+_TEST_DECL(0031_get_offsets_mock);
 _TEST_DECL(0033_regex_subscribe);
 _TEST_DECL(0033_regex_subscribe_local);
 _TEST_DECL(0034_offset_reset);
@@ -334,6 +335,7 @@ struct test tests[] = {
           /* Loops over committed() until timeout */
           _THRES(.ucpu = 10.0, .scpu = 5.0)),
     _TEST(0031_get_offsets, 0),
+    _TEST(0031_get_offsets_mock, TEST_F_LOCAL),
     _TEST(0033_regex_subscribe, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0033_regex_subscribe_local, TEST_F_LOCAL),
     _TEST(0034_offset_reset, 0),

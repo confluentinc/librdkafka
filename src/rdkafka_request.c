@@ -2475,7 +2475,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         if (topic_cnt > 0) {
                 char *topic;
                 int i;
-                rd_kafka_uuid_t zero_uuid = RD_KAFKA_UUID_ZERO;
+                rd_kafka_Uuid_t zero_uuid = RD_KAFKA_UUID_ZERO;
 
                 /* Maintain a copy of the topics list so we can purge
                  * hints from the metadata cache on error. */

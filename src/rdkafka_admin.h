@@ -547,9 +547,10 @@ struct rd_kafka_TopicPartitionInfo_s {
  * @struct DescribeTopics result
  */
 struct rd_kafka_TopicDescription_s {
-        char *topic;           /**< Topic name */
-        int partition_cnt;     /**< Number of partitions in \p partitions*/
-        rd_bool_t is_internal; /**< Is the topic is internal to Kafka? */
+        char *topic;              /**< Topic name */
+        rd_kafka_Uuid_t topic_id; /**< Topic Id */
+        int partition_cnt;        /**< Number of partitions in \p partitions*/
+        rd_bool_t is_internal;    /**< Is the topic is internal to Kafka? */
         rd_kafka_TopicPartitionInfo_t **partitions; /**< Partitions */
         rd_kafka_error_t *error;       /**< Topic error reported by broker */
         int authorized_operations_cnt; /**< Count of operations allowed for

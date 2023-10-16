@@ -3169,6 +3169,7 @@ static void do_test_DescribeTopics(const char *what,
         const rd_kafka_DescribeTopics_result_t *res;
         const rd_kafka_TopicDescription_t **result_topics;
         const rd_kafka_TopicPartitionInfo_t **partitions;
+        const rd_kafka_Uuid_t *topic_id;
         size_t partitions_cnt;
         size_t result_topics_cnt;
         char errstr[128];
@@ -3260,6 +3261,10 @@ static void do_test_DescribeTopics(const char *what,
                            topic_names[0]) == 0,
                     "Expected topic name %s, got %s", topic_names[0],
                     rd_kafka_TopicDescription_name(result_topics[0]));
+
+        topic_id = rd_kafka_TopicDescription_topic_id(result_topics[0]);
+
+        TEST_ASSERT(topic_id, "Expected Topic Id to present.");
 
         partitions = rd_kafka_TopicDescription_partitions(result_topics[0],
                                                           &partitions_cnt);

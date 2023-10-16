@@ -54,7 +54,7 @@ typedef struct rd_kafka_metadata_topic_internal_s {
          *  same count as metadata.topics[i].partition_cnt.
          *  Sorted by Partition Id. */
         rd_kafka_metadata_partition_internal_t *partitions;
-        rd_kafka_uuid_t topic_id;
+        rd_kafka_Uuid_t topic_id;
         int32_t topic_authorized_operations; /**< ACL operations allowed
                                               * for topic, -1 if not
                                               * supported by broker */

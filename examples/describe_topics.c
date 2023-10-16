@@ -198,17 +198,19 @@ print_partition_info(const rd_kafka_TopicPartitionInfo_t *partition) {
  */
 static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
         size_t j;
-        const rd_kafka_error_t *error;
-        const char *topic_name = rd_kafka_TopicDescription_name(topic);
-        error                  = rd_kafka_TopicDescription_error(topic);
+        const char *topic_name        = rd_kafka_TopicDescription_name(topic);
+        const rd_kafka_error_t *error = rd_kafka_TopicDescription_error(topic);
         const rd_kafka_AclOperation_t *authorized_operations;
         size_t authorized_operations_cnt;
         const rd_kafka_TopicPartitionInfo_t **partitions;
         size_t partition_cnt;
+        const rd_kafka_Uuid_t *topic_id =
+            rd_kafka_TopicDescription_topic_id(topic);
+        const char *topic_id_str = rd_kafka_Uuid_base64str(topic_id);
 
         if (rd_kafka_error_code(error)) {
-                printf("Topic: %s has error[%" PRId32 "]: %s\n", topic_name,
-                       rd_kafka_error_code(error),
+                printf("Topic: %s (Topic Id: %s) has error[%" PRId32 "]: %s\n",
+                       topic_name, topic_id_str, rd_kafka_error_code(error),
                        rd_kafka_error_string(error));
                 return;
         }
@@ -217,9 +219,9 @@ static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
             topic, &authorized_operations_cnt);
 
         printf(
-            "Topic: %s succeeded, has %d topic authorized operations "
+            "Topic: %s (Topic Id: %s) succeeded, has %ld authorized operations "
             "allowed, they are:\n",
-            topic_name, (int)authorized_operations_cnt);
+            topic_name, topic_id_str, authorized_operations_cnt);
 
         for (j = 0; j < authorized_operations_cnt; j++)
                 printf("\t%s operation is allowed\n",

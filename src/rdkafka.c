@@ -5040,3 +5040,77 @@ int rd_kafka_errno(void) {
 int rd_kafka_unittest(void) {
         return rd_unittest();
 }
+
+
+/**
+ * Creates a new UUID.
+ *
+ * @return A newly allocated UUID.
+ */
+rd_kafka_Uuid_t *rd_kafka_Uuid_new(int64_t most_significant_bits,
+                                   int64_t least_significant_bits) {
+        rd_kafka_Uuid_t *uuid        = rd_calloc(1, sizeof(rd_kafka_Uuid_t));
+        uuid->most_significant_bits  = most_significant_bits;
+        uuid->least_significant_bits = least_significant_bits;
+        return uuid;
+}
+
+/**
+ * Returns a newly allocated copy of the given UUID.
+ *
+ * @param uuid UUID to copy.
+ * @return Copy of the provided UUID.
+ *
+ * @remark Dynamically allocated. Deallocate (free) after use.
+ */
+rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
+        rd_kafka_Uuid_t *copy_uuid = rd_kafka_Uuid_new(
+            uuid->most_significant_bits, uuid->least_significant_bits);
+        if (*uuid->base64str)
+                memcpy(copy_uuid->base64str, uuid->base64str, 23);
+        return copy_uuid;
+}
+
+/**
+ * @brief Destroy the provided uuid.
+ *
+ * @param uuid UUID
+ */
+void rd_kafka_Uuid_destroy(rd_kafka_Uuid_t *uuid) {
+        rd_free(uuid);
+}
+
+const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
+        if (*uuid->base64str)
+                return uuid->base64str;
+
+        rd_chariov_t in_base64;
+        char *out_base64_str;
+        char *uuid_bytes;
+        uint64_t input_uuid[2];
+
+        input_uuid[0]  = htobe64(uuid->most_significant_bits);
+        input_uuid[1]  = htobe64(uuid->least_significant_bits);
+        uuid_bytes     = (char *)input_uuid;
+        in_base64.ptr  = uuid_bytes;
+        in_base64.size = sizeof(uuid->most_significant_bits) +
+                         sizeof(uuid->least_significant_bits);
+
+        out_base64_str = rd_base64_encode_str(&in_base64);
+        if (!out_base64_str)
+                return NULL;
+
+        rd_strlcpy((char *)uuid->base64str, out_base64_str,
+                   23 /* Removing extra ('=') padding */);
+        rd_free(out_base64_str);
+        return uuid->base64str;
+}
+
+int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid) {
+        return uuid->least_significant_bits;
+}
+
+
+int64_t rd_kafka_Uuid_most_significant_bits(const rd_kafka_Uuid_t *uuid) {
+        return uuid->most_significant_bits;
+}

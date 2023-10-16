@@ -1454,7 +1454,7 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
         } while (0)
 
 static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
-                                              rd_kafka_uuid_t *uuid) {
+                                              rd_kafka_Uuid_t *uuid) {
         rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
         rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
 }

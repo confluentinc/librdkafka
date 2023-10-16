@@ -5011,6 +5011,7 @@ static void do_test_ListOffsets(const char *what,
 
         for (i = 0; i < RD_ARRAY_SIZE(test_fixtures); i++) {
                 rd_bool_t retry = rd_true;
+                rd_kafka_topic_partition_list_t *topic_partitions_copy;
 
                 struct test_fixture_s test_fixture = test_fixtures[i];
                 if (test_fixture.min_broker_version &&
@@ -5023,7 +5024,7 @@ static void do_test_ListOffsets(const char *what,
 
                 TEST_SAY("Testing offset %" PRId64 "\n", test_fixture.query);
 
-                rd_kafka_topic_partition_list_t *topic_partitions_copy =
+                topic_partitions_copy =
                     rd_kafka_topic_partition_list_copy(topic_partitions);
 
                 /* Set OffsetSpec */
@@ -5041,42 +5042,39 @@ static void do_test_ListOffsets(const char *what,
 
                         err = rd_kafka_event_error(event);
                         if (err == RD_KAFKA_RESP_ERR__NOENT) {
+                                rd_kafka_event_destroy(event);
                                 /* Still looking for the leader */
                                 rd_usleep(100000, 0);
+                                continue;
                         } else if (err) {
                                 TEST_FAIL("Failed with error: %s",
                                           rd_kafka_err2name(err));
-                        } else {
-                                const rd_kafka_ListOffsets_result_t *result;
-                                const rd_kafka_ListOffsetsResultInfo_t *
-                                    *result_infos;
-                                size_t cnt;
-                                size_t j;
-                                result =
-                                    rd_kafka_event_ListOffsets_result(event);
-                                result_infos =
-                                    rd_kafka_ListOffsets_result_infos(result,
-                                                                      &cnt);
-                                for (j = 0; j < cnt; j++) {
-                                        const rd_kafka_topic_partition_t
-                                            *topic_partition =
-                                                rd_kafka_ListOffsetsResultInfo_topic_partition(
-                                                    result_infos[j]);
-                                        TEST_ASSERT(
-                                            topic_partition->err == 0,
-                                            "Expected error NO_ERROR, got %s",
-                                            rd_kafka_err2name(
-                                                topic_partition->err));
-                                        TEST_ASSERT(topic_partition->offset ==
-                                                        test_fixture.expected,
-                                                    "Expected offset %" PRId64
-                                                    ", got %" PRId64,
-                                                    test_fixture.expected,
-                                                    topic_partition->offset);
-                                }
-                                retry = rd_false;
+                        }
+
+                        const rd_kafka_ListOffsets_result_t *result;
+                        const rd_kafka_ListOffsetsResultInfo_t **result_infos;
+                        size_t cnt;
+                        size_t j;
+                        result = rd_kafka_event_ListOffsets_result(event);
+                        result_infos =
+                            rd_kafka_ListOffsets_result_infos(result, &cnt);
+                        for (j = 0; j < cnt; j++) {
+                                const rd_kafka_topic_partition_t *topic_partition =
+                                    rd_kafka_ListOffsetsResultInfo_topic_partition(
+                                        result_infos[j]);
+                                TEST_ASSERT(
+                                    topic_partition->err == 0,
+                                    "Expected error NO_ERROR, got %s",
+                                    rd_kafka_err2name(topic_partition->err));
+                                TEST_ASSERT(topic_partition->offset ==
+                                                test_fixture.expected,
+                                            "Expected offset %" PRId64
+                                            ", got %" PRId64,
+                                            test_fixture.expected,
+                                            topic_partition->offset);
                         }
                         rd_kafka_event_destroy(event);
+                        retry = rd_false;
                 }
                 rd_kafka_topic_partition_list_destroy(topic_partitions_copy);
         }

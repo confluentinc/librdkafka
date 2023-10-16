@@ -221,10 +221,8 @@ static void do_test_ListOffsets_leader_change(void) {
 
         rd_kafka_event_destroy(rkev);
 
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, 1, RD_KAFKAP_ListOffsets, 3,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER, 0,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER, 0);
+
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
 
         TEST_SAY(
             "Second ListOffsets call to leader broker 1, returns "
@@ -246,11 +244,8 @@ static void do_test_ListOffsets_leader_change(void) {
 
         rd_kafka_event_destroy(rkev);
 
-        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
-
-
         TEST_SAY(
-            "third ListOffsets call to leader broker 2, returns NO_ERROR\n");
+            "Third ListOffsets call to leader broker 2, returns NO_ERROR\n");
         rd_kafka_ListOffsets(rk, to_list, NULL, q);
 
         rkev         = rd_kafka_queue_poll(q, -1);

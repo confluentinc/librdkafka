@@ -811,14 +811,14 @@ rd_kafka_resp_err_t rd_kafka_ListOffsetsRequest_admin(
     rd_kafka_replyq_t replyq,
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque) {
+        rd_kafka_ListOffsetRequest_parameters_t params;
+        rd_kafka_IsolationLevel_t isolation_level;
         rd_kafka_topic_partition_list_t *topic_partitions;
         rd_kafka_buf_t *rkbuf;
         rd_kafka_resp_err_t err;
         topic_partitions = rd_list_elem(offsets, 0);
-        rd_kafka_ListOffsetRequest_parameters_t params;
 
-        rd_kafka_IsolationLevel_t isolation_level =
-            RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED;
+        isolation_level = RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED;
         if (options && options->isolation_level.u.INT.v)
                 isolation_level = options->isolation_level.u.INT.v;
 

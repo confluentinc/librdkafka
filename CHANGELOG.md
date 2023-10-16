@@ -17,7 +17,7 @@ librdkafka v2.3.0 is a feature release:
    retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
    maximum backoff, with 20% jitter(#4422).
  * [KIP-396](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=97551484): completed the implementation with
-   the addition of ListOffsets (#).
+   the addition of ListOffsets (#4225).
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
  * Add missing destroy that leads to leaking partition structure memory when there
    are partition leader changes and a stale leader epoch is received (#4429).

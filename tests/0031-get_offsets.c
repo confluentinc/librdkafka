@@ -128,15 +128,6 @@ void test_query_watermark_offsets_leader_change(void) {
         /* First call returns NOT_LEADER_FOR_PARTITION, second one should go to
          * the second broker and return NO_ERROR instead of
          * NOT_LEADER_FOR_PARTITION. */
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, 1, RD_KAFKAP_ListOffsets, 4,
-            /* first call */
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION, 0,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION, 0,
-            /* second call, shouldn't be triggered */
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION, 0,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION, 0);
-
         err = rd_kafka_query_watermark_offsets(rk, topic, 0, &qry_low,
                                                &qry_high, timeout_ms);
 

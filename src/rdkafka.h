@@ -6850,9 +6850,8 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS,
         RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
         RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
-        /** ListOffsets */
-        RD_KAFKA_ADMIN_OP_LISTOFFSETS,
-        RD_KAFKA_ADMIN_OP__CNT /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP_LISTOFFSETS,     /**< ListOffsets */
+        RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**

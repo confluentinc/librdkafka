@@ -2,20 +2,17 @@
 
 librdkafka v2.3.0 is a feature release:
 
- * Added Topic id to the metadata response which is part of the [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
- * Add support for AdminAPI `DescribeCluster()` and `DescribeTopics()`
-  (#4240, @jainruchir).
- * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):
-   Return authorized operations in Describe Responses.
-   (#4240, @jainruchir).
- * Add support for AdminAPI `DescribeCluster()` and `DescribeTopics()`
+ * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+   Partial support of topic identifiers. Topic identifiers in metadata response
+   available through the new `rd_kafka_DescribeTopics` function (#4300, #4451).
+ * [KIP-117](https://cwiki.apache.org/confluence/display/KAFKA/KIP-117%3A+Add+a+public+AdminClient+API+for+Kafka+admin+operations) Add support for AdminAPI `DescribeCluster()` and `DescribeTopics()`
   (#4240, @jainruchir).
  * [KIP-430](https://cwiki.apache.org/confluence/display/KAFKA/KIP-430+-+Return+Authorized+Operations+in+Describe+Responses):
    Return authorized operations in Describe Responses.
    (#4240, @jainruchir).
  * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for
    retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
-   maximum backoff, with 20% jitter(#4422).
+   maximum backoff, with 20% jitter (#4422).
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
  * Add missing destroy that leads to leaking partition structure memory when there
    are partition leader changes and a stale leader epoch is received (#4429).

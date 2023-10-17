@@ -67,78 +67,101 @@ calculate_connection_creation_rate(rd_kafka_t *rk) {
         return total;
 }
 
-static rd_kafka_telemetry_metric_value_t calculate_broker_max_rtt(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_broker_max_rtt(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t max_rtt;
         rd_kafka_broker_t *rkb;
 
         max_rtt.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                max_rtt.intValue = RD_MAX(max_rtt.intValue, (int32_t) rkb->rkb_avg_rtt.ra_v.maxv_interval);
+                max_rtt.intValue =
+                    RD_MAX(max_rtt.intValue,
+                           (int32_t)rkb->rkb_avg_rtt.ra_v.maxv_interval);
         }
         return max_rtt;
 }
 
-static rd_kafka_telemetry_metric_value_t calculate_broker_avg_rtt(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_broker_avg_rtt(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t avg_rtt;
         long s = 0;
         rd_kafka_broker_t *rkb;
 
-//        avg_rtt.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rkb->rkb_avg_rtt.ra_v.cnt > rkb->rkb_c_historic.rkb_avg_rtt.ra_v.cnt)
-                        s += (rkb->rkb_avg_rtt.ra_v.sum - rkb->rkb_c_historic.rkb_avg_rtt.ra_v.sum) / (rkb->rkb_avg_rtt.ra_v.cnt - rkb->rkb_c_historic.rkb_avg_rtt.ra_v.cnt);
+                if (rkb->rkb_avg_rtt.ra_v.cnt >
+                    rkb->rkb_c_historic.rkb_avg_rtt.ra_v.cnt)
+                        s += (rkb->rkb_avg_rtt.ra_v.sum -
+                              rkb->rkb_c_historic.rkb_avg_rtt.ra_v.sum) /
+                             (rkb->rkb_avg_rtt.ra_v.cnt -
+                              rkb->rkb_c_historic.rkb_avg_rtt.ra_v.cnt);
         }
         avg_rtt.doubleValue = s / (rk->rk_broker_cnt.val * 1.0);
         return avg_rtt;
 }
 
-static rd_kafka_telemetry_metric_value_t calculate_throttle_avg(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_throttle_avg(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t avg_rtt;
         long s = 0;
         rd_kafka_broker_t *rkb;
 
-        //        avg_rtt.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rkb->rkb_avg_throttle.ra_v.cnt > rkb->rkb_c_historic.rkb_avg_throttle.ra_v.cnt)
-                        s += (rkb->rkb_avg_throttle.ra_v.sum - rkb->rkb_c_historic.rkb_avg_throttle.ra_v.sum) / (rkb->rkb_avg_throttle.ra_v.cnt - rkb->rkb_c_historic.rkb_avg_throttle.ra_v.cnt);
+                if (rkb->rkb_avg_throttle.ra_v.cnt >
+                    rkb->rkb_c_historic.rkb_avg_throttle.ra_v.cnt)
+                        s += (rkb->rkb_avg_throttle.ra_v.sum -
+                              rkb->rkb_c_historic.rkb_avg_throttle.ra_v.sum) /
+                             (rkb->rkb_avg_throttle.ra_v.cnt -
+                              rkb->rkb_c_historic.rkb_avg_throttle.ra_v.cnt);
         }
         avg_rtt.doubleValue = s / (rk->rk_broker_cnt.val * 1.0);
         return avg_rtt;
 }
 
 
-static rd_kafka_telemetry_metric_value_t calculate_throttle_max(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_throttle_max(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t max_throttle;
         rd_kafka_broker_t *rkb;
 
         max_throttle.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                max_throttle.intValue = RD_MAX(max_throttle.intValue, (int32_t) rkb->rkb_avg_throttle.ra_v.maxv_interval);
+                max_throttle.intValue =
+                    RD_MAX(max_throttle.intValue,
+                           (int32_t)rkb->rkb_avg_throttle.ra_v.maxv_interval);
         }
         return max_throttle;
 }
 
-static rd_kafka_telemetry_metric_value_t calculate_queue_time_avg(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_queue_time_avg(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t avg_rtt;
         long s = 0;
         rd_kafka_broker_t *rkb;
 
-        //        avg_rtt.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rkb->rkb_avg_outbuf_latency.ra_v.cnt > rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.cnt)
-                        s += (rkb->rkb_avg_outbuf_latency.ra_v.sum - rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.sum) / (rkb->rkb_avg_outbuf_latency.ra_v.cnt - rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.cnt);
+                if (rkb->rkb_avg_outbuf_latency.ra_v.cnt >
+                    rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.cnt)
+                        s += (rkb->rkb_avg_outbuf_latency.ra_v.sum -
+                              rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v
+                                  .sum) /
+                             (rkb->rkb_avg_outbuf_latency.ra_v.cnt -
+                              rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v
+                                  .cnt);
         }
         avg_rtt.doubleValue = s / (rk->rk_broker_cnt.val * 1.0);
         return avg_rtt;
 }
 
-static rd_kafka_telemetry_metric_value_t calculate_queue_time_max(rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_queue_time_max(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t max_throttle;
         rd_kafka_broker_t *rkb;
 
         max_throttle.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                max_throttle.intValue = RD_MAX(max_throttle.intValue, (int32_t) rkb->rkb_avg_outbuf_latency.ra_v.maxv_interval);
+                max_throttle.intValue = RD_MAX(
+                    max_throttle.intValue,
+                    (int32_t)rkb->rkb_avg_outbuf_latency.ra_v.maxv_interval);
         }
         return max_throttle;
 }
@@ -148,30 +171,46 @@ static void reset_historical_metrics(rd_kafka_t *rk) {
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
+                rkb->rkb_c_historic.connects    = rkb->rkb_c.connects.val;
                 rkb->rkb_c_historic.rkb_avg_rtt = rkb->rkb_avg_rtt;
                 rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
                 rkb->rkb_c_historic.rkb_avg_throttle = rkb->rkb_avg_throttle;
                 rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
-                rkb->rkb_c_historic.rkb_avg_outbuf_latency = rkb->rkb_avg_outbuf_latency;
-                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset, 1);
+                rkb->rkb_c_historic.rkb_avg_outbuf_latency =
+                    rkb->rkb_avg_outbuf_latency;
+                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
+                                1);
         }
 }
 
-static const rd_kafka_telemetry_metric_value_calculator_t PRODUCER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT] = {
-    [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE] = &calculate_connection_creation_rate,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL] = &calculate_connection_creation_total,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG] = &calculate_broker_avg_rtt,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX] = &calculate_broker_max_rtt,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_AVG] = &calculate_throttle_avg,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_MAX] = &calculate_throttle_max,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_AVG] = &calculate_queue_time_avg,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_MAX] = &calculate_queue_time_max,
+static const rd_kafka_telemetry_metric_value_calculator_t
+    PRODUCER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT] =
+        {
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE] =
+                &calculate_connection_creation_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL] =
+                &calculate_connection_creation_total,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG] =
+                &calculate_broker_avg_rtt,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX] =
+                &calculate_broker_max_rtt,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_AVG] =
+                &calculate_throttle_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_MAX] =
+                &calculate_throttle_max,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_AVG] =
+                &calculate_queue_time_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_MAX] =
+                &calculate_queue_time_max,
 };
 
-static const rd_kafka_telemetry_metric_value_calculator_t CONSUMER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT] = {
-    [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE] = &calculate_connection_creation_rate,
-        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL] = &calculate_connection_creation_total,
+static const rd_kafka_telemetry_metric_value_calculator_t
+    CONSUMER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT] =
+        {
+            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE] =
+                &calculate_connection_creation_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL] =
+                &calculate_connection_creation_total,
 };
 
 static bool
@@ -348,13 +387,21 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 data_points[i] = rd_calloc(
                     1, sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
 
-                rd_kafka_telemetry_metric_value_calculator_t metricValueCalculator = (rk->rk_type == RD_KAFKA_PRODUCER) ? PRODUCER_METRIC_VALUE_CALCULATORS[metrics_to_encode[i]] : CONSUMER_METRIC_VALUE_CALCULATORS[metrics_to_encode[i]];
-                const rd_kafka_telemetry_metric_info_t *info = TELEMETRY_METRIC_INFO(rk);
+                rd_kafka_telemetry_metric_value_calculator_t
+                    metricValueCalculator =
+                        (rk->rk_type == RD_KAFKA_PRODUCER)
+                            ? PRODUCER_METRIC_VALUE_CALCULATORS
+                                  [metrics_to_encode[i]]
+                            : CONSUMER_METRIC_VALUE_CALCULATORS
+                                  [metrics_to_encode[i]];
+                const rd_kafka_telemetry_metric_info_t *info =
+                    TELEMETRY_METRIC_INFO(rk);
 
                 if (info[metrics_to_encode[i]].is_int) {
                         data_points[i]->which_value =
                             opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
-                        data_points[i]->value.as_int = metricValueCalculator(rk).intValue;
+                        data_points[i]->value.as_int =
+                            metricValueCalculator(rk).intValue;
 
                 } else {
                         data_points[i]->which_value =
@@ -382,8 +429,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 //    data_point.attributes.arg = &attribute;
 
 
-                switch (info[metrics_to_encode[i]]
-                            .type) {
+                switch (info[metrics_to_encode[i]].type) {
 
                 case RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM: {
                         metrics[i]->which_data =
@@ -411,18 +457,21 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
 
                 metrics[i]->description.funcs.encode = &encode_string;
                 metrics[i]->description.arg =
-                    (void *)
-                        info[metrics_to_encode[i]]
-                            .description;
+                    (void *)info[metrics_to_encode[i]].description;
+
+                metric_name_len = strlen(TELEMETRY_METRIC_PREFIX) +
+                                  strlen(info[metrics_to_encode[i]].name) + 1;
+                metric_names[i] = rd_calloc(1, metric_name_len);
+                rd_snprintf(metric_names[i], metric_name_len, "%s%s",
+                            TELEMETRY_METRIC_PREFIX,
+                            info[metrics_to_encode[i]].name);
+
 
                 metrics[i]->name.funcs.encode = &encode_string;
-                metrics[i]->name.arg          = (void *)info[metrics_to_encode[i]].name;
+                metrics[i]->name.arg          = metric_names[i];
 
                 metrics[i]->unit.funcs.encode = &encode_string;
-                metrics[i]->unit.arg =
-                    (void *)
-                        info[metrics_to_encode[i]]
-                            .unit;
+                metrics[i]->unit.arg = (void *)info[metrics_to_encode[i]].unit;
         }
 
         metrics_repeated.metrics = metrics;

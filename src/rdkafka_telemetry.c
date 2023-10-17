@@ -118,25 +118,33 @@ static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
 
 static void update_matched_metrics(rd_kafka_t *rk, size_t j) {
         rk->rk_telemetry.matched_metrics_cnt++;
-        rk->rk_telemetry.matched_metrics = rd_realloc(
-            rk->rk_telemetry.matched_metrics,
-            sizeof(rd_kafka_telemetry_metric_name_t) * rk->rk_telemetry.matched_metrics_cnt);
-        rk->rk_telemetry.matched_metrics[rk->rk_telemetry.matched_metrics_cnt - 1] = j;
+        rk->rk_telemetry.matched_metrics =
+            rd_realloc(rk->rk_telemetry.matched_metrics,
+                       sizeof(rd_kafka_telemetry_metric_name_t) *
+                           rk->rk_telemetry.matched_metrics_cnt);
+        rk->rk_telemetry
+            .matched_metrics[rk->rk_telemetry.matched_metrics_cnt - 1] = j;
 }
 
 static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
         size_t metrics_cnt = TELEMETRY_METRIC_CNT(rk);
-        const rd_kafka_telemetry_metric_info_t *info = TELEMETRY_METRIC_INFO(rk);
+        const rd_kafka_telemetry_metric_info_t *info =
+            TELEMETRY_METRIC_INFO(rk);
 
-        rd_kafka_telemetry_metric_type_t type = rk->rk_telemetry.delta_temporality ?
-                                                                                   RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE : RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM;
+        rd_kafka_telemetry_metric_type_t type =
+            rk->rk_telemetry.delta_temporality
+                ? RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE
+                : RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM;
 
 
-        if (rk->rk_telemetry.requested_metrics_cnt == 1 && !strcmp(rk->rk_telemetry.requested_metrics[0], "")) {
-                rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO", "All metrics subscribed");
+        if (rk->rk_telemetry.requested_metrics_cnt == 1 &&
+            !strcmp(rk->rk_telemetry.requested_metrics[0], "")) {
+                rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
+                             "All metrics subscribed");
 
                 for (size_t j = 0; j < metrics_cnt; j++) {
-                        if (info[j].type == type) update_matched_metrics(rk, j);
+                        if (info[j].type == type)
+                                update_matched_metrics(rk, j);
                 }
                 return;
         }
@@ -145,35 +153,21 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 size_t name_len = strlen(rk->rk_telemetry.requested_metrics[i]);
 
                 for (size_t j = 0; j < metrics_cnt; j++) {
-                        bool name_matches = strncmp(info[j].name, rk->rk_telemetry.requested_metrics[i], name_len) == 0;
+                        /* Prefix matching the requested metrics with the
+                         * available metrics. */
+                        bool name_matches =
+                            strncmp(info[j].name,
+                                    rk->rk_telemetry.requested_metrics[i],
+                                    name_len) == 0;
 
-                        if (name_matches && info[j].type == type) update_matched_metrics(rk, j);
+                        if (name_matches && info[j].type == type)
+                                update_matched_metrics(rk, j);
                 }
         }
 
-        rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO", "Matched metrics: %" PRIdsz, rk->rk_telemetry.matched_metrics_cnt);
-
-//        // TODO: Count the number of matched metrics and allocate the array
-//        rk->rk_telemetry.matched_metrics_cnt = 1;
-//        rk->rk_telemetry.matched_metrics =
-//            rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) *
-//                      rk->rk_telemetry.matched_metrics_cnt);
-//
-//        if (rk->rk_telemetry.matched_metrics == NULL) {
-//                rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
-//                             "Failed to allocate memory for matched metrics");
-//                return;
-//        }
-//
-//        // TODO: Implement prefix matching
-//        if (rk->rk_telemetry.delta_temporality) {
-//                rk->rk_telemetry.matched_metrics[0] =
-//                    RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_RATE;
-//        } else {
-//                rk->rk_telemetry.matched_metrics[0] =
-//                    RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_TOTAL;
-//                rk->rk_telemetry.matched_metrics_cnt += 1;
-//        }
+        rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
+                     "Matched metrics: %" PRIdsz,
+                     rk->rk_telemetry.matched_metrics_cnt);
 }
 
 /**

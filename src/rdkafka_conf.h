@@ -348,6 +348,7 @@ struct rd_kafka_conf_s {
         /* Client group configuration */
         int coord_query_intvl_ms;
         int max_poll_interval_ms;
+        int enable_metrics_push;
 
         int builtin_features;
         /*

@@ -410,7 +410,9 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                             metricValueCalculator(rk).doubleValue;
                 }
 
-                data_points[i]->time_unix_nano       = now_ns;
+                data_points[i]->time_unix_nano = now_ns;
+                /* TODO: For delta temporality needs to be reset when push fails
+                 * otherwise same as the first data point */
                 data_points[i]->start_time_unix_nano = now_ns;
 
                 //    TODO: Add data point attributes as needed

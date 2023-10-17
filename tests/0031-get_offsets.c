@@ -61,7 +61,7 @@ void test_query_watermark_offsets_timeout(void) {
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, 1, RD_KAFKAP_ListOffsets, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
-            (int)(timeout_ms * 1.2));
+            timeout_ms);
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "bootstrap.servers", bootstraps);

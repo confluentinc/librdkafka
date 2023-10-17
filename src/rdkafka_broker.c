@@ -4861,14 +4861,15 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rd_kafka_bufq_init(&rkb->rkb_waitresps);
         rd_kafka_bufq_init(&rkb->rkb_retrybufs);
         rkb->rkb_ops = rd_kafka_q_new(rk);
+        /* TODO: Add telemetry config here */
         rd_avg_init(&rkb->rkb_avg_int_latency, RD_AVG_GAUGE, 0, 100 * 1000, 2,
-                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+                    rk->rk_conf.stats_interval_ms ? 1 : 1);
         rd_avg_init(&rkb->rkb_avg_outbuf_latency, RD_AVG_GAUGE, 0, 100 * 1000,
-                    2, rk->rk_conf.stats_interval_ms ? 1 : 0);
+                    2, rk->rk_conf.stats_interval_ms ? 1 : 1);
         rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+                    rk->rk_conf.stats_interval_ms ? 1 : 1);
         rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE, 0, 5000 * 1000, 2,
-                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+                    rk->rk_conf.stats_interval_ms ? 1 : 1);
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 

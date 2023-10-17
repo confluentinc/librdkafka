@@ -163,9 +163,11 @@ static void rd_kafka_toppar_consumer_lag_req(rd_kafka_toppar_t *rktp) {
 
         /* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
-        rd_kafka_ListOffsetsRequest(
-            rktp->rktp_broker, partitions, RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
-            rd_kafka_toppar_lag_handle_Offset, rd_kafka_toppar_keep(rktp));
+        rd_kafka_ListOffsetsRequest(rktp->rktp_broker, partitions,
+                                    RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
+                                    rd_kafka_toppar_lag_handle_Offset,
+                                    -1, /* don't set an absolute timeout */
+                                    rd_kafka_toppar_keep(rktp));
 
         rd_kafka_toppar_unlock(rktp);
 
@@ -1600,7 +1602,9 @@ void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
                 rd_kafka_ListOffsetsRequest(
                     rkb, offsets,
                     RD_KAFKA_REPLYQ(rktp->rktp_ops, rktp->rktp_op_version),
-                    rd_kafka_toppar_handle_Offset, rktp);
+                    rd_kafka_toppar_handle_Offset,
+                    -1, /* don't set an absolute timeout */
+                    rktp);
 
                 rd_kafka_topic_partition_list_destroy(offsets);
         }

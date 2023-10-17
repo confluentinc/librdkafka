@@ -116,6 +116,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:ALTERUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
+            [RD_KAFKA_OP_LISTOFFSETS] = "REPLY:LISTOFFSETS",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -274,6 +275,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_LISTOFFSETS] = sizeof(rko->rko_u.admin_request),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -424,6 +426,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS:
         case RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS:
+        case RD_KAFKA_OP_LISTOFFSETS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 if (rko->rko_u.admin_request.options.match_consumer_group_states

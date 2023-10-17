@@ -4935,6 +4935,166 @@ final_checks:
         SUB_TEST_PASS();
 }
 
+static void do_test_ListOffsets(const char *what,
+                                rd_kafka_t *rk,
+                                rd_kafka_queue_t *useq,
+                                int req_timeout_ms) {
+        char errstr[512];
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        char *message     = "Message";
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_event_t *event;
+        rd_kafka_queue_t *q;
+        rd_kafka_t *p;
+        size_t i = 0;
+        rd_kafka_topic_partition_list_t *topic_partitions;
+        int64_t basetimestamp = 10000000;
+        int64_t timestamps[]  = {
+            basetimestamp + 100,
+            basetimestamp + 400,
+            basetimestamp + 250,
+        };
+        struct test_fixture_s {
+                int64_t query;
+                int64_t expected;
+                int min_broker_version;
+        } test_fixtures[] = {
+            {.query = RD_KAFKA_OFFSET_SPEC_EARLIEST, .expected = 0},
+            {.query = RD_KAFKA_OFFSET_SPEC_LATEST, .expected = 3},
+            {.query              = RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP,
+             .expected           = 1,
+             .min_broker_version = TEST_BRKVER(3, 0, 0, 0)},
+            {.query = basetimestamp + 50, .expected = 0},
+            {.query = basetimestamp + 300, .expected = 1},
+            {.query = basetimestamp + 150, .expected = 1},
+        };
+
+        SUB_TEST_QUICK(
+            "%s ListOffsets with %s, "
+            "request_timeout %d",
+            rd_kafka_name(rk), what, req_timeout_ms);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        test_CreateTopics_simple(rk, NULL, (char **)&topic, 1, 1, NULL);
+
+        p = test_create_producer();
+        for (i = 0; i < RD_ARRAY_SIZE(timestamps); i++) {
+                rd_kafka_producev(
+                    /* Producer handle */
+                    p,
+                    /* Topic name */
+                    RD_KAFKA_V_TOPIC(topic),
+                    /* Make a copy of the payload. */
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    /* Message value and length */
+                    RD_KAFKA_V_VALUE(message, strlen(message)),
+
+                    RD_KAFKA_V_TIMESTAMP(timestamps[i]),
+                    /* Per-Message opaque, provided in
+                     * delivery report callback as
+                     * msg_opaque. */
+                    RD_KAFKA_V_OPAQUE(NULL),
+                    /* End sentinel */
+                    RD_KAFKA_V_END);
+        }
+
+        rd_kafka_flush(p, 20 * 1000);
+        rd_kafka_destroy(p);
+
+        /* Set timeout (optional) */
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTOFFSETS);
+
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 30 * 1000 /* 30s */, errstr, sizeof(errstr)));
+
+        TEST_CALL_ERROR__(rd_kafka_AdminOptions_set_isolation_level(
+            options, RD_KAFKA_ISOLATION_LEVEL_READ_COMMITTED));
+
+        topic_partitions = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(topic_partitions, topic, 0);
+
+        for (i = 0; i < RD_ARRAY_SIZE(test_fixtures); i++) {
+                rd_bool_t retry = rd_true;
+                rd_kafka_topic_partition_list_t *topic_partitions_copy;
+
+                struct test_fixture_s test_fixture = test_fixtures[i];
+                if (test_fixture.min_broker_version &&
+                    test_broker_version < test_fixture.min_broker_version) {
+                        TEST_SAY("Skipping offset %" PRId64
+                                 ", as not supported\n",
+                                 test_fixture.query);
+                        continue;
+                }
+
+                TEST_SAY("Testing offset %" PRId64 "\n", test_fixture.query);
+
+                topic_partitions_copy =
+                    rd_kafka_topic_partition_list_copy(topic_partitions);
+
+                /* Set OffsetSpec */
+                topic_partitions_copy->elems[0].offset = test_fixture.query;
+
+                while (retry) {
+                        rd_kafka_resp_err_t err;
+                        /* Call ListOffsets */
+                        rd_kafka_ListOffsets(rk, topic_partitions_copy, options,
+                                             q);
+                        /* Wait for results */
+                        event = rd_kafka_queue_poll(q, -1 /*indefinitely*/);
+                        if (!event)
+                                TEST_FAIL("Event missing");
+
+                        err = rd_kafka_event_error(event);
+                        if (err == RD_KAFKA_RESP_ERR__NOENT) {
+                                rd_kafka_event_destroy(event);
+                                /* Still looking for the leader */
+                                rd_usleep(100000, 0);
+                                continue;
+                        } else if (err) {
+                                TEST_FAIL("Failed with error: %s",
+                                          rd_kafka_err2name(err));
+                        }
+
+                        const rd_kafka_ListOffsets_result_t *result;
+                        const rd_kafka_ListOffsetsResultInfo_t **result_infos;
+                        size_t cnt;
+                        size_t j;
+                        result = rd_kafka_event_ListOffsets_result(event);
+                        result_infos =
+                            rd_kafka_ListOffsets_result_infos(result, &cnt);
+                        for (j = 0; j < cnt; j++) {
+                                const rd_kafka_topic_partition_t *topic_partition =
+                                    rd_kafka_ListOffsetsResultInfo_topic_partition(
+                                        result_infos[j]);
+                                TEST_ASSERT(
+                                    topic_partition->err == 0,
+                                    "Expected error NO_ERROR, got %s",
+                                    rd_kafka_err2name(topic_partition->err));
+                                TEST_ASSERT(topic_partition->offset ==
+                                                test_fixture.expected,
+                                            "Expected offset %" PRId64
+                                            ", got %" PRId64,
+                                            test_fixture.expected,
+                                            topic_partition->offset);
+                        }
+                        rd_kafka_event_destroy(event);
+                        retry = rd_false;
+                }
+                rd_kafka_topic_partition_list_destroy(topic_partitions_copy);
+        }
+
+        rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_topic_partition_list_destroy(topic_partitions);
+
+        test_DeleteTopics_simple(rk, NULL, (char **)&topic, 1, NULL);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
+}
+
 static void do_test_apis(rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
@@ -4953,6 +5113,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         test_conf_init(&conf, NULL, 180);
         test_conf_set(conf, "socket.timeout.ms", "10000");
+
         rk = test_create_handle(cltype, conf);
 
         mainq = rd_kafka_queue_get_main(rk);
@@ -5054,6 +5215,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         }
 
         if (test_broker_version >= TEST_BRKVER(2, 5, 0, 0)) {
+                /* ListOffsets */
+                do_test_ListOffsets("temp queue", rk, NULL, -1);
+                do_test_ListOffsets("main queue", rk, mainq, 1500);
+
                 /* Alter committed offsets */
                 do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
                                                   rd_false, rd_true);

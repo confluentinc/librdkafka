@@ -179,6 +179,7 @@ typedef enum {
         RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,    /* < Admin:
                                                      AlterUserScramCredentials
                                                      u.admin_request >*/
+        RD_KAFKA_OP_LISTOFFSETS, /**< Admin: ListOffsets u.admin_request >*/
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -528,6 +529,9 @@ struct rd_kafka_op_s {
 
                         char *errstr; /**< Error string, if rko_err
                                        *   is set, else NULL. */
+
+                        /** Result cb for this op */
+                        void (*result_cb)(rd_kafka_op_t *);
 
                         rd_list_t results; /**< Type depends on request type:
                                             *

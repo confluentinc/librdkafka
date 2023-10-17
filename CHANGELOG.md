@@ -13,6 +13,8 @@ librdkafka v2.3.0 is a feature release:
  * [KIP-580](https://cwiki.apache.org/confluence/display/KAFKA/KIP-580%3A+Exponential+Backoff+for+Kafka+Clients): Added Exponential Backoff mechanism for
    retriable requests with `retry.backoff.ms` as minimum backoff and `retry.backoff.max.ms` as the
    maximum backoff, with 20% jitter (#4422).
+ * [KIP-396](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=97551484): completed the implementation with
+   the addition of ListOffsets (#4225).
  * Fixed ListConsumerGroupOffsets not fetching offsets for all the topics in a group with Apache Kafka version below 2.4.0.
  * Add missing destroy that leads to leaking partition structure memory when there
    are partition leader changes and a stale leader epoch is received (#4429).
@@ -32,6 +34,8 @@ librdkafka v2.3.0 is a feature release:
    consume_cb (#4431).
  * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
  * Fix `rd_kafka_query_watermark_offsets` continuing beyond timeout expiry (#4460).
+ * Fix `rd_kafka_query_watermark_offsets` not refreshing the partition leader
+   after a leader change and subsequent `NOT_LEADER_OR_FOLLOWER` error (#4225).
 
 
 ## Upgrade considerations
@@ -54,9 +58,9 @@ librdkafka v2.3.0 is a feature release:
  * An assertion failed with insufficient buffer size when allocating
    rack information on 32bit architectures.
    Solved by aligning all allocations to the maximum allowed word size (#4449).
- * The timeout for `rd_kafka_query_watermark_offsets` was not checked after
+ * The timeout for `rd_kafka_query_watermark_offsets` was not enforced after
    making the necessary ListOffsets requests, and thus, it never timed out in
-   case of broker/network issues. Fixed by checking timeout expiry (#4460).
+   case of broker/network issues. Fixed by setting an absolute timeout (#4460).
 
 ### Idempotent producer fixes
 
@@ -93,6 +97,10 @@ librdkafka v2.3.0 is a feature release:
     consumer messages, while the method to service the queue internally also
     services the queue forwarded to from `rk_rep`, which is `rkcg_q`.
     Solved by moving the `max.poll.interval.ms` check into `rd_kafka_q_serve` (#4431).
+  * After a leader change a `rd_kafka_query_watermark_offsets` call would continue
+    trying to call ListOffsets on the old leader, if the topic wasn't included in
+    the subscription set, so it started querying the new leader only after
+    `topic.metadata.refresh.interval.ms` (#4225).
 
 
 

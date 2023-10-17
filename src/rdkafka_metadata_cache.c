@@ -94,8 +94,7 @@ rd_kafka_metadata_cache_delete(rd_kafka_t *rk,
  * @locks rd_kafka_wrlock()
  * @returns 1 if entry was found and removed, else 0.
  */
-static int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk,
-                                                  const char *topic) {
+int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic) {
         struct rd_kafka_metadata_cache_entry *rkmce;
 
         rkmce = rd_kafka_metadata_cache_find(rk, topic, 1);

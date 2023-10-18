@@ -133,7 +133,7 @@ static void update_matched_metrics(rd_kafka_t *rk, size_t j) {
 }
 
 static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
-        size_t metrics_cnt = TELEMETRY_METRIC_CNT(rk);
+        size_t metrics_cnt = TELEMETRY_METRIC_CNT(rk), i;
         const rd_kafka_telemetry_metric_info_t *info =
             TELEMETRY_METRIC_INFO(rk);
 
@@ -145,20 +145,22 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
 
         if (rk->rk_telemetry.requested_metrics_cnt == 1 &&
             !strcmp(rk->rk_telemetry.requested_metrics[0], "")) {
+                size_t j;
                 rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
                              "All metrics subscribed");
 
-                for (size_t j = 0; j < metrics_cnt; j++) {
+                for (j = 0; j < metrics_cnt; j++) {
                         if (info[j].type == type)
                                 update_matched_metrics(rk, j);
                 }
                 return;
         }
 
-        for (size_t i = 0; i < rk->rk_telemetry.requested_metrics_cnt; i++) {
-                size_t name_len = strlen(rk->rk_telemetry.requested_metrics[i]);
+        for (i = 0; i < rk->rk_telemetry.requested_metrics_cnt; i++) {
+                size_t name_len = strlen(rk->rk_telemetry.requested_metrics[i]),
+                       j;
 
-                for (size_t j = 0; j < metrics_cnt; j++) {
+                for (j = 0; j < metrics_cnt; j++) {
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
                         bool name_matches =
@@ -226,8 +228,9 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                 rd_kafka_match_requested_metrics(rk);
 
                 /* Some metrics are requested. Start the timer accordingly */
-                next_scheduled = rd_jitter(0.8, 1.2) * 1000 *
-                                 rk->rk_telemetry.push_interval_ms;
+                double jitter_multiplier = rd_jitter(80, 120) / 100.0;
+                next_scheduled           = (int)(jitter_multiplier * 1000 *
+                                       rk->rk_telemetry.push_interval_ms);
 
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
         } else {

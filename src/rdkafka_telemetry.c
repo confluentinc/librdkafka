@@ -64,6 +64,7 @@ rd_kafka_filter_broker_by_GetTelemetrySubscription(rd_kafka_broker_t *rkb,
  */
 void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                               rd_bool_t clear_control_flow_fields) {
+        rd_kafka_broker_t *rkb;
         if (clear_control_flow_fields) {
                 mtx_lock(&rk->rk_telemetry.lock);
                 if (rk->rk_telemetry.preferred_broker) {
@@ -92,6 +93,14 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.requested_metrics_cnt = 0;
                 rk->rk_telemetry.matched_metrics       = NULL;
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
+        }
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rkb->rkb_c_historic.connects = 0;
+                rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
+                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
+                                1);
+                rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
         }
         rk->rk_telemetry.telemetry_max_bytes = 0;
 }
@@ -249,7 +258,6 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                          rd_kafka_broker_t *rkb,
                                          rd_bool_t terminating) {
 
-        // TODO: Update dummy values
         size_t metrics_payload_size;
         void *metrics_payload =
             rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
@@ -274,7 +282,8 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                       metrics_payload, metrics_payload_size,
                                       NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                                       rd_kafka_handle_PushTelemetry, NULL);
-        rd_free(metrics_payload);
+        if (metrics_payload_size)
+                rd_free(metrics_payload);
         rk->rk_telemetry.state = terminating
                                      ? RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT
                                      : RD_KAFKA_TELEMETRY_PUSH_SENT;

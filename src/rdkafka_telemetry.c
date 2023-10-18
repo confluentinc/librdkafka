@@ -126,8 +126,7 @@ static void update_matched_metrics(rd_kafka_t *rk, size_t j) {
         rk->rk_telemetry.matched_metrics_cnt++;
         rk->rk_telemetry.matched_metrics =
             rd_realloc(rk->rk_telemetry.matched_metrics,
-                       sizeof(rd_kafka_telemetry_metric_name_t) *
-                           rk->rk_telemetry.matched_metrics_cnt);
+                       sizeof(int) * rk->rk_telemetry.matched_metrics_cnt);
         rk->rk_telemetry
             .matched_metrics[rk->rk_telemetry.matched_metrics_cnt - 1] = j;
 }

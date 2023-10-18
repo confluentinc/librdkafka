@@ -266,7 +266,7 @@ static void clear_unit_test_data(void) {
         unit_test_data.metric_time           = 0;
 }
 
-bool unit_test_telemetry(rd_kafka_telemetry_metric_name_t metric_name,
+bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                          const char *expected_name,
                          const char *expected_description,
                          rd_kafka_telemetry_metric_type_t expected_type) {
@@ -274,7 +274,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_metric_name_t metric_name,
         rk->rk_type                          = RD_KAFKA_PRODUCER;
         rk->rk_telemetry.matched_metrics_cnt = 1;
         rk->rk_telemetry.matched_metrics =
-            rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) *
+            rd_malloc(sizeof(rd_kafka_telemetry_producer_metric_name_t) *
                       rk->rk_telemetry.matched_metrics_cnt);
         rk->rk_telemetry.matched_metrics[0] = metric_name;
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
@@ -318,16 +318,16 @@ bool unit_test_telemetry(rd_kafka_telemetry_metric_name_t metric_name,
 
 bool unit_test_telemetry_gauge(void) {
         return unit_test_telemetry(
-            RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_RATE,
-            "producer.connection.creation.rate",
+            RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE,
+            "org.apache.kafka.producer.connection.creation.rate",
             "The rate of connections established per second.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE);
 }
 
 bool unit_test_telemetry_sum(void) {
         return unit_test_telemetry(
-            RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_TOTAL,
-            "producer.connection.creation.total",
+            RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL,
+            "org.apache.kafka.producer.connection.creation.total",
             "The total number of connections established.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM);
 }

@@ -94,13 +94,10 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.matched_metrics       = NULL;
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
-
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rkb->rkb_c_historic.connects = 0;
-                rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
-                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
-                                1);
-                rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
+                rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_throttle);
+                rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_outbuf_latency);
+                rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_rtt);
         }
         rk->rk_telemetry.telemetry_max_bytes = 0;
 }
@@ -441,6 +438,24 @@ void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
                      "Setting telemetry broker to %s\n", rkb->rkb_name);
 
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rkb->rkb_c_historic.connects = 0;
+                rd_avg_init(&rkb->rkb_c_historic.rkb_avg_rtt, RD_AVG_GAUGE, 0,
+                            500 * 1000, 2,
+                            rk->rk_conf.enable_metrics_push ? 1 : 0);
+                rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
+                rd_avg_init(&rkb->rkb_c_historic.rkb_avg_outbuf_latency,
+                            RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                            rk->rk_conf.enable_metrics_push ? 1 : 0);
+                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
+                                1);
+                rd_avg_init(&rkb->rkb_c_historic.rkb_avg_throttle, RD_AVG_GAUGE,
+                            0, 500 * 1000, 2,
+                            rk->rk_conf.enable_metrics_push ? 1 : 0);
+                rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
+        }
+
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
             0 /* immediate */, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);

@@ -349,8 +349,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         pb_ostream_t stream;
         bool status;
         char **metric_names;
-        const rd_kafka_telemetry_metric_name_t *metrics_to_encode =
-            rk->rk_telemetry.matched_metrics;
+        const int *metrics_to_encode = rk->rk_telemetry.matched_metrics;
         const size_t metrics_to_encode_count =
             rk->rk_telemetry.matched_metrics_cnt;
         size_t metric_name_len;

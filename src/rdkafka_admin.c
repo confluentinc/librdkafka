@@ -4434,10 +4434,9 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
                           const rd_kafka_AdminOptions_t *options,
                           rd_kafka_queue_t *rkqu) {
         int i;
-        int16_t error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_op_t *rko_fanout;
         rd_kafka_topic_partition_list_t *copied_topic_partitions;
-        rd_list_t *topic_partitions_sorted;
+        rd_list_t *topic_partitions_sorted = NULL;
 
         static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
             rd_kafka_ListOffsets_response_merge,
@@ -4452,7 +4451,9 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
             rko_fanout, rd_kafka_ListOffsets_handle_result);
 
         if (topic_partitions->cnt == 0) {
-                error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                rd_kafka_admin_result_fail(
+                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "At least one partition is required");
                 goto err;
         }
 
@@ -4465,24 +4466,25 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
 
         rd_list_sort(topic_partitions_sorted, rd_kafka_topic_partition_cmp);
         if (rd_list_find_duplicate(topic_partitions_sorted,
-                                   rd_kafka_topic_partition_cmp))
-                error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
-        rd_list_destroy(topic_partitions_sorted);
+                                   rd_kafka_topic_partition_cmp)) {
 
-        if (error_code)
+                rd_kafka_admin_result_fail(
+                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Partitions must not contain duplicates");
                 goto err;
+        }
 
         for (i = 0; i < topic_partitions->cnt; i++) {
                 rd_kafka_topic_partition_t *partition =
                     &topic_partitions->elems[i];
                 if (partition->offset < RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP) {
-                        error_code = RD_KAFKA_RESP_ERR__INVALID_ARG;
-                        break;
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Partition %d has an invalid offset %" PRId64, i,
+                            partition->offset);
+                        goto err;
                 }
         }
-
-        if (error_code)
-                goto err;
 
         copied_topic_partitions =
             rd_kafka_topic_partition_list_copy(topic_partitions);
@@ -4497,10 +4499,11 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
             rd_kafka_admin_timeout_remains(rko_fanout),
             RD_KAFKA_REPLYQ(rk->rk_ops, 0),
             rd_kafka_ListOffsets_leaders_queried_cb, rko_fanout);
+
+        rd_list_destroy(topic_partitions_sorted);
         return;
 err:
-        rd_kafka_admin_result_fail(rko_fanout, error_code, "%s",
-                                   rd_kafka_err2str(error_code));
+        RD_IF_FREE(topic_partitions_sorted, rd_list_destroy);
         rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
                                              rd_true /*destroy*/);
 }

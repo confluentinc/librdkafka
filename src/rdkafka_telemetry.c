@@ -96,8 +96,11 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
         }
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_throttle);
+                rkb->rkb_c_historic.rkb_avg_throttle = (rd_avg_t) {0};
                 rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_outbuf_latency);
+                rkb->rkb_c_historic.rkb_avg_outbuf_latency = (rd_avg_t) {0};
                 rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_rtt);
+                rkb->rkb_c_historic.rkb_avg_rtt = (rd_avg_t) {0};
         }
         rk->rk_telemetry.telemetry_max_bytes = 0;
 }

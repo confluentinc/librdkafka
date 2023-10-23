@@ -8721,39 +8721,43 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
             rk, RD_KAFKA_OP_DESCRIBETOPICS,
             RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT, &cbs, options, rkqu->rkqu_q);
 
-        if (topics->topics_cnt == 0) {
-                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                           "No topics to describe");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                return;
-        }
-
         rd_list_init(&rko->rko_u.admin_request.args, (int)topics->topics_cnt,
                      rd_free);
         for (i = 0; i < topics->topics_cnt; i++)
                 rd_list_add(&rko->rko_u.admin_request.args,
                             rd_strdup(topics->topics[i]));
 
-        /* Check for duplicates.
-         * Make a temporary copy of the topic list and sort it to check for
-         * duplicates, we don't want the original list sorted since we want
-         * to maintain ordering. */
-        rd_list_init(&dup_list, rd_list_cnt(&rko->rko_u.admin_request.args),
-                     NULL);
-        rd_list_copy_to(&dup_list, &rko->rko_u.admin_request.args, NULL, NULL);
-        rd_list_sort(&dup_list, rd_kafka_DescribeTopics_cmp);
-        if (rd_list_find_duplicate(&dup_list, rd_kafka_DescribeTopics_cmp)) {
+        if (rd_list_cnt(&rko->rko_u.admin_request.args)) {
+                /* Check for duplicates.
+                 * Make a temporary copy of the topic list and sort it to check
+                 * for duplicates, we don't want the original list sorted since
+                 * we want to maintain ordering. */
+                rd_list_init(&dup_list,
+                             rd_list_cnt(&rko->rko_u.admin_request.args), NULL);
+                rd_list_copy_to(&dup_list, &rko->rko_u.admin_request.args, NULL,
+                                NULL);
+                rd_list_sort(&dup_list, rd_kafka_DescribeTopics_cmp);
+                if (rd_list_find_duplicate(&dup_list,
+                                           rd_kafka_DescribeTopics_cmp)) {
+                        rd_list_destroy(&dup_list);
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate topics not allowed");
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko, rd_true /*destroy*/);
+                        return;
+                }
+
                 rd_list_destroy(&dup_list);
-                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                           "Duplicate topics not allowed");
+                rd_kafka_q_enq(rk->rk_ops, rko);
+        } else {
+                /* Empty list */
+                rd_kafka_op_t *rko_result = rd_kafka_admin_result_new(rko);
+                /* Enqueue empty result on application queue, we're done. */
+                rd_kafka_admin_result_enq(rko, rko_result);
                 rd_kafka_admin_common_worker_destroy(rk, rko,
                                                      rd_true /*destroy*/);
-                return;
         }
-
-        rd_list_destroy(&dup_list);
-        rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
 /**@}*/

@@ -255,7 +255,7 @@ static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
                         fprintf(stderr, "No matching topics found\n");
                         return 1;
                 } else {
-                        fprintf(stderr, "No topics in cluster\n");
+                        fprintf(stderr, "No topics requested\n");
                 }
         }
 
@@ -281,7 +281,7 @@ static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_error_t *error;
         int retval         = 0;
         int topics_cnt     = 0;
-        const int min_argc = 2;
+        const int min_argc = 1;
         int include_topic_authorized_operations;
 
         if (argc < min_argc)

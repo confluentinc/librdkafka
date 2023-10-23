@@ -4450,28 +4450,25 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
         rd_kafka_admin_request_op_result_cb_set(
             rko_fanout, rd_kafka_ListOffsets_handle_result);
 
-        if (topic_partitions->cnt == 0) {
-                rd_kafka_admin_result_fail(
-                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "At least one partition is required");
-                goto err;
-        }
+        if (topic_partitions->cnt) {
+                topic_partitions_sorted =
+                    rd_list_new(topic_partitions->cnt,
+                                rd_kafka_topic_partition_destroy_free);
+                for (i = 0; i < topic_partitions->cnt; i++)
+                        rd_list_add(topic_partitions_sorted,
+                                    rd_kafka_topic_partition_copy(
+                                        &topic_partitions->elems[i]));
 
-        topic_partitions_sorted = rd_list_new(
-            topic_partitions->cnt, rd_kafka_topic_partition_destroy_free);
-        for (i = 0; i < topic_partitions->cnt; i++)
-                rd_list_add(
-                    topic_partitions_sorted,
-                    rd_kafka_topic_partition_copy(&topic_partitions->elems[i]));
+                rd_list_sort(topic_partitions_sorted,
+                             rd_kafka_topic_partition_cmp);
+                if (rd_list_find_duplicate(topic_partitions_sorted,
+                                           rd_kafka_topic_partition_cmp)) {
 
-        rd_list_sort(topic_partitions_sorted, rd_kafka_topic_partition_cmp);
-        if (rd_list_find_duplicate(topic_partitions_sorted,
-                                   rd_kafka_topic_partition_cmp)) {
-
-                rd_kafka_admin_result_fail(
-                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Partitions must not contain duplicates");
-                goto err;
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Partitions must not contain duplicates");
+                        goto err;
+                }
         }
 
         for (i = 0; i < topic_partitions->cnt; i++) {
@@ -4493,14 +4490,23 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
         rd_list_add(&rko_fanout->rko_u.admin_request.args,
                     copied_topic_partitions);
 
-        /* Async query for partition leaders */
-        rd_kafka_topic_partition_list_query_leaders_async(
-            rk, copied_topic_partitions,
-            rd_kafka_admin_timeout_remains(rko_fanout),
-            RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-            rd_kafka_ListOffsets_leaders_queried_cb, rko_fanout);
+        if (topic_partitions->cnt) {
+                /* Async query for partition leaders */
+                rd_kafka_topic_partition_list_query_leaders_async(
+                    rk, copied_topic_partitions,
+                    rd_kafka_admin_timeout_remains(rko_fanout),
+                    RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                    rd_kafka_ListOffsets_leaders_queried_cb, rko_fanout);
+        } else {
+                /* Empty list */
+                rd_kafka_op_t *rko_result =
+                    rd_kafka_admin_result_new(rko_fanout);
+                /* Enqueue empty result on application queue, we're done. */
+                rd_kafka_admin_result_enq(rko_fanout, rko_result);
+                goto err;
+        }
 
-        rd_list_destroy(topic_partitions_sorted);
+        RD_IF_FREE(topic_partitions_sorted, rd_list_destroy);
         return;
 err:
         RD_IF_FREE(topic_partitions_sorted, rd_list_destroy);

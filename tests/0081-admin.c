@@ -4978,8 +4978,11 @@ static void do_test_ListOffsets(const char *what,
         rd_kafka_event_t *event;
         rd_kafka_queue_t *q;
         rd_kafka_t *p;
-        size_t i = 0;
-        rd_kafka_topic_partition_list_t *topic_partitions;
+        size_t i = 0, cnt = 0;
+        rd_kafka_topic_partition_list_t *topic_partitions,
+            *empty_topic_partitions;
+        const rd_kafka_ListOffsets_result_t *result;
+        const rd_kafka_ListOffsetsResultInfo_t **result_infos;
         int64_t basetimestamp = 10000000;
         int64_t timestamps[]  = {
             basetimestamp + 100,
@@ -5043,8 +5046,28 @@ static void do_test_ListOffsets(const char *what,
         TEST_CALL_ERROR__(rd_kafka_AdminOptions_set_isolation_level(
             options, RD_KAFKA_ISOLATION_LEVEL_READ_COMMITTED));
 
-        topic_partitions = rd_kafka_topic_partition_list_new(1);
+        topic_partitions       = rd_kafka_topic_partition_list_new(1);
+        empty_topic_partitions = rd_kafka_topic_partition_list_new(0);
         rd_kafka_topic_partition_list_add(topic_partitions, topic, 0);
+
+        /* Call ListOffsets with empty partition list */
+        rd_kafka_ListOffsets(rk, empty_topic_partitions, options, q);
+        rd_kafka_topic_partition_list_destroy(empty_topic_partitions);
+        /* Wait for results */
+        event = rd_kafka_queue_poll(q, -1 /*indefinitely*/);
+        if (!event)
+                TEST_FAIL("Event missing");
+
+        TEST_CALL_ERR__(rd_kafka_event_error(event));
+
+        result       = rd_kafka_event_ListOffsets_result(event);
+        result_infos = rd_kafka_ListOffsets_result_infos(result, &cnt);
+        rd_kafka_event_destroy(event);
+
+        TEST_ASSERT(!cnt,
+                    "Expected empty result info array, got %" PRIusz
+                    " result infos",
+                    cnt);
 
         for (i = 0; i < RD_ARRAY_SIZE(test_fixtures); i++) {
                 rd_bool_t retry = rd_true;
@@ -5068,6 +5091,7 @@ static void do_test_ListOffsets(const char *what,
                 topic_partitions_copy->elems[0].offset = test_fixture.query;
 
                 while (retry) {
+                        size_t j;
                         rd_kafka_resp_err_t err;
                         /* Call ListOffsets */
                         rd_kafka_ListOffsets(rk, topic_partitions_copy, options,
@@ -5088,10 +5112,6 @@ static void do_test_ListOffsets(const char *what,
                                           rd_kafka_err2name(err));
                         }
 
-                        const rd_kafka_ListOffsets_result_t *result;
-                        const rd_kafka_ListOffsetsResultInfo_t **result_infos;
-                        size_t cnt;
-                        size_t j;
                         result = rd_kafka_event_ListOffsets_result(event);
                         result_infos =
                             rd_kafka_ListOffsets_result_infos(result, &cnt);

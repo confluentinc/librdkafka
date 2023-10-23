@@ -125,12 +125,21 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
  * @brief Print list offsets result information.
  */
 static int
-print_list_offsets_result_info(const rd_kafka_ListOffsets_result_t *result) {
+print_list_offsets_result_info(const rd_kafka_ListOffsets_result_t *result,
+                               int req_cnt) {
         const rd_kafka_ListOffsetsResultInfo_t **result_infos;
         size_t cnt;
         size_t i;
         result_infos = rd_kafka_ListOffsets_result_infos(result, &cnt);
         printf("ListOffsets results:\n");
+        if (cnt == 0) {
+                if (req_cnt > 0) {
+                        fprintf(stderr, "No matching partitions found\n");
+                        return 1;
+                } else {
+                        fprintf(stderr, "No partitions requested\n");
+                }
+        }
         for (i = 0; i < cnt; i++) {
                 const rd_kafka_topic_partition_t *topic_partition =
                     rd_kafka_ListOffsetsResultInfo_topic_partition(
@@ -177,7 +186,8 @@ static void cmd_list_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_event_t *event = NULL;
         rd_kafka_error_t *error = NULL;
         int i;
-        int retval = 0;
+        int retval     = 0;
+        int partitions = 0;
         rd_kafka_topic_partition_list_t *rktpars;
 
         if ((argc - 1) % 3 != 0) {
@@ -193,6 +203,7 @@ static void cmd_list_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                     rktpars, argv[i], parse_int("partition", argv[i + 1]))
                     ->offset = parse_int("offset", argv[i + 2]);
         }
+        partitions = rktpars->cnt;
 
         /*
          * Create consumer instance
@@ -254,7 +265,7 @@ static void cmd_list_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                  * partitions may have errors. */
                 const rd_kafka_ListOffsets_result_t *result;
                 result = rd_kafka_event_ListOffsets_result(event);
-                retval = print_list_offsets_result_info(result);
+                retval = print_list_offsets_result_info(result, partitions);
         }
 
 

@@ -4451,6 +4451,25 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
             rko_fanout, rd_kafka_ListOffsets_handle_result);
 
         if (topic_partitions->cnt) {
+                for (i = 0; i < topic_partitions->cnt; i++) {
+                        if (!topic_partitions->elems[i].topic[0]) {
+                                rd_kafka_admin_result_fail(
+                                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                    "Partition topic name at index %d must be "
+                                    "non-empty",
+                                    i);
+                                goto err;
+                        }
+                        if (topic_partitions->elems[i].partition < 0) {
+                                rd_kafka_admin_result_fail(
+                                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                    "Partition at index %d cannot be negative",
+                                    i);
+                                goto err;
+                        }
+                }
+
+
                 topic_partitions_sorted =
                     rd_list_new(topic_partitions->cnt,
                                 rd_kafka_topic_partition_destroy_free);

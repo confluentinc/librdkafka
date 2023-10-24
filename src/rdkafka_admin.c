@@ -4503,7 +4503,8 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
                     rd_kafka_admin_result_new(rko_fanout);
                 /* Enqueue empty result on application queue, we're done. */
                 rd_kafka_admin_result_enq(rko_fanout, rko_result);
-                goto err;
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
         }
 
         RD_IF_FREE(topic_partitions_sorted, rd_list_destroy);

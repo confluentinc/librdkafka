@@ -3160,7 +3160,7 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_queue_t *q;
 #define TEST_DESCRIBE_TOPICS_CNT 3
         char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
-        rd_kafka_TopicCollection_t *topics;
+        rd_kafka_TopicCollection_t *topics, *empty_topics;
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
         const rd_kafka_error_t *error;
@@ -3197,11 +3197,11 @@ static void do_test_DescribeTopics(const char *what,
         }
         topics = rd_kafka_TopicCollection_of_topic_names(
             (const char **)topic_names, TEST_DESCRIBE_TOPICS_CNT);
+        empty_topics = rd_kafka_TopicCollection_of_topic_names(NULL, 0);
 
         test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);
         test_wait_topic_exists(rk, topic_names[0], 10000);
 
-        /* Call DescribeTopics. */
         options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
@@ -3210,10 +3210,40 @@ static void do_test_DescribeTopics(const char *what,
             rd_kafka_AdminOptions_set_include_authorized_operations(
                 options, include_authorized_operations));
 
-        TIMING_START(&timing, "DescribeTopics");
+        /* Call DescribeTopics with empty topics. */
+        TIMING_START(&timing, "DescribeTopics empty");
+        rd_kafka_DescribeTopics(rk, empty_topics, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        /* Check DescribeTopics results. */
+        rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
+                                      tmout_multip(20 * 1000));
+        TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
+
+        /* Extract result. */
+        res = rd_kafka_event_DescribeTopics_result(rkev);
+        TEST_ASSERT(res, "Expected DescribeTopics result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!err, "Expected success, not %s: %s",
+                    rd_kafka_err2name(err), errstr2);
+
+        result_topics =
+            rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
+
+        /* Check no result is received. */
+        TEST_ASSERT((int)result_topics_cnt == 0,
+                    "Expected 0 topics in result, got %d",
+                    (int)result_topics_cnt);
+
+        rd_kafka_event_destroy(rkev);
+
+        /* Call DescribeTopics with all of them. */
+        TIMING_START(&timing, "DescribeTopics all");
         rd_kafka_DescribeTopics(rk, topics, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
-        rd_kafka_AdminOptions_destroy(options);
 
         /* Check DescribeTopics results. */
         rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
@@ -3302,6 +3332,7 @@ static void do_test_DescribeTopics(const char *what,
                     "Authorized operations should be NULL when not requested");
         }
 
+        rd_kafka_AdminOptions_destroy(options);
         rd_kafka_event_destroy(rkev);
 
         /* If we don't have authentication/authorization set up in our
@@ -3410,6 +3441,7 @@ done:
                 rd_kafka_queue_destroy(q);
 
         rd_kafka_TopicCollection_destroy(topics);
+        rd_kafka_TopicCollection_destroy(empty_topics);
 
 
         TEST_LATER_CHECK();
@@ -4946,8 +4978,11 @@ static void do_test_ListOffsets(const char *what,
         rd_kafka_event_t *event;
         rd_kafka_queue_t *q;
         rd_kafka_t *p;
-        size_t i = 0;
-        rd_kafka_topic_partition_list_t *topic_partitions;
+        size_t i = 0, cnt = 0;
+        rd_kafka_topic_partition_list_t *topic_partitions,
+            *empty_topic_partitions;
+        const rd_kafka_ListOffsets_result_t *result;
+        const rd_kafka_ListOffsetsResultInfo_t **result_infos;
         int64_t basetimestamp = 10000000;
         int64_t timestamps[]  = {
             basetimestamp + 100,
@@ -5011,8 +5046,28 @@ static void do_test_ListOffsets(const char *what,
         TEST_CALL_ERROR__(rd_kafka_AdminOptions_set_isolation_level(
             options, RD_KAFKA_ISOLATION_LEVEL_READ_COMMITTED));
 
-        topic_partitions = rd_kafka_topic_partition_list_new(1);
+        topic_partitions       = rd_kafka_topic_partition_list_new(1);
+        empty_topic_partitions = rd_kafka_topic_partition_list_new(0);
         rd_kafka_topic_partition_list_add(topic_partitions, topic, 0);
+
+        /* Call ListOffsets with empty partition list */
+        rd_kafka_ListOffsets(rk, empty_topic_partitions, options, q);
+        rd_kafka_topic_partition_list_destroy(empty_topic_partitions);
+        /* Wait for results */
+        event = rd_kafka_queue_poll(q, -1 /*indefinitely*/);
+        if (!event)
+                TEST_FAIL("Event missing");
+
+        TEST_CALL_ERR__(rd_kafka_event_error(event));
+
+        result       = rd_kafka_event_ListOffsets_result(event);
+        result_infos = rd_kafka_ListOffsets_result_infos(result, &cnt);
+        rd_kafka_event_destroy(event);
+
+        TEST_ASSERT(!cnt,
+                    "Expected empty result info array, got %" PRIusz
+                    " result infos",
+                    cnt);
 
         for (i = 0; i < RD_ARRAY_SIZE(test_fixtures); i++) {
                 rd_bool_t retry = rd_true;
@@ -5036,6 +5091,7 @@ static void do_test_ListOffsets(const char *what,
                 topic_partitions_copy->elems[0].offset = test_fixture.query;
 
                 while (retry) {
+                        size_t j;
                         rd_kafka_resp_err_t err;
                         /* Call ListOffsets */
                         rd_kafka_ListOffsets(rk, topic_partitions_copy, options,
@@ -5056,10 +5112,6 @@ static void do_test_ListOffsets(const char *what,
                                           rd_kafka_err2name(err));
                         }
 
-                        const rd_kafka_ListOffsets_result_t *result;
-                        const rd_kafka_ListOffsetsResultInfo_t **result_infos;
-                        size_t cnt;
-                        size_t j;
                         result = rd_kafka_event_ListOffsets_result(event);
                         result_infos =
                             rd_kafka_ListOffsets_result_infos(result, &cnt);

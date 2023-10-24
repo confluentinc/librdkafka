@@ -4450,28 +4450,44 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
         rd_kafka_admin_request_op_result_cb_set(
             rko_fanout, rd_kafka_ListOffsets_handle_result);
 
-        if (topic_partitions->cnt == 0) {
-                rd_kafka_admin_result_fail(
-                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "At least one partition is required");
-                goto err;
-        }
+        if (topic_partitions->cnt) {
+                for (i = 0; i < topic_partitions->cnt; i++) {
+                        if (!topic_partitions->elems[i].topic[0]) {
+                                rd_kafka_admin_result_fail(
+                                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                    "Partition topic name at index %d must be "
+                                    "non-empty",
+                                    i);
+                                goto err;
+                        }
+                        if (topic_partitions->elems[i].partition < 0) {
+                                rd_kafka_admin_result_fail(
+                                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                    "Partition at index %d cannot be negative",
+                                    i);
+                                goto err;
+                        }
+                }
 
-        topic_partitions_sorted = rd_list_new(
-            topic_partitions->cnt, rd_kafka_topic_partition_destroy_free);
-        for (i = 0; i < topic_partitions->cnt; i++)
-                rd_list_add(
-                    topic_partitions_sorted,
-                    rd_kafka_topic_partition_copy(&topic_partitions->elems[i]));
 
-        rd_list_sort(topic_partitions_sorted, rd_kafka_topic_partition_cmp);
-        if (rd_list_find_duplicate(topic_partitions_sorted,
-                                   rd_kafka_topic_partition_cmp)) {
+                topic_partitions_sorted =
+                    rd_list_new(topic_partitions->cnt,
+                                rd_kafka_topic_partition_destroy_free);
+                for (i = 0; i < topic_partitions->cnt; i++)
+                        rd_list_add(topic_partitions_sorted,
+                                    rd_kafka_topic_partition_copy(
+                                        &topic_partitions->elems[i]));
 
-                rd_kafka_admin_result_fail(
-                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Partitions must not contain duplicates");
-                goto err;
+                rd_list_sort(topic_partitions_sorted,
+                             rd_kafka_topic_partition_cmp);
+                if (rd_list_find_duplicate(topic_partitions_sorted,
+                                           rd_kafka_topic_partition_cmp)) {
+
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Partitions must not contain duplicates");
+                        goto err;
+                }
         }
 
         for (i = 0; i < topic_partitions->cnt; i++) {
@@ -4493,14 +4509,24 @@ void rd_kafka_ListOffsets(rd_kafka_t *rk,
         rd_list_add(&rko_fanout->rko_u.admin_request.args,
                     copied_topic_partitions);
 
-        /* Async query for partition leaders */
-        rd_kafka_topic_partition_list_query_leaders_async(
-            rk, copied_topic_partitions,
-            rd_kafka_admin_timeout_remains(rko_fanout),
-            RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-            rd_kafka_ListOffsets_leaders_queried_cb, rko_fanout);
+        if (topic_partitions->cnt) {
+                /* Async query for partition leaders */
+                rd_kafka_topic_partition_list_query_leaders_async(
+                    rk, copied_topic_partitions,
+                    rd_kafka_admin_timeout_remains(rko_fanout),
+                    RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                    rd_kafka_ListOffsets_leaders_queried_cb, rko_fanout);
+        } else {
+                /* Empty list */
+                rd_kafka_op_t *rko_result =
+                    rd_kafka_admin_result_new(rko_fanout);
+                /* Enqueue empty result on application queue, we're done. */
+                rd_kafka_admin_result_enq(rko_fanout, rko_result);
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+        }
 
-        rd_list_destroy(topic_partitions_sorted);
+        RD_IF_FREE(topic_partitions_sorted, rd_list_destroy);
         return;
 err:
         RD_IF_FREE(topic_partitions_sorted, rd_list_destroy);
@@ -8721,39 +8747,60 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
             rk, RD_KAFKA_OP_DESCRIBETOPICS,
             RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT, &cbs, options, rkqu->rkqu_q);
 
-        if (topics->topics_cnt == 0) {
-                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                           "No topics to describe");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                return;
-        }
-
         rd_list_init(&rko->rko_u.admin_request.args, (int)topics->topics_cnt,
                      rd_free);
         for (i = 0; i < topics->topics_cnt; i++)
                 rd_list_add(&rko->rko_u.admin_request.args,
                             rd_strdup(topics->topics[i]));
 
-        /* Check for duplicates.
-         * Make a temporary copy of the topic list and sort it to check for
-         * duplicates, we don't want the original list sorted since we want
-         * to maintain ordering. */
-        rd_list_init(&dup_list, rd_list_cnt(&rko->rko_u.admin_request.args),
-                     NULL);
-        rd_list_copy_to(&dup_list, &rko->rko_u.admin_request.args, NULL, NULL);
-        rd_list_sort(&dup_list, rd_kafka_DescribeTopics_cmp);
-        if (rd_list_find_duplicate(&dup_list, rd_kafka_DescribeTopics_cmp)) {
+        if (rd_list_cnt(&rko->rko_u.admin_request.args)) {
+                int j;
+                char *topic_name;
+                /* Check for duplicates.
+                 * Make a temporary copy of the topic list and sort it to check
+                 * for duplicates, we don't want the original list sorted since
+                 * we want to maintain ordering. */
+                rd_list_init(&dup_list,
+                             rd_list_cnt(&rko->rko_u.admin_request.args), NULL);
+                rd_list_copy_to(&dup_list, &rko->rko_u.admin_request.args, NULL,
+                                NULL);
+                rd_list_sort(&dup_list, rd_kafka_DescribeTopics_cmp);
+                if (rd_list_find_duplicate(&dup_list,
+                                           rd_kafka_DescribeTopics_cmp)) {
+                        rd_list_destroy(&dup_list);
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate topics not allowed");
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko, rd_true /*destroy*/);
+                        return;
+                }
+
+                /* Check for empty topics. */
+                RD_LIST_FOREACH(topic_name, &rko->rko_u.admin_request.args, j) {
+                        if (!topic_name[0]) {
+                                rd_list_destroy(&dup_list);
+                                rd_kafka_admin_result_fail(
+                                    rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                    "Empty topic name at index %d isn't "
+                                    "allowed",
+                                    j);
+                                rd_kafka_admin_common_worker_destroy(
+                                    rk, rko, rd_true /*destroy*/);
+                                return;
+                        }
+                }
+
                 rd_list_destroy(&dup_list);
-                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                           "Duplicate topics not allowed");
+                rd_kafka_q_enq(rk->rk_ops, rko);
+        } else {
+                /* Empty list */
+                rd_kafka_op_t *rko_result = rd_kafka_admin_result_new(rko);
+                /* Enqueue empty result on application queue, we're done. */
+                rd_kafka_admin_result_enq(rko, rko_result);
                 rd_kafka_admin_common_worker_destroy(rk, rko,
                                                      rd_true /*destroy*/);
-                return;
         }
-
-        rd_list_destroy(&dup_list);
-        rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
 /**@}*/

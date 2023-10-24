@@ -8735,6 +8735,8 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
                             rd_strdup(topics->topics[i]));
 
         if (rd_list_cnt(&rko->rko_u.admin_request.args)) {
+                int j;
+                char *topic_name;
                 /* Check for duplicates.
                  * Make a temporary copy of the topic list and sort it to check
                  * for duplicates, we don't want the original list sorted since
@@ -8753,6 +8755,21 @@ void rd_kafka_DescribeTopics(rd_kafka_t *rk,
                         rd_kafka_admin_common_worker_destroy(
                             rk, rko, rd_true /*destroy*/);
                         return;
+                }
+
+                /* Check for empty topics. */
+                RD_LIST_FOREACH(topic_name, &rko->rko_u.admin_request.args, j) {
+                        if (!topic_name[0]) {
+                                rd_list_destroy(&dup_list);
+                                rd_kafka_admin_result_fail(
+                                    rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                    "Empty topic name at index %d isn't "
+                                    "allowed",
+                                    j);
+                                rd_kafka_admin_common_worker_destroy(
+                                    rk, rko, rd_true /*destroy*/);
+                                return;
+                        }
                 }
 
                 rd_list_destroy(&dup_list);

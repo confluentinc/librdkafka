@@ -171,12 +171,13 @@ static const rd_kafka_telemetry_metric_info_t
                  .unit        = "ms",
                  .is_int      = rd_true,
                  .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
-           [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS] =
+            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS] =
                 {.name        = "consumer.coordinator.assigned.partitions",
-                 .description = "The number of partitions currently assigned to this consumer.",
-                 .unit        = "1",
-                 .is_int      = rd_true,
-                 .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+                 .description = "The number of partitions currently assigned "
+                                "to this consumer.",
+                 .unit   = "1",
+                 .is_int = rd_true,
+                 .type   = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };
 
 void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size);

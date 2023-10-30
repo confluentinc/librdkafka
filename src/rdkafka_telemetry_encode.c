@@ -194,8 +194,8 @@ calculate_queue_time_max(rd_kafka_t *rk) {
         return max_queue_time;
 }
 
-static rd_kafka_telemetry_metric_value_t calculate_consumer_assigned_partitions(
-        rd_kafka_t *rk) {
+static rd_kafka_telemetry_metric_value_t
+calculate_consumer_assigned_partitions(rd_kafka_t *rk) {
         rd_kafka_telemetry_metric_value_t assigned_partitions;
         rd_kafka_broker_t *rkb;
         rd_kafka_toppar_t *rktp;
@@ -223,7 +223,8 @@ static void reset_historical_metrics(rd_kafka_t *rk) {
                 TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
                         total_assigned_partitions++;
                 }
-                rkb->rkb_c_historic.assigned_partitions = total_assigned_partitions;
+                rkb->rkb_c_historic.assigned_partitions =
+                    total_assigned_partitions;
                 rkb->rkb_c_historic.connects    = rkb->rkb_c.connects.val;
                 rkb->rkb_c_historic.rkb_avg_rtt = rkb->rkb_avg_rtt;
                 rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
@@ -258,18 +259,17 @@ static const rd_kafka_telemetry_metric_value_calculator_t
 };
 
 static const rd_kafka_telemetry_metric_value_calculator_t
-    CONSUMER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT] =
-        {
-            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE] =
-                &calculate_connection_creation_rate,
-            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL] =
-                &calculate_connection_creation_total,
-            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG] =
-                    &calculate_broker_avg_rtt,
-            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX] =
-                    &calculate_broker_max_rtt,
-            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS] =
-                &calculate_consumer_assigned_partitions,
+    CONSUMER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT] = {
+        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE] =
+            &calculate_connection_creation_rate,
+        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL] =
+            &calculate_connection_creation_total,
+        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG] =
+            &calculate_broker_avg_rtt,
+        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX] =
+            &calculate_broker_max_rtt,
+        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS] =
+            &calculate_consumer_assigned_partitions,
 };
 
 static bool

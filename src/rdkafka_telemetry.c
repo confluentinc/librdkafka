@@ -423,6 +423,7 @@ void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rkb->rkb_c_historic.assigned_partitions = 0;
                 rkb->rkb_c_historic.connects = 0;
                 rd_avg_init(&rkb->rkb_c_historic.rkb_avg_rtt, RD_AVG_GAUGE, 0,
                             500 * 1000, 2,

@@ -64,6 +64,9 @@ typedef enum {
 typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE,
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS,
         RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_consumer_metric_name_t;
 
@@ -156,6 +159,24 @@ static const rd_kafka_telemetry_metric_info_t
                  .unit        = "1",
                  .is_int      = rd_true,
                  .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG] =
+                {.name        = "consumer.node.request.latency.avg",
+                 .description = "The average request latency in ms for a node.",
+                 .unit        = "ms",
+                 .is_int      = rd_false,
+                 .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX] =
+                {.name        = "consumer.node.request.latency.max",
+                 .description = "The maximum request latency in ms for a node.",
+                 .unit        = "ms",
+                 .is_int      = rd_true,
+                 .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+           [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS] =
+                {.name        = "consumer.coordinator.assigned.partitions",
+                 .description = "The number of partitions currently assigned to this consumer.",
+                 .unit        = "1",
+                 .is_int      = rd_true,
+                 .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };
 
 void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size);

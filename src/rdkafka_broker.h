@@ -194,6 +194,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         } rkb_c;
 
         struct {
+                int32_t assigned_partitions; /**< Current number of assigned
+                                               partitions. */
                 int32_t connects;                /**< Connection attempts,
                                                   *   successful or not. */
                 rd_avg_t rkb_avg_rtt;            /* Current RTT period */
@@ -202,6 +204,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                   *   between buf_enq0
                                                   *   and writing to socket
                                                   */
+
         } rkb_c_historic;
 
         int rkb_req_timeouts; /* Current value */

@@ -2846,7 +2846,6 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
                 parpriv_copy->current_leader_epoch =
                     parpriv->current_leader_epoch;
                 parpriv_copy->topic_id = parpriv->topic_id;
-                printf("ParPriv Copy Topic Id -> %s\n", rd_kafka_uuid_base64str(&parpriv_copy->topic_id));
         } else if (rktp) {
                 rd_kafka_topic_partition_private_t *parpriv_copy =
                     rd_kafka_topic_partition_get_private(rktpar);
@@ -2873,6 +2872,7 @@ rd_kafka_topic_partition_list_add_with_topic_id(rd_kafka_topic_partition_list_t 
         rd_kafka_topic_partition_private_t *parpriv = rd_kafka_topic_partition_private_new();
         rd_kafka_topic_partition_t *rktpar;
         parpriv->topic_id = topic_id;
+        printf("Topic Id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
         rktpar = rd_kafka_topic_partition_list_add0(
             __FUNCTION__, __LINE__, rktparlist, "", partition, NULL, parpriv);
         rd_kafka_topic_partition_private_destroy(parpriv);

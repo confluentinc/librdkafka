@@ -2448,6 +2448,45 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
 }
 
 
+static rd_kafka_error_t *rd_kafka_consumer_assign(rd_kafka_cgrp_t  *rkcg,
+                                                  rd_kafka_topic_partition_list_t * partitions) {
+
+        rd_kafka_error_t *error;
+        rd_kafka_assignment_pause(rkcg->rkcg_rk,
+                                  "consumer assign called");
+        error = rd_kafka_assignment_add(rkcg->rkcg_rk, partitions);
+        if (error)
+                return error;
+
+        rd_kafka_assignment_resume(rkcg->rkcg_rk,
+                                   "consumer assign called");
+        rd_kafka_assignment_serve(rkcg->rkcg_rk);
+        return NULL;
+}
+
+
+/**
+ * @brief Op callback from handle_JoinGroup
+ */
+static rd_kafka_op_res_t
+rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
+                                          rd_kafka_q_t *rkq,
+                                          rd_kafka_op_t *rko) {
+
+        printf("In ConsumerGroupHeartbeat Metadata handler\n");
+        rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
+        rkcg->rkcg_subscription->elems[0].topic = rd_strdup(rko->rko_u.metadata.md->topics[0].topic);
+
+        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+                return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
+
+        // Check whether the metadata response has all the requested topic ids.
+        printf("Started assignment\n");
+        rd_kafka_consumer_assign(rkcg, rkcg->rkcg_subscription);
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+
 /**
  * @brief Handle Heartbeat response.
  */
@@ -2517,7 +2556,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
         int8_t are_assignments_present;
         rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
-
+        printf("Are assignment present %d\n", are_assignments_present);
         if(are_assignments_present) {
                 int8_t assignment_error_code;
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;
@@ -2542,18 +2581,24 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
 
                 if(assigned_topic_partitions && assigned_topic_partitions->cnt > 0) {
-
+                        rd_kafka_op_t *rko;
                         rd_kafka_uuid_t topic_id =
                             rd_kafka_topic_partition_get_topic_id(&assigned_topic_partitions->elems[0]);
+                        rd_list_t *topic_ids = rd_list_new(1, rd_list_uuid_destroy);
                         printf("Assigned Topic id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
 
-                        rd_list_t *topic_ids = rd_list_new(1, rd_list_uuid_destroy);
+                        rkcg->rkcg_subscription = assigned_topic_partitions;
                         rd_list_add(topic_ids, rd_kafka_uuid_copy(&topic_id));
+
+                        rko = rd_kafka_op_new_cb(
+                            rkcg->rkcg_rk, RD_KAFKA_OP_METADATA,
+                            rd_kafka_cgrp_consumer_handle_Metadata_op);
+                        rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
                         rd_kafka_MetadataRequest(
                             rkb, NULL, topic_ids, "ConsumerGroupHeartbeat API Response",
                             rd_false /*!allow_auto_create*/,
                             rd_false,
-                            rd_false, NULL);
+                            rd_false, rko);
                         rd_list_destroy(topic_ids);
                 }
 

@@ -49,20 +49,35 @@ typedef struct rd_tmpabuf_s {
         size_t of;
         char *buf;
         int failed;
-        int assert_on_fail;
+        rd_bool_t assert_on_fail;
 } rd_tmpabuf_t;
 
 /**
- * @brief Allocate new tmpabuf with \p size bytes pre-allocated.
+ * @brief Initialize new tmpabuf of non-final \p size bytes.
  */
 static RD_UNUSED void
-rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, int assert_on_fail) {
-        tab->buf            = rd_malloc(size);
-        tab->size           = size;
+rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, rd_bool_t assert_on_fail) {
+        tab->buf            = NULL;
+        tab->size           = RD_ROUNDUP(size, 8);
         tab->of             = 0;
         tab->failed         = 0;
         tab->assert_on_fail = assert_on_fail;
 }
+
+/**
+ * @brief Add a new allocation of \p _size bytes,
+ *        rounded up to maximum word size,
+ *        for \p _times times.
+ */
+#define rd_tmpabuf_add_alloc_times(_tab, _size, _times)                        \
+        (_tab)->size += RD_ROUNDUP(_size, 8) * _times
+
+#define rd_tmpabuf_add_alloc(_tab, _size)                                      \
+        rd_tmpabuf_add_alloc_times(_tab, _size, 1)
+/**
+ * @brief Finalize tmpabuf pre-allocating tab->size bytes.
+ */
+#define rd_tmpabuf_finalize(_tab) (_tab)->buf = rd_malloc((_tab)->size)
 
 /**
  * @brief Free memory allocated by tmpabuf
@@ -933,6 +948,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request0(rd_kafka_broker_t *rkb,
 #define rd_kafka_buf_new_flexver_request(rkb, ApiKey, segcnt, size,            \
                                          is_flexver)                           \
         rd_kafka_buf_new_request0(rkb, ApiKey, segcnt, size, is_flexver)
+void rd_kafka_buf_upgrade_flexver_request(rd_kafka_buf_t *rkbuf);
 
 rd_kafka_buf_t *
 rd_kafka_buf_new_shadow(const void *ptr, size_t size, void (*free_cb)(void *));
@@ -1439,7 +1455,7 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
         } while (0)
 
 static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
-                                              rd_kafka_uuid_t *uuid) {
+                                              rd_kafka_Uuid_t *uuid) {
         rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
         rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
 }

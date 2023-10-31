@@ -87,7 +87,9 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_LISTCONSUMERGROUPS] = "REPLY:LISTCONSUMERGROUPS",
             [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
                 "REPLY:DESCRIBECONSUMERGROUPS",
-            [RD_KAFKA_OP_DELETEGROUPS] = "REPLY:DELETEGROUPS",
+            [RD_KAFKA_OP_DESCRIBETOPICS]  = "REPLY:DESCRIBETOPICS",
+            [RD_KAFKA_OP_DESCRIBECLUSTER] = "REPLY:DESCRIBECLUSTER",
+            [RD_KAFKA_OP_DELETEGROUPS]    = "REPLY:DELETEGROUPS",
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
             [RD_KAFKA_OP_CREATEACLS]   = "REPLY:CREATEACLS",
@@ -114,6 +116,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:ALTERUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
+            [RD_KAFKA_OP_LISTOFFSETS] = "REPLY:LISTOFFSETS",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -243,7 +246,9 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_LISTCONSUMERGROUPS] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
                 sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_DELETEGROUPS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBETOPICS]  = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBECLUSTER] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DELETEGROUPS]    = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_CREATEACLS]   = sizeof(rko->rko_u.admin_request),
@@ -270,6 +275,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_LISTOFFSETS] = sizeof(rko->rko_u.admin_request),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -415,9 +421,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_DESCRIBEACLS:
         case RD_KAFKA_OP_DELETEACLS:
         case RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_DESCRIBETOPICS:
+        case RD_KAFKA_OP_DESCRIBECLUSTER:
         case RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS:
         case RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS:
+        case RD_KAFKA_OP_LISTOFFSETS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 if (rko->rko_u.admin_request.options.match_consumer_group_states
@@ -747,11 +756,11 @@ rd_kafka_op_call(rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 rd_kafka_op_t *rd_kafka_op_new_ctrl_msg(rd_kafka_toppar_t *rktp,
                                         int32_t version,
                                         rd_kafka_buf_t *rkbuf,
-                                        int64_t offset) {
+                                        rd_kafka_fetch_pos_t pos) {
         rd_kafka_msg_t *rkm;
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new_fetch_msg(&rkm, rktp, version, rkbuf, offset, 0,
+        rko = rd_kafka_op_new_fetch_msg(&rkm, rktp, version, rkbuf, pos, 0,
                                         NULL, 0, NULL);
 
         rkm->rkm_flags |= RD_KAFKA_MSG_F_CONTROL;
@@ -770,7 +779,7 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
                                          rd_kafka_toppar_t *rktp,
                                          int32_t version,
                                          rd_kafka_buf_t *rkbuf,
-                                         int64_t offset,
+                                         rd_kafka_fetch_pos_t pos,
                                          size_t key_len,
                                          const void *key,
                                          size_t val_len,
@@ -792,7 +801,8 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
         rko->rko_u.fetch.rkbuf = rkbuf;
         rd_kafka_buf_keep(rkbuf);
 
-        rkm->rkm_offset = offset;
+        rkm->rkm_offset                  = pos.offset;
+        rkm->rkm_u.consumer.leader_epoch = pos.leader_epoch;
 
         rkm->rkm_key     = (void *)key;
         rkm->rkm_key_len = key_len;

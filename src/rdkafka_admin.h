@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2018-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,12 +94,27 @@ struct rd_kafka_AdminOptions_s {
                                      * Valid for:
                                      *     ListConsumerGroupOffsets
                                      */
+        rd_kafka_confval_t
+            include_authorized_operations; /**< BOOL: Whether broker should
+                                            * return authorized operations.
+                                            * Valid for:
+                                            *     DescribeConsumerGroups
+                                            *     DescribeCluster
+                                            *     DescribeTopics
+                                            */
 
         rd_kafka_confval_t
             match_consumer_group_states; /**< PTR: list of consumer group states
                                           *   to query for.
                                           *   Valid for: ListConsumerGroups.
                                           */
+
+        rd_kafka_confval_t
+            isolation_level; /**< INT:Isolation Level needed for list Offset
+                              *   to query for.
+                              *   Default Set to
+                              * RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED
+                              */
 
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
                                     *   Valid for all. */
@@ -298,6 +314,47 @@ struct rd_kafka_DeleteRecords_s {
 
 /**@}*/
 
+/**
+ * @name ListConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief ListConsumerGroupOffsets result
+ */
+struct rd_kafka_ListConsumerGroupOffsets_result_s {
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_ListConsumerGroupOffsets_s {
+        char *group_id; /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
+};
+
+/**@}*/
+
+/**
+ * @name AlterConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief AlterConsumerGroupOffsets result
+ */
+struct rd_kafka_AlterConsumerGroupOffsets_result_s {
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_AlterConsumerGroupOffsets_s {
+        char *group_id; /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
+};
+
+/**@}*/
 
 /**
  * @name DeleteConsumerGroupOffsets
@@ -318,6 +375,24 @@ struct rd_kafka_DeleteConsumerGroupOffsets_s {
                        *   the struct here. */
 };
 
+/**@}*/
+
+/**
+ * @name ListOffsets
+ * @{
+ */
+
+/**
+ * @struct ListOffsets result about a single partition
+ */
+struct rd_kafka_ListOffsetsResultInfo_s {
+        rd_kafka_topic_partition_t *topic_partition;
+        int64_t timestamp;
+};
+
+rd_kafka_ListOffsetsResultInfo_t *
+rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
+                                   rd_ts_t timestamp);
 /**@}*/
 
 /**
@@ -353,50 +428,6 @@ struct rd_kafka_AclBinding_s {
 struct rd_kafka_DeleteAcls_result_response_s {
         rd_kafka_error_t *error; /**< Response error object, or NULL */
         rd_list_t matching_acls; /**< Type (rd_kafka_AclBinding_t *) */
-};
-
-/**@}*/
-
-
-/**
- * @name AlterConsumerGroupOffsets
- * @{
- */
-
-/**
- * @brief AlterConsumerGroupOffsets result
- */
-struct rd_kafka_AlterConsumerGroupOffsets_result_s {
-        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
-};
-
-struct rd_kafka_AlterConsumerGroupOffsets_s {
-        char *group_id; /**< Points to data */
-        rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group id is allocated along with
-                       *   the struct here. */
-};
-
-/**@}*/
-
-
-/**
- * @name ListConsumerGroupOffsets
- * @{
- */
-
-/**
- * @brief ListConsumerGroupOffsets result
- */
-struct rd_kafka_ListConsumerGroupOffsets_result_s {
-        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
-};
-
-struct rd_kafka_ListConsumerGroupOffsets_s {
-        char *group_id; /**< Points to data */
-        rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group id is allocated along with
-                       *   the struct here. */
 };
 
 /**@}*/
@@ -473,9 +504,85 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_consumer_group_state_t state;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
+        /** Count of operations allowed for topic. -1 indicates operations not
+         * requested.*/
+        int authorized_operations_cnt;
+        /** Operations allowed for topic. May be NULL if operations were not
+         * requested */
+        rd_kafka_AclOperation_t *authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;
 };
+
+/**@}*/
+
+/**
+ * @name DescribeTopics
+ * @{
+ */
+
+/**
+ * @brief TopicCollection contains a list of topics.
+ *
+ */
+struct rd_kafka_TopicCollection_s {
+        char **topics;     /**< List of topic names. */
+        size_t topics_cnt; /**< Count of topic names. */
+};
+
+/**
+ * @brief TopicPartition result type in DescribeTopics result.
+ *
+ */
+struct rd_kafka_TopicPartitionInfo_s {
+        int partition;              /**< Partition id. */
+        rd_kafka_Node_t *leader;    /**< Leader of the partition. */
+        size_t isr_cnt;             /**< Count of insync replicas. */
+        rd_kafka_Node_t **isr;      /**< List of in sync replica nodes. */
+        size_t replica_cnt;         /**< Count of partition replicas. */
+        rd_kafka_Node_t **replicas; /**< List of replica nodes. */
+};
+
+/**
+ * @struct DescribeTopics result
+ */
+struct rd_kafka_TopicDescription_s {
+        char *topic;              /**< Topic name */
+        rd_kafka_Uuid_t topic_id; /**< Topic Id */
+        int partition_cnt;        /**< Number of partitions in \p partitions*/
+        rd_bool_t is_internal;    /**< Is the topic is internal to Kafka? */
+        rd_kafka_TopicPartitionInfo_t **partitions; /**< Partitions */
+        rd_kafka_error_t *error;       /**< Topic error reported by broker */
+        int authorized_operations_cnt; /**< Count of operations allowed for
+                                        * topic. -1 indicates operations not
+                                        * requested. */
+        rd_kafka_AclOperation_t
+            *authorized_operations; /**< Operations allowed for topic. May be
+                                     * NULL if operations were not requested */
+};
+
+/**@}*/
+
+/**
+ * @name DescribeCluster
+ * @{
+ */
+/**
+ * @struct DescribeCluster result - internal type.
+ */
+typedef struct rd_kafka_ClusterDescription_s {
+        char *cluster_id;              /**< Cluster id */
+        rd_kafka_Node_t *controller;   /**< Current controller. */
+        size_t node_cnt;               /**< Count of brokers in the cluster. */
+        rd_kafka_Node_t **nodes;       /**< Brokers in the cluster. */
+        int authorized_operations_cnt; /**< Count of operations allowed for
+                                        * cluster. -1 indicates operations not
+                                        * requested. */
+        rd_kafka_AclOperation_t
+            *authorized_operations; /**< Operations allowed for cluster. May be
+                                     * NULL if operations were not requested */
+
+} rd_kafka_ClusterDescription_t;
 
 /**@}*/
 

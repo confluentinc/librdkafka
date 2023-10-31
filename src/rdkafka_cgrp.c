@@ -370,7 +370,8 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
-        if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state_cb)
+        if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state_cb &&
+            rkcg->rkcg_assignor_state)
                 rkcg->rkcg_assignor->rkas_destroy_state_cb(
                     rkcg->rkcg_assignor_state);
         rd_free(rkcg);
@@ -754,8 +755,11 @@ void rd_kafka_cgrp_coord_query(rd_kafka_cgrp_t *rkcg, const char *reason) {
 
         rd_kafka_broker_destroy(rkb);
 
-        /* Back off the next intervalled query since we just sent one. */
-        rd_interval_reset_to_now(&rkcg->rkcg_coord_query_intvl, 0);
+        /* Back off the next intervalled query with a jitter since we just sent
+         * one. */
+        rd_interval_reset_to_now_with_jitter(&rkcg->rkcg_coord_query_intvl, 0,
+                                             500,
+                                             RD_KAFKA_RETRY_JITTER_PERCENT);
 }
 
 /**
@@ -1914,7 +1918,9 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                                      "Unsupported assignment strategy \"%s\"",
                                      protocol_name);
                         if (rkcg->rkcg_assignor) {
-                                if (rkcg->rkcg_assignor->rkas_destroy_state_cb)
+                                if (rkcg->rkcg_assignor
+                                        ->rkas_destroy_state_cb &&
+                                    rkcg->rkcg_assignor_state)
                                         rkcg->rkcg_assignor
                                             ->rkas_destroy_state_cb(
                                                 rkcg->rkcg_assignor_state);
@@ -1952,7 +1958,8 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
         }
 
         if (rkcg->rkcg_assignor && rkcg->rkcg_assignor != rkas) {
-                if (rkcg->rkcg_assignor->rkas_destroy_state_cb)
+                if (rkcg->rkcg_assignor->rkas_destroy_state_cb &&
+                    rkcg->rkcg_assignor_state)
                         rkcg->rkcg_assignor->rkas_destroy_state_cb(
                             rkcg->rkcg_assignor_state);
                 rkcg->rkcg_assignor_state = NULL;

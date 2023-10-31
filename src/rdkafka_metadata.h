@@ -54,7 +54,11 @@ typedef struct rd_kafka_metadata_topic_internal_s {
          *  same count as metadata.topics[i].partition_cnt.
          *  Sorted by Partition Id. */
         rd_kafka_metadata_partition_internal_t *partitions;
-        rd_kafka_uuid_t topic_id;
+        rd_kafka_Uuid_t topic_id;
+        int32_t topic_authorized_operations; /**< ACL operations allowed
+                                              * for topic, -1 if not
+                                              * supported by broker */
+        rd_bool_t is_internal;               /**< Is topic internal to Kafka? */
 } rd_kafka_metadata_topic_internal_t;
 
 
@@ -77,11 +81,19 @@ typedef struct rd_kafka_metadata_internal_s {
                            be kept the first field so the pointer
                            can be cast to *rd_kafka_metadata_internal_t
                            when needed */
+        /* Identical to metadata->brokers, but sorted by broker id. */
+        struct rd_kafka_metadata_broker *brokers_sorted;
         /* Internal metadata brokers. Same count as metadata.broker_cnt.
          * Sorted by broker id. */
         rd_kafka_metadata_broker_internal_t *brokers;
         /* Internal metadata topics. Same count as metadata.topic_cnt. */
         rd_kafka_metadata_topic_internal_t *topics;
+        char *cluster_id;  /**< Cluster id (optionally populated)*/
+        int controller_id; /**< current controller id for cluster, -1 if not
+                            * supported by broker. */
+        int32_t cluster_authorized_operations; /**< ACL operations allowed
+                                                * for cluster, -1 if not
+                                                * supported by broker */
 } rd_kafka_metadata_internal_t;
 
 /**
@@ -92,10 +104,17 @@ typedef struct rd_kafka_metadata_internal_s {
 
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 
-rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
-                                            rd_kafka_buf_t *request,
-                                            rd_kafka_buf_t *rkbuf,
-                                            rd_kafka_metadata_internal_t **mdp);
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                        rd_kafka_buf_t *request,
+                        rd_kafka_buf_t *rkbuf,
+                        rd_kafka_metadata_internal_t **mdip);
+
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
+                              rd_kafka_buf_t *rkbuf,
+                              rd_list_t *request_topics,
+                              rd_kafka_metadata_internal_t **mdip);
 
 rd_kafka_metadata_internal_t *
 rd_kafka_metadata_copy(const rd_kafka_metadata_internal_t *mdi, size_t size);
@@ -160,6 +179,10 @@ int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
 int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
 
+int rd_kafka_metadata_broker_cmp(const void *_a, const void *_b);
+
+void rd_kafka_metadata_partition_clear(
+    struct rd_kafka_metadata_partition *rkmp);
 
 #define rd_kafka_metadata_broker_internal_find(mdi, broker_id, broker)         \
         do {                                                                   \
@@ -245,6 +268,7 @@ struct rd_kafka_metadata_cache {
 
 
 
+int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic);
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
 int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
 void rd_kafka_metadata_cache_topic_update(

@@ -30,6 +30,47 @@
 
 #if WITH_SSL
 #include <openssl/ssl.h>
+#else
+
+#define conv_bin2ascii(a, table) ((table)[(a)&0x3f])
+
+static const unsigned char data_bin2ascii[65] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static int base64_encoding_conversion(unsigned char *out,
+                                      const unsigned char *in,
+                                      int dlen) {
+        int i, ret = 0;
+        unsigned long l;
+
+        for (i = dlen; i > 0; i -= 3) {
+                if (i >= 3) {
+                        l = (((unsigned long)in[0]) << 16L) |
+                            (((unsigned long)in[1]) << 8L) | in[2];
+                        *(out++) = conv_bin2ascii(l >> 18L, data_bin2ascii);
+                        *(out++) = conv_bin2ascii(l >> 12L, data_bin2ascii);
+                        *(out++) = conv_bin2ascii(l >> 6L, data_bin2ascii);
+                        *(out++) = conv_bin2ascii(l, data_bin2ascii);
+                } else {
+                        l = ((unsigned long)in[0]) << 16L;
+                        if (i == 2)
+                                l |= ((unsigned long)in[1] << 8L);
+
+                        *(out++) = conv_bin2ascii(l >> 18L, data_bin2ascii);
+                        *(out++) = conv_bin2ascii(l >> 12L, data_bin2ascii);
+                        *(out++) =
+                            (i == 1) ? '='
+                                     : conv_bin2ascii(l >> 6L, data_bin2ascii);
+                        *(out++) = '=';
+                }
+                ret += 4;
+                in += 3;
+        }
+
+        *out = '\0';
+        return ret;
+}
+
 #endif
 
 /**
@@ -41,7 +82,6 @@
  */
 void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
 
-#if WITH_SSL
         size_t max_len;
 
         /* OpenSSL takes an |int| argument so the input cannot exceed that. */
@@ -53,14 +93,16 @@ void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
         max_len  = (((in->size + 2) / 3) * 4) + 1;
         out->ptr = rd_malloc(max_len);
 
+#if WITH_SSL
         out->size = EVP_EncodeBlock((unsigned char *)out->ptr,
                                     (unsigned char *)in->ptr, (int)in->size);
+#else
+        out->size = base64_encoding_conversion(
+            (unsigned char *)out->ptr, (unsigned char *)in->ptr, (int)in->size);
+#endif
 
         rd_assert(out->size < max_len);
         out->ptr[out->size] = 0;
-#else
-        out->ptr = NULL;
-#endif
 }
 
 

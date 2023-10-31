@@ -6,10 +6,13 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	openssl_engine_example_cpp \
 	list_consumer_groups \
 	describe_consumer_groups \
+	describe_topics \
+	describe_cluster \
 	list_consumer_group_offsets \
 	alter_consumer_group_offsets \
 	incremental_alter_configs \
 	user_scram \
+	list_offsets \
 	misc
 
 all: $(EXAMPLES)
@@ -74,6 +77,14 @@ describe_consumer_groups: ../src/librdkafka.a describe_consumer_groups.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 
+describe_topics: ../src/librdkafka.a describe_topics.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+describe_cluster: ../src/librdkafka.a describe_cluster.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
 list_consumer_group_offsets: ../src/librdkafka.a list_consumer_group_offsets.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
@@ -135,6 +146,10 @@ openssl_engine_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a openss
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
 user_scram: ../src/librdkafka.a user_scram.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+list_offsets: ../src/librdkafka.a list_offsets.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

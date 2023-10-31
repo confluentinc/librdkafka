@@ -584,12 +584,12 @@ typedef struct rd_kafka_Uuid_s {
 } rd_kafka_Uuid_t;
 
 #define RD_KAFKA_UUID_ZERO                                                     \
-        (rd_kafka_uuid_t) {                                                    \
+        (rd_kafka_Uuid_t) {                                                    \
                 0, 0, ""                                                       \
         }
 
 #define RD_KAFKA_UUID_METADATA_TOPIC_ID                                        \
-        (rd_kafka_uuid_t) {                                                    \
+        (rd_kafka_Uuid_t) {                                                    \
                 0, 1, ""                                                       \
         }
 
@@ -599,8 +599,8 @@ typedef struct rd_kafka_Uuid_s {
  *
  * @return A newly allocated UUID.
  */
-static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
-        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t *));
+static RD_INLINE RD_UNUSED rd_kafka_Uuid_t *rd_kafka_uuid_new() {
+        rd_kafka_Uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_Uuid_t *));
         return uuid;
 }
 
@@ -609,12 +609,12 @@ static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
  *
  * @param uuid UUID to initialize.
  */
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_uuid_t *uuid) {
+static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_Uuid_t *uuid) {
         memset(uuid, 0, sizeof(*uuid));
 }
 
-static RD_INLINE RD_UNUSED int rd_kafka_uuid_cmp(rd_kafka_uuid_t a,
-                                                 rd_kafka_uuid_t b) {
+static RD_INLINE RD_UNUSED int rd_kafka_uuid_cmp(rd_kafka_Uuid_t a,
+                                                 rd_kafka_Uuid_t b) {
         return (a.most_significant_bits - b.most_significant_bits) ||
                (a.least_significant_bits - b.least_significant_bits);
 }
@@ -627,7 +627,7 @@ static RD_INLINE RD_UNUSED int rd_kafka_uuid_cmp(rd_kafka_uuid_t a,
  *         issue with the conversion or the conversion is not supported.
  */
 static RD_INLINE RD_UNUSED char *
-rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
+rd_kafka_uuid_base64str(rd_kafka_Uuid_t *uuid) {
         if (*uuid->base64str)
                 return uuid->base64str;
 
@@ -653,7 +653,7 @@ rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
         return uuid->base64str;
 }
 
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid) {
+static RD_INLINE RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_Uuid_t *uuid) {
         rd_free(uuid);
 }
 

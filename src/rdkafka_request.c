@@ -357,7 +357,7 @@ int rd_kafka_buf_write_topic_partitions(
 
                         /* Topic */
                         if (use_topic_id) {
-                                rd_kafka_uuid_t topic_id =
+                                rd_kafka_Uuid_t topic_id =
                                     rd_kafka_topic_partition_get_topic_id(
                                         rktpar);
                                 rd_kafka_buf_write_uuid(rkbuf, &topic_id);

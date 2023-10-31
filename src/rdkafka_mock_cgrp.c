@@ -748,7 +748,7 @@ static void rd_kafka_mock_cgrp_consumer_member_target_assignment_set(
 
         /* If not present, fill topic ids using names */
         RD_KAFKA_TPLIST_FOREACH(rktpar, member->target_assignment) {
-                rd_kafka_uuid_t topic_id =
+                rd_kafka_Uuid_t topic_id =
                     rd_kafka_topic_partition_get_topic_id(rktpar);
                 if (!rd_kafka_uuid_cmp(topic_id, RD_KAFKA_UUID_ZERO)) {
                         rd_kafka_mock_topic_t *mtopic =
@@ -823,7 +823,7 @@ rd_kafka_mock_cgrp_consumer_member_assignment_filter(
             rd_kafka_topic_partition_list_new(assignment->cnt);
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, assignment) {
-                rd_kafka_uuid_t topic_id =
+                rd_kafka_Uuid_t topic_id =
                     rd_kafka_topic_partition_get_topic_id(rktpar);
                 if (rd_kafka_uuid_cmp(topic_id, RD_KAFKA_UUID_ZERO)) {
                         rd_kafka_topic_partition_list_add_copy(ret, rktpar);
@@ -883,7 +883,7 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
                         if (member->current_assignment) {
                                 RD_KAFKA_TPLIST_FOREACH(
                                     rktpar, member->current_assignment) {
-                                        rd_kafka_uuid_t topic_id =
+                                        rd_kafka_Uuid_t topic_id =
                                             rd_kafka_topic_partition_get_topic_id(
                                                 rktpar);
                                         if (rd_kafka_topic_partition_list_find_by_id_idx(

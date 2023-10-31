@@ -2257,7 +2257,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                     rd_kafka_topic_partition_list_new(TopicPartitionsCnt);
         for (i = 0; i < TopicPartitionsCnt; i++) {
                 int32_t PartitionsCnt;
-                rd_kafka_uuid_t TopicId;
+                rd_kafka_Uuid_t TopicId;
                 rd_kafka_mock_topic_t *mtopic;
                 int j;
 

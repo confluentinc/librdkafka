@@ -2865,10 +2865,11 @@ rd_kafka_topic_partition_list_add(rd_kafka_topic_partition_list_t *rktparlist,
 }
 
 
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add_with_topic_id(rd_kafka_topic_partition_list_t *rktparlist,
-                                  rd_kafka_uuid_t topic_id,
-                                  int32_t partition) {
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_uuid_t topic_id,
+    const char *topic_name,
+    int32_t partition) {
         rd_kafka_topic_partition_private_t *parpriv = rd_kafka_topic_partition_private_new();
         rd_kafka_topic_partition_t *rktpar;
         parpriv->topic_id = topic_id;

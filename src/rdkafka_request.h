@@ -93,6 +93,7 @@ int rd_kafka_buf_write_topic_partitions(
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     const rd_kafka_topic_partition_field_t *fields);
 
 rd_kafka_resp_err_t
@@ -154,10 +155,18 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  const char *group_id,
                                  rd_kafka_topic_partition_list_t *parts,
+                                 rd_bool_t use_topic_id,
+                                 int32_t generation_id_or_member_epoch,
+                                 rd_kafkap_str_t *member_id,
                                  rd_bool_t require_stable_offsets,
                                  int timeout,
                                  rd_kafka_replyq_t replyq,
-                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void (*resp_cb)(rd_kafka_t *,
+                                                 rd_kafka_broker_t *,
+                                                 rd_kafka_resp_err_t,
+                                                 rd_kafka_buf_t *,
+                                                 rd_kafka_buf_t *,
+                                                 void *),
                                  void *opaque);
 
 rd_kafka_resp_err_t

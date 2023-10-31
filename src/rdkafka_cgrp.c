@@ -5160,7 +5160,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
 
                 rd_kafka_OffsetFetchRequest(
                     rkcg->rkcg_coord, rk->rk_group_id->str,
-                    rko->rko_u.offset_fetch.partitions,
+                    rko->rko_u.offset_fetch.partitions, rd_false, -1, NULL,
                     rko->rko_u.offset_fetch.require_stable_offsets,
                     0, /* Timeout */
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),

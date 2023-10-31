@@ -160,7 +160,7 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
                     rkbuf, owned_partitions,
                     rd_false /*don't skip invalid offsets*/,
                     rd_false /*any offset*/, rd_false /* use_topic name */,
-                    fields);
+                    rd_true, fields);
         }
 
         /* Following data is ignored by consumer version < 2 */

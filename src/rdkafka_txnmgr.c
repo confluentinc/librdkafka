@@ -1716,7 +1716,8 @@ rd_kafka_txn_send_TxnOffsetCommitRequest(rd_kafka_broker_t *rkb,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         cnt = rd_kafka_buf_write_topic_partitions(
             rkbuf, rko->rko_u.txn.offsets, rd_true /*skip invalid offsets*/,
-            rd_false /*any offset*/, rd_false /* use_topic name */, fields);
+            rd_false /*any offset*/, rd_false /* use_topic name */, rd_true,
+            fields);
         if (!cnt) {
                 /* No valid partition offsets, don't commit. */
                 rd_kafka_buf_destroy(rkbuf);

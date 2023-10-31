@@ -6481,8 +6481,8 @@ static rd_kafka_resp_err_t rd_kafka_ListConsumerGroupOffsetsRequest(
         require_stable_offsets =
             rd_kafka_confval_get_int(&options->require_stable_offsets);
         rd_kafka_OffsetFetchRequest(
-            rkb, grpoffsets->group_id, grpoffsets->partitions,
-            require_stable_offsets, op_timeout, replyq, resp_cb, opaque);
+            rkb, grpoffsets->group_id, grpoffsets->partitions, rd_false, -1,
+            NULL, require_stable_offsets, op_timeout, replyq, resp_cb, opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 

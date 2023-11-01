@@ -953,10 +953,10 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                 int j;
 
                 rd_kafka_buf_read_str(rkbuf, &topic);
-                if(ApiVersion >= 9) {
-                        topic_id = rd_kafka_uuid_new();
-                        rd_kafka_buf_read_uuid(rkbuf, topic_id);
-                }
+//                if(ApiVersion >= 9) {
+//                        topic_id = rd_kafka_uuid_new();
+//                        rd_kafka_buf_read_uuid(rkbuf, topic_id);
+//                }
                 rd_kafka_buf_read_arraycnt(rkbuf, &PartArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
 
@@ -1213,25 +1213,14 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
             rkb, RD_KAFKAP_OffsetFetch, 0, 9, NULL);
 
         if (parts) {
-                parts_size = parts->cnt * 48;
+                parts_size = parts->cnt * 64;
         }
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
             /* GroupId + GenerationIdOrMemberEpoch + MemberId +
              * rd_kafka_buf_write_arraycnt_pos + Topics + RequireStable */
-            32 + 4 + 4 + 32 + parts_size + 1, ApiVersion >= 6 /*flexver*/);
-
-        if(ApiVersion >= 9) {
-                rd_kafka_buf_write_i32(rkbuf, generation_id_or_member_epoch);
-                if(!member_id) {
-                        rd_kafkap_str_t *null_member_id = rd_kafkap_str_new(NULL, -1);
-                        rd_kafka_buf_write_kstr(rkbuf, null_member_id);
-                        rd_kafkap_str_destroy(null_member_id);
-                } else {
-                        rd_kafka_buf_write_kstr(rkbuf, member_id);
-                }
-        }
+            32 + 4 + 50 + 4 + parts_size + 1, ApiVersion >= 6 /*flexver*/);
 
         if (ApiVersion >= 8) {
                 /*
@@ -1244,6 +1233,17 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
         /* ConsumerGroup */
         rd_kafka_buf_write_str(rkbuf, group_id, -1);
+
+        if(ApiVersion >= 9) {
+                if(!member_id) {
+                        rd_kafkap_str_t *null_member_id = rd_kafkap_str_new(NULL, -1);
+                        rd_kafka_buf_write_kstr(rkbuf, null_member_id);
+                        rd_kafkap_str_destroy(null_member_id);
+                } else {
+                        rd_kafka_buf_write_kstr(rkbuf, member_id);
+                }
+                rd_kafka_buf_write_i32(rkbuf, generation_id_or_member_epoch);
+        }
 
         if (parts) {
                 /* Sort partitions by topic */

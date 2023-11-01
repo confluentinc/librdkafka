@@ -2505,7 +2505,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rd_kafkap_str_t error_str;
         rd_kafkap_str_t member_id;
         int32_t member_epoch;
-        rd_bool_t should_compute_assignment;
+//        rd_bool_t should_compute_assignment;
         int32_t heartbeat_interval_ms;
 
 
@@ -2533,12 +2533,12 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
         rd_kafka_buf_read_str(rkbuf, &member_id);
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
-        rd_kafka_buf_read_bool(rkbuf, &should_compute_assignment);
+//        rd_kafka_buf_read_bool(rkbuf, &should_compute_assignment);
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
 
         printf("Member Id is '%s'\n", member_id.str);
         printf("Member Epoch is '%d'\n", member_epoch);
-        printf("Should Compute Assignment is '%s'\n", should_compute_assignment ? "true" : "false");
+//        printf("Should Compute Assignment is '%s'\n", should_compute_assignment ? "true" : "false");
         printf("Heartbeat Interval Ms is '%d'\n", heartbeat_interval_ms);
 
         /*
@@ -2558,17 +2558,17 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
         printf("Are assignment present %d\n", are_assignments_present);
         if(are_assignments_present) {
-                int8_t assignment_error_code;
+//                int8_t assignment_error_code;
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;
 //                rd_kafka_topic_partition_list_t *pending_topic_partitions;
 //                int16_t metadata_version;
 //                rd_kafkap_bytes_t metadata_bytes;
 
-                rd_kafka_buf_read_i8(rkbuf, &assignment_error_code);
-                if(assignment_error_code) {
-                        err = (int16_t ) assignment_error_code;
-                        goto err;
-                }
+//                rd_kafka_buf_read_i8(rkbuf, &assignment_error_code);
+//                if(assignment_error_code) {
+//                        err = (int16_t ) assignment_error_code;
+//                        goto err;
+//                }
 
                 const rd_kafka_topic_partition_field_t
                     assignments_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
@@ -2588,8 +2588,8 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                         printf("Assigned Topic id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
 
                         rkcg->rkcg_subscription = assigned_topic_partitions;
-                        rd_list_add(topic_ids, rd_kafka_uuid_copy(&topic_id));
 
+                        rd_list_add(topic_ids, rd_kafka_uuid_copy(&topic_id));
                         rko = rd_kafka_op_new_cb(
                             rkcg->rkcg_rk, RD_KAFKA_OP_METADATA,
                             rd_kafka_cgrp_consumer_handle_Metadata_op);

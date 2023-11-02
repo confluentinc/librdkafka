@@ -145,20 +145,30 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
                                        *   ConsumerGroupHeartbeat */
         int32_t current_member_epoch; /**< Current member epoch,
                                        *   updated only on heartbeat. */
+        int32_t target_member_epoch;  /**< Target member epoch,
+                                       *   only updated after next assignment has
+                                       *   been  sent to a member.
+                                       */
         int32_t
-            target_member_epoch; /**< Target member epoch,
-                                  *   updated only when calling
-                                  *   rd_kafka_mock_cgrp_consumer_target_assignment.
-                                  */
+            next_member_epoch; /**< Next member epoch,
+                                *   updated only when calling
+                                *   rd_kafka_mock_cgrp_consumer_target_assignment.
+                                */
         rd_kafka_topic_partition_list_t
             *current_assignment; /**< Current assignment,
                                   *   only updated when reported by the client.
                                   */
+        rd_kafka_topic_partition_list_t
+            *target_assignment; /**< Target assignment,
+                                 *   only updated after next assignment has been
+                                 *   sent to a member.
+                                 */
         rd_kafka_topic_partition_list_t *
-            target_assignment; /**< Target assignment,
-                                *   only updated when calling
-                                *   rd_kafka_mock_cgrp_consumer_target_assignment.
-                                */
+            next_assignment; /**< Next assignment to send to the consumer,
+                              *   after target_assignment is acknowledged.
+                              *   only updated when calling
+                              *   rd_kafka_mock_cgrp_consumer_target_assignment.
+                              */
         rd_kafka_topic_partition_list_t
             *returned_assignment;                /**< Returned assignment */
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL

@@ -2126,6 +2126,30 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+void rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *cluster,
+                                        int32_t broker_id,
+                                        const char *host,
+                                        int port) {
+        rd_kafka_mock_broker_t *mrkb;
+
+        mtx_lock(&cluster->lock);
+        TAILQ_FOREACH(mrkb, &cluster->brokers, link) {
+                if (mrkb->id == broker_id) {
+                        rd_kafka_dbg(
+                            cluster->rk, MOCK, "MOCK",
+                            "Broker %" PRId32
+                            ": Setting advertised listener from %s:%d to %s:%d",
+                            broker_id, mrkb->advertised_listener, mrkb->port,
+                            host, port);
+                        rd_snprintf(mrkb->advertised_listener,
+                                    sizeof(mrkb->advertised_listener), "%s",
+                                    host);
+                        mrkb->port = port;
+                }
+        }
+        mtx_unlock(&cluster->lock);
+}
+
 rd_kafka_resp_err_t
 rd_kafka_mock_coordinator_set(rd_kafka_mock_cluster_t *mcluster,
                               const char *key_type,

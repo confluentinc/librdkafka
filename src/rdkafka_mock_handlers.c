@@ -2173,7 +2173,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
             SubscribedTopicRegex, ServerAssignor;
         rd_kafkap_str_t *SubscribedTopicNames = NULL;
         int32_t MemberEpoch, RebalanceTimeoutMs, SubscribedTopicNamesCnt,
-            ClientAssignorsCnt, TopicPartitionsCnt;
+            TopicPartitionsCnt;
         int32_t i;
         rd_kafka_resp_err_t err;
         rd_kafka_mock_cgrp_consumer_t *mcgrp         = NULL;
@@ -2217,37 +2217,6 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
 
         /* ServerAssignor */
         rd_kafka_buf_read_str(rkbuf, &ServerAssignor);
-
-        /* #ClientAssignors */
-        rd_kafka_buf_read_arraycnt(rkbuf, &ClientAssignorsCnt, 100);
-        for (i = 0; i < ClientAssignorsCnt; i++) {
-                rd_kafkap_str_t Name;
-                int8_t Reason;
-                int16_t MinimumVersion, MaximumVersion, MetadataVersion;
-                rd_kafkap_bytes_t MetadataBytes;
-
-                /* Skip client assignors as they aren't supported still */
-
-                /* Name */
-                rd_kafka_buf_read_str(rkbuf, &Name);
-
-                /* MinimumVersion */
-                rd_kafka_buf_read_i16(rkbuf, &MinimumVersion);
-
-                /* MaximumVersion */
-                rd_kafka_buf_read_i16(rkbuf, &MaximumVersion);
-
-                /* Reason */
-                rd_kafka_buf_read_i8(rkbuf, &Reason);
-
-                /* MetadataVersion */
-                rd_kafka_buf_read_i16(rkbuf, &MetadataVersion);
-
-                /* MetadataBytes */
-                rd_kafka_buf_read_kbytes(rkbuf, &MetadataBytes);
-
-                rd_kafka_buf_skip_tags(rkbuf);
-        }
 
         /* #TopicPartitions */
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicPartitionsCnt,
@@ -2345,9 +2314,6 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         /* Response: MemberEpoch */
         rd_kafka_buf_write_i32(resp, MemberEpoch);
 
-        /* Response: ShouldComputeAssignment */
-        rd_kafka_buf_write_bool(resp, rd_false);
-
         /* Response: HeartbeatIntervalMs */
         rd_kafka_buf_write_i32(
             resp, 3000); /* TODO: use consumer group configuration */
@@ -2356,22 +2322,9 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 /* Response: Assignment */
                 rd_kafka_buf_write_i8(resp, 1);
 
-                /* Response: Error */
-                rd_kafka_buf_write_i8(resp, err);
-
-                /* Response: AssignedTopicPartitions */
+                /* Response: TopicPartitions */
                 rd_kafka_mock_handle_ConsumerGroupHeartbeat_write_TopicPartitions(
                     resp, next_assignment);
-
-                /* Response: PendingTopicPartitions */
-                rd_kafka_mock_handle_ConsumerGroupHeartbeat_write_TopicPartitions(
-                    resp, pending_topic_partitions);
-
-                /* Response: MetadataVersion */
-                rd_kafka_buf_write_i16(resp, 0);
-
-                /* Response: MetadataBytes */
-                rd_kafka_buf_write_uvarint(resp, 1); /* Empty bytes */
 
                 rd_kafka_buf_write_tags(resp);
         } else {

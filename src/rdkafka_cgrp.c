@@ -361,7 +361,12 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
         if (rkcg->rkcg_group_instance_id)
                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
-
+        if (rkcg->rkcg_group_remote_assignor)
+                rd_kafkap_str_destroy(rkcg->rkcg_group_remote_assignor);
+        if(rkcg->rkcg_next_subscription_regex)
+                rd_kafkap_str_destroy(rkcg->rkcg_next_subscription_regex);
+        if(rkcg->rkcg_client_rack)
+                rd_kafkap_str_destroy(rkcg->rkcg_client_rack);
         rd_kafka_q_destroy_owner(rkcg->rkcg_q);
         rd_kafka_q_destroy_owner(rkcg->rkcg_ops);
         rd_kafka_q_destroy_owner(rkcg->rkcg_wait_coord_q);
@@ -425,6 +430,10 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
         rkcg->rkcg_group_remote_assignor =
             rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
+        if(!RD_KAFKAP_STR_LEN(rkcg->rkcg_rk->rk_conf.client_rack))
+                rkcg->rkcg_client_rack = rd_kafkap_str_new(NULL, -1);
+        else
+                rkcg->rkcg_client_rack = rd_kafkap_str_copy(rkcg->rkcg_rk->rk_conf.client_rack);
         rkcg->rkcg_next_subscription = NULL;
         rkcg->rkcg_next_subscription_regex = rd_kafkap_str_new(NULL, -1);
         rkcg->rkcg_group_assignment = rd_kafka_topic_partition_list_new(0);
@@ -5416,7 +5425,7 @@ void  rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg) {
             rkcg->rkcg_member_id,
             rkcg->rkcg_member_epoch,
             rkcg->rkcg_group_instance_id,
-            rkcg->rkcg_rk->rk_conf.client_rack,
+            rkcg->rkcg_client_rack,
             rkcg->rkcg_rk->rk_conf.max_poll_interval_ms,
             rkcg->rkcg_next_subscription,
             rkcg->rkcg_next_subscription_regex,

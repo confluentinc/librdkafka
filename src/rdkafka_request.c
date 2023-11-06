@@ -2084,7 +2084,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, member_id);
         rd_kafka_buf_write_i32(rkbuf, member_epoch);
         rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
-        rd_kafka_buf_write_kstr(rkbuf, rd_kafkap_str_new(NULL, -1));
+        rd_kafka_buf_write_kstr(rkbuf, rack_id);
         rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
 
         if(subscribe_topics && subscribe_topics->cnt > 0) {

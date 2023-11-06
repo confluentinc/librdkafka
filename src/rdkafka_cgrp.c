@@ -361,6 +361,8 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
         if (rkcg->rkcg_group_instance_id)
                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
+        if (rkcg->rkcg_group_remote_assignor)
+                rd_kafkap_str_destroy(rkcg->rkcg_group_remote_assignor);
 
         rd_kafka_q_destroy_owner(rkcg->rkcg_q);
         rd_kafka_q_destroy_owner(rkcg->rkcg_ops);

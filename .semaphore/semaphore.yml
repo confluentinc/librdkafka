@@ -252,7 +252,7 @@ blocks:
         commands:
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
-          - wget https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip
+          - Invoke-WebRequest -Uri https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip  -OutFileclamav-signatures.zip
           - powershell -command "Expand-Archive clamav-signatures.zip C:\clamav-db"
       epilogue:
         commands:
@@ -300,7 +300,7 @@ blocks:
           - echo $Env:VCPKG_ROOT
           - pwd
           - cd librdkafka
-          - wget https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip
+          - Invoke-WebRequest -Uri https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip  -OutFileclamav-signatures.zip
           - powershell -command "Expand-Archive clamav-signatures.zip C:\clamav-db"
 
       epilogue:

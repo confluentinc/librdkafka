@@ -252,8 +252,11 @@ blocks:
         commands:
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
+          - wget https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip
+          - powershell -command "Expand-Archive clamav-signatures.zip C:\clamav-db"
       epilogue:
         commands:
+          - clamscan -d C:\clamav-db --max-scansize=1024M --max-filesize=1024M -ir .
           - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
       jobs:
         - name: 'Build: MinGW-w64 Dynamic'
@@ -297,10 +300,14 @@ blocks:
           - echo $Env:VCPKG_ROOT
           - pwd
           - cd librdkafka
+          - wget https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip
+          - powershell -command "Expand-Archive clamav-signatures.zip C:\clamav-db"
+
       epilogue:
         commands:
           - Get-ChildItem . -include *.dll -recurse
           - Get-ChildItem . -include *.lib -recurse
+          - clamscan -d C:\clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts/
           - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
       jobs:
         - name: 'Build: MSVC x64'

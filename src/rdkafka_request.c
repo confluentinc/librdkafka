@@ -2398,6 +2398,8 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
             rkb, RD_KAFKAP_Metadata, 0, 12, &features);
 
         topic_id_cnt = (ApiVersion >= 10 && topic_ids) ? rd_list_cnt(topic_ids) : 0;
+        rd_assert(topic_ids == 0 || ApiVersion >= 12);
+
         total_topic_cnt = topic_cnt + topic_id_cnt;
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,

@@ -439,6 +439,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rd_interval_init(&rkcg->rkcg_timeout_scan_intvl);
         rd_atomic32_init(&rkcg->rkcg_assignment_lost, rd_false);
         rd_atomic32_init(&rkcg->rkcg_terminated, rd_false);
+        rkcg->rkcg_assignment_inprogress = rd_false;
+        rkcg->rkcg_revocation_inprogress = rd_false;
 
         rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
 
@@ -2475,14 +2477,16 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
 
         printf("In ConsumerGroupHeartbeat Metadata handler\n");
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
-        rkcg->rkcg_subscription->elems[0].topic = rd_strdup(rko->rko_u.metadata.md->topics[0].topic);
+        rkcg->rkcg_rebalance_incr_assignment->elems[0].topic = rd_strdup(rko->rko_u.metadata.md->topics[0].topic);
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
 
         // Check whether the metadata response has all the requested topic ids.
         printf("Started assignment\n");
-        rd_kafka_consumer_assign(rkcg, rkcg->rkcg_subscription);
+        rd_kafka_consumer_assign(rkcg, rkcg->rkcg_rebalance_incr_assignment);
+        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_rebalance_incr_assignment);
+        rkcg->rkcg_rebalance_incr_assignment = NULL;
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
@@ -2587,7 +2591,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                         rd_list_t *topic_ids = rd_list_new(1, rd_list_uuid_destroy);
                         printf("Assigned Topic id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
 
-                        rkcg->rkcg_subscription = assigned_topic_partitions;
+                        rkcg->rkcg_rebalance_incr_assignment = assigned_topic_partitions;
 
                         rd_list_add(topic_ids, rd_kafka_uuid_copy(&topic_id));
                         rko = rd_kafka_op_new_cb(

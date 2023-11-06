@@ -264,6 +264,9 @@ typedef struct rd_kafka_cgrp_s {
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
 
+        rd_bool_t rkcg_assignment_inprogress;
+        rd_bool_t rkcg_revocation_inprogress;
+
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */
         rd_bool_t rkcg_rebalance_rejoin;

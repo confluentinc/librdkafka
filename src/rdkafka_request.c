@@ -287,7 +287,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                         if(use_topic_id) {
                                 rktpar =
                                     rd_kafka_topic_partition_list_add_with_topic_id(
-                                        parts, topic_id, "", Partition);
+                                        parts, topic_id, NULL, Partition);
                         } else {
                                 rktpar = rd_kafka_topic_partition_list_add(parts, topic,
                                                                            Partition);

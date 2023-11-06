@@ -2615,6 +2615,20 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                         rd_list_destroy(topic_ids);
                 }
 
+//                Remove any old subscription as we have subscribed to the new subscriptions
+                if(rkcg->rkcg_next_subscription) {
+
+                        rd_list_t *tinfos = rd_list_new(rkcg->rkcg_next_subscription->cnt,
+                                             (void *)rd_kafka_topic_info_destroy);
+
+                        rd_kafka_topic_partition_list_t *errored = rd_kafka_topic_partition_list_new(0);
+                        rd_kafka_metadata_topic_filter(
+                            rkcg->rkcg_rk, tinfos, assigned_topic_partitions, errored);
+                        rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos);
+                        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_next_subscription);
+                        rkcg->rkcg_next_subscription = NULL;
+                        rd_kafka_topic_partition_list_destroy(errored);
+                }
 //                pending_topic_partitions =
 //                    rd_kafka_buf_read_topic_partitions(rkbuf,
 //                                                       rd_true,
@@ -4771,6 +4785,14 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
 static rd_kafka_resp_err_t
 rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
                         rd_kafka_topic_partition_list_t *rktparlist) {
+
+        /* Clear any existing postponed subscribe. */
+        if (rkcg->rkcg_next_subscription)
+                rd_kafka_topic_partition_list_destroy_free(
+                    rkcg->rkcg_next_subscription);
+        rkcg->rkcg_next_subscription = NULL;
+        rkcg->rkcg_next_unsubscribe  = rd_false;
+
         rkcg->rkcg_next_subscription = rktparlist;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -5440,7 +5462,7 @@ void  rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg) {
 }
 
 void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
-        if(rkcg->rkcg_next_subscription->cnt > 0) {
+        if(rkcg->rkcg_next_subscription && rkcg->rkcg_next_subscription->cnt > 0) {
                 rd_kafka_cgrp_consumer_group_heartbeat(rkcg);
         }
 }

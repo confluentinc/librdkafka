@@ -1144,7 +1144,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .vdef = RD_KAFKA_GROUP_PROTOCOL_GENERIC,
      .s2i  = {{RD_KAFKA_GROUP_PROTOCOL_GENERIC, "generic"},
              {RD_KAFKA_GROUP_PROTOCOL_CONSUMER, "consumer"}}},
-    {_RK_GLOBAL | _RK_CGRP | _RK_MED, "group.remote.assignor", _RK_C_STR,
+    {_RK_GLOBAL | _RK_CGRP | _RK_MED | _RK_HIDDEN, "group.remote.assignor", _RK_C_STR,
      _RK(group_remote_assignor),
      "Server side assignor to use. Keep it null to make server select a "
      "suitable assignor for the group. "

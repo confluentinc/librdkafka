@@ -68,24 +68,30 @@ struct rd_kafka_toppar_err {
                                   *   last msg sequence */
 };
 
-
+/**
+ * @brief Fetchpos comparator, only offset is compared.
+ */
+static RD_UNUSED RD_INLINE int
+rd_kafka_fetch_pos_cmp_offset(const rd_kafka_fetch_pos_t *a,
+                              const rd_kafka_fetch_pos_t *b) {
+        return (RD_CMP(a->offset, b->offset));
+}
 
 /**
- * @brief Fetchpos comparator, leader epoch has precedence.
+ * @brief Fetchpos comparator, leader epoch has precedence
+ *        iff both values are not null.
  */
 static RD_UNUSED RD_INLINE int
 rd_kafka_fetch_pos_cmp(const rd_kafka_fetch_pos_t *a,
                        const rd_kafka_fetch_pos_t *b) {
+        if (a->leader_epoch == -1 || b->leader_epoch == -1)
+                return rd_kafka_fetch_pos_cmp_offset(a, b);
         if (a->leader_epoch < b->leader_epoch)
                 return -1;
         else if (a->leader_epoch > b->leader_epoch)
                 return 1;
-        else if (a->offset < b->offset)
-                return -1;
-        else if (a->offset > b->offset)
-                return 1;
         else
-                return 0;
+                return rd_kafka_fetch_pos_cmp_offset(a, b);
 }
 
 
@@ -490,7 +496,7 @@ typedef struct rd_kafka_topic_partition_private_s {
         /** Leader epoch if known, else -1. */
         int32_t leader_epoch;
         /** Topic id. */
-        rd_kafka_uuid_t topic_id;
+        rd_kafka_Uuid_t topic_id;
 } rd_kafka_topic_partition_private_t;
 
 
@@ -562,7 +568,10 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         int max_retries,
                         rd_ts_t backoff,
                         rd_kafka_msg_status_t status,
-                        int (*cmp)(const void *a, const void *b));
+                        int (*cmp)(const void *a, const void *b),
+                        rd_bool_t exponential_backoff,
+                        int retry_ms,
+                        int retry_max_ms);
 void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
                                rd_kafka_msgq_t *srcq,
                                int (*cmp)(const void *a, const void *b));
@@ -674,8 +683,8 @@ void rd_kafka_topic_partition_destroy_free(void *ptr);
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_new_from_rktp(rd_kafka_toppar_t *rktp);
 void rd_kafka_topic_partition_set_topic_id(rd_kafka_topic_partition_t *rktpar,
-                                           rd_kafka_uuid_t topic_id);
-rd_kafka_uuid_t
+                                           rd_kafka_Uuid_t topic_id);
+rd_kafka_Uuid_t
 rd_kafka_topic_partition_get_topic_id(const rd_kafka_topic_partition_t *rktpar);
 
 void rd_kafka_topic_partition_list_init(
@@ -746,7 +755,7 @@ int rd_kafka_topic_partition_list_find_idx(
 
 int rd_kafka_topic_partition_list_find_by_id_idx(
     const rd_kafka_topic_partition_list_t *rktparlist,
-    rd_kafka_uuid_t topic_id,
+    rd_kafka_Uuid_t topic_id,
     int32_t partition);
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic(

@@ -25,8 +25,8 @@ blocks:
         commands:
           - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
           -	mkdir -p /tmp/clamav-db
-	        - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
-	        - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
           - clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts
@@ -57,8 +57,8 @@ blocks:
       prologue:
         commands:
           -	mkdir -p /tmp/clamav-db
-	        - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
-	        - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
           - clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts
@@ -162,8 +162,8 @@ blocks:
         commands:
           - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
           -	mkdir -p /tmp/clamav-db
-	        - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
-	        - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
           -  clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts
@@ -222,8 +222,8 @@ blocks:
         commands:
           - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
           -	mkdir -p /tmp/clamav-db
-	        - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
-	        - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
           -  clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts

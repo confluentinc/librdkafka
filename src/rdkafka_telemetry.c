@@ -223,16 +223,19 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
 #if WITH_ZLIB
 
 static int rd_kafka_compress_gzip(rd_kafka_broker_t *rkb,
-                                  void *payload, size_t payload_len,
-                                  void **outbuf, size_t *outlenp) {
+                                  void *payload,
+                                  size_t payload_len,
+                                  void **outbuf,
+                                  size_t *outlenp) {
         z_stream strm;
         int r;
-        //TODO: What compression level should we use?
+        // TODO: What compression level should we use?
         int comp_level = Z_DEFAULT_COMPRESSION;
 
         memset(&strm, 0, sizeof(strm));
 
-        r = deflateInit2(&strm, comp_level, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY);
+        r = deflateInit2(&strm, comp_level, Z_DEFLATED, 15 + 16, 8,
+                         Z_DEFAULT_STRATEGY);
         if (r != Z_OK) {
                 rd_rkb_log(rkb, LOG_ERR, "GZIP",
                            "Failed to initialize gzip for "
@@ -244,11 +247,11 @@ static int rd_kafka_compress_gzip(rd_kafka_broker_t *rkb,
         }
 
         *outlenp = deflateBound(&strm, (uLong)payload_len);
-        *outbuf = rd_malloc(*outlenp);
+        *outbuf  = rd_malloc(*outlenp);
 
-        strm.next_in = payload;
-        strm.avail_in = (uInt)payload_len;
-        strm.next_out = *outbuf;
+        strm.next_in   = payload;
+        strm.avail_in  = (uInt)payload_len;
+        strm.next_out  = *outbuf;
         strm.avail_out = (uInt)*outlenp;
 
         if ((r = deflate(&strm, Z_FINISH)) != Z_STREAM_END) {
@@ -261,7 +264,7 @@ static int rd_kafka_compress_gzip(rd_kafka_broker_t *rkb,
                            payload_len, strm.msg ? strm.msg : "", r);
                 deflateEnd(&strm);
                 rd_free(*outbuf);
-                *outbuf = NULL;
+                *outbuf  = NULL;
                 *outlenp = 0;
                 return -1;
         }
@@ -287,37 +290,37 @@ static int rd_kafka_compress_snappy(rd_kafka_broker_t *rkb,
         //        char *map = "hello world!";
         struct iovec *inpiov = NULL, *ciov = NULL;
         inpiov = rd_alloca(sizeof(*inpiov) * 1);
-        ciov = rd_alloca(sizeof(*ciov) * 1);
+        ciov   = rd_alloca(sizeof(*ciov) * 1);
 
         inpiov[0].iov_base = payload;
-        inpiov[0].iov_len = payload_len;
+        inpiov[0].iov_len  = payload_len;
 
-        ciov[0].iov_len = rd_kafka_snappy_max_compressed_length(payload_len);
+        ciov[0].iov_len  = rd_kafka_snappy_max_compressed_length(payload_len);
         ciov[0].iov_base = rd_malloc(ciov[0].iov_len);
 
         int err;
-        printf("snappy_max_compressed_length %zu\n", rd_kafka_snappy_max_compressed_length(payload_len));
 
         err = rd_kafka_snappy_compress_iov(&env, inpiov, 1, payload_len, ciov);
-        if (err)
-        {
+        if (err) {
                 printf("compression failed: %d\n", err);
                 return -1;
         }
 
         rd_kafka_snappy_free_env(&env);
-        //        rd_free(inpiov);
-        *outbuf = ciov[0].iov_base;
+        *outbuf  = ciov[0].iov_base;
         *outlenp = ciov[0].iov_len;
         return 0;
 }
 
 #endif
 
-static rd_kafka_compression_t rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
-                                                      rd_kafka_broker_t *rkb,
-                                                      void* payload,
-                                                      size_t payload_len, void **compressed_payload, size_t *compressed_payload_size) {
+static rd_kafka_compression_t
+rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
+                                         rd_kafka_broker_t *rkb,
+                                         void *payload,
+                                         size_t payload_len,
+                                         void **compressed_payload,
+                                         size_t *compressed_payload_size) {
         rd_kafka_compression_t compression_used = RD_KAFKA_COMPRESSION_NONE;
         int i, r = -1;
 
@@ -329,61 +332,57 @@ static rd_kafka_compression_t rd_kafka_push_telemetry_payload_compress(rd_kafka_
 #if WITH_ZLIB
                 case RD_KAFKA_COMPRESSION_GZIP:
                         r = rd_kafka_compress_gzip(rkb, payload, payload_len,
-                                               compressed_payload,
-                                               compressed_payload_size);
+                                                   compressed_payload,
+                                                   compressed_payload_size);
                         compression_used = RD_KAFKA_COMPRESSION_GZIP;
                         break;
 #endif
                 case RD_KAFKA_COMPRESSION_LZ4:
-                        //TODO: What compression level should we use?
-                        r = rd_kafka_lz4_compress_direct(rkb, 0, payload,
-                                                         payload_len,
-                                                         compressed_payload,
-                                                         compressed_payload_size);
+                        // TODO: What compression level should we use?
+                        r = rd_kafka_lz4_compress_direct(
+                            rkb, 0, payload, payload_len, compressed_payload,
+                            compressed_payload_size);
                         compression_used = RD_KAFKA_COMPRESSION_LZ4;
                         break;
 #if WITH_ZSTD
                 case RD_KAFKA_COMPRESSION_ZSTD:
-                        r = rd_kafka_zstd_compress_direct(rkb, 0, payload,
-                                                          payload_len,
-                                                          compressed_payload,
-                                                          compressed_payload_size);
+                        r = rd_kafka_zstd_compress_direct(
+                            rkb, 0, payload, payload_len, compressed_payload,
+                            compressed_payload_size);
                         compression_used = RD_KAFKA_COMPRESSION_ZSTD;
                         break;
 #endif
 #if WITH_SNAPPY
                 case RD_KAFKA_COMPRESSION_SNAPPY:
-                        r = rd_kafka_compress_snappy(rkb, payload,
-                                                     payload_len,
+                        r = rd_kafka_compress_snappy(rkb, payload, payload_len,
                                                      compressed_payload,
                                                      compressed_payload_size);
                         compression_used = RD_KAFKA_COMPRESSION_SNAPPY;
                         break;
 #endif
                 default:
-                        continue;
+                        break;
                 }
-        }
-        if (compression_used != RD_KAFKA_COMPRESSION_NONE) {
-                if (r == 0) {
-                        rd_kafka_dbg(rk, TELEMETRY, "PUSHCOMP",
-                                     "Compressed payload of size %" PRIusz
-                                     " to %" PRIusz " using compression type "
-                                     "%s",
-                                     payload_len, *compressed_payload_size,
-                                     rd_kafka_compression2str(compression_used));
+                if (compression_used != RD_KAFKA_COMPRESSION_NONE && r == 0) {
+                        rd_kafka_dbg(
+                            rk, TELEMETRY, "PUSHCOMP",
+                            "Compressed payload of size %" PRIusz " to %" PRIusz
+                            " using compression type "
+                            "%s",
+                            payload_len, *compressed_payload_size,
+                            rd_kafka_compression2str(compression_used));
                         rd_free(payload);
                         return compression_used;
                 }
+        }
+        if (compression_used != RD_KAFKA_COMPRESSION_NONE && r == -1) {
                 rd_kafka_dbg(rk, TELEMETRY, "PUSHCOMPERR",
-                             "Failed to compress payload of size %" PRIusz
-                             " using compression type %s with error %d",
-                             payload_len,
-                             rd_kafka_compression2str(compression_used), r);
+                             "Failed to compress payload with available "
+                             "compression types");
         }
         rd_kafka_dbg(rk, TELEMETRY, "PUSHCOMP", "Sending uncompressed payload");
 
-        *compressed_payload = payload;
+        *compressed_payload      = payload;
         *compressed_payload_size = payload_len;
         return RD_KAFKA_COMPRESSION_NONE;
 }
@@ -395,32 +394,33 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
 
         size_t metrics_payload_size = 0, compressed_metrics_payload_size = 0;
         void *metrics_payload =
-            rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size), *compressed_metrics_payload = NULL;
+                 rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size),
+             *compressed_metrics_payload        = NULL;
         rd_kafka_compression_t compression_used = RD_KAFKA_COMPRESSION_NONE;
 
         if (rk->rk_telemetry.accepted_compression_types_cnt != 0) {
-                compression_used =
-                    rd_kafka_push_telemetry_payload_compress(
-                        rk, rkb, metrics_payload, metrics_payload_size,
-                        &compressed_metrics_payload, &compressed_metrics_payload_size);
+                compression_used = rd_kafka_push_telemetry_payload_compress(
+                    rk, rkb, metrics_payload, metrics_payload_size,
+                    &compressed_metrics_payload,
+                    &compressed_metrics_payload_size);
         } else {
                 rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
                              "No compression types accepted, sending "
                              "uncompressed payload");
-                compressed_metrics_payload = metrics_payload;
-                metrics_payload = NULL;
+                compressed_metrics_payload      = metrics_payload;
+                metrics_payload                 = NULL;
                 compressed_metrics_payload_size = metrics_payload_size;
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
                      "Sending PushTelemetryRequest with terminating = %d",
                      terminating);
-        rd_kafka_PushTelemetryRequest(rkb, &rk->rk_telemetry.client_instance_id,
-                                      rk->rk_telemetry.subscription_id,
-                                      terminating, compression_used,
-                                      compressed_metrics_payload, compressed_metrics_payload_size,
-                                      NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                                      rd_kafka_handle_PushTelemetry, NULL);
+        rd_kafka_PushTelemetryRequest(
+            rkb, &rk->rk_telemetry.client_instance_id,
+            rk->rk_telemetry.subscription_id, terminating, compression_used,
+            compressed_metrics_payload, compressed_metrics_payload_size, NULL,
+            0, RD_KAFKA_REPLYQ(rk->rk_ops, 0), rd_kafka_handle_PushTelemetry,
+            NULL);
 
         rd_free(compressed_metrics_payload);
 

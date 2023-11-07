@@ -450,11 +450,11 @@ done:
 }
 
 rd_kafka_resp_err_t rd_kafka_lz4_compress_direct(rd_kafka_broker_t *rkb,
-                                                       int comp_level,
-                                                       void *payload,
-                                                       size_t payload_len,
-                                                       void **outbuf,
-                                                       size_t *outlenp) {
+                                                 int comp_level,
+                                                 void *payload,
+                                                 size_t payload_len,
+                                                 void **outbuf,
+                                                 size_t *outlenp) {
         LZ4F_compressionContext_t cctx;
         LZ4F_errorCode_t r;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;

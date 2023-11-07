@@ -226,11 +226,11 @@ done:
 }
 
 rd_kafka_resp_err_t rd_kafka_zstd_compress_direct(rd_kafka_broker_t *rkb,
-                                                        int comp_level,
-                                                        void *payload,
-                                                        size_t payload_len,
-                                                        void **outbuf,
-                                                        size_t *outlenp) {
+                                                  int comp_level,
+                                                  void *payload,
+                                                  size_t payload_len,
+                                                  void **outbuf,
+                                                  size_t *outlenp) {
         ZSTD_CStream *cctx;
         size_t r;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -272,10 +272,10 @@ rd_kafka_resp_err_t rd_kafka_zstd_compress_direct(rd_kafka_broker_t *rkb,
                 goto done;
         }
 
-        in.src = payload;
+        in.src  = payload;
         in.size = payload_len;
-        in.pos = 0;
-        r = ZSTD_compressStream(cctx, &out, &in);
+        in.pos  = 0;
+        r       = ZSTD_compressStream(cctx, &out, &in);
         if (unlikely(ZSTD_isError(r))) {
                 rd_rkb_dbg(rkb, MSG, "ZSTDCOMPR",
                            "ZSTD compression failed "
@@ -284,8 +284,7 @@ rd_kafka_resp_err_t rd_kafka_zstd_compress_direct(rd_kafka_broker_t *rkb,
                            "%" PRIusz
                            " bytes remaining in out buffer): "
                            "%s",
-                           in.size, out.size - out.pos,
-                           ZSTD_getErrorName(r));
+                           in.size, out.size - out.pos, ZSTD_getErrorName(r));
                 err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 goto done;
         }

@@ -234,25 +234,27 @@ static bool decode_and_print_resource_metrics(pb_istream_t *stream,
 }
 #ifdef WITH_SNAPPY
 
-static int rd_kafka_snappy_decompress (rd_kafka_broker_t *rkb,
-                                      const char *compressed, size_t compressed_size,
-                                      void **outbuf, size_t *outbuf_len) {
-        struct iovec iov        = {.iov_base = NULL, .iov_len = 0};
+static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
+                                      const char *compressed,
+                                      size_t compressed_size,
+                                      void **outbuf,
+                                      size_t *outbuf_len) {
+        struct iovec iov = {.iov_base = NULL, .iov_len = 0};
 
         const char *inbuf = compressed;
         size_t inlen      = compressed_size;
         int r;
-        static const unsigned char snappy_java_magic[] = {
-            0x82, 'S', 'N', 'A', 'P', 'P', 'Y', 0};
-        static const size_t snappy_java_hdrlen = 8 + 4 + 4;
+        static const unsigned char snappy_java_magic[] = {0x82, 'S', 'N', 'A',
+                                                          'P',  'P', 'Y', 0};
+        static const size_t snappy_java_hdrlen         = 8 + 4 + 4;
 
         /* snappy-java adds its own header (SnappyCodec)
-                 * which is not compatible with the official Snappy
-                 * implementation.
-                 *   8: magic, 4: version, 4: compatible
-                 * followed by any number of chunks:
-                 *   4: length
-                 * ...: snappy-compressed data. */
+         * which is not compatible with the official Snappy
+         * implementation.
+         *   8: magic, 4: version, 4: compatible
+         * followed by any number of chunks:
+         *   4: length
+         * ...: snappy-compressed data. */
         if (likely(inlen > snappy_java_hdrlen + 4 &&
                    !memcmp(inbuf, snappy_java_magic, 8))) {
                 /* snappy-java framing */
@@ -264,9 +266,11 @@ static int rd_kafka_snappy_decompress (rd_kafka_broker_t *rkb,
                     inbuf, inlen, &iov.iov_len, errstr, sizeof(errstr));
 
                 if (unlikely(!iov.iov_base)) {
-                        rd_rkb_dbg(rkb, MSG, "SNAPPY",
-                                   "Snappy decompression for message failed: %s: "
-                                   "ignoring message", errstr);
+                        rd_rkb_dbg(
+                            rkb, MSG, "SNAPPY",
+                            "Snappy decompression for message failed: %s: "
+                            "ignoring message",
+                            errstr);
                         return -1;  // Indicates decompression error
                 }
 
@@ -277,10 +281,13 @@ static int rd_kafka_snappy_decompress (rd_kafka_broker_t *rkb,
                 /* Acquire uncompressed length */
                 if (unlikely(!rd_kafka_snappy_uncompressed_length(
                         inbuf, inlen, &iov.iov_len))) {
-                        rd_rkb_dbg(rkb, MSG, "SNAPPY",
-                                   "Failed to get length of Snappy compressed payload "
-                                   "for message (%" PRIusz " bytes): "
-                                   "ignoring message", inlen);
+                        rd_rkb_dbg(
+                            rkb, MSG, "SNAPPY",
+                            "Failed to get length of Snappy compressed payload "
+                            "for message (%" PRIusz
+                            " bytes): "
+                            "ignoring message",
+                            inlen);
                         return -1;  // Indicates decompression error
                 }
 
@@ -288,37 +295,50 @@ static int rd_kafka_snappy_decompress (rd_kafka_broker_t *rkb,
                 iov.iov_base = rd_malloc(iov.iov_len);
                 if (unlikely(!iov.iov_base)) {
                         rd_rkb_dbg(rkb, MSG, "SNAPPY",
-                                   "Failed to allocate Snappy decompress buffer of size %" PRIusz
-                                   " for message (%" PRIusz " bytes): %s: "
-                                   "ignoring message", *outbuf_len, inlen, rd_strerror(errno));
+                                   "Failed to allocate Snappy decompress "
+                                   "buffer of size %" PRIusz
+                                   " for message (%" PRIusz
+                                   " bytes): %s: "
+                                   "ignoring message",
+                                   *outbuf_len, inlen, rd_strerror(errno));
                         return -1;  // Indicates memory allocation error
                 }
 
                 /* Uncompress to outbuf */
-                if (unlikely((r = rd_kafka_snappy_uncompress(
-                                  inbuf, inlen, iov.iov_base)))) {
-                        fprintf(stderr, "r: %d err %s\n", r, rd_strerror(errno));
-                        rd_rkb_dbg(rkb, MSG, "SNAPPY",
-                                   "Failed to decompress Snappy payload for message "
-                                   "(%" PRIusz " bytes): %s: "
-                                   "ignoring message", inlen, rd_strerror(errno));
+                if (unlikely((r = rd_kafka_snappy_uncompress(inbuf, inlen,
+                                                             iov.iov_base)))) {
+                        fprintf(stderr, "r: %d err %s\n", r,
+                                rd_strerror(errno));
+                        rd_rkb_dbg(
+                            rkb, MSG, "SNAPPY",
+                            "Failed to decompress Snappy payload for message "
+                            "(%" PRIusz
+                            " bytes): %s: "
+                            "ignoring message",
+                            inlen, rd_strerror(errno));
                         rd_free(iov.iov_base);
                         return -1;  // Indicates decompression error
                 }
         }
-        *outbuf = iov.iov_base;
+        *outbuf     = iov.iov_base;
         *outbuf_len = iov.iov_len;
         return 0;
 }
 #endif
 
-int rd_kafka_telemetry_uncompress_metrics_payload(rd_kafka_broker_t *rkb, rd_kafka_compression_t compression_type, void *compressed_payload, size_t compressed_payload_size, void **uncompressed_payload, size_t *uncompressed_payload_size) {
+int rd_kafka_telemetry_uncompress_metrics_payload(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_compression_t compression_type,
+    void *compressed_payload,
+    size_t compressed_payload_size,
+    void **uncompressed_payload,
+    size_t *uncompressed_payload_size) {
         int r = -1;
         switch (compression_type) {
 #if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP:
-                *uncompressed_payload = rd_gz_decompress(compressed_payload,
-                                                        (int)compressed_payload_size,
+                *uncompressed_payload = rd_gz_decompress(
+                    compressed_payload, (int)compressed_payload_size,
                     (uint64_t *)uncompressed_payload_size);
                 if (*uncompressed_payload == NULL)
                         r = -1;
@@ -327,20 +347,22 @@ int rd_kafka_telemetry_uncompress_metrics_payload(rd_kafka_broker_t *rkb, rd_kaf
                 break;
 #endif
         case RD_KAFKA_COMPRESSION_LZ4:
-                r = rd_kafka_lz4_decompress(rkb, 0, 0, compressed_payload, compressed_payload_size, uncompressed_payload, uncompressed_payload_size);
+                r = rd_kafka_lz4_decompress(
+                    rkb, 0, 0, compressed_payload, compressed_payload_size,
+                    uncompressed_payload, uncompressed_payload_size);
                 break;
 #if WITH_ZSTD
         case RD_KAFKA_COMPRESSION_ZSTD:
-                r = rd_kafka_zstd_decompress(rkb, compressed_payload,
-                                             compressed_payload_size,
-                                             uncompressed_payload, uncompressed_payload_size);
+                r = rd_kafka_zstd_decompress(
+                    rkb, compressed_payload, compressed_payload_size,
+                    uncompressed_payload, uncompressed_payload_size);
                 break;
 #endif
 #if WITH_SNAPPY
         case RD_KAFKA_COMPRESSION_SNAPPY:
-                r = rd_kafka_snappy_decompress(rkb, compressed_payload,
-                                               compressed_payload_size,
-                                               uncompressed_payload, uncompressed_payload_size);
+                r = rd_kafka_snappy_decompress(
+                    rkb, compressed_payload, compressed_payload_size,
+                    uncompressed_payload, uncompressed_payload_size);
                 break;
 #endif
         default:

@@ -23,7 +23,6 @@ blocks:
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
       prologue:
         commands:
-          - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
           - mkdir -p /tmp/clamav-db
           - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
           - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db

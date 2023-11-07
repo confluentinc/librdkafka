@@ -1,7 +1,7 @@
 /*
- * node-rdkafka - Node.js wrapper for RdKafka C/C++ library
+ * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
  *
- * Copyright (c) 2016 Blizzard Entertainment
+ * Copyright (c) 2016-2023 Blizzard Entertainment
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -22,7 +22,7 @@ describe('Transactional Producer', function () {
 
   before(function (done) {
     /*
-    prepare: 
+    prepare:
     transactional consumer (read from input topic)
     transactional producer (write to output topic)
     write 3 messages to input topic: A, B, C

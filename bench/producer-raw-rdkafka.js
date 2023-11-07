@@ -1,7 +1,7 @@
 /*
- * node-rdkafka - Node.js wrapper for RdKafka C/C++ library
+ * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
  *
- * Copyright (c) 2016 Blizzard Entertainment
+ * Copyright (c) 2016-2023 Blizzard Entertainment
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -24,7 +24,7 @@ var MAX = process.argv[5] || 10000000;
 
 var producer = new Kafka.Producer({
   'metadata.broker.list': host,
-  'group.id': 'node-rdkafka-bench',
+  'group.id': 'confluent-kafka-js-bench',
   'compression.codec': compression,
   'retry.backoff.ms': 200,
   'message.send.max.retries': 10,

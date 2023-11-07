@@ -52,7 +52,7 @@ function extractConfigItems(configStr) {
 }
 
 function processItem(configItem) {
-  // These items are overwritten by node-rdkafka
+  // These items are overwritten by confluent-kafka-js
   switch (configItem.property) {
     case 'dr_msg_cb':
       return { ...configItem, type: 'boolean' };

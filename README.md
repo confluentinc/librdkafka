@@ -1,31 +1,27 @@
-node-rdkafka - Node.js wrapper for Kafka C/C++ library
+confluent-kafka-js - Node.js wrapper  for Kafka C/C++ library
 ==============================================
 
-Copyright (c) 2016 Blizzard Entertainment.
+Copyright (c) 2016-2023 Blizzard Entertainment.
 
-[https://github.com/blizzard/node-rdkafka](https://github.com/blizzard/node-rdkafka)
-
-[![Build Status](https://github.com/Blizzard/node-rdkafka/actions/workflows/test.yml/badge.svg)](https://github.com/Blizzard/node-rdkafka/actions/workflows/test.yml)
-
-[![npm version](https://badge.fury.io/js/node-rdkafka.svg)](https://badge.fury.io/js/node-rdkafka)
+[https://github.com/confluentinc/confluent-kafka-js](https://github.com/confluentinc/confluent-kafka-js)
 
 # Looking for Collaborators!
 
-I am looking for *your* help to make this project even better! If you're interested, check [this out](https://github.com/Blizzard/node-rdkafka/issues/628)
+I am looking for *your* help to make this project even better! If you're interested, check [this out](https://github.com/confluentinc/confluent-kafka-js/issues/628)
 
 # Overview
 
-The `node-rdkafka` library is a high-performance NodeJS client for [Apache Kafka](http://kafka.apache.org/) that wraps the native  [librdkafka](https://github.com/edenhill/librdkafka) library.  All the complexity of balancing writes across partitions and managing (possibly ever-changing) brokers should be encapsulated in the library.
+The `confluent-kafka-js` library is a high-performance NodeJS client for [Apache Kafka](http://kafka.apache.org/) that wraps the native  [librdkafka](https://github.com/edenhill/librdkafka) library.  All the complexity of balancing writes across partitions and managing (possibly ever-changing) brokers should be encapsulated in the library.
 
 __This library currently uses `librdkafka` version `2.3.0`.__
 
 ## Reference Docs
 
-To view the reference docs for the current version, go [here](https://blizzard.github.io/node-rdkafka/current/)
+To view the reference docs for the current version, go [here](https://confluentinc.github.io/confluent-kafka-js/current/)
 
 ## Contributing
 
-For guidelines on contributing please see [CONTRIBUTING.md](https://github.com/blizzard/node-rdkafka/blob/master/CONTRIBUTING.md)
+For guidelines on contributing please see [CONTRIBUTING.md](https://github.com/confluentinc/confluent-kafka-js/blob/master/CONTRIBUTING.md)
 
 ## Code of Conduct
 
@@ -41,7 +37,7 @@ Play nice; Play fair.
 
 ### Mac OS High Sierra / Mojave
 
-OpenSSL has been upgraded in High Sierra and homebrew does not overwrite default system libraries. That means when building node-rdkafka, because you are using openssl, you need to tell the linker where to find it:
+OpenSSL has been upgraded in High Sierra and homebrew does not overwrite default system libraries. That means when building confluent-kafka-js, because you are using openssl, you need to tell the linker where to find it:
 
 ```sh
 export CPPFLAGS=-I/usr/local/opt/openssl/include
@@ -56,7 +52,7 @@ __NOTE:__ From the `librdkafka` docs
 
 ### Alpine
 
-Using Alpine Linux? Check out the [docs](https://github.com/Blizzard/node-rdkafka/blob/master/examples/docker-alpine.md).
+Using Alpine Linux? Check out the [docs](https://github.com/confluentinc/confluent-kafka-js/blob/master/examples/docker-alpine.md).
 
 ### Windows
 
@@ -65,7 +61,7 @@ Windows build **is not** compiled from `librdkafka` source but it is rather link
 Requirements:
  * [node-gyp for Windows](https://github.com/nodejs/node-gyp#on-windows)
 
-**Note:** I _still_ do not recommend using `node-rdkafka` in production on Windows. This feature was in high demand and is provided to help develop, but we do not test against Windows, and windows support may lag behind Linux/Mac support because those platforms are the ones used to develop this library. Contributors are welcome if any Windows issues are found :)
+**Note:** I _still_ do not recommend using `confluent-kafka-js` in production on Windows. This feature was in high demand and is provided to help develop, but we do not test against Windows, and windows support may lag behind Linux/Mac support because those platforms are the ones used to develop this library. Contributors are welcome if any Windows issues are found :)
 
 ## Tests
 
@@ -83,16 +79,16 @@ You can run both types of tests by using `Makefile`. Doing so calls `mocha` in y
 
 # Usage
 
-You can install the `node-rdkafka` module like any other module:
+You can install the `confluent-kafka-js` module like any other module:
 
 ```
-npm install node-rdkafka
+npm install confluent-kafka-js
 ```
 
 To use the module, you must `require` it.
 
 ```js
-const Kafka = require('node-rdkafka');
+const Kafka = require('confluent-kafka-js');
 ```
 
 ## Configuration
@@ -117,10 +113,10 @@ The library currently supports the following callbacks:
 
 This library includes two utility functions for detecting the status of your installation. Please try to include these when making issue reports where applicable.
 
-You can get the features supported by your compile of `librdkafka` by reading the variable "features" on the root of the `node-rdkafka` object.
+You can get the features supported by your compile of `librdkafka` by reading the variable "features" on the root of the `confluent-kafka-js` object.
 
 ```js
-const Kafka = require('node-rdkafka');
+const Kafka = require('confluent-kafka-js');
 console.log(Kafka.features);
 
 // #=> [ 'gzip', 'snappy', 'ssl', 'sasl', 'regex', 'lz4' ]
@@ -129,7 +125,7 @@ console.log(Kafka.features);
 You can also get the version of `librdkafka`
 
 ```js
-const Kafka = require('node-rdkafka');
+const Kafka = require('confluent-kafka-js');
 console.log(Kafka.librdkafkaVersion);
 
 // #=> 2.3.0
@@ -382,7 +378,7 @@ const consumer = new Kafka.KafkaConsumer({
 
 ### Commits
 
-When you commit in `node-rdkafka`, the standard way is to queue the commit request up with the next `librdkafka` request to the broker. When doing this, there isn't a way to know the result of the commit. Luckily there is another callback you can listen to to get this information
+When you commit in `confluent-kafka-js`, the standard way is to queue the commit request up with the next `librdkafka` request to the broker. When doing this, there isn't a way to know the result of the commit. Luckily there is another callback you can listen to to get this information
 
 ```js
 const consumer = new Kafka.KafkaConsumer({
@@ -596,12 +592,12 @@ producer.getMetadata(opts, (err, metadata) => {
 
 ## Admin Client
 
-`node-rdkafka` now supports the admin client for creating, deleting, and scaling out topics. The `librdkafka` APIs also support altering configuration of topics and broker, but that is not currently implemented.
+`confluent-kafka-js` now supports the admin client for creating, deleting, and scaling out topics. The `librdkafka` APIs also support altering configuration of topics and broker, but that is not currently implemented.
 
 To create an Admin client, you can do as follows:
 
 ```js
-const Kafka = require('node-rdkafka');
+const Kafka = require('confluent-kafka-js');
 
 const client = Kafka.AdminClient.create({
   'client.id': 'kafka-admin',

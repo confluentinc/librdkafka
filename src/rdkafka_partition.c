@@ -2871,13 +2871,12 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
     rd_kafka_uuid_t topic_id,
     const char *topic_name,
     int32_t partition) {
-        rd_kafka_topic_partition_private_t *parpriv = rd_kafka_topic_partition_private_new();
         rd_kafka_topic_partition_t *rktpar;
+        rktpar            = rd_kafka_topic_partition_list_add0(
+            __FUNCTION__, __LINE__, rktparlist, topic_name, partition, NULL, NULL);
+        rd_kafka_topic_partition_private_t *parpriv =
+            rd_kafka_topic_partition_get_private(rktpar);
         parpriv->topic_id = topic_id;
-        printf("Topic Id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
-        rktpar = rd_kafka_topic_partition_list_add0(
-            __FUNCTION__, __LINE__, rktparlist, topic_name, partition, NULL, parpriv);
-        rd_kafka_topic_partition_private_destroy(parpriv);
         return rktpar;
 }
 

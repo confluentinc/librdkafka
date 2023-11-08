@@ -449,6 +449,12 @@ done:
         return err;
 }
 
+/**
+ * @brief Compress \p payload_len bytes of \p payload using LZ4F (framed)
+ *        compression.
+ *
+ * @returns allocated buffer in \p *outbuf, length in \p *outlenp.
+ */
 rd_kafka_resp_err_t rd_kafka_lz4_compress_direct(rd_kafka_broker_t *rkb,
                                                  int comp_level,
                                                  void *payload,
@@ -458,7 +464,7 @@ rd_kafka_resp_err_t rd_kafka_lz4_compress_direct(rd_kafka_broker_t *rkb,
         LZ4F_compressionContext_t cctx;
         LZ4F_errorCode_t r;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        size_t len              = payload_len;  // Use direct payload length
+        size_t len              = payload_len;
         size_t out_sz;
         size_t out_of = 0;
         char *out;

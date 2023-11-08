@@ -229,7 +229,7 @@ static int rd_kafka_compress_gzip(rd_kafka_broker_t *rkb,
                                   size_t *outlenp) {
         z_stream strm;
         int r;
-        // TODO: What compression level should we use?
+        // TODO: Using the default compression level for now.
         int comp_level = Z_DEFAULT_COMPRESSION;
 
         memset(&strm, 0, sizeof(strm));
@@ -287,7 +287,8 @@ static int rd_kafka_compress_snappy(rd_kafka_broker_t *rkb,
                                     size_t *outlenp) {
         struct snappy_env env;
         rd_kafka_snappy_init_env_sg(&env, 1);
-        //        char *map = "hello world!";
+        int err;
+
         struct iovec *inpiov = NULL, *ciov = NULL;
         inpiov = rd_alloca(sizeof(*inpiov) * 1);
         ciov   = rd_alloca(sizeof(*ciov) * 1);
@@ -298,7 +299,6 @@ static int rd_kafka_compress_snappy(rd_kafka_broker_t *rkb,
         ciov[0].iov_len  = rd_kafka_snappy_max_compressed_length(payload_len);
         ciov[0].iov_base = rd_malloc(ciov[0].iov_len);
 
-        int err;
 
         err = rd_kafka_snappy_compress_iov(&env, inpiov, 1, payload_len, ciov);
         if (err) {
@@ -338,7 +338,7 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
                         break;
 #endif
                 case RD_KAFKA_COMPRESSION_LZ4:
-                        // TODO: What compression level should we use?
+                        // TODO: Using 0 for compression level for now.
                         r = rd_kafka_lz4_compress_direct(
                             rkb, 0, payload, payload_len, compressed_payload,
                             compressed_payload_size);
@@ -346,6 +346,7 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
                         break;
 #if WITH_ZSTD
                 case RD_KAFKA_COMPRESSION_ZSTD:
+                        // TODO: Using 0 for compression level for now.
                         r = rd_kafka_zstd_compress_direct(
                             rkb, 0, payload, payload_len, compressed_payload,
                             compressed_payload_size);

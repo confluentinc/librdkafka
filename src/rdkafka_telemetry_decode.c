@@ -326,6 +326,12 @@ static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
 }
 #endif
 
+/*
+ * Decompress a payload using the specified compression type. Allocates memory
+ * for uncompressed payload.
+ * @returns 0 on success, -1 on failure. Allocated memory in
+ * uncompressed_payload and its size in uncompressed_payload_size.
+ */
 int rd_kafka_telemetry_uncompress_metrics_payload(
     rd_kafka_broker_t *rkb,
     rd_kafka_compression_t compression_type,

@@ -2199,33 +2199,33 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_i8(rkbuf, &compression_type);
         rd_kafka_buf_read_kbytes(rkbuf, &metrics);
 
-        void *uncompressed_payload      = NULL;
-        size_t uncompressed_payload_len = 0;
+        void *decompressed_payload      = NULL;
+        size_t decompressed_payload_len = 0;
 
         if (compression_type != RD_KAFKA_COMPRESSION_NONE) {
                 fprintf(stderr, "Compression type %s\n",
                         rd_kafka_compression2str(compression_type));
-                int err_uncompress =
-                    rd_kafka_telemetry_uncompress_metrics_payload(
+                int err_decompress =
+                    rd_kafka_telemetry_decompress_metrics_payload(
                         rkb, compression_type, (void *)metrics.data,
-                        metrics.len, &uncompressed_payload,
-                        &uncompressed_payload_len);
-                if (err_uncompress) {
+                        metrics.len, &decompressed_payload,
+                        &decompressed_payload_len);
+                if (err_decompress) {
                         rd_kafka_buf_destroy(resp);
                         rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
-                                     "Failed to uncompress "
+                                     "Failed to decompress "
                                      "telemetry payload.");
                         return -1;
                 }
         } else {
-                uncompressed_payload     = (void *)metrics.data;
-                uncompressed_payload_len = metrics.len;
+                decompressed_payload     = (void *)metrics.data;
+                decompressed_payload_len = metrics.len;
         }
 
-        rd_kafka_telemetry_decode_metrics(uncompressed_payload,
-                                          uncompressed_payload_len, rd_false);
+        rd_kafka_telemetry_decode_metrics(decompressed_payload,
+                                          decompressed_payload_len, rd_false);
         if (compression_type != RD_KAFKA_COMPRESSION_NONE)
-                rd_free(uncompressed_payload);
+                rd_free(decompressed_payload);
 
         // ThrottleTime
         rd_kafka_buf_write_i32(resp, 0);

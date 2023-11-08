@@ -328,25 +328,25 @@ static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
 
 /*
  * Decompress a payload using the specified compression type. Allocates memory
- * for uncompressed payload.
+ * for decompressed payload.
  * @returns 0 on success, -1 on failure. Allocated memory in
- * uncompressed_payload and its size in uncompressed_payload_size.
+ * decompressed_payload and its size in decompressed_payload_size.
  */
-int rd_kafka_telemetry_uncompress_metrics_payload(
+int rd_kafka_telemetry_decompress_metrics_payload(
     rd_kafka_broker_t *rkb,
     rd_kafka_compression_t compression_type,
     void *compressed_payload,
     size_t compressed_payload_size,
-    void **uncompressed_payload,
-    size_t *uncompressed_payload_size) {
+    void **decompressed_payload,
+    size_t *decompressed_payload_size) {
         int r = -1;
         switch (compression_type) {
 #if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP:
-                *uncompressed_payload = rd_gz_decompress(
+                *decompressed_payload = rd_gz_decompress(
                     compressed_payload, (int)compressed_payload_size,
-                    (uint64_t *)uncompressed_payload_size);
-                if (*uncompressed_payload == NULL)
+                    (uint64_t *)decompressed_payload_size);
+                if (*decompressed_payload == NULL)
                         r = -1;
                 else
                         r = 0;
@@ -355,20 +355,20 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
         case RD_KAFKA_COMPRESSION_LZ4:
                 r = rd_kafka_lz4_decompress(
                     rkb, 0, 0, compressed_payload, compressed_payload_size,
-                    uncompressed_payload, uncompressed_payload_size);
+                    decompressed_payload, decompressed_payload_size);
                 break;
 #if WITH_ZSTD
         case RD_KAFKA_COMPRESSION_ZSTD:
                 r = rd_kafka_zstd_decompress(
                     rkb, compressed_payload, compressed_payload_size,
-                    uncompressed_payload, uncompressed_payload_size);
+                    decompressed_payload, decompressed_payload_size);
                 break;
 #endif
 #if WITH_SNAPPY
         case RD_KAFKA_COMPRESSION_SNAPPY:
                 r = rd_kafka_snappy_decompress(
                     rkb, compressed_payload, compressed_payload_size,
-                    uncompressed_payload, uncompressed_payload_size);
+                    decompressed_payload, decompressed_payload_size);
                 break;
 #endif
         default:

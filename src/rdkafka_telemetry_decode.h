@@ -42,13 +42,13 @@
 #include "rdkafka_zstd.h"
 #include "snappy.h"
 
-int rd_kafka_telemetry_uncompress_metrics_payload(
+int rd_kafka_telemetry_decompress_metrics_payload(
     rd_kafka_broker_t *rkb,
     rd_kafka_compression_t compression_type,
     void *compressed_payload,
     size_t compressed_payload_size,
-    void **uncompressed_payload,
-    size_t *uncompressed_payload_size);
+    void **decompressed_payload,
+    size_t *decompressed_payload_size);
 int rd_kafka_telemetry_decode_metrics(void *buffer,
                                       size_t size,
                                       rd_bool_t is_unit_test);

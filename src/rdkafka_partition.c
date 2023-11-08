@@ -163,9 +163,11 @@ static void rd_kafka_toppar_consumer_lag_req(rd_kafka_toppar_t *rktp) {
 
         /* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
-        rd_kafka_ListOffsetsRequest(
-            rktp->rktp_broker, partitions, RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
-            rd_kafka_toppar_lag_handle_Offset, rd_kafka_toppar_keep(rktp));
+        rd_kafka_ListOffsetsRequest(rktp->rktp_broker, partitions,
+                                    RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
+                                    rd_kafka_toppar_lag_handle_Offset,
+                                    -1, /* don't set an absolute timeout */
+                                    rd_kafka_toppar_keep(rktp));
 
         rd_kafka_toppar_unlock(rktp);
 
@@ -873,6 +875,11 @@ void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
  * @param incr_retry Increment retry count for messages.
  * @param max_retries Maximum retries allowed per message.
  * @param backoff Absolute retry backoff for retried messages.
+ * @param exponential_backoff If true the backoff should be exponential with
+ *                            2**(retry_count - 1)*retry_ms with jitter. The
+ *                            \p backoff is ignored.
+ * @param retry_ms The retry ms used for exponential backoff calculation
+ * @param retry_max_ms The max backoff limit for exponential backoff calculation
  *
  * @returns 0 if all messages were retried, or 1 if some messages
  *          could not be retried.
@@ -883,10 +890,14 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         int max_retries,
                         rd_ts_t backoff,
                         rd_kafka_msg_status_t status,
-                        int (*cmp)(const void *a, const void *b)) {
+                        int (*cmp)(const void *a, const void *b),
+                        rd_bool_t exponential_backoff,
+                        int retry_ms,
+                        int retry_max_ms) {
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
-
+        int64_t jitter = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
+                                   100 + RD_KAFKA_RETRY_JITTER_PERCENT);
         /* Scan through messages to see which ones are eligible for retry,
          * move the retryable ones to temporary queue and
          * set backoff time for first message and optionally
@@ -900,8 +911,25 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                 rd_kafka_msgq_deq(srcq, rkm, 1);
                 rd_kafka_msgq_enq(&retryable, rkm);
 
-                rkm->rkm_u.producer.ts_backoff = backoff;
                 rkm->rkm_u.producer.retries += incr_retry;
+                if (exponential_backoff) {
+                        /* In some cases, like failed Produce requests do not
+                         * increment the retry count, see
+                         * rd_kafka_handle_Produce_error. */
+                        if (rkm->rkm_u.producer.retries > 0)
+                                backoff =
+                                    (1 << (rkm->rkm_u.producer.retries - 1)) *
+                                    retry_ms;
+                        else
+                                backoff = retry_ms;
+                        /* Multiplied by 10 as backoff should be in nano
+                         * seconds. */
+                        backoff = jitter * backoff * 10;
+                        if (backoff > retry_max_ms * 1000)
+                                backoff = retry_max_ms * 1000;
+                        backoff = rd_clock() + backoff;
+                }
+                rkm->rkm_u.producer.ts_backoff = backoff;
 
                 /* Don't downgrade a message from any form of PERSISTED
                  * to NOT_PERSISTED, since the original cause of indicating
@@ -940,17 +968,21 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                                rd_kafka_msgq_t *rkmq,
                                int incr_retry,
                                rd_kafka_msg_status_t status) {
-        rd_kafka_t *rk  = rktp->rktp_rkt->rkt_rk;
-        rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
+        rd_kafka_t *rk   = rktp->rktp_rkt->rkt_rk;
+        int retry_ms     = rk->rk_conf.retry_backoff_ms;
+        int retry_max_ms = rk->rk_conf.retry_backoff_max_ms;
         int r;
 
         if (rd_kafka_terminating(rk))
                 return 1;
 
         rd_kafka_toppar_lock(rktp);
+        /* Exponential backoff applied. */
         r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq, incr_retry,
-                                rk->rk_conf.max_retries, backoff, status,
-                                rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+                                rk->rk_conf.max_retries,
+                                0 /* backoff will be calculated */, status,
+                                rktp->rktp_rkt->rkt_conf.msg_order_cmp, rd_true,
+                                retry_ms, retry_max_ms);
         rd_kafka_toppar_unlock(rktp);
 
         return r;
@@ -1570,7 +1602,9 @@ void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
                 rd_kafka_ListOffsetsRequest(
                     rkb, offsets,
                     RD_KAFKA_REPLYQ(rktp->rktp_ops, rktp->rktp_op_version),
-                    rd_kafka_toppar_handle_Offset, rktp);
+                    rd_kafka_toppar_handle_Offset,
+                    -1, /* don't set an absolute timeout */
+                    rktp);
 
                 rd_kafka_topic_partition_list_destroy(offsets);
         }
@@ -2686,7 +2720,7 @@ int32_t rd_kafka_topic_partition_get_current_leader_epoch(
  * @param topic_id Topic id to set.
  */
 void rd_kafka_topic_partition_set_topic_id(rd_kafka_topic_partition_t *rktpar,
-                                           rd_kafka_uuid_t topic_id) {
+                                           rd_kafka_Uuid_t topic_id) {
         rd_kafka_topic_partition_private_t *parpriv;
 
         /* Avoid allocating private_t if clearing the epoch */
@@ -2705,7 +2739,7 @@ void rd_kafka_topic_partition_set_topic_id(rd_kafka_topic_partition_t *rktpar,
  * @param rktpar Topic partition.
  * @return Topic id, or RD_KAFKA_UUID_ZERO.
  */
-rd_kafka_uuid_t rd_kafka_topic_partition_get_topic_id(
+rd_kafka_Uuid_t rd_kafka_topic_partition_get_topic_id(
     const rd_kafka_topic_partition_t *rktpar) {
         const rd_kafka_topic_partition_private_t *parpriv;
 
@@ -3045,8 +3079,8 @@ int rd_kafka_topic_partition_cmp(const void *_a, const void *_b) {
 int rd_kafka_topic_partition_by_id_cmp(const void *_a, const void *_b) {
         const rd_kafka_topic_partition_t *a = _a;
         const rd_kafka_topic_partition_t *b = _b;
-        rd_kafka_uuid_t topic_id_a = rd_kafka_topic_partition_get_topic_id(a);
-        rd_kafka_uuid_t topic_id_b = rd_kafka_topic_partition_get_topic_id(b);
+        rd_kafka_Uuid_t topic_id_a = rd_kafka_topic_partition_get_topic_id(a);
+        rd_kafka_Uuid_t topic_id_b = rd_kafka_topic_partition_get_topic_id(b);
         int r                      = rd_kafka_uuid_cmp(topic_id_a, topic_id_b);
         if (r)
                 return r;
@@ -3106,7 +3140,7 @@ static int rd_kafka_topic_partition_list_find0(
  */
 static int rd_kafka_topic_partition_list_find_by_id0(
     const rd_kafka_topic_partition_list_t *rktparlist,
-    rd_kafka_uuid_t topic_id,
+    rd_kafka_Uuid_t topic_id,
     int32_t partition,
     int (*cmp)(const void *, const void *)) {
         rd_kafka_topic_partition_t *rktpar =
@@ -3144,7 +3178,7 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find(
  */
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_by_id(
     const rd_kafka_topic_partition_list_t *rktparlist,
-    rd_kafka_uuid_t topic_id,
+    rd_kafka_Uuid_t topic_id,
     int32_t partition) {
         int i = rd_kafka_topic_partition_list_find_by_id0(
             rktparlist, topic_id, partition,
@@ -3169,7 +3203,7 @@ int rd_kafka_topic_partition_list_find_idx(
  */
 int rd_kafka_topic_partition_list_find_by_id_idx(
     const rd_kafka_topic_partition_list_t *rktparlist,
-    rd_kafka_uuid_t topic_id,
+    rd_kafka_Uuid_t topic_id,
     int32_t partition) {
         return rd_kafka_topic_partition_list_find_by_id0(
             rktparlist, topic_id, partition,

@@ -2492,7 +2492,21 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                                           rd_kafka_op_t *rko) {
 
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
-        rkcg->rkcg_rebalance_incr_assignment->elems[0].topic = rd_strdup(rko->rko_u.metadata.md->topics[0].topic);
+        int i, j;
+
+/*      Update topic name for all the assignments given by topic id
+ *      KIP848TODO: Improve complexity.
+ */
+        for(i=0;i<rkcg->rkcg_rebalance_incr_assignment->cnt;i++) {
+                rd_kafka_Uuid_t request_topic_id = rd_kafka_topic_partition_get_topic_id(&rkcg->rkcg_rebalance_incr_assignment->elems[i]);
+                for(j=0;j<rko->rko_u.metadata.md->topic_cnt;j++) {
+                        rd_kafka_Uuid_t compare_topic_id = rko->rko_u.metadata.mdi->topics[j].topic_id;
+                        if(!rd_kafka_Uuid_cmp(request_topic_id, compare_topic_id)) {
+                                rkcg->rkcg_rebalance_incr_assignment->elems[i].topic = rd_strdup(rko->rko_u.metadata.md->topics[j].topic);
+                                break;
+                        }
+                }
+        }
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED; /* Terminating */

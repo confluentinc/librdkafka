@@ -591,8 +591,6 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                     rkbuf, "%d internal topics: tmpabuf memory shortage",
                     md->topic_cnt);
 
-        printf("Topics found %d\n", md->topic_cnt);
-
         for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_buf_read_i16a(rkbuf, md->topics[i].err);
                 rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf,
@@ -601,9 +599,6 @@ rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 if (ApiVersion >= 10) {
                         rd_kafka_buf_read_uuid(rkbuf, &mdi->topics[i].topic_id);
                 }
-
-                printf("%d \n\tTopic Name is -> %s\n", i, md->topics[i].topic);
-                printf("\tTopic Id is -> %s\n", rd_kafka_uuid_base64str(&mdi->topics[i].topic_id));
 
                 if (ApiVersion >= 1) {
                         int8_t is_internal;

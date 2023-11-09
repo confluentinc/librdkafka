@@ -231,7 +231,6 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
 
                 if(use_topic_id) {
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
-                        printf("Buffer Topic Id is -> %s\n", rd_kafka_uuid_base64str(&topic_id));
                 } else {
                         rd_kafka_buf_read_str(rkbuf, &kTopic);
                         RD_KAFKAP_STR_DUPA(&topic, &kTopic);
@@ -2057,8 +2056,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 1, &features);
-
-        printf("ApiVersion is %d\n", ApiVersion);
 
         size_t next_subscription_size = 0;
 

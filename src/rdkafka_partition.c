@@ -2865,8 +2865,8 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
 
         rktpar = &rktparlist->elems[rktparlist->cnt++];
         memset(rktpar, 0, sizeof(*rktpar));
-        if(topic)
-                rktpar->topic     = rd_strdup(topic);
+        if (topic)
+                rktpar->topic = rd_strdup(topic);
         rktpar->partition = partition;
         rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
 
@@ -2905,7 +2905,7 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
     rd_kafka_uuid_t topic_id,
     int32_t partition) {
         rd_kafka_topic_partition_t *rktpar;
-        rktpar            = rd_kafka_topic_partition_list_add0(
+        rktpar = rd_kafka_topic_partition_list_add0(
             __FUNCTION__, __LINE__, rktparlist, NULL, partition, NULL, NULL);
         rd_kafka_topic_partition_private_t *parpriv =
             rd_kafka_topic_partition_get_private(rktpar);

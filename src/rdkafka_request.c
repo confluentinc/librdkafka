@@ -226,10 +226,10 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
         while (TopicArrayCnt-- > 0) {
                 rd_kafkap_str_t kTopic;
                 int32_t PartArrayCnt;
-                char *topic;
+                char *topic = NULL;
                 rd_kafka_Uuid_t topic_id;
 
-                if(use_topic_id) {
+                if (use_topic_id) {
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
                 } else {
                         rd_kafka_buf_read_str(rkbuf, &kTopic);
@@ -283,13 +283,13 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                 }
                         }
 
-                        if(use_topic_id) {
+                        if (use_topic_id) {
                                 rktpar =
                                     rd_kafka_topic_partition_list_add_with_topic_id(
-                                        parts, topic_id, NULL, Partition);
+                                        parts, topic_id, Partition);
                         } else {
-                                rktpar = rd_kafka_topic_partition_list_add(parts, topic,
-                                                                           Partition);
+                                rktpar = rd_kafka_topic_partition_list_add(
+                                    parts, topic, Partition);
                         }
 
                         /* Use dummy sentinel values that are unlikely to be
@@ -975,7 +975,8 @@ rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
                             : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
             RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-        *offsets = rd_kafka_buf_read_topic_partitions(rkbuf, rd_false, 0, fields);
+        *offsets = rd_kafka_buf_read_topic_partitions(
+            rkbuf, rd_false /* don't use topic_id */, 0, fields);
         if (!*offsets)
                 goto err_parse;
 
@@ -1135,7 +1136,7 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                         if (!rktpar && add_part) {
                                 if (topic_id) {
                                         rktpar = rd_kafka_topic_partition_list_add_with_topic_id(
-                                            *offsets, *topic_id, topic_name, partition);
+                                            *offsets, *topic_id, partition);
                                 } else {
                                         rktpar = rd_kafka_topic_partition_list_add(
                                             *offsets, topic_name, partition);

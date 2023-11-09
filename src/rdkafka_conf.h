@@ -163,6 +163,11 @@ typedef enum {
         RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
 } rd_kafka_client_dns_lookup_t;
 
+typedef enum {
+        RD_KAFKA_GROUP_PROTOCOL_GENERIC,
+        RD_KAFKA_GROUP_PROTOCOL_CONSUMER,
+} rd_kafka_group_protocol_t;
+
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
 #define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
@@ -363,8 +368,10 @@ struct rd_kafka_conf_s {
         int fetch_min_bytes;
         int fetch_queue_backoff_ms;
         int fetch_error_backoff_ms;
+        rd_kafka_group_protocol_t group_protocol;
         char *group_id_str;
         char *group_instance_id;
+        char *group_remote_assignor;
         int allow_auto_create_topics;
 
         rd_kafka_pattern_list_t *topic_blacklist;

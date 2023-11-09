@@ -361,6 +361,8 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
         if (rkcg->rkcg_group_instance_id)
                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
+        if (rkcg->rkcg_group_remote_assignor)
+                rd_kafkap_str_destroy(rkcg->rkcg_group_remote_assignor);
 
         rd_kafka_q_destroy_owner(rkcg->rkcg_q);
         rd_kafka_q_destroy_owner(rkcg->rkcg_ops);
@@ -398,18 +400,20 @@ rd_kafka_cgrp_update_session_timeout(rd_kafka_cgrp_t *rkcg, rd_bool_t reset) {
 
 
 rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
+                                   rd_kafka_group_protocol_t group_protocol,
                                    const rd_kafkap_str_t *group_id,
                                    const rd_kafkap_str_t *client_id) {
         rd_kafka_cgrp_t *rkcg;
 
         rkcg = rd_calloc(1, sizeof(*rkcg));
 
-        rkcg->rkcg_rk            = rk;
-        rkcg->rkcg_group_id      = group_id;
-        rkcg->rkcg_client_id     = client_id;
-        rkcg->rkcg_coord_id      = -1;
-        rkcg->rkcg_generation_id = -1;
-        rkcg->rkcg_wait_resp     = -1;
+        rkcg->rkcg_rk             = rk;
+        rkcg->rkcg_group_protocol = group_protocol;
+        rkcg->rkcg_group_id       = group_id;
+        rkcg->rkcg_client_id      = client_id;
+        rkcg->rkcg_coord_id       = -1;
+        rkcg->rkcg_generation_id  = -1;
+        rkcg->rkcg_wait_resp      = -1;
 
         rkcg->rkcg_ops                      = rd_kafka_q_new(rk);
         rkcg->rkcg_ops->rkq_serve           = rd_kafka_cgrp_op_serve;
@@ -420,6 +424,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
+        rkcg->rkcg_group_remote_assignor =
+            rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
 
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);

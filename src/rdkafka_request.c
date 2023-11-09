@@ -1212,7 +1212,7 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
             rkb, RD_KAFKAP_OffsetFetch, 0, 9, NULL);
 
         if (parts) {
-                parts_size = parts->cnt * 64;
+                parts_size = parts->cnt * 32;
         }
 
         rkbuf = rd_kafka_buf_new_flexver_request(
@@ -2073,7 +2073,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
                                          next_subscription_size /* SubscribedTopicNames */+
                                          RD_KAFKAP_STR_SIZE(subscribe_topics_regex) /* SubscribedTopicRegex */ +
                                          RD_KAFKAP_STR_SIZE(remote_assignor) +
-                                         4 /* Client Assignors */ +
                                          ((current_assignments->cnt * (16 + 100)) + 4) /* TopicPartitions */,
                                          rd_true);
 
@@ -2100,7 +2099,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_write_kstr(rkbuf, subscribe_topics_regex);
         rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
-//        rd_kafka_buf_write_arraycnt(rkbuf, -1); /* Client Assignor */
 
         if(current_assignments) {
                 const rd_kafka_topic_partition_field_t current_assignments_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,

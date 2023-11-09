@@ -227,7 +227,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                 rd_kafkap_str_t kTopic;
                 int32_t PartArrayCnt;
                 char *topic = NULL;
-                rd_kafka_uuid_t topic_id;
+                rd_kafka_Uuid_t topic_id;
 
                 if (use_topic_id) {
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);

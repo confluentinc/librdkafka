@@ -595,68 +595,19 @@ typedef struct rd_kafka_Uuid_s {
 
 
 /**
- * Creates a new UUID.
- *
- * @return A newly allocated UUID.
- */
-static RD_INLINE RD_UNUSED rd_kafka_Uuid_t *rd_kafka_uuid_new() {
-        rd_kafka_Uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_Uuid_t *));
-        return uuid;
-}
-
-/**
  * Initialize given UUID to zero UUID.
  *
  * @param uuid UUID to initialize.
  */
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_Uuid_t *uuid) {
+static RD_INLINE RD_UNUSED void rd_kafka_Uuid_init(rd_kafka_Uuid_t *uuid) {
         memset(uuid, 0, sizeof(*uuid));
 }
 
-static RD_INLINE RD_UNUSED int rd_kafka_uuid_cmp(rd_kafka_Uuid_t a,
+static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
                                                  rd_kafka_Uuid_t b) {
         return (a.most_significant_bits - b.most_significant_bits) ||
                (a.least_significant_bits - b.least_significant_bits);
 }
-
-/**
- * @brief Computes base64 encoding for the given uuid string.
- * @param uuid UUID for which base64 encoding is required.
- *
- * @return base64 encoded string for the given UUID or NULL in case of some
- *         issue with the conversion or the conversion is not supported.
- */
-static RD_INLINE RD_UNUSED char *
-rd_kafka_uuid_base64str(rd_kafka_Uuid_t *uuid) {
-        if (*uuid->base64str)
-                return uuid->base64str;
-
-        rd_chariov_t in_base64;
-        char *out_base64_str;
-        char *uuid_bytes;
-        uint64_t input_uuid[2];
-
-        input_uuid[0]  = htobe64(uuid->most_significant_bits);
-        input_uuid[1]  = htobe64(uuid->least_significant_bits);
-        uuid_bytes     = (char *)input_uuid;
-        in_base64.ptr  = uuid_bytes;
-        in_base64.size = sizeof(uuid->most_significant_bits) +
-                         sizeof(uuid->least_significant_bits);
-
-        out_base64_str = rd_base64_encode_str(&in_base64);
-        if (!out_base64_str)
-                return NULL;
-
-        rd_strlcpy(uuid->base64str, out_base64_str,
-                   23 /* Removing extra ('=') padding */);
-        rd_free(out_base64_str);
-        return uuid->base64str;
-}
-
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_Uuid_t *uuid) {
-        rd_free(uuid);
-}
-
 
 /**
  * @name Producer ID and Epoch for the Idempotent Producer

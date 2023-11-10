@@ -991,25 +991,15 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                         rd_kafka_topic_leader_query0(rk, rktp->rktp_rkt, 1,
                                                      rd_true /* force */);
 
-                if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                        /* No need for refcnt on rktp for timer opaque
-                         * since the timer resides on the rktp and will be
-                         * stopped on toppar remove. */
-                        rd_kafka_timer_start_oneshot(
-                            &rk->rk_timers, &rktp->rktp_validate_tmr, rd_false,
-                            500 * 1000 /* 500ms */,
-                            rd_kafka_offset_validate_tmr_cb, rktp);
-
-                } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
-                        /* Permanent error */
-                        rd_kafka_offset_reset(
-                            rktp, rd_kafka_broker_id(rkb),
-                            RD_KAFKA_FETCH_POS(RD_KAFKA_OFFSET_INVALID,
-                                               rktp->rktp_leader_epoch),
-                            RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
-                            "Unable to validate offset and epoch: %s",
-                            rd_kafka_err2str(err));
-                }
+                /* No need for refcnt on rktp for timer opaque
+                 * since the timer resides on the rktp and will be
+                 * stopped on toppar remove.
+                 * Retries the validation with a new call even in
+                 * case of permanent error. */
+                rd_kafka_timer_start_oneshot(
+                    &rk->rk_timers, &rktp->rktp_validate_tmr, rd_false,
+                    500 * 1000 /* 500ms */, rd_kafka_offset_validate_tmr_cb,
+                    rktp);
                 goto done;
         }
 

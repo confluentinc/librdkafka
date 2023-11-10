@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2017-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -668,14 +669,14 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
 
         /* Create op/message container for message. */
         rko = rd_kafka_op_new_fetch_msg(
-            &rkm, rktp, msetr->msetr_tver->version, rkbuf, hdr.Offset,
+            &rkm, rktp, msetr->msetr_tver->version, rkbuf,
+            RD_KAFKA_FETCH_POS(hdr.Offset, msetr->msetr_leader_epoch),
             (size_t)RD_KAFKAP_BYTES_LEN(&Key),
             RD_KAFKAP_BYTES_IS_NULL(&Key) ? NULL : Key.data,
             (size_t)RD_KAFKAP_BYTES_LEN(&Value),
             RD_KAFKAP_BYTES_IS_NULL(&Value) ? NULL : Value.data);
 
-        rkm->rkm_u.consumer.leader_epoch = msetr->msetr_leader_epoch;
-        rkm->rkm_broker_id               = msetr->msetr_broker_id;
+        rkm->rkm_broker_id = msetr->msetr_broker_id;
 
         /* Assign message timestamp.
          * If message was in a compressed MessageSet and the outer/wrapper
@@ -733,6 +734,7 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                 ? LOG_DEBUG
                 : 0;
         size_t message_end;
+        rd_kafka_fetch_pos_t msetr_pos;
 
         rd_kafka_buf_read_varint(rkbuf, &hdr.Length);
         message_end =
@@ -742,15 +744,23 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_buf_read_varint(rkbuf, &hdr.TimestampDelta);
         rd_kafka_buf_read_varint(rkbuf, &hdr.OffsetDelta);
         hdr.Offset = msetr->msetr_v2_hdr->BaseOffset + hdr.OffsetDelta;
+        msetr_pos  = RD_KAFKA_FETCH_POS(hdr.Offset, msetr->msetr_leader_epoch);
 
-        /* Skip message if outdated */
+        /* Skip message if outdated.
+         * Don't check offset leader epoch, just log it, as if current leader
+         * epoch is different the fetch will fail (KIP-320) and if offset leader
+         * epoch is different it'll return an empty fetch (KIP-595). If we
+         * checked it, it's possible to have a loop when moving from a broker
+         * that supports leader epoch to one that doesn't. */
         if (hdr.Offset < rktp->rktp_offsets.fetch_pos.offset) {
-                rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
-                           "%s [%" PRId32
-                           "]: "
-                           "Skip offset %" PRId64 " < fetch_offset %" PRId64,
-                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           hdr.Offset, rktp->rktp_offsets.fetch_pos.offset);
+                rd_rkb_dbg(
+                    msetr->msetr_rkb, MSG, "MSG",
+                    "%s [%" PRId32
+                    "]: "
+                    "Skip %s < fetch %s",
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    rd_kafka_fetch_pos2str(msetr_pos),
+                    rd_kafka_fetch_pos2str(rktp->rktp_offsets.fetch_pos));
                 rd_kafka_buf_skip_to(rkbuf, message_end);
                 return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next msg */
         }
@@ -771,10 +781,11 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                             rkbuf,
                             "%s [%" PRId32
                             "]: "
-                            "Ctrl message at offset %" PRId64
+                            "Ctrl message at %s"
                             " has invalid key size %" PRId64,
                             rktp->rktp_rkt->rkt_topic->str,
-                            rktp->rktp_partition, hdr.Offset,
+                            rktp->rktp_partition,
+                            rd_kafka_fetch_pos2str(msetr_pos),
                             ctrl_data.KeySize);
 
                 rd_kafka_buf_read_i16(rkbuf, &ctrl_data.Version);
@@ -784,11 +795,10 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                                    "%s [%" PRId32
                                    "]: "
                                    "Skipping ctrl msg with "
-                                   "unsupported version %" PRId16
-                                   " at offset %" PRId64,
+                                   "unsupported version %" PRId16 " at %s",
                                    rktp->rktp_rkt->rkt_topic->str,
                                    rktp->rktp_partition, ctrl_data.Version,
-                                   hdr.Offset);
+                                   rd_kafka_fetch_pos2str(msetr_pos));
                         rd_kafka_buf_skip_to(rkbuf, message_end);
                         return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next
                                                               msg */
@@ -799,10 +809,11 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                             rkbuf,
                             "%s [%" PRId32
                             "]: "
-                            "Ctrl message at offset %" PRId64
+                            "Ctrl message at %s"
                             " has invalid key size %" PRId64,
                             rktp->rktp_rkt->rkt_topic->str,
-                            rktp->rktp_partition, hdr.Offset,
+                            rktp->rktp_partition,
+                            rd_kafka_fetch_pos2str(msetr_pos),
                             ctrl_data.KeySize);
 
                 rd_kafka_buf_read_i16(rkbuf, &ctrl_data.Type);
@@ -827,14 +838,15 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                                            MSG | RD_KAFKA_DBG_EOS, "TXN",
                                            "%s [%" PRId32
                                            "] received abort txn "
-                                           "ctrl msg at offset %" PRId64
+                                           "ctrl msg at %s"
                                            " for "
                                            "PID %" PRId64
                                            ", but there are no "
                                            "known aborted transactions: "
                                            "ignoring",
                                            rktp->rktp_rkt->rkt_topic->str,
-                                           rktp->rktp_partition, hdr.Offset,
+                                           rktp->rktp_partition,
+                                           rd_kafka_fetch_pos2str(msetr_pos),
                                            msetr->msetr_v2_hdr->PID);
                                 break;
                         }
@@ -844,14 +856,14 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                         aborted_txn_start_offset =
                             rd_kafka_aborted_txns_pop_offset(
                                 msetr->msetr_aborted_txns,
-                                msetr->msetr_v2_hdr->PID, hdr.Offset);
+                                msetr->msetr_v2_hdr->PID, msetr_pos.offset);
 
                         if (unlikely(aborted_txn_start_offset == -1)) {
                                 rd_rkb_dbg(msetr->msetr_rkb,
                                            MSG | RD_KAFKA_DBG_EOS, "TXN",
                                            "%s [%" PRId32
                                            "] received abort txn "
-                                           "ctrl msg at offset %" PRId64
+                                           "ctrl msg at %s"
                                            " for "
                                            "PID %" PRId64
                                            ", but this offset is "
@@ -859,7 +871,8 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                                            "transaction: aborted transaction "
                                            "was possibly empty: ignoring",
                                            rktp->rktp_rkt->rkt_topic->str,
-                                           rktp->rktp_partition, hdr.Offset,
+                                           rktp->rktp_partition,
+                                           rd_kafka_fetch_pos2str(msetr_pos),
                                            msetr->msetr_v2_hdr->PID);
                                 break;
                         }
@@ -873,16 +886,16 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                                    "]: "
                                    "Unsupported ctrl message "
                                    "type %" PRId16
-                                   " at offset"
-                                   " %" PRId64 ": ignoring",
+                                   " at "
+                                   " %s: ignoring",
                                    rktp->rktp_rkt->rkt_topic->str,
                                    rktp->rktp_partition, ctrl_data.Type,
-                                   hdr.Offset);
+                                   rd_kafka_fetch_pos2str(msetr_pos));
                         break;
                 }
 
                 rko = rd_kafka_op_new_ctrl_msg(rktp, msetr->msetr_tver->version,
-                                               rkbuf, hdr.Offset);
+                                               rkbuf, msetr_pos);
                 rd_kafka_q_enq(&msetr->msetr_rkq, rko);
                 msetr->msetr_msgcnt++;
 
@@ -905,14 +918,13 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
 
         /* Create op/message container for message. */
         rko = rd_kafka_op_new_fetch_msg(
-            &rkm, rktp, msetr->msetr_tver->version, rkbuf, hdr.Offset,
+            &rkm, rktp, msetr->msetr_tver->version, rkbuf, msetr_pos,
             (size_t)RD_KAFKAP_BYTES_LEN(&hdr.Key),
             RD_KAFKAP_BYTES_IS_NULL(&hdr.Key) ? NULL : hdr.Key.data,
             (size_t)RD_KAFKAP_BYTES_LEN(&hdr.Value),
             RD_KAFKAP_BYTES_IS_NULL(&hdr.Value) ? NULL : hdr.Value.data);
 
-        rkm->rkm_u.consumer.leader_epoch = msetr->msetr_leader_epoch;
-        rkm->rkm_broker_id               = msetr->msetr_broker_id;
+        rkm->rkm_broker_id = msetr->msetr_broker_id;
 
         /* Store pointer to unparsed message headers, they will
          * be parsed on the first access.

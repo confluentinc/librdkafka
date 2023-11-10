@@ -134,6 +134,7 @@ _TEST_DECL(0028_long_topicnames);
 _TEST_DECL(0029_assign_offset);
 _TEST_DECL(0030_offset_commit);
 _TEST_DECL(0031_get_offsets);
+_TEST_DECL(0031_get_offsets_mock);
 _TEST_DECL(0033_regex_subscribe);
 _TEST_DECL(0033_regex_subscribe_local);
 _TEST_DECL(0034_offset_reset);
@@ -254,6 +255,8 @@ _TEST_DECL(0138_admin_mock);
 _TEST_DECL(0139_offset_validation_mock);
 _TEST_DECL(0140_commit_metadata);
 _TEST_DECL(0142_reauthentication);
+_TEST_DECL(0143_exponential_backoff_mock);
+_TEST_DECL(0144_idempotence_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -332,6 +335,7 @@ struct test tests[] = {
           /* Loops over committed() until timeout */
           _THRES(.ucpu = 10.0, .scpu = 5.0)),
     _TEST(0031_get_offsets, 0),
+    _TEST(0031_get_offsets_mock, TEST_F_LOCAL),
     _TEST(0033_regex_subscribe, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0033_regex_subscribe_local, TEST_F_LOCAL),
     _TEST(0034_offset_reset, 0),
@@ -505,6 +509,8 @@ struct test tests[] = {
     _TEST(0139_offset_validation_mock, 0),
     _TEST(0140_commit_metadata, 0),
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
+    _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
+    _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
 
 
     /* Manual tests */
@@ -5872,13 +5878,15 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
         size_t aclres_cnt                      = 0;
         int errcnt                             = 0;
         rd_kafka_resp_err_t err;
-        const rd_kafka_group_result_t **gres               = NULL;
-        size_t gres_cnt                                    = 0;
-        const rd_kafka_ConsumerGroupDescription_t **gdescs = NULL;
-        size_t gdescs_cnt                                  = 0;
-        const rd_kafka_error_t **glists_errors             = NULL;
-        size_t glists_error_cnt                            = 0;
-        const rd_kafka_topic_partition_list_t *offsets     = NULL;
+        const rd_kafka_group_result_t **gres                        = NULL;
+        size_t gres_cnt                                             = 0;
+        const rd_kafka_ConsumerGroupDescription_t **gdescs          = NULL;
+        size_t gdescs_cnt                                           = 0;
+        const rd_kafka_error_t **glists_errors                      = NULL;
+        size_t glists_error_cnt                                     = 0;
+        const rd_kafka_topic_partition_list_t *offsets              = NULL;
+        const rd_kafka_DeleteAcls_result_response_t **delete_aclres = NULL;
+        size_t delete_aclres_cnt                                    = 0;
 
         rkev = test_wait_admin_result(q, evtype, tmout);
 
@@ -5951,6 +5959,15 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                                   rd_kafka_event_name(rkev));
 
                 aclres = rd_kafka_CreateAcls_result_acls(res, &aclres_cnt);
+        } else if (evtype == RD_KAFKA_EVENT_DELETEACLS_RESULT) {
+                const rd_kafka_DeleteAcls_result_t *res;
+
+                if (!(res = rd_kafka_event_DeleteAcls_result(rkev)))
+                        TEST_FAIL("Expected a DeleteAcls result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                delete_aclres = rd_kafka_DeleteAcls_result_responses(
+                    res, &delete_aclres_cnt);
         } else if (evtype == RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT) {
                 const rd_kafka_ListConsumerGroups_result_t *res;
                 if (!(res = rd_kafka_event_ListConsumerGroups_result(rkev)))
@@ -6108,6 +6125,20 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                                   rd_kafka_err2str(offsets->elems[i].err));
                         if (!(errcnt++))
                                 err = offsets->elems[i].err;
+                }
+        }
+
+        /* Check delete ACL errors. */
+        for (i = 0; i < delete_aclres_cnt; i++) {
+                const rd_kafka_DeleteAcls_result_response_t *res_resp =
+                    delete_aclres[i];
+                const rd_kafka_error_t *error =
+                    rd_kafka_DeleteAcls_result_response_error(res_resp);
+                if (error) {
+                        TEST_WARN("DeleteAcls result error: %s\n",
+                                  rd_kafka_error_string(error));
+                        if ((errcnt++) == 0)
+                                err = rd_kafka_error_code(error);
                 }
         }
 
@@ -6298,7 +6329,7 @@ rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,
 
         TEST_SAY("Deleting %" PRIusz " topics\n", topic_cnt);
 
-        rd_kafka_DeleteTopics(rk, del_topics, topic_cnt, options, useq);
+        rd_kafka_DeleteTopics(rk, del_topics, topic_cnt, options, q);
 
         rd_kafka_AdminOptions_destroy(options);
 
@@ -6720,6 +6751,56 @@ rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
         if (err)
                 TEST_FAIL("Failed to create %d acl(s): %s", (int)acl_cnt,
                           rd_kafka_err2str(err));
+
+        return err;
+}
+
+/**
+ * @brief Topic Admin API helpers
+ *
+ * @param useq Makes the call async and posts the response in this queue.
+ *             If NULL this call will be synchronous and return the error
+ *             result.
+ *
+ * @remark Fails the current test on failure.
+ */
+
+rd_kafka_resp_err_t
+test_DeleteAcls_simple(rd_kafka_t *rk,
+                       rd_kafka_queue_t *useq,
+                       rd_kafka_AclBindingFilter_t **acl_filters,
+                       size_t acl_filters_cnt,
+                       void *opaque) {
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *q;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30 * 1000;
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEACLS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Deleting acls using %" PRIusz " filters\n", acl_filters_cnt);
+
+        rd_kafka_DeleteAcls(rk, acl_filters, acl_filters_cnt, options, q);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(q, RD_KAFKA_EVENT_DELETEACLS_RESULT,
+                                           NULL, tmout + 5000);
+
+        rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to delete acl(s): %s", rd_kafka_err2str(err));
 
         return err;
 }

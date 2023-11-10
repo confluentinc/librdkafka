@@ -3480,6 +3480,7 @@ static void rd_kafka_query_wmark_offsets_resp_cb(rd_kafka_t *rk,
         struct _query_wmark_offsets_state *state;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
+        int actions = 0;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* 'state' has gone out of scope when query_watermark..()
@@ -3491,7 +3492,15 @@ static void rd_kafka_query_wmark_offsets_resp_cb(rd_kafka_t *rk,
 
         offsets = rd_kafka_topic_partition_list_new(1);
         err = rd_kafka_handle_ListOffsets(rk, rkb, err, rkbuf, request, offsets,
-                                          NULL);
+                                          &actions);
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Remove its cache in case the topic isn't a known topic. */
+                rd_kafka_wrlock(rk);
+                rd_kafka_metadata_cache_delete_by_name(rk, state->topic);
+                rd_kafka_wrunlock(rk);
+        }
+
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                 rd_kafka_topic_partition_list_destroy(offsets);
                 return; /* Retrying */
@@ -3512,14 +3521,18 @@ static void rd_kafka_query_wmark_offsets_resp_cb(rd_kafka_t *rk,
                 /* FALLTHRU */
         }
 
-        /* Partition not seen in response. */
-        if (!(rktpar = rd_kafka_topic_partition_list_find(offsets, state->topic,
-                                                          state->partition)))
+        rktpar = rd_kafka_topic_partition_list_find(offsets, state->topic,
+                                                    state->partition);
+        if (!rktpar && err > RD_KAFKA_RESP_ERR__END) {
+                /* Partition not seen in response,
+                 * not a local error. */
                 err = RD_KAFKA_RESP_ERR__BAD_MSG;
-        else if (rktpar->err)
-                err = rktpar->err;
-        else
-                state->offsets[state->offidx] = rktpar->offset;
+        } else if (rktpar) {
+                if (rktpar->err)
+                        err = rktpar->err;
+                else
+                        state->offsets[state->offidx] = rktpar->offset;
+        }
 
         state->offidx++;
 
@@ -3575,26 +3588,25 @@ rd_kafka_resp_err_t rd_kafka_query_watermark_offsets(rd_kafka_t *rk,
         state.ts_end        = ts_end;
         state.state_version = rd_kafka_brokers_get_state_version(rk);
 
-
         rktpar->offset = RD_KAFKA_OFFSET_BEGINNING;
         rd_kafka_ListOffsetsRequest(
             leader->rkb, partitions, RD_KAFKA_REPLYQ(rkq, 0),
-            rd_kafka_query_wmark_offsets_resp_cb, &state);
+            rd_kafka_query_wmark_offsets_resp_cb, timeout_ms, &state);
 
         rktpar->offset = RD_KAFKA_OFFSET_END;
         rd_kafka_ListOffsetsRequest(
             leader->rkb, partitions, RD_KAFKA_REPLYQ(rkq, 0),
-            rd_kafka_query_wmark_offsets_resp_cb, &state);
+            rd_kafka_query_wmark_offsets_resp_cb, timeout_ms, &state);
 
         rd_kafka_topic_partition_list_destroy(partitions);
         rd_list_destroy(&leaders);
 
         /* Wait for reply (or timeout) */
-        while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS &&
-               rd_kafka_q_serve(rkq, 100, 0, RD_KAFKA_Q_CB_CALLBACK,
-                                rd_kafka_poll_cb,
-                                NULL) != RD_KAFKA_OP_RES_YIELD)
-                ;
+        while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
+                rd_kafka_q_serve(rkq, RD_POLL_INFINITE, 0,
+                                 RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb,
+                                 NULL);
+        }
 
         rd_kafka_q_destroy_owner(rkq);
 
@@ -3734,7 +3746,7 @@ rd_kafka_offsets_for_times(rd_kafka_t *rk,
                 state.wait_reply++;
                 rd_kafka_ListOffsetsRequest(
                     leader->rkb, leader->partitions, RD_KAFKA_REPLYQ(rkq, 0),
-                    rd_kafka_get_offsets_for_times_resp_cb, &state);
+                    rd_kafka_get_offsets_for_times_resp_cb, timeout_ms, &state);
         }
 
         rd_list_destroy(&leaders);
@@ -3958,6 +3970,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
         case RD_KAFKA_OP_CREATEACLS:
         case RD_KAFKA_OP_DESCRIBEACLS:
         case RD_KAFKA_OP_DELETEACLS:
+        case RD_KAFKA_OP_LISTOFFSETS:
                 /* Calls op_destroy() from worker callback,
                  * when the time comes. */
                 res = rd_kafka_op_call(rk, rkq, rko);
@@ -4005,36 +4018,19 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
 int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
         int r;
-        const rd_bool_t can_q_contain_fetched_msgs =
-            rd_kafka_q_can_contain_fetched_msgs(rk->rk_rep, RD_DO_LOCK);
-
-        if (timeout_ms && can_q_contain_fetched_msgs)
-                rd_kafka_app_poll_blocking(rk);
 
         r = rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0, RD_KAFKA_Q_CB_CALLBACK,
                              rd_kafka_poll_cb, NULL);
-
-        if (can_q_contain_fetched_msgs)
-                rd_kafka_app_polled(rk);
-
         return r;
 }
 
 
 rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
         rd_kafka_op_t *rko;
-        const rd_bool_t can_q_contain_fetched_msgs =
-            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
-
-
-        if (timeout_ms && can_q_contain_fetched_msgs)
-                rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, rd_timeout_us(timeout_ms), 0,
                                    RD_KAFKA_Q_CB_EVENT, rd_kafka_poll_cb, NULL);
 
-        if (can_q_contain_fetched_msgs)
-                rd_kafka_app_polled(rkqu->rkqu_rk);
 
         if (!rko)
                 return NULL;
@@ -4044,18 +4040,9 @@ rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
 
 int rd_kafka_queue_poll_callback(rd_kafka_queue_t *rkqu, int timeout_ms) {
         int r;
-        const rd_bool_t can_q_contain_fetched_msgs =
-            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
-
-        if (timeout_ms && can_q_contain_fetched_msgs)
-                rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         r = rd_kafka_q_serve(rkqu->rkqu_q, timeout_ms, 0,
                              RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
-
-        if (can_q_contain_fetched_msgs)
-                rd_kafka_app_polled(rkqu->rkqu_rk);
-
         return r;
 }
 
@@ -4796,7 +4783,9 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
                 state->wait_cnt++;
                 error = rd_kafka_DescribeGroupsRequest(
-                    rkb, 0, grps, i, RD_KAFKA_REPLYQ(state->q, 0),
+                    rkb, 0, grps, i,
+                    rd_false /* don't include authorized operations */,
+                    RD_KAFKA_REPLYQ(state->q, 0),
                     rd_kafka_DescribeGroups_resp_cb, state);
                 if (error) {
                         rd_kafka_DescribeGroups_resp_cb(
@@ -5050,4 +5039,78 @@ int rd_kafka_errno(void) {
 
 int rd_kafka_unittest(void) {
         return rd_unittest();
+}
+
+
+/**
+ * Creates a new UUID.
+ *
+ * @return A newly allocated UUID.
+ */
+rd_kafka_Uuid_t *rd_kafka_Uuid_new(int64_t most_significant_bits,
+                                   int64_t least_significant_bits) {
+        rd_kafka_Uuid_t *uuid        = rd_calloc(1, sizeof(rd_kafka_Uuid_t));
+        uuid->most_significant_bits  = most_significant_bits;
+        uuid->least_significant_bits = least_significant_bits;
+        return uuid;
+}
+
+/**
+ * Returns a newly allocated copy of the given UUID.
+ *
+ * @param uuid UUID to copy.
+ * @return Copy of the provided UUID.
+ *
+ * @remark Dynamically allocated. Deallocate (free) after use.
+ */
+rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
+        rd_kafka_Uuid_t *copy_uuid = rd_kafka_Uuid_new(
+            uuid->most_significant_bits, uuid->least_significant_bits);
+        if (*uuid->base64str)
+                memcpy(copy_uuid->base64str, uuid->base64str, 23);
+        return copy_uuid;
+}
+
+/**
+ * @brief Destroy the provided uuid.
+ *
+ * @param uuid UUID
+ */
+void rd_kafka_Uuid_destroy(rd_kafka_Uuid_t *uuid) {
+        rd_free(uuid);
+}
+
+const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
+        if (*uuid->base64str)
+                return uuid->base64str;
+
+        rd_chariov_t in_base64;
+        char *out_base64_str;
+        char *uuid_bytes;
+        uint64_t input_uuid[2];
+
+        input_uuid[0]  = htobe64(uuid->most_significant_bits);
+        input_uuid[1]  = htobe64(uuid->least_significant_bits);
+        uuid_bytes     = (char *)input_uuid;
+        in_base64.ptr  = uuid_bytes;
+        in_base64.size = sizeof(uuid->most_significant_bits) +
+                         sizeof(uuid->least_significant_bits);
+
+        out_base64_str = rd_base64_encode_str(&in_base64);
+        if (!out_base64_str)
+                return NULL;
+
+        rd_strlcpy((char *)uuid->base64str, out_base64_str,
+                   23 /* Removing extra ('=') padding */);
+        rd_free(out_base64_str);
+        return uuid->base64str;
+}
+
+int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid) {
+        return uuid->least_significant_bits;
+}
+
+
+int64_t rd_kafka_Uuid_most_significant_bits(const rd_kafka_Uuid_t *uuid) {
+        return uuid->most_significant_bits;
 }

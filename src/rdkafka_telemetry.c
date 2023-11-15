@@ -93,6 +93,7 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.matched_metrics       = NULL;
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
+        rk->rk_telemetry.telemetry_max_bytes = 0;
 }
 
 /**

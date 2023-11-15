@@ -679,6 +679,7 @@ struct rd_kafka_s {
                 rd_kafka_compression_t *accepted_compression_types;
                 size_t accepted_compression_types_cnt;
                 int32_t push_interval_ms;
+                int32_t telemetry_max_bytes;
                 rd_bool_t delta_temporality;
                 char **requested_metrics;
                 size_t requested_metrics_cnt;

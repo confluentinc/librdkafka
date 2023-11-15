@@ -5339,6 +5339,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         }
 
         rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.push_interval_ms);
+        rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.telemetry_max_bytes);
         rd_kafka_buf_read_bool(rkbuf, &rk->rk_telemetry.delta_temporality);
 
 

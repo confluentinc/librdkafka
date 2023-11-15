@@ -2574,7 +2574,8 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_new(const char *topic,
                                                          int32_t partition) {
         rd_kafka_topic_partition_t *rktpar = rd_calloc(1, sizeof(*rktpar));
 
-        rktpar->topic     = rd_strdup(topic);
+        if (topic)
+                rktpar->topic = rd_strdup(topic);
         rktpar->partition = partition;
 
         return rktpar;

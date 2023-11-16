@@ -1192,32 +1192,9 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                 rd_kafka_wrlock(rk);
         }
 
-        /* Decommission brokers.
-         * Broker thread holds a refcount and detects when broker refcounts
-         * reaches 1 and then decommissions itself. */
+        /* Decommission brokers. */
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
-                /* Add broker's thread to wait_thrds list for later joining */
-                thrd  = rd_malloc(sizeof(*thrd));
-                *thrd = rkb->rkb_thread;
-                rd_list_add(&wait_thrds, thrd);
-                rd_kafka_wrunlock(rk);
-
-                rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",
-                             rd_kafka_broker_name(rkb));
-                /* Send op to trigger queue/io wake-up.
-                 * The op itself is (likely) ignored by the broker thread. */
-                rd_kafka_q_enq(rkb->rkb_ops,
-                               rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
-
-#ifndef _WIN32
-                /* Interrupt IO threads to speed up termination. */
-                if (rk->rk_conf.term_sig)
-                        pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
-#endif
-
-                rd_kafka_broker_destroy(rkb);
-
-                rd_kafka_wrlock(rk);
+                rd_kafka_broker_decommission(rk, rkb, &wait_thrds);
         }
 
         if (rk->rk_clusterid) {

@@ -1572,6 +1572,28 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 
 
 /**
+ * @brief Decommission a mock broker from a cluster.
+ *
+ * @param mcluster The mock cluster
+ * @param broker_id The id of the broker to remove
+ *
+ * @returns Error value or 0 if no error occurred
+ */
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *mcluster,
+                                  int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.lo        = rd_false;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+
+/**
  * @brief Starts listening on the mock broker socket.
  *
  * @returns 0 on success or -1 on error (logged).
@@ -2317,6 +2339,10 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mrkb->rack = NULL;
                 break;
 
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
+                rd_kafka_mock_broker_destroy(mrkb);
+                break;
+
         default:
                 RD_BUG("Unhandled mock cmd %d", rko->rko_u.mock.cmd);
                 break;
@@ -2480,6 +2506,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:

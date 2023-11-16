@@ -356,6 +356,18 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
+ * @brief Remove and delete a mock broker from a cluster.
+ *
+ * @param cluster The mock cluster containing the broker
+ * @param broker_id The broker to delete
+ * @returns 0 on success or -1 on error
+ */
+RD_EXPORT int
+rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *cluster,
+                                  int32_t broker_id);
+
+
+/**
  * @brief Explicitly sets the coordinator. If this API is not a standard
  *        hashing scheme will be used.
  *

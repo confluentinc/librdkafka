@@ -460,13 +460,14 @@ struct rd_kafka_op_s {
                         struct rd_kafka_admin_worker_cbs *cbs;
 
                         /** Worker state */
-                        enum { RD_KAFKA_ADMIN_STATE_INIT,
-                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
-                               RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
-                               RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
-                               RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
-                               RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
-                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
+                        enum {
+                                RD_KAFKA_ADMIN_STATE_INIT,
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
+                                RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
+                                RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
                         } state;
 
                         int32_t broker_id; /**< Requested broker id to
@@ -569,6 +570,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
+                               RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
                                RD_KAFKA_MOCK_CMD_COORD_SET,
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
                         } cmd;

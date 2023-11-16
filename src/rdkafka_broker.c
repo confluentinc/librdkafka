@@ -6045,6 +6045,57 @@ int32_t *rd_kafka_broker_get_learned_ids(rd_kafka_t *rk, size_t *cntp) {
 }
 
 /**
+ * @brief Decommission a broker.
+ *
+ * @param rk Client instance.
+ * @param rkb Broker to decommission.
+ * @param wait_thrds Add the broker's thread to this list if not NULL.
+ *
+ * @locks rd_kafka_wrlock() is dropped and reacquired.
+ *
+ * Broker threads hold a refcount and detect when it reaches 1 and then
+ * decommissions itself. Callers can wait for this to happen by calling
+ * thrd_join() on elements of \p wait_thrds. Callers are responsible for
+ * managing the creation and destruction of \p wait_thrds which can be NULL.
+ */
+void rd_kafka_broker_decommission(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_list_t *wait_thrds) {
+
+        if (rkb->termination_in_progress)
+                return;
+
+        rkb->termination_in_progress = rd_true;
+
+        /* Add broker's thread to wait_thrds list for later joining */
+        if (wait_thrds) {
+                thrd_t *thrd = rd_malloc(sizeof(*thrd));
+                *thrd        = rkb->rkb_thread;
+
+                rd_list_add(wait_thrds, thrd);
+        }
+
+        rd_kafka_wrunlock(rk);
+
+        rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",
+                     rd_kafka_broker_name(rkb));
+
+        /* Send op to trigger queue/io wake-up.
+         * The op itself is (likely) ignored by the broker thread. */
+        rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
+
+#ifndef _WIN32
+        /* Interrupt IO threads to speed up termination. */
+        if (rk->rk_conf.term_sig)
+                pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+#endif
+
+        rd_kafka_broker_destroy(rkb);
+
+        rd_kafka_wrlock(rk);
+}
+
+/**
  * @name Unit tests
  * @{
  *

@@ -305,8 +305,8 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                     rktpar, CurrentLeaderEpoch);
                         rktpar->err = ErrorCode;
 
-
-                        rd_kafka_buf_skip_tags(rkbuf);
+                        if (fi > 1)
+                                rd_kafka_buf_skip_tags(rkbuf);
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
@@ -1107,10 +1107,11 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                 int j;
 
                 rd_kafka_buf_read_str(rkbuf, &topic);
-//                if(ApiVersion >= 9) {
-//                        topic_id = rd_kafka_Uuid_new();
-//                        rd_kafka_buf_read_uuid(rkbuf, topic_id);
-//                }
+                //                if(ApiVersion >= 9) {
+                //                        topic_id = rd_kafka_Uuid_new();
+                //                        rd_kafka_buf_read_uuid(rkbuf,
+                //                        topic_id);
+                //                }
                 rd_kafka_buf_read_arraycnt(rkbuf, &PartArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
 
@@ -1135,14 +1136,16 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                             *offsets, topic_name, partition);
                         if (!rktpar && add_part) {
                                 if (topic_id) {
-                                        rktpar = rd_kafka_topic_partition_list_add_with_topic_id(
-                                            *offsets, *topic_id, partition);
+                                        rktpar =
+                                            rd_kafka_topic_partition_list_add_with_topic_id(
+                                                *offsets, *topic_id, partition);
                                 } else {
-                                        rktpar = rd_kafka_topic_partition_list_add(
-                                            *offsets, topic_name, partition);
+                                        rktpar =
+                                            rd_kafka_topic_partition_list_add(
+                                                *offsets, topic_name,
+                                                partition);
                                 }
-                        }
-                        else if (!rktpar) {
+                        } else if (!rktpar) {
                                 rd_rkb_dbg(rkb, TOPIC, "OFFSETFETCH",
                                            "OffsetFetchResponse: %s [%" PRId32
                                            "] "
@@ -1388,9 +1391,10 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
         /* ConsumerGroup */
         rd_kafka_buf_write_str(rkbuf, group_id, -1);
 
-        if(ApiVersion >= 9) {
-                if(!member_id) {
-                        rd_kafkap_str_t *null_member_id = rd_kafkap_str_new(NULL, -1);
+        if (ApiVersion >= 9) {
+                if (!member_id) {
+                        rd_kafkap_str_t *null_member_id =
+                            rd_kafkap_str_new(NULL, -1);
                         rd_kafka_buf_write_kstr(rkbuf, null_member_id);
                         rd_kafkap_str_destroy(null_member_id);
                 } else {
@@ -1416,7 +1420,7 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_arraycnt(rkbuf, PartCnt);
         }
 
-        if(ApiVersion >= 8) {
+        if (ApiVersion >= 8) {
                 // Tags for the groups array
                 rd_kafka_buf_write_tags(rkbuf);
         }
@@ -2189,21 +2193,22 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
 
-void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
-                                       const rd_kafkap_str_t *group_id,
-                                       const rd_kafkap_str_t *member_id,
-                                       int32_t member_epoch,
-                                       const rd_kafkap_str_t *group_instance_id,
-                                       const rd_kafkap_str_t *rack_id,
-                                       int32_t rebalance_timeout_ms,
-                                       const rd_kafka_topic_partition_list_t *subscribe_topics,
-                                       const rd_kafkap_str_t *subscribe_topics_regex,
-                                       const rd_kafkap_str_t *remote_assignor,
-                                       const rd_kafka_topic_partition_list_t *current_assignments,
-                                       rd_bool_t full_request,
-                                       rd_kafka_replyq_t replyq,
-                                       rd_kafka_resp_cb_t *resp_cb,
-                                       void *opaque) {
+void rd_kafka_ConsumerGroupHeartbeatRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    const rd_kafkap_str_t *member_id,
+    int32_t member_epoch,
+    const rd_kafkap_str_t *group_instance_id,
+    const rd_kafkap_str_t *rack_id,
+    int32_t rebalance_timeout_ms,
+    const rd_kafka_topic_partition_list_t *subscribe_topics,
+    const rd_kafkap_str_t *subscribe_topics_regex,
+    const rd_kafkap_str_t *remote_assignor,
+    const rd_kafka_topic_partition_list_t *current_assignments,
+    rd_bool_t full_request,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
 
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
@@ -2214,22 +2219,23 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
 
         size_t next_subscription_size = 0;
 
-        if(subscribe_topics) {
-                next_subscription_size = ((subscribe_topics->cnt * (4+50)) + 4);
+        if (subscribe_topics) {
+                next_subscription_size =
+                    ((subscribe_topics->cnt * (4 + 50)) + 4);
         }
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
-                                         RD_KAFKAP_STR_SIZE(group_id) +
-                                         RD_KAFKAP_STR_SIZE(member_id) +
-                                         4 /* MemberEpoch */ +
-                                         RD_KAFKAP_STR_SIZE(group_instance_id) +
-                                         RD_KAFKAP_STR_SIZE(rack_id) +
-                                         4 /* RebalanceTimeoutMs */ +
-                                         next_subscription_size /* SubscribedTopicNames */+
-                                         RD_KAFKAP_STR_SIZE(subscribe_topics_regex) /* SubscribedTopicRegex */ +
-                                         RD_KAFKAP_STR_SIZE(remote_assignor) +
-                                         ((current_assignments->cnt * (16 + 100)) + 4) /* TopicPartitions */,
-                                         rd_true);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
+            RD_KAFKAP_STR_SIZE(group_id) + RD_KAFKAP_STR_SIZE(member_id) +
+                4 /* MemberEpoch */ + RD_KAFKAP_STR_SIZE(group_instance_id) +
+                RD_KAFKAP_STR_SIZE(rack_id) + 4 /* RebalanceTimeoutMs */ +
+                next_subscription_size /* SubscribedTopicNames */ +
+                RD_KAFKAP_STR_SIZE(
+                    subscribe_topics_regex) /* SubscribedTopicRegex */
+                + RD_KAFKAP_STR_SIZE(remote_assignor) +
+                ((current_assignments->cnt * (16 + 100)) +
+                 4) /* TopicPartitions */,
+            rd_true);
 
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
@@ -2238,15 +2244,18 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, rack_id);
         rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
 
-        if(subscribe_topics && subscribe_topics->cnt > 0) {
+        if (subscribe_topics && subscribe_topics->cnt > 0) {
                 size_t of_TopicsArrayCnt;
                 int topics_cnt = subscribe_topics->cnt;
 
                 /* write Topics */
                 of_TopicsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicsArrayCnt, topics_cnt);
+                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicsArrayCnt,
+                                               topics_cnt);
                 while (--topics_cnt >= 0)
-                        rd_kafka_buf_write_str(rkbuf, subscribe_topics->elems[topics_cnt].topic, -1);
+                        rd_kafka_buf_write_str(
+                            rkbuf, subscribe_topics->elems[topics_cnt].topic,
+                            -1);
 
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
@@ -2255,9 +2264,11 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, subscribe_topics_regex);
         rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
 
-        if(current_assignments) {
-                const rd_kafka_topic_partition_field_t current_assignments_fields[] = {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
-                                                                                       RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        if (current_assignments) {
+                const rd_kafka_topic_partition_field_t
+                    current_assignments_fields[] = {
+                        RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                        RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, current_assignments, rd_false, rd_false, rd_true,
                     rd_true, current_assignments_fields);
@@ -2274,7 +2285,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(rd_kafka_broker_t *rkb,
             rkbuf, rkb->rkb_rk->rk_conf.group_session_timeout_ms, 0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
-
 }
 
 
@@ -2560,14 +2570,17 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_Metadata, 0, metadata_max_version, &features);
 
-        topic_id_cnt = (ApiVersion >= 10 && topic_ids) ? rd_list_cnt(topic_ids) : 0;
+        topic_id_cnt =
+            (ApiVersion >= 10 && topic_ids) ? rd_list_cnt(topic_ids) : 0;
         rd_assert(topic_id_cnt == 0 || ApiVersion >= 12);
 
         total_topic_cnt = topic_cnt + topic_id_cnt;
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
-                                                 4 + ((50 /*topic name */ + 16 /* topic id */) * total_topic_cnt) + 1,
-                                                 ApiVersion >= 9);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_Metadata, 1,
+            4 + ((50 /*topic name */ + 16 /* topic id */) * total_topic_cnt) +
+                1,
+            ApiVersion >= 9);
 
         if (!reason)
                 reason = "";
@@ -2674,7 +2687,8 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 int i;
                 rd_kafka_Uuid_t *topic_id;
 
-                /* KIP848TODO: Properly handle usecases for this similar to Metadata.topics */
+                /* KIP848TODO: Properly handle usecases for this similar to
+                 * Metadata.topics */
                 /* Maintain a copy of the topics list so we can purge
                  * hints from the metadata cache on error. */
                 rkbuf->rkbuf_u.Metadata.topic_ids =

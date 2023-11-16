@@ -182,7 +182,8 @@ typedef struct rd_kafka_cgrp_s {
 
         int32_t rkcg_generation_id; /* Current generation id */
 
-        int32_t rkcg_member_epoch; /* KIP848TODO: Merge this and Generation Id field */
+        int32_t rkcg_member_epoch; /* KIP848TODO: Merge this and Generation Id
+                                      field */
 
         rd_kafka_assignor_t *rkcg_assignor; /**< The current partition
                                              *   assignor. used by both

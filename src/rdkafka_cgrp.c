@@ -2631,9 +2631,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                                  rd_kafka_buf_t *rkbuf,
                                                  rd_kafka_buf_t *request,
                                                  void *opaque) {
-
-        printf("In ConsumerGroupHeartbeat Response Handler\n");
-
         rd_kafka_cgrp_t *rkcg       = rk->rk_cgrp;
         const int log_decode_errors = LOG_ERR;
         int16_t error_code          = 0;
@@ -2689,7 +2686,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
         int8_t are_assignments_present;
         rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
-        printf("Are assignment present %d\n", are_assignments_present);
         if (!RD_KAFKAP_STR_IS_NULL(&member_id)) {
                 rd_kafka_cgrp_set_member_id(rkcg, member_id.str);
         }
@@ -2699,20 +2695,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         if (are_assignments_present == 1) {
-                //                int8_t assignment_error_code;
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;
-                //                rd_kafka_topic_partition_list_t
-                //                *pending_topic_partitions; int16_t
-                //                metadata_version; rd_kafkap_bytes_t
-                //                metadata_bytes;
-
-                //                rd_kafka_buf_read_i8(rkbuf,
-                //                &assignment_error_code);
-                //                if(assignment_error_code) {
-                //                        err = (int16_t )
-                //                        assignment_error_code; goto err;
-                //                }
-
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
                     RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                     RD_KAFKA_TOPIC_PARTITION_FIELD_END};
@@ -2758,38 +2741,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                         RD_IF_FREE(assigned_topic_partitions,
                                    rd_kafka_topic_partition_list_destroy);
                 }
-
-                //                Remove any old subscription as we have
-                //                subscribed to the new subscriptions
-                // if(rkcg->rkcg_next_subscription) {
-
-                //         rd_list_t *tinfos =
-                //         rd_list_new(rkcg->rkcg_next_subscription->cnt,
-                //                              (void
-                //                              *)rd_kafka_topic_info_destroy);
-
-                //         rd_kafka_topic_partition_list_t *errored =
-                //         rd_kafka_topic_partition_list_new(0);
-                //         rd_kafka_metadata_topic_filter(
-                //             rkcg->rkcg_rk, tinfos, assigned_topic_partitions,
-                //             errored);
-                //         rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos);
-                //         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_next_subscription);
-                //         rkcg->rkcg_next_subscription = NULL;
-                //         rd_kafka_topic_partition_list_destroy(errored);
-                // }
-                //                pending_topic_partitions =
-                //                    rd_kafka_buf_read_topic_partitions(rkbuf,
-                //                                                       rd_true,
-                //                                                       0,
-                //                                                       assignments_fields);
-
-                //                /* Metadata information -> not used right now
-                //                */ rd_kafka_buf_read_i16(rkbuf,
-                //                &metadata_version); if(metadata_version) {
-                //                        rd_kafka_buf_read_kbytes_varint(rkbuf,
-                //                        &metadata_bytes);
-                //                }
         }
 
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;

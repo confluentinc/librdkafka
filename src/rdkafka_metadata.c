@@ -474,8 +474,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_metadata_internal_t *mdi = NULL;
         rd_kafka_metadata_t *md           = NULL;
         size_t rkb_namelen;
-        const int log_decode_errors       = LOG_ERR;
-        rd_list_t *missing_topics         = NULL;
+        const int log_decode_errors = LOG_ERR;
+        rd_list_t *missing_topics   = NULL;
 
         const rd_list_t *requested_topics = request_topics;
         rd_bool_t all_topics              = rd_false;

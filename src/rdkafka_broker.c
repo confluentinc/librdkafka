@@ -6010,6 +6010,8 @@ void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
  * @param rk Instance to use.
  * @param cntp Will be updated to the number of brokers returned.
  *
+ * @locks_acquired rd_kafka_rdlock()
+ *
  * @returns a malloc:ed list of int32_t broker ids.
  */
 int32_t *rd_kafka_broker_get_learned_ids(rd_kafka_t *rk, size_t *cntp) {
@@ -6021,6 +6023,7 @@ int32_t *rd_kafka_broker_get_learned_ids(rd_kafka_t *rk, size_t *cntp) {
         int32_t *p   = ids;
 
         *cntp = 0;
+        rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 if (rkb->rkb_source != RD_KAFKA_LEARNED)
                         continue;
@@ -6028,6 +6031,7 @@ int32_t *rd_kafka_broker_get_learned_ids(rd_kafka_t *rk, size_t *cntp) {
                 *p++ = rkb->rkb_nodeid;
                 (*cntp)++;
         }
+        rd_kafka_rdunlock(rk);
 
         return ids;
 }

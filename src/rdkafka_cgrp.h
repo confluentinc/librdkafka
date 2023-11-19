@@ -265,6 +265,11 @@ typedef struct rd_kafka_cgrp_s {
         /** The partitions to incrementally assign following a
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
+        // Added with KIP-848. Not being used right now.
+        rd_kafka_topic_partition_list_t *rkcg_current_target_assignments;
+        // Target assignment present in the CGHB protocol will be updated here
+        // only.
+        rd_kafka_topic_partition_list_t *rkcg_next_target_assignments;
 
         rd_bool_t rkcg_assignment_inprogress;
         rd_bool_t rkcg_revocation_inprogress;

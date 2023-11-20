@@ -80,12 +80,22 @@ typedef rd_kafka_telemetry_metric_value_t (
 
 typedef struct {
         const char *name;
+        const char *value;
+} rd_kafka_telemetry_resource_attribute_t;
+
+typedef struct {
+        const char *name;
         const char *description;
         const char *unit;
         const rd_bool_t is_int;
         rd_kafka_telemetry_metric_type_t type;
         rd_kafka_telemetry_metric_value_calculator_t calculate_value;
 } rd_kafka_telemetry_metric_info_t;
+
+typedef struct {
+        const char* name;
+        const char* (*getValue)(const rd_kafka_t* rk);
+} rd_kafka_telemetry_attribute_config_t;
 
 static const rd_kafka_telemetry_metric_info_t
     RD_KAFKA_TELEMETRY_PRODUCER_METRICS_INFO

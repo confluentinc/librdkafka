@@ -1540,7 +1540,8 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         if (!(assignment = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, rd_false /* don't use topic_id */, 0, fields)))
+                  rkbuf, rd_false /* don't use topic_id */, rd_true, 0,
+                  fields)))
                 goto err_parse;
         rd_kafka_buf_read_kbytes(rkbuf, &UserData);
 
@@ -1841,7 +1842,8 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         if (Version >= 1 &&
             !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, rd_false /* don't use topic_id */, 0, fields)))
+                  rkbuf, rd_false /* don't use topic_id */, rd_true, 0,
+                  fields)))
                 goto err;
 
         if (Version >= 2) {
@@ -2586,7 +2588,8 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                     RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                     RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                 assigned_topic_partitions = rd_kafka_buf_read_topic_partitions(
-                    rkbuf, rd_true, 0, assignments_fields);
+                    rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
+                    assignments_fields);
 
 
                 if (assigned_topic_partitions &&

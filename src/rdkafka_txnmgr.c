@@ -1501,7 +1501,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit(rd_kafka_t *rk,
             RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         partitions = rd_kafka_buf_read_topic_partitions(
-            rkbuf, rd_false /* don't use topic_id */, 0, fields);
+            rkbuf, rd_false /* don't use topic_id */, rd_true, 0, fields);
         if (!partitions)
                 goto err_parse;
 

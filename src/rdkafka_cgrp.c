@@ -2672,34 +2672,12 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
         if (error_code) {
                 err = error_code;
-                printf("Server Side Error -> '%s'\n", error_str.str);
                 goto err;
         }
 
         rd_kafka_buf_read_str(rkbuf, &member_id);
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
-        //        rd_kafka_buf_read_bool(rkbuf, &should_compute_assignment);
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
-
-        printf("Member Id is '%s'\n", member_id.str);
-        printf("Member Epoch is '%d'\n", member_epoch);
-        //        printf("Should Compute Assignment is '%s'\n",
-        //        should_compute_assignment ? "true" : "false");
-        printf("Heartbeat Interval Ms is '%d'\n", heartbeat_interval_ms);
-
-        /*
-         * assignment => error [assigned_topic_partitions]
-         [pending_topic_partitions] metadata_version metadata_bytes TAG_BUFFER
-            error => INT8
-            assigned_topic_partitions => topic_id [partitions] TAG_BUFFER
-              topic_id => UUID
-              partitions => INT32
-            pending_topic_partitions => topic_id [partitions] TAG_BUFFER
-              topic_id => UUID
-              partitions => INT32
-            metadata_version => INT16
-            metadata_bytes => COMPACT_BYTES
-         */
 
         int8_t are_assignments_present;
         rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
@@ -2769,9 +2747,6 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 err:
-        printf("Got Error for ConsumerGroupHeartbeat -> '%s'\n",
-               rd_kafka_err2str(err));
-
         rkcg->rkcg_last_heartbeat_err = err;
 }
 
@@ -5399,9 +5374,6 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
             rkcg_group_remote_assignor, rkcg_group_assignment,
             RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
             rd_kafka_cgrp_handle_ConsumerGroupHeartbeat, NULL);
-
-        printf("Sent ConsumerGroupHeartbeatRequest in state %d\n",
-               rkcg->rkcg_join_state);
 }
 
 void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {

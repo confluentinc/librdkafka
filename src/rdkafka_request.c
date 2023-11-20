@@ -212,6 +212,7 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields) {
         const int log_decode_errors = LOG_ERR;
@@ -231,7 +232,8 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
 
                 if (use_topic_id) {
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
-                } else {
+                }
+                if (use_topic_name) {
                         rd_kafka_buf_read_str(rkbuf, &kTopic);
                         RD_KAFKAP_STR_DUPA(&topic, &kTopic);
                 }
@@ -287,9 +289,14 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                 rktpar =
                                     rd_kafka_topic_partition_list_add_with_topic_id(
                                         parts, topic_id, Partition);
-                        } else {
+                                if (use_topic_name)
+                                        rktpar->topic = rd_strdup(topic);
+                        } else if (use_topic_name) {
                                 rktpar = rd_kafka_topic_partition_list_add(
                                     parts, topic, Partition);
+                        } else {
+                                rd_assert(!*"one of use_topic_id and "
+                                          "use_topic_name should be true");
                         }
 
                         /* Use dummy sentinel values that are unlikely to be
@@ -976,7 +983,7 @@ rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
             RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         *offsets = rd_kafka_buf_read_topic_partitions(
-            rkbuf, rd_false /* don't use topic_id */, 0, fields);
+            rkbuf, rd_false /* don't use topic_id */, rd_true, 0, fields);
         if (!*offsets)
                 goto err_parse;
 

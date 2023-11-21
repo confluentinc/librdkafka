@@ -98,6 +98,8 @@ static void
 rd_kafka_cgrp_handle_assignment(rd_kafka_cgrp_t *rkcg,
                                 rd_kafka_topic_partition_list_t *assignment);
 
+static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg);
+
 
 /**
  * @returns true if the current assignment is lost.
@@ -3872,6 +3874,11 @@ static void rd_kafka_cgrp_unassign_done(rd_kafka_cgrp_t *rkcg) {
  *         change in the rkcg.
  */
 void rd_kafka_cgrp_assignment_done(rd_kafka_cgrp_t *rkcg) {
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                rd_kafka_cgrp_consumer_assignment_done(rkcg);
+                return;
+        }
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGNDONE",
                      "Group \"%s\": "
                      "assignment operations done in join-state %s "
@@ -5512,6 +5519,124 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
         rd_kafka_cgrp_consumer_join(rkcg);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Call when all incremental unassign operations are done to transition
+ *        to the next state.
+ */
+static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
+
+        /* If this action was underway when a terminate was initiated, it will
+         * be left to complete. Now that's done, unassign all partitions */
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
+                             "Group \"%s\" is terminating, initiating full "
+                             "unassign",
+                             rkcg->rkcg_group_id->str);
+                rd_kafka_cgrp_unassign(rkcg);
+                return;
+        }
+
+        if (rkcg->rkcg_rebalance_incr_assignment) {
+
+                /* This incremental unassign was part of a normal rebalance
+                 * (in which the revoke set was not empty). Immediately
+                 * trigger the assign that follows this revoke. The protocol
+                 * dictates this should occur even if the new assignment
+                 * set is empty.
+                 *
+                 * Also, since this rebalance had some revoked partitions,
+                 * a re-join should occur following the assign.
+                 */
+
+                rd_kafka_rebalance_op_incr(
+                    rkcg, RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
+                    rkcg->rkcg_rebalance_incr_assignment,
+                    rd_false /* don't rejoin following assign*/,
+                    "cooperative assign after revoke");
+
+                rd_kafka_topic_partition_list_destroy(
+                    rkcg->rkcg_rebalance_incr_assignment);
+                rkcg->rkcg_rebalance_incr_assignment = NULL;
+
+                /* Note: rkcg_rebalance_rejoin is actioned / reset in
+                 * rd_kafka_cgrp_incremental_assign call */
+
+        } else if (rkcg->rkcg_rebalance_rejoin) {
+                rkcg->rkcg_rebalance_rejoin = rd_false;
+
+                /* There are some cases (lost partitions), where a rejoin
+                 * should occur immediately following the unassign (this
+                 * is not the case under normal conditions), in which case
+                 * the rejoin flag will be set. */
+
+                /* Skip the join backoff */
+                rd_interval_reset(&rkcg->rkcg_join_intvl);
+
+                rd_kafka_cgrp_rejoin(rkcg, "Incremental unassignment done");
+
+        } else {
+                /* After this incremental unassignment we're now back in
+                 * a steady state. */
+                rd_kafka_cgrp_set_join_state(rkcg,
+                                             RD_KAFKA_CGRP_JOIN_STATE_STEADY);
+        }
+}
+
+
+/**
+ * @brief TODO: write
+ */
+static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGNDONE",
+                     "Group \"%s\": "
+                     "assignment operations done in join-state %s "
+                     "(rebalance rejoin=%s)",
+                     rkcg->rkcg_group_id->str,
+                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+                     RD_STR_ToF(rkcg->rkcg_rebalance_rejoin));
+
+        switch (rkcg->rkcg_join_state) {
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE:
+                rd_kafka_cgrp_unassign_done(rkcg);
+                break;
+
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE:
+                rd_kafka_cgrp_consumer_incr_unassign_done(rkcg);
+                break;
+
+        case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
+                /* If an updated/next subscription is available, schedule it. */
+                if (rd_kafka_trigger_waiting_subscribe_maybe(rkcg))
+                        break;
+
+                if (rkcg->rkcg_rebalance_rejoin) {
+                        rkcg->rkcg_rebalance_rejoin = rd_false;
+
+                        /* Skip the join backoff */
+                        rd_interval_reset(&rkcg->rkcg_join_intvl);
+
+                        rd_kafka_cgrp_rejoin(
+                            rkcg,
+                            "rejoining group to redistribute "
+                            "previously owned partitions to other "
+                            "group members");
+                        break;
+                }
+
+                /* FALLTHRU */
+
+        case RD_KAFKA_CGRP_JOIN_STATE_INIT:
+                /* Check if cgrp is trying to terminate, which is safe to do
+                 * in these two states. Otherwise we'll need to wait for
+                 * the current state to decommission. */
+                rd_kafka_cgrp_try_terminate(rkcg);
+                break;
+
+        default:
+                break;
+        }
 }
 
 /**

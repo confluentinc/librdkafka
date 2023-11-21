@@ -2587,8 +2587,6 @@ static rd_kafka_op_res_t
 rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                                           rd_kafka_q_t *rkq,
                                           rd_kafka_op_t *rko) {
-
-        printf("In ConsumerGroupHeartbeat Metadata handler\n");
         int i, j;
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
 

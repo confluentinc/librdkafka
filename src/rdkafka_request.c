@@ -2260,7 +2260,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         rd_kafka_buf_write_kstr(rkbuf, rack_id);
         rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
 
-        if (subscribe_topics && subscribe_topics->cnt > 0) {
+        if (subscribe_topics) {
                 size_t of_TopicsArrayCnt;
                 int topics_cnt = subscribe_topics->cnt;
 

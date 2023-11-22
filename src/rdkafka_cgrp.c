@@ -100,6 +100,9 @@ rd_kafka_cgrp_handle_assignment(rd_kafka_cgrp_t *rkcg,
 
 static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg);
 
+static void
+rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg);
+
 
 /**
  * @returns true if the current assignment is lost.
@@ -358,6 +361,11 @@ void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
                      rd_kafka_cgrp_join_state_names[join_state],
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
         rkcg->rkcg_join_state = join_state;
+
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
+            join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
+        }
 }
 
 
@@ -5408,48 +5416,6 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
                                                        send_ack);
 }
 
-static void rd_kafka_cgrp_consumer_join(rd_kafka_cgrp_t *rkcg) {
-        if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP ||
-            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_INIT ||
-            rd_kafka_cgrp_awaiting_response(rkcg))
-                return;
-
-        /* On max.poll.interval.ms failure, do not rejoin group until the
-         * application has called poll. */
-        if ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED) &&
-            rd_kafka_max_poll_exceeded(rkcg->rkcg_rk))
-                return;
-
-        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED;
-
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
-                     "Group \"%.*s\": join with %d subscribed topic(s)",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                     rd_list_cnt(rkcg->rkcg_subscribed_topics));
-
-
-        if (rd_list_empty(rkcg->rkcg_subscribed_topics)) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP | RD_KAFKA_DBG_CONSUMER,
-                             "JOIN",
-                             "Group \"%.*s\": "
-                             "no subscribed topics",
-                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
-                return;
-        }
-
-        rd_rkb_dbg(
-            rkcg->rkcg_curr_coord, CONSUMER | RD_KAFKA_DBG_CGRP, "JOIN",
-            "Joining group \"%.*s\" with %d subscribed topic(s) and "
-            "member id \"%.*s\"",
-            RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-            rd_list_cnt(rkcg->rkcg_subscribed_topics),
-            rkcg->rkcg_member_id ? RD_KAFKAP_STR_LEN(rkcg->rkcg_member_id) : 0,
-            rkcg->rkcg_member_id ? rkcg->rkcg_member_id->str : "");
-
-
-        rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN);
-}
-
 /**
  * Set new atomic topic subscription (KIP-848).
  */
@@ -5516,7 +5482,7 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
 
         rkcg->rkcg_subscription = rktparlist;
 
-        rd_kafka_cgrp_consumer_join(rkcg);
+        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -5637,6 +5603,11 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
         default:
                 break;
         }
+}
+
+static void
+rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg) {
+        rd_interval_reset(&rkcg->rkcg_heartbeat_intvl);
 }
 
 /**

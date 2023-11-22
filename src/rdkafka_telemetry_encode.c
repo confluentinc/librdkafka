@@ -89,7 +89,8 @@ calculate_broker_avg_rtt(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                 int64_t sum_diff = current_sum - historic_sum;
 
                 avg_value =
-                    sum_diff / (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
+                    sum_diff /
+                    (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
         }
 
         avg_rtt.doubleValue = avg_value;
@@ -618,6 +619,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         pb_ostream_t stream;
         bool status;
         char **metric_names;
+        char **metric_attribute_names;
         const int *metrics_to_encode = rk->rk_telemetry.matched_metrics;
         const size_t metrics_to_encode_count =
             rk->rk_telemetry.matched_metrics_cnt;

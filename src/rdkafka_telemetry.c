@@ -153,7 +153,8 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                              "All metrics subscribed");
 
                 for (j = 0; j < metrics_cnt; j++) {
-                        if (info[j].type == type)
+                        // Gauges are always sent.
+                        if (info[j].type == RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE || info[j].type == type)
                                 update_matched_metrics(rk, j);
                 }
                 return;
@@ -171,7 +172,8 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                                     rk->rk_telemetry.requested_metrics[i],
                                     name_len) == 0;
 
-                        if (name_matches && info[j].type == type)
+                        // Gauges are always sent.
+                        if (name_matches && (info[j].type == RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE || info[j].type == type))
                                 update_matched_metrics(rk, j);
                 }
         }

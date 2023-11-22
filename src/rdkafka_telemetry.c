@@ -146,7 +146,7 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
 
 
         if (rk->rk_telemetry.requested_metrics_cnt == 1 &&
-            !strcmp(rk->rk_telemetry.requested_metrics[0], "")) {
+            !strcmp(rk->rk_telemetry.requested_metrics[0], TELEMETRY_METRICS_ALL_METRICS_SUBSCRIPTION)) {
                 size_t j;
                 rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
                              "All metrics subscribed");

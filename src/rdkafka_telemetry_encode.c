@@ -48,7 +48,7 @@ typedef struct {
 
 
 static rd_kafka_telemetry_metric_value_t
-calculate_connection_creation_total(rd_kafka_t *rk) {
+calculate_connection_creation_total(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
 
@@ -61,7 +61,7 @@ calculate_connection_creation_total(rd_kafka_t *rk) {
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_connection_creation_rate(rd_kafka_t *rk) {
+calculate_connection_creation_rate(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
 
@@ -74,47 +74,39 @@ calculate_connection_creation_rate(rd_kafka_t *rk) {
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_broker_avg_rtt(rd_kafka_t *rk) {
+calculate_broker_avg_rtt(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_rtt;
-        int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
-        rd_kafka_broker_t *rkb;
+        double avg_value = 0;
 
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                int64_t current_cnt  = rkb->rkb_avg_rtt.ra_v.cnt;
-                int64_t historic_cnt = rkb->rkb_c_historic.rkb_avg_rtt.ra_v.cnt;
+        int64_t current_cnt  = broker->rkb_avg_rtt.ra_v.cnt;
+        int64_t historic_cnt = broker->rkb_c_historic.rkb_avg_rtt.ra_v.cnt;
 
-                if (current_cnt > historic_cnt) {
-                        int64_t current_sum = rkb->rkb_avg_rtt.ra_v.sum;
-                        int64_t historic_sum =
-                            rkb->rkb_c_historic.rkb_avg_rtt.ra_v.sum;
-                        int64_t cnt_diff = current_cnt - historic_cnt;
-                        int64_t sum_diff = current_sum - historic_sum;
+        if (current_cnt > historic_cnt) {
+                int64_t current_sum = broker->rkb_avg_rtt.ra_v.sum;
+                int64_t historic_sum =
+                    broker->rkb_c_historic.rkb_avg_rtt.ra_v.sum;
+                int64_t cnt_diff = current_cnt - historic_cnt;
+                int64_t sum_diff = current_sum - historic_sum;
 
-                        sum_value +=
-                            sum_diff /
-                            (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
-                }
+                avg_value =
+                    sum_diff /
+                    (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
         }
-        avg_rtt.intValue = sum_value / broker_count;
+
+        avg_rtt.doubleValue = avg_value;
         return avg_rtt;
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_broker_max_rtt(rd_kafka_t *rk) {
+calculate_broker_max_rtt(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t max_rtt;
-        rd_kafka_broker_t *rkb;
 
-        max_rtt.intValue = 0;
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                max_rtt.intValue = RD_MAX(max_rtt.intValue,
-                                          rkb->rkb_avg_rtt.ra_v.maxv_interval);
-        }
-        max_rtt.intValue /= RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
+        max_rtt.intValue = broker->rkb_avg_rtt.ra_v.maxv_interval / RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
         return max_rtt;
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_throttle_avg(rd_kafka_t *rk) {
+calculate_throttle_avg(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_throttle;
         int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
         rd_kafka_broker_t *rkb;
@@ -142,7 +134,7 @@ calculate_throttle_avg(rd_kafka_t *rk) {
 
 
 static rd_kafka_telemetry_metric_value_t
-calculate_throttle_max(rd_kafka_t *rk) {
+calculate_throttle_max(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t max_throttle;
         rd_kafka_broker_t *rkb;
 
@@ -157,7 +149,7 @@ calculate_throttle_max(rd_kafka_t *rk) {
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_queue_time_avg(rd_kafka_t *rk) {
+calculate_queue_time_avg(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_queue_time;
         int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
         rd_kafka_broker_t *rkb;
@@ -185,7 +177,7 @@ calculate_queue_time_avg(rd_kafka_t *rk) {
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_queue_time_max(rd_kafka_t *rk) {
+calculate_queue_time_max(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t max_queue_time;
         rd_kafka_broker_t *rkb;
 
@@ -200,7 +192,7 @@ calculate_queue_time_max(rd_kafka_t *rk) {
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_consumer_assigned_partitions(rd_kafka_t *rk) {
+calculate_consumer_assigned_partitions(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t assigned_partitions;
         rd_kafka_broker_t *rkb;
         rd_kafka_toppar_t *rktp;
@@ -436,6 +428,17 @@ static bool encode_resource_metrics(pb_ostream_t *stream,
             resource_metrics);
 }
 
+static bool encode_key_value(pb_ostream_t *stream,
+                             const pb_field_t *field,
+                             void *const *arg) {
+        if (!pb_encode_tag_for_field(stream, field))
+                return false;
+        opentelemetry_proto_common_v1_KeyValue *key_value =
+            (opentelemetry_proto_common_v1_KeyValue *)*arg;
+        return pb_encode_submessage(
+            stream, opentelemetry_proto_common_v1_KeyValue_fields, key_value);
+}
+
 static bool encode_key_values(pb_ostream_t *stream,
                                       const pb_field_t *field,
                                       void *const *arg) {
@@ -459,21 +462,21 @@ static bool encode_key_values(pb_ostream_t *stream,
 
 }
 
-//static bool metric_label_node_id_needed(rd_kafka_t *rk, int metric_idx) {
-//        const rd_kafka_telemetry_metric_info_t *info = TELEMETRY_METRIC_INFO(rk);
-//        if (rk->rk_type == RD_KAFKA_PRODUCER && (metric_idx == RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG || metric_idx == RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX)) {
-//                return true;
-//        }
-//        if (rk->rk_type == RD_KAFKA_CONSUMER && (metric_idx == RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG || metric_idx == RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX)) {
-//                return true;
-//        }
-//        return false;
-//}
+static bool is_per_broker_metric(rd_kafka_t *rk, int metric_idx) {
+        if (rk->rk_type == RD_KAFKA_PRODUCER && (metric_idx == RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG || metric_idx == RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX)) {
+                return true;
+        }
+        if (rk->rk_type == RD_KAFKA_CONSUMER && (metric_idx == RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG || metric_idx == RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX)) {
+                return true;
+        }
+        return false;
+}
 
 static void
 free_metrics(opentelemetry_proto_metrics_v1_Metric **metrics,
              char **metric_names,
              opentelemetry_proto_metrics_v1_NumberDataPoint **data_points,
+             opentelemetry_proto_common_v1_KeyValue *datapoint_attributes_key_values,
              size_t count) {
         size_t i;
         for (i = 0; i < count; i++) {
@@ -484,6 +487,7 @@ free_metrics(opentelemetry_proto_metrics_v1_Metric **metrics,
         rd_free(data_points);
         rd_free(metric_names);
         rd_free(metrics);
+        rd_free(datapoint_attributes_key_values);
 }
 
 static void free_resource_attributes(opentelemetry_proto_common_v1_KeyValue **resource_attributes_key_values,
@@ -498,6 +502,85 @@ static void free_resource_attributes(opentelemetry_proto_common_v1_KeyValue **re
         rd_free(resource_attributes_key_values);
 }
 
+static void serializeMetricData(rd_kafka_t *rk, rd_kafka_broker_t *rkb, const rd_kafka_telemetry_metric_info_t *info, opentelemetry_proto_metrics_v1_Metric **metric,
+            opentelemetry_proto_metrics_v1_NumberDataPoint **data_point, opentelemetry_proto_common_v1_KeyValue *data_point_attribute, rd_kafka_telemetry_metric_value_calculator_t metricValueCalculator, char **metric_name, char **attribute_name, bool is_per_broker, rd_ts_t now_ns) {
+        size_t metric_name_len;
+        if (info->is_int) {
+                (*data_point)->which_value =
+                    opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
+                (*data_point)->value.as_int =
+                    metricValueCalculator(rk, rkb).intValue;
+        } else {
+                (*data_point)->which_value =
+                    opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag;
+                (*data_point)->value.as_double =
+                    metricValueCalculator(rk, rkb).doubleValue;
+        }
+
+        /* TODO: For delta temporality do we needs to be rese when push
+         * fails? */
+
+        (*data_point)->time_unix_nano       = now_ns;
+        (*data_point)->start_time_unix_nano = now_ns;
+
+        if (is_per_broker) {
+                data_point_attribute->key.funcs.encode = &encode_string;
+                data_point_attribute->key.arg = TELEMETRY_METRIC_NODE_ID_ATTRIBUTE;
+                data_point_attribute->has_value = true;
+                data_point_attribute->value.which_value =
+                    opentelemetry_proto_common_v1_AnyValue_int_value_tag;
+
+                data_point_attribute->value.value.int_value = rkb->rkb_nodeid;
+                (*data_point)->attributes.funcs.encode = &encode_key_value;
+                (*data_point)->attributes.arg          = data_point_attribute;
+        }
+
+
+        switch (info->type) {
+
+        case RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM: {
+                (*metric)->which_data =
+                    opentelemetry_proto_metrics_v1_Metric_sum_tag;
+                (*metric)->data.sum.data_points.funcs.encode =
+                    &encode_number_data_point;
+                (*metric)->data.sum.data_points.arg = *data_point;
+                /* TODO: Do we need sum metrics with Delta temporality?
+                 */
+                (*metric)->data.sum.aggregation_temporality =
+                    opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
+                (*metric)->data.sum.is_monotonic = true;
+                break;
+        }
+        case RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE: {
+                (*metric)->which_data =
+                    opentelemetry_proto_metrics_v1_Metric_gauge_tag;
+                (*metric)->data.gauge.data_points.funcs.encode =
+                    &encode_number_data_point;
+                (*metric)->data.gauge.data_points.arg = *data_point;
+                break;
+        }
+        default:
+                rd_assert(!"Unknown metric type");
+                break;
+        }
+
+        (*metric)->description.funcs.encode = &encode_string;
+        (*metric)->description.arg          = (void *)info->description;
+
+        metric_name_len =
+            strlen(TELEMETRY_METRIC_PREFIX) + strlen(info->name) + 1;
+        *metric_name = rd_calloc(1, metric_name_len);
+        rd_snprintf(*metric_name, metric_name_len, "%s%s",
+                 TELEMETRY_METRIC_PREFIX, info->name);
+
+
+        (*metric)->name.funcs.encode = &encode_string;
+        (*metric)->name.arg          = *metric_name;
+
+        (*metric)->unit.funcs.encode = &encode_string;
+        (*metric)->unit.arg          = (void *)info->unit;
+}
+
 /**
  * @brief Encodes the metrics to opentelemetry_proto_metrics_v1_MetricsData and
  * returns the serialized data. Currently only supports encoding of connection
@@ -509,16 +592,24 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         pb_ostream_t stream;
         bool status;
         char **metric_names;
+        char **metric_attribute_names;
         const int *metrics_to_encode = rk->rk_telemetry.matched_metrics;
         const size_t metrics_to_encode_count =
             rk->rk_telemetry.matched_metrics_cnt;
-        size_t metric_name_len;
+        size_t metric_name_len, total_metrics_count = metrics_to_encode_count;
+        size_t i, metric_idx = 0;
 
         if (metrics_to_encode_count == 0) {
                 rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
-                             "No metrics to encode.");
+                             "No metrics to serializeMetricData.");
                 *size = 0;
                 return NULL;
+        }
+
+        for (i = 0; i < metrics_to_encode_count; i++) {
+                if (is_per_broker_metric(rk, (int)i)) {
+                        total_metrics_count += rk->rk_broker_cnt.val - 1;
+                }
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
@@ -532,6 +623,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
 
         opentelemetry_proto_metrics_v1_Metric **metrics;
         opentelemetry_proto_common_v1_KeyValue **resource_attributes_key_values = NULL;
+        opentelemetry_proto_common_v1_KeyValue *datapoint_attributes_key_values = NULL;
         opentelemetry_proto_metrics_v1_NumberDataPoint **data_points;
         rd_kafka_telemetry_metrics_repeated_t metrics_repeated;
         rd_kafka_telemetry_key_values_repeated_t resource_attributes_repeated;
@@ -545,24 +637,24 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 resource_attributes_key_values =
                     rd_malloc(sizeof(opentelemetry_proto_common_v1_KeyValue *) *
                               resource_attributes_count);
-                int i;
-                for (i = 0; i < resource_attributes_count; ++i) {
-                        resource_attributes_key_values[i] =
+                int ind;
+                for (ind = 0; ind < resource_attributes_count; ++ind) {
+                        resource_attributes_key_values[ind] =
                             rd_calloc(1, sizeof(opentelemetry_proto_common_v1_KeyValue));
-                        resource_attributes_key_values[i]->key.funcs.encode =
+                        resource_attributes_key_values[ind]->key.funcs.encode =
                             &encode_string;
-                        resource_attributes_key_values[i]->key.arg =
-                            (void*)resource_attributes_struct[i].name;
+                        resource_attributes_key_values[ind]->key.arg =
+                            (void*)resource_attributes_struct[ind].name;
 
-                        resource_attributes_key_values[i]->has_value = true;
-                        resource_attributes_key_values[i]->value.which_value =
+                        resource_attributes_key_values[ind]->has_value = true;
+                        resource_attributes_key_values[ind]->value.which_value =
                             opentelemetry_proto_common_v1_AnyValue_string_value_tag;
-                        resource_attributes_key_values[i]
+                        resource_attributes_key_values[ind]
                             ->value.value.string_value.funcs.encode =
                             &encode_string;
-                        resource_attributes_key_values[i]
+                        resource_attributes_key_values[ind]
                             ->value.value.string_value.arg =
-                            (void*)resource_attributes_struct[i].value;
+                            (void*)resource_attributes_struct[ind].value;
                 }
                 resource_attributes_repeated.key_values =
                     resource_attributes_key_values;
@@ -589,18 +681,20 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         scopeMetrics.scope     = instrumentationScope;
 
         metrics = rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Metric *) *
-                            metrics_to_encode_count);
+                            total_metrics_count);
         data_points =
             rd_malloc(sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint *) *
-                      metrics_to_encode_count);
-        metric_names = rd_malloc(sizeof(char *) * metrics_to_encode_count);
-        size_t i;
+                      total_metrics_count);
+        datapoint_attributes_key_values =
+            rd_malloc(sizeof(opentelemetry_proto_common_v1_KeyValue) *
+                      total_metrics_count);
+        metric_names = rd_malloc(sizeof(char *) * total_metrics_count);
+        metric_attribute_names = rd_malloc(sizeof(char *) * total_metrics_count);
+        rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
+                     "Total metrics to be encoded count: %ld", total_metrics_count);
+
 
         for (i = 0; i < metrics_to_encode_count; i++) {
-                metrics[i] =
-                    rd_calloc(1, sizeof(opentelemetry_proto_metrics_v1_Metric));
-                data_points[i] = rd_calloc(
-                    1, sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
 
                 rd_kafka_telemetry_metric_value_calculator_t
                     metricValueCalculator =
@@ -612,89 +706,45 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 const rd_kafka_telemetry_metric_info_t *info =
                     TELEMETRY_METRIC_INFO(rk);
 
-                if (info[metrics_to_encode[i]].is_int) {
-                        data_points[i]->which_value =
-                            opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
-                        data_points[i]->value.as_int =
-                            metricValueCalculator(rk).intValue;
+                if (is_per_broker_metric(rk, (int)metrics_to_encode[i])) {
+                        rd_kafka_broker_t *rkb;
 
-                } else {
-                        data_points[i]->which_value =
-                            opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag;
-                        data_points[i]->value.as_double =
-                            metricValueCalculator(rk).doubleValue;
+                        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                                metrics[metric_idx] =
+                                    rd_calloc(1, sizeof(opentelemetry_proto_metrics_v1_Metric));
+                                data_points[metric_idx] = rd_calloc(
+                                    1, sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
+                                serializeMetricData(
+                                    rk, rkb, &info[metrics_to_encode[i]],
+                                    &metrics[metric_idx],
+                                    &data_points[metric_idx],
+                                    &datapoint_attributes_key_values
+                                        [metric_idx],
+                                    metricValueCalculator,
+                                    &metric_names[metric_idx],
+                                    &metric_attribute_names[metric_idx], true,
+                                    now_ns);
+                                metric_idx++;
+                        }
+                        continue;
                 }
 
-                data_points[i]->time_unix_nano = now_ns;
-                /* TODO: For delta temporality do we needs to be rese when push
-                 * fails? */
-                data_points[i]->start_time_unix_nano = now_ns;
+                metrics[metric_idx] =
+                    rd_calloc(1, sizeof(opentelemetry_proto_metrics_v1_Metric));
+                data_points[metric_idx] = rd_calloc(
+                    1, sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
 
-                //    TODO: Add data point attributes as needed
-                //    opentelemetry_proto_common_v1_KeyValue attribute =
-                //    opentelemetry_proto_common_v1_KeyValue_init_zero;
-                //    attribute.key.funcs.encode = &encode_string;
-                //    attribute.key.arg = "type";
-                //    attribute.has_value = true;
-                //    attribute.value.which_value =
-                //    opentelemetry_proto_common_v1_AnyValue_string_value_tag;
-                //    attribute.value.value.string_value.funcs.encode =
-                //    &encode_string; attribute.value.value.string_value.arg =
-                //    "heap";
-                //
-                //    data_point.attributes.funcs.encode = &encode_key_value;
-                //    data_point.attributes.arg = &attribute;
-
-
-                switch (info[metrics_to_encode[i]].type) {
-
-                case RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM: {
-                        metrics[i]->which_data =
-                            opentelemetry_proto_metrics_v1_Metric_sum_tag;
-                        metrics[i]->data.sum.data_points.funcs.encode =
-                            &encode_number_data_point;
-                        metrics[i]->data.sum.data_points.arg = data_points[i];
-                        /* TODO: Do we need sum metrics with Delta temporality?
-                         */
-                        metrics[i]->data.sum.aggregation_temporality =
-                            opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
-                        metrics[i]->data.sum.is_monotonic = true;
-                        break;
-                }
-                case RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE: {
-                        metrics[i]->which_data =
-                            opentelemetry_proto_metrics_v1_Metric_gauge_tag;
-                        metrics[i]->data.gauge.data_points.funcs.encode =
-                            &encode_number_data_point;
-                        metrics[i]->data.gauge.data_points.arg = data_points[i];
-                        break;
-                }
-                default:
-                        rd_assert(!"Unknown metric type");
-                        break;
-                }
-
-                metrics[i]->description.funcs.encode = &encode_string;
-                metrics[i]->description.arg =
-                    (void *)info[metrics_to_encode[i]].description;
-
-                metric_name_len = strlen(TELEMETRY_METRIC_PREFIX) +
-                                  strlen(info[metrics_to_encode[i]].name) + 1;
-                metric_names[i] = rd_calloc(1, metric_name_len);
-                rd_snprintf(metric_names[i], metric_name_len, "%s%s",
-                            TELEMETRY_METRIC_PREFIX,
-                            info[metrics_to_encode[i]].name);
-
-
-                metrics[i]->name.funcs.encode = &encode_string;
-                metrics[i]->name.arg          = metric_names[i];
-
-                metrics[i]->unit.funcs.encode = &encode_string;
-                metrics[i]->unit.arg = (void *)info[metrics_to_encode[i]].unit;
+                serializeMetricData(
+                    rk, NULL, &info[metrics_to_encode[i]], &metrics[metric_idx],
+                    &data_points[metric_idx],
+                    &datapoint_attributes_key_values[metric_idx],
+                    metricValueCalculator, &metric_names[metric_idx],
+                    &metric_attribute_names[metric_idx], false, now_ns);
+                metric_idx++;
         }
 
         metrics_repeated.metrics = metrics;
-        metrics_repeated.count   = metrics_to_encode_count;
+        metrics_repeated.count   = total_metrics_count;
 
         scopeMetrics.metrics.funcs.encode = &encode_metric;
         scopeMetrics.metrics.arg          = &metrics_repeated;
@@ -712,8 +762,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         if (!status) {
                 rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
                              "Failed to get encoded size");
-                free_metrics(metrics, metric_names, data_points,
-                             metrics_to_encode_count);
+                free_metrics(metrics, metric_names, data_points, datapoint_attributes_key_values,
+                             total_metrics_count);
                 free_resource_attributes(resource_attributes_key_values,
                                          resource_attributes_struct,
                                          resource_attributes_count);
@@ -724,8 +774,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         if (buffer == NULL) {
                 rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
                              "Failed to allocate memory for buffer");
-                free_metrics(metrics, metric_names, data_points,
-                             metrics_to_encode_count);
+                free_metrics(metrics, metric_names, data_points, datapoint_attributes_key_values,
+                             total_metrics_count);
                 free_resource_attributes(resource_attributes_key_values,
                                          resource_attributes_struct,
                                          resource_attributes_count);
@@ -742,16 +792,16 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
                              "Encoding failed: %s", PB_GET_ERROR(&stream));
                 rd_free(buffer);
-                free_metrics(metrics, metric_names, data_points,
-                             metrics_to_encode_count);
+                free_metrics(metrics, metric_names, data_points, datapoint_attributes_key_values,
+                             total_metrics_count);
                 free_resource_attributes(resource_attributes_key_values,
                                          resource_attributes_struct,
                                          resource_attributes_count);
 
                 return NULL;
         }
-        free_metrics(metrics, metric_names, data_points,
-                     metrics_to_encode_count);
+        free_metrics(metrics, metric_names, data_points, datapoint_attributes_key_values,
+                     total_metrics_count);
         free_resource_attributes(resource_attributes_key_values,
                                  resource_attributes_struct,
                                  resource_attributes_count);

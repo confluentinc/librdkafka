@@ -946,6 +946,7 @@ err_parse:
 
 static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
         rd_kafkap_str_t *member_id;
+        int32_t member_epoch = -1;
 
         member_id = rd_kafkap_str_copy(rkcg->rkcg_member_id);
 
@@ -969,14 +970,17 @@ static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
 
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_LEAVE;
+        if (RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg)) {
+                member_epoch = -2;
+        }
 
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP) {
                 rd_rkb_dbg(rkcg->rkcg_curr_coord, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_ConsumerGroupHeartbeatRequest(
-                    rkcg->rkcg_coord, rkcg->rkcg_group_id, member_id, -1,
-                    rkcg->rkcg_group_instance_id, NULL /* no rack */,
-                    -1 /* no rebalance_timeout_ms */,
+                    rkcg->rkcg_coord, rkcg->rkcg_group_id, member_id,
+                    member_epoch, rkcg->rkcg_group_instance_id,
+                    NULL /* no rack */, -1 /* no rebalance_timeout_ms */,
                     NULL /* no subscription */, NULL /* no regex */,
                     NULL /* no remote assignor */,
                     NULL /* no current assignment */,
@@ -1047,7 +1051,6 @@ static rd_bool_t rd_kafka_cgrp_leave_maybe(rd_kafka_cgrp_t *rkcg) {
                 return rd_false;
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                /* TODO: static group membership not implemented yet. */
                 rd_kafka_cgrp_consumer_leave(rkcg);
         } else {
                 /* KIP-345: Static group members must not send a
@@ -4563,7 +4566,6 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb(rd_kafka_timers_t *rkts,
                             1 /*lock*/);
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                /* TODO: static group membership not implemented yet. */
                 rd_kafka_cgrp_consumer_leave(rkcg);
         } else {
                 /* Leave the group before calling rebalance since the standard

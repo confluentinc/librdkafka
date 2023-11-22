@@ -31,7 +31,7 @@
 
 #include "rdtypes.h"
 
-#define TELEMETRY_METRIC_PREFIX "org.apache.kafka."
+#define TELEMETRY_METRIC_PREFIX            "org.apache.kafka."
 #define TELEMETRY_METRIC_NODE_ID_ATTRIBUTE "node.id"
 
 #define TELEMETRY_METRIC_INFO(rk)                                              \
@@ -77,7 +77,8 @@ typedef union {
 } rd_kafka_telemetry_metric_value_t;
 
 typedef rd_kafka_telemetry_metric_value_t (
-    *rd_kafka_telemetry_metric_value_calculator_t)(rd_kafka_t *, rd_kafka_broker_t *);
+    *rd_kafka_telemetry_metric_value_calculator_t)(rd_kafka_t *,
+                                                   rd_kafka_broker_t *);
 
 typedef struct {
         const char *name;
@@ -94,8 +95,8 @@ typedef struct {
 } rd_kafka_telemetry_metric_info_t;
 
 typedef struct {
-        const char* name;
-        const char* (*getValue)(const rd_kafka_t* rk);
+        const char *name;
+        const char *(*getValue)(const rd_kafka_t *rk);
 } rd_kafka_telemetry_attribute_config_t;
 
 static const rd_kafka_telemetry_metric_info_t

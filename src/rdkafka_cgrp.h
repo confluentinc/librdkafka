@@ -164,6 +164,7 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_interval_t rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t rkcg_heartbeat_intvl;    /* Heartbeat intvl */
+        int rkcg_heartbeat_intvl_ms;           /* TODO: write */
         rd_interval_t rkcg_join_intvl;         /* JoinGroup interval */
         rd_interval_t rkcg_timeout_scan_intvl; /* Timeout scanner */
 
@@ -239,6 +240,11 @@ typedef struct rd_kafka_cgrp_s {
 
         /** Assignment considered lost */
         rd_atomic32_t rkcg_assignment_lost;
+
+        /**
+         * TODO: write
+         */
+        rd_bool_t rkcg_group_assignment_waits_ack;
 
         /** Current assignment of partitions from last SyncGroup response.
          *  NULL means no assignment, else empty or non-empty assignment.

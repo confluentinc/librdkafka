@@ -297,7 +297,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
     const rd_kafkap_str_t *subscribe_topics_regex,
     const rd_kafkap_str_t *remote_assignor,
     const rd_kafka_topic_partition_list_t *current_assignments,
-    rd_bool_t full_request,
     rd_kafka_replyq_t replyq,
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque);

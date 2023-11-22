@@ -294,6 +294,9 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                         } else if (use_topic_name) {
                                 rktpar = rd_kafka_topic_partition_list_add(
                                     parts, topic, Partition);
+                        } else {
+                                rd_assert(!*"one of use_topic_id and "
+                                          "use_topic_name should be true");
                         }
 
                         /* Use dummy sentinel values that are unlikely to be
@@ -2209,7 +2212,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
     const rd_kafkap_str_t *subscribe_topics_regex,
     const rd_kafkap_str_t *remote_assignor,
     const rd_kafka_topic_partition_list_t *current_assignments,
-    rd_bool_t full_request,
     rd_kafka_replyq_t replyq,
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque) {
@@ -2217,6 +2219,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         int features;
+        size_t rkbuf_size = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 1, &features);
@@ -2228,18 +2231,27 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                     ((subscribe_topics->cnt * (4 + 50)) + 4);
         }
 
+        if (group_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(group_id);
+        if (member_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(member_id);
+        rkbuf_size += 4; /* MemberEpoch */
+        if (group_instance_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(group_instance_id);
+        if (rack_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(rack_id);
+        rkbuf_size += 4; /* RebalanceTimeoutMs */
+        if (next_subscription_size)
+                rkbuf_size += next_subscription_size;
+        if (remote_assignor)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(remote_assignor);
+        rkbuf_size += 4; /* Client Assignors */
+        if (current_assignments)
+                rkbuf_size += (current_assignments->cnt * (16 + 100));
+        rkbuf_size += 4; /* TopicPartitions */
+
         rkbuf = rd_kafka_buf_new_flexver_request(
-            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
-            RD_KAFKAP_STR_SIZE(group_id) + RD_KAFKAP_STR_SIZE(member_id) +
-                4 /* MemberEpoch */ + RD_KAFKAP_STR_SIZE(group_instance_id) +
-                RD_KAFKAP_STR_SIZE(rack_id) + 4 /* RebalanceTimeoutMs */ +
-                next_subscription_size /* SubscribedTopicNames */ +
-                RD_KAFKAP_STR_SIZE(
-                    subscribe_topics_regex) /* SubscribedTopicRegex */
-                + RD_KAFKAP_STR_SIZE(remote_assignor) +
-                ((current_assignments->cnt * (16 + 100)) +
-                 4) /* TopicPartitions */,
-            rd_true);
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1, rkbuf_size, rd_true);
 
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
@@ -2248,7 +2260,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         rd_kafka_buf_write_kstr(rkbuf, rack_id);
         rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
 
-        if (subscribe_topics && subscribe_topics->cnt > 0) {
+        if (subscribe_topics) {
                 size_t of_TopicsArrayCnt;
                 int topics_cnt = subscribe_topics->cnt;
 
@@ -2275,13 +2287,10 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                         RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, current_assignments, rd_false, rd_false, rd_true,
-                    rd_true, current_assignments_fields);
+                    rd_false, current_assignments_fields);
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
         }
-
-        rd_kafka_buf_write_tags(rkbuf);
-        rd_kafka_buf_write_tags(rkbuf);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

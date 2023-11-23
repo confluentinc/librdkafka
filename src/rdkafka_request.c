@@ -2646,7 +2646,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "Request metadata for %d topic(s): "
                            "%s",
-                           topic_cnt, reason);
+                           total_topic_cnt, reason);
         }
 
         if (full_incr) {

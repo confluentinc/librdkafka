@@ -241,11 +241,6 @@ typedef struct rd_kafka_cgrp_s {
         /** Assignment considered lost */
         rd_atomic32_t rkcg_assignment_lost;
 
-        /**
-         * TODO: write
-         */
-        rd_bool_t rkcg_group_assignment_waits_ack;
-
         /** Current assignment of partitions from last SyncGroup response.
          *  NULL means no assignment, else empty or non-empty assignment.
          *
@@ -276,6 +271,10 @@ typedef struct rd_kafka_cgrp_s {
         // Target assignment present in the CGHB protocol will be updated here
         // only.
         rd_kafka_topic_partition_list_t *rkcg_next_target_assignments;
+        /**
+         * TODO: write
+         */
+        rd_bool_t rkcg_current_target_assignments_waits_ack;
 
         rd_bool_t rkcg_assignment_inprogress;
         rd_bool_t rkcg_revocation_inprogress;
@@ -405,5 +404,7 @@ rd_kafka_rebalance_protocol2str(rd_kafka_rebalance_protocol_t protocol) {
                 return "NONE";
         }
 }
+
+void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg);
 
 #endif /* _RDKAFKA_CGRP_H_ */

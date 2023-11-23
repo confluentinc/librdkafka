@@ -84,6 +84,7 @@ typedef enum {
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields);
 
@@ -93,6 +94,7 @@ int rd_kafka_buf_write_topic_partitions(
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     const rd_kafka_topic_partition_field_t *fields);
 
 rd_kafka_resp_err_t
@@ -171,10 +173,18 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  const char *group_id,
                                  rd_kafka_topic_partition_list_t *parts,
+                                 rd_bool_t use_topic_id,
+                                 int32_t generation_id_or_member_epoch,
+                                 rd_kafkap_str_t *member_id,
                                  rd_bool_t require_stable_offsets,
                                  int timeout,
                                  rd_kafka_replyq_t replyq,
-                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void (*resp_cb)(rd_kafka_t *,
+                                                 rd_kafka_broker_t *,
+                                                 rd_kafka_resp_err_t,
+                                                 rd_kafka_buf_t *,
+                                                 rd_kafka_buf_t *,
+                                                 void *),
                                  void *opaque);
 
 rd_kafka_resp_err_t
@@ -275,8 +285,26 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
                                rd_kafka_resp_cb_t *resp_cb,
                                void *opaque);
 
+void rd_kafka_ConsumerGroupHeartbeatRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    const rd_kafkap_str_t *member_id,
+    int32_t member_epoch,
+    const rd_kafkap_str_t *group_instance_id,
+    const rd_kafkap_str_t *rack_id,
+    int32_t rebalance_timeout_ms,
+    const rd_kafka_topic_partition_list_t *subscribe_topics,
+    const rd_kafkap_str_t *subscribe_topics_regex,
+    const rd_kafkap_str_t *remote_assignor,
+    const rd_kafka_topic_partition_list_t *current_assignments,
+    rd_bool_t full_request,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
 rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const rd_list_t *topics,
+                                             rd_list_t *topic_ids,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,

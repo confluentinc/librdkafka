@@ -113,8 +113,9 @@
 #define RD_KAFKAP_DescribeTransactions         65
 #define RD_KAFKAP_ListTransactions             66
 #define RD_KAFKAP_AllocateProducerIds          67
+#define RD_KAFKAP_ConsumerGroupHeartbeat       68
 
-#define RD_KAFKAP__NUM 68
+#define RD_KAFKAP__NUM 69
 
 
 #endif /* _RDKAFKA_PROTOCOL_H_ */

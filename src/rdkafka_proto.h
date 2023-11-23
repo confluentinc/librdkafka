@@ -593,7 +593,6 @@ typedef struct rd_kafka_Uuid_s {
                 0, 1, ""                                                       \
         }
 
-
 /**
  * Initialize given UUID to zero UUID.
  *
@@ -608,6 +607,18 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
         return (a.most_significant_bits - b.most_significant_bits) ||
                (a.least_significant_bits - b.least_significant_bits);
 }
+
+/**
+ * @brief UUID copier for rd_list_copy()
+ */
+static RD_UNUSED void *rd_list_Uuid_copy(const void *elem, void *opaque) {
+        return (void *)rd_kafka_Uuid_copy((rd_kafka_Uuid_t *)elem);
+}
+
+static RD_INLINE RD_UNUSED void rd_list_Uuid_destroy(void *uuid) {
+        rd_kafka_Uuid_destroy((rd_kafka_Uuid_t *)uuid);
+}
+
 
 /**
  * @name Producer ID and Epoch for the Idempotent Producer

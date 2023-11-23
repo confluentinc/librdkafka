@@ -2568,7 +2568,21 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new(int size) {
         return rktparlist;
 }
 
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_with_topic_id(rd_kafka_Uuid_t topic_id,
+                                           int32_t partition) {
+        rd_kafka_topic_partition_private_t *parpriv;
+        rd_kafka_topic_partition_t *rktpar = rd_calloc(1, sizeof(*rktpar));
 
+        rktpar->partition = partition;
+
+        if (!rd_kafka_Uuid_cmp(topic_id, RD_KAFKA_UUID_ZERO))
+                return rktpar;
+
+        parpriv           = rd_kafka_topic_partition_get_private(rktpar);
+        parpriv->topic_id = topic_id;
+        return rktpar;
+}
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_new(const char *topic,
                                                          int32_t partition) {
@@ -2907,12 +2921,14 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
         rd_kafka_topic_partition_t *rktpar;
         rktpar = rd_kafka_topic_partition_list_add0(
             __FUNCTION__, __LINE__, rktparlist, NULL, partition, NULL, NULL);
+        if (!rd_kafka_Uuid_cmp(topic_id, RD_KAFKA_UUID_ZERO))
+                return rktpar;
+
         rd_kafka_topic_partition_private_t *parpriv =
             rd_kafka_topic_partition_get_private(rktpar);
         parpriv->topic_id = topic_id;
         return rktpar;
 }
-
 
 /**
  * Adds a consecutive list of partitions to a list
@@ -3079,13 +3095,10 @@ int rd_kafka_topic_partition_cmp(const void *_a, const void *_b) {
 int rd_kafka_topic_partition_by_id_cmp(const void *_a, const void *_b) {
         const rd_kafka_topic_partition_t *a = _a;
         const rd_kafka_topic_partition_t *b = _b;
-        rd_kafka_Uuid_t topic_id_a = rd_kafka_topic_partition_get_topic_id(a);
-        rd_kafka_Uuid_t topic_id_b = rd_kafka_topic_partition_get_topic_id(b);
-        int r                      = rd_kafka_Uuid_cmp(topic_id_a, topic_id_b);
-        if (r)
-                return r;
-        else
-                return RD_CMP(a->partition, b->partition);
+        rd_kafka_Uuid_t topic_id_a  = rd_kafka_topic_partition_get_topic_id(a);
+        rd_kafka_Uuid_t topic_id_b  = rd_kafka_topic_partition_get_topic_id(b);
+        int are_topic_ids_different = rd_kafka_Uuid_cmp(topic_id_a, topic_id_b);
+        return are_topic_ids_different || RD_CMP(a->partition, b->partition);
 }
 
 /** @brief Compare only the topic */
@@ -3143,11 +3156,9 @@ static int rd_kafka_topic_partition_list_find_by_id0(
     rd_kafka_Uuid_t topic_id,
     int32_t partition,
     int (*cmp)(const void *, const void *)) {
-        rd_kafka_topic_partition_t *rktpar =
-            rd_kafka_topic_partition_new("", partition);
         int i, ret = -1;
-
-        rd_kafka_topic_partition_set_topic_id(rktpar, topic_id);
+        rd_kafka_topic_partition_t *rktpar =
+            rd_kafka_topic_partition_new_with_topic_id(topic_id, partition);
 
         for (i = 0; i < rktparlist->cnt; i++) {
                 if (!cmp(rktpar, &rktparlist->elems[i])) {

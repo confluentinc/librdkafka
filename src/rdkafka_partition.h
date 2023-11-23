@@ -682,6 +682,9 @@ void *rd_kafka_topic_partition_copy_void(const void *src);
 void rd_kafka_topic_partition_destroy_free(void *ptr);
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_new_from_rktp(rd_kafka_toppar_t *rktp);
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_with_topic_id(rd_kafka_Uuid_t topic_id,
+                                           int32_t partition);
 void rd_kafka_topic_partition_set_topic_id(rd_kafka_topic_partition_t *rktpar,
                                            rd_kafka_Uuid_t topic_id);
 rd_kafka_Uuid_t

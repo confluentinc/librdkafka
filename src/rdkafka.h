@@ -631,12 +631,9 @@ typedef enum {
         RD_KAFKA_RESP_ERR_FEATURE_UPDATE_FAILED = 96,
         /** Request principal deserialization failed during forwarding */
         RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
-        /** The member epoch is fenced by the group coordinator. The member must
-         *  abandon all its partitions and rejoin. */
+        /** The member epoch is fenced by the group coordinator */
         RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
-        /** The member epoch is stale.
-         *  The member must retry after receiving its updated member epoch
-         *  via the ConsumerGroupHeartbeat API. */
+        /** The member epoch is stale */
         RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH = 113,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

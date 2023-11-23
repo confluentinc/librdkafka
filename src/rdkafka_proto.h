@@ -593,16 +593,6 @@ typedef struct rd_kafka_Uuid_s {
                 0, 1, ""                                                       \
         }
 
-
-/**
- * Initialize given UUID to zero UUID.
- *
- * @param uuid UUID to initialize.
- */
-static RD_INLINE RD_UNUSED void rd_kafka_Uuid_init(rd_kafka_Uuid_t *uuid) {
-        memset(uuid, 0, sizeof(*uuid));
-}
-
 static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
                                                  rd_kafka_Uuid_t b) {
         return (a.most_significant_bits - b.most_significant_bits) ||

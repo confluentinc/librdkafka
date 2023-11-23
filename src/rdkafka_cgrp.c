@@ -435,7 +435,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_wait_coord_q->rkq_serve  = rkcg->rkcg_ops->rkq_serve;
         rkcg->rkcg_wait_coord_q->rkq_opaque = rkcg->rkcg_ops->rkq_opaque;
         rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
-        rkcg->rkcg_member_id                = rd_kafkap_str_new("", -1);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
         rkcg->rkcg_group_remote_assignor =
@@ -447,7 +446,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
                     rd_kafkap_str_copy(rkcg->rkcg_rk->rk_conf.client_rack);
         rkcg->rkcg_next_subscription       = NULL;
         rkcg->rkcg_next_subscription_regex = rd_kafkap_str_new(NULL, -1);
-        rkcg->rkcg_group_assignment = rd_kafka_topic_partition_list_new(0);
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
         rd_kafka_cgrp_set_member_id(rkcg, "");

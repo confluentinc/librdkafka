@@ -1042,7 +1042,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
 static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
-                if (unlikely(rk->rk_cgrp->rkcg_group_protocol ==
+                if (unlikely(rk->rk_cgrp &&
+                             rk->rk_cgrp->rkcg_group_protocol ==
                                  RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
                              rk->rk_cgrp->rkcg_flags &
                                  RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED)) {

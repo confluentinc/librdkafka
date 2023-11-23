@@ -359,9 +359,9 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.members);
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
-        RD_IF_FREE(rkcg->rkcg_current_target_assignments,
+        RD_IF_FREE(rkcg->rkcg_current_target_assignment,
                    rd_kafka_topic_partition_list_destroy);
-        RD_IF_FREE(rkcg->rkcg_next_target_assignments,
+        RD_IF_FREE(rkcg->rkcg_next_target_assignment,
                    rd_kafka_topic_partition_list_destroy);
         if (rkcg->rkcg_group_instance_id)
                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
@@ -456,8 +456,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rd_atomic32_init(&rkcg->rkcg_terminated, rd_false);
         rkcg->rkcg_assignment_inprogress      = rd_false;
         rkcg->rkcg_revocation_inprogress      = rd_false;
-        rkcg->rkcg_current_target_assignments = NULL;
-        rkcg->rkcg_next_target_assignments    = NULL;
+        rkcg->rkcg_current_target_assignment  = NULL;
+        rkcg->rkcg_next_target_assignment     = NULL;
 
         rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
 
@@ -2505,16 +2505,16 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
         /*      Update topic name for all the assignments given by topic id
          *      KIP848TODO: Improve complexity.
          */
-        for (i = 0; i < rkcg->rkcg_next_target_assignments->cnt; i++) {
+        for (i = 0; i < rkcg->rkcg_next_target_assignment->cnt; i++) {
                 rd_kafka_Uuid_t request_topic_id =
                     rd_kafka_topic_partition_get_topic_id(
-                        &rkcg->rkcg_next_target_assignments->elems[i]);
+                        &rkcg->rkcg_next_target_assignment->elems[i]);
                 for (j = 0; j < rko->rko_u.metadata.md->topic_cnt; j++) {
                         rd_kafka_Uuid_t compare_topic_id =
                             rko->rko_u.metadata.mdi->topics[j].topic_id;
                         if (!rd_kafka_Uuid_cmp(request_topic_id,
                                                compare_topic_id)) {
-                                rkcg->rkcg_next_target_assignments->elems[i]
+                                rkcg->rkcg_next_target_assignment->elems[i]
                                     .topic = rd_strdup(
                                     rko->rko_u.metadata.md->topics[j].topic);
                                 break;
@@ -2526,10 +2526,10 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
 
         // Check whether the metadata response has all the requested topic ids.
-        rd_kafka_consumer_assign(rkcg, rkcg->rkcg_next_target_assignments);
+        rd_kafka_consumer_assign(rkcg, rkcg->rkcg_next_target_assignment);
         rd_kafka_topic_partition_list_destroy(
-            rkcg->rkcg_next_target_assignments);
-        rkcg->rkcg_next_target_assignments = NULL;
+            rkcg->rkcg_next_target_assignment);
+        rkcg->rkcg_next_target_assignment = NULL;
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
@@ -2608,9 +2608,9 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                             rd_kafka_Uuid_copy(&topic_id));
                         }
 
-                        RD_IF_FREE(rkcg->rkcg_next_target_assignments,
+                        RD_IF_FREE(rkcg->rkcg_next_target_assignment,
                                    rd_kafka_topic_partition_list_destroy);
-                        rkcg->rkcg_next_target_assignments =
+                        rkcg->rkcg_next_target_assignment =
                             assigned_topic_partitions;
 
                         rko = rd_kafka_op_new_cb(

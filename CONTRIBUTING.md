@@ -195,7 +195,7 @@ You can add breakpoints and so on after that.
 
 ## Updating librdkafka version
 
-The librdkafka should be periodically updated to the latest release in https://github.com/edenhill/librdkafka/releases
+The librdkafka should be periodically updated to the latest release in https://github.com/confluentinc/librdkafka/releases
 
 Steps to update:
 1. Update the `librdkafka` property in [`package.json`](https://github.com/confluentinc/confluent-kafka-js/blob/master/package.json) to the desired version.

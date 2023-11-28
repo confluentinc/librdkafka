@@ -15,7 +15,9 @@ async function eosStart() {
     const consumer = kafka.consumer({
         groupId: 'groupId',
         rdKafka: {
-            "enable.auto.commit": false,
+            globalConfig: {
+                "enable.auto.commit": false,
+            }
         },
     });
 
@@ -34,7 +36,8 @@ async function eosStart() {
     // The run method acts like a consume-transform-produce loop.
     consumer.run({
         eachMessage: async ({ topic, partition, message }) => {
-            const msgAckString = JSON.stringify({topic,
+            const msgAckString = JSON.stringify({
+                topic,
                 partition,
                 offset: message.offset,
                 key: message.key?.toString(),

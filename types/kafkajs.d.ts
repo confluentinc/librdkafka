@@ -1,4 +1,5 @@
 import * as tls from 'tls'
+import { ConsumerGlobalConfig, ConsumerTopicConfig, ProducerGlobalConfig, ProducerTopicConfig } from './config'
 
 export type BrokersFunction = () => string[] | Promise<string[]>
 
@@ -37,6 +38,7 @@ export interface ProducerConfig {
   transactionalId?: string
   transactionTimeout?: number
   maxInFlightRequests?: number
+  rdKafka?: Function | { topicConfig?: ProducerTopicConfig, globalConfig?: ProducerGlobalConfig }
 }
 
 export interface IHeaders {
@@ -124,6 +126,7 @@ export interface ConsumerConfig {
   maxInFlightRequests?: number
   readUncommitted?: boolean
   rackId?: string
+  rdKafka?: Function | { topicConfig?: ConsumerTopicConfig, globalConfig?: ConsumerGlobalConfig }
 }
 
 export type ConsumerEvents = {
@@ -409,7 +412,7 @@ export type GroupDescription = {
 export type Consumer = {
   connect(): Promise<void>
   disconnect(): Promise<void>
-  subscribe(subscription: ConsumerSubscribeTopics ): Promise<void>
+  subscribe(subscription: ConsumerSubscribeTopics): Promise<void>
   stop(): Promise<void>
   run(config?: ConsumerRunConfig): Promise<void>
   commitOffsets(topicPartitions: Array<TopicPartitionOffsetAndMetadata>): Promise<void>

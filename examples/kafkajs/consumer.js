@@ -1,4 +1,4 @@
-const { Kafka } = require('../..').KafkaJS
+const { Kafka } = require('../..').KafkaJS;
 //const { Kafka } = require('kafkajs')
 
 async function consumerStart() {
@@ -32,7 +32,12 @@ async function consumerStart() {
         }
       },
       rdKafka: {
+        globalConfig: {
         'enable.auto.commit': false
+        },
+        topicConfig: {
+          'auto.offset.reset': 'earliest'
+        },
       }
     });
 

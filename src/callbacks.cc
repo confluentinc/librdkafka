@@ -291,7 +291,7 @@ void DeliveryReportDispatcher::Flush() {
 
     if (event.is_error) {
         // If it is an error we need the first argument to be set
-        argv[0] = Nan::Error(event.error_string.c_str());
+        argv[0] = Nan::New(event.error_code);
     } else {
         argv[0] = Nan::Null();
     }

@@ -7,3 +7,5 @@ github:
   enable: true
 codeowners:
   enable: true
+semaphore:
+  enable: true

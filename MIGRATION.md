@@ -4,8 +4,10 @@
 
 ### Common
 
-1. Error Handling: Some possible subtypes of `KafkaJSError` have been removed,
-   and additional information has been added into `KafkaJSError`. 
+* Configuration changes
+
+* Error Handling: Some possible subtypes of `KafkaJSError` have been removed,
+   and additional information has been added into `KafkaJSError`.
    Internally, fields have been added denoting if the error is fatal, retriable, or abortable (the latter two only relevant for a
    transactional producer).
    Some error-specific fields have also been removed. An exhaustive list is at the bottom of this section.
@@ -17,7 +19,7 @@
                checks based on `error.code` or `error.type`.
 
    **Example:**:
-   ```js
+   ```javascript
    try {
       await producer.send(/* args */);
    } catch (error) {
@@ -58,6 +60,46 @@
    22. `KafkaJSConnectionClosedError`: removed, and subsumed into `KafkaJSConnectionError` as librdkafka treats them equivalently.
 
 ### Producer
+
+* `sendBatch` is currently unsupported - but will be supported. TODO. However, the actual batching semantics are handled by librdkafka.
+* Changes to `send`:
+  1. `acks`, `compression` and `timeout` are not set on a per-send basis. Rather, they must be configured in the configuration.
+    Before:
+    ```javascript
+    const kafka = new Kafka({/* ... */});
+    const producer = kafka.producer();
+    await producer.connect();
+
+    await producer.send({
+      topic: 'test',
+      messages: [ /* ... */ ],
+      acks: 1,
+      compression: CompressionTypes.GZIP,
+      timeout: 30000,
+    });
+    ```
+
+    After:
+    ```javascript
+    const kafka = new Kafka({/* ... */});
+    const producer = kafka.producer({
+      rdKafka: {
+        topicConfig: {
+          "acks": "1",
+          "compression.codec": "gzip",
+          "message.timeout.ms": "30000",
+        },
+      }
+    });
+    await producer.connect();
+
+    await producer.send({
+      topic: 'test',
+      messages: [ /* ... */ ],
+    });
+    ```
+
+ * Error-handling for a failed `send` is stricter. While sending multiple messages, even if one of the messages fails, the method throws an error.
 
 ### Consumer
 

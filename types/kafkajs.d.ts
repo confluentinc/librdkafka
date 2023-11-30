@@ -1,5 +1,5 @@
 import * as tls from 'tls'
-import { ConsumerGlobalConfig, ConsumerTopicConfig, ProducerGlobalConfig, ProducerTopicConfig } from './config'
+import { ConsumerGlobalConfig, ConsumerTopicConfig, GlobalConfig, ProducerGlobalConfig, ProducerTopicConfig, TopicConfig } from './config'
 
 export type BrokersFunction = () => string[] | Promise<string[]>
 
@@ -29,6 +29,7 @@ export interface KafkaConfig {
   reauthenticationThreshold?: number
   requestTimeout?: number
   enforceRequestTimeout?: boolean
+  rdKafka?: Function | { topicConfig?: TopicConfig, globalConfig?: GlobalConfig };
 }
 
 export interface ProducerConfig {

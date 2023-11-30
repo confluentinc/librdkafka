@@ -25,38 +25,30 @@ global_job_config:
   prologue:
     commands:
       - checkout
-      - make show-args
-      - . vault-setup
-      - . vault-sem-get-secret cpd_gcloud
-      - . vault-sem-get-secret ci-reporting
-      - . vault-sem-get-secret v1/ci/kv/service-foundations/cc-mk-include
-      - make init-ci
-  epilogue:
-    always:
-      commands:
-        - make epilogue-ci
 
 blocks:
-  - name: "Build, Test, Release"
-    run:
-      # don't run the build or unit tests on non-functional changes...
-      when: "change_in('/', {exclude: ['/.deployed-versions/', '.github/']})"
+  - name: "Linux amd64"
+    dependencies: [ ]
     task:
-       # You can customize your CI job here
-#      env_vars:
-#        # custom env_vars
-#      prologue:
-#        commands:
-#          # custom vault secrets
-#          # custom prologue commands
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-amd64-2
+      prologue:
+        commands:
+          - sem-version node 18.19.0
+          - node --version
+          - npm --version
+          - npx --version
+          - sudo apt-get update -q
+          - git submodule update --init --recursive
       jobs:
-        - name: "Build, Test, Release"
+        - name: "Build from source and test"
           commands:
-            - make build
+            - sudo apt install -y  libcurl4-openssl-dev libcrypto++-dev libssl-dev libzstd-dev
+            - npm install # this will actually not build anything, but rather, fetch things using node-pre-gyp - so change this later.
             - make test
-            - make release-ci
-      epilogue:
-        always:
+        - name: "ESLint"
           commands:
-            - make epilogue-ci
-            - make testbreak-after
+            - npm install --only=dev
+            - npx eslint lib/kafkajs
+

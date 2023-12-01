@@ -908,7 +908,6 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                                        rktp->rktp_leader_epoch);
                         }
                 }
-                /* Finalize */
                 /* FetchOffset */
                 rd_kafka_buf_write_i64(rkbuf,
                                        rktp->rktp_offsets.fetch_pos.offset);

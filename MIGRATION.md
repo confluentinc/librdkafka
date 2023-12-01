@@ -61,9 +61,9 @@
 
 ### Producer
 
-* `sendBatch` is currently unsupported - but will be supported. TODO. However, the actual batching semantics are handled by librdkafka.
+* `sendBatch` is not supported (YET). However, the actual batching semantics are handled by librdkafka.
 * Changes to `send`:
-  1. `acks`, `compression` and `timeout` are not set on a per-send basis. Rather, they must be configured in the configuration.
+  * `acks`, `compression` and `timeout` are not set on a per-send basis. Rather, they must be configured in the configuration.
     Before:
     ```javascript
     const kafka = new Kafka({/* ... */});
@@ -99,8 +99,80 @@
     });
     ```
 
- * Error-handling for a failed `send` is stricter. While sending multiple messages, even if one of the messages fails, the method throws an error.
+  * Error-handling for a failed `send` is stricter. While sending multiple messages, even if one of the messages fails, the method throws an error.
 
 ### Consumer
+
+ * While passing a list of topics to `subscribe`, the `fromBeginning` property is not supported. Instead, the property `auto.offset.reset` needs to be used.
+   Before:
+    ```javascript
+      const kafka = new Kafka({ /* ... */ });
+      const consumer = kafka.consumer({
+        groupId: 'test-group',
+      });
+      await consumer.connect();
+      await consumer.subscribe({ topics: ["topic"], fromBeginning: true});
+    ```
+
+   After:
+    ```javascript
+      const kafka = new Kafka({ /* ... */ });
+      const consumer = kafka.consumer({
+        groupId: 'test-group',
+        rdKafka: {
+          topicConfig: {
+            'auto.offset.reset': 'earliest',
+          },
+        }
+      });
+      await consumer.connect();
+      await consumer.subscribe({ topics: ["topic"] });
+    ```
+
+ * For auto-commiting using a consumer, the properties on `run` are no longer used. Instead, corresponding rdKafka properties must be set.
+    * `autoCommit` corresponds to `enable.auto.commit`.
+    * `autoCommitInterval` corresponds to `auto.commit.interval.ms`.
+    * `autoCommitThreshold` is no longer supported.
+
+    Before:
+    ```javascript
+      const kafka = new Kafka({ /* ... */ });
+      const consumer = kafka.consumer({ /* ... */ });
+      await consumer.connect();
+      await consumer.subscribe({ topics: ["topic"] });
+      consumer.run({
+        eachMessage: someFunc,
+        autoCommit: true,
+        autoCommitThreshold: 5000,
+      });
+    ```
+
+    After:
+    ```javascript
+      const kafka = new Kafka({ /* ... */ });
+      const consumer = kafka.consumer({
+        /* ... */,
+        rdKafka: {
+          globalConfig: {
+            "enable.auto.commit": "true",
+            "auto.commit.interval.ms": "5000",
+          }
+        },
+      });
+      await consumer.connect();
+      await consumer.subscribe({ topics: ["topic"] });
+      consumer.run({
+        eachMessage: someFunc,
+      });
+    ```
+
+  * For the `eachMessage` method while running the consumer:
+    * The `heartbeat()` no longer needs to be called. Heartbeats are automatically managed by librdkafka.
+    * The `partitionsConsumedConcurrently` property is not supported (YET).
+  * The `eachBatch` method is not supported.
+  * `commitOffsets` does not (YET) support sending metadata for topic partitions being commited.
+  * `paused()` is not (YET) supported.
+  * Custom partition assignors are not supported.
+
 
 ## node-rdkafka

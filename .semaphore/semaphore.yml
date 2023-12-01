@@ -26,49 +26,75 @@ global_job_config:
     commands:
       - checkout
 
-blocks:
-  # - name: "Linux amd64"
-  #   dependencies: [ ]
-  #   task:
-  #     agent:
-  #       machine:
-  #         type: s1-prod-ubuntu20-04-amd64-2
-  #     prologue:
-  #       commands:
-  #         - sem-version node 18.19.0
-  #         - node --version
-  #         - npm --version
-  #         - npx --version
-  #         - sudo apt-get update -q
-  #         - git submodule update --init --recursive
-  #     jobs:
-  #       - name: "Build from source and test"
-  #         commands:
-  #           - sudo apt install -y  libcurl4-openssl-dev libcrypto++-dev libssl-dev libzstd-dev
-  #           - npm install # this will actually not build anything if we have a release, but rather, fetch things using node-pre-gyp - so change this later.
-  #           - make test
-  #       - name: "ESLint"
-  #         commands:
-  #           - npm install --only=dev
-  #           - npx eslint lib/kafkajs
+# blocks:
+#   - name: "Linux amd64: Build and test"
+#     dependencies: [ ]
+#     task:
+#       agent:
+#         machine:
+#           type: s1-prod-ubuntu20-04-amd64-2
+#       prologue:
+#         commands:
+#           - sem-version node 18.19.0
+#           - node --version
+#           - npm --version
+#           - npx --version
+#           - sudo apt-get update -q
+#           - git submodule update --init --recursive
+#           - sudo apt install -y  libcurl4-openssl-dev libcrypto++-dev libssl-dev libzstd-dev
+#           - npm install # this will actually not build anything if we have a release, but rather, fetch things using node-pre-gyp - so change this later.
+#       jobs:
+#         - name: "Test"
+#           commands:
+#             - make test
+#         - name: "ESLint"
+#           commands:
+#             - npx eslint lib/kafkajs
 
-  - name: 'OSX arm64/m1'
-    dependencies: []
+blocks:
+  - name: "Linux amd64: Release"
+    dependencies: [ ]
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
-          type: s1-prod-macos-arm64
+          type: s1-prod-ubuntu20-04-amd64-2
       prologue:
         commands:
           - sem-version node 18.19.0
           - node --version
           - npm --version
           - npx --version
+          - sudo apt-get update -q
           - git submodule update --init --recursive
+          - sudo apt install -y  libcurl4-openssl-dev libcrypto++-dev libssl-dev libzstd-dev
       jobs:
-        - name: 'Build from source and test'
+        - name: "Release"
           commands:
-            - npm install # this will actually not build anything if we have a release, but rather, fetch things using node-pre-gyp - so change this later.
-            - make test
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v108-linux-x64.tar.gz"
+            - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
+            - npx node-pre-gyp package
+            - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
+            - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${ARTIFACT_KEY}"
+
+  # - name: 'OSX arm64/m1'
+  #   dependencies: []
+  #   task:
+  #     agent:
+  #       machine:
+  #         type: s1-prod-macos-arm64
+  #     prologue:
+  #       commands:
+  #         - sem-version node 18.19.0
+  #         - node --version
+  #         - npm --version
+  #         - npx --version
+  #         - git submodule update --init --recursive
+  #     jobs:
+  #       - name: 'Build from source and test'
+  #         commands:
+  #           - npm install # this will actually not build anything if we have a release, but rather, fetch things using node-pre-gyp - so change this later.
+  #           - make test
 
 

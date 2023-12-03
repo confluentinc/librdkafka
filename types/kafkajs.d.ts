@@ -29,7 +29,7 @@ export interface KafkaConfig {
   reauthenticationThreshold?: number
   requestTimeout?: number
   enforceRequestTimeout?: boolean
-  rdKafka?: Function | { topicConfig?: TopicConfig, globalConfig?: GlobalConfig };
+  rdKafka?: { topicConfig?: TopicConfig, globalConfig?: GlobalConfig };
 }
 
 export interface ProducerConfig {
@@ -39,7 +39,7 @@ export interface ProducerConfig {
   transactionalId?: string
   transactionTimeout?: number
   maxInFlightRequests?: number
-  rdKafka?: Function | { topicConfig?: ProducerTopicConfig, globalConfig?: ProducerGlobalConfig }
+  rdKafka?: { topicConfig?: ProducerTopicConfig, globalConfig?: ProducerGlobalConfig }
 }
 
 export interface IHeaders {
@@ -127,7 +127,7 @@ export interface ConsumerConfig {
   maxInFlightRequests?: number
   readUncommitted?: boolean
   rackId?: string
-  rdKafka?: Function | { topicConfig?: ConsumerTopicConfig, globalConfig?: ConsumerGlobalConfig }
+  rdKafka?: { topicConfig?: ConsumerTopicConfig, globalConfig?: ConsumerGlobalConfig }
 }
 
 export type ConsumerEvents = {

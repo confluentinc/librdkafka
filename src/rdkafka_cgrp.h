@@ -275,6 +275,10 @@ typedef struct rd_kafka_cgrp_s {
          * TODO: write
          */
         rd_bool_t rkcg_current_target_assignments_waits_ack;
+        /**
+         * TODO: write
+         */
+        rd_bool_t rkcg_subscribed_at_least_once;
 
         rd_bool_t rkcg_assignment_inprogress;
         rd_bool_t rkcg_revocation_inprogress;

@@ -578,6 +578,7 @@ int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         char *wanted;
         char *s;
         int idx = 0;
+        rd_kafka_assignor_t *cooperative_assignor;
 
         rd_list_init(&rk->rk_conf.partition_assignors, 3,
                      (void *)rd_kafka_assignor_destroy);
@@ -636,6 +637,11 @@ int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         /* Clear the SORTED flag because the list is sorted according to the
          * rkas_index, but will do the search using rkas_protocol_name. */
         rk->rk_conf.partition_assignors.rl_flags &= ~RD_LIST_F_SORTED;
+
+        cooperative_assignor = rd_kafka_assignor_find(rk, "cooperative-sticky");
+        rk->rk_conf.partition_assignors_cooperative =
+            !rk->rk_conf.partition_assignors.rl_cnt ||
+            (cooperative_assignor && cooperative_assignor->rkas_enabled);
 
         if (rd_kafka_assignor_rebalance_protocol_check(&rk->rk_conf)) {
                 rd_snprintf(errstr, errstr_size,

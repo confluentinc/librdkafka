@@ -173,7 +173,12 @@ rd_kafka_cgrp_assignment_clear_lost(rd_kafka_cgrp_t *rkcg, char *fmt, ...) {
 rd_kafka_rebalance_protocol_t
 rd_kafka_cgrp_rebalance_protocol(rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                return RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE;
+                if (!rkcg->rkcg_subscribed_at_least_once)
+                        return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
+
+                return rkcg->rkcg_rk->rk_conf.partition_assignors_cooperative
+                           ? RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE
+                           : RD_KAFKA_REBALANCE_PROTOCOL_EAGER;
         }
 
         if (!rkcg->rkcg_assignor)
@@ -1063,7 +1068,6 @@ static rd_bool_t rd_kafka_cgrp_leave_maybe(rd_kafka_cgrp_t *rkcg) {
 
         return rd_true;
 }
-
 
 /**
  * @brief Enqueues a rebalance op, delegating responsibility of calling
@@ -2593,6 +2597,40 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
         return rd_true;
 }
 
+static rd_kafka_op_res_t
+rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg) {
+        rd_bool_t is_assignment_different = rd_false;
+
+        if (rkcg->rkcg_current_target_assignments_waits_ack)
+                return RD_KAFKA_OP_RES_HANDLED;
+
+        is_assignment_different = rd_kafka_topic_partition_list_cmp(
+            rkcg->rkcg_next_target_assignments,
+            rkcg->rkcg_current_target_assignments,
+            rd_kafka_topic_partition_by_id_cmp);
+
+        rkcg->rkcg_current_target_assignments_waits_ack =
+            is_assignment_different;
+        if (rkcg->rkcg_join_state !=
+                RD_KAFKA_CGRP_JOIN_STATE_STEADY || /* TODO: validate this
+                                                      condition */
+            is_assignment_different) {
+                if (rkcg->rkcg_current_target_assignments) {
+                        rd_kafka_topic_partition_list_destroy(
+                            rkcg->rkcg_current_target_assignments);
+                }
+                rkcg->rkcg_current_target_assignments =
+                    rkcg->rkcg_next_target_assignments;
+                rkcg->rkcg_next_target_assignments = NULL;
+                rd_kafka_cgrp_handle_assignment(
+                    rkcg, rkcg->rkcg_current_target_assignments);
+        }
+        RD_IF_FREE(rkcg->rkcg_next_target_assignments,
+                   rd_kafka_topic_partition_list_destroy);
+        rkcg->rkcg_next_target_assignments = NULL;
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
 /**
  * @brief Op callback from handle_JoinGroup
  */
@@ -2600,7 +2638,7 @@ static rd_kafka_op_res_t
 rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                                           rd_kafka_q_t *rkq,
                                           rd_kafka_op_t *rko) {
-        int i, j;
+        int i, j, found = 0;
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
@@ -2613,6 +2651,12 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
          *      KIP848TODO: Improve complexity.
          */
         for (i = 0; i < rkcg->rkcg_next_target_assignments->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar =
+                    &rkcg->rkcg_next_target_assignments->elems[i];
+                if (rktpar->topic) {
+                        found++;
+                        continue;
+                }
                 rd_kafka_Uuid_t request_topic_id =
                     rd_kafka_topic_partition_get_topic_id(
                         &rkcg->rkcg_next_target_assignments->elems[i]);
@@ -2621,33 +2665,52 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                             rko->rko_u.metadata.mdi->topics[j].topic_id;
                         if (!rd_kafka_Uuid_cmp(request_topic_id,
                                                compare_topic_id)) {
-                                rkcg->rkcg_next_target_assignments->elems[i]
-                                    .topic = rd_strdup(
+                                rktpar->topic = rd_strdup(
                                     rko->rko_u.metadata.md->topics[j].topic);
+                                found++;
                                 break;
                         }
                 }
         }
 
-        // Check whether the metadata response has all the requested topic ids.
-        if (!rkcg->rkcg_current_target_assignments_waits_ack)
-                rkcg->rkcg_current_target_assignments_waits_ack = rd_true;
-        if (rd_kafka_topic_partition_list_cmp(
-                rkcg->rkcg_next_target_assignments,
-                rkcg->rkcg_current_target_assignments,
-                rd_kafka_topic_partition_by_id_cmp)) {
-                if (rkcg->rkcg_current_target_assignments) {
-                        rd_kafka_topic_partition_list_destroy(
-                            rkcg->rkcg_current_target_assignments);
-                        rkcg->rkcg_current_target_assignments = NULL;
-                }
-                rd_kafka_cgrp_handle_assignment(
-                    rkcg, rkcg->rkcg_current_target_assignments);
+        if (found < rkcg->rkcg_next_target_assignments->cnt)
+                return RD_KAFKA_OP_RES_HANDLED;
+
+        return rd_kafka_cgrp_consumer_handle_next_assignment(rkcg);
+}
+
+void rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
+    rd_kafka_t *rk,
+    rd_kafka_broker_t *rkb) {
+
+        rd_kafka_op_t *rko;
+        rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
+        rd_kafka_Uuid_t topic_id;
+        rd_list_t *topic_ids;
+        int i;
+
+        if (!rkcg->rkcg_next_target_assignments->cnt) {
+                /* No metadata to request, continue with handle_next_assignment.
+                 */
+                rd_kafka_cgrp_consumer_handle_next_assignment(rkcg);
+                return;
         }
-        rd_kafka_topic_partition_list_destroy(
-            rkcg->rkcg_next_target_assignments);
-        rkcg->rkcg_next_target_assignments = NULL;
-        return RD_KAFKA_OP_RES_HANDLED;
+
+        topic_ids = rd_list_new(1, rd_list_Uuid_destroy);
+
+        for (i = 0; i < rkcg->rkcg_next_target_assignments->cnt; i++) {
+                topic_id = rd_kafka_topic_partition_get_topic_id(
+                    &rkcg->rkcg_next_target_assignments->elems[i]);
+                rd_list_add(topic_ids, rd_kafka_Uuid_copy(&topic_id));
+        }
+
+        rko = rd_kafka_op_new_cb(rkcg->rkcg_rk, RD_KAFKA_OP_METADATA,
+                                 rd_kafka_cgrp_consumer_handle_Metadata_op);
+        rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
+        rd_kafka_MetadataRequest(
+            rkb, NULL, topic_ids, "ConsumerGroupHeartbeat API Response",
+            rd_false /*!allow_auto_create*/, rd_false, rd_false, rko);
+        rd_list_destroy(topic_ids);
 }
 
 /**
@@ -2708,42 +2771,14 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
 
+                RD_IF_FREE(rkcg->rkcg_next_target_assignments,
+                           rd_kafka_topic_partition_list_destroy);
+                rkcg->rkcg_next_target_assignments = assigned_topic_partitions;
+        }
 
-                if (assigned_topic_partitions &&
-                    assigned_topic_partitions->cnt > 0) {
-                        rd_kafka_op_t *rko;
-                        rd_kafka_Uuid_t topic_id;
-                        rd_list_t *topic_ids =
-                            rd_list_new(1, rd_list_Uuid_destroy);
-                        int i;
-
-                        for (i = 0; i < assigned_topic_partitions->cnt; i++) {
-                                topic_id =
-                                    rd_kafka_topic_partition_get_topic_id(
-                                        &assigned_topic_partitions->elems[i]);
-                                rd_list_add(topic_ids,
-                                            rd_kafka_Uuid_copy(&topic_id));
-                        }
-
-                        RD_IF_FREE(rkcg->rkcg_next_target_assignments,
-                                   rd_kafka_topic_partition_list_destroy);
-                        rkcg->rkcg_next_target_assignments =
-                            assigned_topic_partitions;
-
-                        rko = rd_kafka_op_new_cb(
-                            rkcg->rkcg_rk, RD_KAFKA_OP_METADATA,
-                            rd_kafka_cgrp_consumer_handle_Metadata_op);
-                        rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
-                        rd_kafka_MetadataRequest(
-                            rkb, NULL, topic_ids,
-                            "ConsumerGroupHeartbeat API Response",
-                            rd_false /*!allow_auto_create*/, rd_false, rd_false,
-                            rko);
-                        rd_list_destroy(topic_ids);
-                } else {
-                        RD_IF_FREE(assigned_topic_partitions,
-                                   rd_kafka_topic_partition_list_destroy);
-                }
+        if (rkcg->rkcg_next_target_assignments) {
+                rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
+                    rk, rkb);
         }
 
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
@@ -5370,6 +5405,12 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
 
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
 
+        if (!rkcg->rkcg_current_target_assignments) {
+                rkcg->rkcg_current_target_assignments =
+                    rd_kafka_topic_partition_list_new(0);
+                rkcg_group_assignment = rkcg->rkcg_current_target_assignments;
+        }
+
         if (full_request) {
                 rkcg_group_instance_id = rkcg->rkcg_group_instance_id;
                 rkcg_client_rack       = rkcg->rkcg_client_rack;
@@ -5378,6 +5419,7 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                 rkcg_subscription          = rkcg->rkcg_subscription;
                 rkcg_group_remote_assignor = rkcg->rkcg_group_remote_assignor;
         }
+
         if (full_request || send_current_assignment) {
                 rkcg_group_assignment = rkcg->rkcg_current_target_assignments;
         }
@@ -5484,6 +5526,7 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
+        rkcg->rkcg_subscribed_at_least_once = rd_true;
 
         if (rd_kafka_topic_partition_list_regex_cnt(rktparlist) > 0)
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
@@ -5714,11 +5757,11 @@ retry:
                                 rd_kafka_cgrp_consumer_serve(rkcg);
                         } else {
                                 rd_kafka_cgrp_join_state_serve(rkcg);
-
-                                /* Serve any pending partitions in the
-                                 * assignment */
-                                rd_kafka_assignment_serve(rkcg->rkcg_rk);
                         }
+
+                        /* Serve any pending partitions in the
+                         * assignment */
+                        rd_kafka_assignment_serve(rkcg->rkcg_rk);
                 }
                 break;
 

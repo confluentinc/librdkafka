@@ -5186,7 +5186,20 @@ static void rd_kafka_cgrp_handle_assign_op(rd_kafka_cgrp_t *rkcg,
                             rko->rko_u.assign.partitions);
                         rko->rko_u.assign.partitions = NULL;
                 }
+
+                if (rkcg->rkcg_rebalance_incr_assignment) {
+                        rd_kafka_topic_partition_list_destroy(
+                            rkcg->rkcg_rebalance_incr_assignment);
+                        rkcg->rkcg_rebalance_incr_assignment = NULL;
+                }
+
                 rko->rko_u.assign.method = RD_KAFKA_ASSIGN_METHOD_ASSIGN;
+
+                if (rkcg->rkcg_join_state ==
+                    RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL) {
+                        rd_kafka_cgrp_set_join_state(
+                            rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL);
+                }
 
         } else if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
                        RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&

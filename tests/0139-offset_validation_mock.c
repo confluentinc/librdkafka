@@ -427,10 +427,7 @@ static void do_test_store_offset_without_leader_epoch(void) {
 
 int main_0139_offset_validation_mock(int argc, char **argv) {
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_no_duplicates_during_offset_validation();
 

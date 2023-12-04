@@ -290,4 +290,12 @@
   * `paused()` is not (YET) supported.
   * Custom partition assignors are not supported.
 
+### Admin Client
+
+  * The admin-client is currently experimental, and only has support for a limited subset of methods. The API is subject to change.
+    The methods supported are:
+    * The `createTopics` method does not yet support the `validateOnly` or `waitForLeaders` properties, and the per-topic configuration
+      does not support `replicaAssignment`.
+    * The `deleteTopics` method is fully supported.
+
 ## node-rdkafka

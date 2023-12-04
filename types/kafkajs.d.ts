@@ -149,6 +149,27 @@ export type ConsumerEvents = {
   REQUEST_QUEUE_SIZE: 'consumer.network.request_queue_size'
 }
 
+export interface AdminConfig {
+  retry?: RetryOptions
+}
+
+export interface ITopicConfig {
+  topic: string
+  numPartitions?: number
+  replicationFactor?: number
+  replicaAssignment?: ReplicaAssignment[]
+  configEntries?: IResourceConfigEntry[]
+}
+
+export interface ReplicaAssignment {
+  partition: number
+  replicas: Array<number>
+}
+
+export interface IResourceConfigEntry {
+  name: string
+  value: string
+}
 
 export enum logLevel {
   NOTHING = 0,

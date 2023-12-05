@@ -3209,22 +3209,38 @@ static void x_incremental_rebalances(void) {
   test_consumer_subscribe(c[1], topic);
   test_consumer_wait_assignment(c[1], rd_true /*poll*/);
   rd_sleep(3);
-  test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 3,
-                                  topic, 4, topic, 5, NULL);
-  test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 0,
-                                  topic, 1, topic, 2, NULL);
+  if (test_consumer_group_protocol_generic()) {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 3,
+                                    topic, 4, topic, 5, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 0,
+                                    topic, 1, topic, 2, NULL);
+  } else {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 0,
+                                    topic, 1, topic, 2, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 3,
+                                    topic, 4, topic, 5, NULL);
+  }
 
   /* Third consumer joins group */
   TEST_SAY("%s: joining\n", rd_kafka_name(c[2]));
   test_consumer_subscribe(c[2], topic);
   test_consumer_wait_assignment(c[2], rd_true /*poll*/);
   rd_sleep(3);
-  test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 4,
-                                  topic, 5, NULL);
-  test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 1,
-                                  topic, 2, NULL);
-  test_consumer_verify_assignment(c[2], rd_false /*fail later*/, topic, 3,
-                                  topic, 0, NULL);
+  if (test_consumer_group_protocol_generic()) {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 4,
+                                    topic, 5, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 1,
+                                    topic, 2, NULL);
+    test_consumer_verify_assignment(c[2], rd_false /*fail later*/, topic, 3,
+                                    topic, 0, NULL);
+  } else {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 0,
+                                    topic, 1, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 3,
+                                    topic, 4, NULL);
+    test_consumer_verify_assignment(c[2], rd_false /*fail later*/, topic, 2,
+                                    topic, 5, NULL);
+  }
 
   /* Raise any previously failed verify_assignment calls and fail the test */
   TEST_LATER_CHECK();
@@ -3293,7 +3309,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
                             true /*auto commit*/);
   v_commit_during_rebalance(true /*with rebalance callback*/,
                             false /*manual commit*/);
-  // x_incremental_rebalances();
+  x_incremental_rebalances();
 
   return 0;
 }

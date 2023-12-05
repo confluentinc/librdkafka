@@ -169,8 +169,11 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 for (j = 0; j < metrics_cnt; j++) {
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
-                        char full_metric_name[strlen(TELEMETRY_METRIC_PREFIX) + strlen(info[j].name) + 1];
-                        rd_snprintf(full_metric_name, sizeof(full_metric_name), "%s%s", TELEMETRY_METRIC_PREFIX, info[j].name);
+                        char full_metric_name[strlen(TELEMETRY_METRIC_PREFIX) +
+                                              strlen(info[j].name) + 1];
+                        rd_snprintf(full_metric_name, sizeof(full_metric_name),
+                                    "%s%s", TELEMETRY_METRIC_PREFIX,
+                                    info[j].name);
                         bool name_matches =
                             strncmp(full_metric_name,
                                     rk->rk_telemetry.requested_metrics[i],
@@ -241,7 +244,7 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
             rk->rk_telemetry.requested_metrics_cnt) {
                 rd_kafka_match_requested_metrics(rk);
                 TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                        rkb->rkb_c_historic.ts_last = rd_clock() * 1000;
+                        rkb->rkb_c_historic.ts_last  = rd_clock() * 1000;
                         rkb->rkb_c_historic.ts_start = rd_clock() * 1000;
                 }
 
@@ -372,7 +375,8 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
 
         /* In the case where we have a termination during creation, we can't
          * send any telemetry. */
-        if (thrd_is_current(rk->rk_thread) || !rk->rk_conf.enable_metrics_push) {
+        if (thrd_is_current(rk->rk_thread) ||
+            !rk->rk_conf.enable_metrics_push) {
                 /* We can change state since we're on the main thread. */
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATED;
                 return;

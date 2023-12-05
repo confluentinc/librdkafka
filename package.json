@@ -1,6 +1,6 @@
 {
   "name": "confluent-kafka-js",
-  "version": "v0.1.0-devel",
+  "version": "v0.1.2-devel",
   "description": "Node.js bindings for librdkafka",
   "librdkafka": "2.3.0",
   "main": "lib/index.js",
@@ -16,7 +16,7 @@
   "binary": {
     "module_name": "node-librdkafka",
     "module_path": "./build/{configuration}/",
-    "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{arch}.tar.gz",
+    "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{libc}-{arch}.tar.gz",
     "host": "https://github.com/confluentinc/confluent-kafka-js/releases/download/",
     "remote_path": "v{version}"
   },

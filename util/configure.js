@@ -7,6 +7,10 @@ var path = require('path');
 
 var baseDir = path.resolve(__dirname, '../');
 var releaseDir = path.join(baseDir, 'build', 'deps');
+// var command = './configure --install-deps --source-deps-only --disable-lz4-ext --enable-static --enable-strip --disable-gssapi';
+// if (!process.env.IS_ON_CI) {
+var command = './configure --install-deps --source-deps-only --disable-lz4-ext --enable-static --enable-strip --disable-gssapi --prefix=' + releaseDir + ' --libdir=' + releaseDir;
+// }
 
 var isWin = /^win/.test(process.platform);
 
@@ -19,7 +23,8 @@ if (isWin) {
 var childProcess = require('child_process');
 
 try {
-  childProcess.execSync('./configure --install-deps --source-deps-only --disable-lz4-ext --enable-static --enable-strip --disable-gssapi --prefix=' + releaseDir + ' --libdir=' + releaseDir, {
+  process.stderr.write("Running: " + command + 'on working directory = ' + baseDir + '\n');
+  childProcess.execSync(command, {
     cwd: baseDir,
     stdio: [0,1,2]
   });

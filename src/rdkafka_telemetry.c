@@ -227,11 +227,12 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         rd_kafka_compression_t compression_type = RD_KAFKA_COMPRESSION_GZIP;
 
         if (metrics_payload_size > rk->rk_telemetry.telemetry_max_bytes) {
-                rd_kafka_log(
-                    rk, LOG_WARNING, "TELEMETRY",
-                    "Metrics payload size %" PRIdsz
-                    " exceeds telemetry_max_bytes %d specified by the broker.",
-                    metrics_payload_size, rk->rk_telemetry.telemetry_max_bytes);
+                rd_kafka_log(rk, LOG_WARNING, "TELEMETRY",
+                             "Metrics payload size %" PRIdsz
+                             " exceeds telemetry_max_bytes %" PRId32
+                             "specified by the broker.",
+                             metrics_payload_size,
+                             rk->rk_telemetry.telemetry_max_bytes);
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
@@ -281,7 +282,6 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                              "PushTelemetryRequest failed: %s",
                              rd_kafka_err2str(err));
                 // Non-retriable errors
-                // TODO: What to do for TELEMETRY_TOO_LARGE?
                 if (err == RD_KAFKA_RESP_ERR_INVALID_REQUEST ||
                     err == RD_KAFKA_RESP_ERR_INVALID_RECORD) {
                         rd_kafka_log(

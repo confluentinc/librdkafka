@@ -139,10 +139,10 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
         const rd_kafka_telemetry_metric_info_t *info =
             RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
 
-        rd_kafka_telemetry_metric_type_t type =
+        rd_kafka_telemetry_temporality_type_t temporality =
             rk->rk_telemetry.delta_temporality
-                ? RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE
-                : RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM;
+                ? RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_DELTA
+                : RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_CUMULATIVE;
 
 
         if (rk->rk_telemetry.requested_metrics_cnt == 1 &&
@@ -154,9 +154,9 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
 
                 for (j = 0; j < metrics_cnt; j++) {
                         /* Gauges are always sent. */
-                        if (info[j].type ==
-                                RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE ||
-                            info[j].type == type)
+                        if (info[j].temporality ==
+                                RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE ||
+                            info[j].temporality == temporality)
                                 update_matched_metrics(rk, j);
                 }
                 return;
@@ -178,9 +178,9 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
 
                         /* Gauges are always sent. */
                         if (name_matches &&
-                            (info[j].type ==
-                                 RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE ||
-                             info[j].type == type))
+                            (info[j].temporality ==
+                                 RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE ||
+                             info[j].temporality == temporality))
                                 update_matched_metrics(rk, j);
                 }
         }
@@ -225,6 +225,7 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err) {
         rd_ts_t next_scheduled;
         double jitter_multiplier = rd_jitter(80, 120) / 100.0;
+        rd_kafka_broker_t *rkb;
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_dbg(rk, TELEMETRY, "GETERR",
@@ -239,6 +240,10 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR &&
             rk->rk_telemetry.requested_metrics_cnt) {
                 rd_kafka_match_requested_metrics(rk);
+                TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                        rkb->rkb_c_historic.ts_last = rd_clock() * 1000;
+                        rkb->rkb_c_historic.ts_start = rd_clock() * 1000;
+                }
 
                 /* Some metrics are requested. Start the timer accordingly */
                 next_scheduled = (int)(jitter_multiplier * 1000 *

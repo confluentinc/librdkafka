@@ -194,6 +194,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         } rkb_c;
 
         struct {
+                rd_ts_t ts_last;                /**< Timestamp of last push */
+                rd_ts_t ts_start;               /**< Timestamp from when collection started */
                 int32_t assigned_partitions;     /**< Current number of assigned
                                                    partitions. */
                 int32_t connects;                /**< Connection attempts,

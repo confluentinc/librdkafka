@@ -4776,6 +4776,10 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_avg_destroy(&rkb->rkb_avg_outbuf_latency);
         rd_avg_destroy(&rkb->rkb_avg_rtt);
         rd_avg_destroy(&rkb->rkb_avg_throttle);
+        rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_throttle);
+        rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_outbuf_latency);
+        rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_rtt);
+
 
         mtx_lock(&rkb->rkb_logname_lock);
         rd_free(rkb->rkb_logname);
@@ -4873,7 +4877,16 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                         rk->rk_conf.enable_metrics_push);
         rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE, 0, 5000 * 1000, 2,
                     rk->rk_conf.stats_interval_ms ||
-                        rk->rk_conf.enable_metrics_push);
+                            rk->rk_conf.enable_metrics_push
+                        ? 1
+                        : 0);
+        rd_avg_init(&rkb->rkb_c_historic.rkb_avg_rtt, RD_AVG_GAUGE, 0,
+                    500 * 1000, 2, rk->rk_conf.enable_metrics_push ? 1 : 0);
+        rd_avg_init(&rkb->rkb_c_historic.rkb_avg_outbuf_latency, RD_AVG_GAUGE,
+                    0, 500 * 1000, 2, rk->rk_conf.enable_metrics_push ? 1 : 0);
+        rd_avg_init(&rkb->rkb_c_historic.rkb_avg_throttle, RD_AVG_GAUGE, 0,
+                    500 * 1000, 2, rk->rk_conf.enable_metrics_push ? 1 : 0);
+
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 

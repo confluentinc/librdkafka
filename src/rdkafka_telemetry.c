@@ -95,12 +95,18 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_throttle);
-                rkb->rkb_c_historic.rkb_avg_throttle = (rd_avg_t) {0};
-                rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_outbuf_latency);
-                rkb->rkb_c_historic.rkb_avg_outbuf_latency = (rd_avg_t) {0};
-                rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_rtt);
-                rkb->rkb_c_historic.rkb_avg_rtt = (rd_avg_t) {0};
+                rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
+                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
+                                1);
+                rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
+                rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.start =
+                    rd_clock();
+                rkb->rkb_c_historic.rkb_avg_rtt.ra_v.start      = rd_clock();
+                rkb->rkb_c_historic.rkb_avg_throttle.ra_v.start = rd_clock();
+                rkb->rkb_c_historic.assigned_partitions         = 0;
+                rkb->rkb_c_historic.connects                    = 0;
+                rkb->rkb_c_historic.ts_last  = rd_clock() * 1000;
+                rkb->rkb_c_historic.ts_start = rd_clock() * 1000;
         }
         rk->rk_telemetry.telemetry_max_bytes = 0;
 }
@@ -243,10 +249,6 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR &&
             rk->rk_telemetry.requested_metrics_cnt) {
                 rd_kafka_match_requested_metrics(rk);
-                TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                        rkb->rkb_c_historic.ts_last  = rd_clock() * 1000;
-                        rkb->rkb_c_historic.ts_start = rd_clock() * 1000;
-                }
 
                 /* Some metrics are requested. Start the timer accordingly */
                 next_scheduled = (int)(jitter_multiplier * 1000 *
@@ -336,7 +338,6 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                     rk->rk_telemetry.push_interval_ms * 1000,
                     rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         } else { /* error */
-                /* TODO: add specific error handling. */
                 rd_kafka_dbg(rk, TELEMETRY, "PUSHERR",
                              "PushTelemetryRequest failed: %s",
                              rd_kafka_err2str(err));
@@ -367,6 +368,7 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                         return;
                 }
 
+                /* Unknown subscription id */
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
@@ -477,21 +479,6 @@ void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
                      "Setting telemetry broker to %s\n", rkb->rkb_name);
 
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
-
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rkb->rkb_c_historic.assigned_partitions = 0;
-                rkb->rkb_c_historic.connects            = 0;
-                rd_avg_init(&rkb->rkb_c_historic.rkb_avg_rtt, RD_AVG_GAUGE, 0,
-                            500 * 1000, 2, 1);
-                rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
-                rd_avg_init(&rkb->rkb_c_historic.rkb_avg_outbuf_latency,
-                            RD_AVG_GAUGE, 0, 500 * 1000, 2, 1);
-                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
-                                1);
-                rd_avg_init(&rkb->rkb_c_historic.rkb_avg_throttle, RD_AVG_GAUGE,
-                            0, 500 * 1000, 2, 1);
-                rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
-        }
 
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,

@@ -238,12 +238,16 @@ static void reset_historical_metrics(rd_kafka_t *rk) {
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_c_historic.assigned_partitions = rkb->rkb_toppar_cnt;
                 rkb->rkb_c_historic.connects    = rkb->rkb_c.connects.val;
-                rkb->rkb_c_historic.rkb_avg_rtt = rkb->rkb_avg_rtt;
+                rkb->rkb_c_historic.ts_last = rd_clock() * 1000;
+                rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
+                /* Only ra_v is being used to keep track of the metrics */
+                rkb->rkb_c_historic.rkb_avg_rtt.ra_v = rkb->rkb_avg_rtt.ra_v;
                 rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
-                rkb->rkb_c_historic.rkb_avg_throttle = rkb->rkb_avg_throttle;
+                rkb->rkb_c_historic.rkb_avg_throttle.ra_v =
+                    rkb->rkb_avg_throttle.ra_v;
                 rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
-                rkb->rkb_c_historic.rkb_avg_outbuf_latency =
-                    rkb->rkb_avg_outbuf_latency;
+                rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v =
+                    rkb->rkb_avg_outbuf_latency.ra_v;
                 rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
                                 1);
         }

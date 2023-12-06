@@ -5375,7 +5375,7 @@ err_parse:
 err:
         /* TODO: Add error handling actions, possibly call
          * rd_kafka_handle_get_telemetry_subscriptions with error. */
-        return;
+        rd_kafka_handle_get_telemetry_subscriptions(rk, err);
 }
 
 void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,

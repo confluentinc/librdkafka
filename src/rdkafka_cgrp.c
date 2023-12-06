@@ -462,6 +462,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rd_atomic32_init(&rkcg->rkcg_terminated, rd_false);
         rkcg->rkcg_current_target_assignments = NULL;
         rkcg->rkcg_next_target_assignments    = NULL;
+        rkcg->rkcg_group_assignment = NULL;
 
         rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
 
@@ -2719,6 +2720,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg       = rk->rk_cgrp;
         const int log_decode_errors = LOG_ERR;
         int16_t error_code          = 0;
+        int actions = 0;
         rd_kafkap_str_t error_str;
         rd_kafkap_str_t member_id;
         int32_t member_epoch;
@@ -2796,7 +2798,72 @@ err_parse:
 err:
         rkcg->rkcg_last_heartbeat_err = err;
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
-        rkcg->rkcg_last_heartbeat_err = err;
+
+
+        // Supported errors:
+        // - GROUP_AUTHORIZATION_FAILED
+        // - COORDINATOR_LOAD_IN_PROGRESS
+        // - INVALID_REQUEST
+        // - UNKNOWN_MEMBER_ID
+        // - FENCED_MEMBER_EPOCH
+        // - UNSUPPORTED_ASSIGNOR
+        // - UNRELEASED_INSTANCE_ID
+        // - GROUP_MAX_SIZE_REACHED
+
+        switch (err) {
+        case RD_KAFKA_RESP_ERR__DESTROY:
+                /* quick cleanup */
+                return;
+
+        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
+        case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
+                             "Heartbeat failed due to coordinator (%s) "
+                             "no longer available: %s: "
+                             "re-querying for coordinator",
+                             rkcg->rkcg_curr_coord
+                                 ? rd_kafka_broker_name(rkcg->rkcg_curr_coord)
+                                 : "none",
+                             rd_kafka_err2str(err));
+                /* Remain in joined state and keep querying for coordinator */
+                actions = RD_KAFKA_ERR_ACTION_REFRESH;
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+                printf("Got Unknown Member Id Error\n");
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_REJOIN;
+                rkcg->rkcg_member_epoch = 0;
+//                rd_kafka_cgrp_set_member_id(rkcg, "");
+                rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true /*lost*/,
+                                                      rd_true /*initiating*/,
+                                                      "resetting member-id");
+                return;
+
+        case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
+                printf("Got Fenced Member Epoch Error\n");
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_REJOIN;
+                rkcg->rkcg_member_epoch = 0;
+                rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true, rd_true, "member fenced - rejoining");
+
+        default:
+                actions = rd_kafka_err_action(rkb, err, request,
+                                              RD_KAFKA_ERR_ACTION_END);
+                break;
+        }
+
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
+            rd_kafka_buf_retry(rkb, request)) {
+                /* Retry */
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+                return;
+        }
 }
 
 
@@ -4425,6 +4492,7 @@ static void rd_kafka_cgrp_revoke_all_rejoin_maybe(rd_kafka_cgrp_t *rkcg,
                         : "",
                     rkcg->rkcg_rebalance_rejoin ? ", rejoin on rebalance" : "",
                     reason);
+                printf("Rebalancing...\n");
                 return;
         }
 
@@ -5432,7 +5500,7 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
         }
 
         if (full_request || send_current_assignment) {
-                rkcg_group_assignment = rkcg->rkcg_current_target_assignments;
+                rkcg_group_assignment = rkcg->rkcg_group_assignment;
         }
 
         if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY &&
@@ -5466,7 +5534,15 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
 
         switch (rkcg->rkcg_join_state) {
         case RD_KAFKA_CGRP_JOIN_STATE_INIT:
+                printf("(Re)Joining...\n");
+                rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_REJOIN;
                 full_request = rd_true;
+                if(rkcg->rkcg_group_assignment && rkcg->rkcg_group_assignment->cnt > 0) {
+                        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_group_assignment);
+                        rkcg->rkcg_group_assignment = NULL;
+                }
+                if(!rkcg->rkcg_group_assignment)
+                        rkcg->rkcg_group_assignment = rd_kafka_topic_partition_list_new(0);
                 break;
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
                 if (rkcg->rkcg_consumer_flags &
@@ -5484,10 +5560,13 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         }
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
+            !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_REJOIN) &&
             rd_interval(&rkcg->rkcg_heartbeat_intvl,
-                        rkcg->rkcg_heartbeat_intvl_ms * 1000, now) > 0)
+                        rkcg->rkcg_heartbeat_intvl_ms * 1000, now) > 0) {
+                printf("Sending Heartbeat in state: %s\n", rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
                 rd_kafka_cgrp_consumer_group_heartbeat(rkcg, full_request,
                                                        send_current_assignment);
+        }
 }
 
 /**

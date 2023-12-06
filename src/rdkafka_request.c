@@ -2275,6 +2275,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
 
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
+//                rd_kafka_buf_write_tags(rkbuf);
         }
 
         rd_kafka_buf_write_kstr(rkbuf, subscribe_topics_regex);
@@ -2290,6 +2291,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                     rd_false, current_assignments_fields);
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
+//                rd_kafka_buf_write_tags(rkbuf);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

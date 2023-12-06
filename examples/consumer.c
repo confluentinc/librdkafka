@@ -188,12 +188,12 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        if (rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr)) !=
-            RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
+//        if (rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr)) !=
+//            RD_KAFKA_CONF_OK) {
+//                fprintf(stderr, "%s\n", errstr);
+//                rd_kafka_conf_destroy(conf);
+//                return 1;
+//        }
 
         if (rd_kafka_conf_set(conf, "session.timeout.ms", "10000", errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {

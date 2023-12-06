@@ -352,6 +352,21 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                         return;
                 }
 
+                if (err == RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE) {
+                        rd_kafka_log(
+                            rk, LOG_WARNING, "TELEMETRY",
+                            "PushTelemetryRequest failed because of payload "
+                            "size too large: %s. Continuing telemetry.",
+                            rd_kafka_err2str(err));
+                        rk->rk_telemetry.state =
+                            RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
+                        rd_kafka_timer_start_oneshot(
+                            &rk->rk_timers, &rk->rk_telemetry.request_timer,
+                            rd_false, rk->rk_telemetry.push_interval_ms * 1000,
+                            rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+                        return;
+                }
+
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                 rd_kafka_timer_start_oneshot(

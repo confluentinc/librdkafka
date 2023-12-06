@@ -5413,7 +5413,7 @@ err_parse:
 err:
         /* TODO: Add error handling actions, possibly call
          * rd_kafka_handle_push_telemetry with error. */
-        return;
+        rd_kafka_handle_push_telemetry(rk, err);
 }
 
 

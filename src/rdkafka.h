@@ -630,7 +630,12 @@ typedef enum {
         RD_KAFKA_RESP_ERR_FEATURE_UPDATE_FAILED = 96,
         /** Request principal deserialization failed during forwarding */
         RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
-
+        /** Client sent a push telemetry request with an invalid or outdated
+           subscription ID. */
+        RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID = 117,
+        /** Client sent a push telemetry request larger than the maximum size
+           the broker will accept. */
+        RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE = 118,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 

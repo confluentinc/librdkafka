@@ -93,6 +93,7 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.matched_metrics       = NULL;
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
+        rk->rk_telemetry.telemetry_max_bytes = 0;
 }
 
 /**
@@ -225,6 +226,15 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         // TODO: Cycle through compression types
         rd_kafka_compression_t compression_type = RD_KAFKA_COMPRESSION_GZIP;
 
+        if (metrics_payload_size > rk->rk_telemetry.telemetry_max_bytes) {
+                rd_kafka_log(rk, LOG_WARNING, "TELEMETRY",
+                             "Metrics payload size %" PRIdsz
+                             " exceeds telemetry_max_bytes %" PRId32
+                             "specified by the broker.",
+                             metrics_payload_size,
+                             rk->rk_telemetry.telemetry_max_bytes);
+        }
+
         rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
                      "Sending PushTelemetryRequest with terminating = %d",
                      terminating);
@@ -271,6 +281,18 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                 rd_kafka_dbg(rk, TELEMETRY, "PUSHERR",
                              "PushTelemetryRequest failed: %s",
                              rd_kafka_err2str(err));
+                // Non-retriable errors
+                if (err == RD_KAFKA_RESP_ERR_INVALID_REQUEST ||
+                    err == RD_KAFKA_RESP_ERR_INVALID_RECORD) {
+                        rd_kafka_log(
+                            rk, LOG_WARNING, "TELEMETRY",
+                            "PushTelemetryRequest failed with non-retriable "
+                            "error: %s. Stopping telemetry.",
+                            rd_kafka_err2str(err));
+                        rd_kafka_telemetry_set_terminated(rk);
+                        return;
+                }
+
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                 rd_kafka_timer_start_oneshot(

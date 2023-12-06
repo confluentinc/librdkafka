@@ -2157,6 +2157,9 @@ static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
         /* Response: PushIntervalMs */
         rd_kafka_buf_write_i32(resp, 5000);
 
+        /* Response: TelemetryMaxBytes */
+        rd_kafka_buf_write_i32(resp, 10000);
+
         /* Response: DeltaTemporality */
         rd_kafka_buf_write_bool(resp, rd_true);
 

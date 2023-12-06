@@ -231,7 +231,6 @@ typedef struct rd_kafka_cgrp_s {
          *  completes. The waiting subscription is stored here.
          *  Mutually exclusive with rkcg_next_subscription. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
-        rd_kafkap_str_t *rkcg_next_subscription_regex;
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe
@@ -271,17 +270,14 @@ typedef struct rd_kafka_cgrp_s {
         // Target assignment present in the CGHB protocol will be updated here
         // only.
         rd_kafka_topic_partition_list_t *rkcg_next_target_assignments;
-        /**
-         * TODO: write
-         */
-        rd_bool_t rkcg_current_target_assignments_waits_ack;
-        /**
-         * TODO: write
-         */
-        rd_bool_t rkcg_subscribed_at_least_once;
 
-        rd_bool_t rkcg_assignment_inprogress;
-        rd_bool_t rkcg_revocation_inprogress;
+        int rkcg_consumer_flags;
+#define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION                      \
+        0x4                                          /* TODO: write            \
+                                                      */
+#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8 /* TODO: write */
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */

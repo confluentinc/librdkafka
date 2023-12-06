@@ -736,6 +736,9 @@ static void a_assign_rapid() {
   Test::conf_set(conf, "group.id", group_id);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
   Test::conf_set(conf, "enable.auto.commit", "false");
+  if (test_consumer_group_protocol()) {
+    Test::conf_set(conf, "group.protocol", test_consumer_group_protocol());
+  }
 
   RdKafka::KafkaConsumer *consumer;
   consumer = RdKafka::KafkaConsumer::create(conf, errstr);
@@ -2314,7 +2317,7 @@ static void t_max_poll_interval_exceeded(int variation) {
                        << expected_cb1_lost_call_cnt
                        << ", not: " << rebalance_cb1.lost_call_cnt);
 
-  if (!test_consumer_group_protocol_consumer()) {
+  if (test_consumer_group_protocol_generic()) {
     if (rebalance_cb1.nonempty_assign_call_cnt != expected_cb1_assign_call_cnt)
       Test::Fail(tostr() << "Expected consumer 1 non-empty assign count to be "
                          << expected_cb1_assign_call_cnt << ", not: "
@@ -3280,10 +3283,10 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   }
 
   c_subscribe_no_cb_test(false /*don't close consumer*/);
-  // d_change_subscription_add_topic(true /*close consumer*/);
-  // d_change_subscription_add_topic(false /*don't close consumer*/);
-  // e_change_subscription_remove_topic(true /*close consumer*/);
-  // e_change_subscription_remove_topic(false /*don't close consumer*/);
+  d_change_subscription_add_topic(true /*close consumer*/);
+  d_change_subscription_add_topic(false /*don't close consumer*/);
+  e_change_subscription_remove_topic(true /*close consumer*/);
+  e_change_subscription_remove_topic(false /*don't close consumer*/);
   f_assign_call_cooperative();
   g_incremental_assign_call_eager();
   h_delete_topic();
@@ -3292,17 +3295,24 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   k_add_partition();
   l_unsubscribe();
   m_unsubscribe_2();
-  // n_wildcard();
+  if (test_consumer_group_protocol_generic()) {
+    /* FIXME: should work with next ConsumerGroupHeartbeat version */
+    n_wildcard();
+  }
   o_java_interop();
-  // for (i = 1; i <= 6; i++) /* iterate over 6 different test variations */
-  //   s_subscribe_when_rebalancing(i);
+  for (i = 1; i <= 6; i++) /* iterate over 6 different test variations */
+    s_subscribe_when_rebalancing(i);
   for (i = 1; i <= 3; i++)
     t_max_poll_interval_exceeded(i);
-  // /* Run all 2*3 variations of the u_.. test */
-  // for (i = 0; i < 3; i++) {
-  //   u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
-  //   u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
-  // }
+  /* Run all 2*3 variations of the u_.. test */
+  for (i = 0; i < 3; i++) {
+    if (test_consumer_group_protocol_generic()) {
+      /* FIXME: check this test, it should fail because of the callback number
+       */
+      u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
+    }
+    u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
+  }
   v_commit_during_rebalance(true /*with rebalance callback*/,
                             true /*auto commit*/);
   v_commit_during_rebalance(false /*without rebalance callback*/,

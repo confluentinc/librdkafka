@@ -31,8 +31,8 @@
 
 #include "rdtypes.h"
 
-#define RD_KAFKA_TELEMETRY_METRIC_PREFIX "org.apache.kafka."
-#define TELEMETRY_METRIC_NODE_ID_ATTRIBUTE "node.id"
+#define RD_KAFKA_TELEMETRY_METRIC_PREFIX            "org.apache.kafka."
+#define RD_KAFKA_TELEMETRY_METRIC_NODE_ID_ATTRIBUTE "node.id"
 
 #define RD_KAFKA_TELEMETRY_METRIC_INFO(rk)                                     \
         (rk->rk_type == RD_KAFKA_PRODUCER                                      \

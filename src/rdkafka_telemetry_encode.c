@@ -265,7 +265,7 @@ static const rd_kafka_telemetry_metric_value_calculator_t
 static const char *get_client_rack(const rd_kafka_t *rk) {
         return rk->rk_conf.client_rack &&
                        RD_KAFKAP_STR_LEN(rk->rk_conf.client_rack)
-                   ? (const char *)rk->rk_conf.client_rack
+                   ? (const char *)rk->rk_conf.client_rack->str
                    : NULL;
 }
 
@@ -362,12 +362,6 @@ resource_attributes(rd_kafka_t *rk,
 
         *attributes =
             rd_malloc(sizeof(rd_kafka_telemetry_resource_attribute_t) * count);
-        if (!*attributes) {
-                rd_kafka_dbg(
-                    rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
-                    "Failed to allocate memory for resource attributes");
-                return 0;
-        }
 
         set_attributes(rk, attributes, configs, config_count);
 
@@ -515,9 +509,9 @@ static void free_resource_attributes(
     opentelemetry_proto_common_v1_KeyValue **resource_attributes_key_values,
     rd_kafka_telemetry_resource_attribute_t *resource_attributes_struct,
     size_t count) {
+        size_t i;
         if (count == 0)
                 return;
-        size_t i;
         for (i = 0; i < count; i++)
                 rd_free(resource_attributes_key_values[i]);
         rd_free(resource_attributes_struct);
@@ -557,7 +551,7 @@ static void serializeMetricData(
         if (is_per_broker) {
                 data_point_attribute->key.funcs.encode = &encode_string;
                 data_point_attribute->key.arg =
-                    TELEMETRY_METRIC_NODE_ID_ATTRIBUTE;
+                    RD_KAFKA_TELEMETRY_METRIC_NODE_ID_ATTRIBUTE;
                 data_point_attribute->has_value = true;
                 data_point_attribute->value.which_value =
                     opentelemetry_proto_common_v1_AnyValue_int_value_tag;
@@ -600,10 +594,10 @@ static void serializeMetricData(
         (*metric)->description.arg          = (void *)info->description;
 
         metric_name_len =
-            strlen(TELEMETRY_METRIC_PREFIX) + strlen(info->name) + 1;
+            strlen(RD_KAFKA_TELEMETRY_METRIC_PREFIX) + strlen(info->name) + 1;
         *metric_name = rd_calloc(1, metric_name_len);
         rd_snprintf(*metric_name, metric_name_len, "%s%s",
-                    TELEMETRY_METRIC_PREFIX, info->name);
+                    RD_KAFKA_TELEMETRY_METRIC_PREFIX, info->name);
 
 
         (*metric)->name.funcs.encode = &encode_string;

@@ -2575,10 +2575,6 @@ rd_kafka_topic_partition_new_with_topic_id(rd_kafka_Uuid_t topic_id,
         rd_kafka_topic_partition_t *rktpar = rd_calloc(1, sizeof(*rktpar));
 
         rktpar->partition = partition;
-
-        if (!rd_kafka_Uuid_cmp(topic_id, RD_KAFKA_UUID_ZERO))
-                return rktpar;
-
         parpriv           = rd_kafka_topic_partition_get_private(rktpar);
         parpriv->topic_id = topic_id;
         return rktpar;
@@ -2736,14 +2732,7 @@ int32_t rd_kafka_topic_partition_get_current_leader_epoch(
 void rd_kafka_topic_partition_set_topic_id(rd_kafka_topic_partition_t *rktpar,
                                            rd_kafka_Uuid_t topic_id) {
         rd_kafka_topic_partition_private_t *parpriv;
-
-        /* Avoid allocating private_t if clearing the epoch */
-        if (!rd_kafka_Uuid_cmp(topic_id, RD_KAFKA_UUID_ZERO) &&
-            !rktpar->_private)
-                return;
-
-        parpriv = rd_kafka_topic_partition_get_private(rktpar);
-
+        parpriv           = rd_kafka_topic_partition_get_private(rktpar);
         parpriv->topic_id = topic_id;
 }
 
@@ -2921,9 +2910,6 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
         rd_kafka_topic_partition_t *rktpar;
         rktpar = rd_kafka_topic_partition_list_add0(
             __FUNCTION__, __LINE__, rktparlist, NULL, partition, NULL, NULL);
-        if (!rd_kafka_Uuid_cmp(topic_id, RD_KAFKA_UUID_ZERO))
-                return rktpar;
-
         rd_kafka_topic_partition_private_t *parpriv =
             rd_kafka_topic_partition_get_private(rktpar);
         parpriv->topic_id = topic_id;

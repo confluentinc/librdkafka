@@ -280,7 +280,8 @@ blocks:
           - powershell -command "Expand-Archive clamav-signatures.zip C:\clamav-db"
       epilogue:
         commands:
-          - clamscan -d C:\clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-win-malware-scan-results.tx; if ($?){artifact push workflow librdkafka-win-malware-scan-results.txt} else {artifact push workflow librdkafka-win-malware-scan-results.txt; exit /b           - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
+          - clamscan -d C:\clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-win-malware-scan-results.tx; if ($?){artifact push workflow librdkafka-win-malware-scan-results.txt} else {artifact push workflow librdkafka-win-malware-scan-results.txt; exit /b 1}
+          - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
       jobs:
         - name: 'Build: MinGW-w64 Dynamic'
           env_vars:

@@ -657,6 +657,9 @@ static void a_assign_tests() {
   std::string topic2_str = Test::mk_topic_name("0113-a2", 1);
   test_create_topic(NULL, topic2_str.c_str(), 1, 1);
 
+  test_wait_topic_exists(NULL, topic1_str.c_str(), 10 * 1000);
+  test_wait_topic_exists(NULL, topic2_str.c_str(), 10 * 1000);
+
   test_produce_msgs_easy_size(topic1_str.c_str(), 0, 0, msgcnt, msgsize1);
   test_produce_msgs_easy_size(topic2_str.c_str(), 0, 0, msgcnt, msgsize2);
 
@@ -3310,8 +3313,8 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
       /* FIXME: check this test, it should fail because of the callback number
        */
       u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
+      u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
     }
-    u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
   }
   v_commit_during_rebalance(true /*with rebalance callback*/,
                             true /*auto commit*/);

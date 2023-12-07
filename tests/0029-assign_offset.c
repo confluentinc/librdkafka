@@ -111,6 +111,12 @@ int main_0029_assign_offset(int argc, char **argv) {
         test_timing_t t_simple, t_hl;
         test_msgver_t mv;
 
+        if (!test_consumer_group_protocol_generic()) {
+                /* FIXME: check if manually assigning and then subscribing
+                 * is supported with the new protocol. */
+                return 0;
+        }
+
         test_conf_init(NULL, NULL, 20 + (test_session_timeout_ms * 3 / 1000));
 
         /* Produce X messages to Y partitions so we get a

@@ -202,9 +202,7 @@ calculate_consumer_assigned_partitions(rd_kafka_t *rk) {
         int32_t total_assigned_partitions = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-                        total_assigned_partitions++;
-                }
+                total_assigned_partitions += rkb->rkb_toppar_cnt;
                 total_assigned_partitions -=
                     rkb->rkb_c_historic.assigned_partitions;
         }
@@ -216,15 +214,9 @@ calculate_consumer_assigned_partitions(rd_kafka_t *rk) {
 static void reset_historical_metrics(rd_kafka_t *rk) {
         rd_kafka_broker_t *rkb;
         rd_kafka_toppar_t *rktp;
-        int32_t total_assigned_partitions = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                total_assigned_partitions = 0;
-                TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-                        total_assigned_partitions++;
-                }
-                rkb->rkb_c_historic.assigned_partitions =
-                    total_assigned_partitions;
+                rkb->rkb_c_historic.assigned_partitions = rkb->rkb_toppar_cnt;
                 rkb->rkb_c_historic.connects    = rkb->rkb_c.connects.val;
                 rkb->rkb_c_historic.rkb_avg_rtt = rkb->rkb_avg_rtt;
                 rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);

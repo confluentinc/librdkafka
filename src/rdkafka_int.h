@@ -676,6 +676,7 @@ struct rd_kafka_s {
                 rd_bool_t delta_temporality;
                 char **requested_metrics;
                 size_t requested_metrics_cnt;
+                /* TODO: Use rd_list_t to store the metrics */
                 int *matched_metrics;
                 size_t matched_metrics_cnt;
         } rk_telemetry;

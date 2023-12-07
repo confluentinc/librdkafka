@@ -31,14 +31,14 @@
 
 #include "rdtypes.h"
 
-#define TELEMETRY_METRIC_PREFIX "org.apache.kafka."
+#define RD_KAFKA_TELEMETRY_METRIC_PREFIX "org.apache.kafka."
 
-#define TELEMETRY_METRIC_INFO(rk)                                              \
+#define RD_KAFKA_TELEMETRY_METRIC_INFO(rk)                                     \
         (rk->rk_type == RD_KAFKA_PRODUCER                                      \
              ? RD_KAFKA_TELEMETRY_PRODUCER_METRICS_INFO                        \
              : RD_KAFKA_TELEMETRY_CONSUMER_METRICS_INFO)
 
-#define TELEMETRY_METRIC_CNT(rk)                                               \
+#define RD_KAFKA_TELEMETRY_METRIC_CNT(rk)                                      \
         (rk->rk_type == RD_KAFKA_PRODUCER                                      \
              ? RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT                         \
              : RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT)

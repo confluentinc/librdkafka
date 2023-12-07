@@ -135,9 +135,9 @@ static void update_matched_metrics(rd_kafka_t *rk, size_t j) {
 }
 
 static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
-        size_t metrics_cnt = TELEMETRY_METRIC_CNT(rk), i;
+        size_t metrics_cnt = RD_KAFKA_TELEMETRY_METRIC_CNT(rk), i;
         const rd_kafka_telemetry_metric_info_t *info =
-            TELEMETRY_METRIC_INFO(rk);
+            RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
 
         rd_kafka_telemetry_metric_type_t type =
             rk->rk_telemetry.delta_temporality
@@ -165,7 +165,7 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 for (j = 0; j < metrics_cnt; j++) {
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
-                        bool name_matches =
+                        rd_bool_t name_matches =
                             strncmp(info[j].name,
                                     rk->rk_telemetry.requested_metrics[i],
                                     name_len) == 0;
@@ -214,6 +214,7 @@ static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err) {
         rd_ts_t next_scheduled;
+        double jitter_multiplier = rd_jitter(80, 120) / 100.0;
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_dbg(rk, TELEMETRY, "GETERR",
@@ -230,8 +231,7 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                 rd_kafka_match_requested_metrics(rk);
 
                 /* Some metrics are requested. Start the timer accordingly */
-                double jitter_multiplier = rd_jitter(80, 120) / 100.0;
-                next_scheduled           = (int)(jitter_multiplier * 1000 *
+                next_scheduled = (int)(jitter_multiplier * 1000 *
                                        rk->rk_telemetry.push_interval_ms);
 
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
@@ -447,17 +447,14 @@ void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_c_historic.connects = 0;
                 rd_avg_init(&rkb->rkb_c_historic.rkb_avg_rtt, RD_AVG_GAUGE, 0,
-                            500 * 1000, 2,
-                            rk->rk_conf.enable_metrics_push ? 1 : 0);
+                            500 * 1000, 2, 1);
                 rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
                 rd_avg_init(&rkb->rkb_c_historic.rkb_avg_outbuf_latency,
-                            RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                            rk->rk_conf.enable_metrics_push ? 1 : 0);
+                            RD_AVG_GAUGE, 0, 500 * 1000, 2, 1);
                 rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
                                 1);
                 rd_avg_init(&rkb->rkb_c_historic.rkb_avg_throttle, RD_AVG_GAUGE,
-                            0, 500 * 1000, 2,
-                            rk->rk_conf.enable_metrics_push ? 1 : 0);
+                            0, 500 * 1000, 2, 1);
                 rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
         }
 

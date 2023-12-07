@@ -428,7 +428,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                             : CONSUMER_METRIC_VALUE_CALCULATORS
                                   [metrics_to_encode[i]];
                 const rd_kafka_telemetry_metric_info_t *info =
-                    TELEMETRY_METRIC_INFO(rk);
+                    RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
 
                 if (info[metrics_to_encode[i]].is_int) {
                         data_points[i]->which_value =
@@ -444,7 +444,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 }
 
                 data_points[i]->time_unix_nano = now_ns;
-                /* TODO: For delta temporality do we needs to be rese when push
+                /* For delta temporality do we need to be reset when push
                  * fails? */
                 data_points[i]->start_time_unix_nano = now_ns;
 
@@ -496,11 +496,11 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 metrics[i]->description.arg =
                     (void *)info[metrics_to_encode[i]].description;
 
-                metric_name_len = strlen(TELEMETRY_METRIC_PREFIX) +
+                metric_name_len = strlen(RD_KAFKA_TELEMETRY_METRIC_PREFIX) +
                                   strlen(info[metrics_to_encode[i]].name) + 1;
                 metric_names[i] = rd_calloc(1, metric_name_len);
                 rd_snprintf(metric_names[i], metric_name_len, "%s%s",
-                            TELEMETRY_METRIC_PREFIX,
+                            RD_KAFKA_TELEMETRY_METRIC_PREFIX,
                             info[metrics_to_encode[i]].name);
 
 

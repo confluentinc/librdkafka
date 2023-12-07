@@ -319,7 +319,8 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 bool unit_test_telemetry_gauge(void) {
         return unit_test_telemetry(
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE,
-            "org.apache.kafka.producer.connection.creation.rate",
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "producer.connection.creation.rate",
             "The rate of connections established per second.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE);
 }
@@ -327,7 +328,8 @@ bool unit_test_telemetry_gauge(void) {
 bool unit_test_telemetry_sum(void) {
         return unit_test_telemetry(
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL,
-            "org.apache.kafka.producer.connection.creation.total",
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "producer.connection.creation.total",
             "The total number of connections established.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM);
 }

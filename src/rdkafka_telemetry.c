@@ -164,7 +164,9 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 for (j = 0; j < metrics_cnt; j++) {
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
-                        size_t full_metric_name_len = strlen(TELEMETRY_METRIC_PREFIX) + strlen(info[j].name) + 1;
+                        size_t full_metric_name_len =
+                            strlen(TELEMETRY_METRIC_PREFIX) +
+                            strlen(info[j].name) + 1;
                         char full_metric_name[full_metric_name_len];
                         rd_snprintf(full_metric_name, sizeof(full_metric_name),
                                     "%s%s", TELEMETRY_METRIC_PREFIX,

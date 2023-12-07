@@ -113,12 +113,12 @@
 #define RD_KAFKAP_DescribeTransactions         65
 #define RD_KAFKAP_ListTransactions             66
 #define RD_KAFKAP_AllocateProducerIds          67
-#define RD_KAFKAP_ConsumerGroupHeartbeat     68
-#define RD_KAFKAP_ConsumerGroupDescribe                69
-#define RD_KAFKAP_ControllerRegistration                70
-#define RD_KAFKAP_GetTelemetrySubscriptions 71
-#define RD_KAFKAP_PushTelemetry             72
-#define RD_KAFKAP_AssignReplicasToDirs       73
+#define RD_KAFKAP_ConsumerGroupHeartbeat       68
+#define RD_KAFKAP_ConsumerGroupDescribe        69
+#define RD_KAFKAP_ControllerRegistration       70
+#define RD_KAFKAP_GetTelemetrySubscriptions    71
+#define RD_KAFKAP_PushTelemetry                72
+#define RD_KAFKAP_AssignReplicasToDirs         73
 
 #define RD_KAFKAP__NUM 74
 

@@ -49,15 +49,13 @@ typedef struct {
 
 static rd_kafka_telemetry_metric_value_t calculate_connection_creation_total(
     rd_kafka_t *rk,
-    rd_kafka_broker_t *broker,
-    rd_kafka_telemetry_temporality_type_t temporality) {
+    rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
 
         total.intValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (temporality ==
-                    RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_CUMULATIVE)
+                if (!rk->rk_telemetry.delta_temporality)
                         total.intValue += rkb->rkb_c.connects.val;
                 else
                         total.intValue += rkb->rkb_c.connects.val -
@@ -69,23 +67,26 @@ static rd_kafka_telemetry_metric_value_t calculate_connection_creation_total(
 
 static rd_kafka_telemetry_metric_value_t calculate_connection_creation_rate(
     rd_kafka_t *rk,
-    rd_kafka_broker_t *broker,
-    rd_kafka_telemetry_temporality_type_t temporality) {
+    rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
+        rd_ts_t ts_last = 0;
 
-        total.intValue = 0;
+        total.doubleValue = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                total.intValue +=
+                ts_last = rkb->rkb_c_historic.ts_last;
+                total.doubleValue +=
                     rkb->rkb_c.connects.val - rkb->rkb_c_historic.connects;
         }
+        int seconds = (rd_clock() * 1000 - ts_last) / 1e9;
+        if (seconds > 0)
+                total.doubleValue /= seconds;
         return total;
 }
 
 static rd_kafka_telemetry_metric_value_t
 calculate_broker_avg_rtt(rd_kafka_t *rk,
-                         rd_kafka_broker_t *broker,
-                         rd_kafka_telemetry_temporality_type_t temporality) {
+                         rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_rtt;
         double avg_value = 0;
 
@@ -109,8 +110,7 @@ calculate_broker_avg_rtt(rd_kafka_t *rk,
 
 static rd_kafka_telemetry_metric_value_t
 calculate_broker_max_rtt(rd_kafka_t *rk,
-                         rd_kafka_broker_t *broker,
-                         rd_kafka_telemetry_temporality_type_t temporality) {
+                         rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t max_rtt;
 
         max_rtt.intValue = broker->rkb_avg_rtt.ra_v.maxv_interval /
@@ -120,8 +120,7 @@ calculate_broker_max_rtt(rd_kafka_t *rk,
 
 static rd_kafka_telemetry_metric_value_t
 calculate_throttle_avg(rd_kafka_t *rk,
-                       rd_kafka_broker_t *broker,
-                       rd_kafka_telemetry_temporality_type_t temporality) {
+                       rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_throttle;
         int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
         rd_kafka_broker_t *rkb;
@@ -150,8 +149,7 @@ calculate_throttle_avg(rd_kafka_t *rk,
 
 static rd_kafka_telemetry_metric_value_t
 calculate_throttle_max(rd_kafka_t *rk,
-                       rd_kafka_broker_t *broker,
-                       rd_kafka_telemetry_temporality_type_t temporality) {
+                       rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t max_throttle;
         rd_kafka_broker_t *rkb;
 
@@ -167,8 +165,7 @@ calculate_throttle_max(rd_kafka_t *rk,
 
 static rd_kafka_telemetry_metric_value_t
 calculate_queue_time_avg(rd_kafka_t *rk,
-                         rd_kafka_broker_t *broker,
-                         rd_kafka_telemetry_temporality_type_t temporality) {
+                         rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_queue_time;
         int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
         rd_kafka_broker_t *rkb;
@@ -197,8 +194,7 @@ calculate_queue_time_avg(rd_kafka_t *rk,
 
 static rd_kafka_telemetry_metric_value_t
 calculate_queue_time_max(rd_kafka_t *rk,
-                         rd_kafka_broker_t *broker,
-                         rd_kafka_telemetry_temporality_type_t temporality) {
+                         rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t max_queue_time;
         rd_kafka_broker_t *rkb;
 
@@ -214,8 +210,7 @@ calculate_queue_time_max(rd_kafka_t *rk,
 
 static rd_kafka_telemetry_metric_value_t calculate_consumer_assigned_partitions(
     rd_kafka_t *rk,
-    rd_kafka_broker_t *broker,
-    rd_kafka_telemetry_temporality_type_t temporality) {
+    rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t assigned_partitions;
         rd_kafka_broker_t *rkb;
         rd_kafka_toppar_t *rktp;
@@ -257,9 +252,7 @@ static const rd_kafka_telemetry_metric_value_calculator_t
     PRODUCER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT] = {
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE] =
             &calculate_connection_creation_rate,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL_DELTA] =
-            &calculate_connection_creation_total,
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL_CUMULATIVE] =
+        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL] =
             &calculate_connection_creation_total,
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG] =
             &calculate_broker_avg_rtt,
@@ -279,9 +272,7 @@ static const rd_kafka_telemetry_metric_value_calculator_t
     CONSUMER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT] = {
         [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE] =
             &calculate_connection_creation_rate,
-        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL_DELTA] =
-            &calculate_connection_creation_total,
-        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL_CUMULATIVE] =
+        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL] =
             &calculate_connection_creation_total,
         [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG] =
             &calculate_broker_avg_rtt,
@@ -564,12 +555,12 @@ static void serializeMetricData(
                 (*data_point)->which_value =
                     opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
                 (*data_point)->value.as_int =
-                    metricValueCalculator(rk, rkb, info->temporality).intValue;
+                    metricValueCalculator(rk, rkb).intValue;
         } else {
                 (*data_point)->which_value =
                     opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag;
                 (*data_point)->value.as_double =
-                    metricValueCalculator(rk, rkb, info->temporality)
+                    metricValueCalculator(rk, rkb)
                         .doubleValue;
         }
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -607,8 +598,7 @@ static void serializeMetricData(
                     &encode_number_data_point;
                 (*metric)->data.sum.data_points.arg = *data_point;
                 (*metric)->data.sum.aggregation_temporality =
-                    info->temporality ==
-                            RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_DELTA
+                    rk->rk_telemetry.delta_temporality
                         ? opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA
                         : opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
                 (*metric)->data.sum.is_monotonic = true;
@@ -660,13 +650,6 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
             rk->rk_telemetry.matched_metrics_cnt;
         size_t metric_name_len, total_metrics_count = metrics_to_encode_count;
         size_t i, metric_idx                        = 0;
-
-        if (metrics_to_encode_count == 0) {
-                rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
-                             "No metrics to serializeMetricData.");
-                *size = 0;
-                return NULL;
-        }
 
         for (i = 0; i < metrics_to_encode_count; i++) {
                 if (is_per_broker_metric(rk, (int)i)) {
@@ -812,18 +795,21 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 metric_idx++;
         }
 
-        metrics_repeated.metrics = metrics;
-        metrics_repeated.count   = total_metrics_count;
+        /* Send empty metrics blob if no metrics are matched */
+        if (total_metrics_count > 0) {
+                metrics_repeated.metrics = metrics;
+                metrics_repeated.count   = total_metrics_count;
 
-        scopeMetrics.metrics.funcs.encode = &encode_metric;
-        scopeMetrics.metrics.arg          = &metrics_repeated;
+                scopeMetrics.metrics.funcs.encode = &encode_metric;
+                scopeMetrics.metrics.arg          = &metrics_repeated;
 
 
-        resource_metrics.scope_metrics.funcs.encode = &encode_scope_metrics;
-        resource_metrics.scope_metrics.arg          = &scopeMetrics;
+                resource_metrics.scope_metrics.funcs.encode = &encode_scope_metrics;
+                resource_metrics.scope_metrics.arg          = &scopeMetrics;
 
-        metrics_data.resource_metrics.funcs.encode = &encode_resource_metrics;
-        metrics_data.resource_metrics.arg          = &resource_metrics;
+                metrics_data.resource_metrics.funcs.encode = &encode_resource_metrics;
+                metrics_data.resource_metrics.arg          = &resource_metrics;
+        }
 
         status = pb_get_encoded_size(
             &message_size, opentelemetry_proto_metrics_v1_MetricsData_fields,

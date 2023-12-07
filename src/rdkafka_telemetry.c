@@ -145,12 +145,6 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
         const rd_kafka_telemetry_metric_info_t *info =
             RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
 
-        rd_kafka_telemetry_temporality_type_t temporality =
-            rk->rk_telemetry.delta_temporality
-                ? RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_DELTA
-                : RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_CUMULATIVE;
-
-
         if (rk->rk_telemetry.requested_metrics_cnt == 1 &&
             !strcmp(rk->rk_telemetry.requested_metrics[0],
                     RD_KAFKA_TELEMETRY_METRICS_ALL_METRICS_SUBSCRIPTION)) {
@@ -158,13 +152,8 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
                              "All metrics subscribed");
 
-                for (j = 0; j < metrics_cnt; j++) {
-                        /* Gauges are always sent. */
-                        if (info[j].temporality ==
-                                RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE ||
-                            info[j].temporality == temporality)
-                                update_matched_metrics(rk, j);
-                }
+                for (j = 0; j < metrics_cnt; j++)
+                        update_matched_metrics(rk, j);
                 return;
         }
 
@@ -175,8 +164,8 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 for (j = 0; j < metrics_cnt; j++) {
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
-                        char full_metric_name[strlen(TELEMETRY_METRIC_PREFIX) +
-                                              strlen(info[j].name) + 1];
+                        size_t full_metric_name_len = strlen(TELEMETRY_METRIC_PREFIX) + strlen(info[j].name) + 1;
+                        char full_metric_name[full_metric_name_len];
                         rd_snprintf(full_metric_name, sizeof(full_metric_name),
                                     "%s%s", TELEMETRY_METRIC_PREFIX,
                                     info[j].name);
@@ -185,11 +174,7 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                                     rk->rk_telemetry.requested_metrics[i],
                                     name_len) == 0;
 
-                        /* Gauges are always sent. */
-                        if (name_matches &&
-                            (info[j].temporality ==
-                                 RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE ||
-                             info[j].temporality == temporality))
+                        if (name_matches)
                                 update_matched_metrics(rk, j);
                 }
         }

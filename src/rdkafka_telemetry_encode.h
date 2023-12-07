@@ -51,15 +51,8 @@ typedef enum {
 } rd_kafka_telemetry_metric_type_t;
 
 typedef enum {
-        RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE,
-        RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_DELTA,
-        RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_CUMULATIVE,
-} rd_kafka_telemetry_temporality_type_t;
-
-typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE,
-        RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL_DELTA,
-        RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL_CUMULATIVE,
+        RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL,
         RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG,
         RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX,
         RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_AVG,
@@ -71,8 +64,7 @@ typedef enum {
 
 typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE,
-        RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL_DELTA,
-        RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL_CUMULATIVE,
+        RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL,
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG,
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX,
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS,
@@ -87,8 +79,7 @@ typedef union {
 typedef rd_kafka_telemetry_metric_value_t (
     *rd_kafka_telemetry_metric_value_calculator_t)(
     rd_kafka_t *,
-    rd_kafka_broker_t *,
-    rd_kafka_telemetry_temporality_type_t);
+    rd_kafka_broker_t *);
 
 typedef struct {
         const char *name;
@@ -101,7 +92,6 @@ typedef struct {
         const char *unit;
         const rd_bool_t is_int;
         rd_kafka_telemetry_metric_type_t type;
-        rd_kafka_telemetry_temporality_type_t temporality;
         rd_kafka_telemetry_metric_value_calculator_t calculate_value;
 } rd_kafka_telemetry_metric_info_t;
 
@@ -116,68 +106,52 @@ static const rd_kafka_telemetry_metric_info_t RD_KAFKA_TELEMETRY_PRODUCER_METRIC
             {.name        = "producer.connection.creation.rate",
              .description = "The rate of connections established per second.",
              .unit        = "1",
-             .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL_DELTA] =
+             .is_int      = rd_false,
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL] =
             {.name        = "producer.connection.creation.total",
              .description = "The total number of connections established.",
              .unit        = "1",
              .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_DELTA},
-
-        [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL_CUMULATIVE] =
-            {.name        = "producer.connection.creation.total",
-             .description = "The total number of connections established.",
-             .unit        = "1",
-             .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_CUMULATIVE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG] =
             {.name        = "producer.node.request.latency.avg",
              .description = "The average request latency in ms for a node.",
              .unit        = "ms",
              .is_int      = rd_false,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX] =
             {.name        = "producer.node.request.latency.max",
              .description = "The maximum request latency in ms for a node.",
              .unit        = "ms",
              .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_AVG] =
             {.name        = "producer.produce.throttle.time.avg",
              .description = "The average throttle time in ms for a node.",
              .unit        = "ms",
              .is_int      = rd_false,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_MAX] =
             {.name        = "producer.produce.throttle.time.max",
              .description = "The maximum throttle time in ms for a node.",
              .unit        = "ms",
              .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_AVG] =
             {.name        = "producer.record.queue.time.avg",
              .description = "The average time in ms a record spends in the "
                             "producer queue.",
              .unit        = "ms",
              .is_int      = rd_false,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
         [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_MAX] =
             {.name        = "producer.record.queue.time.max",
              .description = "The maximum time in ms a record spends in the "
                             "producer queue.",
              .unit        = "ms",
              .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };
 
 static const rd_kafka_telemetry_metric_info_t RD_KAFKA_TELEMETRY_CONSUMER_METRICS_INFO
@@ -186,45 +160,33 @@ static const rd_kafka_telemetry_metric_info_t RD_KAFKA_TELEMETRY_CONSUMER_METRIC
             {.name        = "consumer.connection.creation.rate",
              .description = "The rate of connections established per second.",
              .unit        = "1",
-             .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
-        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL_DELTA] =
+             .is_int      = rd_false,
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL] =
             {.name        = "consumer.connection.creation.total",
              .description = "The total number of connections established.",
              .unit        = "1",
              .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_DELTA},
-        [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL_CUMULATIVE] =
-            {.name        = "consumer.connection.creation.total",
-             .description = "The total number of connections established.",
-             .unit        = "1",
-             .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_CUMULATIVE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
         [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG] =
             {.name        = "consumer.node.request.latency.avg",
              .description = "The average request latency in ms for a node.",
              .unit        = "ms",
              .is_int      = rd_false,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
         [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX] =
             {.name        = "consumer.node.request.latency.max",
              .description = "The maximum request latency in ms for a node.",
              .unit        = "ms",
              .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
         [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS] =
             {.name        = "consumer.coordinator.assigned.partitions",
              .description = "The number of partitions currently assigned "
                             "to this consumer.",
              .unit        = "1",
              .is_int      = rd_true,
-             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-             .temporality = RD_KAFKA_TELEMETRY_TEMPORALITY_TYPE_NOT_APPLICABLE},
+             .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };
 
 void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size);

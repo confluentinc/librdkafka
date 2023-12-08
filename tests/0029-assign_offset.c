@@ -112,8 +112,8 @@ int main_0029_assign_offset(int argc, char **argv) {
         test_msgver_t mv;
 
         if (!test_consumer_group_protocol_generic()) {
-                /* FIXME: check if manually assigning and then subscribing
-                 * is supported with the new protocol. */
+                /* FIXME: this should be fixed when upgrading from generic to
+                 * new consumer group will be possible. See KAFKA-15989 */
                 return 0;
         }
 

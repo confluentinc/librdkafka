@@ -489,6 +489,7 @@ function mkl_dep_install_source {
     # Build and install
     mkl_dbg "Building $name from source in $sdir (func $func)"
 
+    mkl_dbg "MILIND::Created dest dir $ddir for $name and searching there."
     $func $name "$ddir" >$ilog 2>&1
     retcode=$?
 
@@ -595,6 +596,8 @@ function mkl_dep_install {
     fi
 
     local ddir=$(mkl_dep_destdir $name)
+
+    mkl_dbg "MILIND::Checking $ddir/usr for the static libraries."
 
     # Find the static library(s), if any.
     if ! mkl_resolve_static_libs "$name" "${ddir}/usr"; then

@@ -53,9 +53,15 @@ function install_source {
             "$checksum" || return 1
     fi
 
-    CFLAGS=-fPIC ./configure --static --prefix=/usr
-    make -j
-    make test
-    make DESTDIR="${destdir}" install
+    savedLibdir="$libdir"
+    export libdir="/usr/lib"
+    echo "Stariting ZLIB" >> /tmp/log
+    CFLAGS=-fPIC ./configure --static --prefix=/usr >> /tmp/log
+    make -j >> /tmp/log
+    make test >> /tmp/log
+    make DESTDIR="${destdir}" install >> /tmp/log
+    export libdir="$savedLibdir"
+    echo "Running find" >> /tmp/log
+    find . -name "libz.a" >> /tmp/log
     return $?
 }

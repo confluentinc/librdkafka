@@ -53,6 +53,6 @@ function install_source {
             $checksum || return 1
     fi
 
-    time make -j DESTDIR="${destdir}" prefix=/usr install
+    time libdir="/usr/lib"  make -j DESTDIR="${destdir}" prefix=/usr install
     return $?
 }

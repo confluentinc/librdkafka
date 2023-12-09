@@ -13,7 +13,8 @@ endif
 NODE ?= node
 CPPLINT ?= cpplint.py
 BUILDTYPE ?= Release
-TESTS = "test/**/*.js"
+TESTS = $(ls test/producer/*.js test/*.js test/tools/*.js)
+PROMISIFIED_TESTS = "test/promisified"
 E2E_TESTS = $(wildcard e2e/*.spec.js)
 TEST_REPORTER =
 TEST_OUTPUT =
@@ -24,7 +25,7 @@ CONFIG_OUTPUTS = \
 
 CPPLINT_FILES = $(wildcard src/*.cc src/*.h)
 CPPLINT_FILTER = -legal/copyright
-JSLINT_FILES = lib/*.js test/*.js e2e/*.js
+JSLINT_FILES = lib/*.js test/*.js e2e/*.js lib/kafkajs/*.js
 
 PACKAGE = $(shell node -pe 'require("./package.json").name.split("/")[1]')
 VERSION = $(shell node -pe 'require("./package.json").version')
@@ -58,6 +59,7 @@ $(CONFIG_OUTPUTS): node_modules/.dirstamp binding.gyp
 
 test: node_modules/.dirstamp
 	@./node_modules/.bin/mocha --ui exports $(TEST_REPORTER) $(TESTS) $(TEST_OUTPUT)
+	@./node_modules/.bin/jest --ci --runInBand $(PROMISIFIED_TESTS)
 
 check: node_modules/.dirstamp
 	@$(NODE) util/test-compile.js

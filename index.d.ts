@@ -203,7 +203,7 @@ export abstract class Client<Events extends string> extends EventEmitter {
 }
 
 export class KafkaConsumer extends Client<KafkaConsumerEvents> {
-    constructor(conf: ConsumerGlobalConfig, topicConf: ConsumerTopicConfig);
+    constructor(conf: ConsumerGlobalConfig | ConsumerTopicConfig, topicConf?: ConsumerTopicConfig);
 
     assign(assignments: Assignment[]): this;
 
@@ -256,7 +256,7 @@ export class KafkaConsumer extends Client<KafkaConsumerEvents> {
 }
 
 export class Producer extends Client<KafkaProducerEvents> {
-    constructor(conf: ProducerGlobalConfig, topicConf?: ProducerTopicConfig);
+    constructor(conf: ProducerGlobalConfig | ProducerTopicConfig, topicConf?: ProducerTopicConfig);
 
     flush(timeout?: NumberNullUndefined, cb?: (err: LibrdKafkaError) => void): this;
 

@@ -35,7 +35,9 @@ Producer::Producer(Conf* gconfig, Conf* tconfig):
   m_partitioner_cb() {
     std::string errstr;
 
-    m_gconfig->set("default_topic_conf", m_tconfig, errstr);
+    if (m_tconfig)
+      m_gconfig->set("default_topic_conf", m_tconfig, errstr);
+
     m_gconfig->set("dr_cb", &m_dr_cb, errstr);
   }
 
@@ -110,10 +112,6 @@ void Producer::New(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     return Nan::ThrowError("Global configuration data must be specified");
   }
 
-  if (!info[1]->IsObject()) {
-    return Nan::ThrowError("Topic configuration must be specified");
-  }
-
   std::string errstr;
 
   Conf* gconfig =
@@ -124,14 +122,17 @@ void Producer::New(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     return Nan::ThrowError(errstr.c_str());
   }
 
-  Conf* tconfig =
-    Conf::create(RdKafka::Conf::CONF_TOPIC,
-      (info[1]->ToObject(Nan::GetCurrentContext())).ToLocalChecked(), errstr);
+  // If tconfig isn't set, then just let us pick properties from gconf.
+  Conf* tconfig = nullptr;
+  if (info[1]->IsObject()) {
+    tconfig = Conf::create(RdKafka::Conf::CONF_TOPIC,
+                 (info[1]->ToObject(Nan::GetCurrentContext())).ToLocalChecked(), errstr);
 
-  if (!tconfig) {
-    // No longer need this since we aren't instantiating anything
-    delete gconfig;
-    return Nan::ThrowError(errstr.c_str());
+    if (!tconfig) {
+      // No longer need this since we aren't instantiating anything
+      delete gconfig;
+      return Nan::ThrowError(errstr.c_str());
+    }
   }
 
   Producer* producer = new Producer(gconfig, tconfig);

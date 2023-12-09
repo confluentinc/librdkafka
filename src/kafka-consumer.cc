@@ -31,7 +31,8 @@ KafkaConsumer::KafkaConsumer(Conf* gconfig, Conf* tconfig):
   Connection(gconfig, tconfig) {
     std::string errstr;
 
-    m_gconfig->set("default_topic_conf", m_tconfig, errstr);
+    if (m_tconfig)
+      m_gconfig->set("default_topic_conf", m_tconfig, errstr);
 
     m_consume_loop = nullptr;
   }
@@ -553,10 +554,6 @@ void KafkaConsumer::New(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     return Nan::ThrowError("Global configuration data must be specified");
   }
 
-  if (!info[1]->IsObject()) {
-    return Nan::ThrowError("Topic configuration must be specified");
-  }
-
   std::string errstr;
 
   Conf* gconfig =
@@ -567,13 +564,16 @@ void KafkaConsumer::New(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     return Nan::ThrowError(errstr.c_str());
   }
 
-  Conf* tconfig =
-    Conf::create(RdKafka::Conf::CONF_TOPIC,
+  // If tconfig isn't set, then just let us pick properties from gconf.
+  Conf* tconfig = nullptr;
+  if (info[1]->IsObject()) {
+    tconfig = Conf::create(RdKafka::Conf::CONF_TOPIC,
       (info[1]->ToObject(Nan::GetCurrentContext())).ToLocalChecked(), errstr);
 
-  if (!tconfig) {
-    delete gconfig;
-    return Nan::ThrowError(errstr.c_str());
+    if (!tconfig) {
+      delete gconfig;
+      return Nan::ThrowError(errstr.c_str());
+    }
   }
 
   KafkaConsumer* consumer = new KafkaConsumer(gconfig, tconfig);

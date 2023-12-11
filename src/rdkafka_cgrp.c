@@ -2759,10 +2759,11 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         if (are_assignments_present == 1) {
-                rd_kafka_topic_partition_list_t *assigned_topic_partitions;
+                rd_kafka_topic_partition_list_t *assigned_topic_partitions = NULL;
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
                     RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                     RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                // TODO: Fix null case
                 assigned_topic_partitions = rd_kafka_buf_read_topic_partitions(
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
@@ -5499,6 +5500,7 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                 rkcg_group_remote_assignor = rkcg->rkcg_group_remote_assignor;
         }
 
+        printf("Full Request %d, Sending Current Assignment %d\n", full_request, send_current_assignment);
         if (full_request || send_current_assignment) {
                 rkcg_group_assignment = rkcg->rkcg_group_assignment;
         }

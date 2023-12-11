@@ -291,6 +291,9 @@
   * `commitOffsets` does not (YET) support sending metadata for topic partitions being committed.
   * `paused()` is not (YET) supported.
   * Custom partition assignors are not supported.
+  * Changes to `seek`:
+    * The restriction to call seek only after `run` is removed.
+    * Rather than the `autoCommit` property of `run` deciding if the offset is committed, the librdkafka property `enable.auto.commit` of the consumer config is used.
 
 ### Admin Client
 

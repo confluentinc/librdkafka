@@ -26,10 +26,12 @@ function secureRandom(length = 10) {
 }
 
 async function createTopic(args) {
-    const { topic } = args;
+    const { topic, partitions } = args;
     const admin = createAdmin({});
     await admin.connect();
-    await admin.createTopics({ topics: [{topic}] });
+    await admin.createTopics({ topics: [
+        { topic, numPartitions: partitions ?? 1 }
+    ] });
     await admin.disconnect();
 }
 
@@ -43,7 +45,7 @@ async function waitForMessages(messagesConsumed, { number } = {number: 0}) {
         const interval = setInterval(() => {
             if (messagesConsumed.length >= number) {
                 clearInterval(interval);
-                resolve();
+                resolve(messagesConsumed);
             }
         }, 200);
     });

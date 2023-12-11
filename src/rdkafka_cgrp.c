@@ -361,6 +361,8 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
         if (rkcg->rkcg_group_instance_id)
                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
+        if (rkcg->rkcg_group_remote_assignor)
+                rd_kafkap_str_destroy(rkcg->rkcg_group_remote_assignor);
 
         rd_kafka_q_destroy_owner(rkcg->rkcg_q);
         rd_kafka_q_destroy_owner(rkcg->rkcg_ops);
@@ -398,18 +400,20 @@ rd_kafka_cgrp_update_session_timeout(rd_kafka_cgrp_t *rkcg, rd_bool_t reset) {
 
 
 rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
+                                   rd_kafka_group_protocol_t group_protocol,
                                    const rd_kafkap_str_t *group_id,
                                    const rd_kafkap_str_t *client_id) {
         rd_kafka_cgrp_t *rkcg;
 
         rkcg = rd_calloc(1, sizeof(*rkcg));
 
-        rkcg->rkcg_rk            = rk;
-        rkcg->rkcg_group_id      = group_id;
-        rkcg->rkcg_client_id     = client_id;
-        rkcg->rkcg_coord_id      = -1;
-        rkcg->rkcg_generation_id = -1;
-        rkcg->rkcg_wait_resp     = -1;
+        rkcg->rkcg_rk             = rk;
+        rkcg->rkcg_group_protocol = group_protocol;
+        rkcg->rkcg_group_id       = group_id;
+        rkcg->rkcg_client_id      = client_id;
+        rkcg->rkcg_coord_id       = -1;
+        rkcg->rkcg_generation_id  = -1;
+        rkcg->rkcg_wait_resp      = -1;
 
         rkcg->rkcg_ops                      = rd_kafka_q_new(rk);
         rkcg->rkcg_ops->rkq_serve           = rd_kafka_cgrp_op_serve;
@@ -420,6 +424,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
+        rkcg->rkcg_group_remote_assignor =
+            rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
 
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
@@ -1513,8 +1519,8 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-        if (!(assignment =
-                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
+        if (!(assignment = rd_kafka_buf_read_topic_partitions(
+                  rkbuf, rd_false /* don't use topic_id */, 0, fields)))
                 goto err_parse;
         rd_kafka_buf_read_kbytes(rkbuf, &UserData);
 
@@ -1814,8 +1820,8 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         if (Version >= 1 &&
-            !(rkgm->rkgm_owned =
-                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
+            !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
+                  rkbuf, rd_false /* don't use topic_id */, 0, fields)))
                 goto err;
 
         if (Version >= 2) {
@@ -5565,6 +5571,11 @@ rd_kafka_consumer_group_metadata(rd_kafka_t *rk) {
         rd_kafka_op_destroy(rko);
 
         return cgmetadata;
+}
+
+const char *rd_kafka_consumer_group_metadata_member_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->member_id;
 }
 
 void rd_kafka_consumer_group_metadata_destroy(

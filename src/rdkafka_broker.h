@@ -194,8 +194,14 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         } rkb_c;
 
         struct {
-                int32_t connects; /**< Connection attempts,
-                                   *   successful or not. */
+                int32_t connects;                /**< Connection attempts,
+                                                  *   successful or not. */
+                rd_avg_t rkb_avg_rtt;            /* Current RTT period */
+                rd_avg_t rkb_avg_throttle;       /* Current throttle period */
+                rd_avg_t rkb_avg_outbuf_latency; /**< Current latency
+                                                  *   between buf_enq0
+                                                  *   and writing to socket
+                                                  */
         } rkb_c_historic;
 
         int rkb_req_timeouts; /* Current value */

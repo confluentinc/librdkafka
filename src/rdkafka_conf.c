@@ -1453,6 +1453,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .s2i  = {{RD_KAFKA_USE_ALL_DNS_IPS, "use_all_dns_ips"},
              {RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
               "resolve_canonical_bootstrap_servers_only"}}},
+    {_RK_GLOBAL, "enable.metrics.push", _RK_C_BOOL, _RK(enable_metrics_push),
+     "Whether to enable pushing of client metrics to the cluster, if the "
+     "cluster has a client metrics subscription which matches this client",
+     0, 1, 1},
+
 
 
     /*

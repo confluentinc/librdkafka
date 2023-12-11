@@ -34,27 +34,13 @@
 #include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
 
-typedef union {
-        int32_t intValue;
-        double doubleValue;
-} rd_kafka_telemetry_metric_value_t;
-
-typedef rd_kafka_telemetry_metric_value_t (
-    *rd_kafka_telemetry_metric_value_calculator_t)(rd_kafka_t *);
+#define RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR 1000000
 
 typedef struct {
         opentelemetry_proto_metrics_v1_Metric **metrics;
         size_t count;
 } rd_kafka_telemetry_metrics_repeated_t;
 
-typedef struct {
-        const char *name;
-        const char *description;
-        const char *unit;
-        const rd_bool_t is_int;
-        rd_kafka_telemetry_metric_type_t type;
-        rd_kafka_telemetry_metric_value_calculator_t calculate_value;
-} rd_kafka_telemetry_metric_info_t;
 
 static rd_kafka_telemetry_metric_value_t
 calculate_connection_creation_total(rd_kafka_t *rk) {
@@ -78,34 +64,182 @@ calculate_connection_creation_rate(rd_kafka_t *rk) {
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 total.intValue +=
                     rkb->rkb_c.connects.val - rkb->rkb_c_historic.connects;
-                rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
         }
         return total;
 }
 
-static const rd_kafka_telemetry_metric_info_t
-    RD_KAFKA_TELEMETRY_METRICS_INFO[RD_KAFKA_TELEMETRY_METRIC__CNT] = {
-        [RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_TOTAL] =
-            {
-                .name        = "connection.creation.total",
-                .description = "The total number of connections established.",
-                .unit        = "1",
-                .is_int      = true,
-                .type        = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM,
-                .calculate_value = &calculate_connection_creation_total,
-            },
-        [RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_RATE] =
-            {
-                .name = "connection.creation.rate",
-                .description =
-                    "The rate of connections established per second.",
-                .unit            = "1",
-                .is_int          = true,
-                .type            = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE,
-                .calculate_value = &calculate_connection_creation_rate,
-            },
+static rd_kafka_telemetry_metric_value_t
+calculate_broker_avg_rtt(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_value_t avg_rtt;
+        int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
+        rd_kafka_broker_t *rkb;
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                int64_t current_cnt  = rkb->rkb_avg_rtt.ra_v.cnt;
+                int64_t historic_cnt = rkb->rkb_c_historic.rkb_avg_rtt.ra_v.cnt;
+
+                if (current_cnt > historic_cnt) {
+                        int64_t current_sum = rkb->rkb_avg_rtt.ra_v.sum;
+                        int64_t historic_sum =
+                            rkb->rkb_c_historic.rkb_avg_rtt.ra_v.sum;
+                        int64_t cnt_diff = current_cnt - historic_cnt;
+                        int64_t sum_diff = current_sum - historic_sum;
+
+                        sum_value +=
+                            sum_diff /
+                            (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
+                }
+        }
+        avg_rtt.intValue = sum_value / broker_count;
+        return avg_rtt;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_broker_max_rtt(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_value_t max_rtt;
+        rd_kafka_broker_t *rkb;
+
+        max_rtt.intValue = 0;
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                max_rtt.intValue = RD_MAX(max_rtt.intValue,
+                                          rkb->rkb_avg_rtt.ra_v.maxv_interval);
+        }
+        max_rtt.intValue /= RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
+        return max_rtt;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_throttle_avg(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_value_t avg_throttle;
+        int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
+        rd_kafka_broker_t *rkb;
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                int64_t current_cnt = rkb->rkb_avg_throttle.ra_v.cnt;
+                int64_t historic_cnt =
+                    rkb->rkb_c_historic.rkb_avg_throttle.ra_v.cnt;
+
+                if (current_cnt > historic_cnt) {
+                        int64_t current_sum = rkb->rkb_avg_throttle.ra_v.sum;
+                        int64_t historic_sum =
+                            rkb->rkb_c_historic.rkb_avg_throttle.ra_v.sum;
+                        int64_t cnt_diff = current_cnt - historic_cnt;
+                        int64_t sum_diff = current_sum - historic_sum;
+
+                        sum_value +=
+                            sum_diff /
+                            (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
+                }
+        }
+        avg_throttle.intValue = sum_value / broker_count;
+        return avg_throttle;
+}
+
+
+static rd_kafka_telemetry_metric_value_t
+calculate_throttle_max(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_value_t max_throttle;
+        rd_kafka_broker_t *rkb;
+
+        max_throttle.intValue = 0;
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                max_throttle.intValue =
+                    RD_MAX(max_throttle.intValue,
+                           rkb->rkb_avg_throttle.ra_v.maxv_interval);
+        }
+        max_throttle.intValue /= RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
+        return max_throttle;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_queue_time_avg(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_value_t avg_queue_time;
+        int64_t sum_value = 0, broker_count = rk->rk_broker_cnt.val;
+        rd_kafka_broker_t *rkb;
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                int64_t current_cnt = rkb->rkb_avg_outbuf_latency.ra_v.cnt;
+                int64_t historic_cnt =
+                    rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.cnt;
+
+                if (current_cnt > historic_cnt) {
+                        int64_t current_sum =
+                            rkb->rkb_avg_outbuf_latency.ra_v.sum;
+                        int64_t historic_sum =
+                            rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.sum;
+                        int64_t cnt_diff = current_cnt - historic_cnt;
+                        int64_t sum_diff = current_sum - historic_sum;
+
+                        sum_value +=
+                            sum_diff /
+                            (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
+                }
+        }
+        avg_queue_time.intValue = sum_value / broker_count;
+        return avg_queue_time;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_queue_time_max(rd_kafka_t *rk) {
+        rd_kafka_telemetry_metric_value_t max_queue_time;
+        rd_kafka_broker_t *rkb;
+
+        max_queue_time.intValue = 0;
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                max_queue_time.intValue =
+                    RD_MAX(max_queue_time.intValue,
+                           rkb->rkb_avg_outbuf_latency.ra_v.maxv_interval);
+        }
+        max_queue_time.intValue /= RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
+        return max_queue_time;
+}
+
+
+static void reset_historical_metrics(rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb;
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rkb->rkb_c_historic.connects    = rkb->rkb_c.connects.val;
+                rkb->rkb_c_historic.rkb_avg_rtt = rkb->rkb_avg_rtt;
+                rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
+                rkb->rkb_c_historic.rkb_avg_throttle = rkb->rkb_avg_throttle;
+                rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
+                rkb->rkb_c_historic.rkb_avg_outbuf_latency =
+                    rkb->rkb_avg_outbuf_latency;
+                rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
+                                1);
+        }
+}
+
+static const rd_kafka_telemetry_metric_value_calculator_t
+    PRODUCER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT] =
+        {
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE] =
+                &calculate_connection_creation_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL] =
+                &calculate_connection_creation_total,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG] =
+                &calculate_broker_avg_rtt,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX] =
+                &calculate_broker_max_rtt,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_AVG] =
+                &calculate_throttle_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_MAX] =
+                &calculate_throttle_max,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_AVG] =
+                &calculate_queue_time_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_MAX] =
+                &calculate_queue_time_max,
 };
 
+static const rd_kafka_telemetry_metric_value_calculator_t
+    CONSUMER_METRIC_VALUE_CALCULATORS[RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT] =
+        {
+            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE] =
+                &calculate_connection_creation_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL] =
+                &calculate_connection_creation_total,
+};
 
 static bool
 encode_string(pb_ostream_t *stream, const pb_field_t *field, void *const *arg) {
@@ -214,13 +348,18 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         uint8_t *buffer;
         pb_ostream_t stream;
         bool status;
-        const char *metric_type_str = rd_kafka_type2str(rk->rk_type);
         char **metric_names;
-        const rd_kafka_telemetry_metric_name_t *metrics_to_encode =
-            rk->rk_telemetry.matched_metrics;
+        const int *metrics_to_encode = rk->rk_telemetry.matched_metrics;
         const size_t metrics_to_encode_count =
             rk->rk_telemetry.matched_metrics_cnt;
         size_t metric_name_len;
+
+        if (metrics_to_encode_count == 0) {
+                rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
+                             "No metrics to encode.");
+                *size = 0;
+                return NULL;
+        }
 
         rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
                      "Serializing metrics");
@@ -281,27 +420,32 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 data_points[i] = rd_calloc(
                     1, sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
 
-                if (RD_KAFKA_TELEMETRY_METRICS_INFO[metrics_to_encode[i]]
-                        .is_int) {
+                rd_kafka_telemetry_metric_value_calculator_t
+                    metricValueCalculator =
+                        (rk->rk_type == RD_KAFKA_PRODUCER)
+                            ? PRODUCER_METRIC_VALUE_CALCULATORS
+                                  [metrics_to_encode[i]]
+                            : CONSUMER_METRIC_VALUE_CALCULATORS
+                                  [metrics_to_encode[i]];
+                const rd_kafka_telemetry_metric_info_t *info =
+                    RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
+
+                if (info[metrics_to_encode[i]].is_int) {
                         data_points[i]->which_value =
                             opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
                         data_points[i]->value.as_int =
-                            RD_KAFKA_TELEMETRY_METRICS_INFO
-                                [metrics_to_encode[i]]
-                                    .calculate_value(rk)
-                                    .intValue;
+                            metricValueCalculator(rk).intValue;
 
                 } else {
                         data_points[i]->which_value =
                             opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag;
                         data_points[i]->value.as_double =
-                            RD_KAFKA_TELEMETRY_METRICS_INFO
-                                [metrics_to_encode[i]]
-                                    .calculate_value(rk)
-                                    .doubleValue;
+                            metricValueCalculator(rk).doubleValue;
                 }
 
-                data_points[i]->time_unix_nano       = now_ns;
+                data_points[i]->time_unix_nano = now_ns;
+                /* For delta temporality do we need to be reset when push
+                 * fails? */
                 data_points[i]->start_time_unix_nano = now_ns;
 
                 //    TODO: Add data point attributes as needed
@@ -320,8 +464,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 //    data_point.attributes.arg = &attribute;
 
 
-                switch (RD_KAFKA_TELEMETRY_METRICS_INFO[metrics_to_encode[i]]
-                            .type) {
+                switch (info[metrics_to_encode[i]].type) {
 
                 case RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM: {
                         metrics[i]->which_data =
@@ -329,6 +472,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                         metrics[i]->data.sum.data_points.funcs.encode =
                             &encode_number_data_point;
                         metrics[i]->data.sum.data_points.arg = data_points[i];
+                        /* TODO: Do we need sum metrics with Delta temporality?
+                         */
                         metrics[i]->data.sum.aggregation_temporality =
                             opentelemetry_proto_metrics_v1_AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE;
                         metrics[i]->data.sum.is_monotonic = true;
@@ -349,29 +494,21 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
 
                 metrics[i]->description.funcs.encode = &encode_string;
                 metrics[i]->description.arg =
-                    (void *)
-                        RD_KAFKA_TELEMETRY_METRICS_INFO[metrics_to_encode[i]]
-                            .description;
+                    (void *)info[metrics_to_encode[i]].description;
 
-                metric_name_len =
-                    strlen(metric_type_str) +
-                    strlen(RD_KAFKA_TELEMETRY_METRICS_INFO[metrics_to_encode[i]]
-                               .name) +
-                    2;
+                metric_name_len = strlen(RD_KAFKA_TELEMETRY_METRIC_PREFIX) +
+                                  strlen(info[metrics_to_encode[i]].name) + 1;
                 metric_names[i] = rd_calloc(1, metric_name_len);
-                rd_snprintf(
-                    metric_names[i], metric_name_len, "%s.%s", metric_type_str,
-                    RD_KAFKA_TELEMETRY_METRICS_INFO[metrics_to_encode[i]].name);
+                rd_snprintf(metric_names[i], metric_name_len, "%s%s",
+                            RD_KAFKA_TELEMETRY_METRIC_PREFIX,
+                            info[metrics_to_encode[i]].name);
 
 
                 metrics[i]->name.funcs.encode = &encode_string;
                 metrics[i]->name.arg          = metric_names[i];
 
                 metrics[i]->unit.funcs.encode = &encode_string;
-                metrics[i]->unit.arg =
-                    (void *)
-                        RD_KAFKA_TELEMETRY_METRICS_INFO[metrics_to_encode[i]]
-                            .unit;
+                metrics[i]->unit.arg = (void *)info[metrics_to_encode[i]].unit;
         }
 
         metrics_repeated.metrics = metrics;
@@ -427,6 +564,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                      "Push Telemetry metrics encoded, size: %ld",
                      stream.bytes_written);
         *size = message_size;
+
+        reset_historical_metrics(rk);
 
         return (void *)buffer;
 }

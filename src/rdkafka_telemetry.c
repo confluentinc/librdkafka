@@ -355,13 +355,16 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                         return;
                 }
 
-                /* Unknown subscription id */
+                rd_ts_t next_scheduled =
+                    err == RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID
+                        ? 0
+                        : rk->rk_telemetry.push_interval_ms * 1000;
+
                 rk->rk_telemetry.state =
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
-                    rk->rk_telemetry.push_interval_ms * 1000,
-                    rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+                    next_scheduled, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         }
 }
 

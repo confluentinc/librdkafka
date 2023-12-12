@@ -68,8 +68,8 @@ describe('Consumer', () => {
             /* Send the first 2 messages to each topic. */
             for (const topic of topics) {
                 await producer.send({ topic, messages: messages.slice(0, 2) });
+                await consumer.subscribe({ topic });
             }
-            await consumer.subscribe({ topics: topics });
 
             let shouldPause = true;
             let pauseMessageRecvd = false;
@@ -141,7 +141,7 @@ describe('Consumer', () => {
             for (const topic of topics) {
                 await producer.send({ topic, messages: messages.slice(0, 2) })
             }
-            await consumer.subscribe({ topics })
+            await consumer.subscribe({ topics, replace: true });
 
             let shouldPause = true
             const messagesConsumed = []

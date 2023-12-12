@@ -220,9 +220,11 @@
 #### Semantic and Per-Method Changes
 
 
- * Changes to subscribe:
+ * Changes to `subscribe`:
   * Regex flags are ignored while passing a topic subscription (like 'i' or 'g').
   * Subscribe must be called after `connect`.
+  * An optional parameter, `replace` is provided. If set to true, the current subscription is replaced with the new one. If set to false, the new subscription is added to the current one.
+    The default value is false.
   * While passing a list of topics to `subscribe`, the `fromBeginning` property is not supported. Instead, the property `auto.offset.reset` needs to be used.
    Before:
     ```javascript

@@ -445,8 +445,8 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_read_i32(rkbuf, &hdr.PreferredReadReplica);
         else
                 hdr.PreferredReadReplica = -1;
-
-        rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSetSize);
+        /* Compact Records Array */
+        rd_kafka_buf_read_arraycnt(rkbuf, &hdr.MessageSetSize, -1);
 
         if (unlikely(hdr.MessageSetSize < 0))
                 rd_kafka_buf_parse_fail(
@@ -471,8 +471,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                 if (aborted_txns)
                         rd_kafka_aborted_txns_destroy(aborted_txns);
-                rd_kafka_buf_skip_tags(rkbuf);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                goto no_err;
         }
 
         rd_kafka_toppar_lock(rktp);
@@ -503,9 +502,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
 
                 if (aborted_txns)
                         rd_kafka_aborted_txns_destroy(aborted_txns);
-                rd_kafka_toppar_destroy(rktp); /* from get */
-                rd_kafka_buf_skip_tags(rkbuf);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                goto no_err;
         }
 
         rd_kafka_toppar_lock(rktp);
@@ -519,12 +516,10 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            "]: partition broker has changed: "
                            "discarding fetch response",
                            RD_KAFKAP_STR_PR(topic), hdr.Partition);
-                rd_kafka_toppar_destroy(rktp); /* from get */
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                 if (aborted_txns)
                         rd_kafka_aborted_txns_destroy(aborted_txns);
-                rd_kafka_buf_skip_tags(rkbuf);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                goto no_err;
         }
 
         fetch_version = rktp->rktp_fetch_version;
@@ -547,12 +542,10 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            tver->version, fetch_version);
                 rd_atomic64_add(&rktp->rktp_c.rx_ver_drops, 1);
-                rd_kafka_toppar_destroy(rktp); /* from get */
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                 if (aborted_txns)
                         rd_kafka_aborted_txns_destroy(aborted_txns);
-                rd_kafka_buf_skip_tags(rkbuf);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                goto no_err;
         }
 
         rd_rkb_dbg(rkb, MSG, "FETCH",
@@ -576,25 +569,20 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                 rd_kafka_fetch_reply_handle_partition_error(
                     rkb, rktp, tver, hdr.ErrorCode, hdr.HighwaterMarkOffset);
 
-                rd_kafka_toppar_destroy(rktp); /* from get()*/
-
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 
                 if (aborted_txns)
                         rd_kafka_aborted_txns_destroy(aborted_txns);
-                rd_kafka_buf_skip_tags(rkbuf);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                goto no_err;
         }
 
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         if (unlikely(hdr.MessageSetSize <= 0)) {
-                rd_kafka_toppar_destroy(rktp); /*from get()*/
                 if (aborted_txns)
                         rd_kafka_aborted_txns_destroy(aborted_txns);
-                rd_kafka_buf_skip_tags(rkbuf);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                goto no_err;
         }
 
         /**
@@ -618,15 +606,19 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
         if (unlikely(err))
                 rd_kafka_toppar_fetch_backoff(rkb, rktp, err);
 
-        rd_kafka_toppar_destroy(rktp); /*from get()*/
-        rd_kafka_buf_skip_tags(rkbuf);
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        goto no_err;
 
 err_parse:
         if (rktp)
                 rd_kafka_toppar_destroy(rktp); /*from get()*/
         rd_kafka_buf_skip_tags(rkbuf);
         return rkbuf->rkbuf_err;
+
+no_err:
+        if (rktp)
+                rd_kafka_toppar_destroy(rktp); /*from get()*/
+        rd_kafka_buf_skip_tags(rkbuf);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 /**

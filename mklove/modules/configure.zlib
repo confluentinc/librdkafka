@@ -55,13 +55,10 @@ function install_source {
 
     savedLibdir="$libdir"
     export libdir="/usr/lib"
-    echo "Stariting ZLIB" >> /tmp/log
-    CFLAGS=-fPIC ./configure --static --prefix=/usr >> /tmp/log
-    make -j >> /tmp/log
-    make test >> /tmp/log
-    make DESTDIR="${destdir}" install >> /tmp/log
+    CFLAGS=-fPIC ./configure --static --prefix=/usr
+    make -j
+    make test
+    make DESTDIR="${destdir}" install
     export libdir="$savedLibdir"
-    echo "Running find" >> /tmp/log
-    find . -name "libz.a" >> /tmp/log
     return $?
 }

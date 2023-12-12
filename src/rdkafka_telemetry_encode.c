@@ -76,7 +76,7 @@ calculate_connection_creation_rate(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                 total.doubleValue +=
                     rkb->rkb_c.connects.val - rkb->rkb_c_historic.connects;
         }
-        int seconds = (rd_clock() * 1000 - ts_last) / 1e9;
+        int seconds = (rd_uclock() * 1000 - ts_last) / 1e9;
         if (seconds > 0)
                 total.doubleValue /= seconds;
         return total;
@@ -225,7 +225,7 @@ static void reset_historical_metrics(rd_kafka_t *rk) {
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_c_historic.assigned_partitions = rkb->rkb_toppar_cnt;
                 rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
-                rkb->rkb_c_historic.ts_last  = rd_clock() * 1000;
+                rkb->rkb_c_historic.ts_last  = rd_uclock() * 1000;
                 rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
                 /* Only ra_v is being used to keep track of the metrics */
                 rkb->rkb_c_historic.rkb_avg_rtt.ra_v = rkb->rkb_avg_rtt.ra_v;
@@ -669,7 +669,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         rd_kafka_telemetry_key_values_repeated_t resource_attributes_repeated;
         rd_kafka_telemetry_resource_attribute_t *resource_attributes_struct =
             NULL;
-        rd_ts_t now_ns = rd_clock() * 1000;
+        rd_ts_t now_ns = rd_uclock() * 1000;
 
         int resource_attributes_count =
             resource_attributes(rk, &resource_attributes_struct);

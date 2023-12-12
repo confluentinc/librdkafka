@@ -285,7 +285,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 
         rd_kafka_broker_t *rkb      = rd_calloc(1, sizeof(*rkb));
         rkb->rkb_c.connects.val     = 1;
-        rkb->rkb_c_historic.ts_last = rd_clock() * 1000;
+        rkb->rkb_c_historic.ts_last = rd_uclock() * 1000;
         TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
 
         size_t metrics_payload_size = 0;

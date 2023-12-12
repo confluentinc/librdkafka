@@ -30,6 +30,9 @@
 #ifndef _RD_KAFKA_TELEMETRY_H_
 #define _RD_KAFKA_TELEMETRY_H_
 
+#define RD_KAFKA_TELEMETRY_METRICS_ALL_METRICS_SUBSCRIPTION "*"
+#define RD_KAFKA_TELEMETRY_METRIC_NAME_MAX_LEN              128
+
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err);
 

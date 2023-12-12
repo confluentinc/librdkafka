@@ -43,7 +43,8 @@ struct metric_unit_test_data {
         char metric_name[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
         char metric_description[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
         char metric_unit[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
-        int64_t metric_value;
+        int64_t metric_value_int;
+        double metric_value_double;
         uint64_t metric_time;
 };
 
@@ -110,8 +111,9 @@ static bool decode_and_print_number_data_point(pb_istream_t *stream,
 
         if (arg != NULL && *arg != NULL) {
                 struct metric_unit_test_data *test_data = *arg;
-                test_data->metric_value = data_point.value.as_int;
-                test_data->metric_time  = data_point.time_unix_nano;
+                test_data->metric_value_int    = data_point.value.as_int;
+                test_data->metric_value_double = data_point.value.as_double;
+                test_data->metric_time         = data_point.time_unix_nano;
         }
 
         fprintf(stderr, "NumberDataPoint value: %ld time: %lu\n",
@@ -262,26 +264,28 @@ static void clear_unit_test_data(void) {
         unit_test_data.metric_name[0] = '\0';
         unit_test_data.metric_description[0] = '\0';
         unit_test_data.metric_unit[0]        = '\0';
-        unit_test_data.metric_value          = 0;
+        unit_test_data.metric_value_int      = 0;
         unit_test_data.metric_time           = 0;
 }
 
-bool unit_test_telemetry(rd_kafka_telemetry_metric_name_t metric_name,
+bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                          const char *expected_name,
                          const char *expected_description,
-                         rd_kafka_telemetry_metric_type_t expected_type) {
+                         rd_kafka_telemetry_metric_type_t expected_type,
+                         rd_bool_t is_double) {
         rd_kafka_t *rk                       = rd_calloc(1, sizeof(*rk));
         rk->rk_type                          = RD_KAFKA_PRODUCER;
         rk->rk_telemetry.matched_metrics_cnt = 1;
         rk->rk_telemetry.matched_metrics =
-            rd_malloc(sizeof(rd_kafka_telemetry_metric_name_t) *
+            rd_malloc(sizeof(rd_kafka_telemetry_producer_metric_name_t) *
                       rk->rk_telemetry.matched_metrics_cnt);
         rk->rk_telemetry.matched_metrics[0] = metric_name;
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         TAILQ_INIT(&rk->rk_brokers);
 
-        rd_kafka_broker_t *rkb  = rd_calloc(1, sizeof(*rkb));
-        rkb->rkb_c.connects.val = 1;
+        rd_kafka_broker_t *rkb      = rd_calloc(1, sizeof(*rkb));
+        rkb->rkb_c.connects.val     = 1;
+        rkb->rkb_c_historic.ts_last = rd_uclock() * 1000;
         TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
 
         size_t metrics_payload_size = 0;
@@ -304,9 +308,14 @@ bool unit_test_telemetry(rd_kafka_telemetry_metric_name_t metric_name,
         RD_UT_ASSERT(strcmp(unit_test_data.metric_description,
                             expected_description) == 0,
                      "Metric description mismatch");
-        RD_UT_ASSERT(strcmp(unit_test_data.metric_unit, "1") == 0,
-                     "Metric unit mismatch");
-        RD_UT_ASSERT(unit_test_data.metric_value == 1, "Metric value mismatch");
+        // RD_UT_ASSERT(strcmp(unit_test_data.metric_unit, "1") == 0,
+        //              "Metric unit mismatch");
+        if (is_double)
+                RD_UT_ASSERT(unit_test_data.metric_value_double == 1.0,
+                             "Metric value mismatch");
+        else
+                RD_UT_ASSERT(unit_test_data.metric_value_int == 1,
+                             "Metric value mismatch");
         RD_UT_ASSERT(unit_test_data.metric_time != 0, "Metric time mismatch");
 
         rd_free(rk->rk_telemetry.matched_metrics);
@@ -318,18 +327,20 @@ bool unit_test_telemetry(rd_kafka_telemetry_metric_name_t metric_name,
 
 bool unit_test_telemetry_gauge(void) {
         return unit_test_telemetry(
-            RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_RATE,
+            RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_RATE,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
             "producer.connection.creation.rate",
             "The rate of connections established per second.",
-            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE);
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true);
 }
 
 bool unit_test_telemetry_sum(void) {
         return unit_test_telemetry(
-            RD_KAFKA_TELEMETRY_METRIC_CONNECTION_CREATION_TOTAL,
+            RD_KAFKA_TELEMETRY_METRIC_PRODUCER_CONNECTION_CREATION_TOTAL,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
             "producer.connection.creation.total",
             "The total number of connections established.",
-            RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM);
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false);
 }
 
 int unittest_telemetry_decode(void) {

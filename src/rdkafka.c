@@ -693,6 +693,12 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE,
               "Broker: Request principal deserialization failed during "
               "forwarding"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID,
+              "Broker: Client sent a push telemetry request with an invalid or "
+              "outdated subscription ID"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE,
+              "Broker: Client sent a push telemetry request larger than the "
+              "maximum size the broker will accept"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 

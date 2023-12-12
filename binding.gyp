@@ -3,6 +3,7 @@
     # may be redefined in command line on configuration stage
     # "BUILD_LIBRDKAFKA%": "<!(echo ${BUILD_LIBRDKAFKA:-1})"
     "BUILD_LIBRDKAFKA%": "<!(node ./util/get-env.js BUILD_LIBRDKAFKA 1)",
+    "CKJS_LINKING%": "<!(node ./util/get-env.js CKJS_LINKING static)",
   },
   "targets": [
     {
@@ -85,7 +86,17 @@
                   ],
                   'conditions': [
                     [
-                      'OS=="linux"',
+                      ['OS=="linux"', 'CKJS_LINKING="dynamic"'],
+                      {
+                        "libraries": [
+                          "../build/deps/librdkafka.so",
+                          "../build/deps/librdkafka++.so",
+                          "-Wl,-rpath='$$ORIGIN/../deps'",
+                        ],
+                      }
+                    ],
+                    [
+                      ['OS=="linux"', 'CKJS_LINKING!="dynamic"'],
                       {
                         "libraries": [
                           "../build/deps/librdkafka-static.a",

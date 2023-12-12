@@ -178,6 +178,7 @@
 
   * Error-handling for a failed `send` is stricter. While sending multiple messages, even if one of the messages fails, the method throws an error.
 * `sendBatch` is supported. However, the actual batching semantics are handled by librdkafka, and it just acts as a wrapper around `send` (See `send` for changes).
+* A transactional producer (with a `transactionId`) set, can only send messages after calling `producer.transaction()`.
 
 ### Consumer
 

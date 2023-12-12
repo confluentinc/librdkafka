@@ -66,7 +66,9 @@ async function eosStart() {
                         {
                             topic,
                             partitions: [
-                                { partition, offset: message.offset },
+                                /* The message.offset indicates current offset, so we need to add 1 to it, since committed offset denotes
+                                 * the next offset to consume. */
+                                { partition, offset: message.offset + 1 },
                             ],
                         }
                     ],

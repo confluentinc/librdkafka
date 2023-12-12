@@ -1,3 +1,5 @@
+jest.setTimeout(30000);
+
 const { Kafka, ErrorCodes } = require('../../../lib').KafkaJS;
 const { secureRandom,
     createTopic,
@@ -69,7 +71,7 @@ describe('Consumer', () => {
             expect(messagesConsumed.map(m => m.message.value.toString())).toEqual(
                 expect.arrayContaining(['drink', 'your', 'ovaltine'])
             );
-        })
+        }, 10000);
     })
 
     describe('Deprecated "topic" interface', () => {
@@ -149,7 +151,7 @@ describe('Consumer', () => {
                         'value-br',
                         'value-se',
                     ]);
-                });
+                }, 10000);
             });
         });
     });

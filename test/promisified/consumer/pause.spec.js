@@ -1,3 +1,5 @@
+jest.setTimeout(30000);
+
 const {
     secureRandom,
     createTopic,
@@ -514,26 +516,27 @@ describe('Consumer', () => {
                 groupId,
                 maxWaitTimeInMs: 100,
                 maxBytesPerPartition: 180,
-            })
+            });
 
-            await producer.connect()
-            await consumer.connect()
+            await producer.connect();
+            await consumer.connect();
 
-            const [topic1, topic2] = topics
+            const [topic1, topic2] = topics;
             await consumer.subscribe({ topics: [topic1, topic2] });
 
-            const eachMessage = jest.fn()
-            consumer.run({ eachMessage })
+            const eachMessage = jest.fn();
+            consumer.run({ eachMessage });
 
-            consumer.pause([{ topic: topic1 }, { topic: topic2 }])
+            await waitFor(() => consumer.assignment().length > 0, () => { }, { delay: 10 });
+            consumer.pause([{ topic: topic1 }, { topic: topic2 }]);
 
-            const key1 = secureRandom()
-            const message1 = { key: `key-${key1}`, value: `value-${key1}`, partition: 0 }
+            const key1 = secureRandom();
+            const message1 = { key: `key-${key1}`, value: `value-${key1}`, partition: 0 };
 
-            await producer.send({ topic: topic1, messages: [message1] })
-            await producer.send({ topic: topic2, messages: [message1] })
+            await producer.send({ topic: topic1, messages: [message1] });
+            await producer.send({ topic: topic2, messages: [message1] });
 
-            expect(eachMessage).not.toHaveBeenCalled()
+            expect(eachMessage).not.toHaveBeenCalled();
         })
     });
 

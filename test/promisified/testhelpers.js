@@ -55,6 +55,25 @@ async function waitForMessages(messagesConsumed, { number = 1, delay } = {}) {
     return waitFor(() => messagesConsumed.length >= number, () => messagesConsumed, { delay });
 }
 
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+const generateMessages = options => {
+    const { prefix, number = 100 } = options || {}
+    const prefixOrEmpty = prefix ? `-${prefix}` : ''
+
+    return Array(number)
+      .fill()
+      .map((v, i) => {
+        const value = secureRandom()
+        return {
+          key: `key${prefixOrEmpty}-${i}-${value}`,
+          value: `value${prefixOrEmpty}-${i}-${value}`,
+        }
+      })
+  }
+
 module.exports = {
     createConsumer,
     createProducer,
@@ -65,4 +84,6 @@ module.exports = {
     createTopic,
     waitForConsumerToJoinGroup,
     waitFor,
+    sleep,
+    generateMessages,
 }

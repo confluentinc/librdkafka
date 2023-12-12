@@ -2758,6 +2758,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;
         }
 
+        printf("Are Assignments Present - %d\n", are_assignments_present);
         if (are_assignments_present == 1) {
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions = NULL;
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
@@ -2789,6 +2790,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 rkcg->rkcg_consumer_flags &=
                     ~RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK;
         }
+        printf("\n");
 
         return;
 

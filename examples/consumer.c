@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
         }
 
         /* Callback called on partition assignment changes */
-        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
+//        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
 
         //        if (rd_kafka_conf_set(conf, "debug", "all", errstr,

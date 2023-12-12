@@ -105,8 +105,8 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rkb->rkb_c_historic.rkb_avg_throttle.ra_v.start = rd_clock();
                 rkb->rkb_c_historic.assigned_partitions         = 0;
                 rkb->rkb_c_historic.connects                    = 0;
-                rkb->rkb_c_historic.ts_last  = rd_clock() * 1000;
-                rkb->rkb_c_historic.ts_start = rd_clock() * 1000;
+                rkb->rkb_c_historic.ts_last  = rd_uclock() * 1000;
+                rkb->rkb_c_historic.ts_start = rd_uclock() * 1000;
         }
         rk->rk_telemetry.telemetry_max_bytes = 0;
 }
@@ -164,10 +164,8 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 for (j = 0; j < metrics_cnt; j++) {
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
-                        size_t full_metric_name_len =
-                            strlen(RD_KAFKA_TELEMETRY_METRIC_PREFIX) +
-                            strlen(info[j].name) + 1;
-                        char full_metric_name[full_metric_name_len];
+                        char full_metric_name
+                            [RD_KAFKA_TELEMETRY_METRIC_NAME_MAX_LEN];
                         rd_snprintf(full_metric_name, sizeof(full_metric_name),
                                     "%s%s", RD_KAFKA_TELEMETRY_METRIC_PREFIX,
                                     info[j].name);

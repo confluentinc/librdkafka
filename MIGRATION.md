@@ -289,11 +289,13 @@
     * The `partitionsConsumedConcurrently` property is not supported (YET).
   * The `eachBatch` method is not supported.
   * `commitOffsets` does not (YET) support sending metadata for topic partitions being committed.
-  * `paused()` is not (YET) supported.
+  * `paused()` is supported without any changes.
   * Custom partition assignors are not supported.
   * Changes to `seek`:
-    * The restriction to call seek only after `run` is removed.
+    * The restriction to call seek only after `run` is removed. It can be called any time.
     * Rather than the `autoCommit` property of `run` deciding if the offset is committed, the librdkafka property `enable.auto.commit` of the consumer config is used.
+  * `pause` and `resume` MUST be called after the consumer group is joined. In practice, this means it can be called whenever `consumer.assignment()` has a non-zero size, or within the `eachMessage`
+    callback.
 
 ### Admin Client
 

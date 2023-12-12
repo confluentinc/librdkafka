@@ -40,15 +40,19 @@ async function waitForConsumerToJoinGroup(consumer) {
     return new Promise(resolve => setTimeout(resolve, 2500));
 }
 
-async function waitForMessages(messagesConsumed, { number } = {number: 0}) {
+async function waitFor(check, resolveValue, { delay = 50 }  = {}) {
     return new Promise(resolve => {
         const interval = setInterval(() => {
-            if (messagesConsumed.length >= number) {
+            if (check()) {
                 clearInterval(interval);
-                resolve(messagesConsumed);
+                resolve(resolveValue());
             }
-        }, 200);
+        }, delay);
     });
+}
+
+async function waitForMessages(messagesConsumed, { number = 1, delay } = {}) {
+    return waitFor(() => messagesConsumed.length >= number, () => messagesConsumed, { delay });
 }
 
 module.exports = {
@@ -60,4 +64,5 @@ module.exports = {
     waitForMessages,
     createTopic,
     waitForConsumerToJoinGroup,
+    waitFor,
 }

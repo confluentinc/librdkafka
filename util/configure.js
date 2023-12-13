@@ -18,7 +18,7 @@ if (isWin) {
 var childProcess = require('child_process');
 
 try {
-  let opts = '--install-deps --source-deps-only --disable-lz4-ext --enable-static --enable-strip --disable-gssapi';
+  let opts = '--install-deps --source-deps-only --disable-lz4-ext --enable-static --enable-strip --disable-gssapi --disable-ssl --disable-curl';
   if (process.env['CKJS_LINKING'] === 'dynamic')
     opts = '';
   childProcess.execSync(`./configure ${opts} --prefix=${releaseDir} --libdir=${releaseDir}`, {

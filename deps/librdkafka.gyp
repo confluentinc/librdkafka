@@ -26,7 +26,7 @@
                   "librdkafka/config.h",
                 ],
                 "action": [
-                  "make", "-C", "librdkafka", "libs", "install"
+                  "make", "-j5", "-C", "librdkafka", "libs", "install"
                 ],
                 "conditions": [
                   [

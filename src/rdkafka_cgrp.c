@@ -2804,14 +2804,15 @@ err:
 
 
         // Supported errors:
-        // - GROUP_AUTHORIZATION_FAILED
-        // - COORDINATOR_LOAD_IN_PROGRESS
-        // - INVALID_REQUEST
-        // - UNKNOWN_MEMBER_ID
-        // - FENCED_MEMBER_EPOCH
-        // - UNSUPPORTED_ASSIGNOR
-        // - UNRELEASED_INSTANCE_ID
-        // - GROUP_MAX_SIZE_REACHED
+        // - GROUP_AUTHORIZATION_FAILED         - Retry
+        // - COORDINATOR_LOAD_IN_PROGRESS       - Refresh
+        // - INVALID_REQUEST                    - Fatal
+        // - UNKNOWN_MEMBER_ID                  - Rejoin
+        // - FENCED_MEMBER_EPOCH                - Rejoin
+        // - UNSUPPORTED_ASSIGNOR               - Fatal
+        // - UNRELEASED_INSTANCE_ID             -
+        // - GROUP_MAX_SIZE_REACHED             - Fatal
+        // - RD_KAFKA_RESP_ERR__TRANSPORT       - Send full request
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__DESTROY:

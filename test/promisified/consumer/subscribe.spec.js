@@ -52,7 +52,7 @@ describe('Consumer', () => {
             const messagesConsumed = [];
             await consumer.connect();
             await consumer.subscribe({
-                topics: [topics[0], topics[1], new RegExp(`^pattern-${testScope}-regex-.*`, 'i')],
+                topics: [topics[0], topics[1], new RegExp(`^pattern-${testScope}-regex-.*`)],
             });
 
             consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
@@ -130,7 +130,7 @@ describe('Consumer', () => {
                     const messagesConsumed = [];
                     await consumer.connect();
                     await consumer.subscribe({
-                        topic: new RegExp(`pattern-${testScope}-(se|br)-.*`, 'i'),
+                        topic: new RegExp(`pattern-${testScope}-(se|br)-.*`),
                     });
 
                     consumer.run({ eachMessage: async event => messagesConsumed.push(event) });

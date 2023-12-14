@@ -631,6 +631,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR_FEATURE_UPDATE_FAILED = 96,
         /** Request principal deserialization failed during forwarding */
         RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
+        /** Unknown Topic Id */
+        RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID = 100,
         /** The member epoch is fenced by the group coordinator */
         RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
         /** The member epoch is stale */

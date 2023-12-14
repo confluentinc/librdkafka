@@ -700,6 +700,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE,
               "Broker: Request principal deserialization failed during "
               "forwarding"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID, "Broker: Unknown topic id"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 

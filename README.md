@@ -1,67 +1,64 @@
-confluent-kafka-js - Node.js wrapper  for Kafka C/C++ library
-==============================================
+Confluent's Javascript Client for Apache Kafka<sup>TM</sup>
+=====================================================
 
-Copyright (c) 2016-2023 Blizzard Entertainment.
+**confluent-kafka-js** is Confluent's Javascript client for [Apache Kafka](http://kafka.apache.org/) and the
+[Confluent Platform](https://www.confluent.io/product/compare/).
 
-[https://github.com/confluentinc/confluent-kafka-js](https://github.com/confluentinc/confluent-kafka-js)
 
-# Looking for Collaborators!
+Features:
 
-I am looking for *your* help to make this project even better! If you're interested, check [this out](https://github.com/confluentinc/confluent-kafka-js/issues/628)
+- **High performance** - confluent-kafka-js is a lightweight wrapper around
+[librdkafka](https://github.com/confluentinc/librdkafka), a finely tuned C
+client.
 
-# Overview
+- **Reliability** - There are a lot of details to get right when writing an Apache Kafka
+client. We get them right in one place (librdkafka) and leverage this work
+across all of our clients (also [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python),
+[confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go) and
+and [confluent-kafka-dotnet](https://github.com/confluentinc/confluent-kafka-dotnet)).
 
-The `confluent-kafka-js` library is a high-performance NodeJS client for [Apache Kafka](http://kafka.apache.org/) that wraps the native  [librdkafka](https://github.com/edenhill/librdkafka) library.  All the complexity of balancing writes across partitions and managing (possibly ever-changing) brokers should be encapsulated in the library.
+- **Future proof** - Confluent, founded by the
+creators of Kafka, is building a [streaming platform](https://www.confluent.io/product/compare/)
+with Apache Kafka at its core. It's high priority for us that client features keep
+pace with core Apache Kafka and components of the [Confluent Platform](https://www.confluent.io/product/compare/).
 
-__This library currently uses `librdkafka` version `2.3.0`.__
+## This library is currently not ready for production use. It's an early-access preview in active development, pre-1.0.0, and there might be breaking changes.
 
-## Reference Docs
+This library is based heavily on [node-rdkafka](https://github.com/Blizzard/node-rdkafka).
 
-To view the reference docs for the current version, go [here](https://confluentinc.github.io/confluent-kafka-js/current/)
+This library contains a promisified API, very similar to the one in [kafkajs](https://github.com/tulios/kafkajs). Some of the tests are also based on the ones in kafkajs.
 
-## Contributing
+__This library currently uses `librdkafka` based off of the master branch.__
 
-For guidelines on contributing please see [CONTRIBUTING.md](https://github.com/confluentinc/confluent-kafka-js/blob/master/CONTRIBUTING.md)
-
-## Code of Conduct
-
-Play nice; Play fair.
 
 ## Requirements
 
-* Apache Kafka >=0.9
-* Node.js >=4
-* Linux/Mac
-* Windows?! See below
-* OpenSSL
+The following configurations are supported for this early access preview:
 
-### Mac OS High Sierra / Mojave
+* Any supported version of Node.js (The two LTS versions, 18 and 20, and the latest version, 21).
+* Linux (x64 and arm64) - only glibc, not musl/alpine.
+* macOS - arm64/m1 only
 
-OpenSSL has been upgraded in High Sierra and homebrew does not overwrite default system libraries. That means when building confluent-kafka-js, because you are using openssl, you need to tell the linker where to find it:
+Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required. It can be installed
+from GitHub:
 
-```sh
-export CPPFLAGS=-I/usr/local/opt/openssl/include
-export LDFLAGS=-L/usr/local/opt/openssl/lib
+```bash
+$ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-js.git#v0.1.4-devel"
 ```
 
-Then you can run `npm install` on your application to get it to build correctly.
+# Getting Started
 
-__NOTE:__ From the `librdkafka` docs
+1. If you're starting afresh, you can use the [quickstart guide](QUICKSTART.md) (TBA).
+2. If you're migrating from `kafkajs`, you can use the [migration guide](MIGRATION.md#kafkajs).
+2. If you're migrating from `node-rdkafka`, you can use the [migration guide](MIGRATION.md#node-rdkafka).
 
-> WARNING: Due to a bug in Apache Kafka 0.9.0.x, the ApiVersionRequest (as sent by the client when connecting to the broker) will be silently ignored by the broker causing the request to time out after 10 seconds. This causes client-broker connections to stall for 10 seconds during connection-setup before librdkafka falls back on the `broker.version.fallback` protocol features. The workaround is to explicitly configure `api.version.request` to `false` on clients communicating with <=0.9.0.x brokers.
 
-### Alpine
+## Contributing
 
-Using Alpine Linux? Check out the [docs](https://github.com/confluentinc/confluent-kafka-js/blob/master/examples/docker-alpine.md).
+Bug reports and early feedback is appreciated in the form of Github Issues.
+For guidelines on contributing please see [CONTRIBUTING.md](https://github.com/confluentinc/confluent-kafka-js/blob/master/CONTRIBUTING.md)
 
-### Windows
-
-Windows build **is not** compiled from `librdkafka` source but it is rather linked against the appropriate version of [NuGet librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist/) static binary that gets downloaded from `https://globalcdn.nuget.org/packages/librdkafka.redist.2.3.0.nupkg` during installation. This download link can be changed using the environment variable `NODE_RDKAFKA_NUGET_BASE_URL` that defaults to `https://globalcdn.nuget.org/packages/` when it's no set.
-
-Requirements:
- * [node-gyp for Windows](https://github.com/nodejs/node-gyp#on-windows)
-
-**Note:** I _still_ do not recommend using `confluent-kafka-js` in production on Windows. This feature was in high demand and is provided to help develop, but we do not test against Windows, and windows support may lag behind Linux/Mac support because those platforms are the ones used to develop this library. Contributors are welcome if any Windows issues are found :)
+(README below this point TBA - it's just the older stuff).
 
 ## Tests
 
@@ -78,18 +75,6 @@ You can run both types of tests by using `Makefile`. Doing so calls `mocha` in y
 * To run the integration tests, you must have a running Kafka installation available. By default, the test tries to connect to `localhost:9092`; however, you can supply the `KAFKA_HOST` environment variable to override this default behavior. Run `make e2e`.
 
 # Usage
-
-You can install the `confluent-kafka-js` module like any other module:
-
-```
-npm install confluent-kafka-js
-```
-
-To use the module, you must `require` it.
-
-```js
-const Kafka = require('confluent-kafka-js');
-```
 
 ## Configuration
 

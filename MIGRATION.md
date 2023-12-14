@@ -2,144 +2,144 @@
 
 ## KafkaJS
 
+
+1. Change the import statement, from
+    ```javascript
+    const { Kafka } = require('kafkajs');
+    ```
+    to
+    ```javascript
+    const { Kafka } = require('confluent-kafka-js').KafkaJS;
+    ```
+
+2. Try running your program. In case a migration is needed, an informative error will be thrown.
+
+3. The most common expected changes to the code are:
+  - For the **producer**: `acks`, `compression` and `timeout` are not set on a per-send() basis.
+    Rather, they must be configured in the top-level configuration while creating the producer.
+  - For the **consumer**:
+    - `fromBeginning` is not set on a per-subscribe() basis.
+      Rather, it must be configured in the top-level configuration while creating the consumer.
+    - `autoCommit` and `autoCommitInterval` are not set on a per-run() basis.
+      Rather, they must be configured in the top-level configuration while creating the consumer.
+    - `autoCommitThreshold` and `eachBatch` are not supported.
+  - For errors: Check the `error.code` rather than the error `name` or `type`.
+
+4. A more exhaustive list of semantic and configuration differences is [presented below](#common).
+
+5. An example migration:
+
+```diff
+-const { Kafka } = require('kafkajs');
++const { Kafka } = require('confluent-kafka-js').KafkaJS;
+
+const kafka = new Kafka({
+  clientId: 'my-app',
+  brokers: ['kafka1:9092', 'kafka2:9092']
+})
+
+const producerRun = async () => {
+- const producer = kafka.producer();
++ const producer = kafka.producer({ acks: 1 });
+  await producer.connect();
+  await producer.send({
+    topic: 'test-topic',
+-   acks: 1,
+    messages: [
+      { value: 'Hello confluent-kafka-js user!' },
+    ],
+  });
+};
+
+
+const consumerRun = async () => {
+  // Consuming
+- const consumer = kafka.consumer({ groupId: 'test-group' });
++ const consumer = kafka.consumer({ groupId: 'test-group', fromBeginning: true });
+  await consumer.connect();
+- await consumer.subscribe({ topic: 'test-topic', fromBeginning: true });
++ await consumer.subscribe({ topic: 'test-topic' });
+
+  await consumer.run({
+    eachMessage: async ({ topic, partition, message }) => {
+      console.log({
+        partition,
+        offset: message.offset,
+        value: message.value.toString(),
+      })
+    },
+  });
+};
+
+producerRun().then(consumerRun).catch(console.error);
+```
+
 ### Common
 
 #### Configuration changes
   ```javascript
   const kafka = new Kafka({/* common configuration changes */});
   ```
-  There are several changes in the common configuration. Each config property is discussed.
-  If there needs to be any change, the property is highlighted.
+  Each allowed config property is discussed in the table below.
+  If there is any change in semantics or the default values, the property and the change is **highlighted in bold**.
 
-  * An `rdKafka` block can be added to the config. It allows directly setting librdkafka properties.
-    If you are starting to make the configuration anew, it is best to specify properties using
-    the `rdKafka` block. [Complete list of properties here](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
+  | Property                      | Default Value                        | Comment                                                                                                                                                                                        |
+  |-------------------------------|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | **brokers**                   | null                                 | A list of strings, representing the bootstrap brokers. **A function is no longer allowed as an argument for this.**                                                                            |
+  | **ssl**                       | false                                | A boolean, set to true if ssl needs to be enabled. **Additional properties like CA, certificate, key, etc. need to be specified using the rdKafka block.**                                     |
+  | **sasl**                      | -                                    | An optional object of the form  `{ mechanism: 'plain' or 'scram-sha-256' or 'scram-sha-512', username: string, password: string }`. **Additional authentication types are not yet supported.** |
+  | clientId                      | "rdkafka"                            | An optional string used to identify the client.                                                                                                                                                |
+  | **connectionTimeout**         | 1000                                 | This timeout is not enforced individually, but a sum of `connectionTimeout` and `authenticationTimeout` is enforced together.                                                                  |
+  | **authenticationTimeout**     | 10000                                | This timeout is not enforced individually, but a sum of `connectionTimeout` and `authenticationTimeout` is enforced together.                                                                  |
+  | **reauthenticationThreshold** | **80% of connections.max.reauth.ms** | **No longer checked, the default is always used.**                                                                                                                                             |
+  | requestTimeout                | 30000                                | number of milliseconds for a network request to timeout.                                                                                                                                       |
+  | **enforceRequestTimeout**     | true                                 | When set to false, `requestTimeout` is set to 5 minutes. **This cannot be completely disabled.**                                                                                               |
+  | retry                         | object                               | Properties individually discussed below.                                                                                                                                                       |
+  | retry.maxRetryTime            | 30000                                | maximum time to backoff a retry, in milliseconds.                                                                                                                                              |
+  | retry.initialRetryTime        | 300                                  | minimum time to backoff a retry, in milliseconds                                                                                                                                               |
+  | **retry.retries**             | 5                                    | Total cap on the number of retries. **Applicable only to Produce requests.**                                                                                                                   |
+  | **retry.factor**              | 0.2                                  | Randomization factor (jitter) for backoff. **Cannot be changed**.                                                                                                                              |
+  | **retry.multiplier**          | 2                                    | Multiplier for exponential factor of backoff. **Cannot be changed.**                                                                                                                           |
+  | **retry.restartOnFailure**    | true                                 | Consumer only. **Cannot be changed**. Consumer will always make an attempt to restart.                                                                                                         |
+  | logLevel                      | `logLevel.INFO`                      | Decides the severity level of the logger created by the underlying library. A logger created with the `INFO` level will not be able to log `DEBUG` messages later.                             |
+  | **socketFactory**             | null                                 | **No longer supported.**                                                                                                                                                                       |
+  | **rdKafka**                   | {}                                   | This is a **new** property. It can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).           |
 
-    Example:
-    ```javascript
-    const kafka = new Kafka({
-      rdKafka: {
-        globalConfig: { /* properties mentioned within the 'global config' section of the list */ }
-        topicConfig: { /* properties mentioned within the 'topic config' section of the list */ }
-      },
-      /* ... */
-    });
-    ```
-  * **`brokers`** list of strings, representing the bootstrap brokers.
-               a function is no longer allowed as an argument for this.
-  * **`ssl`**: boolean, set true if ssl needs to be enabled.
-              In case additional properties, like CA, Certificate, Key etc. need to be added, use the `rdKafka` block.
-  * **`sasl`**: omit if the brokers need no authentication, otherwise, an object of the following forms:
-    - For SASL PLAIN or SASL SCRAM : `{ mechanism: 'plain'|'scram-sha-256'|'scram-sha-512', username: string, password: string }`
-    - For SASL OAUTHBEARER: not supported yet.
-    - For AWS IAM or custom mechanisms: not supported with no planned support.
-    - For GSSAPI/Kerberos: use the `rdKafka` configuration.
-  * `clientId`: string for identifying this client.
-  * **`connectionTimeout`** and **`authenticationTimeout`**:
-          These timeouts (specified in milliseconds) are not enforced individually. Instead, the sum of these values is
-          enforced. The default value of the sum is 11000, same as for KafkaJS.
-          It corresponds to librdkafka's `socket.connection.setup.timeout.ms`.
-  * **`reauthenticationThreshold`**: no longer checked, librdkafka handles reauthentication on its own.
-  * **`requestTimeout`**: number of milliseconds for a network request to timeout. The default value has been changed to 60000. It now corresponds to librdkafka's `socket.timeout.ms`.
-  * **`enforceRequestTimeout`**: if this is set to false, `requestTimeout` is set to 5 minutes. The timeout cannot be disabled completely.
-  * **`retry`** is partially supported. It must be an object, with the following (optional) properties
-    - `maxRetryTime`: maximum time to backoff a retry, in milliseconds. Corresponds to librdkafka's `retry.backoff.max.ms`.
-    - `initialRetryTime`: minimum time to backoff a retry, in milliseconds. Corresponds to librdkafka's `retry.backoff.ms`.
-    - `retries`: maximum number of retries, *only* applicable to Produce messages.
-    - **`factor`** and **`multiplier`** cannot be changed from their defaults of 0.2 and 2.
-    - **`restartOnFailure`**: this cannot be changed, and will always be true (the consumer recovers from errors on its own).
-  * `logLevel` is mapped automatically to the syslog(3) levels supported by librdkafka. `LOG_NOTHING` is not YET supported, as some panic situations are still logged.
-  * **`socketFactory`** is no longer supported.
-
-#### Error Handling
-
-   Some possible subtypes of `KafkaJSError` have been removed,
-   and additional information has been added into `KafkaJSError`.
-   Fields have been added denoting if the error is fatal, retriable, or abortable (the latter two only relevant for a transactional producer).
-   Some error-specific fields have also been removed.
-
-   An exhaustive list of changes is at the bottom of this section.
-
-   For compatibility, as many error types as possible have been retained, but it is
-   better to switch to checking the `error.code`.
-
-   **Action**: Convert any checks based on `instanceof` and `error.name` or to error
-               checks based on `error.code` or `error.type`.
-
-   **Example:**
-   ```javascript
-   try {
-      await producer.send(/* args */);
-   } catch (error) {
-      if (!Kafka.isKafkaJSError(error)) { /* unrelated err handling */ }
-      else if (error.fatal) { /* fatal error, abandon producer */ }
-      else if (error.code === Kafka.ErrorCode.ERR__QUEUE_FULL) { /*...*/ }
-      else if (error.type === 'ERR_MSG_SIZE_TOO_LARGE') { /*...*/ }
-      /* and so on for specific errors */
-   }
-   ```
-
-   Exhaustive list of error types and error fields removed:
-   1. `KafkaJSNonRetriableError`: retriable errors are automatically retried by librdkafka, so there's no need for this type.
-                                  Note that `error.retriable` still exists, but it's applicable only for transactional producer,
-                                  where users are expected to retry an action themselves.
-                                  All error types using this as a superclass now use `KafkaJSError` as their superclass.
-   2. `topic` and `partition` are removed from `KafkaJSOffsetOutOfRange`.
-   3. `KafkaJSMemberIdRequired`: removed as automatically handled by librdkafka.
-   4. `KafkaJSNumberOfRetriesExceeded`: removed as retries are handled by librdkafka.
-   5. `broker, correlationId, createdAt, sentAt` and `pendingDuration` are removed from `KafkaJSNumberOfRetriesExceeded`.
-   6. `KafkaJSMetadataNotLoaded`: removed as metadata is automatically reloaded by librdkafka.
-   7. `KafkaJSTopicMetadataNotLoaded`: removed as topic metadata is automatically reloaded by librdkafka.
-   8. `KafkaJSStaleTopicMetadataAssignment`: removed as it's automatically refreshed by librdkafka.
-   9. `KafkaJSDeleteGroupsError`: removed, as the Admin Client doesn't have this yet. May be added back again, or changed.
-   10. `KafkaJSServerDoesNotSupportApiKey`: removed, as this error isn't generally exposed to user in librdkafka. If raised,
-                                            it is subsumed into `KafkaJSError` where `error.code === Kafka.ErrorCode.ERR_UNSUPPORTED_VERSION`.
-   11. `KafkaJSBrokerNotFound`: removed, as this error isn't exposed directly to the user in librdkafka.
-   12. `KafkaJSLockTimeout`: removed, as such an error is not applicable while using librdkafka.
-   13. `KafkaJSUnsupportedMagicByteInMessageSet`: removed. It is subsumed into `KafkaJSError` where `error.code === Kafka.ErrorCode.ERR_UNSUPPORTED_VERSION`.
-   14. `KafkaJSDeleteTopicRecordsError`: removed, as the Admin Client doesn't have this yet. May be added back again, or changed.
-   15. `KafkaJSInvariantViolation`: removed, as it's not applicable to librdkafka. Errors in internal state are subsumed into `KafkaJSError` where `error.code === Kafka.ErrorCode.ERR__STATE`.
-   16. `KafkaJSInvalidVarIntError`: removed, as it's not exposed to the user in librdkafka.
-   17. `KafkaJSInvalidLongError`: removed, as it's not exposed to the user in librdkafka.
-   18. `KafkaJSCreateTopicError`: removed, as the Admin Client doesn't have this yet. May be added back again, or changed.
-   19. `KafkaJSAlterPartitionReassignmentsError`: removed, as the RPC is not used in librdkafka.
-   20. `KafkaJSFetcherRebalanceError`: removed, it's not exposed to the user in librdkafka.
-   21. `broker` is removed from `KafkaJSConnectionError`.
-   22. `KafkaJSConnectionClosedError`: removed, and subsumed into `KafkaJSConnectionError` as librdkafka treats them equivalently.
 
 ### Producer
 
-#### Configuration changes
+#### Producer Configuration Changes
 
   ```javascript
   const producer = kafka.producer({ /* producer-specific configuration changes. */});
   ```
 
-  There are several changes in the common configuration. Each config property is discussed.
-  If there needs to be any change, the property is highlighted.
+  Each allowed config property is discussed in the table below.
+  If there is any change in semantics or the default values, the property and the change is **highlighted in bold**.
 
-  * **`createPartitioner`**: this is not supported yet. The default behaviour is identical to the DefaultPartitioner, and compatible with Java client's default
-                            partitioner.
-                            This corresponds to the librdkafka property `partitioner` and the value `murmur2_random`.
-  * **`retry`**: See the section for retry above. The producer config `retry` takes precedence over the common config `retry`.
-  * `metadataMaxAge`: Time in milliseconds after which to refresh metadata for known topics. The default value remains 5min. This
-                      corresponds to the librdkafka property `topic.metadata.refresh.interval.ms` (and not `metadata.max.age.ms`).
-  * `allowAutoTopicCreation`: determines if a topic should be created if it doesn't exist while producing. True by default.
-  * `transactionTimeout`:  The maximum amount of time in milliseconds that the transaction coordinator will wait for a transaction
-                           status update from the producer before proactively aborting the ongoing transaction. The default value remains 60000.
-                           Only applicable when `transactionalId` is set to true.
-  * `idempotent`: if set to true, ensures that messages are delivered exactly once and in order. False by default.
-                  In case this is set to true, certain constraints must be respected for other properties, `maxInFlightRequests <= 5`, `retry.retries >= 0`.
-  * **`maxInFlightRequests`**: Maximum number of in-flight requests *per broker connection*. If not set, it is practically unbounded (same as KafkaJS).
-  * `transactionalId`: if set, turns this into a transactional producer with this identifier. This also automatically sets `idempotent` to true.
-  * An `rdKafka` block can be added to the config. It allows directly setting librdkafka properties.
-    If you are starting to make the configuration anew, it is best to specify properties using
-    the `rdKafka` block. [Complete list of properties here](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
+  | Property                | Default Value                                              | Comment                                                                                                                                                                                                                                              |
+  |-------------------------|------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | **createPartitioner**   | DefaultPartioner (murmur2_random) - Java client compatible | Custom partitioner support is not yet provided. The default partitioner's behaviour is retained, and a number of partitioners are provided via the `rdKafka.partitioner` property.                                                                   |
+  | **retry**               | object                                                     | Identical to `retry` in the common configuration. This takes precedence over the common config retry.                                                                                                                                                |
+  | metadataMaxAge          | 5 minutes                                                  | Time in milliseconds after which to refresh metadata for known topics                                                                                                                                                                                |
+  | allowAutoTopicCreation  | true                                                       | Determines if a topic should be created if it doesn't exist while producing.                                                                                                                                                                         |
+  | transactionTimeout      | 60000                                                      | The maximum amount of time in milliseconds that the transaction coordinator will wait for a transaction status update from the producer before proactively aborting the ongoing transaction.  Only applicable when `transactionalId` is set to true. |
+  | idempotent              | false                                                      | If set to true, ensures that messages are delivered exactly once and in order. If true, certain constraints must be respected for other properties, `maxInFlightRequests <= 5`, `retry.retries >= 0`                                                 |
+  | **maxInFlightRequests** | null                                                       | Maximum number of in-flight requests **per broker connection**. If not set, it is practically unbounded (same as KafkaJS).                                                                                                                           |
+  | transactionalId         | null                                                       | If set, turns this into a transactional producer with this identifier. This also automatically sets `idempotent` to true.                                                                                                                            |
+  | **acks**                | -1                                                         | The number of required acks before a Produce succeeds. **This is set on a per-producer level, not on a per `send` level**. -1 denotes it will wait for all brokers in the in-sync replica set.                                                       |
+  | **compression**         | CompressionTypes.NONE                                      | Compression codec for Produce messages. **This is set on a per-producer level, not on a per `send` level**. It must be a key of the object CompressionType, namely GZIP, SNAPPY, LZ4, ZSTD or NONE.                                                  |
+  | **timeout**             | 30000                                                      | The ack timeout of the producer request in milliseconds. This value is only enforced by the broker. **This is set on a per-producer level, not on a per `send` level**.                                                                              |
+  | **rdKafka**             | {}                                                         | This is a **new** property. It can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION. md). If set on the common config, the values are merged.            |
+
+
 
 #### Semantic and Per-Method Changes
 
-* Changes to `send`:
-  * `acks`, `compression` and `timeout` are not set on a per-send basis. Rather, they must be configured in the top-level configuration.
+* `send`: and `sendBatch`:`
+  - While sending multiple messages, even if one of the messages fails, the method throws an error.
+  - While `sendBatch` is available, it acts as a wrapper around send, and the actual batching is handled by librdkafka.
+  - `acks`, `compression` and `timeout` are not set on a per-send basis. Rather, they must be configured in the top-level configuration. See [configuration changes](#producer-configuration-changes).
     Additionally, there are several more compression types available by default besides GZIP.
     Before:
     ```javascript
@@ -172,78 +172,74 @@
     });
     ```
 
-  * Error-handling for a failed `send` is stricter. While sending multiple messages, even if one of the messages fails, the method throws an error.
-* `sendBatch` is supported. However, the actual batching semantics are handled by librdkafka, and it just acts as a wrapper around `send` (See `send` for changes).
-* A transactional producer (with a `transactionId`) set, can only send messages after calling `producer.transaction()`.
+* A transactional producer (with a `transactionId`) set, **cannot** send messages without initiating a transaction using `producer.transaction()`.
 
 ### Consumer
 
-#### Configuration changes
+#### Consumer Configuration Changes
 
   ```javascript
   const consumer = kafka.consumer({ /* producer-specific configuration changes. */});
   ```
-  There are several changes in the common configuration. Each config property is discussed.
-  If there needs to be any change, the property is highlighted. The change could be a change in
-  the default values, some added/missing features, or a change in semantics.
+  Each allowed config property is discussed in the table below.
+  If there is any change in semantics or the default values, the property and the change is **highlighted in bold**.
 
-  * `partitionAssigners`: Support for range and roundRobin assignors is provided. Custom assignors are not supported.
-                          The default value of this remains `[PartitionAssigners.roundRobin]`.
-                          Support for cooperative-sticky assignor will be added soon.
-                          An alias for these properties is also made available, `partitionAssignors` and `PartitionAssignors` to maintain
-                          parlance with the Java client's terminology.
-  * `sessionTimeout`: If no heartbeats are received by the broker for a group member within the session timeout, the broker will remove the consumer from
-                         the group and trigger a rebalance.
-  * **`rebalanceTimeout`**: The maximum allowed time for each member to join the group once a rebalance has begun. The **default value** is changed to 300000.
-                            Note, before changing: setting this value *also* changes the max poll interval. Message processing in `eachMessage` must not take more than this time.
-  * `heartbeatInterval`: The expected time in milliseconds between heartbeats to the consumer coordinator. The default value remains 3000.
-  * `metadataMaxAge`: Time in milliseconds after which to refresh metadata for known topics. The default value remains 5min. This
-                      corresponds to the librdkafka property `topic.metadata.refresh.interval.ms` (and not `metadata.max.age.ms`).
-  * `allowAutoTopicCreation`: determines if a topic should be created if it doesn't exist while producing.
-  * **`maxBytesPerPartition`**: determines how many bytes can be fetched in one request from a single partition. The default value remains 1048576.
-                                There is a change in semantics, this size grows dynamically if a single message larger than this is encountered,
-                                and the client does not get stuck.
-  * `minBytes`: Minimum number of bytes the broker responds with (or wait until `maxWaitTimeInMs`). The default remains 1.
-  * `maxBytes`: Maximum number of bytes the broker responds with.
-  * `maxWaitTimeInMs`: Maximum time in milliseconds the broker waits for the `minBytes` to be fulfilled.
-  * **`retry`**: See the section for retry above. The consumer config `retry` takes precedence over the common config `retry`.
-  * `readUncommitted`: if true, consumer will read transactional messages which have not been committed. The default value remains false.
-  * **`maxInFlightRequests`**: Maximum number of in-flight requests *per broker connection*. If not set, it is practically unbounded (same as KafkaJS).
-  * `rackId`: Can be set to an arbitrary string which will be used for fetch-from-follower if set up on the cluster.
-  * An `rdKafka` block can be added to the config. It allows directly setting librdkafka properties.
-    If you are starting to make the configuration anew, it is best to specify properties using
-    the `rdKafka` block. [Complete list of properties here](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
+  | Property                 | Default Value                     | Comment                                                                                                                                                                                                                              |
+  |--------------------------|-----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | groupId                  | null                              | A mandatory string denoting consumer group name that this consumer is a part of.                                                                                                                                                     |
+  | **partitionAssigners**   | `[PartitionAssigners.roundRobin]` | Support for range and roundRobin assignors is provided. Custom assignors are not supported. Support for cooperative-sticky assignor is yet to be added                                                                               |
+  | **partitionAssignors**   | `[PartitionAssignors.roundRobin]` | Alias for `partitionAssigners`                                                                                                                                                                                                       |
+  | **rebalanceTimeout**     | **300000**                        | The maximum allowed time for each member to join the group once a rebalance has begun. Note, that setting this value *also* changes the max poll interval. Message processing in `eachMessage` must not take more than this time.    |
+  | heartbeatInterval        | 3000                              | The expected time in milliseconds between heartbeats to the consumer coordinator.                                                                                                                                                    |
+  | metadataMaxAge           | 5 minutes                         | Time in milliseconds after which to refresh metadata for known topics                                                                                                                                                                |
+  | allowAutoTopicCreation   | true                              | Determines if a topic should be created if it doesn't exist while consuming.                                                                                                                                                         |
+  | **maxBytesPerPartition** | 1048576 (1MB)                     | determines how many bytes can be fetched in one request from a single partition. There is a change in semantics, this size grows dynamically if a single message larger than this is encountered, and the client does not get stuck. |
+  | minBytes                 | 1                                 | Minimum number of bytes the broker responds with (or wait until `maxWaitTimeInMs`)                                                                                                                                                   |
+  | maxBytes                 | 10485760 (10MB)                   | Maximum number of bytes the broker responds with.                                                                                                                                                                                    |
+  | **retry**                | object                            | Identical to `retry` in the common configuration. This takes precedence over the common config retry.                                                                                                                                |
+  | readUncommitted          | false                             | If true, consumer will read transactional messages which have not been committed.                                                                                                                                                    |
+  | **maxInFlightRequests**  | null                              | Maximum number of in-flight requests **per broker connection**. If not set, it is practically unbounded (same as KafkaJS).                                                                                                           |
+  | rackId                   | null                              | Can be set to an arbitrary string which will be used for fetch-from-follower if set up on the cluster.                                                                                                                               |
+  | **fromBeginning**        | false                             | If there is initial offset in offset store or the desired offset is out of range, and this is true, we consume the earliest possible offset.  **This is set on a per-consumer level, not on a per `subscribe` level**.               |
+  | **autoCommit**           | true                              | Whether to periodically auto-commit offsets to the broker while consuming.  **This is set on a per-consumer level, not on a per `run` level**.                                                                                       |
+  | **autoCommitInterval**   | 5000                              | Offsets are committed periodically at this interval, if autoCommit is true. **This is set on a per-consumer level, not on a per `run` level. The default value is changed to 5 seconds.**.                                           |
+  | **rdKafka**              | {}                                | This is a **new** property. It can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md). If set on the common config, the values are merged. |
+
 
 #### Semantic and Per-Method Changes
 
 
- * Changes to `subscribe`:
-  * Regex flags are ignored while passing a topic subscription (like 'i' or 'g').
-  * Subscribe must be called after `connect`.
-  * An optional parameter, `replace` is provided. If set to true, the current subscription is replaced with the new one. If set to false, the new subscription is added to the current one.
-    The default value is false.
-  * While passing a list of topics to `subscribe`, the `fromBeginning` is not set on a per-subscribe basis. Rather, it must be configured in the top-level configuration.
-   Before:
-    ```javascript
-      const consumer = kafka.consumer({
-        groupId: 'test-group',
-      });
-      await consumer.connect();
-      await consumer.subscribe({ topics: ["topic"], fromBeginning: true});
-    ```
-   After:
-    ```javascript
-      const consumer = kafka.consumer({
-        groupId: 'test-group',
-        fromBeginning: true,
-      });
-      await consumer.connect();
-      await consumer.subscribe({ topics: ["topic"] });
-    ```
+* `subscribe`:
+  - Regex flags are ignored while passing a topic subscription (like 'i' or 'g').
+  - Subscribe must be called only after `connect`.
+  - An optional parameter, `replace` is provided.
+    If set to true, the current subscription is replaced with the new one. If set to false, the new subscription is added to the current one, for example,
+    `consumer.subscribe({ topics: ['topic1'], replace: true});`.
+    The default value is false to retain existing behaviour.
+  - While passing a list of topics to `subscribe`, the `fromBeginning` is not set on a per-subscribe basis. Rather, it must be configured in the top-level configuration.
 
- * For auto-committing using a consumer, the properties `autoCommit` and `autoCommitInterval` on `run` are not set on a per-subscribe basis.
-   Rather, they must be configured in the top-level configuration.
-   `autoCommitThreshold` is not supported.
+    Before:
+      ```javascript
+        const consumer = kafka.consumer({
+          groupId: 'test-group',
+        });
+        await consumer.connect();
+        await consumer.subscribe({ topics: ["topic"], fromBeginning: true});
+      ```
+    After:
+      ```javascript
+        const consumer = kafka.consumer({
+          groupId: 'test-group',
+          fromBeginning: true,
+        });
+        await consumer.connect();
+        await consumer.subscribe({ topics: ["topic"] });
+      ```
+
+* `run` :
+  - For auto-committing using a consumer, the properties `autoCommit` and `autoCommitInterval` on `run` are not set on a per-subscribe basis.
+    Rather, they must be configured in the top-level configuration.
+    `autoCommitThreshold` is not supported.
 
     Before:
     ```javascript
@@ -254,17 +250,16 @@
       consumer.run({
         eachMessage: someFunc,
         autoCommit: true,
-        autoCommitThreshold: 5000,
+        autoCommitInterval: 5000,
       });
     ```
-
     After:
     ```javascript
       const kafka = new Kafka({ /* ... */ });
       const consumer = kafka.consumer({
         /* ... */,
         autoCommit: true,
-        autoCommitThreshold: 5000,
+        autoCommitInterval: 5000,
       });
       await consumer.connect();
       await consumer.subscribe({ topics: ["topic"] });
@@ -272,18 +267,18 @@
         eachMessage: someFunc,
       });
     ```
-
-  * The `partitionsConsumedConcurrently` property is not supported at the moment.
-  * The `eachBatch` method is not supported.
-  * For the `eachMessage` method while running the consumer:
-    * The `heartbeat()` no longer needs to be called. Heartbeats are automatically managed by librdkafka.
-  * `commitOffsets` does not yet support sending metadata for topic partitions being committed.
-  * `paused()` is supported without any changes.
-  * Changes to `seek`:
-    * The restriction to call seek only after `run` is removed. It can be called any time.
-  * `pause` and `resume` MUST be called after the consumer group is joined. In practice, this means it can be called whenever `consumer.assignment()` has a non-zero size, or within the `eachMessage`
+  - The `heartbeat()` no longer needs to be called by the user in the `eachMessage callback`. Heartbeats are automatically managed by librdkafka.
+  - The `partitionsConsumedConcurrently` property is not supported at the moment.
+  - The `eachBatch` method is not supported.
+* `commitOffsets`:
+  - Does not yet support sending metadata for topic partitions being committed.
+* `seek`:
+  - The restriction to call seek only after `run` is removed. It can be called any time.
+* `pause` and `resume`:
+  - These methods MUST be called after the consumer group is joined.
+    In practice, this means it can be called whenever `consumer.assignment()` has a non-zero size, or within the `eachMessage`
     callback.
-  * `stop` is not yet supported, and the user must disconnect the consumer.
+* `stop` is not yet supported, and the user must disconnect the consumer.
 
 ### Admin Client
 
@@ -293,4 +288,72 @@
       does not support `replicaAssignment`.
     * The `deleteTopics` method is fully supported.
 
+
+#### Error Handling
+
+  **Action**: Convert any checks based on `instanceof` and `error.name` or to error
+            checks based on `error.code` or `error.type`.
+
+  **Example**:
+  ```javascript
+  try {
+    await producer.send(/* args */);
+  } catch (error) {
+    if (!Kafka.isKafkaJSError(error)) { /* unrelated err handling */ }
+    else if (error.fatal) { /* fatal error, abandon producer */ }
+    else if (error.code === Kafka.ErrorCode.ERR__QUEUE_FULL) { /*...*/ }
+    else if (error.type === 'ERR_MSG_SIZE_TOO_LARGE') { /*...*/ }
+    /* and so on for specific errors */
+  }
+  ```
+
+  **Comprehensive Changes**:
+
+   Some possible subtypes of `KafkaJSError` have been removed,
+   and additional information has been added into `KafkaJSError`.
+   Fields have been added denoting if the error is fatal, retriable, or abortable (the latter two only relevant for a transactional producer).
+   Some error-specific fields have also been removed.
+
+   An exhaustive list of changes is at the bottom of this section.
+
+   For compatibility, as many error types as possible have been retained, but it is
+   better to switch to checking the `error.code`.
+
+
+   Exhaustive list of error types and error fields removed:
+   | Error                                     | Change                                                                                                                                                                                                                                                                                                                                             |
+   |-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+   | `KafkaJSNonRetriableError`                | Removed. Retriable errors are automatically retried by librdkafka, so there's no need for this type. Note that `error.retriable` still exists, but it's applicable only for transactional producer, where users are expected to retry an action themselves. All error types using this as a superclass now use `KafkaJSError` as their superclass. |
+   | `KafkaJSOffsetOutOfRange`                 | `topic` and `partition` are removed from this object.                                                                                                                                                                                                                                                                                              |
+   | `KafkaJSMemberIdRequired`                 | Removed. Automatically handled by librdkafka.                                                                                                                                                                                                                                                                                                      |
+   | `KafkaJSNumberOfRetriesExceeded`          | Removed. Retries are handled by librdkafka.                                                                                                                                                                                                                                                                                                        |
+   | `KafkaJSNumberOfRetriesExceeded`          | `broker, correlationId, createdAt, sentAt` and `pendingDuration` are removed from this object.                                                                                                                                                                                                                                                     |
+   | `KafkaJSMetadataNotLoaded`                | Removed. Metadata is automatically reloaded by librdkafka.                                                                                                                                                                                                                                                                                         |
+   | `KafkaJSTopicMetadataNotLoaded`           | Removed. Topic metadata is automatically reloaded by librdkafka.                                                                                                                                                                                                                                                                                   |
+   | `KafkaJSStaleTopicMetadataAssignment`     | removed as it's automatically refreshed by librdkafka.                                                                                                                                                                                                                                                                                             |
+   | `KafkaJSDeleteGroupsError`                | Removed, as the Admin Client doesn't have this yet. May be added back again, or changed.                                                                                                                                                                                                                                                           |
+   | `KafkaJSServerDoesNotSupportApiKey`       | Removed, as this error isn't generally exposed to user in librdkafka. If raised, it is subsumed into `KafkaJSError` where `error.code === Kafka.ErrorCode.ERR_UNSUPPORTED_VERSION`.                                                                                                                                                                |
+   | `KafkaJSBrokerNotFound`                   | Removed. This error isn't exposed directly to the user in librdkafka.                                                                                                                                                                                                                                                                              |
+   | `KafkaJSLockTimeout`                      | Removed. This error is not applicable while using librdkafka.                                                                                                                                                                                                                                                                                      |
+   | `KafkaJSUnsupportedMagicByteInMessageSet` | Removed. It is subsumed into `KafkaJSError` where `error.code === Kafka.ErrorCode.ERR_UNSUPPORTED_VERSION`.                                                                                                                                                                                                                                        |
+   | `KafkaJSDeleteTopicRecordsError`          | Removed, as the Admin Client doesn't have this yet. May be added back again, or changed.                                                                                                                                                                                                                                                           |
+   | `KafkaJSInvariantViolation`               | Removed, as it's not applicable to librdkafka. Errors in internal state are subsumed into `KafkaJSError` where `error.code === Kafka.ErrorCode.ERR__STATE`.                                                                                                                                                                                        |
+   | `KafkaJSInvalidVarIntError`               | Removed. This error isn't exposed directly to the user in librdkafka.                                                                                                                                                                                                                                                                              |
+   | `KafkaJSInvalidLongError`                 | Removed. This error isn't exposed directly to the user in librdkafka.                                                                                                                                                                                                                                                                              |
+   | `KafkaJSCreateTopicError`                 | Removed, as the Admin Client doesn't have this yet. May be added back again, or changed..                                                                                                                                                                                                                                                          |
+   | `KafkaJSAlterPartitionReassignmentsError` | removed, as the RPC is not used in librdkafka.                                                                                                                                                                                                                                                                                                     |
+   | `KafkaJSFetcherRebalanceError`            | Removed. This error isn't exposed directly to the user in librdkafka.                                                                                                                                                                                                                                                                              |
+   | `KafkaJSConnectionError`                  | `broker` is removed from this object.                                                                                                                                                                                                                                                                                                              |
+   | `KafkaJSConnectionClosedError`            | Removed. Subsumed into `KafkaJSConnectionError` as librdkafka treats them equivalently.                                                                                                                                                                                                                                                            |
+
 ## node-rdkafka
+
+Change the import statement, from
+  ```javascript
+  const Kafka = require('node-rdkafka');
+  ```
+  to
+  ```javascript
+  const Kafka = require('confluent-kafka-js');
+  ```
+The rest of the functionality should work as usual.

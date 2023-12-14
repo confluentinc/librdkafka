@@ -1376,7 +1376,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
      .sdef = "message.send.max.retries"},
 
-    {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.ms", _RK_C_INT,
+    {_RK_GLOBAL | _RK_MED, "retry.backoff.ms", _RK_C_INT,
      _RK(retry_backoff_ms),
      "The backoff time in milliseconds before retrying a protocol request, "
      "this is the first backoff time, "
@@ -1384,7 +1384,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "exhausted, and it's capped by retry.backoff.max.ms.",
      1, 300 * 1000, 100},
 
-    {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
+    {_RK_GLOBAL | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
      _RK(retry_backoff_max_ms),
      "The max backoff time in milliseconds before retrying a protocol request, "
      "this is the atmost backoff allowed for exponentially backed off "

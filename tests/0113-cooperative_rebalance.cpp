@@ -2200,8 +2200,14 @@ static void t_max_poll_interval_exceeded(int variation) {
   Test::subscribe(c1, topic_name_1);
   Test::subscribe(c2, topic_name_1);
 
-  bool done                    = false;
-  bool both_have_been_assigned = false;
+  bool done                        = false;
+  bool both_have_been_assigned     = false;
+  int expected_cb1_assign_call_cnt = 1;
+  int expected_cb2_assign_call_cnt = 2;
+  int expected_cb1_revoke_call_cnt = 1;
+  int expected_cb2_revoke_call_cnt = 1;
+  int expected_cb1_lost_call_cnt   = 1;
+
   while (!done) {
     if (!both_have_been_assigned)
       Test::poll_once(c1, 500);
@@ -2224,7 +2230,7 @@ static void t_max_poll_interval_exceeded(int variation) {
     }
   }
 
-  if (variation == 1) {
+  if (variation == 1 || variation == 3) {
     if (rebalance_cb1.lost_call_cnt != 0)
       Test::Fail(
           tostr() << "Expected consumer 1 lost revoke count to be 0, not: "
@@ -2233,32 +2239,43 @@ static void t_max_poll_interval_exceeded(int variation) {
                     500); /* Eat the max poll interval exceeded error message */
     Test::poll_once(c1,
                     500); /* Trigger the rebalance_cb with lost partitions */
-    if (rebalance_cb1.lost_call_cnt != 1)
-      Test::Fail(
-          tostr() << "Expected consumer 1 lost revoke count to be 1, not: "
-                  << rebalance_cb1.lost_call_cnt);
+    if (rebalance_cb1.lost_call_cnt != expected_cb1_lost_call_cnt)
+      Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be "
+                         << expected_cb1_lost_call_cnt
+                         << ", not: " << rebalance_cb1.lost_call_cnt);
+  }
+
+  if (variation == 3) {
+    /* Last poll will cause a rejoin, wait that the rejoin happens. */
+    rd_sleep(5);
+    expected_cb2_revoke_call_cnt++;
   }
 
   c1->close();
   c2->close();
 
-  if (rebalance_cb1.lost_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 1, not: "
-                       << rebalance_cb1.lost_call_cnt);
+  if (rebalance_cb1.lost_call_cnt != expected_cb1_lost_call_cnt)
+    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be "
+                       << expected_cb1_lost_call_cnt
+                       << ", not: " << rebalance_cb1.lost_call_cnt);
 
-  if (rebalance_cb1.assign_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 assign count to be 1, not: "
-                       << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expected consumer 1 assign count to be 2, not: "
-                       << rebalance_cb1.assign_call_cnt);
+  if (rebalance_cb1.nonempty_assign_call_cnt != expected_cb1_assign_call_cnt)
+    Test::Fail(tostr() << "Expected consumer 1 non-empty assign count to be "
+                       << expected_cb1_assign_call_cnt
+                       << ", not: " << rebalance_cb1.nonempty_assign_call_cnt);
+  if (rebalance_cb2.nonempty_assign_call_cnt != expected_cb2_assign_call_cnt)
+    Test::Fail(tostr() << "Expected consumer 2 non-empty assign count to be "
+                       << expected_cb2_assign_call_cnt
+                       << ", not: " << rebalance_cb2.nonempty_assign_call_cnt);
 
-  if (rebalance_cb1.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: "
-                       << rebalance_cb1.revoke_call_cnt);
-  if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 2 revoke count to be 1, not: "
-                       << rebalance_cb1.revoke_call_cnt);
+  if (rebalance_cb1.revoke_call_cnt != expected_cb1_revoke_call_cnt)
+    Test::Fail(tostr() << "Expected consumer 1 revoke count to be "
+                       << expected_cb1_revoke_call_cnt
+                       << ", not: " << rebalance_cb1.revoke_call_cnt);
+  if (rebalance_cb2.revoke_call_cnt != expected_cb2_revoke_call_cnt)
+    Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
+                       << expected_cb2_revoke_call_cnt
+                       << ", not: " << rebalance_cb2.revoke_call_cnt);
 
   delete c1;
   delete c2;
@@ -3202,7 +3219,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   o_java_interop();
   for (i = 1; i <= 6; i++) /* iterate over 6 different test variations */
     s_subscribe_when_rebalancing(i);
-  for (i = 1; i <= 2; i++)
+  for (i = 1; i <= 3; i++)
     t_max_poll_interval_exceeded(i);
   /* Run all 2*3 variations of the u_.. test */
   for (i = 0; i < 3; i++) {

@@ -1,3 +1,22 @@
+# librdkafka v2.3.1 (can change)
+
+librdkafka v2.3.1 is a maintenance release:
+
+ * Fix hang in cooperative consumer mode if an assignment is processed
+   while closing the consumer (#).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * While using the cooperative assignor, given an assignment is received while closing the consumer
+   it's possible that it gets stuck in state WAIT_ASSIGN_CALL, while the method is converted to
+   a full unassign. Solved by changing state from WAIT_ASSIGN_CALL to WAIT_UNASSIGN_CALL
+   while doing this conversion (#).
+
+
+
 # librdkafka v2.3.0
 
 librdkafka v2.3.0 is a feature release:

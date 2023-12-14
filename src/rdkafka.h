@@ -633,7 +633,10 @@ typedef enum {
         RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
         /** Unknown Topic Id */
         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID = 100,
-
+        /** The member epoch is fenced by the group coordinator */
+        RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
+        /** The member epoch is stale */
+        RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH = 113,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 
@@ -4546,6 +4549,20 @@ rd_kafka_consumer_group_metadata_new_with_genid(const char *group_id,
                                                 int32_t generation_id,
                                                 const char *member_id,
                                                 const char *group_instance_id);
+
+
+/**
+ * @brief Get member id of a group metadata.
+ *
+ * @param group_metadata The group metadata
+ *
+ * @returns The member id contained in the passed \p group_metadata.
+ *
+ * @remark The returned pointer has the same lifetime as \p group_metadata.
+ */
+RD_EXPORT
+const char *rd_kafka_consumer_group_metadata_member_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata);
 
 
 /**

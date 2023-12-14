@@ -584,11 +584,20 @@ typedef struct rd_kafka_Uuid_s {
 } rd_kafka_Uuid_t;
 
 #define RD_KAFKA_UUID_ZERO                                                     \
-        { 0, 0, "" }
+        (rd_kafka_Uuid_t) {                                                    \
+                0, 0, ""                                                       \
+        }
 
 #define RD_KAFKA_UUID_METADATA_TOPIC_ID                                        \
-        { 0, 1, "" }
+        (rd_kafka_Uuid_t) {                                                    \
+                0, 1, ""                                                       \
+        }
 
+static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
+                                                 rd_kafka_Uuid_t b) {
+        return (a.most_significant_bits - b.most_significant_bits) ||
+               (a.least_significant_bits - b.least_significant_bits);
+}
 
 /**
  * @name Producer ID and Epoch for the Idempotent Producer

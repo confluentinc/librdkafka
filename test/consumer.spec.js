@@ -7,7 +7,7 @@
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
-var addon = require('bindings')('confluent-kafka-js');
+var addon = require('bindings')('node-librdkafka');
 var t = require('assert');
 
 var client;

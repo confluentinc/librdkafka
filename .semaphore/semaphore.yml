@@ -97,7 +97,7 @@ blocks:
           commands:
             - sem-version node 18.19.0
             - export NODE_ABI=108
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -106,7 +106,7 @@ blocks:
           commands:
             - sem-version node 20.10.0
             - export NODE_ABI=115
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -115,7 +115,7 @@ blocks:
           commands:
             - sem-version node 21.4.0
             - export NODE_ABI=120
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -141,7 +141,7 @@ blocks:
           commands:
             - sem-version node 18.19.0
             - export NODE_ABI=108
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -150,7 +150,7 @@ blocks:
           commands:
             - sem-version node 20.10.0
             - export NODE_ABI=115
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -159,7 +159,7 @@ blocks:
           commands:
             - sem-version node 21.4.0
             - export NODE_ABI=120
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -184,7 +184,7 @@ blocks:
           commands:
             - sem-version node 18.19.0
             - export NODE_ABI=108
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -193,7 +193,7 @@ blocks:
           commands:
             - sem-version node 20.10.0
             - export NODE_ABI=115
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
@@ -202,7 +202,7 @@ blocks:
           commands:
             - sem-version node 21.4.0
             - export NODE_ABI=120
-            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - export ARTIFACT_KEY="node-librdkafka-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
             - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}

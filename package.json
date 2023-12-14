@@ -17,7 +17,7 @@
     "module_name": "confluent-kafka-js",
     "module_path": "./build/{configuration}/",
     "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{libc}-{arch}.tar.gz",
-    "host": "https://github.com/confluentinc/confluent-kafka-js/releases/download/",
+    "host": "https://confluent-kafka-js.s3.us-west-1.amazonaws.com/releases/download/",
     "remote_path": "v{version}"
   },
   "keywords": [

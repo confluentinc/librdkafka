@@ -28,6 +28,9 @@
                 "inputs": [
                   "librdkafka/config.h",
                 ],
+                "outputs": [
+                  "deps/librdkafka/src/librdkafka.so",
+                ],
                 "action": [
                   "make", "-C", "librdkafka", "libs", "install"
                 ],

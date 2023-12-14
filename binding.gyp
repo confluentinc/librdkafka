@@ -95,14 +95,14 @@
                                   "libraries": [
                                     "../build/deps/librdkafka.dylib",
                                     "../build/deps/librdkafka++.dylib",
-                                    "-Wl,-rpath='$$ORIGIN/../deps'",
+                                    "-Wl,-rpath,'$$ORIGIN/../deps'",
                                   ],
                                 },
                                 {
                                     "libraries": [
                                       "../build/deps/librdkafka.so",
                                       "../build/deps/librdkafka++.so",
-                                      "-Wl,-rpath='$$ORIGIN/../deps'",
+                                      "-Wl,-rpath,'$$ORIGIN/../deps'",
                                     ],
                                 },
                             ]
@@ -112,7 +112,7 @@
                         "libraries": [
                           "../build/deps/librdkafka-static.a",
                           "../build/deps/librdkafka++.a",
-                          "-Wl,-rpath='$$ORIGIN/../deps'",
+                          "-Wl,-rpath,'$$ORIGIN/../deps'",
                         ],
                       }
                     ],

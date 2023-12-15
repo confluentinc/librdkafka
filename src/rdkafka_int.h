@@ -259,6 +259,14 @@ rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
         return names[state];
 }
 
+static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
+        static const char *types[] = {
+            [RD_KAFKA_PRODUCER] = "producer",
+            [RD_KAFKA_CONSUMER] = "consumer",
+        };
+        return types[type];
+}
+
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */
@@ -659,14 +667,18 @@ struct rd_kafka_s {
                 /* Fields obtained from broker as a result of GetSubscriptions -
                  * only accessed from main thread.
                  */
-                rd_kafka_uuid_t client_instance_id;
+                rd_kafka_Uuid_t client_instance_id;
                 int32_t subscription_id;
                 rd_kafka_compression_t *accepted_compression_types;
                 size_t accepted_compression_types_cnt;
                 int32_t push_interval_ms;
+                int32_t telemetry_max_bytes;
                 rd_bool_t delta_temporality;
                 char **requested_metrics;
                 size_t requested_metrics_cnt;
+                /* TODO: Use rd_list_t to store the metrics */
+                int *matched_metrics;
+                size_t matched_metrics_cnt;
         } rk_telemetry;
 
         /* Test mocks */
@@ -914,6 +926,8 @@ const char *rd_kafka_purge_flags2str(int flags);
 #define RD_KAFKA_DBG_ALL         0xfffff
 #define RD_KAFKA_DBG_NONE        0x0
 
+/* Jitter Percent for exponential retry backoff */
+#define RD_KAFKA_RETRY_JITTER_PERCENT 20
 
 void rd_kafka_log0(const rd_kafka_conf_t *conf,
                    const rd_kafka_t *rk,

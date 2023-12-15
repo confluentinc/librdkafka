@@ -38,10 +38,14 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_mock_int.h"
 #include "rdkafka_transport_int.h"
-
+#include "rdkafka_mock.h"
 #include <stdarg.h>
 
+typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
+
 static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster);
+static rd_kafka_mock_request_t *
+rd_kafka_mock_request_new(int32_t id, int16_t api_key, int64_t timestamp_us);
 
 
 static rd_kafka_mock_broker_t *
@@ -1127,12 +1131,13 @@ rd_kafka_mock_connection_parse_request(rd_kafka_mock_connection_t *mconn,
                 return -1;
         }
 
-        /* Add the request to the cluster's request list. */
         mtx_lock(&mcluster->lock);
-        rd_list_add(&mcluster->request_list,
-                    rd_kafka_mock_request_new(mconn->broker->id,
-                                              rkbuf->rkbuf_reqhdr.ApiKey,
-                                              rd_clock()));
+        if (mcluster->track_requests) {
+                rd_list_add(&mcluster->request_list,
+                            rd_kafka_mock_request_new(
+                                mconn->broker->id, rkbuf->rkbuf_reqhdr.ApiKey,
+                                rd_clock()));
+        }
         mtx_unlock(&mcluster->lock);
 
         rd_kafka_dbg(rk, MOCK, "MOCK",
@@ -2594,6 +2599,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->topics);
         mcluster->defaults.partition_cnt      = 4;
         mcluster->defaults.replication_factor = RD_MIN(3, broker_cnt);
+        mcluster->track_requests              = rd_false;
 
         TAILQ_INIT(&mcluster->cgrps);
 
@@ -2674,30 +2680,58 @@ rd_kafka_mock_cluster_bootstraps(const rd_kafka_mock_cluster_t *mcluster) {
         return mcluster->bootstraps;
 }
 
-rd_kafka_mock_request_t *
-rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp) {
+/**
+ * @struct Represents a request to the mock cluster along with a timestamp.
+ */
+struct rd_kafka_mock_request_s {
+        int32_t id;      /**< Broker id */
+        int16_t api_key; /**< API Key of request */
+        rd_ts_t timestamp /**< Timestamp at which request was received */;
+};
+
+/**
+ * @brief Allocate and initialize a rd_kafka_mock_request_t *
+ */
+static rd_kafka_mock_request_t *
+rd_kafka_mock_request_new(int32_t id, int16_t api_key, int64_t timestamp_us) {
         rd_kafka_mock_request_t *request;
         request            = rd_malloc(sizeof(*request));
         request->id        = id;
         request->api_key   = api_key;
-        request->timestamp = timestamp;
+        request->timestamp = timestamp_us;
         return request;
 }
 
 static rd_kafka_mock_request_t *
 rd_kafka_mock_request_copy(rd_kafka_mock_request_t *mrequest) {
         rd_kafka_mock_request_t *request;
-        request = rd_malloc(sizeof(*request));
-        memcpy(request, mrequest, sizeof(*request));
+        request            = rd_malloc(sizeof(*request));
+        request->id        = mrequest->id;
+        request->api_key   = mrequest->api_key;
+        request->timestamp = mrequest->timestamp;
         return request;
 }
 
-void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *mreq) {
-        rd_free(mreq);
+void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *element) {
+        rd_free(element);
 }
 
-void rd_kafka_mock_request_free(void *mreq) {
-        rd_kafka_mock_request_destroy((rd_kafka_mock_request_t *)mreq);
+static void rd_kafka_mock_request_free(void *element) {
+        rd_kafka_mock_request_destroy(element);
+}
+
+void rd_kafka_mock_start_request_tracking(rd_kafka_mock_cluster_t *mcluster) {
+        mtx_lock(&mcluster->lock);
+        mcluster->track_requests = rd_true;
+        rd_list_init(&mcluster->request_list, 32, rd_kafka_mock_request_free);
+        mtx_unlock(&mcluster->lock);
+}
+
+void rd_kafka_mock_stop_request_tracking(rd_kafka_mock_cluster_t *mcluster) {
+        mtx_lock(&mcluster->lock);
+        mcluster->track_requests = rd_false;
+        rd_list_clear(&mcluster->request_list);
+        mtx_unlock(&mcluster->lock);
 }
 
 rd_kafka_mock_request_t **
@@ -2717,25 +2751,23 @@ rd_kafka_mock_get_requests(rd_kafka_mock_cluster_t *mcluster, size_t *cntp) {
         }
 
         mtx_unlock(&mcluster->lock);
-
         return ret;
 }
 
-void rd_kafka_mock_broker_clear_requests(rd_kafka_mock_cluster_t *mcluster) {
+void rd_kafka_mock_clear_requests(rd_kafka_mock_cluster_t *mcluster) {
         mtx_lock(&mcluster->lock);
         rd_list_clear(&mcluster->request_list);
         mtx_unlock(&mcluster->lock);
 }
 
-RD_EXPORT int32_t rd_kafka_mock_request_id(rd_kafka_mock_request_t *mreq) {
+int32_t rd_kafka_mock_request_id(rd_kafka_mock_request_t *mreq) {
         return mreq->id;
 }
 
-RD_EXPORT int16_t rd_kafka_mock_request_api_key(rd_kafka_mock_request_t *mreq) {
+int16_t rd_kafka_mock_request_api_key(rd_kafka_mock_request_t *mreq) {
         return mreq->api_key;
 }
 
-RD_EXPORT rd_ts_t
-rd_kafka_mock_request_timestamp(rd_kafka_mock_request_t *mreq) {
+rd_ts_t rd_kafka_mock_request_timestamp(rd_kafka_mock_request_t *mreq) {
         return mreq->timestamp;
 }

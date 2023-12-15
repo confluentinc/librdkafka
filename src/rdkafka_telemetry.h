@@ -30,6 +30,9 @@
 #ifndef _RD_KAFKA_TELEMETRY_H_
 #define _RD_KAFKA_TELEMETRY_H_
 
+#define RD_KAFKA_TELEMETRY_METRICS_ALL_METRICS_SUBSCRIPTION "*"
+#define RD_KAFKA_TELEMETRY_METRIC_NAME_MAX_LEN              128
+
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err);
 
@@ -42,7 +45,8 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk);
 
 void rd_kafka_telemetry_schedule_termination(rd_kafka_t *rk);
 
-void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk, rd_kafka_broker_t *rkb);
+void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
+                                         rd_kafka_broker_t *rkb);
 
 void rd_kafka_telemetry_fsm_tmr_cb(rd_kafka_timers_t *rkts, void *rk);
 

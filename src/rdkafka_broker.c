@@ -2315,7 +2315,8 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
 
         if (rd_kafka_broker_ApiVersion_supported(
                 rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
-            -1) {
+                -1 &&
+            rkb->rkb_rk->rk_conf.enable_metrics_push) {
                 rd_kafka_t *rk = rkb->rkb_rk;
                 rd_kafka_op_t *rko =
                     rd_kafka_op_new(RD_KAFKA_OP_SET_TELEMETRY_BROKER);
@@ -2886,6 +2887,7 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
  */
 void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
+        int64_t backoff = 0;
         /* Restore original replyq since replyq.q will have been NULLed
          * by buf_callback()/replyq_enq(). */
         if (!rkbuf->rkbuf_replyq.q && rkbuf->rkbuf_orig_replyq.q) {
@@ -2913,9 +2915,24 @@ void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
                    rkb->rkb_rk->rk_conf.retry_backoff_ms);
 
         rd_atomic64_add(&rkb->rkb_c.tx_retries, 1);
+        /* In some cases, failed Produce requests do not increment the retry
+         * count, see rd_kafka_handle_Produce_error. */
+        if (rkbuf->rkbuf_retries > 0)
+                backoff = (1 << (rkbuf->rkbuf_retries - 1)) *
+                          (rkb->rkb_rk->rk_conf.retry_backoff_ms);
+        else
+                backoff = rkb->rkb_rk->rk_conf.retry_backoff_ms;
 
-        rkbuf->rkbuf_ts_retry =
-            rd_clock() + (rkb->rkb_rk->rk_conf.retry_backoff_ms * 1000);
+        /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->
+         * backoff_ms * jitter * 10 */
+        backoff = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
+                            100 + RD_KAFKA_RETRY_JITTER_PERCENT) *
+                  backoff * 10;
+
+        if (backoff > rkb->rkb_rk->rk_conf.retry_backoff_max_ms * 1000)
+                backoff = rkb->rkb_rk->rk_conf.retry_backoff_max_ms * 1000;
+
+        rkbuf->rkbuf_ts_retry = rd_clock() + backoff;
         /* Precaution: time out the request if it hasn't moved from the
          * retry queue within the retry interval (such as when the broker is
          * down). */
@@ -4775,6 +4792,10 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_avg_destroy(&rkb->rkb_avg_outbuf_latency);
         rd_avg_destroy(&rkb->rkb_avg_rtt);
         rd_avg_destroy(&rkb->rkb_avg_throttle);
+        rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_throttle);
+        rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_outbuf_latency);
+        rd_avg_destroy(&rkb->rkb_c_historic.rkb_avg_rtt);
+
 
         mtx_lock(&rkb->rkb_logname_lock);
         rd_free(rkb->rkb_logname);
@@ -4862,13 +4883,24 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rd_kafka_bufq_init(&rkb->rkb_retrybufs);
         rkb->rkb_ops = rd_kafka_q_new(rk);
         rd_avg_init(&rkb->rkb_avg_int_latency, RD_AVG_GAUGE, 0, 100 * 1000, 2,
-                    rk->rk_conf.stats_interval_ms ? 1 : 0);
-        rd_avg_init(&rkb->rkb_avg_outbuf_latency, RD_AVG_GAUGE, 0, 100 * 1000,
-                    2, rk->rk_conf.stats_interval_ms ? 1 : 0);
+                    rk->rk_conf.stats_interval_ms ||
+                        rk->rk_conf.enable_metrics_push);
+        rd_avg_init(
+            &rkb->rkb_avg_outbuf_latency, RD_AVG_GAUGE, 0, 100 * 1000, 2,
+            rk->rk_conf.stats_interval_ms || rk->rk_conf.enable_metrics_push);
         rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+                    rk->rk_conf.stats_interval_ms ||
+                        rk->rk_conf.enable_metrics_push);
         rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE, 0, 5000 * 1000, 2,
-                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+                    rk->rk_conf.stats_interval_ms ||
+                        rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_c_historic.rkb_avg_rtt, RD_AVG_GAUGE, 0,
+                    500 * 1000, 2, rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_c_historic.rkb_avg_outbuf_latency, RD_AVG_GAUGE,
+                    0, 500 * 1000, 2, rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_c_historic.rkb_avg_throttle, RD_AVG_GAUGE, 0,
+                    500 * 1000, 2, rk->rk_conf.enable_metrics_push);
+
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 

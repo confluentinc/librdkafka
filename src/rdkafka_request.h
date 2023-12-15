@@ -101,6 +101,7 @@ rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
 
+
 rd_kafka_resp_err_t
 rd_kafka_handle_ListOffsets(rd_kafka_t *rk,
                             rd_kafka_broker_t *rkb,
@@ -114,7 +115,23 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_topic_partition_list_t *offsets,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
+                                 int timeout_ms,
                                  void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_ListOffsetsRequest_admin(rd_kafka_broker_t *rkb,
+                                  const rd_list_t *offsets,
+                                  rd_kafka_AdminOptions_t *options,
+                                  char *errstr,
+                                  size_t errstr_size,
+                                  rd_kafka_replyq_t replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_parse_ListOffsets(rd_kafka_buf_t *rkbuf,
+                           rd_kafka_topic_partition_list_t *offsets,
+                           rd_list_t *result_infos);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
@@ -236,13 +253,15 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              rd_kafka_resp_cb_t *resp_cb,
                                              void *opaque);
 
-rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
-                                                 int16_t max_ApiVersion,
-                                                 char **groups,
-                                                 size_t group_cnt,
-                                                 rd_kafka_replyq_t replyq,
-                                                 rd_kafka_resp_cb_t *resp_cb,
-                                                 void *opaque);
+rd_kafka_error_t *
+rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
+                               int16_t max_ApiVersion,
+                               char **groups,
+                               size_t group_cnt,
+                               rd_bool_t include_authorized_operations,
+                               rd_kafka_replyq_t replyq,
+                               rd_kafka_resp_cb_t *resp_cb,
+                               void *opaque);
 
 
 void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
@@ -261,6 +280,20 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_bool_t cgrp_update,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko);
+
+rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *topics,
+    const char *reason,
+    rd_bool_t allow_auto_create_topics,
+    rd_bool_t include_cluster_authorized_operations,
+    rd_bool_t include_topic_authorized_operations,
+    rd_bool_t cgrp_update,
+    rd_bool_t force_racks,
+    rd_kafka_resp_cb_t *resp_cb,
+    rd_kafka_replyq_t replyq,
+    rd_bool_t force,
+    void *opaque);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_ApiVersion(rd_kafka_t *rk,
@@ -481,10 +514,10 @@ rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t
 rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
-                              rd_kafka_uuid_t *client_instance_id,
+                              rd_kafka_Uuid_t *client_instance_id,
                               int32_t subscription_id,
                               rd_bool_t terminating,
-                              const char *compression_type,
+                              rd_kafka_compression_t compression_type,
                               const void *metrics,
                               size_t metrics_size,
                               char *errstr,

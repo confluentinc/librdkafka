@@ -1,4 +1,4 @@
-const { Kafka } = require('../..').KafkaJS;
+const { Kafka, logLevel } = require('../..').KafkaJS;
 //const { Kafka } = require('kafkajs')
 
 async function consumerStart() {
@@ -6,18 +6,11 @@ async function consumerStart() {
     var stopped = false;
 
     const kafka = new Kafka({
-        brokers: ['<fill>'],
-        ssl: true,
-        connectionTimeout: 5000,
-        sasl: {
-            mechanism: 'plain',
-            username: '<fill>',
-            password: '<fill>',
-        },
+        brokers: ['localhost:9092'],
     });
 
     consumer = kafka.consumer({
-      groupId: 'test-group',
+      groupId: 'test-group22' + Math.random(),
       rebalanceListener: {
         onPartitionsAssigned: async (assignment) => {
           console.log(`Assigned partitions ${JSON.stringify(assignment)}`);
@@ -33,10 +26,11 @@ async function consumerStart() {
       },
       rdKafka: {
         globalConfig: {
-        'enable.auto.commit': false
+        'debug': 'conf',
+        'enable.auto.commit': false,
+        'auto.offset.reset': 'error'
         },
         topicConfig: {
-          'auto.offset.reset': 'earliest'
         },
       }
     });
@@ -46,7 +40,7 @@ async function consumerStart() {
 
     await consumer.subscribe({
       topics: [
-        "topic2"
+        "test-topic"
       ]
     })
 

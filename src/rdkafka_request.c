@@ -3294,7 +3294,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         const int log_decode_errors = LOG_ERR;
         int64_t log_start_offset    = -1;
 
-        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         if (TopicArrayCnt != 1)
                 goto err;
 
@@ -3303,7 +3303,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
          * and that it is the same that we requested.
          * If not the broker is buggy. */
         rd_kafka_buf_skip_str(rkbuf);
-        rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt,
+                                   RD_KAFKAP_PARTITIONS_MAX);
 
         if (PartitionArrayCnt != 1)
                 goto err;
@@ -3325,7 +3326,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int i;
                 int32_t RecordErrorsCnt;
                 rd_kafkap_str_t ErrorMessage;
-                rd_kafka_buf_read_i32(rkbuf, &RecordErrorsCnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &RecordErrorsCnt, -1);
                 if (RecordErrorsCnt) {
                         result->record_errors = rd_calloc(
                             RecordErrorsCnt, sizeof(*result->record_errors));
@@ -3343,6 +3344,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                                         result->record_errors[i].errstr =
                                             RD_KAFKAP_STR_DUP(
                                                 &BatchIndexErrorMessage);
+                                /* RecordError tags */
+                                rd_kafka_buf_skip_tags(rkbuf);
                         }
                 }
 
@@ -3350,6 +3353,11 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 if (!RD_KAFKAP_STR_IS_NULL(&ErrorMessage))
                         result->errstr = RD_KAFKAP_STR_DUP(&ErrorMessage);
         }
+
+        /* Partition tags */
+        rd_kafka_buf_skip_tags(rkbuf);
+        /* Topic tags */
+        rd_kafka_buf_skip_tags(rkbuf);
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1) {
                 int32_t Throttle_Time;

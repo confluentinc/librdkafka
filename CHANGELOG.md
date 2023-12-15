@@ -1,3 +1,11 @@
+# librdkafka v2.3.1 (can change)
+
+librdkafka v2.3.1 is a maintenance release:
+
+* Grafana dashboard to visualize stats callback JSON metrics
+
+
+
 # librdkafka v2.3.0
 
 librdkafka v2.3.0 is a feature release:

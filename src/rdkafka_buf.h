@@ -34,7 +34,6 @@
 #include "rdlist.h"
 #include "rdbuf.h"
 #include "rdkafka_msgbatch.h"
-#include "rdbase64.h"
 
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
@@ -50,20 +49,35 @@ typedef struct rd_tmpabuf_s {
         size_t of;
         char *buf;
         int failed;
-        int assert_on_fail;
+        rd_bool_t assert_on_fail;
 } rd_tmpabuf_t;
 
 /**
- * @brief Allocate new tmpabuf with \p size bytes pre-allocated.
+ * @brief Initialize new tmpabuf of non-final \p size bytes.
  */
 static RD_UNUSED void
-rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, int assert_on_fail) {
-        tab->buf            = rd_malloc(size);
-        tab->size           = size;
+rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, rd_bool_t assert_on_fail) {
+        tab->buf            = NULL;
+        tab->size           = RD_ROUNDUP(size, 8);
         tab->of             = 0;
         tab->failed         = 0;
         tab->assert_on_fail = assert_on_fail;
 }
+
+/**
+ * @brief Add a new allocation of \p _size bytes,
+ *        rounded up to maximum word size,
+ *        for \p _times times.
+ */
+#define rd_tmpabuf_add_alloc_times(_tab, _size, _times)                        \
+        (_tab)->size += RD_ROUNDUP(_size, 8) * _times
+
+#define rd_tmpabuf_add_alloc(_tab, _size)                                      \
+        rd_tmpabuf_add_alloc_times(_tab, _size, 1)
+/**
+ * @brief Finalize tmpabuf pre-allocating tab->size bytes.
+ */
+#define rd_tmpabuf_finalize(_tab) (_tab)->buf = rd_malloc((_tab)->size)
 
 /**
  * @brief Free memory allocated by tmpabuf
@@ -934,6 +948,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request0(rd_kafka_broker_t *rkb,
 #define rd_kafka_buf_new_flexver_request(rkb, ApiKey, segcnt, size,            \
                                          is_flexver)                           \
         rd_kafka_buf_new_request0(rkb, ApiKey, segcnt, size, is_flexver)
+void rd_kafka_buf_upgrade_flexver_request(rd_kafka_buf_t *rkbuf);
 
 rd_kafka_buf_t *
 rd_kafka_buf_new_shadow(const void *ptr, size_t size, void (*free_cb)(void *));
@@ -1207,18 +1222,6 @@ rd_kafka_buf_update_i64(rd_kafka_buf_t *rkbuf, size_t of, int64_t v) {
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
 }
 
-
-/**
- * Write uint64_t to buffer.
- * The value will be endian-swapped before write.
- */
-static RD_INLINE size_t rd_kafka_buf_write_u64(rd_kafka_buf_t *rkbuf,
-                                               uint64_t v) {
-        v = htobe64(v);
-        return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
-}
-
-
 /**
  * @brief Write standard (2-byte header) or KIP-482 COMPACT_STRING to buffer.
  *
@@ -1444,31 +1447,17 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
 
 #define rd_kafka_buf_read_uuid(rkbuf, uuid)                                    \
         do {                                                                   \
-                uint64_t _msb;                                                 \
-                uint64_t _lsb;                                                 \
-                rd_chariov_t in_base64;                                        \
-                char *out_base64_str;                                          \
-                char *uuid_bytes;                                              \
-                uint64_t input_uuid[2];                                        \
-                rd_kafka_buf_read(rkbuf, &_msb, sizeof(_msb));                 \
-                rd_kafka_buf_read(rkbuf, &_lsb, sizeof(_lsb));                 \
-                input_uuid[0]  = _msb;                                         \
-                input_uuid[1]  = _lsb;                                         \
-                uuid_bytes     = (char *)input_uuid;                           \
-                in_base64.ptr  = uuid_bytes;                                   \
-                in_base64.size = sizeof(_msb) + sizeof(_lsb);                  \
-                out_base64_str = rd_base64_encode_str(&in_base64);             \
-                (uuid)->most_significant_bits  = be64toh(_msb);                \
-                (uuid)->least_significant_bits = be64toh(_lsb);                \
-                rd_strlcpy((uuid)->base64str, out_base64_str, 23);             \
-                free(out_base64_str);                                          \
+                rd_kafka_buf_read_i64(rkbuf,                                   \
+                                      &((uuid)->most_significant_bits));       \
+                rd_kafka_buf_read_i64(rkbuf,                                   \
+                                      &((uuid)->least_significant_bits));      \
+                (uuid)->base64str[0] = '\0';                                   \
         } while (0)
 
-
 static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
-                                              rd_kafka_uuid_t *uuid) {
-        rd_kafka_buf_write_u64(rkbuf, uuid->most_significant_bits);
-        rd_kafka_buf_write_u64(rkbuf, uuid->least_significant_bits);
+                                              rd_kafka_Uuid_t *uuid) {
+        rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
+        rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
 }
 
 #endif /* _RDKAFKA_BUF_H_ */

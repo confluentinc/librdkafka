@@ -833,6 +833,13 @@ rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
                                            size_t acl_cnt,
                                            void *opaque);
 
+rd_kafka_resp_err_t
+test_DeleteAcls_simple(rd_kafka_t *rk,
+                       rd_kafka_queue_t *useq,
+                       rd_kafka_AclBindingFilter_t **acl_filters,
+                       size_t acl_filters_cnt,
+                       void *opaque);
+
 rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);

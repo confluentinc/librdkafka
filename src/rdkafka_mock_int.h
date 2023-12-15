@@ -399,9 +399,19 @@ struct rd_kafka_mock_cluster_s {
         /** < Requested metric count. */
         size_t metrics_cnt;
 
+        /**< Appends the requests received to mock cluster if set to true,
+         *   defaulted to false for less memory usage. */
+        rd_bool_t track_requests;
+        /**< List of API requests for this broker. Type:
+         *   rd_kafka_mock_request_t*
+         */
+        rd_list_t request_list;
+
         /**< Mutex for:
          *   .errstacks
          *   .apiversions
+         *   .track_requests
+         *   .request_list
          */
         mtx_t lock;
 

@@ -667,7 +667,7 @@ struct rd_kafka_s {
                 /* Fields obtained from broker as a result of GetSubscriptions -
                  * only accessed from main thread.
                  */
-                rd_kafka_uuid_t client_instance_id;
+                rd_kafka_Uuid_t client_instance_id;
                 int32_t subscription_id;
                 rd_kafka_compression_t *accepted_compression_types;
                 size_t accepted_compression_types_cnt;
@@ -926,6 +926,8 @@ const char *rd_kafka_purge_flags2str(int flags);
 #define RD_KAFKA_DBG_ALL         0xfffff
 #define RD_KAFKA_DBG_NONE        0x0
 
+/* Jitter Percent for exponential retry backoff */
+#define RD_KAFKA_RETRY_JITTER_PERCENT 20
 
 void rd_kafka_log0(const rd_kafka_conf_t *conf,
                    const rd_kafka_t *rk,

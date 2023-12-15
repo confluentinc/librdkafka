@@ -2,6 +2,8 @@
  * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2021-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
+
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -66,6 +68,7 @@ static char *rd_kafka_oidc_build_auth_header(const char *client_id,
 
         client_authorization_in.size--;
         rd_base64_encode(&client_authorization_in, &client_authorization_out);
+        rd_assert(client_authorization_out.ptr);
 
         authorization_base64_header_size =
             strlen("Authorization: Basic ") + client_authorization_out.size + 1;

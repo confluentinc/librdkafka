@@ -2,7 +2,9 @@ version: v1.0
 name: 'librdkafka build and release artifact pipeline'
 agent:
   machine:
-    type: s1-prod-macos-arm64
+    type: s1-prod-macos-13-5-arm64
+execution_time_limit:
+  hours: 3
 global_job_config:
   prologue:
     commands:
@@ -15,7 +17,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-macos-arm64
+          type: s1-prod-macos-13-5-arm64
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
@@ -41,7 +43,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-macos
+          type: s1-prod-macos-13-5-amd64
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-x64__lnk-all
@@ -108,6 +110,9 @@ blocks:
       env_vars:
         - name: CFLAGS
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
+      prologue:
+        commands:
+          - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
       jobs:
         - name: 'Build and integration tests'
           commands:
@@ -140,6 +145,9 @@ blocks:
       agent:
         machine:
           type: s1-prod-ubuntu20-04-amd64-2
+      prologue:
+        commands:
+          - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
@@ -193,6 +201,9 @@ blocks:
       agent:
         machine:
           type: s1-prod-ubuntu20-04-arm64-1
+      prologue:
+        commands:
+          - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
@@ -239,11 +250,8 @@ blocks:
           value: UCRT64
       prologue:
         commands:
-          - cache restore msys2-x64-${Env:ARTIFACT_KEY}
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
-          - cache delete msys2-x64-${Env:ARTIFACT_KEY}
-          - cache store msys2-x64-${Env:ARTIFACT_KEY} c:/msys64
       epilogue:
         commands:
           - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
@@ -277,8 +285,6 @@ blocks:
           # install vcpkg in the parent directory.
           - pwd
           - cd ..
-          # Restore vcpkg caches, if any.
-          - cache restore vcpkg-archives-$Env:ARTIFACT_KEY
           # Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
           - cd librdkafka
@@ -287,11 +293,8 @@ blocks:
           - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
           - cd ..
           - pwd
-          # Store vcpkg caches
           - ls vcpkg/
           - echo $Env:VCPKG_ROOT
-          - cache delete vcpkg-archives-$Env:ARTIFACT_KEY
-          - cache store vcpkg-archives-$Env:ARTIFACT_KEY C:/Users/semaphore/AppData/Local/vcpkg/archives
           - pwd
           - cd librdkafka
       epilogue:

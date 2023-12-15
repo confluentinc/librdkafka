@@ -80,8 +80,8 @@ docs: node_modules/.dirstamp
 	@rm -rf docs
 	@./node_modules/jsdoc/jsdoc.js --destination docs \
 		--recurse -R ./README.md \
-		-t "./node_modules/toolkit-jsdoc/" \
-		--tutorials examples ./lib
+		-c ./jsdoc.conf \
+		--tutorials examples/ ./lib
 
 gh-pages: node_modules/.dirstamp
 	@./make_docs.sh

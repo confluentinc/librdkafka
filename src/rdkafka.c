@@ -493,6 +493,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "Local: No offset to automatically reset to"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
               "Local: Partition log truncation detected"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD,
+              "Local: an invalid record in the same batch caused "
+              "the failure of this message too."),
 
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN, "Unknown broker error"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_NO_ERROR, "Success"),

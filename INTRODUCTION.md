@@ -1974,7 +1974,7 @@ release of librdkafka.
 
 | ApiKey  | Request name                  | Kafka max   | librdkafka max          |
 | ------- | ------------------------------| ----------- | ----------------------- |
-| 0       | Produce                       | 10          | 8                       |
+| 0       | Produce                       | 10          | 9                       |
 | 1       | Fetch                         | 15          | 11                      |
 | 2       | ListOffsets                   | 8           | 7                       |
 | 3       | Metadata                      | 12          | 12                      |

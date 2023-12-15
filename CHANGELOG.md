@@ -1,3 +1,11 @@
+# librdkafka v2.4.0 (can change)
+
+librdkafka v2.4.0 is a feature release:
+
+ * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records) Augment ProduceResponse error messaging for specific culprit records (#).
+
+
+
 # librdkafka v2.3.0
 
 librdkafka v2.3.0 is a feature release:

@@ -517,9 +517,13 @@ void rd_kafka_broker_connect_done(rd_kafka_broker_t *rkb, const char *errstr);
 int rd_kafka_send(rd_kafka_broker_t *rkb);
 int rd_kafka_recv(rd_kafka_broker_t *rkb);
 
-void rd_kafka_dr_msgq(rd_kafka_topic_t *rkt,
-                      rd_kafka_msgq_t *rkmq,
-                      rd_kafka_resp_err_t err);
+#define rd_kafka_dr_msgq(rkt, rkmq, err)                                       \
+        rd_kafka_dr_msgq0(rkt, rkmq, err, NULL /*no produce result*/)
+
+void rd_kafka_dr_msgq0(rd_kafka_topic_t *rkt,
+                       rd_kafka_msgq_t *rkmq,
+                       rd_kafka_resp_err_t err,
+                       const rd_kafka_Produce_result_t *presult);
 
 void rd_kafka_dr_implicit_ack(rd_kafka_broker_t *rkb,
                               rd_kafka_toppar_t *rktp,

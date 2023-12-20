@@ -29,7 +29,10 @@ export interface KafkaConfig {
   reauthenticationThreshold?: number
   requestTimeout?: number
   enforceRequestTimeout?: boolean
-  rdKafka?: { topicConfig?: TopicConfig, globalConfig?: GlobalConfig };
+}
+
+export interface CommonConstructorConfig extends GlobalConfig {
+  kafkaJs?: KafkaConfig;
 }
 
 export interface ProducerConfig {
@@ -40,6 +43,10 @@ export interface ProducerConfig {
   transactionTimeout?: number
   maxInFlightRequests?: number
   rdKafka?: { topicConfig?: ProducerTopicConfig, globalConfig?: ProducerGlobalConfig }
+}
+
+export interface ProducerConstructorConfig extends ProducerGlobalConfig {
+  kafkaJs?: ProducerConfig;
 }
 
 export interface IHeaders {
@@ -101,9 +108,9 @@ export type RecordMetadata = {
 }
 
 export class Kafka {
-  constructor(config: KafkaConfig)
-  producer(config?: ProducerConfig): Producer
-  consumer(config: ConsumerConfig): Consumer
+  constructor(config: CommonConstructorConfig)
+  producer(config?: ProducerConstructorConfig): Producer
+  consumer(config: ConsumerConstructorConfig): Consumer
 }
 
 type Sender = {
@@ -140,6 +147,10 @@ export interface ConsumerConfig {
   readUncommitted?: boolean
   rackId?: string
   rdKafka?: { topicConfig?: ConsumerTopicConfig, globalConfig?: ConsumerGlobalConfig }
+}
+
+export interface ConsumerConstructorConfig extends ConsumerGlobalConfig {
+  kafkaJs?: ConsumerConfig;
 }
 
 export type ConsumerEvents = {

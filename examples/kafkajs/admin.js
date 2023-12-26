@@ -3,7 +3,9 @@ const { Kafka } = require('../..').KafkaJS
 
 async function adminStart() {
   const kafka = new Kafka({
-    brokers: ['<fill>'],
+    kafkaJs: {
+      brokers: ['localhost:9092'],
+    }
   });
 
   const admin = kafka.admin();

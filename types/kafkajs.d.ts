@@ -176,6 +176,10 @@ export interface AdminConfig {
   retry?: RetryOptions
 }
 
+export interface AdminConstructorConfig extends GlobalConfig {
+  kafkaJs?: AdminConfig;
+}
+
 export interface ITopicConfig {
   topic: string
   numPartitions?: number

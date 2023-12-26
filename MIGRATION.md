@@ -3,13 +3,17 @@
 ## KafkaJS
 
 
-1. Change the import statement, from
+1. Change the import statement, and add a `kafkaJs` block around your configs.
     ```javascript
     const { Kafka } = require('kafkajs');
+    const kafka = new Kafka({ brokers: ['kafka1:9092', 'kafka2:9092'], /* ... */ });
+    const producer = kafka.producer({ /* ... */, });
     ```
     to
     ```javascript
     const { Kafka } = require('confluent-kafka-js').KafkaJS;
+    const kafka = new Kafka({ kafkaJs: { brokers: ['kafka1:9092', 'kafka2:9092'], /* ... */ } });
+    const producer = kafka.producer({ kafkaJs: { /* ... */, } });
     ```
 
 2. Try running your program. In case a migration is needed, an informative error will be thrown.
@@ -34,13 +38,15 @@
 +const { Kafka } = require('confluent-kafka-js').KafkaJS;
 
 const kafka = new Kafka({
++ kafkaJs: {
   clientId: 'my-app',
   brokers: ['kafka1:9092', 'kafka2:9092']
++ }
 })
 
 const producerRun = async () => {
 - const producer = kafka.producer();
-+ const producer = kafka.producer({ acks: 1 });
++ const producer = kafka.producer({ kafkaJs: { acks: 1 } });
   await producer.connect();
   await producer.send({
     topic: 'test-topic',
@@ -55,7 +61,7 @@ const producerRun = async () => {
 const consumerRun = async () => {
   // Consuming
 - const consumer = kafka.consumer({ groupId: 'test-group' });
-+ const consumer = kafka.consumer({ groupId: 'test-group', fromBeginning: true });
++ const consumer = kafka.consumer({ kafkaJs: { groupId: 'test-group', fromBeginning: true } });
   await consumer.connect();
 - await consumer.subscribe({ topic: 'test-topic', fromBeginning: true });
 + await consumer.subscribe({ topic: 'test-topic' });
@@ -78,32 +84,32 @@ producerRun().then(consumerRun).catch(console.error);
 
 #### Configuration changes
   ```javascript
-  const kafka = new Kafka({/* common configuration changes */});
+  const kafka = new Kafka({ kafkaJs: { /* common configuration changes */ } });
   ```
   Each allowed config property is discussed in the table below.
   If there is any change in semantics or the default values, the property and the change is **highlighted in bold**.
 
-  | Property                      | Default Value                        | Comment                                                                                                                                                                                        |
-  |-------------------------------|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-  | **brokers**                   | null                                 | A list of strings, representing the bootstrap brokers. **A function is no longer allowed as an argument for this.**                                                                            |
-  | **ssl**                       | false                                | A boolean, set to true if ssl needs to be enabled. **Additional properties like CA, certificate, key, etc. need to be specified using the rdKafka block.**                                     |
-  | **sasl**                      | -                                    | An optional object of the form  `{ mechanism: 'plain' or 'scram-sha-256' or 'scram-sha-512', username: string, password: string }`. **Additional authentication types are not yet supported.** |
-  | clientId                      | "rdkafka"                            | An optional string used to identify the client.                                                                                                                                                |
-  | **connectionTimeout**         | 1000                                 | This timeout is not enforced individually, but a sum of `connectionTimeout` and `authenticationTimeout` is enforced together.                                                                  |
-  | **authenticationTimeout**     | 10000                                | This timeout is not enforced individually, but a sum of `connectionTimeout` and `authenticationTimeout` is enforced together.                                                                  |
-  | **reauthenticationThreshold** | **80% of connections.max.reauth.ms** | **No longer checked, the default is always used.**                                                                                                                                             |
-  | requestTimeout                | 30000                                | number of milliseconds for a network request to timeout.                                                                                                                                       |
-  | **enforceRequestTimeout**     | true                                 | When set to false, `requestTimeout` is set to 5 minutes. **This cannot be completely disabled.**                                                                                               |
-  | retry                         | object                               | Properties individually discussed below.                                                                                                                                                       |
-  | retry.maxRetryTime            | 30000                                | maximum time to backoff a retry, in milliseconds.                                                                                                                                              |
-  | retry.initialRetryTime        | 300                                  | minimum time to backoff a retry, in milliseconds                                                                                                                                               |
-  | **retry.retries**             | 5                                    | Total cap on the number of retries. **Applicable only to Produce requests.**                                                                                                                   |
-  | **retry.factor**              | 0.2                                  | Randomization factor (jitter) for backoff. **Cannot be changed**.                                                                                                                              |
-  | **retry.multiplier**          | 2                                    | Multiplier for exponential factor of backoff. **Cannot be changed.**                                                                                                                           |
-  | **retry.restartOnFailure**    | true                                 | Consumer only. **Cannot be changed**. Consumer will always make an attempt to restart.                                                                                                         |
-  | logLevel                      | `logLevel.INFO`                      | Decides the severity level of the logger created by the underlying library. A logger created with the `INFO` level will not be able to log `DEBUG` messages later.                             |
-  | **socketFactory**             | null                                 | **No longer supported.**                                                                                                                                                                       |
-  | **rdKafka**                   | {}                                   | This is a **new** property. It can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).           |
+  | Property                      | Default Value                        | Comment                                                                                                                                                                                           |
+  |-------------------------------|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | **brokers**                   | null                                 | A list of strings, representing the bootstrap brokers. **A function is no longer allowed as an argument for this.**                                                                               |
+  | **ssl**                       | false                                | A boolean, set to true if ssl needs to be enabled. **Additional properties like CA, certificate, key, etc. need to be specified outside the kafkaJs block.**                                      |
+  | **sasl**                      | -                                    | An optional object of the form  `{ mechanism: 'plain' or 'scram-sha-256' or 'scram-sha-512', username: string, password: string }`. **Additional authentication types are not yet supported.**    |
+  | clientId                      | "rdkafka"                            | An optional string used to identify the client.                                                                                                                                                   |
+  | **connectionTimeout**         | 1000                                 | This timeout is not enforced individually, but a sum of `connectionTimeout` and `authenticationTimeout` is enforced together.                                                                     |
+  | **authenticationTimeout**     | 10000                                | This timeout is not enforced individually, but a sum of `connectionTimeout` and `authenticationTimeout` is enforced together.                                                                     |
+  | **reauthenticationThreshold** | **80% of connections.max.reauth.ms** | **No longer checked, the default is always used.**                                                                                                                                                |
+  | requestTimeout                | 30000                                | number of milliseconds for a network request to timeout.                                                                                                                                          |
+  | **enforceRequestTimeout**     | true                                 | When set to false, `requestTimeout` is set to 5 minutes. **This cannot be completely disabled.**                                                                                                  |
+  | retry                         | object                               | Properties individually discussed below.                                                                                                                                                          |
+  | retry.maxRetryTime            | 30000                                | maximum time to backoff a retry, in milliseconds.                                                                                                                                                 |
+  | retry.initialRetryTime        | 300                                  | minimum time to backoff a retry, in milliseconds                                                                                                                                                  |
+  | **retry.retries**             | 5                                    | Total cap on the number of retries. **Applicable only to Produce requests.**                                                                                                                      |
+  | **retry.factor**              | 0.2                                  | Randomization factor (jitter) for backoff. **Cannot be changed**.                                                                                                                                 |
+  | **retry.multiplier**          | 2                                    | Multiplier for exponential factor of backoff. **Cannot be changed.**                                                                                                                              |
+  | **retry.restartOnFailure**    | true                                 | Consumer only. **Cannot be changed**. Consumer will always make an attempt to restart.                                                                                                            |
+  | logLevel                      | `logLevel.INFO`                      | Decides the severity level of the logger created by the underlying library. A logger created with the `INFO` level will not be able to log `DEBUG` messages later.                                |
+  | **socketFactory**             | null                                 | **No longer supported.**                                                                                                                                                                          |
+  | outer config                  | {}                                   | The configuration outside the kafkaJs block can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md). |
 
 
 ### Producer
@@ -111,7 +117,7 @@ producerRun().then(consumerRun).catch(console.error);
 #### Producer Configuration Changes
 
   ```javascript
-  const producer = kafka.producer({ /* producer-specific configuration changes. */});
+  const producer = kafka.producer({ kafkaJs: { /* producer-specific configuration changes. */ } });
   ```
 
   Each allowed config property is discussed in the table below.
@@ -119,7 +125,7 @@ producerRun().then(consumerRun).catch(console.error);
 
   | Property                | Default Value                                              | Comment                                                                                                                                                                                                                                              |
   |-------------------------|------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-  | **createPartitioner**   | DefaultPartioner (murmur2_random) - Java client compatible | Custom partitioner support is not yet provided. The default partitioner's behaviour is retained, and a number of partitioners are provided via the `rdKafka.partitioner` property.                                                                   |
+  | **createPartitioner**   | DefaultPartioner (murmur2_random) - Java client compatible | Custom partitioner support is not yet provided. The default partitioner's behaviour is retained, and a number of partitioners are provided via the `partitioner` property, which is specified outside the `kafkaJs` block.                           |
   | **retry**               | object                                                     | Identical to `retry` in the common configuration. This takes precedence over the common config retry.                                                                                                                                                |
   | metadataMaxAge          | 5 minutes                                                  | Time in milliseconds after which to refresh metadata for known topics                                                                                                                                                                                |
   | allowAutoTopicCreation  | true                                                       | Determines if a topic should be created if it doesn't exist while producing.                                                                                                                                                                         |
@@ -130,7 +136,7 @@ producerRun().then(consumerRun).catch(console.error);
   | **acks**                | -1                                                         | The number of required acks before a Produce succeeds. **This is set on a per-producer level, not on a per `send` level**. -1 denotes it will wait for all brokers in the in-sync replica set.                                                       |
   | **compression**         | CompressionTypes.NONE                                      | Compression codec for Produce messages. **This is set on a per-producer level, not on a per `send` level**. It must be a key of the object CompressionType, namely GZIP, SNAPPY, LZ4, ZSTD or NONE.                                                  |
   | **timeout**             | 30000                                                      | The ack timeout of the producer request in milliseconds. This value is only enforced by the broker. **This is set on a per-producer level, not on a per `send` level**.                                                                              |
-  | **rdKafka**             | {}                                                         | This is a **new** property. It can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION. md). If set on the common config, the values are merged.            |
+  | outer config            | {}                                                         | The configuration outside the kafkaJs block can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).                                                    |
 
 
 
@@ -158,11 +164,13 @@ producerRun().then(consumerRun).catch(console.error);
 
     After:
     ```javascript
-    const kafka = new Kafka({/* ... */});
+    const kafka = new Kafka({ kafkaJs: { /* ... */ }});
     const producer = kafka.producer({
-      acks: 1,
-      compression: CompressionTypes.GZIP|CompressionTypes.SNAPPY|CompressionTypes.LZ4|CompressionTypes.ZSTD|CompressionTypes.NONE,
-      timeout: 30000,
+      kafkaJs: {
+        acks: 1,
+        compression: CompressionTypes.GZIP|CompressionTypes.SNAPPY|CompressionTypes.LZ4|CompressionTypes.ZSTD|CompressionTypes.NONE,
+        timeout: 30000,
+      }
     });
     await producer.connect();
 
@@ -179,7 +187,7 @@ producerRun().then(consumerRun).catch(console.error);
 #### Consumer Configuration Changes
 
   ```javascript
-  const consumer = kafka.consumer({ /* producer-specific configuration changes. */});
+  const consumer = kafka.consumer({ kafkaJs: { /* producer-specific configuration changes. */ } });
   ```
   Each allowed config property is discussed in the table below.
   If there is any change in semantics or the default values, the property and the change is **highlighted in bold**.
@@ -203,7 +211,7 @@ producerRun().then(consumerRun).catch(console.error);
   | **fromBeginning**        | false                             | If there is initial offset in offset store or the desired offset is out of range, and this is true, we consume the earliest possible offset.  **This is set on a per-consumer level, not on a per `subscribe` level**.               |
   | **autoCommit**           | true                              | Whether to periodically auto-commit offsets to the broker while consuming.  **This is set on a per-consumer level, not on a per `run` level**.                                                                                       |
   | **autoCommitInterval**   | 5000                              | Offsets are committed periodically at this interval, if autoCommit is true. **This is set on a per-consumer level, not on a per `run` level. The default value is changed to 5 seconds.**.                                           |
-  | **rdKafka**              | {}                                | This is a **new** property. It can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md). If set on the common config, the values are merged. |
+  | outer config             | {}                                | The configuration outside the kafkaJs block can contain any of the keys present in the [librdkafka CONFIGURATION table](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).                                    |
 
 
 #### Semantic and Per-Method Changes
@@ -229,8 +237,10 @@ producerRun().then(consumerRun).catch(console.error);
     After:
       ```javascript
         const consumer = kafka.consumer({
-          groupId: 'test-group',
-          fromBeginning: true,
+          kafkaJs: {
+            groupId: 'test-group',
+            fromBeginning: true,
+          }
         });
         await consumer.connect();
         await consumer.subscribe({ topics: ["topic"] });
@@ -240,6 +250,7 @@ producerRun().then(consumerRun).catch(console.error);
   - For auto-committing using a consumer, the properties `autoCommit` and `autoCommitInterval` on `run` are not set on a per-subscribe basis.
     Rather, they must be configured in the top-level configuration.
     `autoCommitThreshold` is not supported.
+    If `autoCommit` is set to true, messages are *not* committed per-message, but rather periodically at the interval specified by `autoCommitInterval` (default 5 seconds).
 
     Before:
     ```javascript
@@ -255,11 +266,13 @@ producerRun().then(consumerRun).catch(console.error);
     ```
     After:
     ```javascript
-      const kafka = new Kafka({ /* ... */ });
+      const kafka = new Kafka({ kafkaJs: { /* ... */ } });
       const consumer = kafka.consumer({
-        /* ... */,
-        autoCommit: true,
-        autoCommitInterval: 5000,
+        kafkaJs: {
+          /* ... */,
+          autoCommit: true,
+          autoCommitInterval: 5000,
+        },
       });
       await consumer.connect();
       await consumer.subscribe({ topics: ["topic"] });

@@ -35,6 +35,28 @@ global_job_config:
 
 
 blocks:
+  - name: "Linux amd64 (musl): Build and test"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-amd64-2
+      jobs:
+        - name: "Build from source and test for musl"
+          commands:
+            - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker.sh
+
+  - name: "Linux arm64 (musl): Build and test"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-arm64-1
+      jobs:
+        - name: "Build from source and test for musl"
+          commands:
+              - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker.sh
+
   - name: "Linux arm64: Build and test"
     dependencies: [ ]
     task:
@@ -75,7 +97,6 @@ blocks:
         - name: "ESLint"
           commands:
             - npx eslint lib/kafkajs
-
 
   - name: "Linux amd64: Release"
     dependencies: [ ]
@@ -164,6 +185,83 @@ blocks:
             - npx node-pre-gyp package
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
+
+  - name: "Linux amd64 musl: Release"
+    dependencies: [ ]
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-amd64-1
+      env_vars:
+        - name: ARCHITECTURE
+          value: "x64"
+        - name: PLATFORM
+          value: "linux"
+        - name: LIBC
+          value: "musl"
+      jobs:
+        - name: "Release: LTS:18"
+          commands:
+            - export NODE_ABI=108
+            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker.sh
+            - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
+            - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
+        - name: "Release: LTS:20"
+          commands:
+            - export NODE_ABI=115
+            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - docker run -v "$(pwd):/v" node:20-alpine /v/.semaphore/build-docker.sh
+            - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
+            - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
+        - name: "Release: latest: 21"
+          commands:
+            - export NODE_ABI=120
+            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - docker run -v "$(pwd):/v" node:21-alpine /v/.semaphore/build-docker.sh
+            - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
+            - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
+
+  - name: "Linux arm64 musl: Release"
+    dependencies: [ ]
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-arm64-1
+      env_vars:
+        - name: ARCHITECTURE
+          value: "arm64"
+        - name: PLATFORM
+          value: "linux"
+        - name: LIBC
+          value: "musl"
+      jobs:
+        - name: "Release: LTS:18"
+          commands:
+            - export NODE_ABI=108
+            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker.sh
+            - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
+            - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
+        - name: "Release: LTS:20"
+          commands:
+            - export NODE_ABI=115
+            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - docker run -v "$(pwd):/v" node:20-alpine /v/.semaphore/build-docker.sh
+            - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
+            - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
+        - name: "Release: latest: 21"
+          commands:
+            - export NODE_ABI=120
+            - export ARTIFACT_KEY="confluent-kafka-js-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
+            - docker run -v "$(pwd):/v" node:21-alpine /v/.semaphore/build-docker.sh
+            - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
+            - artifact push project "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
+
   - name: "macOS arm64/m1: Release"
     dependencies: [ ]
     run:

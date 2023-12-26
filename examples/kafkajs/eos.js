@@ -3,26 +3,28 @@ const { Kafka } = require('../..').KafkaJS
 
 async function eosStart() {
     const kafka = new Kafka({
-        brokers: ['<fill>'],
-        ssl: true,
-        sasl: {
-            mechanism: 'plain',
-            username: '<fill>',
-            password: '<fill>',
+        kafkaJs: {
+            brokers: ['<fill>'],
+            ssl: true,
+            sasl: {
+                mechanism: 'plain',
+                username: '<fill>',
+                password: '<fill>',
+            }
         }
     });
 
     const consumer = kafka.consumer({
-        groupId: 'groupId',
-        rdKafka: {
-            globalConfig: {
-                "enable.auto.commit": false,
-            }
-        },
+        kafkaJs: {
+            groupId: 'groupId',
+            autoCommit: false,
+        }
     });
 
     const producer = kafka.producer({
-        transactionalId: 'txid'
+        kafkaJs: {
+            transactionalId: 'txid'
+        }
     });
 
     await consumer.connect();
@@ -66,9 +68,7 @@ async function eosStart() {
                         {
                             topic,
                             partitions: [
-                                /* The message.offset indicates current offset, so we need to add 1 to it, since committed offset denotes
-                                 * the next offset to consume. */
-                                { partition, offset: message.offset + 1 },
+                                { partition, offset: message.offset },
                             ],
                         }
                     ],

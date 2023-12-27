@@ -18,11 +18,7 @@ describe('Consumer', () => {
             groupId,
             maxWaitTimeInMs: 1,
             maxBytesPerPartition: 180,
-            rdKafka: {
-                topicConfig: {
-                    'auto.offset.reset': 'earliest',
-                }
-            }
+            fromBeginning: true
         });
 
         producer = createProducer({});
@@ -59,17 +55,17 @@ describe('Consumer', () => {
             await waitForConsumerToJoinGroup(consumer);
 
             await producer.connect();
-            let records = await producer.sendBatch({
+            await producer.sendBatch({
                 topicMessages: [
                     { topic: topics[0], messages: [{ key: 'drink', value: 'drink' }] },
                     { topic: topics[1], messages: [{ key: 'your', value: 'your' }] },
-                    { topic: topics[2], messages: [{ key: 'ovaltine', value: 'ovaltine' }] },
+                    { topic: topics[2], messages: [{ key: 'tea', value: 'tea' }] },
                 ],
             });
 
             await waitForMessages(messagesConsumed, { number: 3 });
             expect(messagesConsumed.map(m => m.message.value.toString())).toEqual(
-                expect.arrayContaining(['drink', 'your', 'ovaltine'])
+                expect.arrayContaining(['drink', 'your', 'tea'])
             );
         });
     })

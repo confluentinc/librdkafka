@@ -29,14 +29,7 @@ describe('Consumer', () => {
             groupId,
             maxWaitTimeInMs: 1,
             maxBytesPerPartition: 180,
-            rdKafka: {
-                globalConfig: {
-                    // 'debug': 'fetch',
-                },
-                topicConfig: {
-                    'auto.offset.reset': 'earliest',
-                },
-            }
+            fromBeginning: true,
         });
     })
 
@@ -196,63 +189,63 @@ describe('Consumer', () => {
 
         /* Skip until eachBatch is made available */
         it.skip('pauses when pausing via the eachBatch callback - skipped until eachBatch is made available', async () => {
-          await consumer.connect()
-          await producer.connect()
-          const originalMessages = [0, 0, 0, 1].map(partition => {
-            const key = secureRandom()
-            return { key: `key-${key}`, value: `value-${key}`, partition }
-          })
+            await consumer.connect()
+            await producer.connect()
+            const originalMessages = [0, 0, 0, 1].map(partition => {
+                const key = secureRandom()
+                return { key: `key-${key}`, value: `value-${key}`, partition }
+            })
 
-          for (const topic of topics) {
-            await producer.send({ topic, messages: originalMessages })
-            await consumer.subscribe({ topic })
-          }
+            for (const topic of topics) {
+                await producer.send({ topic, messages: originalMessages })
+                await consumer.subscribe({ topic })
+            }
 
-          let shouldPause = true
-          const messagesConsumed = []
-          const resumeCallbacks = []
-          consumer.run({
-            eachBatch: async event => {
-              const {
-                batch: { topic, messages },
-                pause,
-                resolveOffset,
-                commitOffsetsIfNecessary,
-              } = event
-              messages.every(message => {
-                const whichTopic = topics.indexOf(topic)
-                const whichMessage = originalMessages.findIndex(
-                  m => String(m.key) === String(message.key)
-                )
+            let shouldPause = true
+            const messagesConsumed = []
+            const resumeCallbacks = []
+            consumer.run({
+                eachBatch: async event => {
+                    const {
+                        batch: { topic, messages },
+                        pause,
+                        resolveOffset,
+                        commitOffsetsIfNecessary,
+                    } = event
+                    messages.every(message => {
+                        const whichTopic = topics.indexOf(topic)
+                        const whichMessage = originalMessages.findIndex(
+                            m => String(m.key) === String(message.key)
+                        )
 
-                if (shouldPause && whichTopic === 0 && whichMessage === 1) {
-                  resumeCallbacks.push(pause())
-                  return false
-                } else if (shouldPause && whichTopic === 1 && whichMessage === 3) {
-                  resumeCallbacks.push(pause())
-                  return false
-                }
-                messagesConsumed.push({
-                  topic: whichTopic,
-                  message: whichMessage,
-                })
-                resolveOffset(message.offset)
-                return true
-              })
-              await commitOffsetsIfNecessary()
-            },
-            eachBatchAutoResolve: false,
-          })
-          await waitForConsumerToJoinGroup(consumer)
-          await waitForMessages(messagesConsumed, { number: 5 })
-          expect(consumer.paused()).toContainEqual({ topic: topics[0], partitions: [0] })
-          expect(consumer.paused()).toContainEqual({ topic: topics[1], partitions: [1] })
-          shouldPause = false
-          resumeCallbacks.forEach(resume => resume())
-          await waitForMessages(messagesConsumed, { number: 8 })
-          expect(consumer.paused()).toEqual([])
-          expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 })
-          expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 })
+                        if (shouldPause && whichTopic === 0 && whichMessage === 1) {
+                            resumeCallbacks.push(pause())
+                            return false
+                        } else if (shouldPause && whichTopic === 1 && whichMessage === 3) {
+                            resumeCallbacks.push(pause())
+                            return false
+                        }
+                        messagesConsumed.push({
+                            topic: whichTopic,
+                            message: whichMessage,
+                        })
+                        resolveOffset(message.offset)
+                        return true
+                    })
+                    await commitOffsetsIfNecessary()
+                },
+                eachBatchAutoResolve: false,
+            })
+            await waitForConsumerToJoinGroup(consumer)
+            await waitForMessages(messagesConsumed, { number: 5 })
+            expect(consumer.paused()).toContainEqual({ topic: topics[0], partitions: [0] })
+            expect(consumer.paused()).toContainEqual({ topic: topics[1], partitions: [1] })
+            shouldPause = false
+            resumeCallbacks.forEach(resume => resume())
+            await waitForMessages(messagesConsumed, { number: 8 })
+            expect(consumer.paused()).toEqual([])
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 })
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 })
         });
 
         it('does not fetch messages for the paused topic', async () => {

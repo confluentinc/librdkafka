@@ -1,3 +1,5 @@
+jest.setTimeout(30000);
+
 const {
     createConsumer,
     createProducer,
@@ -17,11 +19,7 @@ describe('Consumer', () => {
 
         consumer = createConsumer({
             groupId,
-            rdKafka: {
-                topicConfig: {
-                    'auto.offset.reset': 'earliest',
-                },
-            }
+            fromBeginning: true,
         });
     });
 
@@ -81,21 +79,15 @@ describe('Consumer', () => {
                         message: expect.objectContaining({ offset: '0' }),
                     }),
                 ]);
-            }, 10000);
+            });
 
 
             describe('When "enable.auto.commit" is false', () => {
                 beforeEach(() => {
                     consumer = createConsumer({
                         groupId,
-                        rdKafka: {
-                            globalConfig: {
-                                'enable.auto.commit': false,
-                            },
-                            topicConfig: {
-                                'auto.offset.reset': 'earliest',
-                            },
-                        }
+                        fromBeginning: true,
+                        autoCommit: false,
                     });
                 });
 
@@ -129,14 +121,8 @@ describe('Consumer', () => {
 
                     consumer = createConsumer({
                         groupId,
-                        rdKafka: {
-                            globalConfig: {
-                                'enable.auto.commit': false,
-                            },
-                            topicConfig: {
-                                'auto.offset.reset': 'earliest',
-                            },
-                        }
+                        fromBeginning: true,
+                        autoCommit: false,
                     });
                     await consumer.connect();
                     await consumer.subscribe({ topic: topicName });
@@ -163,7 +149,7 @@ describe('Consumer', () => {
                             message: expect.objectContaining({ offset: '2' }),
                         }),
                     ]);
-                }, 10000);
+                });
             });
         });
 
@@ -232,7 +218,7 @@ describe('Consumer', () => {
                     ])
                 );
 
-            }, 10000);
+            });
 
             it('works for both partitions', async () => {
                 await consumer.connect();
@@ -301,18 +287,18 @@ describe('Consumer', () => {
                     ])
                 );
 
-            }, 10000);
+            });
 
             it('uses the last seek for a given topic/partition', async () => {
                 await consumer.connect()
                 await producer.connect()
 
                 const value1 = secureRandom()
-                const message1 = { key: `key-0`, value: `value-${value1}` }
+                const message1 = { key: `key-0`, value: `value-${value1}`, partition: 0 }
                 const value2 = secureRandom()
-                const message2 = { key: `key-0`, value: `value-${value2}` }
+                const message2 = { key: `key-0`, value: `value-${value2}`, partition: 0 }
                 const value3 = secureRandom()
-                const message3 = { key: `key-0`, value: `value-${value3}` }
+                const message3 = { key: `key-0`, value: `value-${value3}`, partition: 0 }
 
                 await producer.send({ topic: topicName, messages: [message1, message2, message3] })
                 await consumer.subscribe({ topic: topicName, })
@@ -353,7 +339,7 @@ describe('Consumer', () => {
                         }),
                     ])
                 );
-            }, 10000);
+            });
         });
     });
 })

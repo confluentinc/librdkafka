@@ -1,6 +1,6 @@
 jest.setTimeout(30000)
 
-const { ErrorCodes } = require('../../../lib').KafkaJS;
+const { ErrorCodes, CompressionTypes } = require('../../../lib').KafkaJS;
 
 const {
     secureRandom,
@@ -28,11 +28,7 @@ describe('Consumer', () => {
         consumer = createConsumer({
             groupId,
             maxWaitTimeInMs: 100,
-            rdKafka: {
-                topicConfig: {
-                    'auto.offset.reset': 'earliest',
-                }
-            }
+            fromBeginning: true,
         });
     });
 
@@ -135,11 +131,7 @@ describe('Consumer', () => {
     it('consume GZIP messages', async () => {
         /* Discard and recreate producer with the compression set */
         producer = createProducer({
-            rdKafka: {
-                globalConfig: {
-                    'compression.codec': 'gzip',
-                }
-            }
+            compression: CompressionTypes.GZIP,
         });
 
         await consumer.connect();
@@ -274,11 +266,7 @@ describe('Consumer', () => {
                 groupId,
                 minBytes: 1024,
                 maxWaitTimeInMs: 500,
-                rdKafka: {
-                    topicConfig: {
-                        'auto.offset.reset': 'earliest',
-                    }
-                }
+                fromBeginning: true,
             });
 
             const messages = Array(10)
@@ -317,11 +305,7 @@ describe('Consumer', () => {
                 // make sure we fetch a batch of messages
                 minBytes: 1024,
                 maxWaitTimeInMs: 500,
-                rdKafka: {
-                    topicConfig: {
-                        'auto.offset.reset': 'earliest',
-                    }
-                }
+                fromBeginning: true,
             })
 
             const messages = Array(10)
@@ -469,11 +453,7 @@ describe('Consumer', () => {
             consumer = createConsumer({
                 groupId,
                 maxWaitTimeInMs: 100,
-                rdKafka: {
-                    topicConfig: {
-                        'auto.offset.reset': 'earliest',
-                    }
-                }
+                fromBeginning: true,
             });
 
             await consumer.connect();
@@ -510,14 +490,7 @@ describe('Consumer', () => {
             consumer = createConsumer({
                 groupId,
                 maxWaitTimeInMs: 100,
-                rdKafka: {
-                    globalConfig: {
-                        // debug: 'cgrp,topic',
-                    },
-                    topicConfig: {
-                        'auto.offset.reset': 'earliest',
-                    }
-                }
+                fromBeginning: true
             });
 
             await consumer.connect();
@@ -573,11 +546,7 @@ describe('Consumer', () => {
             consumer = createConsumer({
                 groupId,
                 maxWaitTimeInMs: 100,
-                rdKafka: {
-                    topicConfig: {
-                        'auto.offset.reset': 'earliest',
-                    }
-                }
+                fromBeginning: true,
             });
 
             await consumer.connect();
@@ -634,11 +603,7 @@ describe('Consumer', () => {
                     groupId,
                     maxWaitTimeInMs: 100,
                     readUncommitted: true,
-                    rdKafka: {
-                        topicConfig: {
-                            'auto.offset.reset': 'earliest',
-                        }
-                    }
+                    fromBeginning: true,
                 })
 
                 await consumer.connect();
@@ -699,14 +664,8 @@ describe('Consumer', () => {
                 consumer = createConsumer({
                     groupId,
                     maxWaitTimeInMs: 100,
-                    rdKafka: {
-                        globalConfig: {
-                            'enable.auto.commit': false,
-                        },
-                        topicConfig: {
-                            'auto.offset.reset': 'earliest',
-                        }
-                    }
+                    fromBeginning: true,
+                    autoCommit: false,
                 });
 
                 await consumer.connect();
@@ -763,14 +722,8 @@ describe('Consumer', () => {
                 consumer = createConsumer({
                     groupId,
                     maxWaitTimeInMs: 100,
-                    rdKafka: {
-                        globalConfig: {
-                            'enable.auto.commit': false,
-                        },
-                        topicConfig: {
-                            'auto.offset.reset': 'earliest',
-                        }
-                    }
+                    fromBeginning: true,
+                    autoCommit: false,
                 });
 
                 await consumer.connect();
@@ -819,14 +772,8 @@ describe('Consumer', () => {
                 consumer = createConsumer({
                     groupId,
                     maxWaitTimeInMs: 100,
-                    rdKafka: {
-                        topicConfig: {
-                            'auto.offset.reset': 'earliest',
-                        },
-                        globalConfig: {
-                            'enable.auto.commit': false,
-                        },
-                    }
+                    fromBeginning: true,
+                    autoCommit: false,
                 });
 
                 await consumer.connect();
@@ -861,14 +808,8 @@ describe('Consumer', () => {
                 consumer = createConsumer({
                     groupId,
                     maxWaitTimeInMs: 100,
-                    rdKafka: {
-                        globalConfig: {
-                            'enable.auto.commit': false,
-                        },
-                        topicConfig: {
-                            'auto.offset.reset': 'earliest',
-                        }
-                    }
+                    fromBeginning: true,
+                    autoCommit: false,
                 });
 
                 await consumer.connect();
@@ -897,7 +838,7 @@ describe('Consumer', () => {
                 uncommittedOffsetsPerMessage = []
 
                 consumer.run({
-                  eachMessage
+                    eachMessage
                 })
 
                 await waitForMessages(messagesConsumed, { number: 1 });

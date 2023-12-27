@@ -7,31 +7,33 @@ const clusterInformation = {
 };
 
 function createConsumer(config) {
-    const kafka = new Kafka(Object.assign(config, clusterInformation));
+    const kafka = new Kafka({ kafkaJs: Object.assign(config, clusterInformation) });
     return kafka.consumer();
 }
 
 function createProducer(config) {
-    const kafka = new Kafka(Object.assign(config, clusterInformation));
+    const kafka = new Kafka({ kafkaJs: Object.assign(config, clusterInformation) });
     return kafka.producer();
 }
 
 function createAdmin(config) {
-    const kafka = new Kafka(Object.assign(config, clusterInformation));
+    const kafka = new Kafka({ kafkaJs: Object.assign(config, clusterInformation) });
     return kafka.admin();
 }
 
 function secureRandom(length = 10) {
-   return `${crypto.randomBytes(length).toString('hex')}-${process.pid}-${crypto.randomUUID()}`;
+    return `${crypto.randomBytes(length).toString('hex')}-${process.pid}-${crypto.randomUUID()}`;
 }
 
 async function createTopic(args) {
     const { topic, partitions } = args;
     const admin = createAdmin({});
     await admin.connect();
-    await admin.createTopics({ topics: [
-        { topic, numPartitions: partitions ?? 1 }
-    ] });
+    await admin.createTopics({
+        topics: [
+            { topic, numPartitions: partitions ?? 1 }
+        ]
+    });
     await admin.disconnect();
 }
 
@@ -40,7 +42,7 @@ async function waitForConsumerToJoinGroup(consumer) {
     return new Promise(resolve => setTimeout(resolve, 2500));
 }
 
-async function waitFor(check, resolveValue, { delay = 50 }  = {}) {
+async function waitFor(check, resolveValue, { delay = 50 } = {}) {
     return new Promise(resolve => {
         const interval = setInterval(() => {
             if (check()) {
@@ -64,15 +66,15 @@ const generateMessages = options => {
     const prefixOrEmpty = prefix ? `-${prefix}` : ''
 
     return Array(number)
-      .fill()
-      .map((v, i) => {
-        const value = secureRandom()
-        return {
-          key: `key${prefixOrEmpty}-${i}-${value}`,
-          value: `value${prefixOrEmpty}-${i}-${value}`,
-        }
-      })
-  }
+        .fill()
+        .map((v, i) => {
+            const value = secureRandom()
+            return {
+                key: `key${prefixOrEmpty}-${i}-${value}`,
+                value: `value${prefixOrEmpty}-${i}-${value}`,
+            }
+        })
+}
 
 module.exports = {
     createConsumer,

@@ -29,11 +29,7 @@ describe('Producer > Idempotent producer', () => {
         consumer = createConsumer({
             groupId: `consumer-group-id-${secureRandom()}`,
             maxWaitTimeInMs: 0,
-            rdKafka: {
-                topicConfig: {
-                    'auto.offset.reset': 'earliest',
-                },
-            }
+            fromBeginning: true,
         })
         await createTopic({ topic: topicName, partitions: 1 });
         await Promise.all([producer.connect(), consumer.connect()]);

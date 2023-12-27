@@ -1,5 +1,6 @@
-const crypto = require('crypto')
-const { Kafka, ErrorCodes } = require('../../lib').KafkaJS;
+const crypto = require('crypto');
+const process = require('process');
+const { Kafka } = require('../../lib').KafkaJS;
 
 // TODO: pick this up from a file
 const clusterInformation = {
@@ -37,8 +38,10 @@ async function createTopic(args) {
     await admin.disconnect();
 }
 
-async function waitForConsumerToJoinGroup(consumer) {
+async function waitForConsumerToJoinGroup(/* consumer is passed as the first argument, and ignored */) {
     // We don't yet have a deterministic way to test this, so we just wait for a bit.
+    // TODO: we can probably wait for consumer.assignment() to be not empty, but that only
+    // works if the assignment exists.
     return new Promise(resolve => setTimeout(resolve, 2500));
 }
 
@@ -81,7 +84,6 @@ module.exports = {
     createProducer,
     createAdmin,
     secureRandom,
-    waitForMessages,
     waitForMessages,
     createTopic,
     waitForConsumerToJoinGroup,

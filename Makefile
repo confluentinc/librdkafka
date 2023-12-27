@@ -26,6 +26,7 @@ CONFIG_OUTPUTS = \
 CPPLINT_FILES = $(wildcard src/*.cc src/*.h)
 CPPLINT_FILTER = -legal/copyright
 JSLINT_FILES = lib/*.js test/*.js e2e/*.js lib/kafkajs/*.js
+ESLINT_FILES = lib/kafkajs/*.js test/promisified/*.js
 
 PACKAGE = $(shell node -pe 'require("./package.json").name.split("/")[1]')
 VERSION = $(shell node -pe 'require("./package.json").version')
@@ -39,13 +40,16 @@ endif
 
 all: lint lib test e2e
 
-lint: cpplint jslint
+lint: cpplint jslint eslint
 
 cpplint:
 	@$(PYTHON) $(CPPLINT) --filter=$(CPPLINT_FILTER) $(CPPLINT_FILES)
 
 jslint: node_modules/.dirstamp
 	@./node_modules/.bin/jshint --verbose $(JSLINT_FILES)
+
+eslint: node_modules/.dirstamp
+	@./node_modules/.bin/eslint $(ESLINT_FILES)
 
 lib: node_modules/.dirstamp $(CONFIG_OUTPUTS)
 	@PYTHONHTTPSVERIFY=0 $(NODE-GYP) build $(GYPBUILDARGS)

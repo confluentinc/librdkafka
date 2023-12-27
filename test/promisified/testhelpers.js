@@ -4,7 +4,7 @@ const { Kafka } = require('../../lib').KafkaJS;
 
 // TODO: pick this up from a file
 const clusterInformation = {
-    brokers: ['localhost:9092'],
+    brokers: process.env.KAFKA_HOST ? process.env.KAFKA_HOST.split(',') : ['localhost:9092'],
 };
 
 function createConsumer(config) {

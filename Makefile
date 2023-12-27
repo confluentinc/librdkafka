@@ -63,6 +63,8 @@ $(CONFIG_OUTPUTS): node_modules/.dirstamp binding.gyp
 
 test: node_modules/.dirstamp
 	@./node_modules/.bin/mocha --ui exports $(TEST_REPORTER) $(TESTS) $(TEST_OUTPUT)
+
+promisified_test: node_modules/.dirstamp
 	@./node_modules/.bin/jest --ci --runInBand $(PROMISIFIED_TESTS)
 
 check: node_modules/.dirstamp

@@ -642,7 +642,6 @@ describe('Consumer', () => {
             async () => {
                 // Seed the topic with some messages. We don't need a tx producer for this.
                 await producer.connect();
-
                 const partition = 0;
                 const messages = generateMessages().map(message => ({
                     ...message,
@@ -691,7 +690,7 @@ describe('Consumer', () => {
                     eachMessage,
                 })
 
-                // Consume pre-produced messages.
+                // 2. Consume pre-produced messages.
 
                 const number = messages.length;
                 await waitForMessages(messagesConsumed, {
@@ -729,8 +728,8 @@ describe('Consumer', () => {
                 await consumer.connect();
                 await consumer.subscribe({ topic: topicName });
 
-                messagesConsumed = []
-                uncommittedOffsetsPerMessage = []
+                messagesConsumed = [];
+                uncommittedOffsetsPerMessage = [];
 
                 consumer.run({ eachMessage })
 
@@ -802,19 +801,6 @@ describe('Consumer', () => {
                 // Consume produced messages.
                 await waitForMessages(messagesConsumed, { number: messages.length });
 
-                // Restart consumer - we cannot stop it, so we recreate it.
-                await consumer.disconnect();
-
-                consumer = createConsumer({
-                    groupId,
-                    maxWaitTimeInMs: 100,
-                    fromBeginning: true,
-                    autoCommit: false,
-                });
-
-                await consumer.connect();
-                await consumer.subscribe({ topic: topicName });
-
                 expect(messagesConsumed[0].value.toString()).toMatch(/value-0/);
                 expect(messagesConsumed[99].value.toString()).toMatch(/value-99/);
                 expect(uncommittedOffsetsPerMessage).toHaveLength(messagesConsumed.length);
@@ -833,13 +819,25 @@ describe('Consumer', () => {
                 });
                 await txnToAbort.abort()
 
-                // Restart consumer
+                /* Restart consumer - we cannot stop it, so we recreate it. */
                 messagesConsumed = []
                 uncommittedOffsetsPerMessage = []
 
+                await consumer.disconnect();
+
+                consumer = createConsumer({
+                    groupId,
+                    maxWaitTimeInMs: 100,
+                    fromBeginning: true,
+                    autoCommit: false,
+                });
+
+                await consumer.connect();
+                await consumer.subscribe({ topic: topicName });
+
                 consumer.run({
-                    eachMessage
-                })
+                    eachMessage,
+                });
 
                 await waitForMessages(messagesConsumed, { number: 1 });
                 expect(messagesConsumed[0].value.toString()).toMatch(/value-0/)

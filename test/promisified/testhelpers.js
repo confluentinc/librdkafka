@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const process = require('process');
+const { logLevel } = require('../../lib/kafkajs');
 const { Kafka } = require('../../lib').KafkaJS;
 
 // TODO: pick this up from a file
@@ -7,18 +8,30 @@ const clusterInformation = {
     brokers: process.env.KAFKA_HOST ? process.env.KAFKA_HOST.split(',') : ['localhost:9092'],
 };
 
+const debug = process.env.TEST_DEBUG;
+
+function makeConfig(config) {
+    const kafkaJs =  Object.assign(config, clusterInformation);
+    const common = {};
+    if (debug) {
+        common['debug'] = debug;
+    }
+
+    return Object.assign(common, { kafkaJs });
+}
+
 function createConsumer(config) {
-    const kafka = new Kafka({ kafkaJs: Object.assign(config, clusterInformation) });
+    const kafka = new Kafka(makeConfig(config));
     return kafka.consumer();
 }
 
 function createProducer(config) {
-    const kafka = new Kafka({ kafkaJs: Object.assign(config, clusterInformation) });
+    const kafka = new Kafka(makeConfig(config));
     return kafka.producer();
 }
 
 function createAdmin(config) {
-    const kafka = new Kafka({ kafkaJs: Object.assign(config, clusterInformation) });
+    const kafka = new Kafka(makeConfig(config));
     return kafka.admin();
 }
 

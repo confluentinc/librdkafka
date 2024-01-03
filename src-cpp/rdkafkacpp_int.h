@@ -875,8 +875,7 @@ class ConfImpl : public Conf {
         name.compare("partitioner_cb") == 0 ||
         name.compare("partitioner_key_pointer_cb") == 0 ||
         name.compare("socket_cb") == 0 || name.compare("open_cb") == 0 ||
-        name.compare("resolve_cb") == 0 ||
-        name.compare("rebalance_cb") == 0 ||
+        name.compare("resolve_cb") == 0 || name.compare("rebalance_cb") == 0 ||
         name.compare("offset_commit_cb") == 0 ||
         name.compare("oauthbearer_token_refresh_cb") == 0 ||
         name.compare("ssl_cert_verify_cb") == 0 ||

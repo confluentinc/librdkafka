@@ -301,7 +301,7 @@ void RdKafka::HandleImpl::set_common_config(const RdKafka::ConfImpl *confimpl) {
 
   if (confimpl->resolve_cb_) {
     rd_kafka_conf_set_resolve_cb(confimpl->rk_conf_,
-                                RdKafka::resolve_cb_trampoline);
+                                 RdKafka::resolve_cb_trampoline);
     resolve_cb_ = confimpl->resolve_cb_;
   }
 

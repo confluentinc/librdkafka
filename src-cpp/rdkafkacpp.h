@@ -1170,7 +1170,10 @@ class RD_EXPORT ResolveCb {
    *
    * @returns 0 if successful, or non-zero on error.
    */
-  virtual int resolve_cb(const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res) = 0;
+  virtual int resolve_cb(const char *node,
+                         const char *service,
+                         const struct addrinfo *hints,
+                         struct addrinfo **res) = 0;
 
   virtual ~ResolveCb() {
   }

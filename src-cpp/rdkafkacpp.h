@@ -80,6 +80,15 @@ typedef SSIZE_T ssize_t;
 #define RD_EXPORT
 #endif
 
+#ifndef _WIN32
+#include <netdb.h>
+#else
+#define WIN32_MEAN_AND_LEAN
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <ws2tcpip.h>
+#endif
+
 /**@endcond*/
 
 extern "C" {
@@ -1146,6 +1155,29 @@ class RD_EXPORT SocketCb {
 
 
 /**
+ * @brief \b Portability: ResolveCb callback class
+ *
+ */
+class RD_EXPORT ResolveCb {
+ public:
+  /**
+   * @brief Resolve callback
+   *
+   * The resolve callback is responsible for resolving hostnames.
+   *
+   * It is typically not required to register an alternative resolve
+   * implementation
+   *
+   * @returns 0 if successful, or non-zero on error.
+   */
+  virtual int resolve_cb(const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res) = 0;
+
+  virtual ~ResolveCb() {
+  }
+};
+
+
+/**
  * @brief \b Portability: OpenCb callback class
  *
  */
@@ -1273,6 +1305,11 @@ class RD_EXPORT Conf {
   /** @brief Use with \p name = \c \"socket_cb\" */
   virtual Conf::ConfResult set(const std::string &name,
                                SocketCb *socket_cb,
+                               std::string &errstr) = 0;
+
+  /** @brief Use with \p name = \c \"resolve_cb\" */
+  virtual Conf::ConfResult set(const std::string &name,
+                               ResolveCb *resolve_cb,
                                std::string &errstr) = 0;
 
   /** @brief Use with \p name = \c \"open_cb\" */

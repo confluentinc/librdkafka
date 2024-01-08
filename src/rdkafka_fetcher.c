@@ -359,6 +359,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
         rd_kafka_aborted_txns_t *aborted_txns = NULL;
         rd_slice_t save_slice;
         int32_t fetch_version;
+        int k;
         struct {
                 int32_t Partition;
                 int16_t ErrorCode;
@@ -387,12 +388,12 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                 if (rd_kafka_buf_ApiVersion(request) >= 5)
                         rd_kafka_buf_read_i64(rkbuf, &hdr.LogStartOffset);
 
-                rd_kafka_buf_read_arraycnt(rkbuf, &AbortedTxnCnt, -1);
+                rd_kafka_buf_read_arraycnt(rkbuf, &AbortedTxnCnt, RD_KAFKAP_ABORTED_TRANSACTIONS_MAX);
 
                 if (rkb->rkb_rk->rk_conf.isolation_level ==
                     RD_KAFKA_READ_UNCOMMITTED) {
 
-                        if (unlikely(AbortedTxnCnt > 0)) {
+                        if (unlikely(AbortedTxnCnt > 1000000)) {
                                 rd_rkb_log(rkb, LOG_ERR, "FETCH",
                                            "%.*s [%" PRId32
                                            "]: "
@@ -403,8 +404,11 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                                            RD_KAFKAP_STR_PR(topic),
                                            hdr.Partition, AbortedTxnCnt);
 
-                                rd_kafka_buf_skip(rkbuf,
-                                                  AbortedTxnCnt * (8 + 8));
+                                for (k = 0; k < AbortedTxnCnt; k++) {
+                                        rd_kafka_buf_skip(rkbuf, (8 + 8));
+                                        /* AbortedTransaction tags */
+                                        rd_kafka_buf_skip_tags(rkbuf);
+                                }
                         }
                 } else {
                         /* Older brokers may return LSO -1,
@@ -432,6 +436,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                                         rd_kafka_buf_read_i64(rkbuf, &PID);
                                         rd_kafka_buf_read_i64(rkbuf,
                                                               &FirstOffset);
+                                        /* AbortedTransaction tags */
                                         rd_kafka_buf_skip_tags(rkbuf);
                                         rd_kafka_aborted_txns_add(
                                             aborted_txns, PID, FirstOffset);
@@ -469,8 +474,6 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            hdr.ErrorCode, RD_KAFKAP_STR_PR(topic),
                            hdr.Partition);
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                if (aborted_txns)
-                        rd_kafka_aborted_txns_destroy(aborted_txns);
                 goto no_err;
         }
 
@@ -500,8 +503,6 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                 }
 
-                if (aborted_txns)
-                        rd_kafka_aborted_txns_destroy(aborted_txns);
                 goto no_err;
         }
 
@@ -517,8 +518,6 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            "discarding fetch response",
                            RD_KAFKAP_STR_PR(topic), hdr.Partition);
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                if (aborted_txns)
-                        rd_kafka_aborted_txns_destroy(aborted_txns);
                 goto no_err;
         }
 
@@ -543,8 +542,6 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            tver->version, fetch_version);
                 rd_atomic64_add(&rktp->rktp_c.rx_ver_drops, 1);
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                if (aborted_txns)
-                        rd_kafka_aborted_txns_destroy(aborted_txns);
                 goto no_err;
         }
 
@@ -571,19 +568,15 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
 
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 
-                if (aborted_txns)
-                        rd_kafka_aborted_txns_destroy(aborted_txns);
                 goto no_err;
         }
 
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        if (unlikely(hdr.MessageSetSize <= 0)) {
-                if (aborted_txns)
-                        rd_kafka_aborted_txns_destroy(aborted_txns);
+        if (unlikely(hdr.MessageSetSize <= 0))
                 goto no_err;
-        }
+
 
         /**
          * Parse MessageSet
@@ -595,8 +588,6 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
         /* Parse messages */
         err = rd_kafka_msgset_parse(rkbuf, request, rktp, aborted_txns, tver);
 
-        if (aborted_txns)
-                rd_kafka_aborted_txns_destroy(aborted_txns);
 
         rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
         /* Continue with next partition regardless of
@@ -611,11 +602,12 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
 err_parse:
         if (rktp)
                 rd_kafka_toppar_destroy(rktp); /*from get()*/
-        rd_kafka_buf_skip_tags(rkbuf);
         return rkbuf->rkbuf_err;
 
 no_err:
-        if (rktp)
+        if (aborted_txns)
+                        rd_kafka_aborted_txns_destroy(aborted_txns);
+        if (likely(rktp != NULL))
                 rd_kafka_toppar_destroy(rktp); /*from get()*/
         rd_kafka_buf_skip_tags(rkbuf);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -649,7 +641,7 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_read_i32(rkbuf, &SessionId);
         }
 
-        rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, -1);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         /* Verify that TopicArrayCnt seems to be in line with remaining size */
         rd_kafka_buf_check_len(rkbuf,
                                TopicArrayCnt * (3 /*topic min size*/ +
@@ -662,7 +654,7 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 int32_t PartitionArrayCnt;
                 int j;
                 rd_kafka_buf_read_str(rkbuf, &topic);
-                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt, -1);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt, RD_KAFKAP_PARTITIONS_MAX);
 
                 rkt = rd_kafka_topic_find0(rkb->rkb_rk, &topic);
 
@@ -676,8 +668,10 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                         rd_kafka_topic_destroy0(rkt);
                         rkt = NULL;
                 }
-                rd_kafka_buf_skip_tags(rkbuf);
         }
+
+        /* Top level tags */
+        rd_kafka_buf_skip_tags(rkbuf);
 
         if (rd_kafka_buf_read_remain(rkbuf) != 0) {
                 rd_kafka_buf_parse_fail(rkbuf,
@@ -864,6 +858,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                 /* Update PartitionArrayCnt */
                                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartitionArrayCnt,
                                         PartitionArrayCnt);
+                                /* Topic tags */
                                 rd_kafka_buf_write_tags(rkbuf);
                         }
                         
@@ -913,6 +908,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                 /* MaxBytes */
                 rd_kafka_buf_write_i32(rkbuf, rktp->rktp_fetch_msg_max_bytes);
 
+                /* Partition tags */
                 rd_kafka_buf_write_tags(rkbuf);
 
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
@@ -955,6 +951,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                 /* Update last topic's PartitionArrayCnt */
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartitionArrayCnt,
                                         PartitionArrayCnt);
+                /* Topic tags */
                 rd_kafka_buf_write_tags(rkbuf);
         }
 

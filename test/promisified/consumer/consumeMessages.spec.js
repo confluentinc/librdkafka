@@ -2,6 +2,7 @@ jest.setTimeout(30000)
 
 const { ErrorCodes, CompressionTypes } = require('../../../lib').KafkaJS;
 
+const { doesNotMatch } = require('assert');
 const {
     secureRandom,
     createTopic,
@@ -441,6 +442,43 @@ describe('Consumer', () => {
         await waitForNextEvent(consumer, consumer.events.FETCH)
 
         expect(offsetsConsumed.length).toEqual(messages.length)
+    });
+
+    it('does not disconnect in the middle of message processing', async () => {
+        await producer.connect();
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName });
+
+        let calls = 0;
+        let failedSeek = false;
+        consumer.run({
+            eachMessage: async ({ message }) => {
+                /* Take a long time to process the message. */
+                await sleep(7000);
+                try {
+                    consumer.seek({ topic: topicName, partition: 0, offset: message.offset });
+                } catch (e) {
+                    failedSeek = true;
+                }
+                calls++;
+            }
+        });
+
+        await producer.send({
+            topic: topicName,
+            messages: [{ key: '1', value: '1' }],
+        });
+
+        /* Waiting for assignment and then a bit more means that the first eachMessage starts running. */
+        await waitFor(() => consumer.assignment().length > 0, () => { }, { delay: 50 });
+        await sleep(200);
+        await consumer.disconnect();
+
+        /* Even without explicitly waiting for it, a pending call to eachMessage must complete before disconnect does. */
+        expect(calls).toEqual(1);
+        expect(failedSeek).toEqual(false);
+
+        await producer.disconnect();
     });
 
     describe('transactions', () => {

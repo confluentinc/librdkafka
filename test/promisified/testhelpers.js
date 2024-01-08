@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const process = require('process');
-const { logLevel } = require('../../lib/kafkajs');
 const { Kafka } = require('../../lib').KafkaJS;
 
 // TODO: pick this up from a file

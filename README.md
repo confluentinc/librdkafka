@@ -36,8 +36,8 @@ __This library currently uses `librdkafka` based off of the master branch.__
 The following configurations are supported for this early access preview:
 
 * Any supported version of Node.js (The two LTS versions, 18 and 20, and the latest version, 21).
-* Linux (x64 and arm64) - only glibc, not musl/alpine.
-* macOS - arm64/m1 only
+* Linux (x64 and arm64) - both glibc and musl/alpine.
+* macOS - arm64/m1.
 
 Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required. It can be installed
 from GitHub:
@@ -48,7 +48,7 @@ $ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-js.git#v0.1
 
 # Getting Started
 
-1. If you're starting afresh, you can use the [quickstart guide](QUICKSTART.md) (TBA).
+1. If you're starting afresh, you can use the [quickstart guide](QUICKSTART.md).
 2. If you're migrating from `kafkajs`, you can use the [migration guide](MIGRATION.md#kafkajs).
 2. If you're migrating from `node-rdkafka`, you can use the [migration guide](MIGRATION.md#node-rdkafka).
 

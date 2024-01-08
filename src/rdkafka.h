@@ -637,6 +637,7 @@ typedef enum {
         RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
         /** The member epoch is stale */
         RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH = 113,
+
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 

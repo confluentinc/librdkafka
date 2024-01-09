@@ -74,7 +74,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-macos-arm64
+          type: s1-prod-macos-13-5-arm64
       jobs:
         - name: 'Build from source and test'
           commands:
@@ -269,7 +269,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-macos-arm64
+          type: s1-prod-macos-13-5-arm64
       env_vars:
         - name: ARCHITECTURE
           value: "arm64"

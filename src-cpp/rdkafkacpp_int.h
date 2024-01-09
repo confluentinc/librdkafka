@@ -81,6 +81,11 @@ int resolve_cb_trampoline(const char *node,
                           const struct addrinfo *hints,
                           struct addrinfo **res,
                           void *opaque);
+int connect_cb_trampoline(int sockfd,
+                          const struct sockaddr *addr,
+                          int addrlen,
+                          const char *id,
+                          void *opaque);
 int open_cb_trampoline(const char *pathname,
                        int flags,
                        mode_t mode,
@@ -588,6 +593,7 @@ class ConfImpl : public Conf {
       event_cb_(NULL),
       socket_cb_(NULL),
       resolve_cb_(NULL),
+      connect_cb_(NULL),
       open_cb_(NULL),
       partitioner_cb_(NULL),
       partitioner_kp_cb_(NULL),
@@ -748,6 +754,23 @@ class ConfImpl : public Conf {
     }
 
     resolve_cb_ = resolve_cb;
+    return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult set(const std::string &name,
+                       ConnectCb *connect_cb,
+                       std::string &errstr) {
+    if (name != "connect_cb") {
+      errstr = "Invalid value type, expected RdKafka::ConnectCb";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    connect_cb_ = connect_cb;
     return Conf::CONF_OK;
   }
 
@@ -958,6 +981,13 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  Conf::ConfResult get(ConnectCb *&connect_cb) const {
+    if (!rk_conf_)
+      return Conf::CONF_INVALID;
+    connect_cb = this->connect_cb_;
+    return Conf::CONF_OK;
+  }
+
   Conf::ConfResult get(OpenCb *&open_cb) const {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
@@ -1025,6 +1055,7 @@ class ConfImpl : public Conf {
   EventCb *event_cb_;
   SocketCb *socket_cb_;
   ResolveCb *resolve_cb_;
+  ConnectCb *connect_cb_;
   OpenCb *open_cb_;
   PartitionerCb *partitioner_cb_;
   PartitionerKeyPointerCb *partitioner_kp_cb_;
@@ -1218,6 +1249,7 @@ class HandleImpl : virtual public Handle {
   EventCb *event_cb_;
   SocketCb *socket_cb_;
   ResolveCb *resolve_cb_;
+  ConnectCb *connect_cb_;
   OpenCb *open_cb_;
   DeliveryReportCb *dr_cb_;
   PartitionerCb *partitioner_cb_;

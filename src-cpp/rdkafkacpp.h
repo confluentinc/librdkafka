@@ -1355,7 +1355,7 @@ class RD_EXPORT Conf {
                                ResolveCb *resolve_cb,
                                std::string &errstr) = 0;
 
-  /** @brief Use with \p name = \c \"resolve_cb\" */
+  /** @brief Use with \p name = \c \"connect_cb\" */
   virtual Conf::ConfResult set(const std::string &name,
                                ConnectCb *connect_cb,
                                std::string &errstr) = 0;

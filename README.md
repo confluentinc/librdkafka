@@ -43,7 +43,7 @@ Installation on any of these platforms is meant to be seamless, without any C/C+
 from GitHub:
 
 ```bash
-$ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-js.git#v0.1.4-devel"
+$ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-js.git#v0.1.5-devel"
 ```
 
 Yarn and pnpm support is experimental.

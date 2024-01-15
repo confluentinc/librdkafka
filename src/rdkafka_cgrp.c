@@ -2617,6 +2617,19 @@ rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg) {
                 }
                 rkcg->rkcg_current_target_assignments =
                     rkcg->rkcg_next_target_assignments;
+                if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
+                        char rkcg_current_target_assignments_str[512] = "NULL";
+
+                        rd_kafka_topic_partition_list_str(
+                            rkcg->rkcg_current_target_assignments,
+                            rkcg_current_target_assignments_str,
+                            sizeof(rkcg_current_target_assignments_str), 0);
+
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+                                     "Reconciliation starts with new target "
+                                     "assignment \"%s\"",
+                                     rkcg_current_target_assignments_str);
+                }
                 rkcg->rkcg_next_target_assignments = NULL;
                 rd_kafka_cgrp_handle_assignment(
                     rkcg, rkcg->rkcg_current_target_assignments);
@@ -2669,6 +2682,20 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
 
         if (found < rkcg->rkcg_next_target_assignments->cnt)
                 return RD_KAFKA_OP_RES_HANDLED;
+
+        if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
+                char rkcg_next_target_assignments_str[512] = "NULL";
+
+                rd_kafka_topic_partition_list_str(
+                    rkcg->rkcg_next_target_assignments,
+                    rkcg_next_target_assignments_str,
+                    sizeof(rkcg_next_target_assignments_str), 0);
+
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+                    "Metadata available for next target assignment \"%s\"",
+                    rkcg_next_target_assignments_str);
+        }
 
         return rd_kafka_cgrp_consumer_handle_next_assignment(rkcg);
 }
@@ -2765,9 +2792,28 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
 
-                RD_IF_FREE(rkcg->rkcg_next_target_assignments,
-                           rd_kafka_topic_partition_list_destroy);
-                rkcg->rkcg_next_target_assignments = assigned_topic_partitions;
+                if (rd_rkb_is_dbg(rkb, CGRP)) {
+                        char assigned_topic_partitions_str[512] = "NULL";
+
+                        if (assigned_topic_partitions) {
+                                rd_kafka_topic_partition_list_str(
+                                    assigned_topic_partitions,
+                                    assigned_topic_partitions_str,
+                                    sizeof(assigned_topic_partitions_str), 0);
+                        }
+
+                        rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
+                                   "Heartbeat response received target "
+                                   "assignment \"%s\"",
+                                   assigned_topic_partitions_str);
+                }
+
+                if (assigned_topic_partitions) {
+                        RD_IF_FREE(rkcg->rkcg_next_target_assignments,
+                                   rd_kafka_topic_partition_list_destroy);
+                        rkcg->rkcg_next_target_assignments =
+                            assigned_topic_partitions;
+                }
         }
 
         if (rkcg->rkcg_next_target_assignments) {

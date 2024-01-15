@@ -4071,11 +4071,16 @@ const char *rd_kafka_topic_partition_list_str(
         int i;
         size_t of = 0;
 
+        if (!rktparlist->cnt)
+                dest[0] = '\0';
         for (i = 0; i < rktparlist->cnt; i++) {
                 const rd_kafka_topic_partition_t *rktpar =
                     &rktparlist->elems[i];
                 char errstr[128];
                 char offsetstr[32];
+                const char *topic_id_str = NULL;
+                const rd_kafka_Uuid_t topic_id =
+                    rd_kafka_topic_partition_get_topic_id(rktpar);
                 int r;
 
                 if (!rktpar->err && (fmt_flags & RD_KAFKA_FMT_F_ONLY_ERR))
@@ -4093,14 +4098,19 @@ const char *rd_kafka_topic_partition_list_str(
                 else
                         offsetstr[0] = '\0';
 
+
+                if (!RD_KAFKA_UUID_IS_ZERO(topic_id))
+                        topic_id_str = rd_kafka_Uuid_base64str(&topic_id);
+
                 r = rd_snprintf(&dest[of], dest_size - of,
                                 "%s"
-                                "%s[%" PRId32
+                                "%s(%s)[%" PRId32
                                 "]"
                                 "%s"
                                 "%s",
                                 of == 0 ? "" : ", ", rktpar->topic,
-                                rktpar->partition, offsetstr, errstr);
+                                topic_id_str, rktpar->partition, offsetstr,
+                                errstr);
 
                 if ((size_t)r >= dest_size - of) {
                         rd_snprintf(&dest[dest_size - 4], 4, "...");

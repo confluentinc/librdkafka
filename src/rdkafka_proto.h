@@ -609,6 +609,9 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
                (a.least_significant_bits - b.least_significant_bits);
 }
 
+#define RD_KAFKA_UUID_IS_ZERO(uuid)                                            \
+        (!rd_kafka_Uuid_cmp(uuid, RD_KAFKA_UUID_ZERO))
+
 /**
  * @brief UUID copier for rd_list_copy()
  */

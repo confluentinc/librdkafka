@@ -565,6 +565,118 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         return;
 }
 
+static void test_message_single_partition_record_fail(void) {
+        int partition = 0;
+        int r;
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_conf_t *topic_conf;
+        char msg[128];
+        int msgcnt  = 100;
+        int failcnt = 0;
+        int i;
+        rd_kafka_message_t *rkmessages;
+
+        msgid_next = 0;
+
+        test_conf_init(&conf, &topic_conf, 20);
+
+        /* Set delivery report callback */
+        rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
+
+        /* Create kafka instance */
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        TEST_SAY("test_message_single_partition_record_fail: Created kafka instance %s\n",
+                 rd_kafka_name(rk));
+
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        if (!rkt)
+                TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
+
+        /* Create messages */
+        rkmessages = calloc(sizeof(*rkmessages), msgcnt);
+        for (i = 0; i < msgcnt; i++) {
+                int *msgidp = malloc(sizeof(*msgidp));
+                char *t;
+                *msgidp     = i;
+                rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
+                            __FILE__, __FUNCTION__, i);
+                if (i % 10 == 0) {
+                        // TODO: Change to create INVALID_RECORD error from broker
+                        rkmessages[i].payload   = rd_strdup(msg);;
+                        rkmessages[i].len       = -10;
+
+                } else {
+                        rkmessages[i].payload   = rd_strdup(msg);
+                        rkmessages[i].len       = strlen(msg);
+                }
+                rkmessages[i]._private  = msgidp;
+                rkmessages[i].partition = 2; /* Will be ignored since
+                                              * RD_KAFKA_MSG_F_PARTITION
+                                              * is not supplied. */
+        }
+
+        r = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_FREE,
+                                   rkmessages, msgcnt);
+
+        /* Scan through messages to check for errors. */
+        for (i = 0; i < msgcnt; i++) {
+                if (rkmessages[i].err) {
+                        TEST_ASSERT(rkmessages[i].err == RD_KAFKA_RESP_ERR_INVALID_MSG,
+                                    "Expected INVALID_MSG error, not %s",
+                                    rd_kafka_err2str(rkmessages[i].err));
+
+                        failcnt++;
+                        if (failcnt < 100)
+                                TEST_SAY("Message #%i failed: %s\n", i,
+                                         rd_kafka_err2str(rkmessages[i].err));
+                }
+        }
+
+        /* All messages should've been produced. */
+        if (r < msgcnt) {
+                TEST_SAY(
+                    "Not all messages were accepted "
+                    "by produce_batch(): %i < %i\n",
+                    r, msgcnt);
+                if (msgcnt - r != failcnt)
+                        TEST_SAY(
+                            "Discrepency between failed messages (%i) "
+                            "and return value %i (%i - %i)\n",
+                            failcnt, msgcnt - r, msgcnt, r);
+                TEST_FAIL("%i/%i messages failed\n", msgcnt - r, msgcnt);
+        }
+
+        free(rkmessages);
+        TEST_SAY(
+            "test_message_single_partition_record_fail: "
+            "Produced %i messages, waiting for deliveries\n",
+            r);
+
+        msgcounter = msgcnt;
+
+        /* Wait for messages to be delivered */
+        test_wait_delivery(rk, &msgcounter);
+
+        if (fails)
+                TEST_FAIL("%i failures, see previous errors", fails);
+
+        if (msgid_next != msgcnt)
+                TEST_FAIL("Still waiting for messages: next %i != end %i\n",
+                          msgid_next, msgcnt);
+
+        /* Destroy topic */
+        rd_kafka_topic_destroy(rkt);
+
+        /* Destroy rdkafka instance */
+        TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
+        rd_kafka_destroy(rk);
+
+        return;
+}
+
 
 int main_0011_produce_batch(int argc, char **argv) {
         test_message_partitioner_wo_per_message_flag();
@@ -572,5 +684,6 @@ int main_0011_produce_batch(int argc, char **argv) {
         test_partitioner();
         if (test_can_create_topics(1))
                 test_per_message_partition_flag();
+        test_message_single_partition_record_fail();
         return 0;
 }

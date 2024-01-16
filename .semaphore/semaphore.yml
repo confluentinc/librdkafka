@@ -32,8 +32,6 @@ global_job_config:
       - cd ../../
       - export MKL_DEBUG=1
 
-
-
 blocks:
   - name: "Linux amd64 (musl): Build and test"
     dependencies: [ ]

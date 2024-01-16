@@ -190,19 +190,14 @@ rd_kafka_topic_t *rd_kafka_topic_find0_fl(const char *func,
 }
 
 /**
- * Finds and returns a topic based on its topic_id, or NULL if not found.
- * The 'rkt' refcount is increased by one and the caller must call
- * rd_kafka_topic_destroy() when it is done with the topic to decrease
- * the refcount.
- *
- * Locality: any thread
+ * Same semantics as ..find() but takes a Uuid instead.
  */
-rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk, rd_kafka_Uuid_t uuid){
+rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk, rd_kafka_Uuid_t topic_id){
         rd_kafka_topic_t *rkt;
 
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-                if (rd_kafka_Uuid_cmp(rkt->rkt_id, uuid) == 0){
+                if (!rd_kafka_Uuid_cmp(rkt->rkt_id, topic_id)){
                         rd_kafka_topic_keep(rkt);
                         break;
                 }
@@ -1332,7 +1327,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                 upd += rd_kafka_topic_partition_cnt_update(rkt,
                                                            mdt->partition_cnt);
-                if(rd_kafka_Uuid_cmp(rkt->rkt_id, RD_KAFKA_UUID_ZERO) == 0)
+                if(!rd_kafka_Uuid_cmp(rkt->rkt_id, RD_KAFKA_UUID_ZERO))
                         rkt->rkt_id = mdit->topic_id;
                 /* If the metadata times out for a topic (because all brokers
                  * are down) the state will transition to S_UNKNOWN.

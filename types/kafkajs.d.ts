@@ -32,7 +32,7 @@ export interface KafkaConfig {
 }
 
 export interface CommonConstructorConfig extends GlobalConfig {
-  kafkaJs?: KafkaConfig;
+  kafkaJS?: KafkaConfig;
 }
 
 export interface ProducerConfig {
@@ -46,7 +46,7 @@ export interface ProducerConfig {
 }
 
 export interface ProducerConstructorConfig extends ProducerGlobalConfig {
-  kafkaJs?: ProducerConfig;
+  kafkaJS?: ProducerConfig;
 }
 
 export interface IHeaders {
@@ -150,7 +150,7 @@ export interface ConsumerConfig {
 }
 
 export interface ConsumerConstructorConfig extends ConsumerGlobalConfig {
-  kafkaJs?: ConsumerConfig;
+  kafkaJS?: ConsumerConfig;
 }
 
 export type ConsumerEvents = {
@@ -177,7 +177,7 @@ export interface AdminConfig {
 }
 
 export interface AdminConstructorConfig extends GlobalConfig {
-  kafkaJs?: AdminConfig;
+  kafkaJS?: AdminConfig;
 }
 
 export interface ITopicConfig {

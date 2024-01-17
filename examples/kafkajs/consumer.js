@@ -6,7 +6,7 @@ async function consumerStart() {
   var stopped = false;
 
   const kafka = new Kafka({
-    kafkaJs: {
+    kafkaJS: {
       brokers: ['localhost:9092'],
       ssl: true,
       connectionTimeout: 5000,
@@ -19,7 +19,7 @@ async function consumerStart() {
   });
 
   consumer = kafka.consumer({
-    kafkaJs: {
+    kafkaJS: {
       groupId: 'test-group',
       autoCommit: false,
       rebalanceListener: {

@@ -3,7 +3,7 @@ const { Kafka } = require('../..').KafkaJS
 
 async function adminStart() {
   const kafka = new Kafka({
-    kafkaJs: {
+    kafkaJS: {
       brokers: ['localhost:9092'],
     }
   });

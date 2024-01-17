@@ -10,13 +10,13 @@ const clusterInformation = {
 const debug = process.env.TEST_DEBUG;
 
 function makeConfig(config) {
-    const kafkaJs =  Object.assign(config, clusterInformation);
+    const kafkaJS =  Object.assign(config, clusterInformation);
     const common = {};
     if (debug) {
         common['debug'] = debug;
     }
 
-    return Object.assign(common, { kafkaJs });
+    return Object.assign(common, { kafkaJS });
 }
 
 function createConsumer(config) {

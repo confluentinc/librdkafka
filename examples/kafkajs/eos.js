@@ -3,7 +3,7 @@ const { Kafka } = require('../..').KafkaJS
 
 async function eosStart() {
     const kafka = new Kafka({
-        kafkaJs: {
+        kafkaJS: {
             brokers: ['<fill>'],
             ssl: true,
             sasl: {
@@ -15,14 +15,14 @@ async function eosStart() {
     });
 
     const consumer = kafka.consumer({
-        kafkaJs: {
+        kafkaJS: {
             groupId: 'groupId',
             autoCommit: false,
         }
     });
 
     const producer = kafka.producer({
-        kafkaJs: {
+        kafkaJS: {
             transactionalId: 'txid'
         }
     });

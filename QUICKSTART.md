@@ -40,20 +40,26 @@ async function consumerStart() {
 
   await consumer.subscribe({ topics: [ "topic" ] });
 
-  consumer.run({
-    eachMessage: async ({ topic, partition, message }) => {
-      console.log({
-        topic,
-        partition,
-        offset: message.offset,
-        key: message.key?.toString(),
-        value: message.value.toString(),
-      });
-    },
-  });
+  let stopped = false;
+  while (!stopped) {
+    const message = await consumer.consume(1000);
+    if (!message) {
+      continue;
+    }
+    console.log({
+      topic: message.topic,
+      partition: message.partition,
+      offset: message.offset,
+      key: message.key?.toString(),
+      value: message.value.toString(),
+    });
 
-  // When done consuming
-  // await consumer.disconnect();
+    // Update stopped whenever we're done consuming.
+    // stopped = true;
+  }
+
+  // Disconnect and clean up.
+  await consumer.disconnect();
 }
 
 consumerStart();

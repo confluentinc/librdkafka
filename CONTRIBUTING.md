@@ -7,33 +7,11 @@ which is hosted by [Confluent Inc.](https://github.com/confluentinc)
 on GitHub. This document lists rules, guidelines, and help getting started,
 so if you feel something is missing feel free to send a pull request.
 
-#### Table Of Contents
-
-[What should I know before I get started?](#what-should-i-know-before-i-get-started)
-  * [Contributor Agreement](#contributor-agreement)
-
-[How Can I Contribute?](#how-can-i-contribute)
-  * [Reporting Bugs](#reporting-bugs)
-  * [Suggesting Enhancements](#suggesting-enhancements)
-  * [Pull Requests](#pull-requests)
-
-[Styleguides](#styleguides)
-  * [Git Commit Messages](#git-commit-messages)
-  * [JavaScript Styleguide](#javascript-styleguide)
-  * [C++ Styleguide](#c++-styleguide)
-  * [Specs Styleguide](#specs-styleguide)
-  * [Documentation Styleguide](#documentation-styleguide)
-
-[Debugging](#debugging)
-  * [Debugging C++](#debugging-c)
-
-[Updating librdkafka version](#updating-librdkafka-version)
-
 ## What should I know before I get started?
 
 ### Contributor Agreement
 
-Not currently required.
+Required (please follow instructions after making any Pull Requests).
 
 ## How can I contribute?
 
@@ -49,6 +27,10 @@ replicas, partitions, and brokers you are connecting to, because some issues
 might be related to Kafka. A list of `librdkafka` configuration key-value pairs
 also helps.
 
+Adding the property `debug` in your `librdkafka` configuration will help us. A list of
+possible values is available [here](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md),
+but you can set it to `all` if verbose logs are okay.
+
 ### Suggesting Enhancements
 
 Please use __Github Issues__ to suggest enhancements. We are happy to consider
@@ -58,6 +40,9 @@ helps the user base can help guide the decision to implement it into the
 library's core.
 
 ### Pull Requests
+
+NOTE: Pull requests while the library in EA are discouraged, as we are still
+working on the API and may make breaking changes.
 
 * Include new test cases (either end-to-end or unit tests) with your change.
 * Follow our style guides.
@@ -114,7 +99,8 @@ In short:
 
 ### Specs Styleguide
 
-* Write all JavaScript tests by using the `mocha` testing framework.
+* Write JavaScript tests by using the `mocha` testing framework for the
+  non-promisified API and `jest` for the promisified API.
 * All `mocha` tests should use exports syntax.
 * All `mocha` test files should be suffixed with `.spec.js` instead of `.js`.
 * Unit tests should mirror the JavaScript files they test (for example,
@@ -168,6 +154,26 @@ Using Visual Studio code to develop on `confluent-kafka-js`. If you use it you c
     "version": 4
 }
 ```
+
+## Tests
+
+This project includes three types of tests in this project:
+* end-to-end integration tests (`mocha`)
+* unit tests (`mocha`)
+* integration tests for promisified API (`jest`)
+
+You can run all types of tests by using `Makefile`. Doing so calls `mocha` or `jest` in your locally installed `node_modules` directory.
+
+* Before you run the tests, be sure to init and update the submodules:
+  1. `git submodule init`
+  2. `git submodule update`
+* To run the unit tests, you can run `make lint` or `make test`.
+* To run the promisified integration tests, you can use `make promisified_test`.
+  You must have a running Kafka installation available. By default, the test tries to connect to `localhost:9092`;
+  however, you can supply the `KAFKA_HOST` environment variable to override this default behavior.
+* To run the integration tests, you can use `make e2e`.
+  You must have a running Kafka installation available. By default, the test tries to connect to `localhost:9092`;
+  however, you can supply the `KAFKA_HOST` environment variable to override this default behavior. Run `make e2e`.
 
 ## Debugging
 

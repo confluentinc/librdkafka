@@ -38,13 +38,15 @@
 #include "rdkafka.h" /* for Kafka driver */
 
 
-static int msgid_next                    = 0;
-static int fails                         = 0;
-static int msgcounter                    = 0;
-static int *dr_partition_count           = NULL;
-static const int topic_num_partitions    = 4;
-static int msg_partition_wo_flag         = 2;
-static int msg_partition_wo_flag_success = 0;
+static int msgid_next                        = 0;
+static int fails                             = 0;
+static int msgcounter                        = 0;
+static int *dr_partition_count               = NULL;
+static const int topic_num_partitions        = 4;
+static int msg_partition_wo_flag             = 2;
+static int msg_partition_wo_flag_success     = 0;
+static int invalid_record_fail_cnt           = 0;
+static int invalid_different_record_fail_cnt = 0;
 
 /**
  * Delivery reported callback.
@@ -565,6 +567,19 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         return;
 }
 
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
+        if (rkmessage->err) {
+                if (rkmessage->err == RD_KAFKA_RESP_ERR_INVALID_RECORD)
+                        invalid_record_fail_cnt++;
+                else if (rkmessage->err ==
+                         RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD)
+                        invalid_different_record_fail_cnt++;
+        }
+        msgcounter--;
+}
+
+
 static void test_message_single_partition_record_fail(void) {
         int partition = 0;
         int r;
@@ -577,19 +592,37 @@ static void test_message_single_partition_record_fail(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+        static int32_t *avail_brokers;
+        static size_t avail_broker_cnt;
+        avail_brokers           = test_get_broker_ids(NULL, &avail_broker_cnt);
+        invalid_record_fail_cnt = 0;
+        invalid_different_record_fail_cnt = 0;
 
-        msgid_next = 0;
+        const char *confs_set_append_broker[] = {"log.cleanup.policy", "APPEND",
+                                                 "compact"};
+
+        const char *confs_delete_subtract_broker[] = {"log.cleanup.policy",
+                                                      "SUBTRACT", "compact"};
 
         test_conf_init(&conf, &topic_conf, 20);
 
         /* Set delivery report callback */
-        rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
+
 
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        TEST_SAY("test_message_single_partition_record_fail: Created kafka instance %s\n",
-                 rd_kafka_name(rk));
+        TEST_SAY(
+            "test_message_single_partition_record_fail: Created kafka instance "
+            "%s\n",
+            rd_kafka_name(rk));
+
+        for (i = 0; i < avail_broker_cnt; i++)
+                test_IncrementalAlterConfigs_simple(
+                    rk, RD_KAFKA_RESOURCE_BROKER,
+                    tsprintf("%d", avail_brokers[i]), confs_set_append_broker,
+                    1);
 
         rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
         if (!rkt)
@@ -600,42 +633,26 @@ static void test_message_single_partition_record_fail(void) {
         for (i = 0; i < msgcnt; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
                 char *t;
-                *msgidp     = i;
+                *msgidp = i;
                 rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
                 if (i % 10 == 0) {
-                        // TODO: Change to create INVALID_RECORD error from broker
-                        rkmessages[i].payload   = rd_strdup(msg);;
-                        rkmessages[i].len       = -10;
+                        rkmessages[i].payload = rd_strdup(msg);
+                        rkmessages[i].len     = strlen(msg);
 
                 } else {
-                        rkmessages[i].payload   = rd_strdup(msg);
-                        rkmessages[i].len       = strlen(msg);
+                        rkmessages[i].payload = rd_strdup(msg);
+                        rkmessages[i].len     = strlen(msg);
+                        rkmessages[i].key     = rd_strdup(msg);
+                        rkmessages[i].key_len = strlen(msg);
                 }
                 rkmessages[i]._private  = msgidp;
-                rkmessages[i].partition = 2; /* Will be ignored since
-                                              * RD_KAFKA_MSG_F_PARTITION
-                                              * is not supplied. */
+                rkmessages[i].partition = 2;
         }
 
         r = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_FREE,
                                    rkmessages, msgcnt);
 
-        /* Scan through messages to check for errors. */
-        for (i = 0; i < msgcnt; i++) {
-                if (rkmessages[i].err) {
-                        TEST_ASSERT(rkmessages[i].err == RD_KAFKA_RESP_ERR_INVALID_MSG,
-                                    "Expected INVALID_MSG error, not %s",
-                                    rd_kafka_err2str(rkmessages[i].err));
-
-                        failcnt++;
-                        if (failcnt < 100)
-                                TEST_SAY("Message #%i failed: %s\n", i,
-                                         rd_kafka_err2str(rkmessages[i].err));
-                }
-        }
-
-        /* All messages should've been produced. */
         if (r < msgcnt) {
                 TEST_SAY(
                     "Not all messages were accepted "
@@ -659,13 +676,22 @@ static void test_message_single_partition_record_fail(void) {
 
         /* Wait for messages to be delivered */
         test_wait_delivery(rk, &msgcounter);
+        TEST_SAY(
+            "invalid_record_fail_cnt: %d invalid_different_record_fail_cnt : "
+            "%d \n",
+            invalid_record_fail_cnt, invalid_different_record_fail_cnt);
+        TEST_ASSERT(invalid_record_fail_cnt == 10);
+        TEST_ASSERT(invalid_different_record_fail_cnt == 90);
+
+        for (i = 0; i < avail_broker_cnt; i++)
+                test_IncrementalAlterConfigs_simple(
+                    rk, RD_KAFKA_RESOURCE_BROKER,
+                    tsprintf("%d", avail_brokers[i]),
+                    confs_delete_subtract_broker, 1);
 
         if (fails)
                 TEST_FAIL("%i failures, see previous errors", fails);
 
-        if (msgid_next != msgcnt)
-                TEST_FAIL("Still waiting for messages: next %i != end %i\n",
-                          msgid_next, msgcnt);
 
         /* Destroy topic */
         rd_kafka_topic_destroy(rkt);

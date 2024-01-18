@@ -1,5 +1,7 @@
-const { Kafka } = require('../..').KafkaJS
-//const { Kafka } = require('kafkajs')
+// require('kafkajs') is replaced with require('confluent-kafka-js').KafkaJS.
+// Since this example is within the package itself, we use '../..', but code
+// will typically use 'confluent-kafka-js'.
+const { Kafka } = require('../..').KafkaJS;
 
 async function consumerStart() {
   let consumer;

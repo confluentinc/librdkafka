@@ -2935,7 +2935,8 @@ void rd_kafka_dr_msgq0(rd_kafka_topic_t *rkt,
                                 rd_kafka_msgq_len(rkmq));
 
         /* Call on_acknowledgement() interceptors */
-        rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq, err);
+        if (!presult)
+                rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq, err);
 
         if (rk->rk_drmode != RD_KAFKA_DR_MODE_NONE &&
             (!rk->rk_conf.dr_err_only || err)) {

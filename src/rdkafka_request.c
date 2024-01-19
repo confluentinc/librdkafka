@@ -2209,7 +2209,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
     const rd_kafkap_str_t *rack_id,
     int32_t rebalance_timeout_ms,
     const rd_kafka_topic_partition_list_t *subscribe_topics,
-    const rd_kafkap_str_t *subscribe_topics_regex,
     const rd_kafkap_str_t *remote_assignor,
     const rd_kafka_topic_partition_list_t *current_assignments,
     rd_kafka_replyq_t replyq,
@@ -2309,7 +2308,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
         }
 
-        rd_kafka_buf_write_kstr(rkbuf, subscribe_topics_regex);
         rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
 
         if (current_assignments) {

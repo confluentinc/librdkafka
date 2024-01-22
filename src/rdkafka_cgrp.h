@@ -279,6 +279,7 @@ typedef struct rd_kafka_cgrp_s {
         0x4                                          /* TODO: write            \
                                                       */
 #define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10 /* TODO: write */
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */

@@ -634,6 +634,14 @@ typedef enum {
         /** The member epoch is fenced by the group coordinator. The member must
          *  abandon all its partitions and rejoin. */
         RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
+        /** The instance ID is still used by another member in the
+         *  consumer group. That member must leave first.
+         */
+        RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID = 111,
+        /** The assignor or its version range is not supported by
+         *  the consumer group.
+         */
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR = 112,
         /** The member epoch is stale.
          *  The member must retry after receiving its updated member epoch
          *  via the ConsumerGroupHeartbeat API. */

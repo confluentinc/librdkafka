@@ -28,7 +28,7 @@ global_job_config:
       - git submodule update --init --recursive
       - cd deps/librdkafka
       - git fetch origin
-      - git checkout master
+      - git checkout dev_bump_openssl_version_3_0_12
       - cd ../../
       - export MKL_DEBUG=1
 
@@ -320,6 +320,6 @@ blocks:
       jobs:
         - name: "Tarball"
           commands:
-            - artifact pull workflow artifacts
-            - tar -czvf artifacts.${SEMAPHORE_GIT_TAG_NAME}.tar.gz artifacts
-            - artifact push project "artifacts.${SEMAPHORE_GIT_TAG_NAME}.tar.gz" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/artifacts.${SEMAPHORE_GIT_TAG_NAME}.tar.gz"
+            - artifact pull workflow releases
+            - tar -czvf releases.${SEMAPHORE_GIT_TAG_NAME}.tar.gz releases
+            - artifact push project "releases.${SEMAPHORE_GIT_TAG_NAME}.tar.gz" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/releases.${SEMAPHORE_GIT_TAG_NAME}.tar.gz"

@@ -22,7 +22,7 @@ const kafka = new Kafka({
 let consumer = kafka.consumer({
   kafkaJS: {
     groupId: "test-group",
-    fromBeginning: false,
+    fromBeginning: true,
   },
 });
 let producer = kafka.producer();

@@ -1,6 +1,6 @@
 {
   "name": "confluent-kafka-js",
-  "version": "v0.1.5-devel",
+  "version": "v0.1.6-devel",
   "description": "Node.js bindings for librdkafka",
   "librdkafka": "master",
   "main": "lib/index.js",

@@ -1,4 +1,4 @@
-# librdkafka v2.4.0
+# librdkafka v2.3.1
 
 librdkafka v2.3.1 is a feature release:
 

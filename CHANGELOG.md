@@ -1,6 +1,6 @@
 # librdkafka v2.4.0
 
-librdkafka v2.3.0 is a feature release:
+librdkafka v2.3.1 is a feature release:
 
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt).

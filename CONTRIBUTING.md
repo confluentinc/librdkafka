@@ -192,6 +192,16 @@ gdb node
 
 You can add breakpoints and so on after that.
 
+### Debugging and Profiling JavaScript
+
+Run the code with the `--inspect` flag, and then open `chrome://inspect` in Chrome and connect to the debugger.
+
+Example:
+
+```
+node --inspect path/to/file.js
+```
+
 ## Updating librdkafka version
 
 The librdkafka should be periodically updated to the latest release in https://github.com/confluentinc/librdkafka/releases

@@ -592,17 +592,19 @@ static void test_message_single_partition_record_fail(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+        const char *topic_name = test_mk_topic_name(
+            "0011_test_message_single_partition_record_fail", 0);
         static int32_t *avail_brokers;
         static size_t avail_broker_cnt;
         avail_brokers           = test_get_broker_ids(NULL, &avail_broker_cnt);
         invalid_record_fail_cnt = 0;
         invalid_different_record_fail_cnt = 0;
 
-        const char *confs_set_append_broker[] = {"log.cleanup.policy", "APPEND",
-                                                 "compact"};
+        const char *confs_set_append[] = {"cleanup.policy", "APPEND",
+                                          "compact"};
 
-        const char *confs_delete_subtract_broker[] = {"log.cleanup.policy",
-                                                      "SUBTRACT", "compact"};
+        const char *confs_delete_subtract[] = {"cleanup.policy", "SUBTRACT",
+                                               "compact"};
 
         test_conf_init(&conf, &topic_conf, 20);
 
@@ -618,15 +620,14 @@ static void test_message_single_partition_record_fail(void) {
             "%s\n",
             rd_kafka_name(rk));
 
-        for (i = 0; i < avail_broker_cnt; i++)
-                test_IncrementalAlterConfigs_simple(
-                    rk, RD_KAFKA_RESOURCE_BROKER,
-                    tsprintf("%d", avail_brokers[i]), confs_set_append_broker,
-                    1);
-
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
+        rd_sleep(5);
+
+        test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
+                                            topic_name, confs_set_append, 1);
+
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
@@ -683,11 +684,8 @@ static void test_message_single_partition_record_fail(void) {
         TEST_ASSERT(invalid_record_fail_cnt == 10);
         TEST_ASSERT(invalid_different_record_fail_cnt == 90);
 
-        for (i = 0; i < avail_broker_cnt; i++)
-                test_IncrementalAlterConfigs_simple(
-                    rk, RD_KAFKA_RESOURCE_BROKER,
-                    tsprintf("%d", avail_brokers[i]),
-                    confs_delete_subtract_broker, 1);
+        test_IncrementalAlterConfigs_simple(
+            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_delete_subtract, 1);
 
         if (fails)
                 TEST_FAIL("%i failures, see previous errors", fails);
@@ -699,8 +697,6 @@ static void test_message_single_partition_record_fail(void) {
         /* Destroy rdkafka instance */
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
-
-        return;
 }
 
 

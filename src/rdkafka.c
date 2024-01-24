@@ -5099,12 +5099,78 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
 }
 
 /**
+ * Returns a new non cryptographically secure UUIDv4 (random).
+ *
+ * @return A UUIDv4.
+ *
+ * @remark Must be freed after use using rd_kafka_Uuid_destroy().
+ */
+rd_kafka_Uuid_t *rd_kafka_Uuid_random() {
+        int i;
+        unsigned char rand_values_bytes[16] = {};
+        uint64_t *rand_values_uint64        = (uint64_t *)rand_values_bytes;
+        unsigned char *rand_values_app;
+        rd_kafka_Uuid_t *ret = rd_kafka_Uuid_copy(&RD_KAFKA_UUID_ZERO);
+        for (i = 0; i < 16; i += 2) {
+                uint16_t rand_uint16 = (uint16_t)rd_jitter(0, INT16_MAX - 1);
+                /* No need to convert endianess here because it's still only
+                 * a random value. */
+                rand_values_app = (unsigned char *)&rand_uint16;
+                rand_values_bytes[i] |= rand_values_app[0];
+                rand_values_bytes[i + 1] |= rand_values_app[1];
+        }
+
+        rand_values_bytes[6] &= 0x0f; /* clear version */
+        rand_values_bytes[6] |= 0x40; /* version 4 */
+        rand_values_bytes[8] &= 0x3f; /* clear variant */
+        rand_values_bytes[8] |= 0x80; /* IETF variant */
+
+        ret->most_significant_bits  = be64toh(rand_values_uint64[0]);
+        ret->least_significant_bits = be64toh(rand_values_uint64[1]);
+        return ret;
+}
+
+/**
  * @brief Destroy the provided uuid.
  *
  * @param uuid UUID
  */
 void rd_kafka_Uuid_destroy(rd_kafka_Uuid_t *uuid) {
         rd_free(uuid);
+}
+
+/**
+ * @brief Computes canonical encoding for the given uuid string.
+ *        Mainly useful for testing.
+ *
+ * @param uuid UUID for which canonical encoding is required.
+ *
+ * @return canonical encoded string for the given UUID.
+ *
+ * @remark  Must be freed after use.
+ */
+const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid) {
+        int i, j;
+        unsigned char bytes[16];
+        char *ret = rd_calloc(37, sizeof(*ret));
+
+        for (i = 0; i < 8; i++) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+                j = 7 - i;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+                j = i;
+#endif
+                bytes[i]     = (uuid->most_significant_bits >> (8 * j)) & 0xFF;
+                bytes[8 + i] = (uuid->least_significant_bits >> (8 * j)) & 0xFF;
+        }
+
+        rd_snprintf(ret, 37,
+                    "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%"
+                    "02x%02x%02x",
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+                    bytes[6], bytes[7], bytes[8], bytes[9], bytes[10],
+                    bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+        return ret;
 }
 
 const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {

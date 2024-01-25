@@ -2672,7 +2672,7 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                         rd_kafka_Uuid_t compare_topic_id =
                             rko->rko_u.metadata.mdi->topics[j].topic_id;
                         if (!rd_kafka_Uuid_cmp(request_topic_id,
-                                               compare_topic_id)) {
+                                               compare_topic_id) && rko->rko_u.metadata.md->topics[j].topic) {
                                 rd_kafka_topic_partition_list_add_with_topic_name_and_id(new_target_assignments,
                                     request_topic_id,
                                     rko->rko_u.metadata.md->topics[j].topic,
@@ -2871,6 +2871,7 @@ err:
                                  : "none",
                              rd_kafka_err2str(err));
                 /* Remain in joined state and keep querying for coordinator */
+                printf("Setting Full request flag due to Transport Error\n");
                 actions = RD_KAFKA_ERR_ACTION_REFRESH;
                 rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
                 break;
@@ -2928,6 +2929,8 @@ err:
                     rd_true,       /*initiating*/
                     "Fatal error in ConsumerGroupHeartbeat API response");
         }
+        printf("\n");
+
 }
 
 
@@ -5593,7 +5596,6 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         rd_ts_t now                       = rd_clock();
         rd_bool_t full_request            = rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
         rd_bool_t send_current_assignment = rd_false;
-//        printf("consumer_serve: At start full_request -> %d\n", full_request);
 
         if (unlikely(rd_kafka_fatal_error_code(rkcg->rkcg_rk)))
                 return;
@@ -5630,12 +5632,13 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_REJOIN) &&
             rd_interval(&rkcg->rkcg_heartbeat_intvl,
                         rkcg->rkcg_heartbeat_intvl_ms * 1000, now) > 0) {
+//                printf("consumer_serve: At start full_request -> %d\n", full_request);
                 setbuf(stdout, 0);
                 printf("Sending Heartbeat in state: %s\n", rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
                 rd_kafka_cgrp_consumer_group_heartbeat(rkcg, full_request,
                                                        send_current_assignment);
                 rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
-//                printf("consumer_serve: At end full_request -> %d\n", full_request);
+//                printf("consumer_serve: At end full_request -> %d\n", rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST);
         }
 }
 

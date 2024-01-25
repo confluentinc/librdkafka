@@ -2157,7 +2157,8 @@ static void rd_kafka_mock_handle_ConsumerGroupHeartbeat_write_TopicPartitions(
         rd_kafka_topic_partition_list_sort_by_topic(rktparlist);
         rd_kafka_buf_write_topic_partitions(
             rkbuf, rktparlist, rd_false /*don't skip invalid offsets*/,
-            rd_false /*any offset*/, rd_true /* use_topic id */, fields);
+            rd_false /*any offset*/, rd_true /* use_topic id */,
+            rd_false /* don't use topic name */, fields);
 }
 
 static int
@@ -2169,11 +2170,10 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         rd_kafka_topic_partition_list_t *current_assignment       = NULL,
                                         *next_assignment          = NULL,
                                         *pending_topic_partitions = NULL;
-        rd_kafkap_str_t GroupId, MemberId, InstanceId, RackId,
-            SubscribedTopicRegex, ServerAssignor;
+        rd_kafkap_str_t GroupId, MemberId, InstanceId, RackId, ServerAssignor;
         rd_kafkap_str_t *SubscribedTopicNames = NULL;
         int32_t MemberEpoch, RebalanceTimeoutMs, SubscribedTopicNamesCnt,
-            ClientAssignorsCnt, TopicPartitionsCnt;
+            TopicPartitionsCnt;
         int32_t i;
         rd_kafka_resp_err_t err;
         rd_kafka_mock_cgrp_consumer_t *mcgrp         = NULL;
@@ -2212,42 +2212,8 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_read_str(rkbuf, &SubscribedTopicNames[i]);
         }
 
-        /* SubscribedTopicRegex */
-        rd_kafka_buf_read_str(rkbuf, &SubscribedTopicRegex);
-
         /* ServerAssignor */
         rd_kafka_buf_read_str(rkbuf, &ServerAssignor);
-
-        /* #ClientAssignors */
-        rd_kafka_buf_read_arraycnt(rkbuf, &ClientAssignorsCnt, 100);
-        for (i = 0; i < ClientAssignorsCnt; i++) {
-                rd_kafkap_str_t Name;
-                int8_t Reason;
-                int16_t MinimumVersion, MaximumVersion, MetadataVersion;
-                rd_kafkap_bytes_t MetadataBytes;
-
-                /* Skip client assignors as they aren't supported still */
-
-                /* Name */
-                rd_kafka_buf_read_str(rkbuf, &Name);
-
-                /* MinimumVersion */
-                rd_kafka_buf_read_i16(rkbuf, &MinimumVersion);
-
-                /* MaximumVersion */
-                rd_kafka_buf_read_i16(rkbuf, &MaximumVersion);
-
-                /* Reason */
-                rd_kafka_buf_read_i8(rkbuf, &Reason);
-
-                /* MetadataVersion */
-                rd_kafka_buf_read_i16(rkbuf, &MetadataVersion);
-
-                /* MetadataBytes */
-                rd_kafka_buf_read_kbytes(rkbuf, &MetadataBytes);
-
-                rd_kafka_buf_skip_tags(rkbuf);
-        }
 
         /* #TopicPartitions */
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicPartitionsCnt,

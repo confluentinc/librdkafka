@@ -2276,7 +2276,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                 rkbuf_size += next_subscription_size;
         if (remote_assignor)
                 rkbuf_size += RD_KAFKAP_STR_SIZE(remote_assignor);
-        rkbuf_size += 4; /* Client Assignors */
         if (current_assignments)
                 rkbuf_size += (current_assignments->cnt * (16 + 100));
         rkbuf_size += 4; /* TopicPartitions */

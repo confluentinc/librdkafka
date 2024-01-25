@@ -4981,7 +4981,7 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
                 rkcg->rkcg_subscription = NULL;
         }
 
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_GENERIC)
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 rd_kafka_cgrp_update_subscribed_topics(rkcg, NULL);
 
         /*
@@ -6268,7 +6268,7 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
         if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
                 return;
 
-        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_GENERIC)
+        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 return;
 
         /*

@@ -2452,7 +2452,7 @@ rd_kafka_mock_cluster_op_serve(rd_kafka_t *rk,
 static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_topic_t *mtopic;
         rd_kafka_mock_broker_t *mrkb;
-        rd_kafka_mock_cgrp_generic_t *mcgrp_generic;
+        rd_kafka_mock_cgrp_classic_t *mcgrp_classic;
         rd_kafka_mock_cgrp_consumer_t *mcgrp_consumer;
         rd_kafka_mock_coord_t *mcoord;
         rd_kafka_mock_error_stack_t *errstack;
@@ -2465,8 +2465,8 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         while ((mrkb = TAILQ_FIRST(&mcluster->brokers)))
                 rd_kafka_mock_broker_destroy(mrkb);
 
-        while ((mcgrp_generic = TAILQ_FIRST(&mcluster->cgrps_generic)))
-                rd_kafka_mock_cgrp_generic_destroy(mcgrp_generic);
+        while ((mcgrp_classic = TAILQ_FIRST(&mcluster->cgrps_classic)))
+                rd_kafka_mock_cgrp_classic_destroy(mcgrp_classic);
 
         while ((mcgrp_consumer = TAILQ_FIRST(&mcluster->cgrps_consumer)))
                 rd_kafka_mock_cgrp_consumer_destroy(mcgrp_consumer);
@@ -2572,7 +2572,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         mcluster->defaults.replication_factor = RD_MIN(3, broker_cnt);
         mcluster->track_requests              = rd_false;
 
-        TAILQ_INIT(&mcluster->cgrps_generic);
+        TAILQ_INIT(&mcluster->cgrps_classic);
 
         TAILQ_INIT(&mcluster->cgrps_consumer);
 

@@ -278,12 +278,13 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
 
         int rkcg_consumer_flags;
-#define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK              0x1 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN           0x2 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x4 /* TODO: write */
 #define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION                      \
-        0x4                                          /* TODO: write            \
-                                                      */
-#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8 /* TODO: write */
+        0x8                                           /* TODO: write           \
+                                                       */
+#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x10 /* TODO: write */
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */

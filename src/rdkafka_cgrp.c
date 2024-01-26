@@ -898,7 +898,7 @@ static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
                    rd_kafka_topic_partition_list_destroy);
         rkcg->rkcg_next_target_assignment = NULL;
         rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);
-        rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK &
+        rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK &
                                      ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
         rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
 }
@@ -2615,7 +2615,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
     rd_kafka_topic_partition_list_t *new_target_assignment,
     rd_bool_t clear_next_assignment) {
         rd_bool_t is_assignment_different = rd_false;
-        if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK)
+        if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK)
                 return RD_KAFKA_OP_RES_HANDLED;
 
         is_assignment_different =
@@ -2634,7 +2634,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
                 }
         } else if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT ||
                    rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
-                rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK;
+                rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK;
                 if (rkcg->rkcg_target_assignment) {
                         rd_kafka_topic_partition_list_destroy(
                             rkcg->rkcg_target_assignment);
@@ -2907,7 +2907,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY &&
-            rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK &&
+            rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK &&
             rkcg->rkcg_target_assignment) {
                 if (rkcg->rkcg_current_assignment)
                         rd_kafka_topic_partition_list_destroy(
@@ -2918,8 +2918,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 rd_kafka_topic_partition_list_destroy(
                     rkcg->rkcg_target_assignment);
                 rkcg->rkcg_target_assignment = NULL;
-                rkcg->rkcg_consumer_flags &=
-                    ~RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK;
+                rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK;
                 if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
                         char rkcg_current_assignment_str[512] = "NULL";
 
@@ -5728,7 +5727,7 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
                 break;
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
                 if (rkcg->rkcg_consumer_flags &
-                    RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK) {
+                    RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK) {
                         send_ack = rd_true;
                 }
                 break;

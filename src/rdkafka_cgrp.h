@@ -278,18 +278,28 @@ typedef struct rd_kafka_cgrp_s {
         /* Number of backoff retries when expediting next heartbeat. */
         int rkcg_expedite_heartbeat_retries;
 
+        /* Flags for KIP-848 state machine. */
         int rkcg_consumer_flags;
-#define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2 /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION                      \
-        0x4                                             /* TODO: write         \
-                                                         */
-#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE   0x8  /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10 /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN                                   \
-        0x20 /* Member is fenced, need to rejoin */
-#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE                       \
-        0x40 /* Member is fenced, rejoining */
+/* Coordinator is waiting for an acknowledgement of currently reconciled
+ * target assignment. Cleared when an HB succeeds
+ * after reconciliation finishes. */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK 0x1
+/* A new subscription needs to be sent to the Coordinator. */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2
+/* A new subscription is being sent to the Coordinator. */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION 0x4
+/* Consumer has subscribed at least once,
+ * if it didn't happen rebalance protocol is still
+ * considered NONE, otherwise it depends on the
+ * configured partition assignors. */
+#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8
+/* Send a complete request in next heartbeat,
+ * but don't send the acknowledgement if it's not required */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10
+/* Member is fenced, need to rejoin */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x20
+/* Member is fenced, rejoining */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x40
 
 
         /** Rejoin the group following a currently in-progress

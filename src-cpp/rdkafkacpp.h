@@ -1478,6 +1478,16 @@ class RD_EXPORT Conf {
 
   /** @brief Query single configuration value
    *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p resolve_cb. */
+  virtual Conf::ConfResult get(ResolveCb *&resolve_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p connect_cb. */
+  virtual Conf::ConfResult get(ConnectCb *&connect_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p open_cb. */
   virtual Conf::ConfResult get(OpenCb *&open_cb) const = 0;
 

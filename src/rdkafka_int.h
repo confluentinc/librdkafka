@@ -879,9 +879,14 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
         rd_kafka_log0(&rk->rk_conf, rk, NULL, level, RD_KAFKA_DBG_NONE, fac,   \
                       __VA_ARGS__)
 
+#define rd_kafka_conf_is_dbg(conf, ctx)                                        \
+        unlikely((conf).debug &(RD_KAFKA_DBG_##ctx))
+
+#define rd_kafka_is_dbg(rk, ctx) (rd_kafka_conf_is_dbg(rk->rk_conf, ctx))
+
 #define rd_kafka_dbg(rk, ctx, fac, ...)                                        \
         do {                                                                   \
-                if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_##ctx)))      \
+                if (rd_kafka_is_dbg(rk, ctx))                                  \
                         rd_kafka_log0(&rk->rk_conf, rk, NULL, LOG_DEBUG,       \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -889,7 +894,7 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 /* dbg() not requiring an rk, just the conf object, for early logging */
 #define rd_kafka_dbg0(conf, ctx, fac, ...)                                     \
         do {                                                                   \
-                if (unlikely((conf)->debug & (RD_KAFKA_DBG_##ctx)))            \
+                if (rd_kafka_conf_is_dbg(*conf, ctx))                          \
                         rd_kafka_log0(conf, NULL, NULL, LOG_DEBUG,             \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -909,10 +914,11 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 #define rd_rkb_log(rkb, level, fac, ...)                                       \
         rd_rkb_log0(rkb, level, RD_KAFKA_DBG_NONE, fac, __VA_ARGS__)
 
+#define rd_rkb_is_dbg(rkb, ctx) rd_kafka_is_dbg((rkb)->rkb_rk, ctx)
+
 #define rd_rkb_dbg(rkb, ctx, fac, ...)                                         \
         do {                                                                   \
-                if (unlikely((rkb)->rkb_rk->rk_conf.debug &                    \
-                             (RD_KAFKA_DBG_##ctx))) {                          \
+                if (rd_rkb_is_dbg(rkb, ctx)) {                                 \
                         rd_rkb_log0(rkb, LOG_DEBUG, (RD_KAFKA_DBG_##ctx), fac, \
                                     __VA_ARGS__);                              \
                 }                                                              \

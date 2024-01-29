@@ -266,11 +266,17 @@ typedef struct rd_kafka_cgrp_s {
         /** The partitions to incrementally assign following a
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
-        // Added with KIP-848. Not being used right now.
-        rd_kafka_topic_partition_list_t *rkcg_current_target_assignments;
-        // Target assignment present in the CGHB protocol will be updated here
-        // only.
-        rd_kafka_topic_partition_list_t *rkcg_next_target_assignments;
+
+        /* Current acked assignment, start with an empty list. */
+        rd_kafka_topic_partition_list_t *rkcg_current_assignment;
+
+        /* Assignment the is currently reconciling.
+         * Can be NULL in case there's no reconciliation ongoing. */
+        rd_kafka_topic_partition_list_t *rkcg_target_assignment;
+
+        /* Next assignment that will be reconciled once current
+         * reconciliation finishes. Can be NULL. */
+        rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
 
         int rkcg_consumer_flags;
 #define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */

@@ -623,15 +623,10 @@ static void test_message_single_partition_record_fail(void) {
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
-        rd_sleep(5);
-
+        rd_sleep(3);
         test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
                                             topic_name, confs_set_append, 1);
-
-
-        test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
-                                            topic_name, confs_set_append, 1);
-
+        rd_sleep(3);
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);

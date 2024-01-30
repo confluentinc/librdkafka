@@ -28,7 +28,6 @@ global_job_config:
       - git submodule update --init --recursive
       - cd deps/librdkafka
       - git fetch origin
-      - git checkout dev_bump_openssl_version_3_0_12
       - cd ../../
       - export MKL_DEBUG=1
 

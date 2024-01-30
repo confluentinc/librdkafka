@@ -1,4 +1,4 @@
-# Introduction to Confluent-Kafka-JS
+# Introduction to Confluent-Kafka-JavaScript
 
 ## Configuration
 

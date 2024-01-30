@@ -305,7 +305,7 @@ static void do_test_joingroup_coordinator_load_in_progress() {
 
 int main_0117_mock_errors(int argc, char **argv) {
 
-        TEST_SKIP_MOCK_CLUSTER(0);
+        TEST_SKIP_MOCK_CLUSTER_NEW(0);
 
         do_test_producer_storage_error(rd_false);
         do_test_producer_storage_error(rd_true);

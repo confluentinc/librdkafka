@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -455,7 +455,7 @@ v8::Local<v8::Object> ToV8Object(RdKafka::Message *message,
 
     if (key_payload) {
       // We want this to also be a buffer to avoid corruption
-      // https://github.com/confluentinc/confluent-kafka-js/issues/208
+      // https://github.com/confluentinc/confluent-kafka-javascript/issues/208
       Nan::Set(pack, Nan::New<v8::String>("key").ToLocalChecked(),
         Nan::Encode(key_payload, message->key_len(), Nan::Encoding::BUFFER));
     } else {

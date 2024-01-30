@@ -1,8 +1,8 @@
-# Contributing to `confluent-kafka-js`
+# Contributing to `confluent-kafka-javascript`
 
 :+1::tada: First off, thanks for taking the time to contribute! :tada::+1:
 
-The following is a set of guidelines for contributing to `confluent-kafka-js`
+The following is a set of guidelines for contributing to `confluent-kafka-javascript`
 which is hosted by [Confluent Inc.](https://github.com/confluentinc)
 on GitHub. This document lists rules, guidelines, and help getting started,
 so if you feel something is missing feel free to send a pull request.
@@ -123,7 +123,7 @@ In short:
 
 ## Editor
 
-Using Visual Studio code to develop on `confluent-kafka-js`. If you use it you can configure the C++ plugin to resolve the paths needed to inform your intellisense. This is the config file I am using on a mac to resolve the required paths:
+Using Visual Studio code to develop on `confluent-kafka-javascript`. If you use it you can configure the C++ plugin to resolve the paths needed to inform your intellisense. This is the config file I am using on a mac to resolve the required paths:
 
 `c_cpp_properties.json`
 ```
@@ -207,7 +207,7 @@ node --inspect path/to/file.js
 The librdkafka should be periodically updated to the latest release in https://github.com/confluentinc/librdkafka/releases
 
 Steps to update:
-1. Update the `librdkafka` property in [`package.json`](https://github.com/confluentinc/confluent-kafka-js/blob/master/package.json) to the desired version.
+1. Update the `librdkafka` property in [`package.json`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/package.json) to the desired version.
 
 1. Update the librdkafka git submodule to that versions release commit (example below)
 
@@ -218,7 +218,7 @@ Steps to update:
 
     If you get an error during that checkout command, double check that the submodule was initialized / cloned! You may need to run `git submodule update --init --recursive`
 
-1. Update [`config.d.ts`](https://github.com/confluentinc/confluent-kafka-js/blob/master/config.d.ts) and [`errors.d.ts`](https://github.com/confluentinc/confluent-kafka-js/blob/master/errors.d.ts) TypeScript definitions by running:
+1. Update [`config.d.ts`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/config.d.ts) and [`errors.d.ts`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/errors.d.ts) TypeScript definitions by running:
     ```bash
     node ci/librdkafka-defs-generator.js
     ```
@@ -227,7 +227,7 @@ Steps to update:
 
 1. Run unit tests: `npm run test`
 
-1. Update the version numbers referenced in the [`README.md`](https://github.com/confluentinc/confluent-kafka-js/blob/master/README.md) file to the new version.
+1. Update the version numbers referenced in the [`README.md`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/README.md) file to the new version.
 
 ## Releasing
 

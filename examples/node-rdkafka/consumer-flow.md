@@ -3,7 +3,7 @@ the Flowing implementation
 
 ```js
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -16,7 +16,7 @@ var Kafka = require('../');
 var consumer = new Kafka.KafkaConsumer({
   //'debug': 'all',
   'metadata.broker.list': 'localhost:9092',
-  'group.id': 'confluent-kafka-js-consumer-flow-example',
+  'group.id': 'confluent-kafka-javascript-consumer-flow-example',
   'enable.auto.commit': false
 });
 

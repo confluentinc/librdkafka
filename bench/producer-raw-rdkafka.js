@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -24,7 +24,7 @@ var MAX = process.argv[5] || 10000000;
 
 var producer = new Kafka.Producer({
   'metadata.broker.list': host,
-  'group.id': 'confluent-kafka-js-bench',
+  'group.id': 'confluent-kafka-javascript-bench',
   'compression.codec': compression,
   'retry.backoff.ms': 200,
   'message.send.max.retries': 10,

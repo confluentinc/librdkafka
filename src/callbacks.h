@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
  * This software may be modified and distributed under the terms
@@ -118,7 +118,7 @@ class DeliveryReport {
   void* opaque;
 
   // Key. It is a pointer to avoid corrupted values
-  // https://github.com/confluentinc/confluent-kafka-js/issues/208
+  // https://github.com/confluentinc/confluent-kafka-javascript/issues/208
   void* key;
   size_t key_len;
 

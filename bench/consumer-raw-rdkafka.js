@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -16,7 +16,7 @@ var topic = process.argv[3] || 'test';
 
 var consumer = new Kafka.KafkaConsumer({
   'metadata.broker.list': host,
-  'group.id': 'confluent-kafka-js-bench-s',
+  'group.id': 'confluent-kafka-javascript-bench-s',
   'fetch.wait.max.ms': 100,
   'fetch.message.max.bytes': 1024 * 1024,
   'enable.auto.commit': false

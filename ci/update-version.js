@@ -89,7 +89,7 @@ function getPackageVersion(tag, branch) {
   console.log(`Package version is "${baseVersion}"`);
 
   // never publish with an suffix
-  // fixes https://github.com/confluentinc/confluent-kafka-js/issues/981
+  // fixes https://github.com/confluentinc/confluent-kafka-javascript/issues/981
   // baseVersion += '-';
 
   // if (tag.commit === 0 && branch === 'master') {

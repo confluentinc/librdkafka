@@ -1,6 +1,6 @@
-// require('kafkajs') is replaced with require('confluent-kafka-js').KafkaJS.
+// require('kafkajs') is replaced with require('confluent-kafka-javascript').KafkaJS.
 // Since this example is within the package itself, we use '../..', but code
-// will typically use 'confluent-kafka-js'.
+// will typically use 'confluent-kafka-javascript'.
 const { Kafka } = require('../..').KafkaJS;
 
 async function producerStart() {

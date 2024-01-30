@@ -1,5 +1,5 @@
 {
-  "name": "confluent-kafka-js",
+  "name": "confluent-kafka-javascript",
   "version": "v0.1.6-devel",
   "description": "Node.js bindings for librdkafka",
   "librdkafka": "master",
@@ -14,7 +14,7 @@
     "test:types": "tsc -p ."
   },
   "binary": {
-    "module_name": "confluent-kafka-js",
+    "module_name": "confluent-kafka-javascript",
     "module_path": "./build/{configuration}/",
     "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{libc}-{arch}.tar.gz",
     "host": "https://confluent-kafka-js.s3.us-west-1.amazonaws.com/releases/download/",
@@ -26,7 +26,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:confluentinc/confluent-kafka-js.git"
+    "url": "git@github.com:confluentinc/confluent-kafka-javascript.git"
   },
   "license": "MIT",
   "devDependencies": {

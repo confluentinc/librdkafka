@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -211,7 +211,7 @@ describe('Producer', function() {
       producer.produce('test', null, Buffer.from('hai'), 'key');
     });
 
-    it('should produce a message with an empty payload and empty key (https://github.com/confluentinc/confluent-kafka-js/issues/117)', function(done) {
+    it('should produce a message with an empty payload and empty key (https://github.com/confluentinc/confluent-kafka-javascript/issues/117)', function(done) {
       var tt = setInterval(function() {
         producer.poll();
       }, 200);
@@ -232,7 +232,7 @@ describe('Producer', function() {
       producer.produce('test', null, Buffer.from(''), '');
     });
 
-    it('should produce a message with a null payload and null key  (https://github.com/confluentinc/confluent-kafka-js/issues/117)', function(done) {
+    it('should produce a message with a null payload and null key  (https://github.com/confluentinc/confluent-kafka-javascript/issues/117)', function(done) {
       producer.setPollInterval(10);
 
       producer.once('delivery-report', function(err, report) {
@@ -250,7 +250,7 @@ describe('Producer', function() {
       producer.produce('test', null, null, null);
     });
 
-    it('should produce an int64 key (https://github.com/confluentinc/confluent-kafka-js/issues/208)', function(done) {
+    it('should produce an int64 key (https://github.com/confluentinc/confluent-kafka-javascript/issues/208)', function(done) {
 
       var v1 = 0x0000000000000084;
       var arr = new Uint8Array(8);

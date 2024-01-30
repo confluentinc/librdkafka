@@ -1,13 +1,13 @@
 Confluent's Javascript Client for Apache Kafka<sup>TM</sup>
 =====================================================
 
-**confluent-kafka-js** is Confluent's JavaScript client for [Apache Kafka](http://kafka.apache.org/) and the
-[Confluent Platform](https://www.confluent.io/product/compare/). This is an **early access** library. The goal is to provide an highly performant, reliable and easy to use JavaScript client that is based on [node-rdkafka](https://github.com/Blizzard/node-rdkafka) yet also API compatible with [KafkaJS](https://github.com/tulios/kafkajs) to provide flexibility to users and streamline migrations from other clients. 
+**confluent-kafka-javascript** is Confluent's JavaScript client for [Apache Kafka](http://kafka.apache.org/) and the
+[Confluent Platform](https://www.confluent.io/product/compare/). This is an **early access** library. The goal is to provide an highly performant, reliable and easy to use JavaScript client that is based on [node-rdkafka](https://github.com/Blizzard/node-rdkafka) yet also API compatible with [KafkaJS](https://github.com/tulios/kafkajs) to provide flexibility to users and streamline migrations from other clients.
 
 This library leverages the work and concepts from two popular Apache Kafka JavaScript clients: [node-rdkafka](https://github.com/Blizzard/node-rdkafka) and [KafkaJS](https://github.com/tulios/kafkajs). The core is heavily based on the node-rdkafka library, which uses our own [librdkafka](https://github.com/confluentinc/librdkafka/tree/v2.3.0) library for core client functionality. However, we leverage a promisified API and a more idiomatic interface, similar to the one in KafkaJS, making it easy for developers to migrate and adopt this client depending on the patterns and interface they prefer.
 __This library currently uses `librdkafka` based off of the master branch.__
 
-## This library is currently in early access and not meant for production use 
+## This library is currently in early access and not meant for production use
 
 **This library is in active development, pre-1.0.0, and it is likely to have many breaking changes.**
 
@@ -16,11 +16,11 @@ For this early-access release, we aim to get feedback from JavaScript developers
 - Migration experience from the node-rdkafka and KafkaJs
 - Overall quality and reliability
 
-We invite you to raise issues to highlight any feedback you may have. 
+We invite you to raise issues to highlight any feedback you may have.
 
-Within the early-access, only **basic produce and consume functionality** as well as the ability to **create and delete topics** are supported. All other admin client functionality is coming in future releases. See [INTRODUCTION.md](INTRODUCTION.md) for more details on what is supported. 
+Within the early-access, only **basic produce and consume functionality** as well as the ability to **create and delete topics** are supported. All other admin client functionality is coming in future releases. See [INTRODUCTION.md](INTRODUCTION.md) for more details on what is supported.
 
-To use **Schema Registry**, use the existing [kafkajs/confluent-schema-registry](https://github.com/kafkajs/confluent-schema-registry) library that is compatible with this library. For a simple schema registry example, see [sr.js](https://github.com/confluentinc/confluent-kafka-js/blob/dev_early_access_development_branch/examples/kafkajs/sr.js). 
+To use **Schema Registry**, use the existing [kafkajs/confluent-schema-registry](https://github.com/kafkajs/confluent-schema-registry) library that is compatible with this library. For a simple schema registry example, see [sr.js](https://github.com/confluentinc/confluent-kafka-javascript/blob/dev_early_access_development_branch/examples/kafkajs/sr.js).
 
 
 ## Requirements
@@ -34,18 +34,18 @@ The following configurations are supported for this early access preview:
 Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required. It can be installed from GitHub:
 
 ```bash
-$ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-js.git#v0.1.6-devel"
+$ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-javascript.git#v0.1.6-devel"
 ```
 
 Yarn and pnpm support is experimental.
 
 # Getting Started
 
-Below is a simple produce example for users migrating from KafkaJS. 
+Below is a simple produce example for users migrating from KafkaJS.
 
-```javascript 
-// require('kafkajs') is replaced with require('confluent-kafka-js').KafkaJS.
-const { Kafka } = require("confluent-kafka-js").KafkaJS;
+```javascript
+// require('kafkajs') is replaced with require('confluent-kafka-javascript').KafkaJS.
+const { Kafka } = require("confluent-kafka-javascript").KafkaJS;
 
 async function producerStart() {
     const kafka = new Kafka({

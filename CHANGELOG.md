@@ -1,4 +1,4 @@
-# confluent-kafka-js v0.1.5-devel
+# confluent-kafka-javascript v0.1.5-devel
 
 v0.1.5-devel is a pre-production, early-access release.
 

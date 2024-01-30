@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -7,6 +7,6 @@
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
-var kafka = require('bindings')('confluent-kafka-js');
+var kafka = require('bindings')('confluent-kafka-javascript');
 
 module.exports = kafka;

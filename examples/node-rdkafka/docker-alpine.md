@@ -1,4 +1,4 @@
-When using docker to install `confluent-kafka-js`, you need to make sure you install appropriate library dependencies. Alpine linux is a lighter weight version of linux and does not come with the same base libraries as other distributions (like glibc).
+When using docker to install `confluent-kafka-javascript`, you need to make sure you install appropriate library dependencies. Alpine linux is a lighter weight version of linux and does not come with the same base libraries as other distributions (like glibc).
 
 You can see some of the differences here: https://linuxacademy.com/blog/cloud/alpine-linux-and-docker/
 
@@ -24,7 +24,7 @@ RUN mkdir -p /usr/local/app
 # Move to the app directory
 WORKDIR /usr/local/app
 
-# Install confluent-kafka-js
-RUN npm install confluent-kafka-js
+# Install confluent-kafka-javascript
+RUN npm install confluent-kafka-javascript
 # Copy package.json first to check if an npm install is needed
 ```

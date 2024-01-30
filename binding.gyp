@@ -7,7 +7,7 @@
   },
   "targets": [
     {
-      "target_name": "confluent-kafka-js",
+      "target_name": "confluent-kafka-javascript",
       'sources': [
         'src/binding.cc',
         'src/callbacks.cc',

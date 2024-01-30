@@ -1,10 +1,10 @@
-// require('kafkajs') is replaced with require('confluent-kafka-js').KafkaJS.
+// require('kafkajs') is replaced with require('confluent-kafka-javascript').KafkaJS.
 // Since this example is within the package itself, we use '../..', but code
-// will typically use 'confluent-kafka-js'.
+// will typically use 'confluent-kafka-javascript'.
 const { Kafka } = require('../..').KafkaJS;
 
 // Note: The kafkajs/confluent-schema-registry will need to be installed separately to run this example,
-//       as it isn't a dependency of confluent-kafka-js.
+//       as it isn't a dependency of confluent-kafka-javascript.
 const { SchemaRegistry, SchemaType } = require('@kafkajs/confluent-schema-registry');
 
 const registry = new SchemaRegistry({ host: '<fill>' })

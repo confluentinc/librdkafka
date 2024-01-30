@@ -22,10 +22,10 @@ The library currently supports the following callbacks:
 
 This library includes two utility functions for detecting the status of your installation. Please try to include these when making issue reports where applicable.
 
-You can get the features supported by your compile of `librdkafka` by reading the variable "features" on the root of the `confluent-kafka-js` object.
+You can get the features supported by your compile of `librdkafka` by reading the variable "features" on the root of the `confluent-kafka-javascript` object.
 
 ```js
-const Kafka = require('confluent-kafka-js');
+const Kafka = require('confluent-kafka-javascript');
 console.log(Kafka.features);
 
 // #=> [ 'gzip', 'snappy', 'ssl', 'sasl', 'regex', 'lz4' ]
@@ -34,7 +34,7 @@ console.log(Kafka.features);
 You can also get the version of `librdkafka`
 
 ```js
-const Kafka = require('confluent-kafka-js');
+const Kafka = require('confluent-kafka-javascript');
 console.log(Kafka.librdkafkaVersion);
 
 // #=> 2.3.0
@@ -293,7 +293,7 @@ const consumer = new Kafka.KafkaConsumer({
 
 #### Commits
 
-When you commit in `confluent-kafka-js`, the standard way is to queue the commit request up with the next `librdkafka` request to the broker. When doing this, there isn't a way to know the result of the commit. Luckily there is another callback you can listen to to get this information
+When you commit in `confluent-kafka-javascript`, the standard way is to queue the commit request up with the next `librdkafka` request to the broker. When doing this, there isn't a way to know the result of the commit. Luckily there is another callback you can listen to to get this information
 
 ```js
 const consumer = new Kafka.KafkaConsumer({
@@ -507,12 +507,12 @@ producer.getMetadata(opts, (err, metadata) => {
 
 ### Admin Client
 
-`confluent-kafka-js` now supports the admin client for creating, deleting, and scaling out topics. The `librdkafka` APIs also support altering configuration of topics and broker, but that is not currently implemented.
+`confluent-kafka-javascript` now supports the admin client for creating, deleting, and scaling out topics. The `librdkafka` APIs also support altering configuration of topics and broker, but that is not currently implemented.
 
 To create an Admin client, you can do as follows:
 
 ```js
-const Kafka = require('confluent-kafka-js');
+const Kafka = require('confluent-kafka-javascript');
 
 const client = Kafka.AdminClient.create({
   'client.id': 'kafka-admin',

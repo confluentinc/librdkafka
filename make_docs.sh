@@ -6,8 +6,8 @@ if [[ `git status --porcelain` ]]; then
   exit 1
 fi
 
-# REPO=git@github.com:confluentinc/confluent-kafka-js.git
-REPO=https://github.com/confluentinc/confluent-kafka-js.git
+# REPO=git@github.com:confluentinc/confluent-kafka-javascript.git
+REPO=https://github.com/confluentinc/confluent-kafka-javascript.git
 
 git remote add deploy $REPO
 

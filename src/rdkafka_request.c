@@ -2228,6 +2228,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                 char subscribe_topics_str[512]    = "NULL";
                 const char *member_id_str         = "NULL";
                 const char *group_instance_id_str = "NULL";
+                const char *remote_assignor_str   = "NULL";
 
                 if (current_assignments) {
                         rd_kafka_topic_partition_list_str(
@@ -2243,16 +2244,19 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                         member_id_str = member_id->str;
                 if (group_instance_id)
                         group_instance_id_str = group_instance_id->str;
+                if (remote_assignor)
+                        remote_assignor_str = remote_assignor->str;
 
                 rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
                            "Heartbeat of member id \"%s\", group id \"%s\", "
                            "generation id %" PRId32
                            ", group instance id \"%s\""
                            ", current assignment \"%s\""
-                           ", subscribe topics \"%s\"",
+                           ", subscribe topics \"%s\""
+                           ", remote assignor \"%s\"",
                            member_id_str, group_id->str, member_epoch,
                            group_instance_id_str, current_assignments_str,
-                           subscribe_topics_str);
+                           subscribe_topics_str, remote_assignor_str);
         }
 
         size_t next_subscription_size = 0;

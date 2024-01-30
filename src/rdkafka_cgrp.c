@@ -782,8 +782,10 @@ void rd_kafka_cgrp_coord_query(rd_kafka_cgrp_t *rkcg, const char *reason) {
                 return;
         }
 
-        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD)
+        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD) {
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_COORD);
+        }
 
         rd_kafka_broker_destroy(rkb);
 
@@ -2863,7 +2865,8 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
         rkcg->rkcg_consumer_flags &=
             ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION;
-        rkcg->rkcg_last_heartbeat_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rkcg->rkcg_last_heartbeat_err         = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rkcg->rkcg_expedite_heartbeat_retries = 0;
 
         return;
 
@@ -2939,6 +2942,7 @@ err:
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
         }
 
@@ -5931,7 +5935,29 @@ void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 return;
 
-        rd_interval_reset(&rkcg->rkcg_heartbeat_intvl);
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        /* Calculate the exponential backoff. */
+        int64_t backoff = (1 << rkcg->rkcg_expedite_heartbeat_retries) *
+                          (rk->rk_conf.retry_backoff_ms);
+
+        /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->
+         * backoff_ms * jitter * 10 */
+        backoff = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
+                            100 + RD_KAFKA_RETRY_JITTER_PERCENT) *
+                  backoff * 10;
+
+        /* Backoff is limited by retry_backoff_max_ms. */
+        if (backoff > rk->rk_conf.retry_backoff_max_ms * 1000)
+                backoff = rk->rk_conf.retry_backoff_max_ms * 1000;
+
+        /* Reset the interval as it happened `rkcg_heartbeat_intvl_ms`
+         * milliseconds ago. */
+        rd_interval_reset_to_now(&rkcg->rkcg_heartbeat_intvl,
+                                 rd_clock() -
+                                     rkcg->rkcg_heartbeat_intvl_ms * 1000);
+        /* Set the exponential backoff. */
+        rd_interval_backoff(&rkcg->rkcg_heartbeat_intvl, backoff);
+        rkcg->rkcg_expedite_heartbeat_retries++;
 }
 
 /**

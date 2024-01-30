@@ -893,6 +893,17 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_buf_t *resp,
         rd_kafka_buf_write_i16(resp, err);
         /* Response: Topics.Name */
         rd_kafka_buf_write_str(resp, topic, -1);
+
+        if (ApiVersion >= 10) {
+                if (mtopic) {
+                        rd_kafka_Uuid_t topic_id = mtopic->id;
+                        /* Response: Topics.TopicId */
+                        rd_kafka_buf_write_uuid(resp, &topic_id);
+                } else {
+                        rd_kafka_buf_write_uuid(resp, &RD_KAFKA_UUID_ZERO);
+                }
+        }
+
         if (ApiVersion >= 1) {
                 /* Response: Topics.IsInternal */
                 rd_kafka_buf_write_bool(resp, rd_false);
@@ -1002,13 +1013,21 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
         for (i = 0; i < TopicsCnt; i++) {
                 rd_kafkap_str_t Topic;
+                rd_kafka_Uuid_t TopicId;
+                rd_kafka_topic_partition_t *rktpar;
                 char *topic;
 
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 10) {
+                        /* TopicId */
+                        rd_kafka_buf_read_uuid(rkbuf, &TopicId);
+                }
                 rd_kafka_buf_read_str(rkbuf, &Topic);
                 RD_KAFKAP_STR_DUPA(&topic, &Topic);
 
-                rd_kafka_topic_partition_list_add(requested_topics, topic,
-                                                  RD_KAFKA_PARTITION_UA);
+                rktpar = rd_kafka_topic_partition_list_add(
+                    requested_topics, topic, RD_KAFKA_PARTITION_UA);
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 12)
+                        rd_kafka_topic_partition_set_topic_id(rktpar, TopicId);
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
@@ -1018,8 +1037,9 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8) {
                 rd_bool_t IncludeClusterAuthorizedOperations;
                 rd_bool_t IncludeTopicAuthorizedOperations;
-                rd_kafka_buf_read_bool(rkbuf,
-                                       &IncludeClusterAuthorizedOperations);
+                if (rkbuf->rkbuf_reqhdr.ApiVersion <= 10)
+                        rd_kafka_buf_read_bool(
+                            rkbuf, &IncludeClusterAuthorizedOperations);
                 rd_kafka_buf_read_bool(rkbuf,
                                        &IncludeTopicAuthorizedOperations);
         }
@@ -1043,18 +1063,32 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                         const rd_kafka_topic_partition_t *rktpar =
                             &requested_topics->elems[i];
                         rd_kafka_mock_topic_t *mtopic;
+                        char *topic_name;
                         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        rd_kafka_Uuid_t topic_id =
+                            rd_kafka_topic_partition_get_topic_id(rktpar);
 
-                        mtopic =
-                            rd_kafka_mock_topic_find(mcluster, rktpar->topic);
-                        if (!mtopic && AllowAutoTopicCreation)
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 12 &&
+                            !RD_KAFKA_UUID_IS_ZERO(topic_id)) {
+                                mtopic = rd_kafka_mock_topic_find_by_id(
+                                    mcluster, topic_id);
+                        } else
+                                mtopic = rd_kafka_mock_topic_find(
+                                    mcluster, rktpar->topic);
+
+                        if (mtopic)
+                                topic_name = mtopic->name;
+                        else
+                                topic_name = rktpar->topic;
+
+                        if (!mtopic && rktpar->topic && AllowAutoTopicCreation)
                                 mtopic = rd_kafka_mock_topic_auto_create(
                                     mcluster, rktpar->topic, -1, &err);
                         else if (!mtopic)
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
                         rd_kafka_mock_buf_write_Metadata_Topic(
-                            resp, rkbuf->rkbuf_reqhdr.ApiVersion, rktpar->topic,
+                            resp, rkbuf->rkbuf_reqhdr.ApiVersion, topic_name,
                             mtopic, err ? err : mtopic->err);
                 }
 
@@ -2181,9 +2215,6 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         rd_kafka_mock_cgrp_consumer_member_t *member = NULL;
         pending_topic_partitions = rd_kafka_topic_partition_list_new(0);
 
-        /* Response: ThrottleTimeMs */
-        rd_kafka_buf_write_i32(resp, 0);
-
         /* GroupId */
         rd_kafka_buf_read_str(rkbuf, &GroupId);
 
@@ -2205,11 +2236,14 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         /* #SubscribedTopicNames */
         rd_kafka_buf_read_arraycnt(rkbuf, &SubscribedTopicNamesCnt,
                                    RD_KAFKAP_TOPICS_MAX);
-        SubscribedTopicNames =
-            rd_calloc(SubscribedTopicNamesCnt, sizeof(rd_kafkap_str_t));
-        for (i = 0; i < SubscribedTopicNamesCnt; i++) {
-                /* SubscribedTopicNames[i] */
-                rd_kafka_buf_read_str(rkbuf, &SubscribedTopicNames[i]);
+        if (SubscribedTopicNamesCnt >= 0) {
+                SubscribedTopicNames = rd_calloc(
+                    SubscribedTopicNamesCnt > 0 ? SubscribedTopicNamesCnt : 1,
+                    sizeof(rd_kafkap_str_t));
+                for (i = 0; i < SubscribedTopicNamesCnt; i++) {
+                        /* SubscribedTopicNames[i] */
+                        rd_kafka_buf_read_str(rkbuf, &SubscribedTopicNames[i]);
+                }
         }
 
         /* ServerAssignor */
@@ -2274,7 +2308,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 member = rd_kafka_mock_cgrp_consumer_member_add(
                     mcgrp, mconn, &MemberId, &InstanceId,
                     /* TODO: use consumer group configuration */
-                    30000);
+                    30000, SubscribedTopicNames, SubscribedTopicNamesCnt);
                 rd_assert(member);
 
                 if (MemberEpoch >= 0) {
@@ -2286,8 +2320,29 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                         }
                 } else {
                         rd_kafka_mock_cgrp_consumer_member_leave(mcgrp, member);
+                        member = NULL;
                 }
                 mtx_unlock(&mcluster->lock);
+        } else {
+                switch (err) {
+                case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+                case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
+                        mtx_lock(&mcluster->lock);
+                        mcgrp = rd_kafka_mock_cgrp_consumer_find(mcluster,
+                                                                 &GroupId);
+                        if (!mcgrp)
+                                break;
+
+                        rd_kafka_mock_cgrp_consumer_member_t *member =
+                            rd_kafka_mock_cgrp_consumer_member_find(mcgrp,
+                                                                    &MemberId);
+                        if (member)
+                                rd_kafka_mock_cgrp_consumer_member_fenced(
+                                    mcgrp, member);
+                        mtx_unlock(&mcluster->lock);
+                default:
+                        break;
+                }
         }
 
         /*
@@ -2311,9 +2366,6 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         /* Response: MemberEpoch */
         rd_kafka_buf_write_i32(resp, MemberEpoch);
 
-        /* Response: ShouldComputeAssignment */
-        rd_kafka_buf_write_bool(resp, rd_false);
-
         /* Response: HeartbeatIntervalMs */
         rd_kafka_buf_write_i32(
             resp, 3000); /* TODO: use consumer group configuration */
@@ -2322,22 +2374,9 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 /* Response: Assignment */
                 rd_kafka_buf_write_i8(resp, 1);
 
-                /* Response: Error */
-                rd_kafka_buf_write_i8(resp, err);
-
-                /* Response: AssignedTopicPartitions */
+                /* Response: TopicPartitions */
                 rd_kafka_mock_handle_ConsumerGroupHeartbeat_write_TopicPartitions(
                     resp, next_assignment);
-
-                /* Response: PendingTopicPartitions */
-                rd_kafka_mock_handle_ConsumerGroupHeartbeat_write_TopicPartitions(
-                    resp, pending_topic_partitions);
-
-                /* Response: MetadataVersion */
-                rd_kafka_buf_write_i16(resp, 0);
-
-                /* Response: MetadataBytes */
-                rd_kafka_buf_write_uvarint(resp, 1); /* Empty bytes */
 
                 rd_kafka_buf_write_tags(resp);
         } else {
@@ -2375,7 +2414,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},
         [RD_KAFKAP_OffsetCommit] = {0, 8, 8, rd_kafka_mock_handle_OffsetCommit},
         [RD_KAFKAP_ApiVersion]   = {0, 2, 3, rd_kafka_mock_handle_ApiVersion},
-        [RD_KAFKAP_Metadata]     = {0, 9, 9, rd_kafka_mock_handle_Metadata},
+        [RD_KAFKAP_Metadata]     = {0, 12, 9, rd_kafka_mock_handle_Metadata},
         [RD_KAFKAP_FindCoordinator] = {0, 3, 3,
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,

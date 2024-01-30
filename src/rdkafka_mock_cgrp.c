@@ -723,12 +723,69 @@ void rd_kafka_mock_cgrps_classic_connection_closed(
 }
 
 /**
+ * @struct Target assignment for a consumer group.
+ *         `member_ids` and `assignment` are in the same order
+ *         and have the same count.
+ */
+typedef struct rd_kafka_mock_cgrp_consumer_target_assignment_s {
+        rd_list_t *member_ids; /**< Member id list (char *). */
+        rd_list_t *assignment; /**< Assingment list
+                                  (rd_kafka_topic_partition_list_t *). */
+} rd_kafka_mock_cgrp_consumer_target_assignment_t;
+
+rd_kafka_mock_cgrp_consumer_target_assignment_t *
+rd_kafka_mock_cgrp_consumer_target_assignment_new0(rd_list_t *member_ids,
+                                                   rd_list_t *assignment) {
+        rd_assert(member_ids->rl_cnt == assignment->rl_cnt);
+        rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment =
+            rd_calloc(1, sizeof(*target_assignment));
+        target_assignment->member_ids =
+            rd_list_copy(member_ids, rd_list_string_copy, NULL);
+        target_assignment->assignment = rd_list_copy(
+            assignment, rd_kafka_topic_partition_list_copy_opaque, NULL);
+        return target_assignment;
+}
+
+rd_kafka_mock_cgrp_consumer_target_assignment_t *
+rd_kafka_mock_cgrp_consumer_target_assignment_new(
+    int member_cnt,
+    char **member_ids,
+    rd_kafka_topic_partition_list_t **assignment) {
+        int i;
+        rd_list_t *member_id_list, *assignment_list;
+        rd_kafka_mock_cgrp_consumer_target_assignment_t *ret;
+
+        member_id_list = rd_list_new(member_cnt, rd_free);
+        assignment_list =
+            rd_list_new(member_cnt, rd_kafka_topic_partition_list_destroy_free);
+        for (i = 0; i < member_cnt; i++) {
+                rd_list_add(member_id_list, rd_strdup(member_ids[i]));
+                rd_list_add(assignment_list,
+                            rd_kafka_topic_partition_list_copy(assignment[i]));
+        }
+
+        ret = rd_kafka_mock_cgrp_consumer_target_assignment_new0(
+            member_id_list, assignment_list);
+        rd_list_destroy(member_id_list);
+        rd_list_destroy(assignment_list);
+        return ret;
+}
+
+void rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment) {
+        rd_list_destroy(target_assignment->member_ids);
+        rd_list_destroy(target_assignment->assignment);
+        rd_free(target_assignment);
+}
+
+/**
  * @brief Sets next target assignment and member epoch for \p member
  *        to a copy of partition list \p rktparlist,
  *        filling its topic ids if not provided, using \p cgrp cluster topics.
  *
  * @param mcgrp The consumer group containing the member.
  * @param member A consumer group member.
+ * @param target_member_epoch New member epoch.
  * @param rktparlist Next target assignment.
  *
  * @locks mcluster->lock MUST be held.
@@ -736,13 +793,14 @@ void rd_kafka_mock_cgrps_classic_connection_closed(
 static void rd_kafka_mock_cgrp_consumer_member_target_assignment_set(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,
     rd_kafka_mock_cgrp_consumer_member_t *member,
+    int target_member_epoch,
     const rd_kafka_topic_partition_list_t *rktparlist) {
         rd_kafka_topic_partition_t *rktpar;
         if (member->target_assignment) {
                 rd_kafka_topic_partition_list_destroy(
                     member->target_assignment);
         }
-        member->target_member_epoch++;
+        member->target_member_epoch = target_member_epoch;
         member->target_assignment =
             rd_kafka_topic_partition_list_copy(rktparlist);
 
@@ -759,6 +817,191 @@ static void rd_kafka_mock_cgrp_consumer_member_target_assignment_set(
                                     rktpar, mtopic->id);
                 }
         }
+}
+
+/**
+ * @brief Sets next target assignment for group \p mcgrp
+ *        to a copy of \p target_assignment partition lists.
+ *
+ * @param mcgrp The consumer group.
+ * @param target_assignment Target assignment for all members.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static void rd_kafka_mock_cgrp_consumer_target_assignment_set(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment) {
+        int i = 0;
+        int32_t new_target_member_epoch;
+        const char *member_id;
+        rd_kafka_mock_cgrp_consumer_member_t *member;
+
+        mcgrp->group_epoch++;
+        new_target_member_epoch = mcgrp->group_epoch;
+        RD_LIST_FOREACH(member_id, target_assignment->member_ids, i) {
+                rd_kafkap_str_t *member_id_str =
+                    rd_kafkap_str_new(member_id, strlen(member_id));
+                rd_kafka_topic_partition_list_t *member_assignment =
+                    rd_list_elem(target_assignment->assignment, i);
+                member = rd_kafka_mock_cgrp_consumer_member_find(mcgrp,
+                                                                 member_id_str);
+                rd_kafkap_str_destroy(member_id_str);
+
+                if (!member)
+                        continue;
+
+                rd_kafka_mock_cgrp_consumer_member_target_assignment_set(
+                    mcgrp, member, new_target_member_epoch, member_assignment);
+        }
+}
+
+typedef RD_MAP_TYPE(const char *, rd_list_t *) map_str_list;
+typedef RD_MAP_TYPE(const char *, int *) map_str_int;
+
+/**
+ * @brief Calculate a simple range target assignment for the consumer group \p
+ * mcgrp.
+ */
+static rd_kafka_mock_cgrp_consumer_target_assignment_t *
+rd_kafka_mock_cgrp_consumer_target_assignment_calculate_simple(
+    const rd_kafka_mock_cgrp_consumer_t *mcgrp) {
+        int i, *ip;
+        const char *topic;
+        rd_list_t *members;
+        rd_kafka_mock_cgrp_consumer_member_t *member;
+        rd_kafka_mock_cluster_t *mcluster = mcgrp->cluster;
+        /* List of member ids (char *) */
+        rd_list_t *member_ids = rd_list_new(mcgrp->member_cnt, rd_free);
+        /* List of member assignment (rd_kafka_topic_partition_list_t *) */
+        rd_list_t *assignment = rd_list_new(
+            mcgrp->member_cnt, rd_kafka_topic_partition_list_destroy_free);
+        /* Map from topic name to list of members */
+        map_str_list topic_members =
+            RD_MAP_INITIALIZER(mcgrp->member_cnt, rd_map_str_cmp,
+                               rd_map_str_hash, NULL, rd_list_destroy_free);
+        /* Map from member id to index in the members and assignment lists. */
+        map_str_int member_idx = RD_MAP_INITIALIZER(
+            mcgrp->member_cnt, rd_map_str_cmp, rd_map_str_hash, NULL, rd_free);
+
+        i = 0;
+
+        /* First create a map with topics associated to the list of members
+         * and save the member idx in the `member_idx` map. */
+        TAILQ_FOREACH(member, &mcgrp->members, link) {
+                int j;
+                rd_list_add(member_ids, rd_strdup(member->id));
+                rd_list_add(assignment, rd_kafka_topic_partition_list_new(0));
+
+                RD_LIST_FOREACH(topic, member->subscribed_topics, j) {
+                        if (!RD_MAP_GET(&topic_members, topic)) {
+                                members = rd_list_new(0, NULL);
+                                RD_MAP_SET(&topic_members, topic, members);
+                        } else
+                                members = RD_MAP_GET(&topic_members, topic);
+                        rd_list_add(members, member);
+                }
+                ip  = rd_calloc(1, sizeof(*ip));
+                *ip = i;
+                RD_MAP_SET(&member_idx, member->id, ip);
+                i++;
+        }
+
+        /* For each topic to a range assignment and add the
+         * corresponding partitions to the assignment for that member.
+         * Finds the list index using the `member_idx` map. */
+        RD_MAP_FOREACH(topic, members, &topic_members) {
+                rd_kafka_Uuid_t topic_id;
+                rd_kafka_topic_partition_list_t *member_assignment;
+                int members_cnt = rd_list_cnt(members);
+                int common, one_more, assigned = 0;
+                rd_kafkap_str_t Topic = {.str = topic, .len = strlen(topic)};
+                rd_kafka_mock_topic_t *mock_topic =
+                    rd_kafka_mock_topic_find_by_kstr(mcluster, &Topic);
+                if (!mock_topic)
+                        continue;
+
+                topic_id = mock_topic->id;
+
+                /* Assign one partition more
+                 * to the first mock_topic->partition_cnt % members_cnt
+                 * members. */
+                common   = mock_topic->partition_cnt / members_cnt;
+                one_more = mock_topic->partition_cnt % members_cnt;
+
+                RD_LIST_FOREACH(member, members, i) {
+                        int j, num_partitions = common;
+                        int idx = *RD_MAP_GET(&member_idx, member->id);
+                        member_assignment = rd_list_elem(assignment, idx);
+                        if (idx < one_more)
+                                num_partitions++;
+                        for (j = 0; j < num_partitions; j++) {
+                                rd_kafka_topic_partition_t *rktpar =
+                                    rd_kafka_topic_partition_list_add(
+                                        member_assignment, topic, assigned + j);
+                                rd_kafka_topic_partition_set_topic_id(rktpar,
+                                                                      topic_id);
+                        }
+                        assigned += num_partitions;
+                }
+        }
+
+        rd_kafka_mock_cgrp_consumer_target_assignment_t *ret =
+            rd_kafka_mock_cgrp_consumer_target_assignment_new0(member_ids,
+                                                               assignment);
+
+        RD_MAP_DESTROY(&topic_members);
+        RD_MAP_DESTROY(&member_idx);
+
+        rd_list_destroy(member_ids);
+        rd_list_destroy(assignment);
+
+        return ret;
+}
+
+/**
+ * @brief Recalculate and set a target assignment for \p mcgrp
+ *        only if `mcgrp->manual_assignment` isn't set.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static void rd_kafka_mock_cgrp_consumer_target_assignment_recalculate(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp) {
+        if (mcgrp->manual_assignment)
+                return;
+
+        rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment =
+            rd_kafka_mock_cgrp_consumer_target_assignment_calculate_simple(
+                mcgrp);
+        rd_kafka_mock_cgrp_consumer_target_assignment_set(mcgrp,
+                                                          target_assignment);
+        rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
+            target_assignment);
+}
+
+/**
+ * @brief Set manual target assignment \p target_assignment
+ *        to the consumer group \p mcgrp .
+ *
+ * @param mcgrp Consumer group
+ * @param target_assignment Target assignment to set.
+ *                          Pass NULL to return to automatic assignment.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static void rd_kafka_mock_cgrp_consumer_target_assignment_set_manual(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment) {
+        if (!target_assignment) {
+                mcgrp->manual_assignment = rd_false;
+                rd_kafka_mock_cgrp_consumer_target_assignment_recalculate(
+                    mcgrp);
+                return;
+        }
+
+        mcgrp->manual_assignment = rd_true;
+
+        rd_kafka_mock_cgrp_consumer_target_assignment_set(mcgrp,
+                                                          target_assignment);
 }
 
 /**
@@ -863,7 +1106,8 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
                     member, current_assignment);
         }
 
-        if (*member_epoch && member->current_member_epoch < *member_epoch) {
+        if (*member_epoch > 0 &&
+            member->current_member_epoch != *member_epoch) {
                 /* FENCED_MEMBER_EPOCH */
                 *member_epoch = -1;
                 return NULL;
@@ -986,6 +1230,45 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
 }
 
 /**
+ * @brief Set the subscribed topics for member \p member
+ *        to \p SubscribedTopicNames .
+ *        Deduplicates the list after sorting it.
+ * @return `rd_true` if the subscription was changed, if set and different
+ *         from previous one.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
+    rd_kafka_mock_cgrp_consumer_member_t *member,
+    rd_kafkap_str_t *SubscribedTopicNames,
+    int32_t SubscribedTopicNamesCnt) {
+        rd_bool_t changed = rd_false;
+        if (!SubscribedTopicNames)
+                return changed;
+
+        int32_t i;
+        rd_list_t *new_subscription = rd_list_new(
+            SubscribedTopicNamesCnt > 0 ? SubscribedTopicNamesCnt : 1, rd_free);
+        for (i = 0; i < SubscribedTopicNamesCnt; i++) {
+                rd_list_add(new_subscription,
+                            RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
+        }
+        rd_list_deduplicate(&new_subscription, rd_strcmp2);
+
+        if (!member->subscribed_topics ||
+            rd_list_cmp(new_subscription, member->subscribed_topics,
+                        rd_list_cmp_str)) {
+                if (member->subscribed_topics)
+                        rd_list_destroy(member->subscribed_topics);
+                member->subscribed_topics =
+                    rd_list_copy(new_subscription, rd_list_string_copy, NULL);
+                changed = rd_true;
+        }
+        rd_list_destroy(new_subscription);
+        return changed;
+}
+
+/**
  * @brief Adds a member to consumer group \p mcgrp. If member with same
  *        \p MemberId is already present, only updates the connection and
  *        sets it as active.
@@ -995,6 +1278,10 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
  * @param MemberId Member id.
  * @param InstanceId Group instance id (optional).
  * @param session_timeout_ms Session timeout to use.
+ * @param SubscribedTopicNames Array of subscribed topics.
+ *                             Mandatory if the member is a new one.
+ * @param SubscribedTopicNamesCnt Number of elements in \p SubscribedTopicNames.
+ *
  * @return New or existing member.
  *
  * @locks mcluster->lock MUST be held.
@@ -1004,20 +1291,25 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                                        struct rd_kafka_mock_connection_s *conn,
                                        const rd_kafkap_str_t *MemberId,
                                        const rd_kafkap_str_t *InstanceId,
-                                       int session_timeout_ms) {
-        rd_kafka_mock_cgrp_consumer_member_t *member;
+                                       int session_timeout_ms,
+                                       rd_kafkap_str_t *SubscribedTopicNames,
+                                       int32_t SubscribedTopicNamesCnt) {
+        rd_kafka_mock_cgrp_consumer_member_t *member = NULL;
+        rd_bool_t changed                            = rd_false;
 
         /* Find member */
         member = rd_kafka_mock_cgrp_consumer_member_find(mcgrp, MemberId);
         if (!member) {
+                rd_assert(SubscribedTopicNamesCnt > 0);
                 /* Not found, add member */
                 member = rd_calloc(1, sizeof(*member));
 
                 if (!RD_KAFKAP_STR_LEN(MemberId)) {
                         /* Generate a member id */
-                        char memberid[32];
-                        rd_snprintf(memberid, sizeof(memberid), "%p", member);
-                        member->id = rd_strdup(memberid);
+                        rd_kafka_Uuid_t *member_id = rd_kafka_Uuid_random();
+                        member->id =
+                            rd_strdup(rd_kafka_Uuid_base64str(member_id));
+                        rd_kafka_Uuid_destroy(member_id);
                 } else
                         member->id = RD_KAFKAP_STR_DUP(MemberId);
 
@@ -1026,15 +1318,22 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
 
                 TAILQ_INSERT_TAIL(&mcgrp->members, member, link);
                 mcgrp->member_cnt++;
-                mcgrp->group_epoch++;
+                changed                     = rd_true;
                 member->target_member_epoch = mcgrp->group_epoch;
         }
+        changed |=
+            rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
+                member, SubscribedTopicNames, SubscribedTopicNamesCnt);
 
         mcgrp->session_timeout_ms = session_timeout_ms;
 
         member->conn = conn;
 
         rd_kafka_mock_cgrp_consumer_member_active(mcgrp, member);
+
+        if (changed)
+                rd_kafka_mock_cgrp_consumer_target_assignment_recalculate(
+                    mcgrp);
 
         return member;
 }
@@ -1053,7 +1352,8 @@ static void rd_kafka_mock_cgrp_consumer_member_destroy(
         rd_assert(mcgrp->member_cnt > 0);
         TAILQ_REMOVE(&mcgrp->members, member, link);
         mcgrp->member_cnt--;
-        mcgrp->group_epoch++;
+
+        rd_kafka_mock_cgrp_consumer_target_assignment_recalculate(mcgrp);
 
         rd_free(member->id);
 
@@ -1066,6 +1366,7 @@ static void rd_kafka_mock_cgrp_consumer_member_destroy(
                    rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(member->returned_assignment,
                    rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(member->subscribed_topics, rd_list_destroy_free);
 
         rd_free(member);
 }
@@ -1085,6 +1386,25 @@ void rd_kafka_mock_cgrp_consumer_member_leave(
 
         rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
                      "Member %s is leaving group %s", member->id, mcgrp->id);
+
+        rd_kafka_mock_cgrp_consumer_member_destroy(mcgrp, member);
+}
+
+/**
+ * @brief Called when a member is fenced from a consumer group.
+ *
+ * @param mcgrp Consumer group.
+ * @param member Member to fence.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_cgrp_consumer_member_fenced(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    rd_kafka_mock_cgrp_consumer_member_t *member) {
+
+        rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
+                     "Member %s is fenced from group %s", member->id,
+                     mcgrp->id);
 
         rd_kafka_mock_cgrp_consumer_member_destroy(mcgrp, member);
 }
@@ -1136,7 +1456,7 @@ static void rd_kafka_mock_cgrp_consumer_session_tmr_cb(rd_kafka_timers_t *rkts,
                              "Member %s session timed out for group %s",
                              member->id, mcgrp->id);
 
-                rd_kafka_mock_cgrp_consumer_member_destroy(mcgrp, member);
+                rd_kafka_mock_cgrp_consumer_member_fenced(mcgrp, member);
         }
         mtx_unlock(&mcluster->lock);
 }
@@ -1178,32 +1498,22 @@ rd_kafka_mock_cgrp_consumer_get(rd_kafka_mock_cluster_t *mcluster,
 void rd_kafka_mock_cgrp_consumer_target_assignment(
     rd_kafka_mock_cluster_t *mcluster,
     const char *group_id,
-    const char *member_id,
-    const rd_kafka_topic_partition_list_t *rktparlist) {
-        rd_kafka_mock_cgrp_consumer_t *cgrp;
-        rd_kafka_mock_cgrp_consumer_member_t *member;
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment) {
+        rd_kafka_mock_cgrp_consumer_t *mcgrp;
         rd_kafkap_str_t *group_id_str =
             rd_kafkap_str_new(group_id, strlen(group_id));
-        rd_kafkap_str_t *member_id_str =
-            rd_kafkap_str_new(member_id, strlen(member_id));
 
         mtx_lock(&mcluster->lock);
 
-        cgrp = rd_kafka_mock_cgrp_consumer_find(mcluster, group_id_str);
-        if (!cgrp)
+        mcgrp = rd_kafka_mock_cgrp_consumer_find(mcluster, group_id_str);
+        if (!mcgrp)
                 goto destroy;
 
-        member = rd_kafka_mock_cgrp_consumer_member_find(cgrp, member_id_str);
-
-        if (!member)
-                goto destroy;
-
-        rd_kafka_mock_cgrp_consumer_member_target_assignment_set(cgrp, member,
-                                                                 rktparlist);
+        rd_kafka_mock_cgrp_consumer_target_assignment_set_manual(
+            mcgrp, target_assignment);
 
 destroy:
         rd_kafkap_str_destroy(group_id_str);
-        rd_kafkap_str_destroy(member_id_str);
         mtx_unlock(&mcluster->lock);
 }
 

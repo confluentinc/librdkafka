@@ -421,10 +421,38 @@ rd_kafka_mock_get_requests(rd_kafka_mock_cluster_t *mcluster, size_t *cntp);
  */
 RD_EXPORT void rd_kafka_mock_clear_requests(rd_kafka_mock_cluster_t *mcluster);
 
+typedef struct rd_kafka_mock_cgrp_consumer_target_assignment_s
+    rd_kafka_mock_cgrp_consumer_target_assignment_t;
+
 /**
- * @brief Sets next target assignment for the member
- *        identified by \p member_id in the group identified by
- *        \p group_id to the list of partitions contained in \p rktparlist,
+ * @brief Create a new target assignment for \p member_cnt members
+ *        given a member_id and a member assignment for each,
+ *        specified in \p member_ids and \p assignment .
+ *
+ * @remark used for mocking target assignment
+ *         in KIP-848 consumer group protocol.
+ *
+ * @param member_cnt Number of members.
+ * @param member_ids Array of member ids of size \p member_cnt.
+ * @param assignment Array of (rd_kafka_topic_partition_list_t *) of size \p
+ * member_cnt.
+ */
+RD_EXPORT rd_kafka_mock_cgrp_consumer_target_assignment_t *
+rd_kafka_mock_cgrp_consumer_target_assignment_new(
+    int member_cnt,
+    char **member_ids,
+    rd_kafka_topic_partition_list_t **assignment);
+
+/**
+ * @brief Destroy target assignment \p target_assignment .
+ */
+RD_EXPORT void rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment);
+
+/**
+ * @brief Sets next target assignment for the group
+ *        identified by \p group_id to the
+ *        target assignment contained in \p target_assignment,
  *        in the cluster \p mcluster.
  *
  * @remark used for mocking target assignment
@@ -432,14 +460,13 @@ RD_EXPORT void rd_kafka_mock_clear_requests(rd_kafka_mock_cluster_t *mcluster);
  *
  * @param mcluster Mock cluster instance.
  * @param group_id Group id.
- * @param member_id Member id.
- * @param rktparlist Partitions to assign to the member.
+ * @param target_assignment Target assignment for all the members.
  */
 void rd_kafka_mock_cgrp_consumer_target_assignment(
     rd_kafka_mock_cluster_t *mcluster,
     const char *group_id,
-    const char *member_id,
-    const rd_kafka_topic_partition_list_t *rktparlist);
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment);
+
 
 /**@}*/
 

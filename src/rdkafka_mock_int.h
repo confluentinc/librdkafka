@@ -129,8 +129,9 @@ typedef struct rd_kafka_mock_cgrp_consumer_s {
         int session_timeout_ms;                  /**< Session timeout */
         rd_kafka_timer_t session_tmr;            /**< Session timeout timer */
         TAILQ_HEAD(, rd_kafka_mock_cgrp_consumer_member_s)
-        members;        /**< Group members */
-        int member_cnt; /**< Number of group members */
+        members;                     /**< Group members */
+        int member_cnt;              /**< Number of group members */
+        rd_bool_t manual_assignment; /**< Use manual assignment */
 } rd_kafka_mock_cgrp_consumer_t;
 
 
@@ -160,7 +161,10 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
                                 *   rd_kafka_mock_cgrp_consumer_target_assignment.
                                 */
         rd_kafka_topic_partition_list_t
-            *returned_assignment;                /**< Returned assignment */
+            *returned_assignment; /**< Returned assignment */
+
+        rd_list_t *subscribed_topics; /**< Subscribed topics */
+
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL
                                                   *   if there is no ongoing
                                                   *   request. */
@@ -626,6 +630,10 @@ void rd_kafka_mock_cgrp_consumer_member_leave(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,
     rd_kafka_mock_cgrp_consumer_member_t *member);
 
+void rd_kafka_mock_cgrp_consumer_member_fenced(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    rd_kafka_mock_cgrp_consumer_member_t *member);
+
 rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
     const rd_kafka_mock_cgrp_consumer_t *mcgrp,
     const rd_kafkap_str_t *MemberId);
@@ -635,7 +643,13 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                                        struct rd_kafka_mock_connection_s *conn,
                                        const rd_kafkap_str_t *MemberId,
                                        const rd_kafkap_str_t *InstanceId,
-                                       int session_timeout_ms);
+                                       int session_timeout_ms,
+                                       rd_kafkap_str_t *SubscribedTopicNames,
+                                       int32_t SubscribedTopicNamesCnt);
+
+rd_kafka_mock_cgrp_consumer_target_assignment_t *
+rd_kafka_mock_cgrp_consumer_target_assignment_new0(rd_list_t *member_ids,
+                                                   rd_list_t *assignment);
 
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);

@@ -2753,22 +2753,23 @@ rd_ts_t rd_kafka_mock_request_timestamp(rd_kafka_mock_request_t *mreq) {
  *           const char *topic_name
  *           int32_t partition
  *
- * End with a NULL topic
- *
  * @remark The returned pointer ownership is transferred to the caller.
  */
 static rd_kafka_topic_partition_list_t *ut_topic_partitions(int cnt, ...) {
         va_list ap;
         const char *topic_name;
+        int i = 0;
 
         rd_kafka_topic_partition_list_t *rktparlist =
             rd_kafka_topic_partition_list_new(cnt);
         va_start(ap, cnt);
-        while ((topic_name = va_arg(ap, const char *))) {
+        while (i < cnt) {
+                topic_name        = va_arg(ap, const char *);
                 int32_t partition = va_arg(ap, int32_t);
 
                 rd_kafka_topic_partition_list_add(rktparlist, topic_name,
                                                   partition);
+                i++;
         }
         va_end(ap);
 
@@ -2859,9 +2860,10 @@ static int ut_cgrp_consumer_member_next_assignment0(
         rd_kafka_mock_cgrp_consumer_t *mcgrp;
         rd_kafka_mock_cgrp_consumer_member_t *member;
         char errstr[512];
-        rd_kafkap_str_t GroupId    = {.str = "group", .len = 5};
-        rd_kafkap_str_t MemberId   = {.str = "A", .len = 1};
-        rd_kafkap_str_t InstanceId = {.len = 0};
+        rd_kafkap_str_t GroupId         = {.str = "group", .len = 5};
+        rd_kafkap_str_t MemberId        = {.str = "A", .len = 1};
+        rd_kafkap_str_t InstanceId      = {.len = 0};
+        rd_kafkap_str_t SubscribedTopic = {.str = topic, .len = strlen(topic)};
         struct rd_kafka_mock_connection_s *conn =
             (struct rd_kafka_mock_connection_s
                  *)1; /* fake connection instance */
@@ -2869,14 +2871,15 @@ static int ut_cgrp_consumer_member_next_assignment0(
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
         mcluster = rd_kafka_mock_cluster_new(rk, 1);
         mcgrp    = rd_kafka_mock_cgrp_consumer_get(mcluster, &GroupId);
-        member = rd_kafka_mock_cgrp_consumer_member_add(mcgrp, conn, &MemberId,
-                                                        &InstanceId, 30000);
+        member   = rd_kafka_mock_cgrp_consumer_member_add(
+            mcgrp, conn, &MemberId, &InstanceId, 30000, &SubscribedTopic, 1);
         mtopic = rd_kafka_mock_topic_new(mcluster, topic, partitions, 1);
 
         for (i = 0; i < fixtures_cnt; i++) {
                 int j;
                 rd_kafka_topic_partition_list_t *current_assignment,
-                    *target_assignment, *next_assignment, *returned_assignment;
+                    *member_target_assignment, *next_assignment,
+                    *returned_assignment;
 
                 RD_UT_SAY("test fixture %" PRIusz ": %s", i,
                           fixtures[i].comment);
@@ -2884,23 +2887,34 @@ static int ut_cgrp_consumer_member_next_assignment0(
                 if (fixtures[i].session_timed_out) {
                         rd_kafka_mock_cgrp_consumer_member_leave(mcgrp, member);
                         member = rd_kafka_mock_cgrp_consumer_member_add(
-                            mcgrp, conn, &MemberId, &InstanceId, 30000);
+                            mcgrp, conn, &MemberId, &InstanceId, 30000,
+                            &SubscribedTopic, 1);
                 }
 
                 if (fixtures[i].reconnected) {
                         rd_kafka_mock_cgrps_connection_closed(mcluster, conn);
                         conn++;
                         member = rd_kafka_mock_cgrp_consumer_member_add(
-                            mcgrp, conn, &MemberId, &InstanceId, 30000);
+                            mcgrp, conn, &MemberId, &InstanceId, 30000,
+                            &SubscribedTopic, 1);
                 }
 
-                target_assignment = fixtures[i].target_assignment;
-                if (target_assignment) {
+                member_target_assignment = fixtures[i].target_assignment;
+                if (member_target_assignment) {
+                        rd_kafka_mock_cgrp_consumer_target_assignment_t
+                            *target_assignment;
+
+                        target_assignment =
+                            rd_kafka_mock_cgrp_consumer_target_assignment_new(
+                                1, (char **)&MemberId.str,
+                                &member_target_assignment);
+
                         rd_kafka_mock_cgrp_consumer_target_assignment(
-                            mcluster, GroupId.str, MemberId.str,
+                            mcluster, GroupId.str, target_assignment);
+                        rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
                             target_assignment);
                         rd_kafka_topic_partition_list_destroy(
-                            target_assignment);
+                            member_target_assignment);
                 }
 
                 current_assignment = fixtures[i].current_assignment;
@@ -2955,14 +2969,14 @@ static int ut_cgrp_consumer_member_next_assignment1(void) {
                 .current_member_epoch = 3,
                 .current_assignment   = NULL,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
             },
             {
                 .comment              = "Current assignment empty",
                 .current_member_epoch = 3,
-                .current_assignment   = ut_topic_partitions(0, NULL),
+                .current_assignment   = ut_topic_partitions(0),
                 .returned_assignment  = NULL,
             },
             {
@@ -2974,7 +2988,7 @@ static int ut_cgrp_consumer_member_next_assignment1(void) {
             {
                 .comment              = "Current assignment 0",
                 .current_member_epoch = 3,
-                .current_assignment   = ut_topic_partitions(1, topic, 0, NULL),
+                .current_assignment   = ut_topic_partitions(1, topic, 0),
                 .returned_assignment  = NULL,
             },
             {
@@ -2987,7 +3001,7 @@ static int ut_cgrp_consumer_member_next_assignment1(void) {
                 .comment              = "Current assignment 0,1",
                 .current_member_epoch = 3,
                 .current_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 1),
                 .returned_assignment = NULL,
             },
             {
@@ -3000,25 +3014,24 @@ static int ut_cgrp_consumer_member_next_assignment1(void) {
                 .comment              = "Current assignment 0,1,2",
                 .current_member_epoch = 3,
                 .current_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment = NULL,
             },
             {
                 .comment = "Target assignment 0,1,3. Returned assignment 0,1",
                 .current_member_epoch = 3,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
                 .current_assignment = NULL,
                 .returned_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 1),
             },
             {
                 .comment = "Target assignment 0,3. Returned assignment 0",
                 .current_member_epoch = 3,
-                .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 3, NULL),
+                .target_assignment = ut_topic_partitions(2, topic, 0, topic, 3),
                 .current_assignment  = NULL,
-                .returned_assignment = ut_topic_partitions(1, topic, 0, NULL),
+                .returned_assignment = ut_topic_partitions(1, topic, 0),
             },
             {
                 .comment              = "Empty heartbeat",
@@ -3030,7 +3043,7 @@ static int ut_cgrp_consumer_member_next_assignment1(void) {
                 .comment              = "Current assignment 0,1",
                 .current_member_epoch = 3,
                 .current_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 1),
                 .returned_assignment = NULL,
             },
             {
@@ -3043,9 +3056,9 @@ static int ut_cgrp_consumer_member_next_assignment1(void) {
                 .comment = "Current assignment 0. Returned assignment 0,3. "
                            "Epoch 3 -> 5",
                 .current_member_epoch = 5,
-                .current_assignment   = ut_topic_partitions(1, topic, 0, NULL),
+                .current_assignment   = ut_topic_partitions(1, topic, 0),
                 .returned_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 3, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 3),
             },
             {
                 .comment              = "Empty heartbeat",
@@ -3057,7 +3070,7 @@ static int ut_cgrp_consumer_member_next_assignment1(void) {
                 .comment              = "Current assignment 0,3",
                 .current_member_epoch = 5,
                 .current_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 3, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 3),
                 .returned_assignment = NULL,
             },
         };
@@ -3084,33 +3097,32 @@ static int ut_cgrp_consumer_member_next_assignment2(void) {
                 .current_member_epoch = 3,
                 .current_assignment   = NULL,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
             },
             {
                 .comment              = "Current assignment 0,1,2",
                 .current_member_epoch = 3,
                 .current_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment = NULL,
             },
             {
                 .comment = "Target assignment 0,1,3. Returned assignment 0,1",
                 .current_member_epoch = 3,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
                 .current_assignment = NULL,
                 .returned_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 1),
             },
             {
                 .comment = "Target assignment 0,3. Returned assignment 0",
                 .current_member_epoch = 3,
-                .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 3, NULL),
+                .target_assignment = ut_topic_partitions(2, topic, 0, topic, 3),
                 .current_assignment  = NULL,
-                .returned_assignment = ut_topic_partitions(1, topic, 0, NULL),
+                .returned_assignment = ut_topic_partitions(1, topic, 0),
             },
             {
                 .comment              = "Empty heartbeat",
@@ -3122,7 +3134,7 @@ static int ut_cgrp_consumer_member_next_assignment2(void) {
                 .comment              = "Current assignment 0,1",
                 .current_member_epoch = 3,
                 .current_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 1),
                 .returned_assignment = NULL,
             },
             {
@@ -3135,10 +3147,10 @@ static int ut_cgrp_consumer_member_next_assignment2(void) {
                 .comment = "Target+Returned assignment 0,1,3. Epoch 3 -> 6",
                 .current_member_epoch = 6,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
                 .current_assignment = NULL,
                 .returned_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, topic, 3, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
             },
             {
                 .comment              = "Empty heartbeat",
@@ -3150,7 +3162,7 @@ static int ut_cgrp_consumer_member_next_assignment2(void) {
                 .comment              = "Current assignment 0,1,3",
                 .current_member_epoch = 6,
                 .current_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
                 .returned_assignment = NULL,
             },
         };
@@ -3177,33 +3189,32 @@ static int ut_cgrp_consumer_member_next_assignment3(void) {
                 .current_member_epoch = 3,
                 .current_assignment   = NULL,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
             },
             {
                 .comment              = "Current assignment 0,1,2",
                 .current_member_epoch = 3,
                 .current_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment = NULL,
             },
             {
                 .comment = "Target assignment 0,1,3. Returned assignment 0,1",
                 .current_member_epoch = 3,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
                 .current_assignment = NULL,
                 .returned_assignment =
-                    ut_topic_partitions(1, topic, 0, topic, 1, NULL),
+                    ut_topic_partitions(2, topic, 0, topic, 1),
             },
             {
                 .comment = "Target assignment 0,3. Returned assignment 0",
                 .current_member_epoch = 3,
-                .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 3, NULL),
+                .target_assignment = ut_topic_partitions(2, topic, 0, topic, 3),
                 .current_assignment  = NULL,
-                .returned_assignment = ut_topic_partitions(1, topic, 0, NULL),
+                .returned_assignment = ut_topic_partitions(1, topic, 0),
             },
             {
                 .comment              = "Empty heartbeat",
@@ -3254,14 +3265,14 @@ static int ut_cgrp_consumer_member_next_assignment4(void) {
                 .current_member_epoch = 3,
                 .current_assignment   = NULL,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
             },
             {
                 .comment              = "Current assignment empty",
                 .current_member_epoch = 3,
-                .current_assignment   = ut_topic_partitions(0, NULL),
+                .current_assignment   = ut_topic_partitions(0),
                 .returned_assignment  = NULL,
             },
             {
@@ -3269,9 +3280,9 @@ static int ut_cgrp_consumer_member_next_assignment4(void) {
                            "assignment again",
                 .reconnected          = rd_true,
                 .current_member_epoch = 3,
-                .current_assignment   = ut_topic_partitions(0, NULL),
+                .current_assignment   = ut_topic_partitions(0),
                 .returned_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
             },
             {
                 .comment              = "Empty heartbeat",
@@ -3283,7 +3294,7 @@ static int ut_cgrp_consumer_member_next_assignment4(void) {
                 .comment              = "Current assignment 0,1,2",
                 .current_member_epoch = 3,
                 .current_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment = NULL,
             },
         };
@@ -3308,9 +3319,9 @@ static int ut_cgrp_consumer_member_next_assignment5(void) {
                 .current_member_epoch = 3,
                 .current_assignment   = NULL,
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
             },
             {
                 .comment = "Session times out, receives FENCED_MEMBER_EPOCH. "
@@ -3321,19 +3332,19 @@ static int ut_cgrp_consumer_member_next_assignment5(void) {
                 .returned_assignment  = NULL,
             },
             {
-                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 5",
+                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 6",
                 .target_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
-                .current_member_epoch = 5,
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .current_member_epoch = 4,
                 .current_assignment   = NULL,
                 .returned_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
             },
             {
                 .comment              = "Current assignment 0,1,2",
-                .current_member_epoch = 5,
+                .current_member_epoch = 4,
                 .current_assignment =
-                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2, NULL),
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
                 .returned_assignment = NULL,
             },
         };

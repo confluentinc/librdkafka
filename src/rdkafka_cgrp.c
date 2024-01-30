@@ -898,6 +898,7 @@ static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
         rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);
         rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK &
                                      ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
+        rkcg->rkcg_target_assignment      = NULL;
         rkcg->rkcg_next_target_assignment = NULL;
         rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
 }
@@ -6479,10 +6480,26 @@ rd_kafka_consumer_group_metadata(rd_kafka_t *rk) {
         return cgmetadata;
 }
 
+const char *rd_kafka_consumer_group_metadata_group_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->group_id;
+}
+
 const char *rd_kafka_consumer_group_metadata_member_id(
     const rd_kafka_consumer_group_metadata_t *group_metadata) {
         return group_metadata->member_id;
 }
+
+const char *rd_kafka_consumer_group_metadata_group_instance_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->group_instance_id;
+}
+
+int32_t rd_kafka_consumer_group_metadata_member_epoch(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->generation_id;
+}
+
 
 void rd_kafka_consumer_group_metadata_destroy(
     rd_kafka_consumer_group_metadata_t *cgmetadata) {

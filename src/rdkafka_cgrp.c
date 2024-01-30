@@ -2910,23 +2910,44 @@ err:
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true /*lost*/,
                                                       rd_true /*initiating*/,
                                                       "resetting member-id");
-                return;
+                break;
 
         case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(
                     rkcg, rd_true, rd_true, "member fenced - rejoining");
+                break;
 
+        case RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR:
+        case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID:
+        case RD_KAFKA_RESP_ERR_INVALID_REQUEST:
+                actions = RD_KAFKA_ERR_ACTION_FATAL;
+                break;
         default:
                 actions = rd_kafka_err_action(rkb, err, request,
                                               RD_KAFKA_ERR_ACTION_END);
                 break;
         }
 
+        if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
+                rd_kafka_set_fatal_error(
+                    rk, err, "ConsumerGroupHeartbeat fatal error: %s",
+                    rd_kafka_err2str(err));
+                return;
+        }
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
+        }
+
+        if (!rkcg->rkcg_heartbeat_intvl_ms &&
+            !(actions & RD_KAFKA_ERR_ACTION_FATAL)) {
+                /* When an error happens on first HB, it should be always
+                 * retried, unless fatal, to avoid entering a tight loop
+                 * and to use exponential backoff. */
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {

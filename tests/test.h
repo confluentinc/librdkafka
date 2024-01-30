@@ -709,6 +709,7 @@ void test_any_conf_set(rd_kafka_conf_t *conf,
                        const char *name,
                        const char *val);
 
+rd_kafka_topic_partition_list_t *test_topic_partitions(int cnt, ...);
 void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions);
 int test_partition_list_cmp(rd_kafka_topic_partition_list_t *al,
@@ -859,6 +860,9 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
                                                const char **bootstraps);
+void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
+                                         int member_cnt,
+                                         ...);
 
 
 

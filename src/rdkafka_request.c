@@ -2248,7 +2248,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                         remote_assignor_str = remote_assignor->str;
 
                 rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
-                           "Heartbeat of member id \"%s\", group id \"%s\", "
+                           "ConsumerGroupHeartbeat of member id \"%s\", group "
+                           "id \"%s\", "
                            "generation id %" PRId32
                            ", group instance id \"%s\""
                            ", current assignment \"%s\""

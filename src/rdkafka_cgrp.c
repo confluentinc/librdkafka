@@ -2693,12 +2693,20 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                         rd_kafka_Uuid_t compare_topic_id =
                             rko->rko_u.metadata.mdi->topics[j].topic_id;
                         if (!rd_kafka_Uuid_cmp(request_topic_id,
-                                               compare_topic_id) && rko->rko_u.metadata.md->topics[j].topic) {
+                                               compare_topic_id)) {
+                            if(rko->rko_u.metadata.md->topics[j].err == RD_KAFKA_RESP_ERR_NO_ERROR)
                                 rd_kafka_topic_partition_list_add_with_topic_name_and_id(new_target_assignments,
                                     request_topic_id,
                                     rko->rko_u.metadata.md->topics[j].topic,
                                     rkcg->rkcg_next_target_assignment->elems[i].partition);
-                                break;
+                            else
+                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+                                             "Metadata not found for the "
+                                             "assigned topic id - %s due to: %s: "
+                                             "Continuing without it",
+                                             rd_kafka_Uuid_base64str(&request_topic_id),
+                                             rd_kafka_err2str(rko->rko_u.metadata.md->topics[j].err));
+                            break;
                         }
                 }
         }

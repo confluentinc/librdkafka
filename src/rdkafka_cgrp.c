@@ -2616,9 +2616,13 @@ rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg,
         /*
          * TODO: What happens in other states?
          */
-        if (is_assignment_different &&
-            (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT ||
-             rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY)) {
+        if(!is_assignment_different) {
+            if (rkcg->rkcg_next_target_assignment && (new_target_assignments->cnt == rkcg->rkcg_next_target_assignment->cnt)) {
+                    rd_kafka_topic_partition_list_destroy(rkcg->rkcg_next_target_assignment);
+                    rkcg->rkcg_next_target_assignment = NULL;
+            }
+        } else if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT ||
+             rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
                 rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK;
                 if (rkcg->rkcg_target_assignment) {
                         rd_kafka_topic_partition_list_destroy(
@@ -2626,12 +2630,10 @@ rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg,
                 }
                 rkcg->rkcg_target_assignment = rd_kafka_topic_partition_list_copy(new_target_assignments);
 
-                // TODO: Check how to improve this logic. Next target assignment should be exactly same as new_target_assignment not just cnt.
                 if (rkcg->rkcg_next_target_assignment && (new_target_assignments->cnt == rkcg->rkcg_next_target_assignment->cnt)) {
                         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_next_target_assignment);
                         rkcg->rkcg_next_target_assignment = NULL;
                 }
-
 
                 if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
                         char rkcg_target_assignment_str[512] = "NULL";
@@ -2649,6 +2651,7 @@ rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg,
                 rd_kafka_cgrp_handle_assignment(rkcg,
                                                 rkcg->rkcg_target_assignment);
         }
+
 
         return RD_KAFKA_OP_RES_HANDLED;
 }
@@ -2891,18 +2894,6 @@ err_parse:
 err:
         rkcg->rkcg_last_heartbeat_err = err;
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
-
-
-        // Supported errors:
-        //              GROUP_AUTHORIZATION_FAILED         - Fatal
-        //              COORDINATOR_LOAD_IN_PROGRESS       - Retry
-        // - INVALID_REQUEST                    - Fatal
-        //              UNKNOWN_MEMBER_ID                  - Rejoin
-        //              FENCED_MEMBER_EPOCH                - Rejoin
-        // - UNSUPPORTED_ASSIGNOR               - Fatal
-        // - UNRELEASED_INSTANCE_ID             -
-        // - GROUP_MAX_SIZE_REACHED             - Fatal
-        //              RD_KAFKA_RESP_ERR__TRANSPORT       - Send full request
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__DESTROY:

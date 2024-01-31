@@ -2622,7 +2622,7 @@ rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg,
                     rkcg->rkcg_next_target_assignment = NULL;
             }
         } else if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT ||
-             rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                   rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
                 rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK;
                 if (rkcg->rkcg_target_assignment) {
                         rd_kafka_topic_partition_list_destroy(
@@ -2652,7 +2652,6 @@ rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg,
                                                 rkcg->rkcg_target_assignment);
         }
 
-
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
@@ -2669,7 +2668,6 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
         int i, j;
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
         rd_kafka_op_res_t assignment_handle_ret;
-        // TODO: Change name to new_assignments?
         rd_kafka_topic_partition_list_t *new_target_assignments;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
@@ -2812,11 +2810,10 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         if (are_assignments_present == 1) {
-                rd_kafka_topic_partition_list_t *assigned_topic_partitions = NULL;
+                rd_kafka_topic_partition_list_t *assigned_topic_partitions;
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
                     RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                     RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-                // TODO: Fix null case
                 assigned_topic_partitions = rd_kafka_buf_read_topic_partitions(
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
@@ -5657,12 +5654,6 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         case RD_KAFKA_CGRP_JOIN_STATE_INIT:
                 rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_REJOIN;
                 full_request = rd_true;
-                if(rkcg->rkcg_group_assignment && rkcg->rkcg_group_assignment->cnt > 0) {
-                        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_group_assignment);
-                        rkcg->rkcg_group_assignment = NULL;
-                }
-                if(!rkcg->rkcg_group_assignment)
-                        rkcg->rkcg_group_assignment = rd_kafka_topic_partition_list_new(0);
                 break;
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
                 if (rkcg->rkcg_consumer_flags &

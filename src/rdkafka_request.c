@@ -219,6 +219,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
         int32_t TopicArrayCnt;
         rd_kafka_topic_partition_list_t *parts = NULL;
 
+        // TODO: check topic array to be null case.
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
         parts = rd_kafka_topic_partition_list_new(

@@ -169,21 +169,34 @@ static void do_test_session_timeout(const char *use_commit_type) {
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.auto.commit",
                       !strcmp(commit_type, "auto") ? "true" : "false");
+        rd_kafka_mock_set_default_session_timeout(mcluster, 5000);
+        rd_kafka_mock_set_default_heartbeat_interval(mcluster, 1000);
 
         c = test_create_consumer(groupid, rebalance_cb, conf, NULL);
 
         test_consumer_subscribe(c, topic);
 
-        /* Let Heartbeats fail after a couple of successful ones */
-        rd_kafka_mock_push_request_errors(
-            mcluster, RD_KAFKAP_Heartbeat, 9, RD_KAFKA_RESP_ERR_NO_ERROR,
-            RD_KAFKA_RESP_ERR_NO_ERROR, RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
+        if (test_consumer_group_protocol_classic()) {
+                /* Let Heartbeats fail after a couple of successful ones */
+                rd_kafka_mock_push_request_errors(
+                    mcluster, RD_KAFKAP_Heartbeat, 9,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, RD_KAFKA_RESP_ERR_NO_ERROR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
+        } else {
+                /* Let Heartbeats fail after a couple of successful ones */
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 3,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, 0, RD_KAFKA_RESP_ERR_NO_ERROR,
+                    0, RD_KAFKA_RESP_ERR_NOT_COORDINATOR, 5500);
+        }
+
+
 
         expect_rebalance("initial assignment", c,
                          RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS, 5 + 2);
@@ -285,13 +298,20 @@ static void do_test_commit_on_lost(void) {
 
 int main_0106_cgrp_sess_timeout(int argc, char **argv) {
 
-        TEST_SKIP_MOCK_CLUSTER(0);
+        TEST_SKIP_MOCK_CLUSTER_NEW(0);
 
         do_test_session_timeout("sync");
         do_test_session_timeout("async");
         do_test_session_timeout("auto");
 
-        do_test_commit_on_lost();
+        if (test_consumer_group_protocol_classic()) {
+                /* With KIP-848 session timeout is remote only.
+                 * Partitions will stay assigned and fetchable
+                 * when there's no communication with the
+                 * coordinator, but the messages won't be
+                 * committed. */
+                do_test_commit_on_lost();
+        }
 
         return 0;
 }

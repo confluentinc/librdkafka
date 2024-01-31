@@ -2568,9 +2568,11 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         mtx_init(&mcluster->lock, mtx_plain);
 
         TAILQ_INIT(&mcluster->topics);
-        mcluster->defaults.partition_cnt      = 4;
-        mcluster->defaults.replication_factor = RD_MIN(3, broker_cnt);
-        mcluster->track_requests              = rd_false;
+        mcluster->defaults.partition_cnt         = 4;
+        mcluster->defaults.replication_factor    = RD_MIN(3, broker_cnt);
+        mcluster->defaults.session_timeout_ms    = 30000;
+        mcluster->defaults.heartbeat_interval_ms = 3000;
+        mcluster->track_requests                 = rd_false;
 
         TAILQ_INIT(&mcluster->cgrps_classic);
 
@@ -2872,7 +2874,7 @@ static int ut_cgrp_consumer_member_next_assignment0(
         mcluster = rd_kafka_mock_cluster_new(rk, 1);
         mcgrp    = rd_kafka_mock_cgrp_consumer_get(mcluster, &GroupId);
         member   = rd_kafka_mock_cgrp_consumer_member_add(
-            mcgrp, conn, &MemberId, &InstanceId, 30000, &SubscribedTopic, 1);
+            mcgrp, conn, &MemberId, &InstanceId, &SubscribedTopic, 1);
         mtopic = rd_kafka_mock_topic_new(mcluster, topic, partitions, 1);
 
         for (i = 0; i < fixtures_cnt; i++) {
@@ -2887,7 +2889,7 @@ static int ut_cgrp_consumer_member_next_assignment0(
                 if (fixtures[i].session_timed_out) {
                         rd_kafka_mock_cgrp_consumer_member_leave(mcgrp, member);
                         member = rd_kafka_mock_cgrp_consumer_member_add(
-                            mcgrp, conn, &MemberId, &InstanceId, 30000,
+                            mcgrp, conn, &MemberId, &InstanceId,
                             &SubscribedTopic, 1);
                 }
 
@@ -2895,7 +2897,7 @@ static int ut_cgrp_consumer_member_next_assignment0(
                         rd_kafka_mock_cgrps_connection_closed(mcluster, conn);
                         conn++;
                         member = rd_kafka_mock_cgrp_consumer_member_add(
-                            mcgrp, conn, &MemberId, &InstanceId, 30000,
+                            mcgrp, conn, &MemberId, &InstanceId,
                             &SubscribedTopic, 1);
                 }
 

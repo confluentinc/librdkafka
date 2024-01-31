@@ -128,6 +128,7 @@ typedef struct rd_kafka_mock_cgrp_consumer_s {
         int32_t group_epoch;                     /**< Group epoch */
         int session_timeout_ms;                  /**< Session timeout */
         rd_kafka_timer_t session_tmr;            /**< Session timeout timer */
+        int heartbeat_interval_ms;               /**< Heartbeat interval */
         TAILQ_HEAD(, rd_kafka_mock_cgrp_consumer_member_s)
         members;                     /**< Group members */
         int member_cnt;              /**< Number of group members */
@@ -436,8 +437,10 @@ struct rd_kafka_mock_cluster_s {
                                        *   here for convenient access. */
 
         struct {
-                int partition_cnt;      /**< Auto topic create part cnt */
-                int replication_factor; /**< Auto topic create repl factor */
+                int partition_cnt;         /**< Auto topic create part cnt */
+                int replication_factor;    /**< Auto topic create repl factor */
+                int session_timeout_ms;    /**< Session timeout */
+                int heartbeat_interval_ms; /**< Heartbeat interval */
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */
@@ -643,7 +646,6 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                                        struct rd_kafka_mock_connection_s *conn,
                                        const rd_kafkap_str_t *MemberId,
                                        const rd_kafkap_str_t *InstanceId,
-                                       int session_timeout_ms,
                                        rd_kafkap_str_t *SubscribedTopicNames,
                                        int32_t SubscribedTopicNamesCnt);
 

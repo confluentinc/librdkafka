@@ -2306,21 +2306,26 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 rd_assert(mcgrp);
 
                 member = rd_kafka_mock_cgrp_consumer_member_add(
-                    mcgrp, mconn, &MemberId, &InstanceId,
-                    /* TODO: use consumer group configuration */
-                    30000, SubscribedTopicNames, SubscribedTopicNamesCnt);
-                rd_assert(member);
+                    mcgrp, mconn, &MemberId, &InstanceId, SubscribedTopicNames,
+                    SubscribedTopicNamesCnt);
 
-                if (MemberEpoch >= 0) {
-                        next_assignment =
-                            rd_kafka_mock_cgrp_consumer_member_next_assignment(
-                                member, current_assignment, &MemberEpoch);
-                        if (MemberEpoch < 0) {
-                                err = RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH;
+                if (member) {
+                        if (MemberEpoch >= 0) {
+                                next_assignment =
+                                    rd_kafka_mock_cgrp_consumer_member_next_assignment(
+                                        member, current_assignment,
+                                        &MemberEpoch);
+                                if (MemberEpoch < 0) {
+                                        err =
+                                            RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH;
+                                }
+                        } else {
+                                rd_kafka_mock_cgrp_consumer_member_leave(
+                                    mcgrp, member);
+                                member = NULL;
                         }
                 } else {
-                        rd_kafka_mock_cgrp_consumer_member_leave(mcgrp, member);
-                        member = NULL;
+                        err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
                 }
                 mtx_unlock(&mcluster->lock);
         } else {
@@ -2367,8 +2372,11 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_write_i32(resp, MemberEpoch);
 
         /* Response: HeartbeatIntervalMs */
-        rd_kafka_buf_write_i32(
-            resp, 3000); /* TODO: use consumer group configuration */
+        if (mcgrp) {
+                rd_kafka_buf_write_i32(resp, mcgrp->heartbeat_interval_ms);
+        } else {
+                rd_kafka_buf_write_i32(resp, 0);
+        }
 
         if (next_assignment) {
                 /* Response: Assignment */

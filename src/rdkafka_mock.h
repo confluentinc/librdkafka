@@ -467,6 +467,32 @@ void rd_kafka_mock_cgrp_consumer_target_assignment(
     const char *group_id,
     rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment);
 
+/**
+ * @brief Set default session timeout
+ *        for the cluster \p mcluster to \p session_timeout_ms.
+ *
+ * @remark used in KIP-848 consumer group protocol.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param session_timeout_ms Session timeout in milliseconds.
+ */
+void rd_kafka_mock_set_default_session_timeout(
+    rd_kafka_mock_cluster_t *mcluster,
+    int session_timeout_ms);
+
+/**
+ * @brief Set default heartbeat interval
+ *        for the cluster \p mcluster to \p heartbeat_interval_ms.
+ *
+ * @remark used in KIP-848 consumer group protocol.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param heartbeat_interval_ms Heartbeat interval in milliseconds.
+ */
+void rd_kafka_mock_set_default_heartbeat_interval(
+    rd_kafka_mock_cluster_t *mcluster,
+    int heartbeat_interval_ms);
+
 
 /**@}*/
 

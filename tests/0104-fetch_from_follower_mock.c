@@ -577,6 +577,7 @@ static void do_test_seek_to_offset_with_previous_epoch(void) {
          * from offset 'msgcnt'. */
         rd_kafka_topic_partition_set_leader_epoch(rktpar, 0);
         rd_kafka_seek_partitions(c, rktpars, -1);
+        rd_kafka_topic_partition_list_destroy(rktpars);
 
         test_consumer_poll("third", c, 0, 0, msgcnt, msgcnt, NULL);
 
@@ -591,7 +592,7 @@ static void do_test_seek_to_offset_with_previous_epoch(void) {
 
 int main_0104_fetch_from_follower_mock(int argc, char **argv) {
 
-        TEST_SKIP_MOCK_CLUSTER(0);
+        TEST_SKIP_MOCK_CLUSTER_NEW(0);
 
         test_timeout_set(50);
 

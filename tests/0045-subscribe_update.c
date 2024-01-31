@@ -706,6 +706,8 @@ int main_0045_subscribe_update_topic_remove(int argc, char **argv) {
 
 
 int main_0045_subscribe_update_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         do_test_regex_many_mock("range", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_true);

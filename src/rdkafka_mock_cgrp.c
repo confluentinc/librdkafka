@@ -1291,7 +1291,6 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                                        struct rd_kafka_mock_connection_s *conn,
                                        const rd_kafkap_str_t *MemberId,
                                        const rd_kafkap_str_t *InstanceId,
-                                       int session_timeout_ms,
                                        rd_kafkap_str_t *SubscribedTopicNames,
                                        int32_t SubscribedTopicNamesCnt) {
         rd_kafka_mock_cgrp_consumer_member_t *member = NULL;
@@ -1300,7 +1299,9 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
         /* Find member */
         member = rd_kafka_mock_cgrp_consumer_member_find(mcgrp, MemberId);
         if (!member) {
-                rd_assert(SubscribedTopicNamesCnt > 0);
+                if (SubscribedTopicNamesCnt < 1)
+                        return NULL;
+
                 /* Not found, add member */
                 member = rd_calloc(1, sizeof(*member));
 
@@ -1325,7 +1326,9 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
             rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                 member, SubscribedTopicNames, SubscribedTopicNamesCnt);
 
-        mcgrp->session_timeout_ms = session_timeout_ms;
+        mcgrp->session_timeout_ms = mcgrp->cluster->defaults.session_timeout_ms;
+        mcgrp->heartbeat_interval_ms =
+            mcgrp->cluster->defaults.heartbeat_interval_ms;
 
         member->conn = conn;
 
@@ -1514,6 +1517,22 @@ void rd_kafka_mock_cgrp_consumer_target_assignment(
 
 destroy:
         rd_kafkap_str_destroy(group_id_str);
+        mtx_unlock(&mcluster->lock);
+}
+
+void rd_kafka_mock_set_default_session_timeout(
+    rd_kafka_mock_cluster_t *mcluster,
+    int session_timeout_ms) {
+        mtx_lock(&mcluster->lock);
+        mcluster->defaults.session_timeout_ms = session_timeout_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
+void rd_kafka_mock_set_default_heartbeat_interval(
+    rd_kafka_mock_cluster_t *mcluster,
+    int heartbeat_interval_ms) {
+        mtx_lock(&mcluster->lock);
+        mcluster->defaults.heartbeat_interval_ms = heartbeat_interval_ms;
         mtx_unlock(&mcluster->lock);
 }
 

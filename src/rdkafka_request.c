@@ -224,8 +224,6 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
         parts = rd_kafka_topic_partition_list_new(
             RD_MAX(TopicArrayCnt * 4, (int)estimated_part_cnt));
 
-        printf("Topic Array Count -> %d\n", TopicArrayCnt);
-
         while (TopicArrayCnt-- > 0) {
                 rd_kafkap_str_t kTopic;
                 int32_t PartArrayCnt;
@@ -2308,7 +2306,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
 
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
-//                rd_kafka_buf_write_tags(rkbuf);
         }
 
         rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
@@ -2323,7 +2320,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                     rd_false, current_assignments_fields);
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
-//                rd_kafka_buf_write_tags(rkbuf);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

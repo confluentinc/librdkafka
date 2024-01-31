@@ -2811,7 +2811,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;
         }
 
-        printf("Are Assignments Present - %d\n", are_assignments_present);
         if (are_assignments_present == 1) {
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions = NULL;
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
@@ -2936,13 +2935,11 @@ err:
                                  : "none",
                              rd_kafka_err2str(err));
                 /* Remain in joined state and keep querying for coordinator */
-                printf("Setting Full request flag due to Transport Error\n");
                 actions = RD_KAFKA_ERR_ACTION_REFRESH;
                 rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
                 break;
 
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
-                printf("Got Unknown Member Id Error\n");
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_REJOIN;
                 rkcg->rkcg_member_epoch = 0;
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true /*lost*/,
@@ -2951,7 +2948,6 @@ err:
                 return;
 
         case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
-                printf("Got Fenced Member Epoch Error\n");
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_REJOIN;
                 rkcg->rkcg_member_epoch = 0;
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true, rd_true, "member fenced - rejoining");
@@ -2994,7 +2990,6 @@ err:
                     rd_true,       /*initiating*/
                     "Fatal error in ConsumerGroupHeartbeat API response");
         }
-        printf("\n");
 
 }
 
@@ -4624,7 +4619,6 @@ static void rd_kafka_cgrp_revoke_all_rejoin_maybe(rd_kafka_cgrp_t *rkcg,
                         : "",
                     rkcg->rkcg_rebalance_rejoin ? ", rejoin on rebalance" : "",
                     reason);
-                printf("Rebalancing...\n");
                 return;
         }
 
@@ -5659,8 +5653,6 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         if (unlikely(rd_kafka_fatal_error_code(rkcg->rkcg_rk)))
                 return;
 
-//        printf("Consumer Group Running\n");
-
         switch (rkcg->rkcg_join_state) {
         case RD_KAFKA_CGRP_JOIN_STATE_INIT:
                 rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_REJOIN;
@@ -5691,13 +5683,9 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_REJOIN) &&
             rd_interval(&rkcg->rkcg_heartbeat_intvl,
                         rkcg->rkcg_heartbeat_intvl_ms * 1000, now) > 0) {
-//                printf("consumer_serve: At start full_request -> %d\n", full_request);
-                setbuf(stdout, 0);
-                printf("Sending Heartbeat in state: %s\n", rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
                 rd_kafka_cgrp_consumer_group_heartbeat(rkcg, full_request,
                                                        send_ack);
                 rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
-//                printf("consumer_serve: At end full_request -> %d\n", rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST);
         }
 }
 

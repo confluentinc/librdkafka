@@ -260,6 +260,7 @@ static void do_test(rd_bool_t with_queue) {
         /* Let remaining consumers run for a while to take over the now
          * lost partitions. */
 
+        /* Callback count can vary in KIP-848 */
         if (test_consumer_group_protocol_classic() &&
             assign_cnt != _CONS_CNT - 1)
                 TEST_FAIL("assign_cnt %d, should be %d\n", assign_cnt,

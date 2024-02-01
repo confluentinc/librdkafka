@@ -189,7 +189,8 @@ static void do_test_session_timeout(const char *use_commit_type) {
                     RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
                     RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
         } else {
-                /* Let Heartbeats fail after a couple of successful ones */
+                /* Let ConsumerGroupHeartbeat fail after couple of successful
+                 * ones and 5.5s. */
                 rd_kafka_mock_broker_push_request_error_rtts(
                     mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 3,
                     RD_KAFKA_RESP_ERR_NO_ERROR, 0, RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -298,18 +299,20 @@ static void do_test_commit_on_lost(void) {
 
 int main_0106_cgrp_sess_timeout(int argc, char **argv) {
 
-        TEST_SKIP_MOCK_CLUSTER_NEW(0);
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_session_timeout("sync");
         do_test_session_timeout("async");
         do_test_session_timeout("auto");
 
+        /* With KIP-848 session timeout is remote only.
+         * Partitions will stay assigned and fetchable
+         * when there's no communication with the
+         * coordinator, but the messages won't be
+         * committed.
+         * TODO: see if session timeout can be received by
+         * the broker and be enforced locally too. */
         if (test_consumer_group_protocol_classic()) {
-                /* With KIP-848 session timeout is remote only.
-                 * Partitions will stay assigned and fetchable
-                 * when there's no communication with the
-                 * coordinator, but the messages won't be
-                 * committed. */
                 do_test_commit_on_lost();
         }
 

@@ -50,7 +50,7 @@ void test_query_watermark_offsets_timeout(void) {
         const char *bootstraps;
         const int timeout_ms = 1000;
 
-        TEST_SKIP_MOCK_CLUSTER_NEW();
+        TEST_SKIP_MOCK_CLUSTER();
 
         SUB_TEST_QUICK();
 
@@ -94,7 +94,7 @@ void test_query_watermark_offsets_leader_change(void) {
         const char *bootstraps;
         const int timeout_ms = 1000;
 
-        TEST_SKIP_MOCK_CLUSTER_NEW();
+        TEST_SKIP_MOCK_CLUSTER();
 
         SUB_TEST_QUICK();
 

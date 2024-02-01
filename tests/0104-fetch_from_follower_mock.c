@@ -592,7 +592,7 @@ static void do_test_seek_to_offset_with_previous_epoch(void) {
 
 int main_0104_fetch_from_follower_mock(int argc, char **argv) {
 
-        TEST_SKIP_MOCK_CLUSTER_NEW(0);
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         test_timeout_set(50);
 

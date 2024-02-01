@@ -240,26 +240,11 @@ static RD_INLINE RD_UNUSED void rtrim(char *str) {
                 TEST_UNLOCK();                                                 \
         } while (0)
 
-#define TEST_SKIP_MOCK_CLUSTER_NEW(RET)                                        \
-        if (test_needs_auth()) {                                               \
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");         \
-                return RET;                                                    \
-        }
-
 #define TEST_SKIP_MOCK_CLUSTER(RET)                                            \
         if (test_needs_auth()) {                                               \
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");         \
                 return RET;                                                    \
-        }                                                                      \
-        if (test_consumer_group_protocol() &&                                  \
-            strcmp(test_consumer_group_protocol(), "classic")) {               \
-                TEST_SKIP(                                                     \
-                    "Mock cluster cannot be used "                             \
-                    "with group.protocol=%s\n",                                \
-                    test_consumer_group_protocol());                           \
-                return RET;                                                    \
         }
-
 
 void test_conf_init(rd_kafka_conf_t **conf,
                     rd_kafka_topic_conf_t **topic_conf,

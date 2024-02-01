@@ -46,7 +46,7 @@ int main_0009_mock_cluster(int argc, char **argv) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *parts;
 
-        TEST_SKIP_MOCK_CLUSTER_NEW(0);
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
 

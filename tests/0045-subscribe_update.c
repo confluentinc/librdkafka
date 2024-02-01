@@ -708,9 +708,12 @@ int main_0045_subscribe_update_topic_remove(int argc, char **argv) {
 int main_0045_subscribe_update_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
-        do_test_regex_many_mock("range", rd_false);
-        do_test_regex_many_mock("cooperative-sticky", rd_false);
-        do_test_regex_many_mock("cooperative-sticky", rd_true);
+        /* TODO: check again when regexes will be supported by KIP-848 */
+        if (test_consumer_group_protocol_classic()) {
+                do_test_regex_many_mock("range", rd_false);
+                do_test_regex_many_mock("cooperative-sticky", rd_false);
+                do_test_regex_many_mock("cooperative-sticky", rd_true);
+        }
 
         return 0;
 }
@@ -722,27 +725,34 @@ int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
 
-        for (use_replica_rack = 0; use_replica_rack < 2; use_replica_rack++) {
-                for (use_client_rack = 0; use_client_rack < 2;
-                     use_client_rack++) {
-                        do_test_replica_rack_change_mock(
-                            "range", rd_true /* use_regex */, use_client_rack,
-                            use_replica_rack);
-                        do_test_replica_rack_change_mock(
-                            "range", rd_true /* use_regex */, use_client_rack,
-                            use_replica_rack);
-                        do_test_replica_rack_change_mock(
-                            "cooperative-sticky", rd_true /* use_regex */,
-                            use_client_rack, use_replica_rack);
-                        do_test_replica_rack_change_mock(
-                            "cooperative-sticky", rd_true /* use_regex */,
-                            use_client_rack, use_replica_rack);
+        /* KIP 848 Mock broker assignor isn't rack-aware. */
+        if (test_consumer_group_protocol_classic()) {
+                for (use_replica_rack = 0; use_replica_rack < 2;
+                     use_replica_rack++) {
+                        for (use_client_rack = 0; use_client_rack < 2;
+                             use_client_rack++) {
+                                do_test_replica_rack_change_mock(
+                                    "range", rd_true /* use_regex */,
+                                    use_client_rack, use_replica_rack);
+                                do_test_replica_rack_change_mock(
+                                    "range", rd_true /* use_regex */,
+                                    use_client_rack, use_replica_rack);
+                                do_test_replica_rack_change_mock(
+                                    "cooperative-sticky",
+                                    rd_true /* use_regex */, use_client_rack,
+                                    use_replica_rack);
+                                do_test_replica_rack_change_mock(
+                                    "cooperative-sticky",
+                                    rd_true /* use_regex */, use_client_rack,
+                                    use_replica_rack);
+                        }
                 }
+                /* Do not test with range assignor (yet) since it does not do
+                 * rack aware assignment properly with the NULL rack, even for
+                 * the Java client. */
+                do_test_replica_rack_change_leader_no_rack_mock(
+                    "cooperative-sticky");
         }
-
-        /* Do not test with range assignor (yet) since it does not do rack aware
-         * assignment properly with the NULL rack, even for the Java client. */
-        do_test_replica_rack_change_leader_no_rack_mock("cooperative-sticky");
 
         return 0;
 }

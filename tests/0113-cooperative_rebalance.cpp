@@ -930,6 +930,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
     /* Failure case: test will time out. */
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic() &&
           !(rebalance_cb1.assign_call_cnt == expected_cb1_assign_call_cnt &&
             rebalance_cb2.assign_call_cnt == expected_cb2_assign_call_cnt))
@@ -956,6 +957,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
    * triggered.
    */
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     /* The rebalance cb is always called on assign, even if empty. */
     if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
@@ -1029,6 +1031,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   c1->close();
   c2->close();
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     /* Closing the consumer should trigger rebalance_cb (revoke): */
     if (rebalance_cb1.revoke_call_cnt != 2)
@@ -1473,6 +1476,7 @@ static void h_delete_topic() {
     c->assignment(partitions);
 
     if (partitions.size() == 2 && !deleted) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic() &&
           rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected 1 assign call, saw "
@@ -1537,6 +1541,7 @@ static void i_delete_topic_2() {
     Test::poll_once(c, 500);
 
     if (Test::assignment_partition_count(c, NULL) == 1 && !deleted) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic() &&
           rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected one assign call, saw "
@@ -1644,6 +1649,7 @@ static void k_add_partition() {
     Test::poll_once(c, 500);
 
     if (Test::assignment_partition_count(c, NULL) == 1 && !subscribed) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic()) {
         if (rebalance_cb.assign_call_cnt != 1)
           Test::Fail(tostr() << "Expected 1 assign call, saw "
@@ -1657,6 +1663,7 @@ static void k_add_partition() {
     }
 
     if (Test::assignment_partition_count(c, NULL) == 2 && subscribed) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic()) {
         if (rebalance_cb.assign_call_cnt != 2)
           Test::Fail(tostr() << "Expected 2 assign calls, saw "
@@ -1673,6 +1680,7 @@ static void k_add_partition() {
   c->close();
   delete c;
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     if (rebalance_cb.assign_call_cnt != 2)
       Test::Fail(tostr() << "Expected 2 assign calls, saw "
@@ -1730,6 +1738,7 @@ static void l_unsubscribe() {
 
     if (Test::assignment_partition_count(c1, NULL) == 2 &&
         Test::assignment_partition_count(c2, NULL) == 2) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic()) {
         if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
           Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be "
@@ -1748,6 +1757,7 @@ static void l_unsubscribe() {
 
     if (unsubscribed && Test::assignment_partition_count(c1, NULL) == 0 &&
         Test::assignment_partition_count(c2, NULL) == 4) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic()) {
         if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
           /* is now unsubscribed, so rebalance_cb will no longer be called. */
@@ -1779,6 +1789,7 @@ static void l_unsubscribe() {
   Test::Say("Closing consumer 2\n");
   c2->close();
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     /* there should be no assign rebalance_cb calls on close */
     if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
@@ -1899,6 +1910,7 @@ static void n_wildcard() {
   Test::poll_once(c1, 500);
   Test::poll_once(c2, 500);
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     if (rebalance_cb1.assign_call_cnt != 0)
       Test::Fail(
@@ -1974,6 +1986,7 @@ static void n_wildcard() {
 
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic()) {
         /* accumulated in lost case as well */
         TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 1,
@@ -2011,6 +2024,7 @@ static void n_wildcard() {
   last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
   c1->close();
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     /* There should be no assign rebalance_cb calls on close */
     TEST_ASSERT(rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt,
@@ -2027,6 +2041,7 @@ static void n_wildcard() {
   last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
   c2->close();
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     /* There should be no assign rebalance_cb calls on close */
     TEST_ASSERT(rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt,
@@ -2119,6 +2134,7 @@ static void o_java_interop() {
 
     if (Test::assignment_partition_count(c, NULL) == 4 && java_pid != 0 &&
         !changed_subscription) {
+      /* Callback count can vary in KIP-848 */
       if (test_consumer_group_protocol_classic() &&
           rebalance_cb.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expecting consumer's assign_call_cnt to be 2, "
@@ -2320,6 +2336,7 @@ static void t_max_poll_interval_exceeded(int variation) {
                        << expected_cb1_lost_call_cnt
                        << ", not: " << rebalance_cb1.lost_call_cnt);
 
+  /* Callback count can vary in KIP-848 */
   if (test_consumer_group_protocol_classic()) {
     if (rebalance_cb1.nonempty_assign_call_cnt != expected_cb1_assign_call_cnt)
       Test::Fail(tostr() << "Expected consumer 1 non-empty assign count to be "
@@ -3343,7 +3360,7 @@ static void x_incremental_rebalances(void) {
 
 /* Local tests not needing a cluster */
 int main_0113_cooperative_rebalance_local(int argc, char **argv) {
-  TEST_SKIP_MOCK_CLUSTER_NEW(0);
+  TEST_SKIP_MOCK_CLUSTER(0);
 
   a_assign_rapid();
   p_lost_partitions_heartbeat_illegal_generation_test();
@@ -3356,7 +3373,7 @@ int main_0113_cooperative_rebalance_local(int argc, char **argv) {
   if (test_consumer_group_protocol_classic()) {
     r_lost_partitions_commit_illegal_generation_test_local();
   } else if (0) {
-    /* TODO: enable this once new errors are handled in OffsetCommit. */
+    /* FIXME: enable this once new errors are handled in OffsetCommit. */
     t_consumer_group_consumer_retry_commit_on_fenced_member_epoch();
   }
   s_no_segfault_before_first_rebalance();
@@ -3389,8 +3406,9 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   k_add_partition();
   l_unsubscribe();
   m_unsubscribe_2();
+
+  /* TODO: check again when regexes will be supported by KIP-848 */
   if (test_consumer_group_protocol_classic()) {
-    /* FIXME: should work with next ConsumerGroupHeartbeat version */
     n_wildcard();
   }
   o_java_interop();
@@ -3400,9 +3418,9 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
     t_max_poll_interval_exceeded(i);
   /* Run all 2*3 variations of the u_.. test */
   for (i = 0; i < 3; i++) {
+    /* TODO: broker doesn't ack some revocations while
+     * epoch has changed. Check again later. */
     if (test_consumer_group_protocol_classic()) {
-      /* FIXME: check this test, it should fail because of the callback number
-       */
       u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
       u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
     }

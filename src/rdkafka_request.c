@@ -334,7 +334,8 @@ err_parse:
  *
  * @returns the number of partitions written to buffer.
  *
- * @remark The \p parts list MUST be sorted.
+ * @remark The \p parts list MUST be sorted by name if use_topic_id is false or
+ * by id.
  */
 int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
@@ -348,8 +349,8 @@ int rd_kafka_buf_write_topic_partitions(
         size_t of_PartArrayCnt = 0;
         int TopicArrayCnt = 0, PartArrayCnt = 0;
         int i;
-        const char *prev_topic = NULL;
-        int cnt                = 0;
+        const rd_kafka_topic_partition_t *prev_topic = NULL;
+        int cnt                                      = 0;
 
         rd_assert(!only_invalid_offsets ||
                   (only_invalid_offsets != skip_invalid_offsets));
@@ -359,6 +360,7 @@ int rd_kafka_buf_write_topic_partitions(
 
         for (i = 0; i < parts->cnt; i++) {
                 const rd_kafka_topic_partition_t *rktpar = &parts->elems[i];
+                rd_bool_t different_topics;
                 int fi;
 
                 if (rktpar->offset < 0) {
@@ -367,7 +369,19 @@ int rd_kafka_buf_write_topic_partitions(
                 } else if (only_invalid_offsets)
                         continue;
 
-                if (!prev_topic || strcmp(rktpar->topic, prev_topic)) {
+                if (use_topic_id) {
+                        different_topics =
+                            !prev_topic ||
+                            rd_kafka_Uuid_cmp(
+                                rd_kafka_topic_partition_get_topic_id(rktpar),
+                                rd_kafka_topic_partition_get_topic_id(
+                                    prev_topic));
+                } else {
+                        different_topics =
+                            !prev_topic ||
+                            strcmp(rktpar->topic, prev_topic->topic);
+                }
+                if (different_topics) {
                         /* Finish previous topic, if any. */
                         if (of_PartArrayCnt > 0) {
                                 rd_kafka_buf_finalize_arraycnt(
@@ -389,7 +403,7 @@ int rd_kafka_buf_write_topic_partitions(
                         }
 
                         TopicArrayCnt++;
-                        prev_topic = rktpar->topic;
+                        prev_topic = rktpar;
                         /* New topic so reset partition count */
                         PartArrayCnt = 0;
 
@@ -1037,8 +1051,8 @@ void rd_kafka_OffsetForLeaderEpochRequest(
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
             rkbuf, parts, rd_false /*include invalid offsets*/,
-            rd_false /*skip valid offsets */, rd_false /* use_topic name */,
-            rd_true, fields);
+            rd_false /*skip valid offsets */, rd_false /*don't use topic id*/,
+            rd_true /*use topic name*/, fields);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1422,7 +1436,8 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                 PartCnt = rd_kafka_buf_write_topic_partitions(
                     rkbuf, parts, rd_false /*include invalid offsets*/,
                     rd_false /*skip valid offsets */,
-                    use_topic_id /* use_topic id */, rd_true, fields);
+                    use_topic_id /* use_topic id */, rd_true /*use topic name*/,
+                    fields);
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, PartCnt);
         }
@@ -1868,7 +1883,8 @@ rd_kafka_OffsetDeleteRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_topic_partitions(
             rkbuf, grpoffsets->partitions,
             rd_false /*dont skip invalid offsets*/, rd_false /*any offset*/,
-            rd_false /* use_topic name */, rd_true, fields);
+            rd_false /*don't use topic id*/, rd_true /*use topic name*/,
+            fields);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1898,7 +1914,8 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
         rd_kafka_buf_write_topic_partitions(
             rkbuf, rkgm->rkgm_assignment,
             rd_false /*don't skip invalid offsets*/, rd_false /* any offset */,
-            rd_false /* use_topic name */, rd_true, fields);
+            rd_false /*don't use topic id*/, rd_true /*use topic name*/,
+            fields);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */
@@ -2320,8 +2337,9 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                         RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                         RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                 rd_kafka_buf_write_topic_partitions(
-                    rkbuf, current_assignments, rd_false, rd_false, rd_true,
-                    rd_false, current_assignments_fields);
+                    rkbuf, current_assignments, rd_false, rd_false,
+                    rd_true /*use topic id*/, rd_false /*don't use topic name*/,
+                    current_assignments_fields);
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
         }
@@ -4625,8 +4643,8 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
             rkbuf, partitions, rd_false /*don't skip invalid offsets*/,
-            rd_false /*any offset*/, rd_false /* use_topic name */, rd_true,
-            fields);
+            rd_false /*any offset*/, rd_false /*don't use topic id*/,
+            rd_true /*use topic name*/, fields);
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

@@ -504,7 +504,8 @@ void do_test_subscription_id_change(void) {
         producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
         test_poll_timeout(producer, push_interval * 1.2);
 
-        rd_kafka_mock_telemetry_set_push_error_code(mcluster, RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID);
+        rd_kafka_mock_telemetry_set_push_error_code(
+            mcluster, RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID);
 
         test_poll_timeout(producer, push_interval * 2.5);
 

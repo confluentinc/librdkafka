@@ -453,8 +453,8 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_telemetry_set_push_error_code(rd_kafka_mock_cluster_t *mcluster,
                                             rd_kafka_resp_err_t error_code);
 
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_telemetry_unset_push_error_code(rd_kafka_mock_cluster_t *mcluster);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_mock_telemetry_unset_push_error_code(
+    rd_kafka_mock_cluster_t *mcluster);
 
 
 

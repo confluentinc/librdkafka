@@ -180,10 +180,10 @@ typedef enum {
                                                      AlterUserScramCredentials
                                                      u.admin_request >*/
         RD_KAFKA_OP_LISTOFFSETS, /**< Admin: ListOffsets u.admin_request >*/
-        RD_KAFKA_OP_SET_TELEMETRY_BROKER,         /**< Set preferred broker for
-                                                       telemetry. */
-        RD_KAFKA_OP_TERMINATE_TELEMETRY, /**< Start termination sequence for
-                                              telemetry. */
+        RD_KAFKA_OP_SET_TELEMETRY_BROKER, /**< Set preferred broker for
+                                               telemetry. */
+        RD_KAFKA_OP_TERMINATE_TELEMETRY,  /**< Start termination sequence for
+                                               telemetry. */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

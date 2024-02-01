@@ -2221,8 +2221,9 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         // ThrottleTime
         rd_kafka_buf_write_i32(resp, 0);
         // ErrorCode
-        rd_kafka_buf_write_i16(resp, mcluster->push_telemetry_error_code ? mcluster->push_telemetry_error_code
-                                                                         : RD_KAFKA_RESP_ERR_NO_ERROR);
+        rd_kafka_buf_write_i16(resp, mcluster->push_telemetry_error_code
+                                         ? mcluster->push_telemetry_error_code
+                                         : RD_KAFKA_RESP_ERR_NO_ERROR);
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 

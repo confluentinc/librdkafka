@@ -2203,8 +2203,8 @@ rd_kafka_mock_telemetry_set_push_error_code(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
-rd_kafka_resp_err_t
-rd_kafka_mock_telemetry_unset_push_error_code(rd_kafka_mock_cluster_t *mcluster) {
+rd_kafka_resp_err_t rd_kafka_mock_telemetry_unset_push_error_code(
+    rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
 
         rko->rko_u.mock.hi  = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -2213,7 +2213,6 @@ rd_kafka_mock_telemetry_unset_push_error_code(rd_kafka_mock_cluster_t *mcluster)
         return rd_kafka_op_err_destroy(
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
-
 
 
 

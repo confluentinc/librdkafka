@@ -220,8 +220,10 @@ static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                                  rd_kafka_resp_err_t err) {
         rd_ts_t next_scheduled;
-        double jitter_multiplier = rd_jitter(100 - RD_KAFKA_TELEMETRY_PUSH_JITTER,
-                                             100 + RD_KAFKA_TELEMETRY_PUSH_JITTER) / 100.0;
+        double jitter_multiplier =
+            rd_jitter(100 - RD_KAFKA_TELEMETRY_PUSH_JITTER,
+                      100 + RD_KAFKA_TELEMETRY_PUSH_JITTER) /
+            100.0;
         rd_kafka_broker_t *rkb;
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {

@@ -893,6 +893,7 @@ static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_current_assignment);
         RD_IF_FREE(rkcg->rkcg_target_assignment,
                    rd_kafka_topic_partition_list_destroy);
+        rkcg->rkcg_target_assignment = NULL;
         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
                    rd_kafka_topic_partition_list_destroy);
         rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);

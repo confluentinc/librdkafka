@@ -83,6 +83,7 @@ typedef enum {
 
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields);
 
@@ -91,6 +92,7 @@ int rd_kafka_buf_write_topic_partitions(
     const rd_kafka_topic_partition_list_t *parts,
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
+    rd_bool_t use_topic_id,
     const rd_kafka_topic_partition_field_t *fields);
 
 rd_kafka_resp_err_t

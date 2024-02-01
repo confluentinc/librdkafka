@@ -1133,9 +1133,26 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Group session keepalive heartbeat interval.", 1, 3600 * 1000, 3 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "group.protocol.type", _RK_C_KSTR,
      _RK(group_protocol_type),
-     "Group protocol type. NOTE: Currently, the only supported group "
+     "Group protocol type for the `generic` group protocol. NOTE: Currently, "
+     "the only supported group "
      "protocol type is `consumer`.",
      .sdef = "consumer"},
+    {_RK_GLOBAL | _RK_CGRP | _RK_HIGH | _RK_HIDDEN, "group.protocol", _RK_C_S2I,
+     _RK(group_protocol),
+     "Group protocol to use. Use `generic` for the original protocol and "
+     "`consumer` for the new "
+     "protocol introduced in KIP-848. Available protocols: generic or "
+     "consumer. Default is `generic`, "
+     "but will change to `consumer` in next releases.",
+     .vdef = RD_KAFKA_GROUP_PROTOCOL_GENERIC,
+     .s2i  = {{RD_KAFKA_GROUP_PROTOCOL_GENERIC, "generic"},
+             {RD_KAFKA_GROUP_PROTOCOL_CONSUMER, "consumer"}}},
+    {_RK_GLOBAL | _RK_CGRP | _RK_MED | _RK_HIDDEN, "group.remote.assignor",
+     _RK_C_STR, _RK(group_remote_assignor),
+     "Server side assignor to use. Keep it null to make server select a "
+     "suitable assignor for the group. "
+     "Available assignors: uniform or range. Default is null",
+     .sdef = NULL},
     {_RK_GLOBAL | _RK_CGRP, "coordinator.query.interval.ms", _RK_C_INT,
      _RK(coord_query_intvl_ms),
      "How often to query for the current client group coordinator. "

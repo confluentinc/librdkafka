@@ -449,6 +449,14 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
                                           int64_t push_interval_ms);
 
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_set_push_error_code(rd_kafka_mock_cluster_t *mcluster,
+                                            rd_kafka_resp_err_t error_code);
+
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_unset_push_error_code(rd_kafka_mock_cluster_t *mcluster);
+
+
 
 /**
  * @name Represents a request to the mock cluster along with a timestamp.

@@ -402,6 +402,9 @@ struct rd_kafka_mock_cluster_s {
         /**< Telemetry push interval ms. Default is 5 min */
         int64_t telemetry_push_interval_ms;
 
+        rd_kafka_resp_err_t push_telemetry_error_code; /**< Error code to return on
+                                        *   telemetry push requests. */
+
         /**< Appends the requests received to mock cluster if set to true,
          *   defaulted to false for less memory usage. */
         rd_bool_t track_requests;
@@ -547,10 +550,6 @@ rd_kafka_mock_cgrp_get(rd_kafka_mock_cluster_t *mcluster,
                        const rd_kafkap_str_t *ProtocolType);
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);
-rd_kafka_mock_request_t *
-rd_kafka_mock_request_new(int32_t id, int16_t api_key, rd_ts_t timestamp);
-void rd_kafka_mock_request_free(void *mreq);
-
 /**
  *@}
  */

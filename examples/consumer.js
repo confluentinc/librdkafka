@@ -1,5 +1,4 @@
-const { Kafka, ErrorCodes } = require('../').KafkaJS
-
+const { Kafka, ErrorCodes } = require('confluent-kafka-javascript').KafkaJS;
 
 async function consumerStart() {
   let consumer;

@@ -1,5 +1,4 @@
-const { Kafka } = require('../').KafkaJS;
-//const { Kafka } = require('kafkajs')
+const { Kafka } = require('confluent-kafka-javascript').KafkaJS;
 
 async function eosStart() {
     const consumer = new Kafka().consumer({

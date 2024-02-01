@@ -586,7 +586,7 @@ describe('Consumer', () => {
             ]);
 
             expect(consumer.paused()).toEqual([]);
-        }, 10000);
+        });
 
         it('resumes fetching from earlier paused partitions', async () => {
             await consumer.connect();

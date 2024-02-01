@@ -4,13 +4,18 @@ const { Kafka } = require('../../lib').KafkaJS;
 
 // TODO: pick this up from a file
 const clusterInformation = {
-    brokers: process.env.KAFKA_HOST ? process.env.KAFKA_HOST.split(',') : ['localhost:9092'],
+    kafkaJS: {
+        brokers: process.env.KAFKA_HOST ? process.env.KAFKA_HOST.split(',') : ['localhost:9092'],
+    },
+    librdkafka: {
+        'bootstrap.servers': process.env.KAFKA_HOST ? process.env.KAFKA_HOST : 'localhost:9092',
+    },
 };
 
 const debug = process.env.TEST_DEBUG;
 
 function makeConfig(config) {
-    const kafkaJS =  Object.assign(config, clusterInformation);
+    const kafkaJS =  Object.assign(config, clusterInformation.kafkaJS);
     const common = {};
     if (debug) {
         common['debug'] = debug;
@@ -102,4 +107,5 @@ module.exports = {
     waitFor,
     sleep,
     generateMessages,
+    clusterInformation,
 }

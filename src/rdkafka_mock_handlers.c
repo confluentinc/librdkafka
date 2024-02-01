@@ -2188,7 +2188,7 @@ static void rd_kafka_mock_handle_ConsumerGroupHeartbeat_write_TopicPartitions(
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-        rd_kafka_topic_partition_list_sort_by_topic(rktparlist);
+        rd_kafka_topic_partition_list_sort_by_topic_id(rktparlist);
         rd_kafka_buf_write_topic_partitions(
             rkbuf, rktparlist, rd_false /*don't skip invalid offsets*/,
             rd_false /*any offset*/, rd_true /* use_topic id */,

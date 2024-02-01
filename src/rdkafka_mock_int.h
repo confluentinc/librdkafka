@@ -169,6 +169,7 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL
                                                   *   if there is no ongoing
                                                   *   request. */
+        rd_kafka_mock_cgrp_consumer_t *mcgrp;    /**< Consumer group */
 } rd_kafka_mock_cgrp_consumer_member_t;
 
 

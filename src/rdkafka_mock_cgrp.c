@@ -1077,6 +1077,58 @@ rd_kafka_mock_cgrp_consumer_member_assignment_filter(
 }
 
 /**
+ * Returns true iff \p new_assignment doesn't have any intersection with any
+ * other member current assignment.
+ */
+rd_bool_t rd_kafka_mock_cgrp_consumer_member_next_assignment_can_bump_epoch(
+    rd_kafka_mock_cgrp_consumer_member_t *member,
+    rd_kafka_topic_partition_list_t *new_assignment) {
+        rd_kafka_topic_partition_list_t *double_assignment,
+            *assigned_partitions = rd_kafka_topic_partition_list_new(0);
+        rd_kafka_mock_cgrp_consumer_member_t *other_member;
+        rd_kafka_mock_cgrp_consumer_t *mcgrp = member->mcgrp;
+        rd_bool_t ret;
+
+        TAILQ_FOREACH(other_member, &mcgrp->members, link) {
+                int other_current_assignment_cnt  = 0,
+                    other_returned_assignment_cnt = 0;
+                if (member == other_member)
+                        continue;
+                if (other_member->current_assignment)
+                        other_current_assignment_cnt =
+                            other_member->current_assignment->cnt;
+                if (other_member->returned_assignment)
+                        other_returned_assignment_cnt =
+                            other_member->returned_assignment->cnt;
+
+                if (other_current_assignment_cnt > 0 &&
+                    other_current_assignment_cnt >
+                        other_returned_assignment_cnt) {
+                        /* This is the case where we're revoking
+                         * some partitions.
+                         * returned_assignment < current_assignment. */
+                        rd_kafka_topic_partition_list_add_list(
+                            assigned_partitions,
+                            other_member->current_assignment);
+                } else if (other_returned_assignment_cnt > 0) {
+                        /* This is the case where we're assigning
+                         * some partitions.
+                         * returned_assignment >= current_assignment. */
+                        rd_kafka_topic_partition_list_add_list(
+                            assigned_partitions,
+                            other_member->returned_assignment);
+                }
+        }
+        double_assignment = rd_kafka_topic_partition_list_intersection_by_id(
+            new_assignment, assigned_partitions);
+        ret = double_assignment->cnt == 0;
+
+        rd_kafka_topic_partition_list_destroy(assigned_partitions);
+        rd_kafka_topic_partition_list_destroy(double_assignment);
+        return ret;
+}
+
+/**
  * @brief Calculates next assignment and member epoch for a \p member,
  *        given \p current_assignment.
  *
@@ -1096,7 +1148,6 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
     rd_kafka_mock_cgrp_consumer_member_t *member,
     rd_kafka_topic_partition_list_t *current_assignment,
     int *member_epoch) {
-        rd_kafka_topic_partition_t *rktpar;
         rd_kafka_topic_partition_list_t *returned_assignment = NULL;
 
         if (current_assignment) {
@@ -1121,35 +1172,36 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
                          * epoch
                          * immediately or do some revocations before that. */
 
-                        rd_kafka_topic_partition_list_t *intersection =
-                            rd_kafka_topic_partition_list_new(
-                                member->target_assignment->cnt);
-                        if (member->current_assignment) {
-                                RD_KAFKA_TPLIST_FOREACH(
-                                    rktpar, member->current_assignment) {
-                                        rd_kafka_Uuid_t topic_id =
-                                            rd_kafka_topic_partition_get_topic_id(
-                                                rktpar);
-                                        if (rd_kafka_topic_partition_list_find_by_id_idx(
-                                                member->target_assignment,
-                                                topic_id,
-                                                rktpar->partition) >= 0) {
-                                                rd_kafka_topic_partition_list_add_copy(
-                                                    intersection, rktpar);
-                                        }
-                                }
-                        }
+                        rd_kafka_topic_partition_list_t *intersection;
+
+                        if (member->current_assignment)
+                                intersection =
+                                    rd_kafka_topic_partition_list_intersection_by_id(
+                                        member->current_assignment,
+                                        member->target_assignment);
+                        else
+                                intersection =
+                                    rd_kafka_topic_partition_list_new(0);
 
                         if (!member->current_assignment ||
                             intersection->cnt ==
                                 member->current_assignment->cnt) {
-                                /* No partitions to remove, return target
-                                 * assignment and reconcile the epochs */
-                                member->current_member_epoch =
-                                    member->target_member_epoch;
                                 returned_assignment =
                                     rd_kafka_mock_cgrp_consumer_member_assignment_filter(
                                         member->target_assignment);
+
+                                if (!rd_kafka_mock_cgrp_consumer_member_next_assignment_can_bump_epoch(
+                                        member, returned_assignment)) {
+                                        rd_kafka_topic_partition_list_destroy(
+                                            returned_assignment);
+                                        returned_assignment = NULL;
+                                } else {
+                                        /* No partitions to remove, return
+                                         * target assignment and reconcile the
+                                         * epochs */
+                                        member->current_member_epoch =
+                                            member->target_member_epoch;
+                                }
                                 rd_kafka_topic_partition_list_destroy(
                                     intersection);
                         } else {
@@ -1303,7 +1355,8 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                         return NULL;
 
                 /* Not found, add member */
-                member = rd_calloc(1, sizeof(*member));
+                member        = rd_calloc(1, sizeof(*member));
+                member->mcgrp = mcgrp;
 
                 if (!RD_KAFKAP_STR_LEN(MemberId)) {
                         /* Generate a member id */

@@ -190,6 +190,12 @@ typedef struct rd_kafka_cgrp_s {
         int32_t rkcg_coord_id; /**< Current coordinator id,
                                 *   or -1 if not known. */
 
+        rd_kafka_group_protocol_t
+            rkcg_group_protocol; /**< Group protocol to use */
+
+        rd_kafkap_str_t *rkcg_group_remote_assignor; /**< Group remote
+                                                      *   assignor to use */
+
         rd_kafka_broker_t *rkcg_curr_coord; /**< Current coordinator
                                              *   broker handle, or NULL.
                                              *   rkcg_coord's nodename is
@@ -313,6 +319,7 @@ extern const char *rd_kafka_cgrp_join_state_names[];
 
 void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg);
 rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
+                                   rd_kafka_group_protocol_t group_protocol,
                                    const rd_kafkap_str_t *group_id,
                                    const rd_kafkap_str_t *client_id);
 void rd_kafka_cgrp_serve(rd_kafka_cgrp_t *rkcg);

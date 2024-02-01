@@ -700,6 +700,11 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE,
               "Broker: Request principal deserialization failed during "
               "forwarding"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID, "Broker: Unknown topic id"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
+              "Broker: The member epoch is fenced by the group coordinator"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
+              "Broker: The member epoch is stale"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -2436,8 +2441,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
                 if (RD_KAFKAP_STR_LEN(rk->rk_group_id) > 0) {
                         /* Create consumer group handle */
-                        rk->rk_cgrp = rd_kafka_cgrp_new(rk, rk->rk_group_id,
-                                                        rk->rk_client_id);
+                        rk->rk_cgrp = rd_kafka_cgrp_new(
+                            rk, rk->rk_conf.group_protocol, rk->rk_group_id,
+                            rk->rk_client_id);
                         rk->rk_consumer.q =
                             rd_kafka_q_keep(rk->rk_cgrp->rkcg_q);
                 } else {

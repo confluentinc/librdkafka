@@ -489,7 +489,7 @@ function mkl_dep_install_source {
     # Build and install
     mkl_dbg "Building $name from source in $sdir (func $func)"
 
-    $func $name "$ddir" >$ilog 2>&1
+    libdir="/usr/lib" $func $name "$ddir" >$ilog 2>&1
     retcode=$?
 
     mkl_popd # $sdir

@@ -237,6 +237,21 @@ unsigned int rd_map_str_hash(const void *key) {
 }
 
 
+/**
+ * @returns a djb2 hash of \p bytes.
+ *
+ * @param len \p bytes will be hashed up to \p len.
+ */
+unsigned int rd_bytes_hash(unsigned char *bytes, size_t len) {
+        unsigned int hash = 5381;
+        size_t i;
+
+        for (i = 0; i < len; i++)
+                hash = ((hash << 5) + hash) + bytes[i];
+
+        return hash;
+}
+
 
 /**
  * @name Unit tests

@@ -249,6 +249,10 @@ int rd_map_str_cmp(const void *a, const void *b);
  */
 unsigned int rd_map_str_hash(const void *a);
 
+/**
+ * @brief Bytes hash function (djb2).
+ */
+unsigned int rd_bytes_hash(unsigned char *bytes, size_t len);
 
 
 /**

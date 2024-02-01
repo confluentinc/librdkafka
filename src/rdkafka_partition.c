@@ -3088,6 +3088,12 @@ int rd_kafka_topic_partition_by_id_cmp(const void *_a, const void *_b) {
                 return RD_CMP(a->partition, b->partition);
 }
 
+static int rd_kafka_topic_partition_by_id_cmp_opaque(const void *_a,
+                                                     const void *_b,
+                                                     void *opaque) {
+        return rd_kafka_topic_partition_by_id_cmp(_a, _b);
+}
+
 /** @brief Compare only the topic */
 int rd_kafka_topic_partition_cmp_topic(const void *_a, const void *_b) {
         const rd_kafka_topic_partition_t *a = _a;
@@ -3101,11 +3107,19 @@ static int rd_kafka_topic_partition_cmp_opaque(const void *_a,
         return rd_kafka_topic_partition_cmp(_a, _b);
 }
 
-/** @returns a hash of the topic and partition */
+/** @returns a hash of the topic name and partition */
 unsigned int rd_kafka_topic_partition_hash(const void *_a) {
         const rd_kafka_topic_partition_t *a = _a;
         int r                               = 31 * 17 + a->partition;
         return 31 * r + rd_string_hash(a->topic, -1);
+}
+
+/** @returns a hash of the topic id and partition */
+unsigned int rd_kafka_topic_partition_hash_by_id(const void *_a) {
+        const rd_kafka_topic_partition_t *a = _a;
+        const rd_kafka_Uuid_t uuid = rd_kafka_topic_partition_get_topic_id(a);
+        int r                      = 31 * 17 + a->partition;
+        return 31 * r + rd_kafka_Uuid_map_hash(&uuid);
 }
 
 
@@ -3314,6 +3328,12 @@ void rd_kafka_topic_partition_list_sort_by_topic(
     rd_kafka_topic_partition_list_t *rktparlist) {
         rd_kafka_topic_partition_list_sort(
             rktparlist, rd_kafka_topic_partition_cmp_opaque, NULL);
+}
+
+void rd_kafka_topic_partition_list_sort_by_topic_id(
+    rd_kafka_topic_partition_list_t *rktparlist) {
+        rd_kafka_topic_partition_list_sort(
+            rktparlist, rd_kafka_topic_partition_by_id_cmp_opaque, NULL);
 }
 
 rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset(
@@ -4491,4 +4511,150 @@ const char *rd_kafka_fetch_pos2str(const rd_kafka_fetch_pos_t fetchpos) {
             rd_kafka_offset2str(fetchpos.offset), fetchpos.leader_epoch);
 
         return ret[idx];
+}
+
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    void *) map_toppar_void_t;
+
+/**
+ * @brief Calculates \p a ∩ \p b.
+ *        Ordered following \p a order. Elements are copied from \p a.
+ */
+static rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_intersection0(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b,
+    int(cmp)(const void *_a, const void *_b),
+    unsigned int(hash)(const void *_a)) {
+        rd_kafka_topic_partition_t *rktpar;
+        rd_kafka_topic_partition_list_t *ret =
+            rd_kafka_topic_partition_list_new(a->cnt);
+        map_toppar_void_t b_map =
+            RD_MAP_INITIALIZER(b->cnt, cmp, hash, NULL, NULL);
+        RD_KAFKA_TPLIST_FOREACH(rktpar, b) {
+                RD_MAP_SET(&b_map, rktpar, rktpar);
+        }
+        RD_KAFKA_TPLIST_FOREACH(rktpar, a) {
+                if ((RD_MAP_GET(&b_map, rktpar) != NULL) == 1) {
+                        rd_kafka_topic_partition_list_add_copy(ret, rktpar);
+                }
+        }
+        RD_MAP_DESTROY(&b_map);
+        return ret;
+}
+
+/**
+ * @brief Calculates \p a - \p b
+ *        Ordered following \p a order. Elements are copied from \p a.
+ */
+static rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_difference0(rd_kafka_topic_partition_list_t *a,
+                                          rd_kafka_topic_partition_list_t *b,
+                                          int(cmp)(const void *_a,
+                                                   const void *_b),
+                                          unsigned int(hash)(const void *_a)) {
+        rd_kafka_topic_partition_t *rktpar;
+        rd_kafka_topic_partition_list_t *ret =
+            rd_kafka_topic_partition_list_new(a->cnt);
+        map_toppar_void_t b_map =
+            RD_MAP_INITIALIZER(b->cnt, cmp, hash, NULL, NULL);
+        RD_KAFKA_TPLIST_FOREACH(rktpar, b) {
+                RD_MAP_SET(&b_map, rktpar, rktpar);
+        }
+        RD_KAFKA_TPLIST_FOREACH(rktpar, a) {
+                if ((RD_MAP_GET(&b_map, rktpar) != NULL) == 0) {
+                        rd_kafka_topic_partition_list_add_copy(ret, rktpar);
+                }
+        }
+        RD_MAP_DESTROY(&b_map);
+        return ret;
+}
+
+/**
+ * @brief Calculates \p a ∩ \p b.
+ *        Ordered following \p a order. Elements are copied from \p a.
+ */
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_intersection(rd_kafka_topic_partition_list_t *a,
+                                           rd_kafka_topic_partition_list_t *b) {
+        return rd_kafka_topic_partition_list_intersection0(
+            a, b, rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash);
+}
+
+/**
+ * @brief Calculates \p a - \p b.
+ *        Ordered following \p a order. Elements are copied from \p a.
+ */
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_difference(rd_kafka_topic_partition_list_t *a,
+                                         rd_kafka_topic_partition_list_t *b) {
+        return rd_kafka_topic_partition_list_difference0(
+            a, b, rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash);
+}
+
+/**
+ * @brief Calculates \p a ∪ \p b.
+ *        Ordered following \p a order for elements in \p a
+ *        and \p b order for elements only in \p b.
+ *        Elements are copied the same way.
+ */
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_union(rd_kafka_topic_partition_list_t *a,
+                                    rd_kafka_topic_partition_list_t *b) {
+        rd_kafka_topic_partition_list_t *ret =
+            rd_kafka_topic_partition_list_copy(a);
+        rd_kafka_topic_partition_list_grow(ret, b->cnt);
+        rd_kafka_topic_partition_list_t *b_minus_a =
+            rd_kafka_topic_partition_list_difference0(
+                b, a, rd_kafka_topic_partition_cmp,
+                rd_kafka_topic_partition_hash);
+        rd_kafka_topic_partition_list_add_list(ret, b_minus_a);
+        rd_kafka_topic_partition_list_destroy(b_minus_a);
+        return ret;
+}
+
+/**
+ * @brief Calculates \p a ∩ \p b using topic id.
+ *        Ordered following \p a order. Elements are copied from \p a.
+ */
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_intersection_by_id(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b) {
+        return rd_kafka_topic_partition_list_intersection0(
+            a, b, rd_kafka_topic_partition_by_id_cmp,
+            rd_kafka_topic_partition_hash_by_id);
+}
+
+/**
+ * @brief Calculates \p a - \p b using topic id.
+ *        Ordered following \p a order. Elements are copied from \p a.
+ */
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_difference_by_id(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b) {
+        return rd_kafka_topic_partition_list_difference0(
+            a, b, rd_kafka_topic_partition_by_id_cmp,
+            rd_kafka_topic_partition_hash_by_id);
+}
+
+/**
+ * @brief Calculates \p a ∪ \p b using topic id.
+ *        Ordered following \p a order for elements in \p a
+ *        and \p b order for elements only in \p b.
+ *        Elements are copied the same way.
+ */
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_union_by_id(rd_kafka_topic_partition_list_t *a,
+                                          rd_kafka_topic_partition_list_t *b) {
+        rd_kafka_topic_partition_list_t *ret =
+            rd_kafka_topic_partition_list_copy(a);
+        rd_kafka_topic_partition_list_grow(ret, b->cnt);
+        rd_kafka_topic_partition_list_t *b_minus_a =
+            rd_kafka_topic_partition_list_difference0(
+                b, a, rd_kafka_topic_partition_by_id_cmp,
+                rd_kafka_topic_partition_hash_by_id);
+        rd_kafka_topic_partition_list_add_list(ret, b_minus_a);
+        rd_kafka_topic_partition_list_destroy(b_minus_a);
+        return ret;
 }

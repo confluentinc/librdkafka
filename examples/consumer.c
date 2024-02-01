@@ -169,6 +169,13 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        if (rd_kafka_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky", errstr,
+                                      sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                        fprintf(stderr, "%s\n", errstr);
+                        rd_kafka_conf_destroy(conf);
+                        return 1;
+        }
+
         /* Set the consumer group id.
          * All consumers sharing the same group id will join the same
          * group, and the subscribed topic' partitions will be assigned
@@ -210,15 +217,15 @@ int main(int argc, char **argv) {
         }
 
         /* Callback called on partition assignment changes */
-//        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
+        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
 
-        //        if (rd_kafka_conf_set(conf, "debug", "all", errstr,
-        //                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-        //                fprintf(stderr, "%s\n", errstr);
-        //                rd_kafka_conf_destroy(conf);
-        //                return 1;
-        //        }
+                if (rd_kafka_conf_set(conf, "max.poll.interval.ms", "90000", errstr,
+                                      sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                        fprintf(stderr, "%s\n", errstr);
+                        rd_kafka_conf_destroy(conf);
+                        return 1;
+                }
 
         /* If there is no previously committed offset for a partition
          * the auto.offset.reset strategy will be used to decide where

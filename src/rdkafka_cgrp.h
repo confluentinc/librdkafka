@@ -127,7 +127,6 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_q_t *rkcg_wait_coord_q; /* Ops awaiting coord */
         int rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE 0x1 /* Terminate cgrp (async) */
-#define RD_KAFKA_CGRP_F_WAIT_REJOIN 0x2 /* Member is fenced */
 #define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE                                 \
         0x8 /* Send LeaveGroup when                                            \
              * unassign is done */
@@ -286,6 +285,9 @@ typedef struct rd_kafka_cgrp_s {
                                                       */
 #define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8 /* TODO: write */
 #define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x20 /* Member is fenced, need to rejoin */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x40 /* Member is fenced, rejoining */
+
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */

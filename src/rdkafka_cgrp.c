@@ -2945,17 +2945,12 @@ err:
                 break;
 
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
-                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_REJOIN;
-                rkcg->rkcg_member_epoch = 0;
-                rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true /*lost*/,
-                                                      rd_true /*initiating*/,
-                                                      "resetting member-id");
-                return;
-
         case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
-                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_REJOIN;
-                rkcg->rkcg_member_epoch = 0;
-                rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true, rd_true, "member fenced - rejoining");
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
+                             "Heartbeat failed due to: %s: "
+                             "will rejoining the group",
+                             rd_kafka_err2str(err));
+                rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
                 return;
 
         case RD_KAFKA_RESP_ERR_INVALID_REQUEST:
@@ -5658,9 +5653,18 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         if (unlikely(rd_kafka_fatal_error_code(rkcg->rkcg_rk)))
                 return;
 
+        if (unlikely(rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN)) {
+                if (RD_KAFKA_CGRP_REBALANCING(rkcg))
+                        return;
+                rkcg->rkcg_member_epoch = 0;
+                rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
+                rkcg->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE;
+                rd_kafka_cgrp_revoke_all_rejoin(rkcg, rd_true, rd_true, "member fenced - rejoining");
+        }
+
         switch (rkcg->rkcg_join_state) {
         case RD_KAFKA_CGRP_JOIN_STATE_INIT:
-                rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_REJOIN;
+                rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE;
                 full_request = rd_true;
                 break;
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
@@ -5679,7 +5683,7 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         }
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
-            !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_REJOIN) &&
+            !(rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE) &&
             rd_interval(&rkcg->rkcg_heartbeat_intvl,
                         rkcg->rkcg_heartbeat_intvl_ms * 1000, now) > 0) {
                 rd_kafka_cgrp_consumer_group_heartbeat(rkcg, full_request,

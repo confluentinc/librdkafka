@@ -3,6 +3,7 @@ jest.setTimeout(30000);
 const { Kafka, ErrorCodes } = require('../../../lib').KafkaJS;
 const { secureRandom,
     createTopic,
+    waitFor,
     waitForMessages,
     waitForConsumerToJoinGroup,
     createProducer,
@@ -13,7 +14,6 @@ describe('Consumer', () => {
 
     beforeEach(async () => {
         groupId = `consumer-group-id-${secureRandom()}`;
-
         consumer = createConsumer({
             groupId,
             maxWaitTimeInMs: 1,
@@ -52,7 +52,7 @@ describe('Consumer', () => {
             });
 
             consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
-            await waitForConsumerToJoinGroup(consumer);
+            await waitFor(() => consumer.assignment().length > 0, () => null);
 
             await producer.connect();
             await producer.sendBatch({

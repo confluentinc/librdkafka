@@ -14,9 +14,8 @@ const clusterInformation = {
 
 const debug = process.env.TEST_DEBUG;
 
-function makeConfig(config) {
+function makeConfig(config, common) {
     const kafkaJS =  Object.assign(config, clusterInformation.kafkaJS);
-    const common = {};
     if (debug) {
         common['debug'] = debug;
     }
@@ -24,18 +23,18 @@ function makeConfig(config) {
     return Object.assign(common, { kafkaJS });
 }
 
-function createConsumer(config) {
-    const kafka = new Kafka(makeConfig(config));
+function createConsumer(config, common = {}) {
+    const kafka = new Kafka(makeConfig(config, common));
     return kafka.consumer();
 }
 
-function createProducer(config) {
-    const kafka = new Kafka(makeConfig(config));
+function createProducer(config, common = {}) {
+    const kafka = new Kafka(makeConfig(config, common));
     return kafka.producer();
 }
 
-function createAdmin(config) {
-    const kafka = new Kafka(makeConfig(config));
+function createAdmin(config, common = {}) {
+    const kafka = new Kafka(makeConfig(config, common));
     return kafka.admin();
 }
 

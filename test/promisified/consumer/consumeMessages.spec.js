@@ -13,9 +13,9 @@ const {
     waitForConsumerToJoinGroup,
     sleep,
     generateMessages,
-} = require('../testhelpers')
+} = require('../testhelpers');
 
-describe('Consumer', () => {
+describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
     let topicName, groupId, producer, consumer;
 
     beforeEach(async () => {
@@ -30,6 +30,7 @@ describe('Consumer', () => {
             groupId,
             maxWaitTimeInMs: 100,
             fromBeginning: true,
+            autoCommit: isAutoCommit,
         });
     });
 
@@ -307,6 +308,7 @@ describe('Consumer', () => {
                 minBytes: 1024,
                 maxWaitTimeInMs: 500,
                 fromBeginning: true,
+                autoCommit: isAutoCommit,
             })
 
             const messages = Array(10)
@@ -492,6 +494,7 @@ describe('Consumer', () => {
                 groupId,
                 maxWaitTimeInMs: 100,
                 fromBeginning: true,
+                autoCommit: isAutoCommit
             });
 
             await consumer.connect();
@@ -528,7 +531,8 @@ describe('Consumer', () => {
             consumer = createConsumer({
                 groupId,
                 maxWaitTimeInMs: 100,
-                fromBeginning: true
+                fromBeginning: true,
+                autoCommit: isAutoCommit,
             });
 
             await consumer.connect();
@@ -585,6 +589,7 @@ describe('Consumer', () => {
                 groupId,
                 maxWaitTimeInMs: 100,
                 fromBeginning: true,
+                autoCommit: isAutoCommit,
             });
 
             await consumer.connect();
@@ -642,6 +647,7 @@ describe('Consumer', () => {
                     maxWaitTimeInMs: 100,
                     readUncommitted: true,
                     fromBeginning: true,
+                    autoCommit: isAutoCommit,
                 })
 
                 await consumer.connect();
@@ -678,6 +684,9 @@ describe('Consumer', () => {
         it(
             'respects offsets sent by a committed transaction ("consume-transform-produce" flow)',
             async () => {
+                if (isAutoCommit) { /* only autoCommit: false makes sense for this test. */
+                    return;
+                }
                 // Seed the topic with some messages. We don't need a tx producer for this.
                 await producer.connect();
                 const partition = 0;
@@ -785,6 +794,10 @@ describe('Consumer', () => {
         it(
             'does not respect offsets sent by an aborted transaction ("consume-transform-produce" flow)',
             async () => {
+                if (isAutoCommit) { /* only autoCommit: false makes sense for this test. */
+                    return;
+                }
+
                 // Seed the topic with some messages. We don't need a tx producer for this.
                 await producer.connect();
 

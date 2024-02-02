@@ -1,5 +1,6 @@
 jest.setTimeout(30000)
 
+const { is } = require('bluebird');
 const {
     secureRandom,
     createTopic,
@@ -10,7 +11,7 @@ const {
     sleep,
 } = require('../testhelpers');
 
-describe('Consumer message cache', () => {
+describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
     let topicName, groupId, producer, consumer;
 
     beforeEach(async () => {
@@ -21,10 +22,12 @@ describe('Consumer message cache', () => {
 
         producer = createProducer({});
 
+        const common = {};
         consumer = createConsumer({
             groupId,
             maxWaitTimeInMs: 100,
             fromBeginning: true,
+            autoCommit: isAutoCommit,
         });
     });
 
@@ -127,6 +130,7 @@ describe('Consumer message cache', () => {
             groupId,
             maxWaitTimeInMs: 100,
             fromBeginning: true,
+            autoCommit: isAutoCommit,
         });
 
         await consumer.connect();
@@ -142,6 +146,10 @@ describe('Consumer message cache', () => {
             eachMessage: async event => {
                 messagesConsumed.push(event);
                 messagesConsumedConsumer1.push(event);
+                if (!isAutoCommit)
+                    await consumer.commitOffsets([
+                        { topic: event.topic, partition: event.partition, offset: Number(event.message.offset) + 1 },
+                    ]);
 
                 /* Until the second consumer joins, consume messages slowly so as to not consume them all
                  * before the rebalance triggers. */
@@ -204,6 +212,7 @@ describe('Consumer message cache', () => {
             rebalanceTimeout: 10000,
             sessionTimeout: 10000,
             clientId: "impatientConsumer",
+            autoCommit: isAutoCommit,
         });
 
         await producer.connect();
@@ -219,6 +228,11 @@ describe('Consumer message cache', () => {
             eachMessage: async event => {
                 messagesConsumed.push(event);
                 impatientConsumerMessages.push(event);
+                if (!isAutoCommit)
+                    await impatientConsumer.commitOffsets([
+                        { topic: event.topic, partition: event.partition, offset: Number(event.message.offset) + 1 },
+                    ]);
+
                 /* When the second consumer is joining, deliberately slow down message consumption.
                  * We should still have a rebalance very soon, since we must expire the cache and
                  * trigger a rebalance before max.poll.interval.ms.
@@ -268,5 +282,5 @@ describe('Consumer message cache', () => {
         expect(impatientConsumerMessages.length).toBeGreaterThan(0);
 
         await impatientConsumer.disconnect();
-    });
+    }, 60000);
 });

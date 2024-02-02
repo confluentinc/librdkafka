@@ -134,7 +134,7 @@ struct rd_kafka_topic_s {
 
         rwlock_t rkt_lock;
         rd_kafkap_str_t *rkt_topic;
-        rd_kafka_Uuid_t rkt_id;
+        rd_kafka_Uuid_t rkt_topic_id;
         rd_kafka_toppar_t *rkt_ua; /**< Unassigned partition (-1) */
         rd_kafka_toppar_t **rkt_p; /**< Partition array */
         int32_t rkt_partition_cnt;
@@ -241,22 +241,10 @@ rd_kafka_topic_t *rd_kafka_topic_find0_fl(const char *func,
         rd_kafka_topic_find_fl(__FUNCTION__, __LINE__, rk, topic, do_lock)
 #define rd_kafka_topic_find0(rk, topic)                                        \
         rd_kafka_topic_find0_fl(__FUNCTION__, __LINE__, rk, topic)
-/**
- * Same semantics as ..find() but takes a Uuid instead.
- */
-rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk, rd_kafka_Uuid_t topic_id){
-        rd_kafka_topic_t *rkt;
 
-        rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-                if (!rd_kafka_Uuid_cmp(rkt->rkt_id, topic_id)){
-                        rd_kafka_topic_keep(rkt);
-                        break;
-                }
-        }
-        rd_kafka_rdunlock(rk);
-        return rkt;
-}
+rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk,
+                                                  rd_kafka_Uuid_t topic_id);
+
 int rd_kafka_topic_cmp_rkt(const void *_a, const void *_b);
 
 void rd_kafka_topic_partitions_remove(rd_kafka_topic_t *rkt);

@@ -231,7 +231,7 @@ Steps to update:
 
 ## Releasing
 
-1. Increment the `version` in `package.json` and change README.md to point to the new version.
+1. Increment the `version` in `package.json`. Change the version in `client.js` and `README.md`.
 
 1. Run `npm install` to update the `package-lock.json` file.
 

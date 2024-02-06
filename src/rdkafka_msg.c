@@ -504,6 +504,13 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
 
                 rd_kafka_msg_destroy(rk, rkm);
 
+                // The rd_kafka_msg_destroy already called delete on the hdrs pointer within rkm->rkm_headers
+                // so prevent it from deleting it again in err which would produce a double free and crash if the memory is already being used again.
+                if (hdrs == rkm->rkm_headers)
+                {
+                    hdrs = NULL;
+                }
+
                 error = rd_kafka_error_new(err, "Failed to enqueue message: %s",
                                            rd_kafka_err2str(err));
                 goto err;

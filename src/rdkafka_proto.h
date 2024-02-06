@@ -156,21 +156,22 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
                 "DescribeUserScramCredentialsRequest",
             [RD_KAFKAP_AlterUserScramCredentials] =
                 "AlterUserScramCredentialsRequest",
-            [RD_KAFKAP_Vote]                 = "VoteRequest",
-            [RD_KAFKAP_BeginQuorumEpoch]     = "BeginQuorumEpochRequest",
-            [RD_KAFKAP_EndQuorumEpoch]       = "EndQuorumEpochRequest",
-            [RD_KAFKAP_DescribeQuorum]       = "DescribeQuorumRequest",
-            [RD_KAFKAP_AlterIsr]             = "AlterIsrRequest",
-            [RD_KAFKAP_UpdateFeatures]       = "UpdateFeaturesRequest",
-            [RD_KAFKAP_Envelope]             = "EnvelopeRequest",
-            [RD_KAFKAP_FetchSnapshot]        = "FetchSnapshot",
-            [RD_KAFKAP_DescribeCluster]      = "DescribeCluster",
-            [RD_KAFKAP_DescribeProducers]    = "DescribeProducers",
-            [RD_KAFKAP_BrokerHeartbeat]      = "BrokerHeartbeat",
-            [RD_KAFKAP_UnregisterBroker]     = "UnregisterBroker",
-            [RD_KAFKAP_DescribeTransactions] = "DescribeTransactions",
-            [RD_KAFKAP_ListTransactions]     = "ListTransactions",
-            [RD_KAFKAP_AllocateProducerIds]  = "AllocateProducerIds",
+            [RD_KAFKAP_Vote]                   = "VoteRequest",
+            [RD_KAFKAP_BeginQuorumEpoch]       = "BeginQuorumEpochRequest",
+            [RD_KAFKAP_EndQuorumEpoch]         = "EndQuorumEpochRequest",
+            [RD_KAFKAP_DescribeQuorum]         = "DescribeQuorumRequest",
+            [RD_KAFKAP_AlterIsr]               = "AlterIsrRequest",
+            [RD_KAFKAP_UpdateFeatures]         = "UpdateFeaturesRequest",
+            [RD_KAFKAP_Envelope]               = "EnvelopeRequest",
+            [RD_KAFKAP_FetchSnapshot]          = "FetchSnapshot",
+            [RD_KAFKAP_DescribeCluster]        = "DescribeCluster",
+            [RD_KAFKAP_DescribeProducers]      = "DescribeProducers",
+            [RD_KAFKAP_BrokerHeartbeat]        = "BrokerHeartbeat",
+            [RD_KAFKAP_UnregisterBroker]       = "UnregisterBroker",
+            [RD_KAFKAP_DescribeTransactions]   = "DescribeTransactions",
+            [RD_KAFKAP_ListTransactions]       = "ListTransactions",
+            [RD_KAFKAP_AllocateProducerIds]    = "AllocateProducerIds",
+            [RD_KAFKAP_ConsumerGroupHeartbeat] = "ConsumerGroupHeartbeat",
         };
         static RD_TLS char ret[64];
 
@@ -593,7 +594,6 @@ typedef struct rd_kafka_Uuid_s {
                 0, 1, ""                                                       \
         }
 
-
 /**
  * Initialize given UUID to zero UUID.
  *
@@ -609,9 +609,8 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
                (a.least_significant_bits - b.least_significant_bits);
 }
 
-rd_kafka_Uuid_t rd_kafka_Uuid_random();
-
-const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
+#define RD_KAFKA_UUID_IS_ZERO(uuid)                                            \
+        (!rd_kafka_Uuid_cmp(uuid, RD_KAFKA_UUID_ZERO))
 
 /**
  * @brief UUID copier for rd_list_copy()

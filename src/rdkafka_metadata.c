@@ -637,10 +637,9 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_read_uuid(rkbuf, &mdi->topics[i].topic_id);
                 }
 
-                if (ApiVersion >= 1) {
-                        int8_t is_internal;
-                        rd_kafka_buf_read_i8(rkbuf, &is_internal);
-                }
+                if (ApiVersion >= 1)
+                        rd_kafka_buf_read_bool(rkbuf,
+                                               &mdi->topics[i].is_internal);
 
                 /* PartitionMetadata */
                 rd_kafka_buf_read_arraycnt(rkbuf, &md->topics[i].partition_cnt,

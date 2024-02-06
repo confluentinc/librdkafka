@@ -111,6 +111,12 @@ int main_0029_assign_offset(int argc, char **argv) {
         test_timing_t t_simple, t_hl;
         test_msgver_t mv;
 
+        if (!test_consumer_group_protocol_generic()) {
+                /* FIXME: this should be fixed when upgrading from generic to
+                 * new consumer group will be possible. See KAFKA-15989 */
+                return 0;
+        }
+
         test_conf_init(NULL, NULL, 20 + (test_session_timeout_ms * 3 / 1000));
 
         /* Produce X messages to Y partitions so we get a

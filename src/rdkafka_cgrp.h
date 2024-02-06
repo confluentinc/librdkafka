@@ -164,6 +164,7 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_interval_t rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t rkcg_heartbeat_intvl;    /* Heartbeat intvl */
+        int rkcg_heartbeat_intvl_ms;           /* TODO: write */
         rd_interval_t rkcg_join_intvl;         /* JoinGroup interval */
         rd_interval_t rkcg_timeout_scan_intvl; /* Timeout scanner */
 
@@ -180,10 +181,8 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_list_t rkcg_toppars; /* Toppars subscribed to*/
 
-        int32_t rkcg_generation_id; /* Current generation id */
-
-        int32_t rkcg_member_epoch; /* KIP848TODO: Merge this and Generation Id
-                                      field */
+        int32_t rkcg_generation_id; /* Current generation id (classic)
+                                     * or member epoch (consumer). */
 
         rd_kafka_assignor_t *rkcg_assignor; /**< The current partition
                                              *   assignor. used by both
@@ -230,7 +229,6 @@ typedef struct rd_kafka_cgrp_s {
          *  completes. The waiting subscription is stored here.
          *  Mutually exclusive with rkcg_next_subscription. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
-        rd_kafkap_str_t *rkcg_next_subscription_regex;
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe
@@ -265,14 +263,25 @@ typedef struct rd_kafka_cgrp_s {
         /** The partitions to incrementally assign following a
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
-        // Added with KIP-848. Not being used right now.
-        rd_kafka_topic_partition_list_t *rkcg_current_target_assignment;
-        // Target assignment present in the CGHB protocol will be updated here
-        // only.
+
+        /* Current acked assignment, start with an empty list. */
+        rd_kafka_topic_partition_list_t *rkcg_current_assignment;
+
+        /* Assignment the is currently reconciling.
+         * Can be NULL in case there's no reconciliation ongoing. */
+        rd_kafka_topic_partition_list_t *rkcg_target_assignment;
+
+        /* Next assignment that will be reconciled once current
+         * reconciliation finishes. Can be NULL. */
         rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
 
-        rd_bool_t rkcg_assignment_inprogress;
-        rd_bool_t rkcg_revocation_inprogress;
+        int rkcg_consumer_flags;
+#define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION                      \
+        0x4                                          /* TODO: write            \
+                                                      */
+#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8 /* TODO: write */
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */
@@ -399,5 +408,7 @@ rd_kafka_rebalance_protocol2str(rd_kafka_rebalance_protocol_t protocol) {
                 return "NONE";
         }
 }
+
+void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg);
 
 #endif /* _RDKAFKA_CGRP_H_ */

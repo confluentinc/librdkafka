@@ -3939,7 +3939,7 @@ rd_kafka_DeleteRecordsResponse_parse(rd_kafka_op_t *rko_req,
             RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         offsets = rd_kafka_buf_read_topic_partitions(
-            reply, rd_false /* don't use topic_id */, rd_true, 0, fields);
+            reply, rd_false /*don't use topic_id*/, rd_true, 0, fields);
         if (!offsets)
                 rd_kafka_buf_parse_fail(reply,
                                         "Failed to parse topic partitions");
@@ -4926,7 +4926,7 @@ rd_kafka_OffsetDeleteResponse_parse(rd_kafka_op_t *rko_req,
             RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         partitions = rd_kafka_buf_read_topic_partitions(
-            reply, rd_false /* don't use topic_id */, rd_true, 16, fields);
+            reply, rd_false /*don't use topic_id*/, rd_true, 16, fields);
         if (!partitions) {
                 rd_snprintf(errstr, errstr_size,
                             "Failed to parse OffsetDeleteResponse partitions");
@@ -8114,7 +8114,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                     {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                                      RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                                 partitions = rd_kafka_buf_read_topic_partitions(
-                                    rkbuf, rd_false /* don't use topic_id */,
+                                    rkbuf, rd_false /*don't use topic_id*/,
                                     rd_true, 0, fields);
                                 rd_kafka_buf_destroy(rkbuf);
                                 if (!partitions)

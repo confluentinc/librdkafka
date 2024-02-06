@@ -530,10 +530,9 @@ int main_0143_exponential_backoff_mock(int argc, char **argv) {
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
         const char *bootstraps;
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL.\n");
-                return 0;
-        }
+
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_start_request_tracking(mcluster);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);

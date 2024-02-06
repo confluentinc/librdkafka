@@ -48,17 +48,18 @@
 int test_level = 2;
 int test_seed  = 0;
 
-char test_mode[64]                     = "bare";
-char test_scenario[64]                 = "default";
-static volatile sig_atomic_t test_exit = 0;
-static char test_topic_prefix[128]     = "rdkafkatest";
-static int test_topic_random           = 0;
-int tests_running_cnt                  = 0;
-int test_concurrent_max                = 5;
-int test_assert_on_fail                = 0;
-double test_timeout_multiplier         = 1.0;
-static char *test_sql_cmd              = NULL;
-int test_session_timeout_ms            = 6000;
+char test_mode[64]                                  = "bare";
+char test_scenario[64]                              = "default";
+static volatile sig_atomic_t test_exit              = 0;
+static char test_topic_prefix[128]                  = "rdkafkatest";
+static int test_topic_random                        = 0;
+int tests_running_cnt                               = 0;
+int test_concurrent_max                             = 5;
+int test_assert_on_fail                             = 0;
+double test_timeout_multiplier                      = 1.0;
+static char *test_sql_cmd                           = NULL;
+int test_session_timeout_ms                         = 6000;
+static const char *test_consumer_group_protocol_str = NULL;
 int test_broker_version;
 static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
@@ -767,6 +768,9 @@ static void test_init(void) {
                         exit(1);
                 }
         }
+        test_consumer_group_protocol_str =
+            test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
+
 
 #ifdef _WIN32
         test_init_win32();
@@ -2036,7 +2040,10 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
                         test_conf_set(conf, "client.id", test_curr->name);
         }
 
-
+        if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol_str);
+        }
 
         /* Creat kafka instance */
         rk = rd_kafka_new(mode, conf, errstr, sizeof(errstr));
@@ -7234,4 +7241,18 @@ void test_sub_skip(const char *fmt, ...) {
         TEST_SAYL(1, _C_YEL "[ %s: SKIP: %s ]\n", test_curr->subtest, buf);
 
         test_sub_reset();
+}
+
+const char *test_consumer_group_protocol() {
+        return test_consumer_group_protocol_str;
+}
+
+int test_consumer_group_protocol_generic() {
+        return !test_consumer_group_protocol_str ||
+               !strcmp(test_consumer_group_protocol_str, "generic");
+}
+
+int test_consumer_group_protocol_consumer() {
+        return test_consumer_group_protocol_str &&
+               !strcmp(test_consumer_group_protocol_str, "consumer");
 }

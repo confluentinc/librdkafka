@@ -459,6 +459,50 @@ int rd_kafka_buf_write_topic_partitions(
         return cnt;
 }
 
+/**
+ * TODO: write.
+ */
+int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_CurrentLeader_t *CurrentLeader) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderId);
+        rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderEpoch);
+        rd_kafka_buf_skip_tags(rkbuf);
+        return 1;
+err_parse:
+        return -1;
+}
+
+/**
+ * TODO: write.
+ */
+int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_NodeEndpoints_t *NodeEndpoints) {
+        const int log_decode_errors = LOG_ERR;
+        int32_t i;
+        rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
+                                   RD_KAFKAP_BROKERS_MAX);
+        RD_IF_FREE(NodeEndpoints->NodeEndpoints, rd_free);
+        NodeEndpoints->NodeEndpoints =
+            rd_calloc(NodeEndpoints->NodeEndpointCnt,
+                      sizeof(*NodeEndpoints->NodeEndpoints));
+
+        for (i = 0; i < NodeEndpoints->NodeEndpointCnt; i++) {
+                rd_kafka_buf_read_i32(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].NodeId);
+                rd_kafka_buf_read_str(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].Host);
+                rd_kafka_buf_read_i32(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].Port);
+                rd_kafka_buf_read_str(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].Rack);
+                rd_kafka_buf_skip_tags(rkbuf);
+        }
+        return 1;
+err_parse:
+        return -1;
+}
+
 
 /**
  * @brief Send FindCoordinatorRequest.

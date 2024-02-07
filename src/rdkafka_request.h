@@ -99,6 +99,13 @@ int rd_kafka_buf_write_topic_partitions(
     rd_bool_t use_topic_name,
     const rd_kafka_topic_partition_field_t *fields);
 
+int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_CurrentLeader_t *CurrentLeader);
+
+int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_NodeEndpoints_t *NodeEndpoints);
+
+
 rd_kafka_resp_err_t
 rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
                                 rd_kafka_coordtype_t coordtype,

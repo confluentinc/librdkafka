@@ -726,5 +726,31 @@ rd_kafka_pid_bump(const rd_kafka_pid_t old) {
 
 /**@}*/
 
+/**
+ * @name Current Leader and NodeEndpoints for KIP-951
+ *       response triggered metadata updates.
+ * @{
+ *
+ */
+
+typedef struct rd_kafkap_CurrentLeader_s {
+        int32_t LeaderId;
+        int32_t LeaderEpoch;
+} rd_kafkap_CurrentLeader_t;
+
+typedef struct rd_kafkap_NodeEndpoint_s {
+        int32_t NodeId;
+        rd_kafkap_str_t Host;
+        int32_t Port;
+        rd_kafkap_str_t Rack;
+} rd_kafkap_NodeEndpoint_t;
+
+typedef struct rd_kafkap_NodeEndpoints_s {
+        int32_t NodeEndpointCnt;
+        rd_kafkap_NodeEndpoint_t *NodeEndpoints;
+} rd_kafkap_NodeEndpoints_t;
+
+/**@}*/
+
 
 #endif /* _RDKAFKA_PROTO_H_ */

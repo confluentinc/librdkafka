@@ -1056,8 +1056,5 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);
 
-RD_EXPORT rd_kafka_Uuid_t *rd_kafka_Uuid_random();
-
-RD_EXPORT const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
 
 #endif /* _RDKAFKA_INT_H_ */

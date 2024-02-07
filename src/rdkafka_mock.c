@@ -616,15 +616,13 @@ rd_kafka_mock_topic_new(rd_kafka_mock_cluster_t *mcluster,
                         int partition_cnt,
                         int replication_factor) {
         rd_kafka_mock_topic_t *mtopic;
-        rd_kafka_Uuid_t *random_uuid = rd_kafka_Uuid_random();
         int i;
 
         mtopic = rd_calloc(1, sizeof(*mtopic));
         /* Assign random topic id */
-        mtopic->id      = *random_uuid;
+        mtopic->id      = rd_kafka_Uuid_random();
         mtopic->name    = rd_strdup(topic);
         mtopic->cluster = mcluster;
-        rd_kafka_Uuid_destroy(random_uuid);
 
         mtopic->partition_cnt = partition_cnt;
         mtopic->partitions =

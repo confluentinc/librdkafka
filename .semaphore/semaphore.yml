@@ -120,7 +120,7 @@ blocks:
             - sudo dpkg -i rapidjson-dev.deb
             - python3 -m pip install -U pip
             - python3 -m pip -V
-            - python3 -m pip install -r tests/requirements.txt
+            - (cd tests && python3 -m pip install -r requirements.txt)
             - ./configure --install-deps
             # split these up
             - ./packaging/tools/rdutcoverage.sh

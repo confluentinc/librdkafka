@@ -1317,7 +1317,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         // TODO: TopicId: Update Unknown Topic Id exception while rebasing from master.
         if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION /*invalid topic*/ ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
-            mdt->err == 100)
+            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID)
                 rd_kafka_topic_set_notexists(rkt, mdt->err);
         else if (mdt->partition_cnt > 0)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);

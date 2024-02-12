@@ -67,6 +67,18 @@ Connection::~Connection() {
   }
 }
 
+Baton Connection::rdkafkaErrorToBaton(RdKafka::Error* error) {
+  if ( NULL == error) {
+    return Baton(RdKafka::ERR_NO_ERROR);
+  }
+  else {
+    Baton result(error->code(), error->str(), error->is_fatal(),
+                 error->is_retriable(), error->txn_requires_abort());
+    delete error;
+    return result;
+  }
+}
+
 RdKafka::TopicPartition* Connection::GetPartition(std::string &topic) {
   return RdKafka::TopicPartition::create(topic, RdKafka::Topic::PARTITION_UA);
 }
@@ -215,6 +227,25 @@ Baton Connection::GetMetadata(
   }
 }
 
+Baton Connection::SetSaslCredentials(
+  std::string username, std::string password) {
+  RdKafka::Error *error;
+
+  if (IsConnected()) {
+    scoped_shared_read_lock lock(m_connection_lock);
+    if (IsConnected()) {
+      // Always send true - we
+      error = m_client->sasl_set_credentials(username, password);
+    } else {
+      return Baton(RdKafka::ERR__STATE);
+    }
+  } else {
+    return Baton(RdKafka::ERR__STATE);
+  }
+
+  return rdkafkaErrorToBaton(error);
+}
+
 void Connection::ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add) {
   if (string_key.compare("event_cb") == 0) {
     if (add) {
@@ -336,6 +367,39 @@ NAN_METHOD(Connection::NodeQueryWatermarkOffsets) {
 
   info.GetReturnValue().Set(Nan::Null());
 }
+
+NAN_METHOD(Connection::NodeSetSaslCredentials) {
+  if (!info[0]->IsString()) {
+    Nan::ThrowError("1st parameter must be a username string");
+    return;
+  }
+
+  if (!info[1]->IsString()) {
+    Nan::ThrowError("2nd parameter must be a password string");
+    return;
+  }
+
+  // Get string pointer for the username
+  Nan::Utf8String usernameUTF8(Nan::To<v8::String>(info[0]).ToLocalChecked());
+  // The first parameter is the username
+  std::string username(*usernameUTF8);
+
+  // Get string pointer for the password
+  Nan::Utf8String passwordUTF8(Nan::To<v8::String>(info[1]).ToLocalChecked());
+  // The first parameter is the password
+  std::string password(*passwordUTF8);
+
+  Connection* obj = ObjectWrap::Unwrap<Connection>(info.This());
+  Baton b = obj->SetSaslCredentials(username, password);
+
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    v8::Local<v8::Value> errorObject = b.ToObject();
+    return Nan::ThrowError(errorObject);
+  }
+
+  info.GetReturnValue().Set(Nan::Null());
+}
+
 
 // Node methods
 NAN_METHOD(Connection::NodeConfigureCallbacks) {

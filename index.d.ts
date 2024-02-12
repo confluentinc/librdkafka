@@ -198,6 +198,8 @@ export abstract class Client<Events extends string> extends EventEmitter {
     queryWatermarkOffsets(topic: string, partition: number, timeout: number, cb?: (err: LibrdKafkaError, offsets: WatermarkOffsets) => any): any;
     queryWatermarkOffsets(topic: string, partition: number, cb?: (err: LibrdKafkaError, offsets: WatermarkOffsets) => any): any;
 
+    setSaslCredentials(username: string, password: string): void;
+
     on<E extends Events>(event: E, listener: EventListener<E>): this;
     once<E extends Events>(event: E, listener: EventListener<E>): this;
 }

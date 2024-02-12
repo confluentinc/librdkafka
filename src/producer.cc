@@ -71,6 +71,7 @@ void Producer::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "getMetadata", NodeGetMetadata);
   Nan::SetPrototypeMethod(tpl, "queryWatermarkOffsets", NodeQueryWatermarkOffsets);  // NOLINT
   Nan::SetPrototypeMethod(tpl, "poll", NodePoll);
+  Nan::SetPrototypeMethod(tpl, "setSaslCredentials", NodeSetSaslCredentials);
 
   /*
    * @brief Methods exposed to do with message production
@@ -348,18 +349,6 @@ void Producer::ConfigureCallback(const std::string &string_key, const v8::Local<
     }
   } else {
     Connection::ConfigureCallback(string_key, cb, add);
-  }
-}
-
-Baton rdkafkaErrorToBaton(RdKafka::Error* error) {
-  if ( NULL == error) {
-    return Baton(RdKafka::ERR_NO_ERROR);
-  }
-  else {
-    Baton result(error->code(), error->str(), error->is_fatal(),
-                 error->is_retriable(), error->txn_requires_abort());
-    delete error;
-    return result;
   }
 }
 

@@ -1,9 +1,9 @@
-# librdkafka v2.3.1
+# librdkafka v2.4.0 (can change)
 
-librdkafka v2.3.1 is a feature release:
+librdkafka v2.4.0 is a feature release:
 
- * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
-   check the [release notes](https://www.openssl.org/news/cl30.txt).
+ * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records) Augment ProduceResponse error messaging for specific culprit records (#).
+
 
 
 # librdkafka v2.3.0

@@ -3079,16 +3079,6 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
 }
 
-
-
-/**
- * @struct Hold temporary result and return values from ProduceResponse
- */
-struct rd_kafka_Produce_result {
-        int64_t offset;    /**< Assigned offset of first message */
-        int64_t timestamp; /**< (Possibly assigned) offset of first message */
-};
-
 /**
  * @brief Parses a Produce reply.
  * @returns 0 on success or an error code on failure.
@@ -3099,7 +3089,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                               rd_kafka_toppar_t *rktp,
                               rd_kafka_buf_t *rkbuf,
                               rd_kafka_buf_t *request,
-                              struct rd_kafka_Produce_result *result) {
+                              rd_kafka_Produce_result_t *result) {
         int32_t TopicArrayCnt;
         int32_t PartitionArrayCnt;
         struct {
@@ -3110,7 +3100,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         const int log_decode_errors = LOG_ERR;
         int64_t log_start_offset    = -1;
 
-        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         if (TopicArrayCnt != 1)
                 goto err;
 
@@ -3118,8 +3108,13 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
          * request we assume that the reply only contains one topic+partition
          * and that it is the same that we requested.
          * If not the broker is buggy. */
-        rd_kafka_buf_skip_str(rkbuf);
-        rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
+        rd_kafkap_str_t topic_name;
+        if (request->rkbuf_reqhdr.ApiVersion >= 9)
+                rd_kafka_buf_read_str(rkbuf, &topic_name);
+        else
+                rd_kafka_buf_skip_str(rkbuf);
+        rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt,
+                                   RD_KAFKAP_PARTITIONS_MAX);
 
         if (PartitionArrayCnt != 1)
                 goto err;
@@ -3136,6 +3131,43 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
         if (request->rkbuf_reqhdr.ApiVersion >= 5)
                 rd_kafka_buf_read_i64(rkbuf, &log_start_offset);
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 8) {
+                int i;
+                int32_t RecordErrorsCnt;
+                rd_kafkap_str_t ErrorMessage;
+                rd_kafka_buf_read_arraycnt(rkbuf, &RecordErrorsCnt, -1);
+                if (RecordErrorsCnt) {
+                        result->record_errors = rd_calloc(
+                            RecordErrorsCnt, sizeof(*result->record_errors));
+                        result->record_errors_cnt = RecordErrorsCnt;
+                        for (i = 0; i < RecordErrorsCnt; i++) {
+                                int32_t BatchIndex;
+                                rd_kafkap_str_t BatchIndexErrorMessage;
+                                rd_kafka_buf_read_i32(rkbuf, &BatchIndex);
+                                rd_kafka_buf_read_str(rkbuf,
+                                                      &BatchIndexErrorMessage);
+                                result->record_errors[i].batch_index =
+                                    BatchIndex;
+                                if (!RD_KAFKAP_STR_IS_NULL(
+                                        &BatchIndexErrorMessage))
+                                        result->record_errors[i].errstr =
+                                            RD_KAFKAP_STR_DUP(
+                                                &BatchIndexErrorMessage);
+                                /* RecordError tags */
+                                rd_kafka_buf_skip_tags(rkbuf);
+                        }
+                }
+
+                rd_kafka_buf_read_str(rkbuf, &ErrorMessage);
+                if (!RD_KAFKAP_STR_IS_NULL(&ErrorMessage))
+                        result->errstr = RD_KAFKAP_STR_DUP(&ErrorMessage);
+        }
+
+        /* Partition tags */
+        rd_kafka_buf_skip_tags(rkbuf);
+        /* Topic tags */
+        rd_kafka_buf_skip_tags(rkbuf);
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1) {
                 int32_t Throttle_Time;
@@ -3964,6 +3996,48 @@ rd_kafka_handle_idempotent_Produce_success(rd_kafka_broker_t *rkb,
                     rk, RD_KAFKA_RESP_ERR__INCONSISTENT, "%s", fatal_err);
 }
 
+static void rd_kafka_msgbatch_handle_Produce_result_record_errors(
+    const rd_kafka_Produce_result_t *presult,
+    rd_kafka_msgbatch_t *batch) {
+        rd_kafka_msg_t *rkm = TAILQ_FIRST(&batch->msgq.rkmq_msgs);
+        if (presult->record_errors) {
+                int i = 0, j = 0;
+                while (rkm) {
+                        if (j < presult->record_errors_cnt &&
+                            presult->record_errors[j].batch_index == i) {
+                                rkm->rkm_u.producer.errstr =
+                                    presult->record_errors[j].errstr;
+                                /* If the batch contained only a single record
+                                 * error, then we can unambiguously use the
+                                 * error corresponding to the partition-level
+                                 * error code. */
+                                if (presult->record_errors_cnt > 1)
+                                        rkm->rkm_err =
+                                            RD_KAFKA_RESP_ERR_INVALID_RECORD;
+                                j++;
+                        } else {
+                                /* If the response contains record errors, then
+                                 * the records which failed validation will be
+                                 * present in the response. To avoid confusion
+                                 * for the remaining records, we return a
+                                 * generic error code. */
+                                rkm->rkm_u.producer.errstr =
+                                    "Failed to append record because it was "
+                                    "part of a batch "
+                                    "which had one more more invalid records";
+                                rkm->rkm_err =
+                                    RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD;
+                        }
+                        rkm = TAILQ_NEXT(rkm, rkm_link);
+                        i++;
+                }
+        } else if (presult->errstr) {
+                while (rkm) {
+                        rkm->rkm_u.producer.errstr = presult->errstr;
+                        rkm                        = TAILQ_NEXT(rkm, rkm_link);
+                }
+        }
+}
 
 /**
  * @brief Handle ProduceRequest result for a message batch.
@@ -3977,7 +4051,7 @@ static void rd_kafka_msgbatch_handle_Produce_result(
     rd_kafka_broker_t *rkb,
     rd_kafka_msgbatch_t *batch,
     rd_kafka_resp_err_t err,
-    const struct rd_kafka_Produce_result *presult,
+    const rd_kafka_Produce_result_t *presult,
     const rd_kafka_buf_t *request) {
 
         rd_kafka_t *rk               = rkb->rkb_rk;
@@ -4046,8 +4120,11 @@ static void rd_kafka_msgbatch_handle_Produce_result(
                                            presult->offset, presult->timestamp,
                                            status);
 
+                /* TODO: write */
+                rd_kafka_msgbatch_handle_Produce_result_record_errors(presult,
+                                                                      batch);
                 /* Enqueue messages for delivery report. */
-                rd_kafka_dr_msgq(rktp->rktp_rkt, &batch->msgq, err);
+                rd_kafka_dr_msgq0(rktp->rktp_rkt, &batch->msgq, err, presult);
         }
 
         if (rd_kafka_is_idempotent(rk) && last_inflight)
@@ -4075,10 +4152,10 @@ static void rd_kafka_handle_Produce(rd_kafka_t *rk,
                                     rd_kafka_buf_t *reply,
                                     rd_kafka_buf_t *request,
                                     void *opaque) {
-        rd_kafka_msgbatch_t *batch            = &request->rkbuf_batch;
-        rd_kafka_toppar_t *rktp               = batch->rktp;
-        struct rd_kafka_Produce_result result = {
-            .offset = RD_KAFKA_OFFSET_INVALID, .timestamp = -1};
+        rd_kafka_msgbatch_t *batch = &request->rkbuf_batch;
+        rd_kafka_toppar_t *rktp    = batch->rktp;
+        rd_kafka_Produce_result_t *result =
+            rd_kafka_Produce_result_new(RD_KAFKA_OFFSET_INVALID, -1);
 
         /* Unit test interface: inject errors */
         if (unlikely(rk->rk_conf.ut.handle_ProduceResponse != NULL)) {
@@ -4089,10 +4166,11 @@ static void rd_kafka_handle_Produce(rd_kafka_t *rk,
         /* Parse Produce reply (unless the request errored) */
         if (!err && reply)
                 err = rd_kafka_handle_Produce_parse(rkb, rktp, reply, request,
-                                                    &result);
+                                                    result);
 
-        rd_kafka_msgbatch_handle_Produce_result(rkb, batch, err, &result,
+        rd_kafka_msgbatch_handle_Produce_result(rkb, batch, err, result,
                                                 request);
+        rd_kafka_Produce_result_destroy(result);
 }
 
 
@@ -5636,9 +5714,9 @@ static int unittest_idempotent_producer(void) {
         int remaining_batches;
         uint64_t msgid = 1;
         rd_kafka_toppar_t *rktp;
-        rd_kafka_pid_t pid                    = {.id = 1000, .epoch = 0};
-        struct rd_kafka_Produce_result result = {.offset    = 1,
-                                                 .timestamp = 1000};
+        rd_kafka_pid_t pid = {.id = 1000, .epoch = 0};
+        rd_kafka_Produce_result_t *result =
+            rd_kafka_Produce_result_new(1, 1000);
         rd_kafka_queue_t *rkqu;
         rd_kafka_event_t *rkev;
         rd_kafka_buf_t *request[_BATCH_CNT];
@@ -5719,8 +5797,8 @@ static int unittest_idempotent_producer(void) {
         RD_UT_ASSERT(r == _MSGS_PER_BATCH, ".");
         rd_kafka_msgbatch_handle_Produce_result(rkb, &request[i]->rkbuf_batch,
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
-                                                &result, request[i]);
-        result.offset += r;
+                                                result, request[i]);
+        result->offset += r;
         RD_UT_ASSERT(rd_kafka_msgq_len(&rktp->rktp_msgq) == 0,
                      "batch %d: expected no messages in rktp_msgq, not %d", i,
                      rd_kafka_msgq_len(&rktp->rktp_msgq));
@@ -5733,7 +5811,7 @@ static int unittest_idempotent_producer(void) {
         RD_UT_ASSERT(r == _MSGS_PER_BATCH, ".");
         rd_kafka_msgbatch_handle_Produce_result(
             rkb, &request[i]->rkbuf_batch,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION, &result, request[i]);
+            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION, result, request[i]);
         retry_msg_cnt += r;
         RD_UT_ASSERT(rd_kafka_msgq_len(&rktp->rktp_msgq) == retry_msg_cnt,
                      "batch %d: expected %d messages in rktp_msgq, not %d", i,
@@ -5746,8 +5824,7 @@ static int unittest_idempotent_producer(void) {
         RD_UT_ASSERT(r == _MSGS_PER_BATCH, ".");
         rd_kafka_msgbatch_handle_Produce_result(
             rkb, &request[i]->rkbuf_batch,
-            RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER, &result,
-            request[i]);
+            RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER, result, request[i]);
         retry_msg_cnt += r;
         RD_UT_ASSERT(rd_kafka_msgq_len(&rktp->rktp_msgq) == retry_msg_cnt,
                      "batch %d: expected %d messages in rktp_xmit_msgq, not %d",
@@ -5759,8 +5836,7 @@ static int unittest_idempotent_producer(void) {
         r = rd_kafka_msgq_len(&request[i]->rkbuf_batch.msgq);
         rd_kafka_msgbatch_handle_Produce_result(
             rkb, &request[i]->rkbuf_batch,
-            RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER, &result,
-            request[i]);
+            RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER, result, request[i]);
         retry_msg_cnt += r;
         RD_UT_ASSERT(rd_kafka_msgq_len(&rktp->rktp_msgq) == retry_msg_cnt,
                      "batch %d: expected %d messages in rktp_xmit_msgq, not %d",
@@ -5800,8 +5876,8 @@ static int unittest_idempotent_producer(void) {
                 r = rd_kafka_msgq_len(&request[i]->rkbuf_batch.msgq);
                 rd_kafka_msgbatch_handle_Produce_result(
                     rkb, &request[i]->rkbuf_batch, RD_KAFKA_RESP_ERR_NO_ERROR,
-                    &result, request[i]);
-                result.offset += r;
+                    result, request[i]);
+                result->offset += r;
                 rd_kafka_buf_destroy(request[i]);
         }
 
@@ -5839,6 +5915,7 @@ static int unittest_idempotent_producer(void) {
         /* Verify the expected number of good delivery reports were seen */
         RD_UT_ASSERT(drcnt == msgcnt, "expected %d DRs, not %d", msgcnt, drcnt);
 
+        rd_kafka_Produce_result_destroy(result);
         rd_kafka_queue_destroy(rkqu);
         rd_kafka_toppar_destroy(rktp);
         rd_kafka_broker_destroy(rkb);

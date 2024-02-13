@@ -599,6 +599,10 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
                (a.least_significant_bits - b.least_significant_bits);
 }
 
+rd_kafka_Uuid_t rd_kafka_Uuid_random();
+
+const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
+
 /**
  * @name Producer ID and Epoch for the Idempotent Producer
  * @{

@@ -36,8 +36,13 @@ class ErrorAwareWorker : public Nan::AsyncWorker {
   void HandleErrorCallback() {
     Nan::HandleScope scope;
 
+    // Construct error and add code to it.
+    v8::Local<v8::Value> error = Nan::Error(ErrorMessage());
+    Nan::Set(error.As<v8::Object>(), Nan::New("code").ToLocalChecked(),
+      Nan::New(GetErrorCode()));
+
     const unsigned int argc = 1;
-    v8::Local<v8::Value> argv[argc] = { Nan::Error(ErrorMessage()) };
+    v8::Local<v8::Value> argv[argc] = { error };
 
     callback->Call(argc, argv);
   }

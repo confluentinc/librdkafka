@@ -21,8 +21,15 @@ blocks:
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
+      prologue:
+        commands:
+          - mkdir -p /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
+          - clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-mac-arm-malware-scan.txt || ( . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 cp librdkafka-mac-arm-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-mac-arm-malware-scan.txt; false)
+          - . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 cp librdkafka-mac-arm-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-mac-arm-malware-scan.txt
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
       jobs:
         - name: 'Build'
@@ -47,8 +54,15 @@ blocks:
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-x64__lnk-all
+      prologue:
+        commands:
+          - mkdir -p /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
+          - clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-mac-x86-malware-scan.txt || ( . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 librdkafka-mac-x86-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-mac-x86-malware-scan.txt ; false)
+          - . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 cp librdkafka-mac-x86-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-$SEMAPHORE_GIT_TAG_NAME-malware-scan.txt
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
       jobs:
         - name: 'Build'
@@ -148,8 +162,13 @@ blocks:
       prologue:
         commands:
           - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
+          - mkdir -p /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
+          -  clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-linux-x86-malware-scan.txt || ( . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 cp librdkafka-linux-x86-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-linux-x86-malware-scan.txt ; false)
+          - . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 cp librdkafka-linux-x86-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-linux-x86-malware-scan.txt
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
       jobs:
         - name: 'Build: centos6 glibc +gssapi'
@@ -204,8 +223,13 @@ blocks:
       prologue:
         commands:
           - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
+          - mkdir -p /tmp/clamav-db
+          - curl https://cfltavupdates.s3.us-west-2.amazonaws.com/downloads/signatures.tgz -o /tmp/clamav-db/signatures.tgz
+          - tar -xzf /tmp/clamav-db/signatures.tgz -C /tmp/clamav-db
       epilogue:
         commands:
+          -  clamscan -d /tmp/clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-linux-arm-malware-scan.txt || ( . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 cp librdkafka-linux-arm-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-linux-arm-malware-scan.txt ; false)
+          - . assume-iam-role arn:aws:iam::368821881613:role/semaphore-access ; aws s3 cp librdkafka-linux-arm-malware-scan.txt s3://malware-scan-results/librdkafka/$SEMAPHORE_GIT_TAG_NAME/librdkafka-linux-arm-malware-scan.txt
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
       jobs:
         - name: 'Build: centos7 glibc +gssapi'
@@ -252,8 +276,11 @@ blocks:
         commands:
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
+          - Invoke-WebRequest -Uri https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip  -OutFile clamav-signatures.zip
+          - powershell -command "Expand-Archive clamav-signatures.zip C:\clamav-db"
       epilogue:
         commands:
+          - clamscan -d C:\clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-win-malware-scan-results.txt; if ($?){artifact push workflow librdkafka-win-malware-scan-results.txt} else {artifact push workflow librdkafka-win-malware-scan-results.txt; exit /b 1}
           - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
       jobs:
         - name: 'Build: MinGW-w64 Dynamic'
@@ -297,10 +324,14 @@ blocks:
           - echo $Env:VCPKG_ROOT
           - pwd
           - cd librdkafka
+          - Invoke-WebRequest -Uri https://malware-scan-clamav-signatures.s3.us-west-2.amazonaws.com/clamav-signatures.zip  -OutFile clamav-signatures.zip
+          - powershell -command "Expand-Archive clamav-signatures.zip C:\clamav-db"
+
       epilogue:
         commands:
           - Get-ChildItem . -include *.dll -recurse
           - Get-ChildItem . -include *.lib -recurse
+          - clamscan -d C:\clamav-db --max-scansize=1024M --max-filesize=1024M -ir artifacts > librdkafka-win-malware-scan-results.tx; if ($?){artifact push workflow librdkafka-win-malware-scan-results.txt} else {artifact push workflow librdkafka-win-malware-scan-results.txt; exit /b 1}
           - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
       jobs:
         - name: 'Build: MSVC x64'

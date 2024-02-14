@@ -29,7 +29,7 @@ global_job_config:
       - cd deps/librdkafka
       - git fetch origin
       - cd ../../
-      - export MKL_DEBUG=1
+      - cache clear
 
 blocks:
   - name: "Linux amd64 (musl): Build and test"
@@ -303,6 +303,82 @@ blocks:
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 
+  - name: "Windows x64: Release"
+    dependencies: [ ]
+    # run:
+    #   when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-windows
+      env_vars:
+        # Disable vcpkg telemetry
+        - name: VCPKG_DISABLE_METRICS
+          value: 'yes'
+        - name: ARCHITECTURE
+          value: "x64"
+        - name: PLATFORM
+          value: "win32"
+        - name: LIBC
+          value: "unknown"
+      prologue:
+        commands:
+          # The semaphore agent already comes with an installed version of node. We, however, need to use a different
+          # version of node for the release (as many as we need to cover all the different ABIs).
+          # The node installer does not allow us to downgrade, so we need to uninstall the current version.
+          # The method below isn't particularly robust (as it depends on the particular format of the URL), but it
+          # works and can be easily fixed if it breaks (the node --version in the below jobs can be checked if there are
+          # any issues in the build).
+          - $env:InstalledMajor = (Get-Command node).Version.Major
+          - $env:InstalledMinor = (Get-Command node).Version.Minor
+          - $env:InstalledBuild = (Get-Command node).Version.Build
+          - $env:InstalledVersion = "v${env:InstalledMajor}.${env:InstalledMinor}.${env:InstalledBuild}"
+          - echo "https://nodejs.org/dist/${env:InstalledVersion}/node-${env:InstalledVersion}-x64.msi"
+          - Invoke-WebRequest "https://nodejs.org/dist/${env:InstalledVersion}/node-${env:InstalledVersion}-x64.msi" -OutFile node_old.msi
+          - msiexec /qn /l* node-old-log.txt /uninstall node_old.msi
+          - cat .\node-old-log.txt
+      jobs:
+        - name: "Release: LTS:18"
+          commands:
+            - Invoke-WebRequest "https://nodejs.org/download/release/v18.19.0/node-v18.19.0-x64.msi" -OutFile node.msi
+            - msiexec /qn /l* node-log.txt /i node.msi
+            - cat .\node-log.txt
+            - node --version
+            - pip install setuptools
+            - $env:NODE_ABI = 108
+            - $env:ARTIFACT_KEY = "confluent-kafka-javascript-${env:SEMAPHORE_GIT_TAG_NAME}-node-v${env:NODE_ABI}-${env:PLATFORM}-${env:LIBC}-${env:ARCHITECTURE}.tar.gz"
+            - echo "$env:ARTIFACT_KEY"
+            - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
+            - npx node-pre-gyp package
+            - ls "build/stage/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}"
+            - artifact push workflow "build/stage/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}" --destination "releases/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}"
+        - name: "Release: LTS:20"
+          commands:
+            - Invoke-WebRequest "https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi" -OutFile node.msi
+            - msiexec /qn /l* node-log.txt /i node.msi
+            - node --version
+            - pip install setuptools
+            - $env:NODE_ABI = 115
+            - $env:ARTIFACT_KEY = "confluent-kafka-javascript-${env:SEMAPHORE_GIT_TAG_NAME}-node-v${env:NODE_ABI}-${env:PLATFORM}-${env:LIBC}-${env:ARCHITECTURE}.tar.gz"
+            - echo "$env:ARTIFACT_KEY"
+            - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
+            - npx node-pre-gyp package
+            - ls "build/stage/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}"
+            - artifact push workflow "build/stage/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}" --destination "releases/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}"
+        - name: "Release: latest: 21"
+          commands:
+            - Invoke-WebRequest "https://nodejs.org/dist/v21.6.1/node-v21.6.1-x64.msi" -OutFile node.msi
+            - msiexec /qn /l* node-log.txt /i node.msi
+            - node --version
+            - pip install setuptools
+            - $env:NODE_ABI = 120
+            - $env:ARTIFACT_KEY = "confluent-kafka-javascript-${env:SEMAPHORE_GIT_TAG_NAME}-node-v${env:NODE_ABI}-${env:PLATFORM}-${env:LIBC}-${env:ARCHITECTURE}.tar.gz"
+            - echo "$env:ARTIFACT_KEY"
+            - npm install # node-pre-gyp will fallback to build here, because new tag implies no release yet.
+            - npx node-pre-gyp package
+            - ls "build/stage/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}"
+            - artifact push workflow "build/stage/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}" --destination "releases/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}"
+
   - name: 'Packaging: tar all release artifacts'
     dependencies:
       - 'Linux amd64: Release'
@@ -310,6 +386,7 @@ blocks:
       - 'Linux amd64 musl: Release'
       - 'Linux arm64 musl: Release'
       - 'macOS arm64/m1: Release'
+      - 'Windows x64: Release'
     run:
       when: "tag =~ '^v[0-9]\\.'"
     task:

@@ -34,7 +34,7 @@ The following configurations are supported for this early access preview:
 Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required. It can be installed from GitHub:
 
 ```bash
-$ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-javascript.git#v0.1.7-devel"
+$ npm install "git+ssh://git@github.com/confluentinc/confluent-kafka-javascript.git#v0.1.8-devel"
 ```
 
 Yarn and pnpm support is experimental.

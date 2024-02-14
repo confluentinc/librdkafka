@@ -4,8 +4,12 @@ import json
 import os
 import glob
 
+# Note: we're using the key 'librdkafka_win' for now since NuGet packages are not
+# available for librdkafka on master. This will be changed to 'librdkafka' once
+# we're out of early access, and we use the latest version of librdkafka rather
+# than master.
 with open('../package.json') as f:
-    librdkafkaVersion = json.load(f)['librdkafka']
+    librdkafkaVersion = json.load(f)['librdkafka_win']
 librdkafkaWinSufix = '7' if librdkafkaVersion == '0.11.5' else '';
 
 depsPrecompiledDir = '../deps/precompiled'

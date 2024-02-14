@@ -1,32 +1,26 @@
-// require('kafkajs') is replaced with require('confluent-kafka-javascript').KafkaJS.
-// Since this example is within the package itself, we use '../..', but code
-// will typically use 'confluent-kafka-javascript'.
-const { Kafka } = require('../..').KafkaJS;
+const { Kafka } = require('../..').KafkaJS
+//const { Kafka } = require('kafkajs')
 
 async function eosStart() {
     const kafka = new Kafka({
-        kafkaJS: {
-            brokers: ['<fill>'],
-            ssl: true,
-            sasl: {
-                mechanism: 'plain',
-                username: '<fill>',
-                password: '<fill>',
-            }
+        brokers: ['<fill>'],
+        ssl: true,
+        sasl: {
+            mechanism: 'plain',
+            username: '<fill>',
+            password: '<fill>',
         }
     });
 
     const consumer = kafka.consumer({
-        kafkaJS: {
-            groupId: 'groupId',
-            autoCommit: false,
-        }
+        groupId: 'groupId',
+        rdKafka: {
+            "enable.auto.commit": false,
+        },
     });
 
     const producer = kafka.producer({
-        kafkaJS: {
-            transactionalId: 'txid'
-        }
+        transactionalId: 'txid'
     });
 
     await consumer.connect();
@@ -40,8 +34,7 @@ async function eosStart() {
     // The run method acts like a consume-transform-produce loop.
     consumer.run({
         eachMessage: async ({ topic, partition, message }) => {
-            const msgAckString = JSON.stringify({
-                topic,
+            const msgAckString = JSON.stringify({topic,
                 partition,
                 offset: message.offset,
                 key: message.key?.toString(),

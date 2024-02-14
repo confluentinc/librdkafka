@@ -1,18 +1,14 @@
-// require('kafkajs') is replaced with require('confluent-kafka-javascript').KafkaJS.
-// Since this example is within the package itself, we use '../..', but code
-// will typically use 'confluent-kafka-javascript'.
-const { Kafka } = require('../..').KafkaJS;
+const { Kafka } = require('../..').KafkaJS
+//const { Kafka } = require('kafkajs')
 
 async function producerStart() {
     const kafka = new Kafka({
-        kafkaJS: {
-            brokers: ['<fill>'],
-            ssl: true,
-            sasl: {
-                mechanism: 'plain',
-                username: '<fill>',
-                password: '<fill>',
-            },
+        brokers: ['<fill>'],
+        ssl: true,
+        sasl: {
+            mechanism: 'plain',
+            username: '<fill>',
+            password: '<fill>',
         }
     });
 
@@ -23,16 +19,16 @@ async function producerStart() {
     console.log("Connected successfully");
 
     const res = []
-    for (let i = 0; i < 50; i++) {
+    for(let i = 0; i < 50; i++) {
         res.push(producer.send({
             topic: 'topic2',
             messages: [
-                { value: 'v222', partition: 0 },
-                { value: 'v11', partition: 0, key: 'x' },
+                {value: 'v222', partition: 0},
+                {value: 'v11', partition: 0, key: 'x'},
             ]
         }));
     }
-    await Promise.all(res);
+    await Promise.allSettled(res);
 
     await producer.disconnect();
 

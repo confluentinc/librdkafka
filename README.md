@@ -20,8 +20,8 @@ We invite you to raise issues to highlight any feedback you may have.
 
 Within the early-access, only **basic produce and consume functionality** as well as the ability to **create and delete topics** are supported. All other admin client functionality is coming in future releases. See [INTRODUCTION.md](INTRODUCTION.md) for more details on what is supported.
 
-To use **Schema Registry**, use the existing [kafkajs/confluent-schema-registry](https://github.com/kafkajs/confluent-schema-registry) library that is compatible with this library. For a simple schema registry example, see [sr.js](https://github.com/confluentinc/confluent-kafka-javascript/blob/dev_early_access_development_branch/examples/kafkajs/sr.js). **DISCLAIMER:** Although it is compatible with **confluent-kafka-javascript**, Confluent does not own or maintain kafkajs/confluent-schema-registry, and the use and functionality of the library should be considered "as is". 
- 
+To use **Schema Registry**, use the existing [kafkajs/confluent-schema-registry](https://github.com/kafkajs/confluent-schema-registry) library that is compatible with this library. For a simple schema registry example, see [sr.js](https://github.com/confluentinc/confluent-kafka-javascript/blob/dev_early_access_development_branch/examples/kafkajs/sr.js). **DISCLAIMER:** Although it is compatible with **confluent-kafka-javascript**, Confluent does not own or maintain kafkajs/confluent-schema-registry, and the use and functionality of the library should be considered "as is".
+
 
 ## Requirements
 
@@ -34,7 +34,7 @@ The following configurations are supported for this early access preview:
 Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required. It can be installed from GitHub:
 
 ```bash
-$ npm install @confluentinc/confluent-kafka-javascript
+$ npm install @confluentinc/kafka-javascript
 ```
 
 Yarn and pnpm support is experimental.
@@ -44,8 +44,8 @@ Yarn and pnpm support is experimental.
 Below is a simple produce example for users migrating from KafkaJS.
 
 ```javascript
-// require('kafkajs') is replaced with require('confluent-kafka-javascript').KafkaJS.
-const { Kafka } = require("confluent-kafka-javascript").KafkaJS;
+// require('kafkajs') is replaced with require('@confluentinc/kafka-javascript').KafkaJS.
+const { Kafka } = require("@confluentinc/kafka-javascript").KafkaJS;
 
 async function producerStart() {
     const kafka = new Kafka({

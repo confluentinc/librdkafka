@@ -25,7 +25,7 @@ This library includes two utility functions for detecting the status of your ins
 You can get the features supported by your compile of `librdkafka` by reading the variable "features" on the root of the `confluent-kafka-javascript` object.
 
 ```js
-const Kafka = require('confluent-kafka-javascript');
+const Kafka = require('@confluentinc/kafka-javascript');
 console.log(Kafka.features);
 
 // #=> [ 'gzip', 'snappy', 'ssl', 'sasl', 'regex', 'lz4' ]
@@ -34,7 +34,7 @@ console.log(Kafka.features);
 You can also get the version of `librdkafka`
 
 ```js
-const Kafka = require('confluent-kafka-javascript');
+const Kafka = require('@confluentinc/kafka-javascript');
 console.log(Kafka.librdkafkaVersion);
 
 // #=> 2.3.0
@@ -512,7 +512,7 @@ producer.getMetadata(opts, (err, metadata) => {
 To create an Admin client, you can do as follows:
 
 ```js
-const Kafka = require('confluent-kafka-javascript');
+const Kafka = require('@confluentinc/kafka-javascript');
 
 const client = Kafka.AdminClient.create({
   'client.id': 'kafka-admin',

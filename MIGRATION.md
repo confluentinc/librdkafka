@@ -11,7 +11,7 @@
     ```
     to
     ```javascript
-    const { Kafka } = require('confluent-kafka-javascript').KafkaJS;
+    const { Kafka } = require('@confluentinc/kafka-javascript').KafkaJS;
     const kafka = new Kafka({ kafkaJS: { brokers: ['kafka1:9092', 'kafka2:9092'], /* ... */ } });
     const producer = kafka.producer({ kafkaJS: { /* ... */, } });
     ```
@@ -35,7 +35,7 @@
 
 ```diff
 -const { Kafka } = require('kafkajs');
-+const { Kafka } = require('confluent-kafka-javascript').KafkaJS;
++const { Kafka } = require('@confluentinc/kafka-javascript').KafkaJS;
 
 const kafka = new Kafka({
 + kafkaJS: {
@@ -371,6 +371,6 @@ Change the import statement, from
   ```
   to
   ```javascript
-  const Kafka = require('confluent-kafka-javascript');
+  const Kafka = require('@confluentinc/kafka-javascript');
   ```
 The rest of the functionality should work as usual.

@@ -1,4 +1,4 @@
-const { Kafka } = require('confluent-kafka-javascript').KafkaJS;
+const { Kafka } = require('@confluentinc/kafka-javascript').KafkaJS;
 
 async function producerStart() {
     const producer = new Kafka().producer({

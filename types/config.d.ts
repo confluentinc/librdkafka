@@ -1,4 +1,4 @@
-// ====== Generated from librdkafka 2.3.0 file CONFIGURATION.md ======
+// ====== Generated from librdkafka master file CONFIGURATION.md ======
 // Code that generated this is a derivative work of the code from Nam Nguyen
 // https://gist.github.com/ntgn81/066c2c8ec5b4238f85d1e9168a04e3fb
 
@@ -810,7 +810,7 @@ export interface ConsumerGlobalConfig extends GlobalConfig {
     "heartbeat.interval.ms"?: number;
 
     /**
-     * Group protocol type. NOTE: Currently, the only supported group protocol type is `consumer`.
+     * Group protocol type for the `generic` group protocol. NOTE: Currently, the only supported group protocol type is `consumer`.
      *
      * @default consumer
      */

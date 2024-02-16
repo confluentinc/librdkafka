@@ -47,7 +47,7 @@ async function consumerStart() {
   // Initialization
   consumer = new Kafka().consumer({
     'bootstrap.servers': 'localhost:9092',
-    'group.id': 'test-group3',
+    'group.id': 'test-group',
     'auto.offset.reset': 'earliest',
     'enable.partition.eof': 'true',
     'rebalance_cb': (err, assignment) => {
@@ -70,20 +70,17 @@ async function consumerStart() {
   console.log("Connected successfully");
   await consumer.subscribe({ topics: ["test-topic"] });
 
-  // Start the consumer.
-  while (!stopped) {
-    const message = await consumer.consume(1000);
-    if (!message) {
-      continue;
+  consumer.run({
+    eachMessage: async ({ topic, partition, message }) => {
+      console.log({
+        topic,
+        partition,
+        offset: message.offset,
+        key: message.key?.toString(),
+        value: message.value.toString(),
+      });
     }
-    console.log({
-      topic: message.topic,
-      partition: message.partition,
-      offset: message.offset,
-      key: message.key?.toString(),
-      value: message.value.toString(),
-    });
-  }
+  });
 }
 
 consumerStart();

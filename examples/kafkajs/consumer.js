@@ -48,7 +48,7 @@ async function consumerStart() {
 
   await consumer.subscribe({
     topics: [
-      "topic2"
+      "test-topic"
     ]
   })
 

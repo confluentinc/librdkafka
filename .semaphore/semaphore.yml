@@ -305,8 +305,8 @@ blocks:
 
   - name: "Windows x64: Release"
     dependencies: [ ]
-    # run:
-    #   when: "tag =~ '^v[0-9]\\.'"
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:

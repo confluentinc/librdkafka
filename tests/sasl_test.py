@@ -9,63 +9,16 @@
 #  gradle in your PATH
 
 from cluster_testing import (
-    LibrdkafkaTestCluster,
     print_report_summary,
     print_test_report_summary,
     read_scenario_conf)
-from LibrdkafkaTestApp import LibrdkafkaTestApp
+from broker_version_tests import test_it
 
 import os
 import sys
 import argparse
 import json
 import tempfile
-
-
-def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False,
-            scenario="default"):
-    """
-    @brief Create, deploy and start a Kafka cluster using Kafka \\p version
-    Then run librdkafka's regression tests.
-    """
-
-    cluster = LibrdkafkaTestCluster(
-        version, conf, debug=debug, scenario=scenario)
-
-    # librdkafka's regression tests, as an App.
-    rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests,
-                                scenario=scenario)
-    rdkafka.do_cleanup = False
-    rdkafka.local_tests = False
-
-    if deploy:
-        cluster.deploy()
-
-    cluster.start(timeout=30)
-
-    print(
-        '# Connect to cluster with bootstrap.servers %s' %
-        cluster.bootstrap_servers())
-    rdkafka.start()
-    print(
-        '# librdkafka regression tests started, logs in %s' %
-        rdkafka.root_path())
-    try:
-        rdkafka.wait_stopped(timeout=60 * 30)
-        rdkafka.dbg(
-            'wait stopped: %s, runtime %ds' %
-            (rdkafka.state, rdkafka.runtime()))
-    except KeyboardInterrupt:
-        print('# Aborted by user')
-
-    report = rdkafka.report()
-    if report is not None:
-        report['root_path'] = rdkafka.root_path()
-
-    cluster.stop(force=True)
-
-    cluster.cleanup()
-    return report
 
 
 def handle_report(report, version, suite):
@@ -137,6 +90,13 @@ if __name__ == '__main__':
                         help='Only run matching suite(s) (substring match)')
     parser.add_argument('versions', type=str, default=None,
                         nargs='*', help='Limit broker versions to these')
+    parser.add_argument(
+        '--kraft',
+        dest='kraft',
+        action='store_true',
+        default=False,
+        help='Run in KRaft mode')
+
     args = parser.parse_args()
 
     conf = dict()
@@ -280,7 +240,8 @@ if __name__ == '__main__':
                 tests_to_run = tests
             report = test_it(version, tests=tests_to_run, conf=_conf,
                              rdkconf=_rdkconf,
-                             debug=args.debug, scenario=args.scenario)
+                             debug=args.debug, scenario=args.scenario,
+                             kraft=args.kraft)
 
             # Handle test report
             report['version'] = version

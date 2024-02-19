@@ -30,8 +30,11 @@ The following configurations are supported for this early access preview:
 * Any supported version of Node.js (The two LTS versions, 18 and 20, and the latest version, 21).
 * Linux (x64 and arm64) - both glibc and musl/alpine.
 * macOS - arm64/m1.
+* Windows - x64 (experimentally available in EA).
 
-Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required. It can be installed from GitHub:
+[A supported version of Python](https://devguide.python.org/versions/) must be available on the system for the installation process. [This is required for the `node-gyp` build tool.](https://github.com/nodejs/node-gyp?tab=readme-ov-file#configuring-python-dependency).
+
+Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required.
 
 ```bash
 $ npm install @confluentinc/kafka-javascript

@@ -3328,6 +3328,74 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
 }
 
+typedef struct rd_kafkap_produce_reply_tags_Partition_s {
+        int32_t Partition;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafkap_produce_reply_tags_Partition_t;
+
+typedef struct rd_kafkap_produce_reply_tags_Topic_s {
+        char* TopicName;
+        int32_t PartitionCnt;
+        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
+} rd_kafkap_produce_reply_tags_Topic_t;
+
+typedef struct rd_kafkap_produce_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        int32_t TopicCnt;
+        rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
+} rd_kafkap_produce_reply_tags_t;
+
+//static rd_kafkap_produce_reply_tags_t *
+//rd_kafka_produce_reply_tags_new(int32_t TopicArrayCnt) {
+//        return rd_calloc(1, sizeof(rd_kafkap_produce_reply_tags_t));
+//}
+
+//void rd_kafka_produce_reply_tags_set_TopicCnt(
+//    rd_kafkap_produce_reply_tags_t *reply_tags,
+//    int32_t TopicCnt) {
+//        reply_tags->TopicCnt = TopicCnt;
+//        reply_tags->Topics   = rd_calloc(TopicCnt, sizeof(*reply_tags->Topics));
+//}
+
+
+static int rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
+                                                          uint64_t tagtype,
+                                                          uint64_t taglen,
+                                                          void *opaque) {
+        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags = opaque;
+        switch (tagtype) {
+        case 1:
+                if (rd_kafka_buf_read_CurrentLeader(
+                        rkbuf, &PartitionTags->CurrentLeader) == -1)
+                        goto err_parse;
+                return 1;
+        default:
+                return 0;
+        }
+err_parse:
+        return -1;
+}
+
+static int rd_kafka_produce_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
+                                                uint64_t tagtype,
+                                                uint64_t taglen,
+                                                void *opaque) {
+        rd_kafkap_produce_reply_tags_t *tags = opaque;
+        switch (tagtype) {
+        case 0: /* NodeEndpoints */
+                if (rd_kafka_buf_read_NodeEndpoints(rkbuf,
+                                                    &tags->NodeEndpoints) == -1)
+                        goto err_parse;
+                return 1;
+        default:
+                return 0;
+        }
+err_parse:
+        return -1;
+}
+
+
+
 /**
  * @brief Parses a Produce reply.
  * @returns 0 on success or an error code on failure.
@@ -3409,10 +3477,28 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                         result->errstr = RD_KAFKAP_STR_DUP(&ErrorMessage);
         }
 
-        /* Partition tags */
-        rd_kafka_buf_skip_tags(rkbuf);
-        /* Topic tags */
-        rd_kafka_buf_skip_tags(rkbuf);
+        if (request->rkbuf_reqhdr.ApiVersion >= 10) {
+                rd_kafkap_produce_reply_tags_Partition_t PartitionTags = {0};
+                rd_kafkap_produce_reply_tags_Topic_t TopicTags = {0};
+                rd_kafkap_produce_reply_tags_t ProduceTags = {0};
+                PartitionTags.Partition = hdr.Partition;
+                rd_kafka_produce_reply_handle_partition_read_tag(
+                    rkbuf, 1, 0, &PartitionTags);
+
+                TopicTags.TopicName = rd_kafkap_str_copy(&topic_name);
+                TopicTags.PartitionCnt = 1;
+                TopicTags.PartitionTags = &PartitionTags;
+                ProduceTags.TopicCnt = 1;
+                ProduceTags.TopicTags = &TopicTags;
+                rd_kafka_produce_reply_handle_read_tag(rkbuf, 0, 0, &ProduceTags);
+
+        } else {
+                /* Partition tags */
+                rd_kafka_buf_skip_tags(rkbuf);
+
+                /* Topic tags */
+                rd_kafka_buf_skip_tags(rkbuf);
+        }
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1) {
                 int32_t Throttle_Time;

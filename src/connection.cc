@@ -223,7 +223,7 @@ Baton Connection::GetMetadata(
     return Baton(metadata);
   } else {
     // metadata is not set here
-    // @see https://github.com/edenhill/librdkafka/blob/master/src-cpp/rdkafkacpp.h#L860
+    // @see https://github.com/confluentinc/librdkafka/blob/master/src-cpp/rdkafkacpp.h#L860
     return Baton(err);
   }
 }

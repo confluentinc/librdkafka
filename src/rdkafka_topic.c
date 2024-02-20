@@ -197,7 +197,7 @@ rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk, rd_kafka_Uuid_
 
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-                if (!rd_kafka_Uuid_cmp(rkt->rkt_id, topic_id)){
+                if (!rd_kafka_Uuid_cmp(rkt->rkt_topic_id, topic_id)){
                         rd_kafka_topic_keep(rkt);
                         break;
                 }
@@ -1327,8 +1327,8 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                 upd += rd_kafka_topic_partition_cnt_update(rkt,
                                                            mdt->partition_cnt);
-                if(!rd_kafka_Uuid_cmp(rkt->rkt_id, RD_KAFKA_UUID_ZERO))
-                        rkt->rkt_id = mdit->topic_id;
+                if(!rd_kafka_Uuid_cmp(rkt->rkt_topic_id, RD_KAFKA_UUID_ZERO))
+                        rkt->rkt_topic_id = mdit->topic_id;
                 /* If the metadata times out for a topic (because all brokers
                  * are down) the state will transition to S_UNKNOWN.
                  * When updated metadata is eventually received there might

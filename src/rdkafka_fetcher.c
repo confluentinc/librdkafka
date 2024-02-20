@@ -384,6 +384,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
         hdr.LogStartOffset   = RD_KAFKA_OFFSET_INVALID;
         if (rd_kafka_buf_ApiVersion(request) >= 4) {
                 int32_t AbortedTxnCnt;
+                int k;
                 rd_kafka_buf_read_i64(rkbuf, &hdr.LastStableOffset);
                 if (rd_kafka_buf_ApiVersion(request) >= 5)
                         rd_kafka_buf_read_i64(rkbuf, &hdr.LogStartOffset);
@@ -403,9 +404,11 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                                            "fetch response: ignoring.",
                                            RD_KAFKAP_STR_PR(topic),
                                            hdr.Partition, AbortedTxnCnt);
-                                rd_kafka_buf_skip(rkbuf, (8 + 8));
-                                /* AbortedTransaction tags */
-                                rd_kafka_buf_skip_tags(rkbuf);
+                                for (k = 0; k < AbortedTxnCnt; k++) {
+                                        rd_kafka_buf_skip(rkbuf, (8 + 8));
+                                        /* AbortedTransaction tags */
+                                        rd_kafka_buf_skip_tags(rkbuf);
+                                }
                         }
                 } else {
                         /* Older brokers may return LSO -1,
@@ -414,7 +417,6 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                                 end_offset = hdr.LastStableOffset;
 
                         if (AbortedTxnCnt > 0) {
-                                int k;
                                 aborted_txns =
                                     rd_kafka_aborted_txns_new(AbortedTxnCnt);
                                 for (k = 0; k < AbortedTxnCnt; k++) {
@@ -597,7 +599,6 @@ no_err:
                 rd_kafka_toppar_destroy(rktp); /*from get()*/
         rd_kafka_buf_skip_tags(rkbuf);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
-
 }
 
 /**
@@ -860,7 +861,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                         }
                         if (rd_kafka_buf_ApiVersion(rkbuf) > 12)
                                 /* Topic ID */
-                                rd_kafka_buf_write_uuid(rkbuf, &rktp->rktp_rkt->rkt_id);
+                                rd_kafka_buf_write_uuid(rkbuf, &rktp->rktp_rkt->rkt_topic_id);
                         else
                                 /* Topic name */
                                 rd_kafka_buf_write_kstr(rkbuf,

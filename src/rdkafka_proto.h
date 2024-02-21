@@ -599,8 +599,20 @@ typedef struct rd_kafka_Uuid_s {
 
 static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
                                                  rd_kafka_Uuid_t b) {
-        return (a.most_significant_bits - b.most_significant_bits) ||
-               (a.least_significant_bits - b.least_significant_bits);
+        if (a.most_significant_bits < b.most_significant_bits)
+                return -1;
+        if (a.most_significant_bits > b.most_significant_bits)
+                return 1;
+        if (a.least_significant_bits < b.least_significant_bits)
+                return -1;
+        if (a.least_significant_bits > b.least_significant_bits)
+                return 1;
+        return 0;
+}
+
+static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
+        rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
+        return rd_kafka_Uuid_cmp(*a_uuid, *b_uuid);
 }
 
 rd_kafka_Uuid_t rd_kafka_Uuid_random();

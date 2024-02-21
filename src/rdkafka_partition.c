@@ -3117,6 +3117,14 @@ int rd_kafka_topic_partition_cmp_topic(const void *_a, const void *_b) {
         return strcmp(a->topic, b->topic);
 }
 
+/** @brief Compare only the topic id */
+int rd_kafka_topic_partition_cmp_topic_id(const void *_a, const void *_b) {
+        const rd_kafka_topic_partition_t *a = _a;
+        const rd_kafka_topic_partition_t *b = _b;
+        return rd_kafka_Uuid_cmp(rd_kafka_topic_partition_get_topic_id(a),
+                                 rd_kafka_topic_partition_get_topic_id(b));
+}
+
 static int rd_kafka_topic_partition_cmp_opaque(const void *_a,
                                                const void *_b,
                                                void *opaque) {
@@ -3248,6 +3256,21 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic(
         int i = rd_kafka_topic_partition_list_find0(
             rktparlist, topic, RD_KAFKA_PARTITION_UA,
             rd_kafka_topic_partition_cmp_topic);
+        if (i == -1)
+                return NULL;
+        else
+                return &rktparlist->elems[i];
+}
+
+/**
+ * @returns the first element that matches \p topic_id, regardless of partition.
+ */
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_id(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    const rd_kafka_Uuid_t topic_id) {
+        int i = rd_kafka_topic_partition_list_find_by_id0(
+            rktparlist, topic_id, RD_KAFKA_PARTITION_UA,
+            rd_kafka_topic_partition_cmp_topic_id);
         if (i == -1)
                 return NULL;
         else

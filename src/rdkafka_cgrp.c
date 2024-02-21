@@ -2594,6 +2594,26 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
         return rd_true;
 }
 
+/**
+ * Compares a new target assignment with
+ * existing consumer group assignment.
+ *
+ * Returns that they're the same assignment
+ * in two cases:
+ *
+ * 1) If target assignment is present and the
+ *    new assignment is same as target assignment,
+ *    then we are already in process of adding that
+ *    target assignment.
+ * 2) If target assignment is not present and
+ *    the new assignment is same as current assignment,
+ *    then we are already at correct assignment.
+ *
+ * @param new_target_assignment New target assignment
+ *
+ * @return Is the new assignment different from what's being handled by
+ *         group \p cgrp ?
+ **/
 static rd_bool_t rd_kafka_cgrp_consumer_is_new_assignment_different(
     rd_kafka_cgrp_t *rkcg,
     rd_kafka_topic_partition_list_t *new_target_assignment) {
@@ -2669,6 +2689,66 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
+static rd_kafka_topic_partition_list_t *
+rd_kafka_cgrp_consumer_assignment_with_metadata(
+    rd_kafka_cgrp_t *rkcg,
+    rd_kafka_topic_partition_list_t *assignment,
+    rd_list_t **missing_topic_ids) {
+        int i;
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        rd_kafka_topic_partition_list_t *assignment_with_metadata =
+            rd_kafka_topic_partition_list_new(assignment->cnt);
+        for (i = 0; i < assignment->cnt; i++) {
+                struct rd_kafka_metadata_cache_entry *rkmce;
+                rd_kafka_topic_partition_t *rktpar;
+                rd_kafka_Uuid_t request_topic_id =
+                    rd_kafka_topic_partition_get_topic_id(
+                        &assignment->elems[i]);
+                rd_kafka_rdlock(rk);
+                rkmce =
+                    rd_kafka_metadata_cache_find_by_id(rk, request_topic_id, 1);
+
+                if (rkmce) {
+                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                            assignment_with_metadata, request_topic_id,
+                            rkmce->rkmce_mtopic.topic,
+                            assignment->elems[i].partition);
+                        rd_kafka_rdunlock(rk);
+                        continue;
+                }
+                rd_kafka_rdunlock(rk);
+
+                rktpar = rd_kafka_topic_partition_list_find_topic_by_id(
+                    rkcg->rkcg_current_assignment, request_topic_id);
+                if (rktpar) {
+                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                            assignment_with_metadata, request_topic_id,
+                            rktpar->topic, assignment->elems[i].partition);
+                        continue;
+                }
+
+                if (missing_topic_ids) {
+                        rd_kafka_Uuid_t topic_id;
+                        if (unlikely(!*missing_topic_ids))
+                                *missing_topic_ids =
+                                    rd_list_new(1, rd_list_Uuid_destroy);
+                        topic_id = rd_kafka_topic_partition_get_topic_id(
+                            &assignment->elems[i]);
+                        rd_list_add(*missing_topic_ids,
+                                    rd_kafka_Uuid_copy(&topic_id));
+                }
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+                             "Metadata not found for the "
+                             "assigned topic id - %s."
+                             " Continuing without it",
+                             rd_kafka_Uuid_base64str(&request_topic_id));
+        }
+        if (missing_topic_ids && *missing_topic_ids)
+                rd_list_deduplicate(missing_topic_ids,
+                                    (void *)rd_kafka_Uuid_ptr_cmp);
+        return assignment_with_metadata;
+}
+
 /**
  * @brief Op callback from handle_JoinGroup
  */
@@ -2676,14 +2756,9 @@ static rd_kafka_op_res_t
 rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                                           rd_kafka_q_t *rkq,
                                           rd_kafka_op_t *rko) {
-        /*
-         * FIXME: Using next_target_assignment is not correct as other heartbeat
-         * call can change it.
-         */
-        int i, j;
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
         rd_kafka_op_res_t assignment_handle_ret;
-        rd_kafka_topic_partition_list_t *new_target_assignment;
+        rd_kafka_topic_partition_list_t *assignment_with_metadata;
         rd_bool_t all_partition_metadata_available;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
@@ -2692,89 +2767,45 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
         if (!rkcg->rkcg_next_target_assignment)
                 return RD_KAFKA_OP_RES_HANDLED;
 
-        /*      Update topic name for all the assignments given by topic id
-         *      TODO: Improve complexity.
-         */
-        /*
-         *      TODO: Checking local metadata cache is an improvement which we
-         * can do later.
-         */
-        new_target_assignment = rd_kafka_topic_partition_list_new(
-            rkcg->rkcg_next_target_assignment->cnt);
-        for (i = 0; i < rkcg->rkcg_next_target_assignment->cnt; i++) {
-                rd_kafka_Uuid_t request_topic_id =
-                    rd_kafka_topic_partition_get_topic_id(
-                        &rkcg->rkcg_next_target_assignment->elems[i]);
-                for (j = 0; j < rko->rko_u.metadata.md->topic_cnt; j++) {
-                        rd_kafka_Uuid_t compare_topic_id =
-                            rko->rko_u.metadata.mdi->topics[j].topic_id;
-                        if (!rd_kafka_Uuid_cmp(request_topic_id,
-                                               compare_topic_id)) {
-                                if (rko->rko_u.metadata.md->topics[j].err ==
-                                    RD_KAFKA_RESP_ERR_NO_ERROR)
-                                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
-                                            new_target_assignment,
-                                            request_topic_id,
-                                            rko->rko_u.metadata.md->topics[j]
-                                                .topic,
-                                            rkcg->rkcg_next_target_assignment
-                                                ->elems[i]
-                                                .partition);
-                                else
-                                        rd_kafka_dbg(
-                                            rkcg->rkcg_rk, CGRP, "HEARTBEAT",
-                                            "Metadata not found for the "
-                                            "assigned topic id - %s due to: "
-                                            "%s: "
-                                            "Continuing without it",
-                                            rd_kafka_Uuid_base64str(
-                                                &request_topic_id),
-                                            rd_kafka_err2str(
-                                                rko->rko_u.metadata.md
-                                                    ->topics[j]
-                                                    .err));
-                                break;
-                        }
-                }
-        }
+        assignment_with_metadata =
+            rd_kafka_cgrp_consumer_assignment_with_metadata(
+                rkcg, rkcg->rkcg_next_target_assignment, NULL);
 
         all_partition_metadata_available =
-            new_target_assignment->cnt == rkcg->rkcg_next_target_assignment->cnt
+            assignment_with_metadata->cnt ==
+                    rkcg->rkcg_next_target_assignment->cnt
                 ? rd_true
                 : rd_false;
 
         if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
-                char new_target_assignment_str[512] = "NULL";
+                char assignment_with_metadata_str[512] = "NULL";
 
                 rd_kafka_topic_partition_list_str(
-                    new_target_assignment, new_target_assignment_str,
-                    sizeof(new_target_assignment_str), 0);
+                    assignment_with_metadata, assignment_with_metadata_str,
+                    sizeof(assignment_with_metadata_str), 0);
 
                 rd_kafka_dbg(
                     rkcg->rkcg_rk, CGRP, "HEARTBEAT",
-                    "Metadata available for %d/%d next target assignment "
-                    "which are: \"%s\"",
-                    new_target_assignment->cnt,
+                    "Metadata available for %d/%d of next target assignment, "
+                    " which is: \"%s\"",
+                    assignment_with_metadata->cnt,
                     rkcg->rkcg_next_target_assignment->cnt,
-                    new_target_assignment_str);
+                    assignment_with_metadata_str);
         }
 
         assignment_handle_ret = rd_kafka_cgrp_consumer_handle_next_assignment(
-            rkcg, new_target_assignment, all_partition_metadata_available);
-        rd_kafka_topic_partition_list_destroy(new_target_assignment);
+            rkcg, assignment_with_metadata, all_partition_metadata_available);
+        rd_kafka_topic_partition_list_destroy(assignment_with_metadata);
         return assignment_handle_ret;
 }
 
 void rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
     rd_kafka_t *rk,
     rd_kafka_broker_t *rkb) {
-
+        rd_kafka_topic_partition_list_t *assignment_with_metadata;
         rd_kafka_op_t *rko;
-        rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
-        rd_kafka_Uuid_t topic_id;
-        rd_kafka_Uuid_t prev_topic_id = RD_KAFKA_UUID_ZERO;
-        rd_list_t *topic_ids;
-        int i;
+        rd_kafka_cgrp_t *rkcg        = rk->rk_cgrp;
+        rd_list_t *missing_topic_ids = NULL;
 
         if (!rkcg->rkcg_next_target_assignment->cnt) {
                 /* No metadata to request, continue with handle_next_assignment.
@@ -2787,23 +2818,28 @@ void rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
                 return;
         }
 
-        topic_ids = rd_list_new(1, rd_list_Uuid_destroy);
-        for (i = 0; i < rkcg->rkcg_next_target_assignment->cnt; i++) {
-                topic_id = rd_kafka_topic_partition_get_topic_id(
-                    &rkcg->rkcg_next_target_assignment->elems[i]);
-                if (rd_kafka_Uuid_cmp(prev_topic_id, topic_id) &&
-                    !rd_list_find(topic_ids, &topic_id, rd_list_Uuid_cmp))
-                        rd_list_add(topic_ids, rd_kafka_Uuid_copy(&topic_id));
-                prev_topic_id = topic_id;
-        }
 
+        assignment_with_metadata =
+            rd_kafka_cgrp_consumer_assignment_with_metadata(
+                rkcg, rkcg->rkcg_next_target_assignment, &missing_topic_ids);
+
+        if (!missing_topic_ids) {
+                /* Metadata is already available for all the topics. */
+                rd_kafka_cgrp_consumer_handle_next_assignment(
+                    rkcg, assignment_with_metadata, rd_true);
+                rd_kafka_topic_partition_list_destroy(assignment_with_metadata);
+                return;
+        }
+        rd_kafka_topic_partition_list_destroy(assignment_with_metadata);
+
+        /* Request missing metadata. */
         rko = rd_kafka_op_new_cb(rkcg->rkcg_rk, RD_KAFKA_OP_METADATA,
                                  rd_kafka_cgrp_consumer_handle_Metadata_op);
         rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
         rd_kafka_MetadataRequest(
-            rkb, NULL, topic_ids, "ConsumerGroupHeartbeat API Response",
+            rkb, NULL, missing_topic_ids, "ConsumerGroupHeartbeat API Response",
             rd_false /*!allow_auto_create*/, rd_false, rd_false, rko);
-        rd_list_destroy(topic_ids);
+        rd_list_destroy(missing_topic_ids);
 }
 
 /**
@@ -2888,18 +2924,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                         rkcg->rkcg_next_target_assignment = NULL;
                         if (rd_kafka_cgrp_consumer_is_new_assignment_different(
                                 rkcg, assigned_topic_partitions)) {
-                                /* We don't update the next_target_assignment
-                                 * in two cases:
-                                 * 1) If target assignment is present and the
-                                 * new assignment is same as target assignment,
-                                 * then we are already in process of adding that
-                                 * target assignment. We can ignore this new
-                                 * assignment.
-                                 * 2) If target assignment is not present then
-                                 * if the current assignment is present and the
-                                 * new assignment is same as current assignment,
-                                 * then we are already at correct assignment. We
-                                 * can ignore this new */
                                 rkcg->rkcg_next_target_assignment =
                                     assigned_topic_partitions;
                         }
@@ -2919,6 +2943,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                     rkcg->rkcg_target_assignment);
                 rkcg->rkcg_target_assignment = NULL;
                 rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK;
+
                 if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
                         char rkcg_current_assignment_str[512] = "NULL";
 
@@ -3007,7 +3032,6 @@ err:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
-
         default:
                 actions = rd_kafka_err_action(rkb, err, request,
                                               RD_KAFKA_ERR_ACTION_END);
@@ -3015,9 +3039,10 @@ err:
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
-                rd_kafka_set_fatal_error(rkcg->rkcg_rk, err,
-                                         "Fatal consumer error: %s",
-                                         rd_kafka_err2str(err));
+                rd_kafka_set_fatal_error(
+                    rkcg->rkcg_rk, err,
+                    "ConsumerGroupHeartbeat fatal error: %s",
+                    rd_kafka_err2str(err));
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(
                     rkcg, rd_true, /*assignments lost*/
                     rd_true,       /*initiating*/
@@ -3036,6 +3061,7 @@ err:
                 /* Re-query for coordinator */
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
         }
 

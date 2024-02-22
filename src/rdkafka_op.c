@@ -828,16 +828,6 @@ void rd_kafka_op_throttle_time(rd_kafka_broker_t *rkb,
                                rd_kafka_q_t *rkq,
                                int throttle_time) {
         rd_kafka_op_t *rko;
-
-        if (unlikely(throttle_time > 0)) {
-                rd_avg_add(&rkb->rkb_avg_throttle, throttle_time);
-                // TODO need to only set throttle if api version match
-                rd_ts_t throttled_ts = rd_clock() + throttle_time * 1000;
-                mtx_lock(&rkb->rkb_ts_throttled.lock);
-                if (rkb->rkb_ts_throttled.throttle_ts < throttled_ts)
-                        rkb->rkb_ts_throttled.throttle_ts = throttled_ts;
-                mtx_unlock(&rkb->rkb_ts_throttled.lock);
-        }
         /* We send throttle events when:
          *  - throttle_time > 0
          *  - throttle_time == 0 and last throttle_time > 0

@@ -620,7 +620,7 @@ static void rd_kafka_cgrp_handle_FindCoordinator(rd_kafka_t *rk,
 
         if (likely(!(ErrorCode = err))) {
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1)
-                        rd_kafka_buf_read_throttle_time(rkbuf);
+                        rd_kafka_buf_read_throttle_time(rkbuf, 2);
 
                 rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
@@ -828,7 +828,7 @@ static void rd_kafka_cgrp_handle_LeaveGroup(rd_kafka_t *rk,
         }
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 2);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
@@ -1624,7 +1624,7 @@ static void rd_kafka_cgrp_handle_SyncGroup(rd_kafka_t *rk,
         }
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 2);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_kbytes(rkbuf, &MemberState);
@@ -1901,7 +1901,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
         }
 
         if (request->rkbuf_reqhdr.ApiVersion >= 2)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 3);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_i32(rkbuf, &GenerationId);
@@ -2479,7 +2479,7 @@ void rd_kafka_cgrp_handle_Heartbeat(rd_kafka_t *rk,
                 goto err;
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 2);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         if (ErrorCode) {

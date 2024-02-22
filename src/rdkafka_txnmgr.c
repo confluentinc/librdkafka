@@ -840,7 +840,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
         }
         rd_kafka_rdunlock(rk);
 
-        rd_kafka_buf_read_throttle_time(rkbuf);
+        rd_kafka_buf_read_throttle_time(rkbuf, 1);
 
         rd_kafka_buf_read_i32(rkbuf, &TopicCnt);
 
@@ -1494,7 +1494,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit(rd_kafka_t *rk,
         if (err)
                 goto done;
 
-        rd_kafka_buf_read_throttle_time(rkbuf);
+        rd_kafka_buf_read_throttle_time(rkbuf, 1);
 
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
@@ -1764,7 +1764,7 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn(rd_kafka_t *rk,
         if (err)
                 goto done;
 
-        rd_kafka_buf_read_throttle_time(rkbuf);
+        rd_kafka_buf_read_throttle_time(rkbuf, 1);
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
         err = ErrorCode;
@@ -2138,7 +2138,7 @@ static void rd_kafka_txn_handle_EndTxn(rd_kafka_t *rk,
         if (err)
                 goto err;
 
-        rd_kafka_buf_read_throttle_time(rkbuf);
+        rd_kafka_buf_read_throttle_time(rkbuf, 1);
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         err = ErrorCode;
         goto err;
@@ -2924,7 +2924,7 @@ static void rd_kafka_txn_handle_FindCoordinator(rd_kafka_t *rk,
                 goto err;
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 2);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 

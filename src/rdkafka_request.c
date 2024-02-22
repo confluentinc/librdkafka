@@ -448,6 +448,11 @@ int rd_kafka_buf_write_topic_partitions(
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_ERR:
                                 rd_kafka_buf_write_i16(rkbuf, rktpar->err);
                                 break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP:
+                                /* Current implementation is just
+                                 * sending a NULL value */
+                                rd_kafka_buf_write_i64(rkbuf, -1);
+                                break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA:
                                 /* Java client 0.9.0 and broker <0.10.0 can't
                                  * parse Null metadata fields, so as a
@@ -459,11 +464,6 @@ int rd_kafka_buf_write_topic_partitions(
                                         rd_kafka_buf_write_str(
                                             rkbuf, rktpar->metadata,
                                             rktpar->metadata_size);
-                                break;
-                        case RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP:
-                                /* Current implementation is just
-                                 * sending a NULL value */
-                                rd_kafka_buf_write_i64(rkbuf, -1);
                                 break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP:
                                 break;

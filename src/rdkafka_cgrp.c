@@ -3734,6 +3734,9 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR__IN_PROGRESS:
                 return; /* Retrying */
 
+        case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
+                /* Continue */
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR__TRANSPORT:

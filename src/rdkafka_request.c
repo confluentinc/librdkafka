@@ -3328,40 +3328,26 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
 }
 
-typedef struct rd_kafkap_produce_reply_tags_Partition_s {
-        int32_t Partition;
-        rd_kafkap_CurrentLeader_t CurrentLeader;
-} rd_kafkap_produce_reply_tags_Partition_t;
 
-typedef struct rd_kafkap_produce_reply_tags_Topic_s {
-        char* TopicName;
-        int32_t PartitionCnt;
-        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
-} rd_kafkap_produce_reply_tags_Topic_t;
-
-typedef struct rd_kafkap_produce_reply_tags_s {
-        rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        int32_t TopicCnt;
-        rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
-} rd_kafkap_produce_reply_tags_t;
-
-//static rd_kafkap_produce_reply_tags_t *
-//rd_kafka_produce_reply_tags_new(int32_t TopicArrayCnt) {
+// static rd_kafkap_produce_reply_tags_t *
+// rd_kafka_produce_reply_tags_new(int32_t TopicArrayCnt) {
 //        return rd_calloc(1, sizeof(rd_kafkap_produce_reply_tags_t));
 //}
 
-//void rd_kafka_produce_reply_tags_set_TopicCnt(
+// void rd_kafka_produce_reply_tags_set_TopicCnt(
 //    rd_kafkap_produce_reply_tags_t *reply_tags,
 //    int32_t TopicCnt) {
 //        reply_tags->TopicCnt = TopicCnt;
-//        reply_tags->Topics   = rd_calloc(TopicCnt, sizeof(*reply_tags->Topics));
+//        reply_tags->Topics   = rd_calloc(TopicCnt,
+//        sizeof(*reply_tags->Topics));
 //}
 
 
-static int rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
-                                                          uint64_t tagtype,
-                                                          uint64_t taglen,
-                                                          void *opaque) {
+static int
+rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
+                                                 uint64_t tagtype,
+                                                 uint64_t taglen,
+                                                 void *opaque) {
         rd_kafkap_produce_reply_tags_Partition_t *PartitionTags = opaque;
         switch (tagtype) {
         case 1:
@@ -3377,9 +3363,9 @@ err_parse:
 }
 
 static int rd_kafka_produce_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
-                                                uint64_t tagtype,
-                                                uint64_t taglen,
-                                                void *opaque) {
+                                                  uint64_t tagtype,
+                                                  uint64_t taglen,
+                                                  void *opaque) {
         rd_kafkap_produce_reply_tags_t *tags = opaque;
         switch (tagtype) {
         case 0: /* NodeEndpoints */
@@ -3392,6 +3378,81 @@ static int rd_kafka_produce_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
         }
 err_parse:
         return -1;
+}
+
+void rd_kafka_produce_metadata_handle_tags(
+    rd_kafka_t *rk,
+    rd_kafkap_produce_reply_tags_t *produce_tags) {
+        // find the topic id from cache, then merge metadata
+        const struct rd_kafka_metadata_cache_entry *rkmce =
+            rd_kafka_metadata_cache_find(rk, produce_tags->TopicTags->TopicName,
+                                         rd_true);
+        if (!rkmce) {
+                // Add the topic to the metadata cache
+                return;
+        }
+        rd_kafka_metadata_internal_t *mdi = rk->rk_full_metadata;
+        int i = 0, j = 0, k = 0, l = 0;
+        for (i = 0; i < mdi->metadata.topic_cnt; i++) {
+                if (strcmp(mdi->metadata.topics[i].topic,
+                           produce_tags->TopicTags->TopicName) == 0) {
+                        for (j = 0; j < mdi->metadata.topics[i].partition_cnt;
+                             j++) {
+                                for (k = 0;
+                                     k < produce_tags->TopicTags->PartitionCnt;
+                                     k++) {
+                                        if (mdi->metadata.topics[i]
+                                                .partitions[j]
+                                                .id == produce_tags->TopicTags
+                                                           ->PartitionTags[k]
+                                                           .Partition) {
+                                                mdi->topics[i]
+                                                    .partitions[j]
+                                                    .leader_epoch =
+                                                    produce_tags->TopicTags
+                                                        ->PartitionTags[k]
+                                                        .CurrentLeader
+                                                        .LeaderEpoch;
+                                                for (l = 0;
+                                                     l <
+                                                     produce_tags->NodeEndpoints
+                                                         .NodeEndpointCnt;
+                                                     l++) {
+                                                        if (produce_tags
+                                                                ->NodeEndpoints
+                                                                .NodeEndpoints
+                                                                    [l]
+                                                                .NodeId ==
+                                                            produce_tags
+                                                                ->TopicTags
+                                                                ->PartitionTags
+                                                                    [k]
+                                                                .CurrentLeader
+                                                                .LeaderId) {
+                                                                // Add rack to
+                                                                // partition
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
+        // TODO: Where to update the port and host?
+        //        for (i = 0; i < mdi->metadata.broker_cnt; i++) {
+        //                for (j = 0; j <
+        //                rk->produce_tags->NodeEndpoints.NodeEndpointCnt; j++)
+        //                {
+        //                        if (mdi->brokers[i].id ==
+        //                        rk->produce_tags->NodeEndpoints.NodeEndpoints[j].NodeId)
+        //                        {
+        //                                mdi->brokers[i].rack =
+        //                                rk->produce_tags->NodeEndpoints.NodeEndpoints[j].Rack;
+        //                        }
+        //                }
+        //        }
+
+        // TODO: Update the metadata cache
 }
 
 
@@ -3479,18 +3540,22 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
         if (request->rkbuf_reqhdr.ApiVersion >= 10) {
                 rd_kafkap_produce_reply_tags_Partition_t PartitionTags = {0};
-                rd_kafkap_produce_reply_tags_Topic_t TopicTags = {0};
-                rd_kafkap_produce_reply_tags_t ProduceTags = {0};
+                rd_kafkap_produce_reply_tags_Topic_t TopicTags         = {0};
+                rd_kafkap_produce_reply_tags_t ProduceTags             = {0};
                 PartitionTags.Partition = hdr.Partition;
                 rd_kafka_produce_reply_handle_partition_read_tag(
                     rkbuf, 1, 0, &PartitionTags);
 
-                TopicTags.TopicName = rd_kafkap_str_copy(&topic_name);
-                TopicTags.PartitionCnt = 1;
+                TopicTags.TopicName     = rd_kafkap_str_copy(&topic_name);
+                TopicTags.PartitionCnt  = 1;
                 TopicTags.PartitionTags = &PartitionTags;
-                ProduceTags.TopicCnt = 1;
-                ProduceTags.TopicTags = &TopicTags;
-                rd_kafka_produce_reply_handle_read_tag(rkbuf, 0, 0, &ProduceTags);
+                ProduceTags.TopicCnt    = 1;
+                ProduceTags.TopicTags   = &TopicTags;
+                rd_kafka_produce_reply_handle_read_tag(rkbuf, 0, 0,
+                                                       &ProduceTags);
+                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_951);
+                rko->rko_u.metadata_tags.produceReplyTags = &ProduceTags;
+                rd_kafka_q_enq(rkb->rkb_rk->rk_ops, rko);
 
         } else {
                 /* Partition tags */

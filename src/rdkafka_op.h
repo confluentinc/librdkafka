@@ -179,7 +179,8 @@ typedef enum {
         RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,    /* < Admin:
                                                      AlterUserScramCredentials
                                                      u.admin_request >*/
-        RD_KAFKA_OP_LISTOFFSETS, /**< Admin: ListOffsets u.admin_request >*/
+        RD_KAFKA_OP_LISTOFFSETS,  /**< Admin: ListOffsets u.admin_request >*/
+        RD_KAFKA_OP_METADATA_951, /**TODO: Change name **/
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -271,6 +272,24 @@ struct rd_kafka_admin_fanout_worker_cbs;
 
 #define RD_KAFKA_OP_TYPE_ASSERT(rko, type)                                     \
         rd_assert(((rko)->rko_type & ~RD_KAFKA_OP_FLAGMASK) == (type))
+
+
+typedef struct rd_kafkap_produce_reply_tags_Partition_s {
+        int32_t Partition;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafkap_produce_reply_tags_Partition_t;
+
+typedef struct rd_kafkap_produce_reply_tags_Topic_s {
+        char *TopicName;
+        int32_t PartitionCnt;
+        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
+} rd_kafkap_produce_reply_tags_Topic_t;
+
+typedef struct rd_kafkap_produce_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        int32_t TopicCnt;
+        rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
+} rd_kafkap_produce_reply_tags_t;
 
 struct rd_kafka_op_s {
         TAILQ_ENTRY(rd_kafka_op_s) rko_link;
@@ -678,6 +697,10 @@ struct rd_kafka_op_s {
                         void *opaque;
 
                 } leaders;
+
+                struct {
+                        rd_kafkap_produce_reply_tags_t *produceReplyTags;
+                } metadata_tags;
 
         } rko_u;
 };

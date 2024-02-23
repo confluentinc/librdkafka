@@ -275,6 +275,7 @@ struct rd_kafka_s {
         int rk_topic_cnt;
 
         struct rd_kafka_cgrp_s *rk_cgrp;
+        rd_kafkap_produce_reply_tags_t *produce_tags;
 
         rd_kafka_conf_t rk_conf;
         rd_kafka_q_t *rk_logq; /* Log queue if `log.queue` set */

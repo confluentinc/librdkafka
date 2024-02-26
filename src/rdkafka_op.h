@@ -569,6 +569,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                RD_KAFKA_MOCK_CMD_COORD_SET,
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
+                               RD_KAFKA_MOCK_CMD_BROKER_SET_THROTTLE,
                         } cmd;
 
                         rd_kafka_resp_err_t err; /**< Error for:
@@ -605,6 +606,9 @@ struct rd_kafka_op_s {
                                                   *    TOPIC_CREATE (repl fact)
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    APIVERSION_SET (maxver)
+                                                  */
+                        int32_t throttle_ms;     /**< Throttle time for:
+                                                  *    All API that support this
                                                   */
                 } mock;
 

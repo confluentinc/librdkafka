@@ -1648,6 +1648,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
         mrkb->listen_s = listen_s;
         mrkb->sin      = sin;
         mrkb->port     = ntohs(sin.sin_port);
+        mrkb->throttle_ms = 0;
         rd_snprintf(mrkb->advertised_listener,
                     sizeof(mrkb->advertised_listener), "%s",
                     rd_sockaddr2str(&sin, 0));
@@ -2151,6 +2152,20 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_mock_broker_set_throttle_ms(rd_kafka_mock_cluster_t *mcluster,
+                              int32_t broker_id,
+                              int32_t throttle_ms) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.throttle_ms = throttle_ms;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_SET_THROTTLE;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
 rd_kafka_mock_coordinator_set(rd_kafka_mock_cluster_t *mcluster,
                               const char *key_type,
                               const char *key,
@@ -2236,6 +2251,10 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mrkb->rack = rd_strdup(rko->rko_u.mock.name);
                 else
                         mrkb->rack = NULL;
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_THROTTLE:
+                mrkb->throttle_ms = rko->rko_u.mock.throttle_ms;
                 break;
 
         default:
@@ -2384,6 +2403,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_THROTTLE:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:

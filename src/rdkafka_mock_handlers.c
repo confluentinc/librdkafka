@@ -151,7 +151,7 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: ThrottleTime */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -193,7 +193,7 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: ThrottleTime */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
 
@@ -426,7 +426,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
                 /* Response: ThrottleTime */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
 
@@ -574,7 +574,7 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
@@ -709,7 +709,7 @@ static int rd_kafka_mock_handle_OffsetCommit(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
@@ -936,7 +936,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         /* Response: #Brokers */
@@ -1090,7 +1090,7 @@ rd_kafka_mock_handle_FindCoordinator(rd_kafka_mock_connection_t *mconn,
          */
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: Throttle */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         /* Inject error, if any */
@@ -1189,7 +1189,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
          */
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
                 /* Response: Throttle */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         /* Inject error, if any */
@@ -1272,7 +1272,7 @@ static int rd_kafka_mock_handle_Heartbeat(rd_kafka_mock_connection_t *mconn,
          */
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: Throttle */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         /* Inject error, if any */
@@ -1341,7 +1341,7 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: Throttle */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         /* Inject error, if any */
@@ -1416,7 +1416,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
          */
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: Throttle */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         /* Inject error, if any */
@@ -1658,7 +1658,7 @@ rd_kafka_mock_handle_InitProducerId(rd_kafka_mock_connection_t *mconn,
          */
 
         /* ThrottleTimeMs */
-        rd_kafka_buf_write_i32(resp, 0);
+        rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
 
         /* Inject error */
         err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -1723,7 +1723,7 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
         int32_t TopicsCnt;
 
         /* Response: ThrottleTimeMs */
-        rd_kafka_buf_write_i32(resp, 0);
+        rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
 
         /* TransactionalId */
         rd_kafka_buf_read_str(rkbuf, &TransactionalId);
@@ -1819,7 +1819,7 @@ rd_kafka_mock_handle_AddOffsetsToTxn(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &GroupId);
 
         /* Response: ThrottleTimeMs */
-        rd_kafka_buf_write_i32(resp, 0);
+        rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
 
         /* Inject error */
         err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -1860,7 +1860,7 @@ rd_kafka_mock_handle_TxnOffsetCommit(rd_kafka_mock_connection_t *mconn,
         int32_t TopicsCnt;
 
         /* Response: ThrottleTimeMs */
-        rd_kafka_buf_write_i32(resp, 0);
+        rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
 
         /* TransactionalId */
         rd_kafka_buf_read_str(rkbuf, &TransactionalId);
@@ -2004,7 +2004,7 @@ static int rd_kafka_mock_handle_EndTxn(rd_kafka_mock_connection_t *mconn,
          */
 
         /* ThrottleTimeMs */
-        rd_kafka_buf_write_i32(resp, 0);
+        rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
 
         /* Inject error */
         err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -2223,7 +2223,7 @@ static int rd_kafka_mock_handle_ApiVersion(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* ThrottletimeMs */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_i32(resp, mconn->broker->throttle_ms);
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);

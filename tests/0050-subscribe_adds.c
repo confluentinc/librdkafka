@@ -41,9 +41,13 @@
  *  * Verify that all messages from all three topics are consumed
  *  * Subscribe to T1,T3
  *  * Verify that there were no duplicate messages.
+ *
+ *  @param partition_assignment_strategy Assignment strategy to test.
  */
+static void
+test_no_duplicate_messages(const char *partition_assignment_strategy) {
 
-int main_0050_subscribe_adds(int argc, char **argv) {
+        SUB_TEST("%s", partition_assignment_strategy);
         rd_kafka_t *rk;
 #define TOPIC_CNT 3
         char *topic[TOPIC_CNT] = {
@@ -81,6 +85,8 @@ int main_0050_subscribe_adds(int argc, char **argv) {
 
         test_conf_init(&conf, &tconf, 60);
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
+        test_conf_set(conf, "partition.assignment.strategy",
+                      partition_assignment_strategy);
 
         rk = test_create_consumer(topic[0], NULL, conf, tconf);
 
@@ -120,6 +126,17 @@ int main_0050_subscribe_adds(int argc, char **argv) {
 
         for (i = 0; i < TOPIC_CNT; i++)
                 rd_free(topic[i]);
+
+        SUB_TEST_PASS();
+}
+
+int main_0050_subscribe_adds(int argc, char **argv) {
+
+        test_no_duplicate_messages("range");
+
+        test_no_duplicate_messages("roundrobin");
+
+        test_no_duplicate_messages("cooperative-sticky");
 
         return 0;
 }

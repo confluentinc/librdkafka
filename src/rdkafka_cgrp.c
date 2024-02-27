@@ -2739,6 +2739,7 @@ void rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
         rd_kafka_Uuid_t topic_id;
+        rd_kafka_Uuid_t prev_topic_id = RD_KAFKA_UUID_ZERO;
         rd_list_t *topic_ids;
         int i;
 
@@ -2752,11 +2753,12 @@ void rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
         }
 
         topic_ids = rd_list_new(1, rd_list_Uuid_destroy);
-
         for (i = 0; i < rkcg->rkcg_next_target_assignment->cnt; i++) {
                 topic_id = rd_kafka_topic_partition_get_topic_id(
                     &rkcg->rkcg_next_target_assignment->elems[i]);
-                rd_list_add(topic_ids, rd_kafka_Uuid_copy(&topic_id));
+                if(rd_kafka_Uuid_cmp(prev_topic_id, topic_id) && !rd_list_find(topic_ids, &topic_id, rd_list_Uuid_cmp))
+                        rd_list_add(topic_ids, rd_kafka_Uuid_copy(&topic_id));
+                prev_topic_id = topic_id;
         }
 
         rko = rd_kafka_op_new_cb(rkcg->rkcg_rk, RD_KAFKA_OP_METADATA,

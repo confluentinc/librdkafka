@@ -472,13 +472,15 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
             rkt, rkm->rkm_partition, rkm->rkm_flags, rkm->rkm_payload,
             rkm->rkm_len, rkm->rkm_key, rkm->rkm_key_len, rkm->rkm_opaque, &err,
             NULL, app_hdrs ? app_hdrs : hdrs, rkm->rkm_timestamp, rd_clock());
-        hdrs = NULL; // now owned by rkm
 
         if (unlikely(err)) {
                 error = rd_kafka_error_new(err, "Failed to produce message: %s",
                                            rd_kafka_err2str(err));
                 goto err;
         }
+        // now 'hdrs' owned by rkm as no error occurred
+        // make NULL to avoid double free in message + on error
+        hdrs = NULL;
 
         /* Partition the message */
         err = rd_kafka_msg_partitioner(rkt, rkm, 1);

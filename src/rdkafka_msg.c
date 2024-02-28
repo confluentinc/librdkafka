@@ -472,6 +472,7 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
             rkt, rkm->rkm_partition, rkm->rkm_flags, rkm->rkm_payload,
             rkm->rkm_len, rkm->rkm_key, rkm->rkm_key_len, rkm->rkm_opaque, &err,
             NULL, app_hdrs ? app_hdrs : hdrs, rkm->rkm_timestamp, rd_clock());
+        hdrs = NULL; // now owned by rkm
 
         if (unlikely(err)) {
                 error = rd_kafka_error_new(err, "Failed to produce message: %s",

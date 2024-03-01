@@ -568,9 +568,4 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
 
-void rd_kafka_produce_metadata_handle_tags(
-    rd_kafka_t *rk,
-    rd_kafkap_produce_reply_tags_t *produce_tags);
-
-
 #endif /* _RDKAFKA_REQUEST_H_ */

@@ -421,7 +421,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
                                    const rd_kafkap_str_t *group_id,
                                    const rd_kafkap_str_t *client_id) {
         rd_kafka_cgrp_t *rkcg;
-
+        setbuf(stdout, 0);
         rkcg = rd_calloc(1, sizeof(*rkcg));
 
         rkcg->rkcg_rk             = rk;
@@ -978,7 +978,9 @@ static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
                 member_epoch = -2;
         }
 
+        printf("In leave request handler\n");
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP) {
+                printf("Sending leave request\n");
                 rd_rkb_dbg(rkcg->rkcg_curr_coord, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_ConsumerGroupHeartbeatRequest(
@@ -2809,6 +2811,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rd_kafka_buf_read_str(rkbuf, &member_id);
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
+        printf("\nMember Epoch is %d\n", member_epoch);
 
         int8_t are_assignments_present;
         rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
@@ -2820,6 +2823,8 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;
         }
 
+        printf("Assignment present %s\n", are_assignments_present == 1 ? "Yes" : "No");
+
         if (are_assignments_present == 1) {
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
@@ -2829,7 +2834,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
 
-                if (rd_rkb_is_dbg(rkb, CGRP)) {
+                // if (rd_rkb_is_dbg(rkb, CGRP)) {
                         char assigned_topic_partitions_str[512] = "NULL";
 
                         if (assigned_topic_partitions) {
@@ -2839,11 +2844,13 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                     sizeof(assigned_topic_partitions_str), 0);
                         }
 
+                        printf("Assined Topic Partitions are: %s\n", assigned_topic_partitions_str);
+
                         rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
                                    "Heartbeat response received target "
                                    "assignment \"%s\"",
                                    assigned_topic_partitions_str);
-                }
+                // }
 
                 if (assigned_topic_partitions) {
                         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
@@ -2985,6 +2992,7 @@ err:
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
+                printf("Fatal Error\n\n");
                 rd_kafka_set_fatal_error(rkcg->rkcg_rk, err,
                                          "Fatal consumer error: %s",
                                          rd_kafka_err2str(err));
@@ -5968,6 +5976,15 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                 /* FALLTHRU */
 
         case RD_KAFKA_CGRP_JOIN_STATE_INIT:
+                /*
+                * There maybe a case when there are no assignments are
+                * assigned to this consumer. In this case, while terminating
+                * the consumer can be in STEADY or INIT state and won't go
+                * to intermediate state. In this scenario, last leave call is
+                * done from here.
+                */
+                rd_kafka_cgrp_leave_maybe(rkcg);
+
                 /* Check if cgrp is trying to terminate, which is safe to do
                  * in these two states. Otherwise we'll need to wait for
                  * the current state to decommission. */

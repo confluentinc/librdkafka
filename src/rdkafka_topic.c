@@ -1314,7 +1314,8 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
 
         /* Set topic state.
          * UNKNOWN_TOPIC_OR_PART may indicate that auto.create.topics failed */
-        // TODO: TopicId: Update Unknown Topic Id exception while rebasing from master.
+        // TODO: TopicId: Update Unknown Topic Id exception while rebasing from
+        // master.
         if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION /*invalid topic*/ ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID)
@@ -1439,10 +1440,11 @@ int rd_kafka_topic_metadata_update2(
 
         rd_kafka_wrlock(rkb->rkb_rk);
 
-        if(likely(mdt->topic != NULL)) {
-            rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic, 0 /*!lock*/);
+        if (likely(mdt->topic != NULL)) {
+                rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic, 0 /*!lock*/);
         } else {
-            rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk, mdit->topic_id);
+                rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk,
+                                                      mdit->topic_id);
         }
 
         if (!rkt) {

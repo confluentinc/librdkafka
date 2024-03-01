@@ -966,7 +966,8 @@ rd_kafka_fatal_error_code(rd_kafka_t *rk) {
          *    errors in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat() */
         if ((rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence) ||
             (rk->rk_type == RD_KAFKA_CONSUMER &&
-            (rk->rk_conf.group_instance_id || rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)))
+             (rk->rk_conf.group_instance_id ||
+              rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)))
                 return rd_atomic32_get(&rk->rk_fatal.err);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;

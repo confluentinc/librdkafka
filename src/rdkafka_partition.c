@@ -2914,7 +2914,8 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
 }
 
 
-rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_add_with_topic_name_and_id(
     rd_kafka_topic_partition_list_t *rktparlist,
     rd_kafka_Uuid_t topic_id,
     const char *topic,

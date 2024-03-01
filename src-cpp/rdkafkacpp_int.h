@@ -103,6 +103,12 @@ int ssl_cert_verify_cb_trampoline(rd_kafka_t *rk,
                                   size_t errstr_size,
                                   void *opaque);
 
+int ssl_ctx_init_cb_trampoline(rd_kafka_t *rk,
+                               void *ssl_ctx,
+                               char *errstr,
+                               size_t errstr_size,
+                               void *opaque);
+
 rd_kafka_topic_partition_list_t *partitions_to_c_parts(
     const std::vector<TopicPartition *> &partitions);
 
@@ -589,6 +595,7 @@ class ConfImpl : public Conf {
       offset_commit_cb_(NULL),
       oauthbearer_token_refresh_cb_(NULL),
       ssl_cert_verify_cb_(NULL),
+      ssl_ctx_init_cb_(NULL),
       conf_type_(conf_type),
       rk_conf_(NULL),
       rkt_conf_(NULL) {
@@ -801,6 +808,25 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+
+  Conf::ConfResult set(const std::string &name,
+                       SslContextInitializationCb *ssl_ctx_init_cb,
+                       std::string &errstr) {
+    if (name != "ssl_ctx_init_cb") {
+      errstr = "Invalid value type, expected RdKafka::SslContextInitializationCb";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    ssl_ctx_init_cb_ = ssl_ctx_init_cb;
+    return Conf::CONF_OK;
+  }
+
+
   Conf::ConfResult set_engine_callback_data(void *value, std::string &errstr) {
     if (!rk_conf_) {
       errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
@@ -857,6 +883,7 @@ class ConfImpl : public Conf {
         name.compare("offset_commit_cb") == 0 ||
         name.compare("oauthbearer_token_refresh_cb") == 0 ||
         name.compare("ssl_cert_verify_cb") == 0 ||
+        name.compare("ssl_ctx_init_cb") == 0 ||
         name.compare("set_engine_callback_data") == 0 ||
         name.compare("enable_sasl_queue") == 0) {
       return Conf::CONF_INVALID;
@@ -957,6 +984,13 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  Conf::ConfResult get(SslContextInitializationCb *&ssl_ctx_init_cb) const {
+      if (!rk_conf_)
+              return Conf::CONF_INVALID;
+      ssl_ctx_init_cb = this->ssl_ctx_init_cb_;
+      return Conf::CONF_OK;
+  }
+
   std::list<std::string> *dump();
 
 
@@ -1002,6 +1036,7 @@ class ConfImpl : public Conf {
   OffsetCommitCb *offset_commit_cb_;
   OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb_;
   SslCertificateVerifyCb *ssl_cert_verify_cb_;
+  SslContextInitializationCb *ssl_ctx_init_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
   rd_kafka_topic_conf_t *rkt_conf_;
@@ -1195,6 +1230,7 @@ class HandleImpl : virtual public Handle {
   OffsetCommitCb *offset_commit_cb_;
   OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb_;
   SslCertificateVerifyCb *ssl_cert_verify_cb_;
+  SslContextInitializationCb *ssl_ctx_init_cb_;
 };
 
 

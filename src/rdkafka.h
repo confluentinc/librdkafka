@@ -2466,6 +2466,34 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(
                               size_t errstr_size,
                               void *opaque));
 
+/**
+ * @brief Sets the SSL context initialization callback.
+ *
+ * The initialization callback is triggered from internal librdkafka threads
+ * when connecting to a broker. It can be used to initialize the SSL context
+ * with greater control than what the configuration parameters allow.
+ *
+ * The callback must return 1 if initialization succeeds, or 0 if it fails
+ * and write a human-readable error message to \p errstr (limited to
+ * \c errstr_size bytes, including nul-term).
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
+ * @returns RD_KAFKA_CONF_OK if SSL is supported in this build, else
+ *          RD_KAFKA_CONF_INVALID.
+ *
+ * @warning This callback will be called from internal librdkafka threads.
+ */
+RD_EXPORT
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_ctx_init_cb (
+        rd_kafka_conf_t *conf,
+        int (*ssl_ctx_init_cb)(rd_kafka_t *rk,
+                               void *ssl_ctx,
+                               char *errstr,
+                               size_t errstr_size,
+                               void *opaque));
+
 
 /**
  * @enum rd_kafka_cert_type_t

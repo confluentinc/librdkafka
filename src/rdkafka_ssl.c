@@ -1660,6 +1660,31 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 goto fail;
         }
 
+        /* Custom context initialization callback. If configured, it supersedes all
+         * other SSL configuration parameters. */
+        if (rk->rk_conf.ssl.ctx_init_cb) {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Initializing SSL context via callback");
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.context.init_cb failed: ");
+                r = (int)strlen(errstr);
+                if (!rk->rk_conf.ssl.ctx_init_cb(rk,
+                                                 ctx,
+                                                 errstr+r,
+                                                 (int)errstr_size > r ?
+                                                         (int)errstr_size - r : 0,
+                                                 rk->rk_conf.opaque)) {
+                        goto fail;
+                }
+                if (errstr_size > 0)
+                        errstr[0] = '\0';
+                rk->rk_conf.ssl.ctx = ctx;
+                return 0;
+        } else {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Initializing SSL context from configuration");
+        }
+
 #ifdef SSL_OP_NO_SSLv3
         /* Disable SSLv3 (unsafe) */
         SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);

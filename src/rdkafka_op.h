@@ -688,10 +688,6 @@ struct rd_kafka_op_s {
 
                 } leaders;
 
-                struct {
-                        rd_kafkap_produce_reply_tags_t *produceReplyTags;
-                } metadata_tags;
-
         } rko_u;
 };
 

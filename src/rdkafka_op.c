@@ -475,6 +475,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                            rd_kafka_topic_partition_list_destroy);
                 break;
 
+        case RD_KAFKA_OP_METADATA_951:
+                RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
+                /* It's not needed to free metadata.mdi because they
+                   are the in the same memory allocation. */
+                break;
+
         default:
                 break;
         }

@@ -2848,24 +2848,20 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
 
-                // if (rd_rkb_is_dbg(rkb, CGRP)) {
-                char assigned_topic_partitions_str[512] = "NULL";
+                if (rd_rkb_is_dbg(rkb, CGRP)) {
+                        char assigned_topic_partitions_str[512] = "NULL";
 
-                if (assigned_topic_partitions) {
                         rd_kafka_topic_partition_list_str(
-                            assigned_topic_partitions,
-                            assigned_topic_partitions_str,
-                            sizeof(assigned_topic_partitions_str), 0);
-                }
+                        assigned_topic_partitions,
+                        assigned_topic_partitions_str,
+                        sizeof(assigned_topic_partitions_str), 0);
 
-                printf("Assined Topic Partitions are: %s\n",
-                       assigned_topic_partitions_str);
 
-                rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
-                           "Heartbeat response received target "
-                           "assignment \"%s\"",
+                        rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
+                                "Heartbeat response received target "
+                                "assignment \"%s\"",
                            assigned_topic_partitions_str);
-                // }
+                }
 
                 if (assigned_topic_partitions) {
                         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
@@ -3009,7 +3005,6 @@ err:
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
-                printf("Fatal Error\n\n");
                 rd_kafka_set_fatal_error(rkcg->rkcg_rk, err,
                                          "Fatal consumer error: %s",
                                          rd_kafka_err2str(err));

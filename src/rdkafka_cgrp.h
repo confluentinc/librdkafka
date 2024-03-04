@@ -181,7 +181,8 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_list_t rkcg_toppars; /* Toppars subscribed to*/
 
-        int32_t rkcg_generation_id; /* Current generation id */
+        int32_t rkcg_generation_id; /* Current generation id (classic)
+                                     * or member epoch (consumer). */
 
         int32_t rkcg_member_epoch; /* KIP848TODO: Merge this and Generation Id
                                       field */

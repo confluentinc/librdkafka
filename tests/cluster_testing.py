@@ -109,10 +109,7 @@ class LibrdkafkaTestCluster(Cluster):
                         ] + curr_conf
                     })  # noqa: E501
             print('conf broker', str(n), ': ', defconf_curr)
-            if kraft:
-                self.brokers.append(KafkaBrokerApp(self, defconf_curr))
-            else:
-                self.brokers.append(KafkaBrokerAppOrig(self, defconf_curr))
+            self.brokers.append(KafkaBrokerApp(self, defconf_curr))
 
     def bootstrap_servers(self):
         """ @return Kafka bootstrap servers based on security.protocol """

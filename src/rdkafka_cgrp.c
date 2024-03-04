@@ -431,7 +431,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_coord_id       = -1;
         rkcg->rkcg_generation_id  = -1;
         rkcg->rkcg_wait_resp      = -1;
-        rkcg->rkcg_member_epoch   = 0;
 
         rkcg->rkcg_ops                      = rd_kafka_q_new(rk);
         rkcg->rkcg_ops->rkq_serve           = rd_kafka_cgrp_op_serve;
@@ -978,9 +977,7 @@ static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
                 member_epoch = -2;
         }
 
-        printf("In leave request handler\n");
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP) {
-                printf("Sending leave request\n");
                 rd_rkb_dbg(rkcg->rkcg_curr_coord, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_ConsumerGroupHeartbeatRequest(
@@ -2831,7 +2828,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rd_kafka_buf_read_str(rkbuf, &member_id);
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
-        printf("\nMember Epoch is %d\n", member_epoch);
 
         int8_t are_assignments_present;
         rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
@@ -2842,9 +2838,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         if (heartbeat_interval_ms > 0) {
                 rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;
         }
-
-        printf("Assignment present %s\n",
-               are_assignments_present == 1 ? "Yes" : "No");
 
         if (are_assignments_present == 1) {
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;

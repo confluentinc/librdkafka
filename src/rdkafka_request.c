@@ -3547,6 +3547,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 rd_kafkap_produce_reply_tags_Partition_t PartitionTags = {0};
                 rd_kafkap_produce_reply_tags_Topic_t TopicTags         = {0};
                 rd_kafkap_produce_reply_tags_t ProduceTags             = {0};
+                int i, j;
                 PartitionTags.Partition = hdr.Partition;
                 rd_kafka_produce_reply_handle_partition_read_tag(
                     rkbuf, 1, 0, &PartitionTags);
@@ -3579,7 +3580,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                                sizeof(*mdi->brokers_sorted));
                 md->broker_cnt = ProduceTags.NodeEndpoints.NodeEndpointCnt;
 
-                for (int i = 0; i < ProduceTags.NodeEndpoints.NodeEndpointCnt;
+                for (i = 0; i < ProduceTags.NodeEndpoints.NodeEndpointCnt;
                      i++) {
                         md->brokers[i].id =
                             ProduceTags.NodeEndpoints.NodeEndpoints[i].NodeId;
@@ -3611,7 +3612,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 mdi->topics   = rd_tmpabuf_alloc(&tbuf, ProduceTags.TopicCnt *
                                                           sizeof(*mdi->topics));
 
-                for (int i = 0; i < ProduceTags.TopicCnt; i++) {
+                for (i = 0; i < ProduceTags.TopicCnt; i++) {
                         md->topics[i].topic = rd_strndup(
                             ProduceTags.TopicTags[i].TopicName,
                             strlen(ProduceTags.TopicTags[i].TopicName));
@@ -3623,8 +3624,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                         mdi->topics[i].partitions = rd_tmpabuf_alloc(
                             &tbuf, ProduceTags.TopicTags[i].PartitionCnt *
                                        sizeof(*mdi->topics[i].partitions));
-                        for (int j = 0;
-                             j < ProduceTags.TopicTags[i].PartitionCnt; j++) {
+                        for (j = 0; j < ProduceTags.TopicTags[i].PartitionCnt;
+                             j++) {
                                 md->topics[i].partitions[j].id =
                                     ProduceTags.TopicTags[i]
                                         .PartitionTags[j]

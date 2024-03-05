@@ -85,6 +85,168 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         expect(messagesConsumed.map(m => m.message.offset)).toEqual(messages.map((_, i) => `${i}`))
     });
 
+    it.each([[true], [false]])('consumes messages using eachBatch', async (isAutoResolve) => {
+        await consumer.connect();
+        await producer.connect();
+        await consumer.subscribe({ topic: topicName })
+
+        const messagesConsumed = [];
+        consumer.run({
+            eachBatchAutoResolve: isAutoResolve,
+            eachBatch: async event => {
+                // Match the message format to be checked easily later.
+                event.batch.messages = event.batch.messages.map(msg => ({
+                    message: msg,
+                    topic: event.batch.topic,
+                    partition: event.batch.partition,
+                }));
+                messagesConsumed.push(...event.batch.messages);
+
+                // If we're not auto-resolving, we need to resolve the offsets manually.
+                if (!isAutoResolve)
+                    event.resolveOffset();
+            }
+        });
+
+        const messages = Array(100)
+            .fill()
+            .map(() => {
+                const value = secureRandom()
+                return { key: `key-${value}`, value: `value-${value}` }
+            })
+
+        await producer.send({ topic: topicName, messages })
+        await waitForMessages(messagesConsumed, { number: messages.length })
+
+        expect(messagesConsumed[0]).toEqual(
+            expect.objectContaining({
+                topic: topicName,
+                partition: 0,
+                message: expect.objectContaining({
+                    key: Buffer.from(messages[0].key),
+                    value: Buffer.from(messages[0].value),
+                    offset: String(0),
+                }),
+            })
+        )
+
+        expect(messagesConsumed[messagesConsumed.length - 1]).toEqual(
+            expect.objectContaining({
+                topic: topicName,
+                partition: 0,
+                message: expect.objectContaining({
+                    key: Buffer.from(messages[messages.length - 1].key),
+                    value: Buffer.from(messages[messages.length - 1].value),
+                    offset: String(messages.length - 1),
+                }),
+            })
+        )
+
+        // check if all offsets are present
+        expect(messagesConsumed.map(m => m.message.offset)).toEqual(messages.map((_, i) => `${i}`))
+    });
+
+    it('is able to reconsume messages after not resolving it', async () => {
+        await consumer.connect();
+        await producer.connect();
+        await consumer.subscribe({ topic: topicName })
+
+        let messageSeen = false;
+        const messagesConsumed = [];
+        consumer.run({
+            eachBatchAutoResolve: false,
+            eachBatch: async event => {
+                expect(event.batch.messages.length).toEqual(1);
+                expect(event.batch.messages[0].offset).toEqual('0');
+                expect(event.batch.topic).toEqual(topicName);
+                expect(event.batch.partition).toEqual(0);
+
+                if (!messageSeen) {
+                    messageSeen = true;
+                    return;
+                }
+                messagesConsumed.push(...event.batch.messages);
+
+                // Since we're not auto-resolving, we need to resolve the offsets manually.
+                event.resolveOffset();
+            }
+        });
+
+        const messages = Array(1)
+            .fill()
+            .map(() => {
+                const value = secureRandom()
+                return { key: `key-${value}`, value: `value-${value}` }
+            })
+
+        await producer.send({ topic: topicName, messages })
+        await waitForMessages(messagesConsumed, { number: messages.length });
+    });
+
+    it.each([[true], [false]])('is able to reconsume messages when an error is thrown', async (isAutoResolve) => {
+        await consumer.connect();
+        await producer.connect();
+        await consumer.subscribe({ topic: topicName })
+
+        let messageSeen = false;
+        const messagesConsumed = [];
+        consumer.run({
+            eachBatchAutoResolve: isAutoResolve,
+            eachBatch: async event => {
+                expect(event.batch.messages.length).toEqual(1);
+                expect(event.batch.messages[0].offset).toEqual('0');
+                expect(event.batch.topic).toEqual(topicName);
+                expect(event.batch.partition).toEqual(0);
+
+                if (!messageSeen) {
+                    messageSeen = true;
+                    throw new Error('a new error.');
+                }
+                messagesConsumed.push(...event.batch.messages);
+            }
+        });
+
+        const messages = Array(1)
+            .fill()
+            .map(() => {
+                const value = secureRandom()
+                return { key: `key-${value}`, value: `value-${value}` }
+            })
+
+        await producer.send({ topic: topicName, messages })
+        await waitForMessages(messagesConsumed, { number: messages.length });
+    });
+
+    it.each([[true], [false]])('does not reconsume resolved messages even on error', async (isAutoResolve) => {
+        await consumer.connect();
+        await producer.connect();
+        await consumer.subscribe({ topic: topicName })
+
+        const messagesConsumed = [];
+        consumer.run({
+            eachBatchAutoResolve: isAutoResolve,
+            eachBatch: async event => {
+                messagesConsumed.push(...event.batch.messages);
+                // Resolve offsets irrespective of the value of eachBatchAutoResolve.
+                event.resolveOffset();
+                throw new Error('a new error.');
+            }
+        });
+
+        const messages = Array(2)
+            .fill()
+            .map(() => {
+                const value = secureRandom()
+                return { key: `key-${value}`, value: `value-${value}` }
+            })
+
+        await producer.send({ topic: topicName, messages })
+        await waitForMessages(messagesConsumed, { number: messages.length });
+
+        expect(messagesConsumed[0].key.toString()).toBe(messages[0].key);
+        expect(messagesConsumed[1].key.toString()).toBe(messages[1].key);
+    });
+
     /* Skip until concurrency support for eachMessage is added. */
     it.skip('consumes messages concurrently', async () => {
         const partitionsConsumedConcurrently = 2
@@ -175,8 +337,8 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         ])
     });
 
-    /* Skip as it uses eachBatch */
-    it.skip('commits the last offsets processed before stopping', async () => {
+    /* Skip as it uses consuimer events. */
+    it('commits the last offsets processed before stopping', async () => {
         jest.spyOn(cluster, 'refreshMetadataIfNecessary')
 
         await Promise.all([admin.connect(), consumer.connect(), producer.connect()])
@@ -300,7 +462,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
             expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1])
         });
 
-        /* Skip as it uses eachBatch */
+        /* Skip as the current implementation will never fetch more than 1 message. */
         it.skip('resolves a batch as stale when seek was called while processing it', async () => {
             consumer = createConsumer({
                 groupId,
@@ -347,7 +509,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
             expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1])
         });
 
-        /* Skip as it uses eachBatch */
+        /* Skip as it uses consumer events */
         it.skip('skips messages fetched while seek was called', async () => {
             consumer = createConsumer({
                 cluster: createCluster(),
@@ -398,7 +560,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         });
     });
 
-    /* Skip as it uses eachBatch */
+    /* Skip as it uses consumer events */
     it.skip('discards messages received when pausing while fetch is in-flight', async () => {
         consumer = createConsumer({
             cluster: createCluster(),

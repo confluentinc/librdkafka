@@ -1,3 +1,12 @@
+# confluent-kafka-javascript vNext
+
+v0.1.11-devel is a pre-production, early-access release.
+
+## Features
+
+1. Add support for `eachBatch` in the Consumer API (partial support for API compatibility).
+
+
 # confluent-kafka-javascript v0.1.10-devel
 
 v0.1.10-devel is a pre-production, early-access release.

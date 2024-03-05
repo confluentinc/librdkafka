@@ -187,8 +187,7 @@ describe('Consumer', () => {
             expect(messagesConsumed).toContainEqual({ topic: 0, message: 3 }) // partition 0
         }, 10000);
 
-        /* Skip until eachBatch is made available */
-        it.skip('pauses when pausing via the eachBatch callback - skipped until eachBatch is made available', async () => {
+        it('pauses when pausing via the eachBatch callback', async () => {
             await consumer.connect()
             await producer.connect()
             const originalMessages = [0, 0, 0, 1].map(partition => {
@@ -238,6 +237,7 @@ describe('Consumer', () => {
             })
             await waitForConsumerToJoinGroup(consumer)
             await waitForMessages(messagesConsumed, { number: 5 })
+            expect(messagesConsumed.length).toEqual(5);
             expect(consumer.paused()).toContainEqual({ topic: topics[0], partitions: [0] })
             expect(consumer.paused()).toContainEqual({ topic: topics[1], partitions: [1] })
             shouldPause = false
@@ -246,7 +246,7 @@ describe('Consumer', () => {
             expect(consumer.paused()).toEqual([])
             expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 })
             expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 })
-        });
+        }, 10000);
 
         it('does not fetch messages for the paused topic', async () => {
             await consumer.connect();

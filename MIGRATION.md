@@ -26,7 +26,7 @@
       Rather, it must be configured in the top-level configuration while creating the consumer.
     - `autoCommit` and `autoCommitInterval` are not set on a per-run() basis.
       Rather, they must be configured in the top-level configuration while creating the consumer.
-    - `autoCommitThreshold` and `eachBatch` are not supported.
+    - `autoCommitThreshold` is not supported and `eachBatch` batch size never exceeds 1.
   - For errors: Check the `error.code` rather than the error `name` or `type`.
 
 4. A more exhaustive list of semantic and configuration differences is [presented below](#common).
@@ -282,7 +282,7 @@ producerRun().then(consumerRun).catch(console.error);
     ```
   - The `heartbeat()` no longer needs to be called by the user in the `eachMessage callback`. Heartbeats are automatically managed by librdkafka.
   - The `partitionsConsumedConcurrently` property is not supported at the moment.
-  - The `eachBatch` method is not supported.
+  - An API compatible version of `eachBatch` is available, but the batch size never exceeds 1. The property `eachBatchAutoResolve` is supported.
 * `commitOffsets`:
   - Does not yet support sending metadata for topic partitions being committed.
 * `seek`:

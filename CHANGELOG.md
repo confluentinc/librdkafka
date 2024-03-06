@@ -9,6 +9,8 @@ librdkafka v2.3.1 is a maintenance release:
  * Fix pipeline inclusion of static binaries (#4666)
  * Fix to main loop timeout calculation leading to a tight loop for a
    max period of 1 ms (#4671).
+ * Fixed a bug causing duplicate message consumption from a stale
+   fetch start offset in some particular cases (#4636)
 
 
 ## Fixes
@@ -26,6 +28,14 @@ librdkafka v2.3.1 is a maintenance release:
    before the expiration of a timeout, it was serving with a zero timeout,
    leading to increased CPU usage until the timeout was reached.
    Happening since 1.x (#4671).
+
+### Consumer fixes
+
+ * In case of subscription change with a consumer using the cooperative assignor
+   it could resume fetching from a previous position.
+   That could also happen if resuming a partition that wasn't paused.
+   Fixed by ensuring that a resume operation is completely a no-op when
+   the partition isn't paused (#4636).
 
 
 

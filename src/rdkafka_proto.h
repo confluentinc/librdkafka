@@ -616,6 +616,9 @@ rd_kafka_Uuid_t rd_kafka_Uuid_random();
 
 const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
 
+#define RD_KAFKA_UUID_IS_ZERO(uuid)                                            \
+        (!rd_kafka_Uuid_cmp(uuid, RD_KAFKA_UUID_ZERO))
+
 /**
  * @brief UUID copier for rd_list_copy()
  */
@@ -625,6 +628,12 @@ static RD_UNUSED void *rd_list_Uuid_copy(const void *elem, void *opaque) {
 
 static RD_INLINE RD_UNUSED void rd_list_Uuid_destroy(void *uuid) {
         rd_kafka_Uuid_destroy((rd_kafka_Uuid_t *)uuid);
+}
+
+static RD_INLINE RD_UNUSED int rd_list_Uuid_cmp(const void *uuid1,
+                                                const void *uuid2) {
+        return rd_kafka_Uuid_cmp(*((rd_kafka_Uuid_t *)uuid1),
+                                 *((rd_kafka_Uuid_t *)uuid2));
 }
 
 

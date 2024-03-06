@@ -109,6 +109,16 @@ typedef struct rd_kafka_partition_leader_epoch_s {
         int32_t leader_epoch;
 } rd_kafka_partition_leader_epoch_t;
 
+/**
+ * Finds and returns a topic based on its topic_id, or NULL if not found.
+ * The 'rkt' refcount is increased by one and the caller must call
+ * rd_kafka_topic_destroy() when it is done with the topic to decrease
+ * the refcount.
+ *
+ * Locality: any thread
+ */
+rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk,
+                                                  rd_kafka_Uuid_t topic_id);
 
 /*
  * @struct Internal representation of a topic.
@@ -124,6 +134,7 @@ struct rd_kafka_topic_s {
 
         rwlock_t rkt_lock;
         rd_kafkap_str_t *rkt_topic;
+        rd_kafka_Uuid_t rkt_topic_id;
 
         rd_kafka_toppar_t *rkt_ua; /**< Unassigned partition (-1) */
         rd_kafka_toppar_t **rkt_p; /**< Partition array */

@@ -6,6 +6,20 @@ librdkafka v2.3.1 is a maintenance release:
    check the [release notes](https://www.openssl.org/news/cl30.txt).
  * Integration tests can be started in KRaft mode and run against any
    GitHub Kafka branch other than the released versions.
+ * Fixed a bug causing duplicate message consumption from a stale
+   fetch start offset in some particular cases (#4636)
+
+
+## Fixes
+
+### Consumer fixes
+
+ * In case of subscription change with a consumer using the cooperative assignor
+   it could resume fetching from a previous position.
+   That could also happen if resuming a partition that wasn't paused.
+   Fixed by ensuring that a resume operation is completely a no-op when
+   the partition isn't paused (#4636).
+
 
 
 # librdkafka v2.3.0

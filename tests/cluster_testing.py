@@ -9,7 +9,7 @@
 
 from trivup.trivup import Cluster
 from trivup.apps.ZookeeperApp import ZookeeperApp
-from trivup.apps.KafkaBrokerApp import KafkaBrokerApp as KafkaBrokerAppOrig
+from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.SslApp import SslApp
 from trivup.apps.OauthbearerOIDCApp import OauthbearerOIDCApp
@@ -33,15 +33,6 @@ def read_scenario_conf(scenario):
     parser = JsonComment(json)
     with open(os.path.join('scenarios', scenario + '.json'), 'r') as f:
         return parser.load(f)
-
-
-# FIXME: merge in trivup
-class KafkaBrokerApp(KafkaBrokerAppOrig):
-    def _add_simple_authorizer(self, conf_blob):
-        conf_blob.append(
-            'authorizer.class.name=' +
-            'org.apache.kafka.metadata.authorizer.StandardAuthorizer')
-        conf_blob.append('super.users=User:ANONYMOUS')
 
 
 class LibrdkafkaTestCluster(Cluster):

@@ -207,7 +207,10 @@ static void do_test_session_timeout(const char *use_commit_type) {
 
         /* The commit in the rebalance callback should fail when the
          * member has timed out from the group. */
-        commit_exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+        if (test_consumer_group_protocol_classic())
+                commit_exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+        else
+                commit_exp_err = RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH;
 
         expect_rebalance("session timeout revoke", c,
                          RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS, 2 + 5 + 2);

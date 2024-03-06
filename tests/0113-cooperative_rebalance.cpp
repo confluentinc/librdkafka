@@ -1937,6 +1937,8 @@ static void n_wildcard() {
           "Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
+      test_wait_topic_exists(NULL, topic_name_1.c_str(), 5000);
+      test_wait_topic_exists(NULL, topic_name_2.c_str(), 5000);
       /* The consumers should autonomously discover these topics and start
        * consuming from them. This happens in the background - is not
        * influenced by whether we wait for the topics to be created before
@@ -2691,8 +2693,13 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
 
   Test::Say("Disposing consumers\n");
   for (int i = 0; i < N_CONSUMERS; i++) {
-    TEST_ASSERT(!use_rebalance_cb || !rebalance_cbs[i].wait_rebalance,
-                "Consumer %d still waiting for rebalance", i);
+    /* A consumer will nor necessarily get a rebalance after a
+     * subscription change with the consumer protocol */
+    if (test_consumer_group_protocol_classic()) {
+      TEST_ASSERT(!use_rebalance_cb || !rebalance_cbs[i].wait_rebalance,
+                  "Consumer %d still waiting for rebalance", i);
+    }
+
     if (i & 1)
       consumers[i]->close();
     delete consumers[i];
@@ -3219,9 +3226,7 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
    */
   p = test_create_producer();
 
-  test_create_topic(p, topic, partition_cnt, 1);
-
-  test_wait_topic_exists(p, topic, 5000);
+  test_create_topic_wait_exists(p, topic, partition_cnt, 1, 5000);
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3288,7 +3293,7 @@ static void x_incremental_rebalances(void) {
   SUB_TEST();
   test_conf_init(&conf, NULL, 60);
 
-  test_create_topic(NULL, topic, 6, 1);
+  test_create_topic_wait_exists(NULL, topic, 6, 1, 5000);
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {
@@ -3418,12 +3423,8 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
     t_max_poll_interval_exceeded(i);
   /* Run all 2*3 variations of the u_.. test */
   for (i = 0; i < 3; i++) {
-    /* TODO: broker doesn't ack some revocations while
-     * epoch has changed. Check again later. */
-    if (test_consumer_group_protocol_classic()) {
-      u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
-      u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
-    }
+    u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
+    u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
   }
   v_commit_during_rebalance(true /*with rebalance callback*/,
                             true /*auto commit*/);

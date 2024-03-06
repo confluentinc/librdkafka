@@ -195,6 +195,7 @@ static void do_test(rd_bool_t with_queue) {
         /* Produce messages */
         rk_p  = test_create_producer();
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
+        test_wait_topic_exists(rk_p, topic, 5000);
 
         for (partition = 0; partition < partition_cnt; partition++) {
                 test_produce_msgs(rk_p, rkt_p, testid, partition,

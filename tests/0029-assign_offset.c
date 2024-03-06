@@ -114,6 +114,7 @@ int main_0029_assign_offset(int argc, char **argv) {
         /* TODO: this should be fixed when upgrading from generic to
          * new consumer group will be possible. See KAFKA-15989 */
         if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP("Still not supported by KIP-848\n");
                 return 0;
         }
 
@@ -125,6 +126,7 @@ int main_0029_assign_offset(int argc, char **argv) {
         testid = test_id_generate();
         rk     = test_create_producer();
         rkt    = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         parts = rd_kafka_topic_partition_list_new(partitions);
 

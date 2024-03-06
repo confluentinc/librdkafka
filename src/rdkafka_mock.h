@@ -462,7 +462,7 @@ RD_EXPORT void rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
  * @param group_id Group id.
  * @param target_assignment Target assignment for all the members.
  */
-void rd_kafka_mock_cgrp_consumer_target_assignment(
+RD_EXPORT void rd_kafka_mock_cgrp_consumer_target_assignment(
     rd_kafka_mock_cluster_t *mcluster,
     const char *group_id,
     rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment);
@@ -476,9 +476,9 @@ void rd_kafka_mock_cgrp_consumer_target_assignment(
  * @param mcluster Mock cluster instance.
  * @param session_timeout_ms Session timeout in milliseconds.
  */
-void rd_kafka_mock_set_default_session_timeout(
-    rd_kafka_mock_cluster_t *mcluster,
-    int session_timeout_ms);
+RD_EXPORT void
+rd_kafka_mock_set_default_session_timeout(rd_kafka_mock_cluster_t *mcluster,
+                                          int session_timeout_ms);
 
 /**
  * @brief Set default heartbeat interval
@@ -489,9 +489,9 @@ void rd_kafka_mock_set_default_session_timeout(
  * @param mcluster Mock cluster instance.
  * @param heartbeat_interval_ms Heartbeat interval in milliseconds.
  */
-void rd_kafka_mock_set_default_heartbeat_interval(
-    rd_kafka_mock_cluster_t *mcluster,
-    int heartbeat_interval_ms);
+RD_EXPORT void
+rd_kafka_mock_set_default_heartbeat_interval(rd_kafka_mock_cluster_t *mcluster,
+                                             int heartbeat_interval_ms);
 
 
 /**@}*/

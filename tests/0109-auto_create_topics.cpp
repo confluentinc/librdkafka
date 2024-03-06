@@ -130,11 +130,17 @@ static void do_test_consumer(bool allow_auto_create_topics,
   } else {
     topics.push_back(topic_exists);
 
-    if (has_acl_cli)
+    /* Consumer doesn't do a preliminary Metadata call that
+     * returns a TOPIC_AUTHORIZATION_FAILED error with the consumer
+     * protocol. */
+    if (has_acl_cli && test_consumer_group_protocol_classic())
       exp_errors[topic_unauth] = RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED;
   }
 
-  if (supports_allow && !allow_auto_create_topics)
+  /* Consumer doesn't do a preliminary Metadata call that returns
+   * UNKNOWN_TOPIC_OR_PART with the consumer protocol. */
+  if (supports_allow && !allow_auto_create_topics &&
+      test_consumer_group_protocol_classic())
     exp_errors[topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
 
   RdKafka::ErrorCode err;
@@ -208,10 +214,14 @@ extern "C" {
 int main_0109_auto_create_topics(int argc, char **argv) {
   /* Parameters:
    *  allow auto create, with wildcards */
-  do_test_consumer(true, true);
   do_test_consumer(true, false);
-  do_test_consumer(false, true);
   do_test_consumer(false, false);
+
+  /* TODO: check again when regexes will be supported by KIP-848 */
+  if (test_consumer_group_protocol_classic()) {
+    do_test_consumer(true, true);
+    do_test_consumer(false, true);
+  }
 
   return 0;
 }

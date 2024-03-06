@@ -169,6 +169,7 @@ static void do_test_produce_timeout(const char *topic, const int msgrate) {
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, "message.timeout.ms",
                                          "5000", NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         /* Create the topic to make sure connections are up and ready. */
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));

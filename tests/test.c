@@ -1813,11 +1813,11 @@ int main(int argc, char **argv) {
         d = 0;
         if (sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d) <
             3) {
-                printf(
-                    "%% Expected broker version to be in format "
-                    "N.N.N (N=int), not %s\n",
-                    test_broker_version_str);
-                exit(1);
+                test_broker_version_str = "9.9.9.9";
+                TEST_SAY(
+                    "Non-numeric broker version, setting version"
+                    " to 9.9.9.9\n");
+                sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d);
         }
         test_broker_version = TEST_BRKVER(a, b, c, d);
         TEST_SAY("Broker version: %s (%d.%d.%d.%d)\n", test_broker_version_str,
@@ -4876,6 +4876,15 @@ void test_create_topic(rd_kafka_t *use_rk,
         else
                 test_admin_create_topic(use_rk, topicname, partition_cnt,
                                         replication_factor, NULL);
+}
+
+void test_create_topic_wait_exists(rd_kafka_t *use_rk,
+                                   const char *topicname,
+                                   int partition_cnt,
+                                   int replication_factor,
+                                   int timeout) {
+        test_create_topic(use_rk, topicname, partition_cnt, replication_factor);
+        test_wait_topic_exists(use_rk, topicname, timeout);
 }
 
 

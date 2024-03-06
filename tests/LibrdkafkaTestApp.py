@@ -12,6 +12,7 @@ from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.OauthbearerOIDCApp import OauthbearerOIDCApp
 
+import os
 import json
 
 
@@ -181,7 +182,9 @@ class LibrdkafkaTestApp(App):
 
         self.env_add('TEST_SCENARIO', scenario)
         self.env_add('RDKAFKA_TEST_CONF', self.test_conf_file)
-        self.env_add('TEST_KAFKA_VERSION', version)
+        test_kafka_version = version
+        if 'TEST_KAFKA_VERSION' not in os.environ:
+            self.env_add('TEST_KAFKA_VERSION', test_kafka_version, False)
         self.env_add('TRIVUP_ROOT', cluster.instance_path())
 
         if self.test_mode != 'bash':

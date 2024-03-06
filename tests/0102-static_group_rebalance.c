@@ -160,7 +160,7 @@ static void do_test_static_group_rebalance(void) {
         c[0].mv = &mv;
         c[1].mv = &mv;
 
-        test_create_topic(NULL, topic, 3, 1);
+        test_create_topic_wait_exists(NULL, topic, 3, 1, 5000);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_set(conf, "max.poll.interval.ms", "9000");
@@ -255,7 +255,8 @@ static void do_test_static_group_rebalance(void) {
          * New topics matching the subscription pattern should cause
          * group rebalance
          */
-        test_create_topic(c->rk, tsprintf("%snew", topic), 1, 1);
+        test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 1, 1,
+                                      5000);
 
         /* Await revocation */
         rebalance_start        = test_clock();
@@ -440,9 +441,9 @@ is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
 }
 
 /**
- * @brief Test that consumer fencing raises a fatal error
+ * @brief Test that consumer fencing raises a fatal error, classic protocol
  */
-static void do_test_fenced_member(void) {
+static void do_test_fenced_member_classic(void) {
         rd_kafka_t *c[3]; /* 0: consumer2b, 1: consumer1, 2: consumer2a */
         rd_kafka_conf_t *conf;
         const char *topic =
@@ -458,9 +459,11 @@ static void do_test_fenced_member(void) {
         test_create_topic(NULL, topic, 3, 1);
 
         test_conf_set(conf, "group.instance.id", "consumer1");
+        test_conf_set(conf, "client.id", "consumer1");
         c[1] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
         test_conf_set(conf, "group.instance.id", "consumer2");
+        test_conf_set(conf, "client.id", "consumer2a");
         c[2] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
         test_wait_topic_exists(c[2], topic, 5000);
@@ -473,6 +476,7 @@ static void do_test_fenced_member(void) {
         /* Create conflicting consumer */
         TEST_SAY("Creating conflicting consumer2 instance\n");
         test_conf_set(conf, "group.instance.id", "consumer2");
+        test_conf_set(conf, "client.id", "consumer2b");
         c[0] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
         rd_kafka_conf_destroy(conf);
 
@@ -523,13 +527,112 @@ static void do_test_fenced_member(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that consumer fencing raises a fatal error,
+ *        consumer protocol (KIP-848).
+ *        The difference with the behavior of the classic one is that
+ *        the member that is fenced is the one that is joining the group
+ *        and not the one that was already in the group.
+ *        Also the error is ERR_UNRELEASED_INSTANCE_ID instead of
+ *        ERR_FENCED_INSTANCE_ID.
+ */
+static void do_test_fenced_member_consumer(void) {
+        rd_kafka_t *c[3]; /* 0: consumer2b, 1: consumer1, 2: consumer2a */
+        rd_kafka_conf_t *conf;
+        const char *topic =
+            test_mk_topic_name("0102_static_group_rebalance", 1);
+        rd_kafka_message_t *rkm;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
 
+        SUB_TEST();
+
+        test_conf_init(&conf, NULL, 30);
+
+        test_create_topic(NULL, topic, 3, 1);
+
+        test_conf_set(conf, "group.instance.id", "consumer1");
+        test_conf_set(conf, "client.id", "consumer1");
+        c[1] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+
+        test_conf_set(conf, "group.instance.id", "consumer2");
+        test_conf_set(conf, "client.id", "consumer2a");
+        c[2] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+
+        test_wait_topic_exists(c[2], topic, 5000);
+
+        test_consumer_subscribe(c[1], topic);
+        test_consumer_subscribe(c[2], topic);
+
+        await_assignment_multi("Awaiting initial assignments", &c[1], 2);
+
+        /* Create conflicting consumer */
+        TEST_SAY("Creating conflicting consumer2 instance\n");
+        test_conf_set(conf, "group.instance.id", "consumer2");
+        test_conf_set(conf, "client.id", "consumer2b");
+        c[0] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        rd_kafka_conf_destroy(conf);
+
+        test_curr->is_fatal_cb = is_fatal_cb;
+        valid_fatal_rk = c[0]; /* consumer2b is the consumer that should fail */
+
+        test_consumer_subscribe(c[0], topic);
+
+        /* consumer1 should not be affected (other than a rebalance which
+         * we ignore here)... */
+        test_consumer_poll_no_msgs("consumer1", c[1], 0, 5000);
+
+        /* consumer2b should be fenced off on joining */
+        rkm = rd_kafka_consumer_poll(c[0], 5000);
+        TEST_ASSERT(rkm != NULL, "Expected error, not timeout");
+        TEST_ASSERT(rkm->err == RD_KAFKA_RESP_ERR__FATAL,
+                    "Expected ERR__FATAL, not %s: %s",
+                    rd_kafka_err2str(rkm->err), rd_kafka_message_errstr(rkm));
+        TEST_SAY("Fenced consumer returned expected: %s: %s\n",
+                 rd_kafka_err2name(rkm->err), rd_kafka_message_errstr(rkm));
+        rd_kafka_message_destroy(rkm);
+
+
+        /* Read the actual error */
+        err = rd_kafka_fatal_error(c[0], errstr, sizeof(errstr));
+        TEST_SAY("%s fatal error: %s: %s\n", rd_kafka_name(c[0]),
+                 rd_kafka_err2name(err), errstr);
+        TEST_ASSERT(
+            err == RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID,
+            "Expected ERR_UNRELEASED_INSTANCE_ID as fatal error, not %s",
+            rd_kafka_err2name(err));
+
+        TEST_SAY("close\n");
+        /* Close consumer2b, should also return a fatal error */
+        err = rd_kafka_consumer_close(c[0]);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__FATAL,
+                    "Expected close on %s to return ERR__FATAL, not %s",
+                    rd_kafka_name(c[0]), rd_kafka_err2name(err));
+
+        rd_kafka_destroy(c[0]);
+
+        /* consumer1 and consumer2a should be fine and get their
+         * assignments */
+        await_assignment_multi("Awaiting post-fencing assignment", &c[1], 2);
+
+        rd_kafka_destroy(c[1]);
+        rd_kafka_destroy(c[2]);
+
+        SUB_TEST_PASS();
+}
 
 int main_0102_static_group_rebalance(int argc, char **argv) {
+        /* TODO: check again when regexes
+         * will be supported by KIP-848 */
+        if (test_consumer_group_protocol_classic()) {
+                do_test_static_group_rebalance();
+        }
 
-        do_test_static_group_rebalance();
-
-        do_test_fenced_member();
+        if (test_consumer_group_protocol_classic()) {
+                do_test_fenced_member_classic();
+        } else {
+                do_test_fenced_member_consumer();
+        }
 
         return 0;
 }

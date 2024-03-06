@@ -884,8 +884,7 @@ err_parse:
         goto err;
 }
 
-
-static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
+static void rd_kafka_cgrp_consumer_destroy(rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 return;
 
@@ -900,6 +899,13 @@ static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
         rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);
         rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK &
                                      ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
+}
+
+static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
+        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
+                return;
+
+        rd_kafka_cgrp_consumer_destroy(rkcg);
         rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
 }
 
@@ -2926,6 +2932,10 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                 rkcg, assigned_topic_partitions)) {
                                 rkcg->rkcg_next_target_assignment =
                                     assigned_topic_partitions;
+                        } else {
+                                rd_kafka_topic_partition_list_destroy(
+                                    assigned_topic_partitions);
+                                assigned_topic_partitions = NULL;
                         }
                 }
         }
@@ -3283,6 +3293,9 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
 
         /* Remove cgrp application queue forwarding, if any. */
         rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
+
+        /* Destroy KIP-848 consumer group structures */
+        rd_kafka_cgrp_consumer_destroy(rkcg);
 }
 
 

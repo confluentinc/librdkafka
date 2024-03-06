@@ -120,10 +120,9 @@ static void test_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
 /** @brief Max Jitter is 20 percent each side so buffer chosen
  *         is +- a fixed error to account for latency delays. */
 static void check_time_difference(int64_t time_difference, int retry_count) {
-        static int32_t error = retry_ms / 2;
-
-        int64_t low  = (1 << retry_count) * retry_ms * 0.8 - error;
-        int64_t high = (1 << retry_count) * retry_ms * 1.2 + error;
+        int32_t error = retry_ms / 2;
+        int64_t low   = (1 << retry_count) * retry_ms * 0.8 - error;
+        int64_t high  = (1 << retry_count) * retry_ms * 1.2 + error;
         if (high > (retry_max_ms * 1.2 + error))
                 high = retry_max_ms * 1.2 + error;
         if (low > (retry_max_ms * 0.8 - error))
@@ -236,6 +235,7 @@ static void test_produce(rd_kafka_mock_cluster_t *mcluster,
 
         producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt      = test_create_producer_topic(producer, topic, NULL);
+        test_wait_topic_exists(producer, topic, 5000);
 
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_Produce, 7,
@@ -404,6 +404,7 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
 
         producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt      = test_create_producer_topic(producer, topic, NULL);
+        test_wait_topic_exists(producer, topic, 5000);
 
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_Produce, 1,

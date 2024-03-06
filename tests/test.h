@@ -718,6 +718,11 @@ void test_create_topic(rd_kafka_t *use_rk,
                        const char *topicname,
                        int partition_cnt,
                        int replication_factor);
+void test_create_topic_wait_exists(rd_kafka_t *use_rk,
+                                   const char *topicname,
+                                   int partition_cnt,
+                                   int replication_factor,
+                                   int timeout);
 rd_kafka_resp_err_t test_auto_create_topic_rkt(rd_kafka_t *rk,
                                                rd_kafka_topic_t *rkt,
                                                int timeout_ms);

@@ -83,6 +83,7 @@ void do_test_producer(int64_t reauth_time, const char *topic) {
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         /* Create the topic to make sure connections are up and ready. */
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
@@ -129,7 +130,7 @@ void do_test_consumer(int64_t reauth_time, const char *topic) {
 
         p1 = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
 
-        test_create_topic(p1, topic, 1, 3);
+        test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
         TEST_SAY("Topic: %s is created\n", topic);
 
         test_conf_set(conf, "auto.offset.reset", "earliest");
@@ -207,6 +208,7 @@ void do_test_txn_producer(int64_t reauth_time,
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
         TEST_ASSERT(!err, "topic creation failed: %s", rd_kafka_err2str(err));
@@ -303,6 +305,7 @@ void do_test_oauthbearer(int64_t reauth_time,
                 rd_kafka_sasl_background_callbacks_enable(rk);
 
         rkt = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         /* Create the topic to make sure connections are up and ready. */
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
@@ -372,6 +375,7 @@ void do_test_reauth_failure(int64_t reauth_time, const char *topic) {
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         /* Create the topic to make sure connections are up and ready. */
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));

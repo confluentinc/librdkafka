@@ -86,7 +86,7 @@ static void do_test_producer(bool topic_known) {
 
   /* Create topic */
   std::string topic_unauth = Test::mk_topic_name("0115-unauthorized", 1);
-  Test::create_topic(NULL, topic_unauth.c_str(), 3, 1);
+  Test::create_topic_wait_exists(NULL, topic_unauth.c_str(), 3, 1, 5000);
 
   int exp_dr_cnt = 0;
 
@@ -111,6 +111,9 @@ static void do_test_producer(bool topic_known) {
       "--operation All --deny-host '*' "
       "--topic '%s'",
       bootstraps.c_str(), topic_unauth.c_str());
+
+  /* Allow ACLs to propagate */
+  rd_sleep(1);
 
   /* Produce message to any partition. */
   Test::Say("Producing message 1 to any partition\n");

@@ -68,6 +68,7 @@ int main_0050_subscribe_adds(int argc, char **argv) {
                 rd_kafka_topic_t *rkt;
 
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
+                test_wait_topic_exists(rk, topic[i], 5000);
 
                 test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
                                   (msgcnt / TOPIC_CNT) * i,

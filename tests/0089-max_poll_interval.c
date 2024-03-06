@@ -61,7 +61,7 @@ static void do_test(void) {
 
         testid = test_id_generate();
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
@@ -183,9 +183,10 @@ done:
         }
 
 
-        for (i = 0; i < 2; i++)
+        for (i = 0; i < 2; i++) {
                 rd_kafka_destroy_flags(c[i],
                                        RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+        }
 
         SUB_TEST_PASS();
 }
@@ -212,7 +213,7 @@ static void do_test_with_log_queue(void) {
 
         testid = test_id_generate();
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
@@ -380,7 +381,7 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
             "%d",
             forward_to_another_q, forward_to_consumer_q);
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         test_str_id_generate(groupid, sizeof(groupid));
         test_conf_init(&conf, NULL, 60);
@@ -466,7 +467,7 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
 
         SUB_TEST();
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
         uint64_t testid = test_id_generate();
 
         test_produce_msgs_easy(topic, testid, -1, 100);

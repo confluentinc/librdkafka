@@ -242,7 +242,8 @@ rd_kafka_topic_t *rd_kafka_topic_find0_fl(const char *func,
 #define rd_kafka_topic_find0(rk, topic)                                        \
         rd_kafka_topic_find0_fl(__FUNCTION__, __LINE__, rk, topic)
 
-rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk, rd_kafka_Uuid_t topic_id);
+rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk,
+                                                  rd_kafka_Uuid_t topic_id);
 
 int rd_kafka_topic_cmp_rkt(const void *_a, const void *_b);
 

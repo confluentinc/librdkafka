@@ -2,6 +2,7 @@
  * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -638,8 +639,8 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                                                 2 + 8 + 4 /*inner header*/));
 
         for (i = 0; i < TopicArrayCnt; i++) {
-                rd_kafkap_str_t topic;
-                rd_kafka_Uuid_t topic_id;
+                rd_kafkap_str_t topic    = RD_ZERO_INIT;
+                rd_kafka_Uuid_t topic_id = RD_KAFKA_UUID_ZERO;
                 int32_t PartitionArrayCnt;
                 int j;
 
@@ -647,6 +648,8 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
                         rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk,
                                                               topic_id);
+                        if (rkt)
+                                topic = *rkt->rkt_topic;
                 } else {
                         rd_kafka_buf_read_str(rkbuf, &topic);
                         rkt = rd_kafka_topic_find0(rkb->rkb_rk, &topic);

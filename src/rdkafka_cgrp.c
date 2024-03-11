@@ -2868,10 +2868,30 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 }
 
                 if (assigned_topic_partitions) {
+                        rd_bool_t assignment_updated = rd_true;
                         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
                                    rd_kafka_topic_partition_list_destroy);
-                        rkcg->rkcg_next_target_assignment =
-                            assigned_topic_partitions;
+                        rkcg->rkcg_next_target_assignment = NULL;
+                        if (rkcg->rkcg_target_assignment) {
+                                if(!rd_kafka_topic_partition_list_cmp(
+                                assigned_topic_partitions, rkcg->rkcg_target_assignment,
+                                rd_kafka_topic_partition_by_id_cmp)) {
+                                        /* If target assignment is present and the new assignment is same as target assignment, then we are already in process of adding that target assignment. We can ignore this new assignment.*/
+                                        assignment_updated = rd_false;
+                                }
+                        } else if (rkcg->rkcg_current_assignment) {
+                                if(!rd_kafka_topic_partition_list_cmp(
+                                assigned_topic_partitions, rkcg->rkcg_current_assignment,
+                                rd_kafka_topic_partition_by_id_cmp)) {
+                                        /* If target assignment is not present then if the current assignment is present and the new assignment is same as current assignment, then we are already at correct assignment. We can ignore this new assignment.*/
+                                        assignment_updated = rd_false;
+                                }
+                        }
+                        if (assignment_updated) {
+                                /* We assign new assignment from the heartbeat only if it is not same as target assignment or current assignment if target assignment is not present */
+                                rkcg->rkcg_next_target_assignment =
+                                assigned_topic_partitions;
+                        }
                 }
         }
 

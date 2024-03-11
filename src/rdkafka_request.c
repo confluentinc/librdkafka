@@ -1595,12 +1595,16 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                              rd_kafka_buf_t *request,
                              rd_kafka_topic_partition_list_t *offsets,
                              rd_bool_t ignore_cgrp) {
-        const int log_decode_errors = LOG_ERR;
-        int32_t TopicArrayCnt;
-        int errcnt  = 0;
-        int partcnt = 0;
-        int i;
-        int actions = 0;
+        const int log_decode_errors                     = LOG_ERR;
+        int errcnt                                      = 0;
+        int partcnt                                     = 0;
+        int actions                                     = 0;
+        rd_kafka_topic_partition_list_t *partitions     = NULL;
+        rd_kafka_topic_partition_t *partition           = NULL;
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
 
         if (err)
                 goto err;
@@ -1608,54 +1612,37 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
         if (rd_kafka_buf_ApiVersion(rkbuf) >= 3)
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
-        rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
-        for (i = 0; i < TopicArrayCnt; i++) {
-                rd_kafkap_str_t topic;
-                char *topic_str;
-                int32_t PartArrayCnt;
-                int j;
+        partitions = rd_kafka_buf_read_topic_partitions(
+            rkbuf, rd_false /*don't use topic_id*/, rd_true /*use topic name*/,
+            0, fields);
 
-                rd_kafka_buf_read_str(rkbuf, &topic);
-                rd_kafka_buf_read_arraycnt(rkbuf, &PartArrayCnt,
-                                           RD_KAFKAP_PARTITIONS_MAX);
+        if (!partitions)
+                goto err_parse;
 
-                RD_KAFKAP_STR_DUPA(&topic_str, &topic);
+        partcnt = partitions->cnt;
+        RD_KAFKA_TPLIST_FOREACH(partition, partitions) {
+                rd_kafka_topic_partition_t *rktpar;
 
-                for (j = 0; j < PartArrayCnt; j++) {
-                        int32_t partition;
-                        int16_t ErrorCode;
-                        rd_kafka_topic_partition_t *rktpar;
+                rktpar = rd_kafka_topic_partition_list_find(
+                    offsets, partition->topic, partition->partition);
 
-                        rd_kafka_buf_read_i32(rkbuf, &partition);
-                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-                        rd_kafka_buf_skip_tags(rkbuf);
-
-                        rktpar = rd_kafka_topic_partition_list_find(
-                            offsets, topic_str, partition);
-
-                        if (!rktpar) {
-                                /* Received offset for topic/partition we didn't
-                                 * ask for, this shouldn't really happen. */
-                                continue;
-                        }
-
-                        rktpar->err = ErrorCode;
-                        if (ErrorCode) {
-                                err = ErrorCode;
-                                errcnt++;
-
-                                /* Accumulate actions for per-partition
-                                 * errors. */
-                                actions |= rd_kafka_handle_OffsetCommit_error(
-                                    rkb, request, rktpar);
-                        }
-
-                        partcnt++;
+                if (!rktpar) {
+                        /* Received offset for topic/partition we didn't
+                         * ask for, this shouldn't really happen. */
+                        continue;
                 }
-                rd_kafka_buf_skip_tags(rkbuf);
-        }
 
-        rd_kafka_buf_skip_tags(rkbuf);
+                if (partition->err) {
+                        rktpar->err = partition->err;
+                        err         = partition->err;
+                        errcnt++;
+                        /* Accumulate actions for per-partition
+                         * errors. */
+                        actions |= rd_kafka_handle_OffsetCommit_error(
+                            rkb, request, partition);
+                }
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
 
         /* If all partitions failed use error code
          * from last partition as the global error. */

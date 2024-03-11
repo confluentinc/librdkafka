@@ -2591,9 +2591,10 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
         return rd_true;
 }
 
-static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
-    rd_kafka_cgrp_t *rkcg,
-    rd_kafka_topic_partition_list_t *new_target_assignment) {
+static rd_kafka_op_res_t
+rd_kafka_cgrp_consumer_handle_next_assignment(rd_kafka_cgrp_t *rkcg,
+                                              rd_kafka_topic_partition_list_t *new_target_assignment,
+                                              rd_bool_t clear_next_assignment) {
         rd_bool_t is_assignment_different = rd_false;
         if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK)
                 return RD_KAFKA_OP_RES_HANDLED;
@@ -2613,8 +2614,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
          * otherwise. */
         if (!is_assignment_different) {
                 if (rkcg->rkcg_next_target_assignment &&
-                    (new_target_assignment->cnt ==
-                     rkcg->rkcg_next_target_assignment->cnt)) {
+                    clear_next_assignment) {
                         rd_kafka_topic_partition_list_destroy(
                             rkcg->rkcg_next_target_assignment);
                         rkcg->rkcg_next_target_assignment = NULL;
@@ -2630,8 +2630,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
                     rd_kafka_topic_partition_list_copy(new_target_assignment);
 
                 if (rkcg->rkcg_next_target_assignment &&
-                    (new_target_assignment->cnt ==
-                     rkcg->rkcg_next_target_assignment->cnt)) {
+                    clear_next_assignment) {
                         rd_kafka_topic_partition_list_destroy(
                             rkcg->rkcg_next_target_assignment);
                         rkcg->rkcg_next_target_assignment = NULL;
@@ -2672,6 +2671,7 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
         rd_kafka_op_res_t assignment_handle_ret;
         rd_kafka_topic_partition_list_t *new_target_assignment;
+        rd_bool_t all_partition_metadata_available;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
@@ -2725,6 +2725,8 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                 }
         }
 
+        all_partition_metadata_available = new_target_assignment->cnt == rkcg->rkcg_next_target_assignment->cnt ? rd_true : rd_false;
+
         if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
                 char new_target_assignment_str[512] = "NULL";
 
@@ -2743,7 +2745,8 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
         }
 
         assignment_handle_ret = rd_kafka_cgrp_consumer_handle_next_assignment(
-            rkcg, new_target_assignment);
+                rkcg, new_target_assignment,
+                all_partition_metadata_available);
         rd_kafka_topic_partition_list_destroy(new_target_assignment);
         return assignment_handle_ret;
 }
@@ -2765,7 +2768,7 @@ void rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
                 rd_kafka_topic_partition_list_t *new_target_assignment =
                     rd_kafka_topic_partition_list_new(0);
                 rd_kafka_cgrp_consumer_handle_next_assignment(
-                    rkcg, new_target_assignment);
+                        rkcg, new_target_assignment, rd_true);
                 rd_kafka_topic_partition_list_destroy(new_target_assignment);
                 return;
         }
@@ -2940,6 +2943,7 @@ err:
 
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
         case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
                              "ConsumerGroupHeartbeat failed due to coordinator (%s) "
                              "no longer available: %s: "
@@ -2950,21 +2954,6 @@ err:
                              rd_kafka_err2str(err));
                 /* Remain in joined state and keep querying for coordinator */
                 actions = RD_KAFKA_ERR_ACTION_REFRESH;
-                break;
-
-        case RD_KAFKA_RESP_ERR__TRANSPORT:
-                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
-                             "ConsumerGroupHeartbeat failed due to coordinator (%s) "
-                             "transport error: %s: "
-                             "re-querying for coordinator",
-                             rkcg->rkcg_curr_coord
-                                 ? rd_kafka_broker_name(rkcg->rkcg_curr_coord)
-                                 : "none",
-                             rd_kafka_err2str(err));
-                /* Remain in joined state and keep querying for coordinator */
-                actions = RD_KAFKA_ERR_ACTION_REFRESH;
-                rkcg->rkcg_consumer_flags |=
-                    RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
                 break;
 
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
@@ -3014,6 +3003,8 @@ err:
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
+                rkcg->rkcg_consumer_flags |=
+                    RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
         }
 

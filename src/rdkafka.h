@@ -633,20 +633,15 @@ typedef enum {
         RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
         /** Unknown Topic Id */
         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID = 100,
-        /** The member epoch is fenced by the group coordinator. The member must
-         *  abandon all its partitions and rejoin. */
+        /** The member epoch is fenced by the group coordinator */
         RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
         /** The instance ID is still used by another member in the
-         *  consumer group. That member must leave first.
-         */
+         *  consumer group */
         RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID = 111,
-        /** The assignor or its version range is not supported by
-         *  the consumer group.
-         */
+        /** The assignor or its version range is not supported by the consumer
+         *  group */
         RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR = 112,
-        /** The member epoch is stale.
-         *  The member must retry after receiving its updated member epoch
-         *  via the ConsumerGroupHeartbeat API. */
+        /** The member epoch is stale */
         RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH = 113,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

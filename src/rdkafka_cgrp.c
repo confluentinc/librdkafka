@@ -2608,9 +2608,9 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
                     rd_kafka_topic_partition_by_id_cmp);
         }
 
-        /*
-         * TODO: What happens in other states?
-         */
+        /* Starts reconcilation only when the group is in state
+         * INIT or state STEADY, keeps it as next target assignment
+         * otherwise. */
         if (!is_assignment_different) {
                 if (rkcg->rkcg_next_target_assignment &&
                     (new_target_assignment->cnt ==
@@ -2859,7 +2859,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                         }
 
                         rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
-                                   "Heartbeat response received target "
+                                   "ConsumerGroupHeartbeat response received target "
                                    "assignment \"%s\"",
                                    assigned_topic_partitions_str);
                 }
@@ -2928,7 +2928,7 @@ err:
 
         case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
-                             "Heartbeat failed due to coordinator (%s) "
+                             "ConsumerGroupHeartbeat failed due to coordinator (%s) "
                              "loading in progress: %s: "
                              "retrying",
                              rkcg->rkcg_curr_coord
@@ -2941,7 +2941,7 @@ err:
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
         case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
-                             "Heartbeat failed due to coordinator (%s) "
+                             "ConsumerGroupHeartbeat failed due to coordinator (%s) "
                              "no longer available: %s: "
                              "re-querying for coordinator",
                              rkcg->rkcg_curr_coord
@@ -2954,8 +2954,8 @@ err:
 
         case RD_KAFKA_RESP_ERR__TRANSPORT:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
-                             "Heartbeat failed due to coordinator (%s) "
-                             "no longer available: %s: "
+                             "ConsumerGroupHeartbeat failed due to coordinator (%s) "
+                             "transport error: %s: "
                              "re-querying for coordinator",
                              rkcg->rkcg_curr_coord
                                  ? rd_kafka_broker_name(rkcg->rkcg_curr_coord)
@@ -2970,8 +2970,8 @@ err:
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
         case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
-                             "Heartbeat failed due to: %s: "
-                             "will rejoining the group",
+                             "ConsumerGroupHeartbeat failed due to: %s: "
+                             "will rejoin the group",
                              rd_kafka_err2str(err));
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
@@ -2992,17 +2992,12 @@ err:
                 break;
         }
 
-
-        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
-                /* Re-query for coordinator */
-                rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
-        }
-
-        if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
-            rd_kafka_buf_retry(rkb, request)) {
-                /* Retry */
-                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
-                return;
+        
+        if (!rkcg->rkcg_heartbeat_intvl_ms) {
+                /* When an error happens on first HB, it should be always
+                 * retried, unless fatal, to avoid entering a tight loop
+                 * and to use exponential backoff. */
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
@@ -3013,6 +3008,19 @@ err:
                     rkcg, rd_true, /*assignments lost*/
                     rd_true,       /*initiating*/
                     "Fatal error in ConsumerGroupHeartbeat API response");
+                return;
+        }
+
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
+            rd_kafka_buf_retry(rkb, request)) {
+                /* Retry */
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
         }
 }
 

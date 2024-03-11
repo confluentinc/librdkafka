@@ -69,60 +69,6 @@ static int is_printable(const char *buf, size_t size) {
         return 1;
 }
 
-static void
-print_partition_list(FILE *fp,
-                     const rd_kafka_topic_partition_list_t *partitions) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                fprintf(fp, "%s %s [%" PRId32 "] offset %" PRId64,
-                        i > 0 ? "," : "", partitions->elems[i].topic,
-                        partitions->elems[i].partition,
-                        partitions->elems[i].offset);
-        }
-        fprintf(fp, "\n");
-}
-
-static void rebalance_cb(rd_kafka_t *rk,
-                         rd_kafka_resp_err_t err,
-                         rd_kafka_topic_partition_list_t *partitions,
-                         void *opaque) {
-        rd_kafka_error_t *error     = NULL;
-        rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-
-        fprintf(stderr, "%% Consumer group rebalanced: ");
-
-        switch (err) {
-        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
-                fprintf(stderr, "assigned (%s):\n",
-                        rd_kafka_rebalance_protocol(rk));
-                print_partition_list(stderr, partitions);
-
-                error = rd_kafka_incremental_assign(rk, partitions);
-                break;
-
-        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                fprintf(stderr, "revoked (%s):\n",
-                        rd_kafka_rebalance_protocol(rk));
-                print_partition_list(stderr, partitions);
-
-                error = rd_kafka_incremental_unassign(rk, partitions);
-                break;
-
-        default:
-                fprintf(stderr, "failed: %s\n", rd_kafka_err2str(err));
-                rd_kafka_assign(rk, NULL);
-                break;
-        }
-
-        if (error) {
-                fprintf(stderr, "incremental assign failure: %s\n",
-                        rd_kafka_error_string(error));
-                rd_kafka_error_destroy(error);
-        } else if (ret_err) {
-                fprintf(stderr, "assign failure: %s\n",
-                        rd_kafka_err2str(ret_err));
-        }
-}
 
 int main(int argc, char **argv) {
         rd_kafka_t *rk;          /* Consumer instance handle */
@@ -180,45 +126,6 @@ int main(int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
                 return 1;
         }
-
-        if (rd_kafka_conf_set(conf, "group.protocol", "consumer", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
-
-        if (rd_kafka_conf_set(conf, "debug", "all", errstr, sizeof(errstr)) !=
-            RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
-
-        if (rd_kafka_conf_set(conf, "session.timeout.ms", "10000", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
-
-        if (rd_kafka_conf_set(conf, "max.poll.interval.ms", "20000", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
-
-        /* Callback called on partition assignment changes */
-        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
-
-
-        //        if (rd_kafka_conf_set(conf, "debug", "all", errstr,
-        //                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-        //                fprintf(stderr, "%s\n", errstr);
-        //                rd_kafka_conf_destroy(conf);
-        //                return 1;
-        //        }
 
         /* If there is no previously committed offset for a partition
          * the auto.offset.reset strategy will be used to decide where

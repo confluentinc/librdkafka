@@ -75,12 +75,12 @@ typedef enum {
         RD_KAFKA_TOPIC_PARTITION_FIELD_CURRENT_EPOCH,
         /** Read/write int16_t for error code */
         RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+        /** Read/write timestamp */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP,
         /** Read/write str for metadata */
         RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA,
         /** Noop, useful for ternary ifs */
         RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
-        /** Read/write timestamp */
-        RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP,
 } rd_kafka_topic_partition_field_t;
 
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(

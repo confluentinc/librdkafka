@@ -220,7 +220,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
         rd_kafka_topic_partition_list_t *parts = NULL;
 
         /* We assume here that the topic partition list is not NULL.
-         * FIXME: check topic array to be null case if required in future. */
+         * FIXME: check NULL topic array case, if required in future. */
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 

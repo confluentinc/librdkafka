@@ -2591,14 +2591,10 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
         return rd_true;
 }
 
-static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
+static rd_bool_t rd_kafka_cgrp_consumer_is_new_assignment_different(
     rd_kafka_cgrp_t *rkcg,
-    rd_kafka_topic_partition_list_t *new_target_assignment,
-    rd_bool_t clear_next_assignment) {
-        rd_bool_t is_assignment_different = rd_false;
-        if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK)
-                return RD_KAFKA_OP_RES_HANDLED;
-
+    rd_kafka_topic_partition_list_t *new_target_assignment) {
+        int is_assignment_different;
         if (rkcg->rkcg_target_assignment) {
                 is_assignment_different = rd_kafka_topic_partition_list_cmp(
                     new_target_assignment, rkcg->rkcg_target_assignment,
@@ -2608,6 +2604,18 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
                     new_target_assignment, rkcg->rkcg_current_assignment,
                     rd_kafka_topic_partition_by_id_cmp);
         }
+        return is_assignment_different ? rd_true : rd_false;
+}
+
+static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
+    rd_kafka_cgrp_t *rkcg,
+    rd_kafka_topic_partition_list_t *new_target_assignment,
+    rd_bool_t clear_next_assignment) {
+        rd_bool_t is_assignment_different = rd_false;
+        if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK)
+                return RD_KAFKA_OP_RES_HANDLED;
+
+        is_assignment_different = rd_kafka_cgrp_consumer_is_new_assignment_different(rkcg, new_target_assignment);
 
         /* Starts reconcilation only when the group is in state
          * INIT or state STEADY, keeps it as next target assignment
@@ -2740,7 +2748,7 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                 rd_kafka_dbg(
                     rkcg->rkcg_rk, CGRP, "HEARTBEAT",
                     "Metadata available for %d/%d next target assignment "
-                    "which are - \"%s\"",
+                    "which are: \"%s\"",
                     new_target_assignment->cnt,
                     rkcg->rkcg_next_target_assignment->cnt,
                     new_target_assignment_str);
@@ -2862,50 +2870,22 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                     sizeof(assigned_topic_partitions_str), 0);
                         }
 
-                        rd_rkb_dbg(
-                            rkb, CGRP, "HEARTBEAT",
+                        rd_kafka_dbg(
+                            rk, CGRP, "HEARTBEAT",
                             "ConsumerGroupHeartbeat response received target "
                             "assignment \"%s\"",
                             assigned_topic_partitions_str);
                 }
 
                 if (assigned_topic_partitions) {
-                        rd_bool_t assignment_updated = rd_true;
                         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
                                    rd_kafka_topic_partition_list_destroy);
                         rkcg->rkcg_next_target_assignment = NULL;
-                        if (rkcg->rkcg_target_assignment) {
-                                if (!rd_kafka_topic_partition_list_cmp(
-                                        assigned_topic_partitions,
-                                        rkcg->rkcg_target_assignment,
-                                        rd_kafka_topic_partition_by_id_cmp)) {
-                                        /* If target assignment is present and
-                                         * the new assignment is same as target
-                                         * assignment, then we are already in
-                                         * process of adding that target
-                                         * assignment. We can ignore this new
-                                         * assignment.*/
-                                        assignment_updated = rd_false;
-                                }
-                        } else if (rkcg->rkcg_current_assignment) {
-                                if (!rd_kafka_topic_partition_list_cmp(
-                                        assigned_topic_partitions,
-                                        rkcg->rkcg_current_assignment,
-                                        rd_kafka_topic_partition_by_id_cmp)) {
-                                        /* If target assignment is not present
-                                         * then if the current assignment is
-                                         * present and the new assignment is
-                                         * same as current assignment, then we
-                                         * are already at correct assignment. We
-                                         * can ignore this new assignment.*/
-                                        assignment_updated = rd_false;
-                                }
-                        }
-                        if (assignment_updated) {
-                                /* We assign new assignment from the heartbeat
-                                 * only if it is not same as target assignment
-                                 * or current assignment if target assignment is
-                                 * not present */
+                        if (rd_kafka_cgrp_consumer_is_new_assignment_different(rkcg, assigned_topic_partitions)) {
+                                /* We don't update the next_target_assignment
+                                 * in two cases:
+                                 * 1) If target assignment is present and the new assignment is same as target assignment, then we are already in process of adding that target assignment. We can ignore this new assignment.
+                                 * 2) If target assignment is not present then if the current assignment is present and the new assignment is same as current assignment, then we are already at correct assignment. We can ignore this new assignment.*/
                                 rkcg->rkcg_next_target_assignment =
                                     assigned_topic_partitions;
                         }
@@ -3020,14 +3000,6 @@ err:
                 break;
         }
 
-
-        if (!rkcg->rkcg_heartbeat_intvl_ms) {
-                /* When an error happens on first HB, it should be always
-                 * retried, unless fatal, to avoid entering a tight loop
-                 * and to use exponential backoff. */
-                actions |= RD_KAFKA_ERR_ACTION_RETRY;
-        }
-
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
                 rd_kafka_set_fatal_error(rkcg->rkcg_rk, err,
                                          "Fatal consumer error: %s",
@@ -3039,6 +3011,12 @@ err:
                 return;
         }
 
+        if (!rkcg->rkcg_heartbeat_intvl_ms) {
+                /* When an error happens on first HB, it should be always
+                 * retried, unless fatal, to avoid entering a tight loop
+                 * and to use exponential backoff. */
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+        }
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */

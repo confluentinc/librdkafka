@@ -2670,7 +2670,7 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
                 rd_rkb_dbg(
                     rkb, BROKER ,
                     "THROTTLE",
-                    "broker throttled for %" PRIu64 ", skip futher requests", current_ts - throttled_ts);
+                    "broker throttled for %" PRIu64 ", skip futher requests", throttled_ts - current_ts);
                 return cnt;
         }
 

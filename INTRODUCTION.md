@@ -1978,7 +1978,7 @@ release of librdkafka.
 | 1       | Fetch                         | 15        | 11             |
 | 2       | ListOffsets                   | 8         | 7              |
 | 3       | Metadata                      | 12        | 12             |
-| 8       | OffsetCommit                  | 9         | 7              |
+| 8       | OffsetCommit                  | 9         | 9              |
 | 9       | OffsetFetch                   | 9         | 9              |
 | 10      | FindCoordinator               | 4         | 2              |
 | 11      | JoinGroup                     | 9         | 5              |
@@ -2010,7 +2010,7 @@ release of librdkafka.
 | 47      | OffsetDelete                  | 0         | 0              |
 | 50      | DescribeUserScramCredentials  | 0         | 0              |
 | 51      | AlterUserScramCredentials     | 0         | 0              |
-
+| 68      | ConsumerGroupHeartbeat        | 0         | 0              |
 
 # Recommendations for language binding developers
 

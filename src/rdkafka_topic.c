@@ -1313,9 +1313,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         rkt->rkt_ts_metadata = ts_age;
 
         /* Set topic state.
-         * UNKNOWN_TOPIC_OR_PART may indicate that auto.create.topics failed */
-        // TODO: TopicId: Update Unknown Topic Id exception while rebasing from
-        // master.
+         * UNKNOWN_TOPIC_* may indicate that auto.create.topics failed */
         if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION /*invalid topic*/ ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID)

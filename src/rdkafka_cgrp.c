@@ -421,7 +421,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
                                    const rd_kafkap_str_t *group_id,
                                    const rd_kafkap_str_t *client_id) {
         rd_kafka_cgrp_t *rkcg;
-        setbuf(stdout, 0);
         rkcg = rd_calloc(1, sizeof(*rkcg));
 
         rkcg->rkcg_rk             = rk;
@@ -2594,18 +2593,18 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
 
 static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
     rd_kafka_cgrp_t *rkcg,
-    rd_kafka_topic_partition_list_t *new_target_assignments) {
+    rd_kafka_topic_partition_list_t *new_target_assignment) {
         rd_bool_t is_assignment_different = rd_false;
         if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK)
                 return RD_KAFKA_OP_RES_HANDLED;
 
         if (rkcg->rkcg_target_assignment) {
                 is_assignment_different = rd_kafka_topic_partition_list_cmp(
-                    new_target_assignments, rkcg->rkcg_target_assignment,
+                    new_target_assignment, rkcg->rkcg_target_assignment,
                     rd_kafka_topic_partition_by_id_cmp);
         } else {
                 is_assignment_different = rd_kafka_topic_partition_list_cmp(
-                    new_target_assignments, rkcg->rkcg_current_assignment,
+                    new_target_assignment, rkcg->rkcg_current_assignment,
                     rd_kafka_topic_partition_by_id_cmp);
         }
 
@@ -2614,7 +2613,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
          */
         if (!is_assignment_different) {
                 if (rkcg->rkcg_next_target_assignment &&
-                    (new_target_assignments->cnt ==
+                    (new_target_assignment->cnt ==
                      rkcg->rkcg_next_target_assignment->cnt)) {
                         rd_kafka_topic_partition_list_destroy(
                             rkcg->rkcg_next_target_assignment);
@@ -2628,10 +2627,10 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
                             rkcg->rkcg_target_assignment);
                 }
                 rkcg->rkcg_target_assignment =
-                    rd_kafka_topic_partition_list_copy(new_target_assignments);
+                    rd_kafka_topic_partition_list_copy(new_target_assignment);
 
                 if (rkcg->rkcg_next_target_assignment &&
-                    (new_target_assignments->cnt ==
+                    (new_target_assignment->cnt ==
                      rkcg->rkcg_next_target_assignment->cnt)) {
                         rd_kafka_topic_partition_list_destroy(
                             rkcg->rkcg_next_target_assignment);
@@ -2672,7 +2671,7 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
         int i, j;
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
         rd_kafka_op_res_t assignment_handle_ret;
-        rd_kafka_topic_partition_list_t *new_target_assignments;
+        rd_kafka_topic_partition_list_t *new_target_assignment;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
@@ -2687,7 +2686,7 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
          *      TODO: Checking local metadata cache is an improvement which we
          * can do later.
          */
-        new_target_assignments = rd_kafka_topic_partition_list_new(
+        new_target_assignment = rd_kafka_topic_partition_list_new(
             rkcg->rkcg_next_target_assignment->cnt);
         for (i = 0; i < rkcg->rkcg_next_target_assignment->cnt; i++) {
                 rd_kafka_Uuid_t request_topic_id =
@@ -2701,7 +2700,7 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
                                 if (rko->rko_u.metadata.md->topics[j].err ==
                                     RD_KAFKA_RESP_ERR_NO_ERROR)
                                         rd_kafka_topic_partition_list_add_with_topic_name_and_id(
-                                            new_target_assignments,
+                                            new_target_assignment,
                                             request_topic_id,
                                             rko->rko_u.metadata.md->topics[j]
                                                 .topic,
@@ -2727,22 +2726,25 @@ rd_kafka_cgrp_consumer_handle_Metadata_op(rd_kafka_t *rk,
         }
 
         if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
-                char rkcg_next_target_assignment_str[512] = "NULL";
+                char new_target_assignment_str[512] = "NULL";
 
                 rd_kafka_topic_partition_list_str(
-                    rkcg->rkcg_next_target_assignment,
-                    rkcg_next_target_assignment_str,
-                    sizeof(rkcg_next_target_assignment_str), 0);
+                    new_target_assignment,
+                    new_target_assignment_str,
+                    sizeof(new_target_assignment_str), 0);
 
                 rd_kafka_dbg(
                     rkcg->rkcg_rk, CGRP, "HEARTBEAT",
-                    "Metadata available for next target assignment \"%s\"",
-                    rkcg_next_target_assignment_str);
+                    "Metadata available for %d/%d next target assignment "
+                    "which are - \"%s\"",
+                    new_target_assignment->cnt,
+                    rkcg->rkcg_next_target_assignment->cnt,
+                    new_target_assignment_str);
         }
 
         assignment_handle_ret = rd_kafka_cgrp_consumer_handle_next_assignment(
-            rkcg, new_target_assignments);
-        rd_kafka_topic_partition_list_destroy(new_target_assignments);
+            rkcg, new_target_assignment);
+        rd_kafka_topic_partition_list_destroy(new_target_assignment);
         return assignment_handle_ret;
 }
 
@@ -2846,7 +2848,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
 
-                if (rd_rkb_is_dbg(rkb, CGRP)) {
+                if (rd_kafka_is_dbg(rk, CGRP)) {
                         char assigned_topic_partitions_str[512] = "NULL";
 
                         if (assigned_topic_partitions) {

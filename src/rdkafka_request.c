@@ -1749,20 +1749,20 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
         /* Write partition list, filtering out partitions with valid
          * offsets */
         rd_kafka_topic_partition_field_t fields[] = {
-                RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
-                RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
-                ApiVersion >= 6 ? RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH
-                                : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
-                ApiVersion == 1 ? RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP
-                                : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
-                RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA,
-                RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
+            ApiVersion >= 6 ? RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH
+                            : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
+            ApiVersion == 1 ? RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP
+                            : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
 
         tot_PartCnt = rd_kafka_buf_write_topic_partitions(
             rkbuf, offsets, rd_true /*skip invalid offsets*/,
             rd_false /*include valid offsets */,
-            rd_false /*don't use topic id*/,
-            rd_true /*use topic name*/, fields);
+            rd_false /*don't use topic id*/, rd_true /*use topic name*/,
+            fields);
 
         if (tot_PartCnt == 0) {
                 /* No topic+partitions had valid offsets to commit. */

@@ -2615,7 +2615,9 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
         if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK)
                 return RD_KAFKA_OP_RES_HANDLED;
 
-        is_assignment_different = rd_kafka_cgrp_consumer_is_new_assignment_different(rkcg, new_target_assignment);
+        is_assignment_different =
+            rd_kafka_cgrp_consumer_is_new_assignment_different(
+                rkcg, new_target_assignment);
 
         /* Starts reconcilation only when the group is in state
          * INIT or state STEADY, keeps it as next target assignment
@@ -2881,11 +2883,20 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
                                    rd_kafka_topic_partition_list_destroy);
                         rkcg->rkcg_next_target_assignment = NULL;
-                        if (rd_kafka_cgrp_consumer_is_new_assignment_different(rkcg, assigned_topic_partitions)) {
+                        if (rd_kafka_cgrp_consumer_is_new_assignment_different(
+                                rkcg, assigned_topic_partitions)) {
                                 /* We don't update the next_target_assignment
                                  * in two cases:
-                                 * 1) If target assignment is present and the new assignment is same as target assignment, then we are already in process of adding that target assignment. We can ignore this new assignment.
-                                 * 2) If target assignment is not present then if the current assignment is present and the new assignment is same as current assignment, then we are already at correct assignment. We can ignore this new assignment.*/
+                                 * 1) If target assignment is present and the
+                                 * new assignment is same as target assignment,
+                                 * then we are already in process of adding that
+                                 * target assignment. We can ignore this new
+                                 * assignment.
+                                 * 2) If target assignment is not present then
+                                 * if the current assignment is present and the
+                                 * new assignment is same as current assignment,
+                                 * then we are already at correct assignment. We
+                                 * can ignore this new */
                                 rkcg->rkcg_next_target_assignment =
                                     assigned_topic_partitions;
                         }

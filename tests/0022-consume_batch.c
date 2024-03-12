@@ -259,7 +259,8 @@ static void do_test_consume_batch_non_existent_topic(void) {
 
 int main_0022_consume_batch(int argc, char **argv) {
         do_test_consume_batch();
-        if (test_consumer_group_protocol_generic()) {
+        /* FIXME: this must be implemented in KIP-848 for compatibility. */
+        if (test_consumer_group_protocol_classic()) {
                 do_test_consume_batch_non_existent_topic();
         }
         return 0;

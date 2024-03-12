@@ -434,8 +434,8 @@ static int do_test(const char *assignor) {
 
 
 int main_0033_regex_subscribe(int argc, char **argv) {
-        if (test_consumer_group_protocol_generic()) {
-                /* FIXME: when regexes will be supported by KIP-848 */
+        /* TODO: check again when regexes will be supported by KIP-848 */
+        if (test_consumer_group_protocol_classic()) {
                 do_test("range");
                 do_test("roundrobin");
         }

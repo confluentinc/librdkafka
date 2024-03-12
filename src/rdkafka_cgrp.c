@@ -780,8 +780,10 @@ void rd_kafka_cgrp_coord_query(rd_kafka_cgrp_t *rkcg, const char *reason) {
                 return;
         }
 
-        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD)
+        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD) {
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_COORD);
+        }
 
         rd_kafka_broker_destroy(rkb);
 
@@ -894,9 +896,10 @@ static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
         rkcg->rkcg_target_assignment = NULL;
         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
                    rd_kafka_topic_partition_list_destroy);
-        rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);
-        rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK;
         rkcg->rkcg_next_target_assignment = NULL;
+        rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);
+        rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK &
+                                     ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
         rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
 }
 
@@ -2940,7 +2943,8 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
         rkcg->rkcg_consumer_flags &=
             ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION;
-        rkcg->rkcg_last_heartbeat_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rkcg->rkcg_last_heartbeat_err         = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rkcg->rkcg_expedite_heartbeat_retries = 0;
 
         return;
 
@@ -5149,7 +5153,7 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
                 rkcg->rkcg_subscription = NULL;
         }
 
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_GENERIC)
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 rd_kafka_cgrp_update_subscribed_topics(rkcg, NULL);
 
         /*
@@ -6046,7 +6050,29 @@ void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 return;
 
-        rd_interval_reset(&rkcg->rkcg_heartbeat_intvl);
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        /* Calculate the exponential backoff. */
+        int64_t backoff = (1 << rkcg->rkcg_expedite_heartbeat_retries) *
+                          (rk->rk_conf.retry_backoff_ms);
+
+        /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->
+         * backoff_ms * jitter * 10 */
+        backoff = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
+                            100 + RD_KAFKA_RETRY_JITTER_PERCENT) *
+                  backoff * 10;
+
+        /* Backoff is limited by retry_backoff_max_ms. */
+        if (backoff > rk->rk_conf.retry_backoff_max_ms * 1000)
+                backoff = rk->rk_conf.retry_backoff_max_ms * 1000;
+
+        /* Reset the interval as it happened `rkcg_heartbeat_intvl_ms`
+         * milliseconds ago. */
+        rd_interval_reset_to_now(&rkcg->rkcg_heartbeat_intvl,
+                                 rd_clock() -
+                                     rkcg->rkcg_heartbeat_intvl_ms * 1000);
+        /* Set the exponential backoff. */
+        rd_interval_backoff(&rkcg->rkcg_heartbeat_intvl, backoff);
+        rkcg->rkcg_expedite_heartbeat_retries++;
 }
 
 /**
@@ -6465,7 +6491,7 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
         if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
                 return;
 
-        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_GENERIC)
+        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 return;
 
         /*
@@ -6616,10 +6642,26 @@ rd_kafka_consumer_group_metadata(rd_kafka_t *rk) {
         return cgmetadata;
 }
 
+const char *rd_kafka_consumer_group_metadata_group_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->group_id;
+}
+
 const char *rd_kafka_consumer_group_metadata_member_id(
     const rd_kafka_consumer_group_metadata_t *group_metadata) {
         return group_metadata->member_id;
 }
+
+const char *rd_kafka_consumer_group_metadata_group_instance_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->group_instance_id;
+}
+
+int32_t rd_kafka_consumer_group_metadata_member_epoch(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->generation_id;
+}
+
 
 void rd_kafka_consumer_group_metadata_destroy(
     rd_kafka_consumer_group_metadata_t *cgmetadata) {

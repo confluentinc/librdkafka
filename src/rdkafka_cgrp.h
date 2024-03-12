@@ -275,6 +275,9 @@ typedef struct rd_kafka_cgrp_s {
          * reconciliation finishes. Can be NULL. */
         rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
 
+        /* Number of backoff retries when expediting next heartbeat. */
+        int rkcg_expedite_heartbeat_retries;
+
         int rkcg_consumer_flags;
 #define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */
 #define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2 /* TODO: write */

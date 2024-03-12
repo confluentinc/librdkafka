@@ -111,9 +111,9 @@ int main_0029_assign_offset(int argc, char **argv) {
         test_timing_t t_simple, t_hl;
         test_msgver_t mv;
 
-        if (!test_consumer_group_protocol_generic()) {
-                /* FIXME: this should be fixed when upgrading from generic to
-                 * new consumer group will be possible. See KAFKA-15989 */
+        /* TODO: this should be fixed when upgrading from generic to
+         * new consumer group will be possible. See KAFKA-15989 */
+        if (!test_consumer_group_protocol_classic()) {
                 return 0;
         }
 

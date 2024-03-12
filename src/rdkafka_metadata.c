@@ -831,6 +831,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
                                                      &mdi->topics[i]);
 
+                // TODO: Should be done for requested_topic_ids as well.
                 if (requested_topics) {
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
@@ -857,6 +858,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 }
         }
 
+        // TODO: Should be done for missing_topic_ids as well.
         /* Requested topics not seen in metadata? Propogate to topic code. */
         if (missing_topics) {
                 char *topic;
@@ -958,6 +960,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_metadata_cache_expiry_start(rk);
         }
 
+
+        // TODO: Should be done for requested_topic_ids as well.
         /* Remove cache hints for the originally requested topics. */
         if (requested_topics)
                 rd_kafka_metadata_cache_purge_hints(rk, requested_topics);
@@ -989,6 +993,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         }
 
 done:
+
+        // TODO: Should be done for requested_topic_ids as well.
         if (missing_topics)
                 rd_list_destroy(missing_topics);
 
@@ -1005,6 +1011,7 @@ done:
 err_parse:
         err = rkbuf->rkbuf_err;
 err:
+        // TODO: Should be done for requested_topic_ids as well.
         if (requested_topics) {
                 /* Failed requests shall purge cache hints for
                  * the requested topics. */
@@ -1013,6 +1020,7 @@ err:
                 rd_kafka_wrunlock(rkb->rkb_rk);
         }
 
+        // TODO: Should be done for requested_topic_ids as well.
         if (missing_topics)
                 rd_list_destroy(missing_topics);
         rd_tmpabuf_destroy(&tbuf);

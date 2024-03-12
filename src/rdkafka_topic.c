@@ -1314,9 +1314,10 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         rkt->rkt_ts_metadata = ts_age;
 
         /* Set topic state.
-         * UNKNOWN_TOPIC_OR_PART may indicate that auto.create.topics failed */
+         * UNKNOWN_TOPIC_* may indicate that auto.create.topics failed */
         if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION /*invalid topic*/ ||
-            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
+            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID)
                 rd_kafka_topic_set_notexists(rkt, mdt->err);
         else if (mdt->partition_cnt > 0)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
@@ -1446,8 +1447,15 @@ int rd_kafka_topic_metadata_update2(
         int r;
 
         rd_kafka_wrlock(rkb->rkb_rk);
-        if (!(rkt =
-                  rd_kafka_topic_find(rkb->rkb_rk, mdt->topic, 0 /*!lock*/))) {
+
+        if (likely(mdt->topic != NULL)) {
+                rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic, 0 /*!lock*/);
+        } else {
+                rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk,
+                                                      mdit->topic_id);
+        }
+
+        if (!rkt) {
                 rd_kafka_wrunlock(rkb->rkb_rk);
                 return -1; /* Ignore topics that we dont have locally. */
         }

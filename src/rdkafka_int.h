@@ -959,10 +959,15 @@ static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code(rd_kafka_t *rk) {
         /* This is an optimization to avoid an atomic read which are costly
          * on some platforms:
-         * Fatal errors are currently only raised by the idempotent producer
-         * and static consumers (group.instance.id). */
+         * Fatal errors are currently raised by:
+         * 1) the idempotent producer
+         * 2) static consumers (group.instance.id)
+         * 3) Group using consumer protocol (Introduced in KIP-848). See exact
+         *    errors in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat() */
         if ((rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence) ||
-            (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_conf.group_instance_id))
+            (rk->rk_type == RD_KAFKA_CONSUMER &&
+             (rk->rk_conf.group_instance_id ||
+              rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)))
                 return rd_atomic32_get(&rk->rk_fatal.err);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;

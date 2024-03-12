@@ -631,6 +631,12 @@ static RD_INLINE RD_UNUSED void rd_list_Uuid_destroy(void *uuid) {
         rd_kafka_Uuid_destroy((rd_kafka_Uuid_t *)uuid);
 }
 
+static RD_INLINE RD_UNUSED int rd_list_Uuid_cmp(const void *uuid1,
+                                                const void *uuid2) {
+        return rd_kafka_Uuid_cmp(*((rd_kafka_Uuid_t *)uuid1),
+                                 *((rd_kafka_Uuid_t *)uuid2));
+}
+
 
 /**
  * @name Producer ID and Epoch for the Idempotent Producer

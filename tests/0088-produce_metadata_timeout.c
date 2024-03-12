@@ -114,7 +114,7 @@ int main_0088_produce_metadata_timeout(int argc, char **argv) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         /* Create topic with single partition, for simplicity. */
-        test_create_topic(rk, topic, 1, 1);
+        test_create_topic_wait_exists(rk, topic, 1, 1, 5000);
 
         rkt = rd_kafka_topic_new(rk, topic, NULL);
 

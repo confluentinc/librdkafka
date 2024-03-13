@@ -1164,6 +1164,9 @@ Examples of needed broker connections are:
  * consumer group coordinator broker
  * cluster controller for Admin API operations
 
+**Note**. This behavior can be changed by setting `enable.sparse.connections`
+          to `false`, but this may lead to a large number of open connections
+          in clusters with a lot of clients and/or brokers.
 
 ##### Random broker selection
 

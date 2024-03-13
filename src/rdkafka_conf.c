@@ -582,7 +582,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "limited to identifying brokers on Azure "
      "(see librdkafka issue #3109 for more info).",
      0, INT_MAX, 0},
-    {_RK_GLOBAL | _RK_MED | _RK_HIDDEN, "enable.sparse.connections", _RK_C_BOOL,
+    {_RK_GLOBAL | _RK_MED, "enable.sparse.connections", _RK_C_BOOL,
      _RK(sparse_connections),
      "When enabled the client will only connect to brokers "
      "it needs to communicate with. When disabled the client "

@@ -4,6 +4,8 @@ librdkafka v2.3.1 is a feature release:
 
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt).
+ * Unhide and document the previously hidden setting `enable.sparse.connections`, as it
+   may be useful to disable this behavior for certain use-cases (#4646, @pascal-hofmann).
 
 
 # librdkafka v2.3.0

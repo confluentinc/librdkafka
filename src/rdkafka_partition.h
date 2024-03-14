@@ -1126,16 +1126,18 @@ static RD_UNUSED RD_INLINE void rd_kafka_toppar_set_offset_validation_position(
 }
 
 rd_kafka_topic_partition_list_t *
-rd_kafka_topic_partition_list_intersection(rd_kafka_topic_partition_list_t *a,
-                                           rd_kafka_topic_partition_list_t *b);
+rd_kafka_topic_partition_list_intersection_by_name(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
 
 rd_kafka_topic_partition_list_t *
-rd_kafka_topic_partition_list_difference(rd_kafka_topic_partition_list_t *a,
-                                         rd_kafka_topic_partition_list_t *b);
+rd_kafka_topic_partition_list_difference_by_name(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
 
 rd_kafka_topic_partition_list_t *
-rd_kafka_topic_partition_list_union(rd_kafka_topic_partition_list_t *a,
-                                    rd_kafka_topic_partition_list_t *b);
+rd_kafka_topic_partition_list_union_by_name(rd_kafka_topic_partition_list_t *a,
+                                            rd_kafka_topic_partition_list_t *b);
 
 rd_kafka_topic_partition_list_t *
 rd_kafka_topic_partition_list_intersection_by_id(

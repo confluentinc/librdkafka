@@ -1806,6 +1806,9 @@ int main(int argc, char **argv) {
         d = 0;
         if (sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d) <
             3) {
+                TEST_SAY(
+                    "Non-numeric broker version, setting version"
+                    " to 9.9.9.9\n");
                 test_broker_version_str = "9.9.9.9";
                 sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d);
         }

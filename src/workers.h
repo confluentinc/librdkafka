@@ -508,6 +508,28 @@ class AdminClientCreatePartitions : public ErrorAwareWorker {
   const int m_timeout_ms;
 };
 
+/**
+ * @brief List consumer groups on a remote broker cluster.
+ */
+class AdminClientListGroups : public ErrorAwareWorker {
+ public:
+  AdminClientListGroups(Nan::Callback *, NodeKafka::AdminClient *, bool,
+                        std::vector<rd_kafka_consumer_group_state_t> &,
+                        const int &);
+  ~AdminClientListGroups();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+
+ private:
+  NodeKafka::AdminClient *m_client;
+  const bool m_is_match_states_set;
+  std::vector<rd_kafka_consumer_group_state_t> m_match_states;
+  const int m_timeout_ms;
+  rd_kafka_event_t *m_event_response;
+};
+
 }  // namespace Workers
 
 }  // namespace NodeKafka

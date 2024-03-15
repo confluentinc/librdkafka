@@ -51,6 +51,10 @@ class AdminClient : public Connection {
   Baton CreatePartitions(rd_kafka_NewPartitions_t* topic, int timeout_ms);
   // Baton AlterConfig(rd_kafka_NewTopic_t* topic, int timeout_ms);
   // Baton DescribeConfig(rd_kafka_NewTopic_t* topic, int timeout_ms);
+  Baton ListGroups(bool is_match_states_set,
+                   std::vector<rd_kafka_consumer_group_state_t>& match_states,
+                   int timeout_ms,
+                   rd_kafka_event_t** event_response);
 
  protected:
   static Nan::Persistent<v8::Function> constructor;
@@ -67,6 +71,9 @@ class AdminClient : public Connection {
   static NAN_METHOD(NodeCreateTopic);
   static NAN_METHOD(NodeDeleteTopic);
   static NAN_METHOD(NodeCreatePartitions);
+
+  // Consumer group operations
+  static NAN_METHOD(NodeListGroups);
 
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);

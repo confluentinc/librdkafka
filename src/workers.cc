@@ -1240,5 +1240,60 @@ void AdminClientCreatePartitions::HandleErrorCallback() {
   callback->Call(argc, argv);
 }
 
+/**
+ * @brief List consumer groups in an asynchronous worker.
+ *
+ * This callback will list consumer groups.
+ *
+ */
+AdminClientListGroups::AdminClientListGroups(
+    Nan::Callback* callback, AdminClient* client, bool is_match_states_set,
+    std::vector<rd_kafka_consumer_group_state_t>& match_states,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_is_match_states_set(is_match_states_set),
+      m_match_states(match_states),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientListGroups::~AdminClientListGroups() {
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientListGroups::Execute() {
+  Baton b = m_client->ListGroups(m_is_match_states_set, m_match_states,
+                                 m_timeout_ms, &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientListGroups::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+
+  const rd_kafka_ListConsumerGroups_result_t* result =
+      rd_kafka_event_ListConsumerGroups_result(m_event_response);
+
+  argv[1] = Conversion::Admin::FromListConsumerGroupsResult(result);
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientListGroups::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
 }  // namespace Workers
 }  // namespace NodeKafka

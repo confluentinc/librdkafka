@@ -1,5 +1,10 @@
 import * as tls from 'tls'
 import { ConsumerGlobalConfig, ConsumerTopicConfig, GlobalConfig, ProducerGlobalConfig, ProducerTopicConfig, TopicConfig } from './config'
+import { ConsumerGroupStates, GroupOverview, LibrdKafkaError } from '../index'
+
+// Admin API related interfaces, types etc; and Error types are common, so
+// just re-export them from here too.
+export { ConsumerGroupStates, GroupOverview, LibrdKafkaError } from '../index'
 
 export type BrokersFunction = () => string[] | Promise<string[]>
 
@@ -178,14 +183,6 @@ export interface AdminConfig {
 
 export interface AdminConstructorConfig extends GlobalConfig {
   kafkaJS?: AdminConfig;
-}
-
-export interface ITopicConfig {
-  topic: string
-  numPartitions?: number
-  replicationFactor?: number
-  replicaAssignment?: ReplicaAssignment[]
-  configEntries?: IResourceConfigEntry[]
 }
 
 export interface ReplicaAssignment {
@@ -444,20 +441,12 @@ export type MemberDescription = {
   memberMetadata: Buffer
 }
 
-export type ConsumerGroupState =
-  | 'Unknown'
-  | 'PreparingRebalance'
-  | 'CompletingRebalance'
-  | 'Stable'
-  | 'Dead'
-  | 'Empty'
-
 export type GroupDescription = {
   groupId: string
   members: MemberDescription[]
   protocol: string
   protocolType: string
-  state: ConsumerGroupState
+  state: ConsumerGroupStates
 }
 
 export type Consumer = {
@@ -545,3 +534,32 @@ export type Consumer = {
   readonly events: ConsumerEvents
 }
 
+export interface ITopicConfig {
+  topic: string
+  numPartitions?: number
+  replicationFactor?: number
+  replicaAssignment?: ReplicaAssignment[]
+  configEntries?: IResourceConfigEntry[]
+}
+
+export interface ITopicPartitionConfig {
+  topic: string
+  count: number
+  assignments?: Array<Array<number>>
+}
+
+export type Admin = {
+  connect(): Promise<void>
+  disconnect(): Promise<void>
+  createTopics(options: {
+    validateOnly?: boolean
+    waitForLeaders?: boolean
+    timeout?: number
+    topics: ITopicConfig[]
+  }): Promise<boolean>
+  deleteTopics(options: { topics: string[]; timeout?: number }): Promise<void>
+  listGroups(options?: {
+    timeout?: number,
+    matchConsumerGroupStates?: ConsumerGroupStates[]
+  }): Promise<{ groups: GroupOverview[], errors: LibrdKafkaError[] }>
+}

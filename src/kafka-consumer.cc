@@ -719,7 +719,7 @@ NAN_METHOD(KafkaConsumer::NodeSubscription) {
 
   std::vector<std::string> * topics = b.data<std::vector<std::string>*>();
 
-  info.GetReturnValue().Set(Conversion::Topic::ToV8Array(*topics));
+  info.GetReturnValue().Set(Conversion::Util::ToV8Array(*topics));
 
   delete topics;
 }
@@ -1079,7 +1079,8 @@ NAN_METHOD(KafkaConsumer::NodeSubscribe) {
   KafkaConsumer* consumer = ObjectWrap::Unwrap<KafkaConsumer>(info.This());
 
   v8::Local<v8::Array> topicsArray = info[0].As<v8::Array>();
-  std::vector<std::string> topics = Conversion::Topic::ToStringVector(topicsArray);  // NOLINT
+  std::vector<std::string> topics =
+      Conversion::Util::ToStringVector(topicsArray);
 
   Baton b = consumer->Subscribe(topics);
 

@@ -142,9 +142,24 @@ std::vector<std::string> v8ArrayToStringVector(v8::Local<v8::Array> parameter) {
   return newItem;
 }
 
-namespace Conversion {
-namespace Topic {
+template<> v8::Local<v8::Array> GetParameter<v8::Local<v8::Array> >(
+  v8::Local<v8::Object> object, std::string field_name, v8::Local<v8::Array> def) {
+  v8::Local<v8::String> field = Nan::New(field_name.c_str()).ToLocalChecked();
 
+  if (Nan::Has(object, field).FromMaybe(false)) {
+    v8::Local<v8::Value> maybeArray = Nan::Get(object, field).ToLocalChecked();
+    if (maybeArray->IsArray()) {
+      v8::Local<v8::Array> parameter = maybeArray.As<v8::Array>();
+      return parameter;
+    }
+  }
+
+  return def;
+}
+
+namespace Conversion {
+
+namespace Util {
 std::vector<std::string> ToStringVector(v8::Local<v8::Array> parameter) {
   std::vector<std::string> newItem;
 
@@ -185,14 +200,31 @@ v8::Local<v8::Array> ToV8Array(std::vector<std::string> parameter) {
 
   for (size_t i = 0; i < parameter.size(); i++) {
     std::string topic = parameter[i];
-
     Nan::Set(newItem, i, Nan::New<v8::String>(topic).ToLocalChecked());
   }
 
   return newItem;
 }
 
-}  // namespace Topic
+/**
+ * @brief Converts a list of rd_kafka_error_t* into a v8 array of RdKafkaError
+ * objects.
+ */
+v8::Local<v8::Array> ToV8Array(const rd_kafka_error_t** error_list,
+                               size_t error_cnt) {
+  v8::Local<v8::Array> errors = Nan::New<v8::Array>();
+
+  for (size_t i = 0; i < error_cnt; i++) {
+    RdKafka::ErrorCode code =
+        static_cast<RdKafka::ErrorCode>(rd_kafka_error_code(error_list[i]));
+    std::string msg = std::string(rd_kafka_error_string(error_list[i]));
+    Nan::Set(errors, i, RdKafkaError(code, msg));
+  }
+
+  return errors;
+}
+
+} // namespace Util
 
 namespace TopicPartition {
 
@@ -566,6 +598,91 @@ rd_kafka_NewTopic_t* FromV8TopicObject(
 
 rd_kafka_NewTopic_t** FromV8TopicObjectArray(v8::Local<v8::Array>) {
   return NULL;
+}
+
+/**
+ * @brief Converts a v8 array of group states into a vector of
+ * rd_kafka_consumer_group_state_t.
+ */
+std::vector<rd_kafka_consumer_group_state_t> FromV8GroupStateArray(
+    v8::Local<v8::Array> array) {
+  v8::Local<v8::Array> parameter = array.As<v8::Array>();
+  std::vector<rd_kafka_consumer_group_state_t> returnVec;
+  if (parameter->Length() >= 1) {
+    for (unsigned int i = 0; i < parameter->Length(); i++) {
+      v8::Local<v8::Value> v;
+      if (!Nan::Get(parameter, i).ToLocal(&v)) {
+        continue;
+      }
+      Nan::Maybe<int64_t> maybeT = Nan::To<int64_t>(v);
+      if (maybeT.IsNothing()) {
+        continue;
+      }
+      int64_t state_number = maybeT.FromJust();
+      if (state_number >= RD_KAFKA_CONSUMER_GROUP_STATE__CNT) {
+        continue;
+      }
+      returnVec.push_back(
+          static_cast<rd_kafka_consumer_group_state_t>(state_number));
+    }
+  }
+  return returnVec;
+}
+
+/**
+ * @brief Converts a rd_kafka_ListConsumerGroups_result_t* into a v8 object.
+ */
+v8::Local<v8::Object> FromListConsumerGroupsResult(
+    const rd_kafka_ListConsumerGroups_result_t* result) {
+  /* Return object type:
+    {
+      groups: {
+        groupId: string,
+        protocolType: string,
+        isSimpleConsumerGroup: boolean,
+        state: ConsumerGroupState (internally a number)
+      }[],
+      errors: LibrdKafkaError[]
+    }
+  */
+  v8::Local<v8::Object> returnObject = Nan::New<v8::Object>();
+
+  size_t error_cnt;
+  const rd_kafka_error_t** error_list =
+      rd_kafka_ListConsumerGroups_result_errors(result, &error_cnt);
+  Nan::Set(returnObject, Nan::New("errors").ToLocalChecked(),
+           Conversion::Util::ToV8Array(error_list, error_cnt));
+
+  v8::Local<v8::Array> groups = Nan::New<v8::Array>();
+  size_t groups_cnt;
+  const rd_kafka_ConsumerGroupListing_t** groups_list =
+      rd_kafka_ListConsumerGroups_result_valid(result, &groups_cnt);
+
+  for (size_t i = 0; i < groups_cnt; i++) {
+    const rd_kafka_ConsumerGroupListing_t* group = groups_list[i];
+    v8::Local<v8::Object> groupObject = Nan::New<v8::Object>();
+
+    Nan::Set(groupObject, Nan::New("groupId").ToLocalChecked(),
+             Nan::New<v8::String>(rd_kafka_ConsumerGroupListing_group_id(group))
+                 .ToLocalChecked());
+
+    bool is_simple =
+        rd_kafka_ConsumerGroupListing_is_simple_consumer_group(group);
+    Nan::Set(groupObject, Nan::New("isSimpleConsumerGroup").ToLocalChecked(),
+             Nan::New<v8::Boolean>(is_simple));
+
+    std::string protocol_type = is_simple ? "simple" : "";
+    Nan::Set(groupObject, Nan::New("protocolType").ToLocalChecked(),
+             Nan::New<v8::String>(protocol_type).ToLocalChecked());
+
+    Nan::Set(groupObject, Nan::New("state").ToLocalChecked(),
+             Nan::New<v8::Number>(rd_kafka_ConsumerGroupListing_state(group)));
+
+    Nan::Set(groups, i, groupObject);
+  }
+
+  Nan::Set(returnObject, Nan::New("groups").ToLocalChecked(), groups);
+  return returnObject;
 }
 
 }  // namespace Admin

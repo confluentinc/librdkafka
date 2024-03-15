@@ -28,6 +28,9 @@ class Baton {
   explicit Baton(const RdKafka::ErrorCode &, std::string, bool isFatal,
                  bool isRetriable, bool isTxnRequiresAbort);
 
+  static Baton BatonFromErrorAndDestroy(rd_kafka_error_t *error);
+  static Baton BatonFromErrorAndDestroy(RdKafka::Error *error);
+
   template<typename T> T data() {
     return static_cast<T>(m_data);
   }
@@ -48,6 +51,8 @@ class Baton {
 };
 
 v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &);
+v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &,
+                                   const std::string &);
 
 }  // namespace NodeKafka
 

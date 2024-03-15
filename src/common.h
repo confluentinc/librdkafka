@@ -34,6 +34,8 @@ template<> std::string GetParameter<std::string>(
   v8::Local<v8::Object>, std::string, std::string);
 template<> std::vector<std::string> GetParameter<std::vector<std::string> >(
   v8::Local<v8::Object>, std::string, std::vector<std::string>);
+template<> v8::Local<v8::Array> GetParameter<v8::Local<v8::Array> >(
+  v8::Local<v8::Object>, std::string, v8::Local<v8::Array>);
 // template int GetParameter<int>(v8::Local<v8::Object, std::string, int);
 std::vector<std::string> v8ArrayToStringVector(v8::Local<v8::Array>);
 
@@ -90,17 +92,27 @@ class scoped_shared_read_lock {
 
 namespace Conversion {
 
-namespace Admin {
-  // Topics from topic object, or topic object array
-  rd_kafka_NewTopic_t* FromV8TopicObject(
-    v8::Local<v8::Object>, std::string &errstr);  // NOLINT
-  rd_kafka_NewTopic_t** FromV8TopicObjectArray(v8::Local<v8::Array>);
-}
+namespace Util {
+std::vector<std::string> ToStringVector(v8::Local<v8::Array>);
+v8::Local<v8::Array> ToV8Array(std::vector<std::string>);
+v8::Local<v8::Array> ToV8Array(const rd_kafka_error_t **error_list,
+                               size_t error_cnt);
+}  // namespace Util
 
-namespace Topic {
-  std::vector<std::string> ToStringVector(v8::Local<v8::Array>);
-  v8::Local<v8::Array> ToV8Array(std::vector<std::string>);
-}  // namespace Topic
+namespace Admin {
+// Topics from topic object, or topic object array
+rd_kafka_NewTopic_t *FromV8TopicObject(v8::Local<v8::Object>,
+                                       std::string &errstr);
+rd_kafka_NewTopic_t **FromV8TopicObjectArray(v8::Local<v8::Array>);
+
+// ListGroups: request
+std::vector<rd_kafka_consumer_group_state_t> FromV8GroupStateArray(
+    v8::Local<v8::Array>);
+
+// ListGroups: response
+v8::Local<v8::Object> FromListConsumerGroupsResult(
+    const rd_kafka_ListConsumerGroups_result_t *);
+}  // namespace Admin
 
 namespace TopicPartition {
 

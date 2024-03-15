@@ -13,8 +13,8 @@
 
 namespace NodeKafka {
 
-v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err, std::string errstr) {  // NOLINT
-  //
+v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err,
+                                   const std::string &errstr) {
   int code = static_cast<int>(err);
 
   v8::Local<v8::Object> ret = Nan::New<v8::Object>();
@@ -28,7 +28,8 @@ v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err, std::string er
 }
 
 v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err) {
-  return RdKafkaError(err, RdKafka::err2str(err));
+  std::string errstr = RdKafka::err2str(err);
+  return RdKafkaError(err, errstr);
 }
 
 v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err, std::string errstr,
@@ -68,6 +69,26 @@ Baton::Baton(const RdKafka::ErrorCode &code, std::string errstr, bool isFatal,
   m_isTxnRequiresAbort = isTxnRequiresAbort;
 }
 
+/**
+ * Creates a Baton from an rd_kafka_error_t* and destroys it.
+ */
+Baton Baton::BatonFromErrorAndDestroy(rd_kafka_error_t *error) {
+  std::string errstr = rd_kafka_error_string(error);
+  RdKafka::ErrorCode err =
+      static_cast<RdKafka::ErrorCode>(rd_kafka_error_code(error));
+  rd_kafka_error_destroy(error);
+  return Baton(err, errstr);
+}
+
+/**
+ * Creates a Baton from an RdKafka::Error* and deletes it.
+ */
+Baton Baton::BatonFromErrorAndDestroy(RdKafka::Error *error) {
+  std::string errstr = error->str();
+  RdKafka::ErrorCode err = error->code();
+  delete error;
+  return Baton(err, errstr);
+}
 
 v8::Local<v8::Object> Baton::ToObject() {
   if (m_errstr.empty()) {

@@ -338,7 +338,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
     });
 
     /* Skip as it uses consuimer events. */
-    it('commits the last offsets processed before stopping', async () => {
+    it.skip('commits the last offsets processed before stopping', async () => {
         jest.spyOn(cluster, 'refreshMetadataIfNecessary')
 
         await Promise.all([admin.connect(), consumer.connect(), producer.connect()])

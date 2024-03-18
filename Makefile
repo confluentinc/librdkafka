@@ -14,7 +14,7 @@ VERSION?=	$(shell python3 packaging/get_version.py src/rdkafka.h)
 BUILD_NUMBER ?= 1
 
 # Skip copyright check in the following paths
-MKL_COPYRIGHT_SKIP?=^(tests|packaging)
+MKL_COPYRIGHT_SKIP?=^(tests|packaging|src/nanopb|src/opentelemetry)
 
 
 .PHONY:

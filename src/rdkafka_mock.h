@@ -67,6 +67,7 @@ extern "C" {
  *  - Low-level consumer
  *  - High-level balanced consumer groups with offset commits
  *  - Topic Metadata and auto creation
+ *  - Telemetry (KIP-714)
  *
  * @remark This is an experimental public API that is NOT covered by the
  *         librdkafka API or ABI stability guarantees.
@@ -420,6 +421,85 @@ rd_kafka_mock_get_requests(rd_kafka_mock_cluster_t *mcluster, size_t *cntp);
  *        tracking is/was turned on.
  */
 RD_EXPORT void rd_kafka_mock_clear_requests(rd_kafka_mock_cluster_t *mcluster);
+
+/**
+ * @brief Set the metrics that are expected by the broker for telemetry
+ * collection.
+ *
+ * @param metrics List of prefixes of metric names or NULL.
+ * @param metrics_cnt
+ *
+ * @note if \p metrics is NULL, no metrics will be expected by the broker. If
+ * the first elements of \p metrics is an empty string, that indicates the
+ * broker expects all metrics.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_set_requested_metrics(rd_kafka_mock_cluster_t *mcluster,
+                                              char **metrics,
+                                              size_t metrics_cnt);
+
+
+/**
+ * @brief Set push frequency to be sent to the client for telemetry collection.
+ *        when the broker receives GetTelemetrySubscription requests.
+ *
+ * @param push_interval_ms time for push in milliseconds. Must be more than 0.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
+                                          int64_t push_interval_ms);
+
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_telemetry_set_push_error_code(rd_kafka_mock_cluster_t *mcluster,
+                                            rd_kafka_resp_err_t error_code);
+
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_mock_telemetry_unset_push_error_code(
+    rd_kafka_mock_cluster_t *mcluster);
+
+
+
+/**
+ * @name Represents a request to the mock cluster along with a timestamp.
+ */
+typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
+
+/**
+ * @brief Get the list of requests sent to this mock cluster.
+ *
+ * @param cntp is set to the count of requests.
+ * @return List of rd_kafka_mock_request_t *.
+ * @remark each element of the returned array must be freed with
+ *         rd_kafka_mock_request_destroy, and the list itself must be freed too.
+ */
+RD_EXPORT rd_kafka_mock_request_t **
+rd_kafka_mock_get_requests(rd_kafka_mock_cluster_t *mcluster, size_t *cntp);
+
+/**
+ * @brief Clear the list of requests sent to this mock broker.
+ */
+RD_EXPORT void
+rd_kafka_mock_broker_clear_requests(rd_kafka_mock_cluster_t *mcluster);
+
+/**
+ * @brief Destroy a rd_kafka_mock_request_t * and deallocate memory.
+ */
+RD_EXPORT void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *mreq);
+
+/**
+ * @brief Get the broker id to which \p mreq was sent.
+ */
+RD_EXPORT int32_t rd_kafka_mock_request_id(rd_kafka_mock_request_t *mreq);
+
+/**
+ * @brief Get the ApiKey with which \p mreq was sent.
+ */
+RD_EXPORT int16_t rd_kafka_mock_request_api_key(rd_kafka_mock_request_t *mreq);
+
+/**
+ * @brief Get the timestamp at which \p mreq was sent.
+ */
+RD_EXPORT rd_ts_t
+rd_kafka_mock_request_timestamp(rd_kafka_mock_request_t *mreq);
 
 /**@}*/
 

@@ -39,6 +39,7 @@
 #include "rdkafka_mock_int.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_telemetry_decode.h"
 
 
 
@@ -2117,6 +2118,121 @@ err_parse:
         return -1;
 }
 
+/**
+ * @brief Handle GetTelemetrySubscriptions
+ */
+static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
+    rd_kafka_mock_connection_t *mconn,
+    rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_resp_err_t err;
+        size_t i;
+        rd_kafka_Uuid_t ClientInstanceId;
+        rd_kafka_Uuid_t zero_uuid = RD_KAFKA_UUID_ZERO;
+
+        /* Request: ClientInstanceId */
+        rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
+        if (ClientInstanceId.least_significant_bits ==
+                zero_uuid.least_significant_bits &&
+            ClientInstanceId.most_significant_bits ==
+                zero_uuid.most_significant_bits) {
+                /* Some random numbers */
+                ClientInstanceId.least_significant_bits = 129;
+                ClientInstanceId.most_significant_bits  = 298;
+        }
+
+        /* Response: ThrottleTimeMs */
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        /* Response: ErrorCode */
+        rd_kafka_buf_write_i16(resp, err);
+
+        /* Response: ClientInstanceId*/
+        rd_kafka_buf_write_uuid(resp, &ClientInstanceId);
+
+        /* Response: SubscriptionId */
+        // TODO: Calculate subscription ID.
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* Response: #AcceptedCompressionTypes */
+        rd_kafka_buf_write_arraycnt(resp, 1);
+
+        /* We send NONE here, despite the broker never actually sending NONE. */
+        /* Response: AcceptedCompressionTypes */
+        rd_kafka_buf_write_i8(resp, RD_KAFKA_COMPRESSION_NONE);
+
+        /* Response: PushIntervalMs */
+        /* We use the value in telemetry_push_interval_ms, and if not set, the
+         * default of 5 minutes. */
+        rd_kafka_buf_write_i32(resp, mcluster->telemetry_push_interval_ms > 0
+                                         ? mcluster->telemetry_push_interval_ms
+                                         : (5 * 60 * 1000));
+
+        /* Response: TelemetryMaxBytes */
+        rd_kafka_buf_write_i32(resp, 10000);
+
+        /* Response: DeltaTemporality */
+        rd_kafka_buf_write_bool(resp, rd_true);
+
+        /* Response: #RequestedMetrics */
+        rd_kafka_buf_write_arraycnt(resp, mcluster->metrics_cnt);
+
+        for (i = 0; i < mcluster->metrics_cnt; i++)
+                rd_kafka_buf_write_str(resp, mcluster->metrics[i], -1);
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
+
+/**
+ * @brief Handle PushTelemetry
+ */
+static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
+                                              rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_resp_err_t err;
+        rd_kafka_Uuid_t ClientInstanceId;
+        int32_t SubscriptionId;
+        rd_bool_t terminating;
+        rd_kafka_compression_t compression_type;
+        rd_kafkap_bytes_t metrics;
+
+        rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
+        rd_kafka_buf_read_i32(rkbuf, &SubscriptionId);
+        rd_kafka_buf_read_bool(rkbuf, &terminating);
+        rd_kafka_buf_read_i8(rkbuf, &compression_type);
+        rd_kafka_buf_read_kbytes(rkbuf, &metrics);
+
+        rd_kafka_telemetry_decode_metrics((void *)metrics.data, metrics.len,
+                                          rd_false);
+
+        // ThrottleTime
+        rd_kafka_buf_write_i32(resp, 0);
+        // ErrorCode
+        rd_kafka_buf_write_i16(resp, mcluster->push_telemetry_error_code
+                                         ? mcluster->push_telemetry_error_code
+                                         : RD_KAFKA_RESP_ERR_NO_ERROR);
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
 
 /**
  * @brief Default request handlers
@@ -2148,6 +2264,10 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
+        [RD_KAFKAP_GetTelemetrySubscriptions] =
+            {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
+        [RD_KAFKAP_PushTelemetry] = {0, 0, 0,
+                                     rd_kafka_mock_handle_PushTelemetry},
 };
 
 

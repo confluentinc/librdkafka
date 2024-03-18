@@ -193,6 +193,22 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_atomic64_t ts_recv; /**< Timestamp of last receive */
         } rkb_c;
 
+        struct {
+                rd_ts_t ts_last;  /**< Timestamp of last push */
+                rd_ts_t ts_start; /**< Timestamp from when collection started */
+                int32_t assigned_partitions;     /**< Current number of assigned
+                                                   partitions. */
+                int32_t connects;                /**< Connection attempts,
+                                                  *   successful or not. */
+                rd_avg_t rkb_avg_rtt;            /* Current RTT period */
+                rd_avg_t rkb_avg_throttle;       /* Current throttle period */
+                rd_avg_t rkb_avg_outbuf_latency; /**< Current latency
+                                                  *   between buf_enq0
+                                                  *   and writing to socket
+                                                  */
+
+        } rkb_c_historic;
+
         int rkb_req_timeouts; /* Current value */
 
         thrd_t rkb_thread;
@@ -411,6 +427,12 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
                                              int16_t maxver,
                                              int *featuresp);
 
+int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver,
+                                              int16_t maxver,
+                                              int *featuresp);
+
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
                                                       int line,
                                                       rd_kafka_t *rk,
@@ -567,6 +589,25 @@ int rd_kafka_brokers_wait_state_change_async(rd_kafka_t *rk,
                                              int stored_version,
                                              rd_kafka_enq_once_t *eonce);
 void rd_kafka_brokers_broadcast_state_change(rd_kafka_t *rk);
+
+rd_kafka_broker_t *rd_kafka_broker_random0(const char *func,
+                                           int line,
+                                           rd_kafka_t *rk,
+                                           rd_bool_t is_up,
+                                           int state,
+                                           int *filtered_cnt,
+                                           int (*filter)(rd_kafka_broker_t *rk,
+                                                         void *opaque),
+                                           void *opaque);
+
+#define rd_kafka_broker_random(rk, state, filter, opaque)                      \
+        rd_kafka_broker_random0(__FUNCTION__, __LINE__, rk, rd_false, state,   \
+                                NULL, filter, opaque)
+
+#define rd_kafka_broker_random_up(rk, filter, opaque)                          \
+        rd_kafka_broker_random0(__FUNCTION__, __LINE__, rk, rd_true,           \
+                                RD_KAFKA_BROKER_STATE_UP, NULL, filter,        \
+                                opaque)
 
 
 

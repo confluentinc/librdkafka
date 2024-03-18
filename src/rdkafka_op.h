@@ -180,6 +180,10 @@ typedef enum {
                                                      AlterUserScramCredentials
                                                      u.admin_request >*/
         RD_KAFKA_OP_LISTOFFSETS, /**< Admin: ListOffsets u.admin_request >*/
+        RD_KAFKA_OP_SET_TELEMETRY_BROKER, /**< Set preferred broker for
+                                               telemetry. */
+        RD_KAFKA_OP_TERMINATE_TELEMETRY,  /**< Start termination sequence for
+                                               telemetry. */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -569,6 +573,9 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                RD_KAFKA_MOCK_CMD_COORD_SET,
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
+                               RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET,
+                               RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET,
+                               RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_ERROR_SET,
                         } cmd;
 
                         rd_kafka_resp_err_t err; /**< Error for:
@@ -605,7 +612,11 @@ struct rd_kafka_op_s {
                                                   *    TOPIC_CREATE (repl fact)
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    APIVERSION_SET (maxver)
+                                                  *    REQUESTED_METRICS_SET (metrics_cnt)
+                                                  *    TELEMETRY_PUSH_INTERVAL_SET (interval)
                                                   */
+                        char **metrics;          /**< Metrics requested, for:
+                                                  *   REQUESTED_METRICS_SET */
                 } mock;
 
                 struct {
@@ -667,6 +678,11 @@ struct rd_kafka_op_s {
                         void *opaque;
 
                 } leaders;
+
+                struct {
+                        /** Preferred broker for telemetry. */
+                        rd_kafka_broker_t *rkb;
+                } telemetry_broker;
 
         } rko_u;
 };

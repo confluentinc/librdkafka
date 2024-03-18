@@ -182,6 +182,29 @@ int RdKafka::ssl_cert_verify_cb_trampoline(rd_kafka_t *rk,
 }
 
 
+int RdKafka::ssl_ctx_init_cb_trampoline (rd_kafka_t *rk,
+                                         void *ssl_ctx,
+                                         char *errstr, size_t errstr_size,
+                                         void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  std::string errbuf;
+
+  bool res = 0 != handle->ssl_ctx_init_cb_->ssl_ctx_init_cb(ssl_ctx, errbuf);
+
+  if (res)
+    return (int)res;
+
+  size_t errlen = errbuf.size() > errstr_size - 1 ?
+    errstr_size - 1 : errbuf.size();
+
+  memcpy(errstr, errbuf.c_str(), errlen);
+  if (errstr_size > 0)
+    errstr[errlen] = '\0';
+
+  return (int)res;
+}
+
+
 RdKafka::ErrorCode RdKafka::HandleImpl::metadata(bool all_topics,
                                                  const Topic *only_rkt,
                                                  Metadata **metadatap,
@@ -293,6 +316,12 @@ void RdKafka::HandleImpl::set_common_config(const RdKafka::ConfImpl *confimpl) {
     rd_kafka_conf_set_ssl_cert_verify_cb(
         confimpl->rk_conf_, RdKafka::ssl_cert_verify_cb_trampoline);
     ssl_cert_verify_cb_ = confimpl->ssl_cert_verify_cb_;
+  }
+
+  if (confimpl->ssl_ctx_init_cb_) {
+    rd_kafka_conf_set_ssl_ctx_init_cb(
+        confimpl->rk_conf_, RdKafka::ssl_ctx_init_cb_trampoline);
+    ssl_ctx_init_cb_ = confimpl->ssl_ctx_init_cb_;
   }
 
   if (confimpl->open_cb_) {

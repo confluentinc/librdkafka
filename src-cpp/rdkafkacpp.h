@@ -80,6 +80,12 @@ typedef SSIZE_T ssize_t;
 #define RD_EXPORT
 #endif
 
+#if __cplusplus >= 201103L
+#define RD_OVERRIDE override
+#else
+#define RD_OVERRIDE
+#endif
+
 /**@endcond*/
 
 extern "C" {

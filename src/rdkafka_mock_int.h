@@ -208,6 +208,7 @@ typedef struct rd_kafka_mock_broker_s {
         rd_kafka_mock_error_stack_head_t errstacks;
 
         struct rd_kafka_mock_cluster_s *cluster;
+        int32_t throttle_ms;
 } rd_kafka_mock_broker_t;
 
 

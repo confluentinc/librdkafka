@@ -2656,6 +2656,23 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
         unsigned int cnt = 0;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+        rd_bool_t need_throttle = 0;
+        mtx_lock(&rkb->rkb_ts_throttled.lock);
+        rd_ts_t current_ts = rd_clock();
+        rd_ts_t throttled_ts = rkb->rkb_ts_throttled.throttle_ts;
+        if (current_ts < throttled_ts) {
+                need_throttle = 1;
+        } else {
+                rkb->rkb_ts_throttled.throttle_ts = 0;
+        }
+        mtx_unlock(&rkb->rkb_ts_throttled.lock);
+        if (need_throttle) {
+                rd_rkb_dbg(
+                    rkb, BROKER ,
+                    "THROTTLE",
+                    "broker throttled for %" PRIu64 ", skip futher requests", throttled_ts - current_ts);
+                return cnt;
+        }
 
         while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
                rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
@@ -4830,6 +4847,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
 
         rd_atomic64_init(&rkb->rkb_c.ts_send, 0);
         rd_atomic64_init(&rkb->rkb_c.ts_recv, 0);
+        mtx_init(&rkb->rkb_ts_throttled.lock, mtx_plain);
 
         /* ApiVersion fallback interval */
         if (rkb->rkb_rk->rk_conf.api_version_request) {

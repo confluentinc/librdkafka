@@ -590,7 +590,7 @@ rd_kafka_parse_ListOffsets(rd_kafka_buf_t *rkbuf,
         api_version = rkbuf->rkbuf_reqhdr.ApiVersion;
 
         if (api_version >= 2)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 3);
 
         /* NOTE:
          * Broker may return offsets in a different constellation than
@@ -963,7 +963,7 @@ rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
         ApiVersion = rkbuf->rkbuf_reqhdr.ApiVersion;
 
         if (ApiVersion >= 2)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, -1);
 
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
@@ -1077,7 +1077,7 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
         ApiVersion = rkbuf->rkbuf_reqhdr.ApiVersion;
 
         if (ApiVersion >= 3)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 4);
 
         if (!*offsets)
                 *offsets = rd_kafka_topic_partition_list_new(16);
@@ -1509,7 +1509,7 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                 goto err;
 
         if (rd_kafka_buf_ApiVersion(rkbuf) >= 3)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 4);
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         for (i = 0; i < TopicArrayCnt; i++) {
@@ -2770,7 +2770,7 @@ rd_kafka_handle_ApiVersion(rd_kafka_t *rk,
         }
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 2);
 
         /* Discard end tags */
         rd_kafka_buf_skip_tags(rkbuf);
@@ -3088,8 +3088,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
-                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
-                                          Throttle_Time);
+                rd_kafka_buf_handle_throttle(rkb, rkb->rkb_rk->rk_rep,
+                                          Throttle_Time, rd_kafka_buf_ApiVersion(rkbuf) >= 6);
         }
 
 
@@ -5216,7 +5216,7 @@ void rd_kafka_handle_InitProducerId(rd_kafka_t *rk,
         if (err)
                 goto err;
 
-        rd_kafka_buf_read_throttle_time(rkbuf);
+        rd_kafka_buf_read_throttle_time(rkbuf, 1);
 
         rd_kafka_buf_read_i16(rkbuf, &error_code);
         if ((err = error_code))

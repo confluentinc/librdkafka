@@ -331,6 +331,12 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 
         rd_kafka_timer_t rkb_sasl_reauth_tmr;
+
+        /**< Timestamp when throttle ends */
+        struct {
+                mtx_t lock;
+                rd_ts_t throttle_ts;
+        } rkb_ts_throttled;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

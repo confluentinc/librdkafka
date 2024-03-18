@@ -603,6 +603,10 @@ rd_kafka_Uuid_t rd_kafka_Uuid_random();
 
 const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
 
+unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid);
+
+unsigned int rd_kafka_Uuid_map_hash(const void *key);
+
 /**
  * @name Producer ID and Epoch for the Idempotent Producer
  * @{

@@ -118,7 +118,6 @@ typedef struct rd_kafka_fetch_pos_s {
 #include "rdkafka_timer.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_metadata.h"
-#include "rdkafka_mock.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_assignment.h"
 #include "rdkafka_coord.h"

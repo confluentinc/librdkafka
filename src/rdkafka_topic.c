@@ -189,6 +189,23 @@ rd_kafka_topic_t *rd_kafka_topic_find0_fl(const char *func,
         return rkt;
 }
 
+/**
+ * Same semantics as ..find() but takes a Uuid instead.
+ */
+rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk,
+                                                  rd_kafka_Uuid_t topic_id) {
+        rd_kafka_topic_t *rkt;
+
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+                if (!rd_kafka_Uuid_cmp(rkt->rkt_topic_id, topic_id)) {
+                        rd_kafka_topic_keep(rkt);
+                        break;
+                }
+        }
+        rd_kafka_rdunlock(rk);
+        return rkt;
+}
 
 /**
  * @brief rd_kafka_topic_t comparator.
@@ -1311,7 +1328,17 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                 upd += rd_kafka_topic_partition_cnt_update(rkt,
                                                            mdt->partition_cnt);
-
+                if (rd_kafka_Uuid_cmp(mdit->topic_id, RD_KAFKA_UUID_ZERO)) {
+                        /* FIXME: an offset reset must be triggered.
+                         * when rkt_topic_id wasn't zero.
+                         * There are no problems
+                         * in test 0107_topic_recreate if offsets in new
+                         * topic are lower than in previous one,
+                         * causing an out of range and an offset reset,
+                         * but the rarer case where they're higher needs
+                         * to be checked. */
+                        rkt->rkt_topic_id = mdit->topic_id;
+                }
                 /* If the metadata times out for a topic (because all brokers
                  * are down) the state will transition to S_UNKNOWN.
                  * When updated metadata is eventually received there might

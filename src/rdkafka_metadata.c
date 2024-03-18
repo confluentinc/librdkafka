@@ -633,6 +633,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
 
                 if (ApiVersion >= 10) {
                         rd_kafka_buf_read_uuid(rkbuf, &mdi->topics[i].topic_id);
+                } else {
+                        mdi->topics[i].topic_id = RD_KAFKA_UUID_ZERO;
                 }
 
                 if (ApiVersion >= 1)

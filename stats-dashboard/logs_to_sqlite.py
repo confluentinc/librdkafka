@@ -19,7 +19,6 @@ def extract_tuples(json_dict, name, time):
             ret.append((str(k), str(v), name, time))
     return ret
 
-
 def extract_logs(f, db):
     if os.path.isfile(db):
         raise Exception("db exists")
@@ -30,6 +29,7 @@ def extract_logs(f, db):
                     value text, name text, timestamp INTEGER)''')
 
         with open(f) as f:
+            stats = 0
             for line in f.readlines():
                 i, j = line.find('{'), line.rfind('}') + 1
                 json_string = line[i:j]
@@ -60,10 +60,10 @@ def extract_logs(f, db):
                     cur.executemany(
                         'INSERT INTO stats VALUES (?,?,?,?,?,?,?,?,?)', rows)
                     con.commit()
+                    stats+=1
                 except json.decoder.JSONDecodeError:
-                    print(
-                        f'Doesn\'t seem to be a JSON: {json_string}',
-                        file=sys.stderr)
+                    # There will always be extraneous log lines
+                    pass
                 except ValueError:
                     print(
                         f'Doesn\'t seem to be a librdkafka stats JSON: {json_string}',  # noqa: E501
@@ -72,6 +72,9 @@ def extract_logs(f, db):
                     print(
                         f'Unexpected error: {e} JSON: {json_string}',
                         file=sys.stderr)
+            print(f'{stats} stats written')
+        cur.execute('''CREATE INDEX idx_stats ON stats(
+            name,f1,f2,f3,f4,f5,timestamp)''')
 
 
 if __name__ == "__main__":

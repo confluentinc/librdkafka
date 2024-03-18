@@ -857,7 +857,7 @@ Configuration is applied prior to object creation using the
 
     rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
     if (!rk) {
-        rd_kafka_conf_destroy(rk);
+        rd_kafka_conf_destroy(conf);
         fail("Failed to create producer: %s\n", errstr);
     }
 

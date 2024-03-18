@@ -773,6 +773,9 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic(
 void rd_kafka_topic_partition_list_sort_by_topic(
     rd_kafka_topic_partition_list_t *rktparlist);
 
+void rd_kafka_topic_partition_list_sort_by_topic_id(
+    rd_kafka_topic_partition_list_t *rktparlist);
+
 void rd_kafka_topic_partition_list_reset_offsets(
     rd_kafka_topic_partition_list_t *rktparlist,
     int64_t offset);
@@ -1121,5 +1124,32 @@ static RD_UNUSED RD_INLINE void rd_kafka_toppar_set_offset_validation_position(
     rd_kafka_fetch_pos_t offset_validation_pos) {
         rktp->rktp_offset_validation_pos = offset_validation_pos;
 }
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_intersection_by_name(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_difference_by_name(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_union_by_name(rd_kafka_topic_partition_list_t *a,
+                                            rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_intersection_by_id(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_difference_by_id(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_union_by_id(rd_kafka_topic_partition_list_t *a,
+                                          rd_kafka_topic_partition_list_t *b);
 
 #endif /* _RDKAFKA_PARTITION_H_ */

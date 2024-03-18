@@ -2136,7 +2136,7 @@ rd_kafka_broker_reconnect_backoff(const rd_kafka_broker_t *rkb, rd_ts_t now) {
 static int rd_ut_reconnect_backoff(void) {
         rd_kafka_broker_t rkb = RD_ZERO_INIT;
         rd_kafka_conf_t conf  = {.reconnect_backoff_ms     = 10,
-                                .reconnect_backoff_max_ms = 90};
+                                 .reconnect_backoff_max_ms = 90};
         rd_ts_t now           = 1000000;
         int backoff;
 
@@ -5430,12 +5430,6 @@ void rd_kafka_broker_update(rd_kafka_t *rk,
                  * the hostname. */
                 if (strcmp(rkb->rkb_nodename, nodename))
                         needs_update = 1;
-        } else if ((rkb = rd_kafka_broker_find(rk, proto, mdb->host,
-                                               mdb->port))) {
-                /* Broker matched by hostname (but not by nodeid),
-                 * update the nodeid. */
-                needs_update = 1;
-
         } else if ((rkb = rd_kafka_broker_add(rk, RD_KAFKA_LEARNED, proto,
                                               mdb->host, mdb->port, mdb->id))) {
                 rd_kafka_broker_keep(rkb);
@@ -6008,6 +6002,89 @@ void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
         rd_dassert(rkb);
         rko = rd_kafka_op_new(RD_KAFKA_OP_SASL_REAUTH);
         rd_kafka_q_enq(rkb->rkb_ops, rko);
+}
+
+/**
+ * @brief Retrieve and return the learned broker ids.
+ *
+ * @param rk Instance to use.
+ * @param cntp Will be updated to the number of brokers returned.
+ *
+ * @locks_acquired rd_kafka_rdlock()
+ *
+ * @returns a malloc:ed list of int32_t broker ids.
+ */
+int32_t *rd_kafka_broker_get_learned_ids(rd_kafka_t *rk, size_t *cntp) {
+        rd_kafka_broker_t *rkb;
+
+        size_t all_broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+        /* This over-allocates but simplifies the code. */
+        int32_t *ids = malloc(sizeof(*ids) * all_broker_cnt);
+        int32_t *p   = ids;
+
+        *cntp = 0;
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                        continue;
+
+                *p++ = rkb->rkb_nodeid;
+                (*cntp)++;
+        }
+        rd_kafka_rdunlock(rk);
+
+        return ids;
+}
+
+/**
+ * @brief Decommission a broker.
+ *
+ * @param rk Client instance.
+ * @param rkb Broker to decommission.
+ * @param wait_thrds Add the broker's thread to this list if not NULL.
+ *
+ * @locks rd_kafka_wrlock() is dropped and reacquired.
+ *
+ * Broker threads hold a refcount and detect when it reaches 1 and then
+ * decommissions itself. Callers can wait for this to happen by calling
+ * thrd_join() on elements of \p wait_thrds. Callers are responsible for
+ * managing the creation and destruction of \p wait_thrds which can be NULL.
+ */
+void rd_kafka_broker_decommission(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_list_t *wait_thrds) {
+
+        if (rkb->termination_in_progress)
+                return;
+
+        rkb->termination_in_progress = rd_true;
+
+        /* Add broker's thread to wait_thrds list for later joining */
+        if (wait_thrds) {
+                thrd_t *thrd = rd_malloc(sizeof(*thrd));
+                *thrd        = rkb->rkb_thread;
+
+                rd_list_add(wait_thrds, thrd);
+        }
+
+        rd_kafka_wrunlock(rk);
+
+        rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",
+                     rd_kafka_broker_name(rkb));
+
+        /* Send op to trigger queue/io wake-up.
+         * The op itself is (likely) ignored by the broker thread. */
+        rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
+
+#ifndef _WIN32
+        /* Interrupt IO threads to speed up termination. */
+        if (rk->rk_conf.term_sig)
+                pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+#endif
+
+        rd_kafka_broker_destroy(rkb);
+
+        rd_kafka_wrlock(rk);
 }
 
 /**

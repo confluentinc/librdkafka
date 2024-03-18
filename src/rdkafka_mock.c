@@ -1534,6 +1534,28 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 
 
 /**
+ * @brief Decommission a mock broker from a cluster.
+ *
+ * @param mcluster The mock cluster
+ * @param broker_id The id of the broker to remove
+ *
+ * @returns Error value or 0 if no error occurred
+ */
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *mcluster,
+                                  int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.lo        = rd_false;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+
+/**
  * @brief Starts listening on the mock broker socket.
  *
  * @returns 0 on success or -1 on error (logged).
@@ -2150,6 +2172,30 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+void rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *cluster,
+                                        int32_t broker_id,
+                                        const char *host,
+                                        int port) {
+        rd_kafka_mock_broker_t *mrkb;
+
+        mtx_lock(&cluster->lock);
+        TAILQ_FOREACH(mrkb, &cluster->brokers, link) {
+                if (mrkb->id == broker_id) {
+                        rd_kafka_dbg(
+                            cluster->rk, MOCK, "MOCK",
+                            "Broker %" PRId32
+                            ": Setting advertised listener from %s:%d to %s:%d",
+                            broker_id, mrkb->advertised_listener, mrkb->port,
+                            host, port);
+                        rd_snprintf(mrkb->advertised_listener,
+                                    sizeof(mrkb->advertised_listener), "%s",
+                                    host);
+                        mrkb->port = port;
+                }
+        }
+        mtx_unlock(&cluster->lock);
+}
+
 rd_kafka_resp_err_t
 rd_kafka_mock_coordinator_set(rd_kafka_mock_cluster_t *mcluster,
                               const char *key_type,
@@ -2236,6 +2282,10 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mrkb->rack = rd_strdup(rko->rko_u.mock.name);
                 else
                         mrkb->rack = NULL;
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
+                rd_kafka_mock_broker_destroy(mrkb);
                 break;
 
         default:
@@ -2384,6 +2434,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:

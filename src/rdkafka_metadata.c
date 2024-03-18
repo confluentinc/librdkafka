@@ -492,6 +492,9 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_bool_t has_client_rack = rk->rk_conf.client_rack &&
                                     RD_KAFKAP_STR_LEN(rk->rk_conf.client_rack);
         rd_bool_t compute_racks = has_client_rack;
+        rd_kafka_broker_t *trkb;
+        rd_kafka_broker_t *trkb_next;
+        rd_bool_t purge_broker;
 
         if (request) {
                 requested_topics = request->rkbuf_u.Metadata.topics;
@@ -799,6 +802,27 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
                                        &md->brokers[i], NULL);
         }
+
+        rd_kafka_wrlock(rk);
+        /* Purge any old brokers that are not in the metadata. */
+        TAILQ_FOREACH_SAFE(trkb, &rk->rk_brokers, rkb_link, trkb_next) {
+                if (trkb->rkb_source != RD_KAFKA_LEARNED)
+                        continue;
+
+                purge_broker = rd_true;
+                for (i = 0; i < md->broker_cnt; i++) {
+                        if (md->brokers[i].id == trkb->rkb_nodeid) {
+                                purge_broker = rd_false;
+                                break;
+                        }
+                }
+
+                if (!purge_broker)
+                        continue;
+
+                rd_kafka_broker_decommission(rk, trkb, NULL);
+        }
+        rd_kafka_wrunlock(rk);
 
         for (i = 0; i < md->topic_cnt; i++) {
 

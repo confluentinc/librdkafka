@@ -117,6 +117,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_LISTOFFSETS] = "REPLY:LISTOFFSETS",
+            [RD_KAFKA_OP_METADATA_951] = "REPLY:METADATA_951",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -276,6 +277,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_LISTOFFSETS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_METADATA_951] = sizeof(rko->rko_u.metadata),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

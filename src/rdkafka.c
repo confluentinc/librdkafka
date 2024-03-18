@@ -3715,6 +3715,16 @@ static void rd_kafka_get_offsets_for_times_resp_cb(rd_kafka_t *rk,
         state->wait_reply--;
 }
 
+void foo2(rd_kafka_t *rk, rd_kafka_metadata_internal_t* mdi) {
+        rd_kafka_broker_t *rkb = NULL;
+        
+        int i;
+        for(i = 0; i < mdi->metadata.topic_cnt; i++)
+                /* Update local topic & partition state based
+                * on metadata */
+                rd_kafka_topic_metadata_update2(rkb, &mdi->metadata.topics[i], &mdi->topics[i]);
+
+}
 
 rd_kafka_resp_err_t
 rd_kafka_offsets_for_times(rd_kafka_t *rk,
@@ -4002,6 +4012,12 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_PURGE:
                 rd_kafka_purge(rk, rko->rko_u.purge.flags);
+                break;
+
+        case RD_KAFKA_OP_METADATA_951:
+                /* TODO: Callback to merge metadata rko_u.metadata.mdi and
+                 * update cache. Phase 5 */
+                foo2(rk, rko->rko_u.metadata.mdi);
                 break;
 
         default:

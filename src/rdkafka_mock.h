@@ -293,6 +293,13 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
                               int32_t broker_id);
 
+RD_EXPORT void
+rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *mcluster,
+                                   int32_t broker_id,
+                                   const char *host,
+                                   int port);
+
+
 /**
  * @brief Makes the broker accept connections again.
  *        This does NOT trigger leader change.

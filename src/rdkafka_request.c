@@ -2706,8 +2706,6 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 int i;
                 rd_kafka_Uuid_t *topic_id;
 
-                /* KIP848TODO: Properly handle usecases for this similar to
-                 * Metadata.topics */
                 /* Maintain a copy of the topics list so we can purge
                  * hints from the metadata cache on error. */
                 rkbuf->rkbuf_u.Metadata.topic_ids =

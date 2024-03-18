@@ -164,7 +164,9 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_interval_t rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t rkcg_heartbeat_intvl;    /* Heartbeat intvl */
-        int rkcg_heartbeat_intvl_ms;           /* TODO: write */
+        int rkcg_heartbeat_intvl_ms;           /* KIP 848: received
+                                                * heartbeat interval in
+                                                * milliseconds */
         rd_interval_t rkcg_join_intvl;         /* JoinGroup interval */
         rd_interval_t rkcg_timeout_scan_intvl; /* Timeout scanner */
 

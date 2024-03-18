@@ -5795,7 +5795,19 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
 }
 
 /**
- * @brief TODO: write.
+ * @brief Get list of topics that need to be removed from \p rkcg
+ *        rkcg_group_assignment following a subscription change to
+ *        \p subscription.
+ *
+ * @param rkcg Affected consumer group.
+ * @param subscription New subscription as a list of topics with optional
+ *                     regexes.
+ *
+ * @return NULL when no topics have to be removed, a
+ *         list of topics otherwise.
+ *
+ * @locality rdkafka main thread
+ * @locks none
  */
 static rd_kafka_topic_partition_list_t *
 rd_kafka_cgrp_consumer_get_unsubscribing_topics(
@@ -5841,20 +5853,29 @@ rd_kafka_cgrp_consumer_get_unsubscribing_topics(
         return result;
 }
 
+/**
+ * @brief React to subscription changes in consumer group \p cgrp .
+ *        Revoke topics not subscribed anymore immediately,
+ *        without waiting for a target assignment first.
+ *
+ * @param rkcg Consumer group.
+ * @param subscription List of topics in new subscription.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
 static void rd_kafka_cgrp_consumer_propagate_subscription_changes(
     rd_kafka_cgrp_t *rkcg,
-    rd_kafka_topic_partition_list_t *rktparlist) {
+    rd_kafka_topic_partition_list_t *subscription) {
         rd_kafka_topic_partition_list_t *unsubscribing_topics;
         rd_kafka_topic_partition_list_t *revoking;
-        // rd_list_t *tinfos;
-        // rd_kafka_topic_partition_list_t *errored;
         int old_cnt =
             rkcg->rkcg_subscription ? rkcg->rkcg_subscription->cnt : 0;
 
         /* Topics in rkcg_subscribed_topics that don't match any pattern in
-           the new subscription. */
+         * the new subscription. */
         unsubscribing_topics =
-            rd_kafka_cgrp_consumer_get_unsubscribing_topics(rkcg, rktparlist);
+            rd_kafka_cgrp_consumer_get_unsubscribing_topics(rkcg, subscription);
 
         /* Currently assigned topic partitions that are no longer desired. */
         revoking = rd_kafka_cgrp_calculate_subscribe_revoking_partitions(
@@ -5865,7 +5886,7 @@ static void rd_kafka_cgrp_consumer_propagate_subscription_changes(
                      "new subscription of size %d, removing %d topic(s), "
                      "revoking %d partition(s) (join-state %s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), old_cnt,
-                     rktparlist->cnt,
+                     subscription->cnt,
                      unsubscribing_topics ? unsubscribing_topics->cnt : 0,
                      revoking ? revoking->cnt : 0,
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
@@ -5873,27 +5894,6 @@ static void rd_kafka_cgrp_consumer_propagate_subscription_changes(
         if (unsubscribing_topics)
                 rd_kafka_topic_partition_list_destroy(unsubscribing_topics);
 
-        // /* Create a list of the topics in metadata that matches the new
-        // * subscription */
-        // tinfos = rd_list_new(rktparlist->cnt,
-        //                 (void *)rd_kafka_topic_info_destroy);
-
-        // /* Unmatched topics will be added to the errored list. */
-        // errored = rd_kafka_topic_partition_list_new(0);
-
-        // if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
-        //         rd_kafka_metadata_topic_match(rkcg->rkcg_rk, tinfos,
-        //                                 rktparlist, errored);
-        // else
-        //         rd_kafka_metadata_topic_filter(
-        //         rkcg->rkcg_rk, tinfos, rktparlist, errored);
-
-        // rd_list_destroy(tinfos);
-
-        // /* Propagate consumer errors for any non-existent or errored topics.
-        // * The function takes ownership of errored. */
-        // rd_kafka_propagate_consumer_topic_errors(
-        //         rkcg, errored, "Subscribed topic not available");
 
         if (revoking) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER | RD_KAFKA_DBG_CGRP,
@@ -5913,6 +5913,9 @@ static void rd_kafka_cgrp_consumer_propagate_subscription_changes(
 
 /**
  * Set new atomic topic subscription (KIP-848).
+ *
+ * @locality rdkafka main thread
+ * @locks none
  */
 static rd_kafka_resp_err_t
 rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
@@ -6027,9 +6030,18 @@ static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
         }
 }
 
-
 /**
- * @brief TODO: write
+ * @brief KIP 848: Called from assignment code when all in progress
+ *        assignment/unassignment operations are done, allowing the cgrp to
+ *        transition to other states if needed.
+ *
+ * @param rkcg Consumer group.
+ *
+ * @remark This may be called spontaneously without any need for a state
+ *         change in the rkcg.
+ *
+ * @locality rdkafka main thread
+ * @locks none
  */
 static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGNDONE",

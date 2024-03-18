@@ -157,7 +157,7 @@ blocks:
             - DESTDIR="$PWD/dest" make install
             - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - export TEST_KAFKA_VERSION=3.7.0
-            - (cd tests && python3 broker_version_tests.py dajac/KAFKA-16249 --kraft
+            - (cd tests && python3 broker_version_tests.py trunk --kraft
               --conf '{"conf":["group.coordinator.rebalance.protocols=classic,consumer"]}'
               --rdkconf '{"args":"-Q -E"}')
 

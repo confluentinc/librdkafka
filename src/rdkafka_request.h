@@ -107,6 +107,23 @@ typedef struct rd_kafkap_NodeEndpoints_s {
         rd_kafkap_NodeEndpoint_t *NodeEndpoints;
 } rd_kafkap_NodeEndpoints_t;
 
+typedef struct rd_kafkap_produce_reply_tags_Partition_s {
+        int32_t Partition;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafkap_produce_reply_tags_Partition_t;
+
+typedef struct rd_kafkap_produce_reply_tags_Topic_s {
+        char *TopicName;
+        int32_t PartitionCnt;
+        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
+} rd_kafkap_produce_reply_tags_Topic_t;
+
+typedef struct rd_kafkap_produce_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        int32_t TopicCnt;
+        rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
+} rd_kafkap_produce_reply_tags_t;
+
 /**@}*/
 
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(

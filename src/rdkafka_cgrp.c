@@ -2979,6 +2979,16 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 }
         }
 
+        if (rkcg->rkcg_consumer_flags &
+                RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING &&
+            rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                /* TODO: Check if this should be done only for the steady state?
+                 */
+                rd_kafka_assignment_serve(rk);
+                rkcg->rkcg_consumer_flags &=
+                    ~RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING;
+        }
+
         if (rkcg->rkcg_next_target_assignment) {
                 if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) {
                         rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
@@ -3092,8 +3102,8 @@ err:
                 /* Re-query for coordinator */
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
@@ -3736,12 +3746,18 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
          */
         switch (err) {
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
-                /* Revoke assignment and rebalance on unknown member */
-                rd_kafka_cgrp_set_member_id(rk->rk_cgrp, "");
-                rd_kafka_cgrp_revoke_all_rejoin_maybe(
-                    rkcg, rd_true /*assignment is lost*/,
-                    rd_true /*this consumer is initiating*/,
-                    "OffsetCommit error: Unknown member");
+                if (rkcg->rkcg_group_protocol ==
+                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp);
+                } else {
+                        /* Revoke assignment and rebalance on unknown member */
+                        rd_kafka_cgrp_set_member_id(rk->rk_cgrp, "");
+                        rd_kafka_cgrp_revoke_all_rejoin_maybe(
+                            rkcg, rd_true /*assignment is lost*/,
+                            rd_true /*this consumer is initiating*/,
+                            "OffsetCommit error: Unknown member");
+                }
                 break;
 
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
@@ -3756,6 +3772,11 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR__IN_PROGRESS:
                 return; /* Retrying */
 
+        case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
+                rd_assert(rkcg->rkcg_group_protocol ==
+                          RD_KAFKA_GROUP_PROTOCOL_CONSUMER);
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
+                /* Continue */
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR__TRANSPORT:

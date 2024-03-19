@@ -4426,6 +4426,7 @@ RD_EXPORT int rd_kafka_assignment_lost(rd_kafka_t *rk);
  *          or successfully scheduled if asynchronous, or failed.
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
  *          a fatal error.
+ * TODO: Update doc with STALE_MEMBER_EPOCH Error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit(rd_kafka_t *rk,

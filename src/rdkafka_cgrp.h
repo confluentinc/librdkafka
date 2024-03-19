@@ -300,6 +300,8 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x20
 /* Member is fenced, rejoining */
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x40
+/* Serve pending assignments after heartbeat */
+#define RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING 0x80
 
 
         /** Rejoin the group following a currently in-progress

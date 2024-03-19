@@ -513,5 +513,4 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
 
-
 #endif /* _RDKAFKA_REQUEST_H_ */

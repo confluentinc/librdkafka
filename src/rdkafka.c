@@ -4006,6 +4006,11 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rd_kafka_purge(rk, rko->rko_u.purge.flags);
                 break;
 
+        case RD_KAFKA_OP_METADATA_951:
+                /* TODO: Callback to merge metadata rko_u.metadata.mdi and
+                 * update cache. Phase 5 */
+                break;
+
         default:
                 /* If op has a callback set (e.g., OAUTHBEARER_REFRESH),
                  * call it. */

@@ -387,6 +387,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
 
                 if (rko->rko_u.dr.rkt)
                         rd_kafka_topic_destroy0(rko->rko_u.dr.rkt);
+                if (rko->rko_u.dr.presult)
+                        rd_kafka_Produce_result_destroy(rko->rko_u.dr.presult);
                 break;
 
         case RD_KAFKA_OP_OFFSET_RESET:

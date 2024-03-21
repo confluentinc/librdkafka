@@ -270,10 +270,7 @@ static void do_test_ListOffsets_leader_change(void) {
 
 int main_0138_admin_mock(int argc, char **argv) {
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_AlterConsumerGroupOffsets_errors(-1);
         do_test_AlterConsumerGroupOffsets_errors(1000);

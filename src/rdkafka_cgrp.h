@@ -56,6 +56,7 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafkap_str_t *rkcg_member_id; /* Last assigned MemberId */
         rd_kafkap_str_t *rkcg_group_instance_id;
         const rd_kafkap_str_t *rkcg_client_id;
+        rd_kafkap_str_t *rkcg_client_rack;
 
         enum {
                 /* Init state */
@@ -163,6 +164,7 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_interval_t rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t rkcg_heartbeat_intvl;    /* Heartbeat intvl */
+        int rkcg_heartbeat_intvl_ms;           /* TODO: write */
         rd_interval_t rkcg_join_intvl;         /* JoinGroup interval */
         rd_interval_t rkcg_timeout_scan_intvl; /* Timeout scanner */
 
@@ -179,7 +181,8 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_list_t rkcg_toppars; /* Toppars subscribed to*/
 
-        int32_t rkcg_generation_id; /* Current generation id */
+        int32_t rkcg_generation_id; /* Current generation id (classic)
+                                     * or member epoch (consumer). */
 
         rd_kafka_assignor_t *rkcg_assignor; /**< The current partition
                                              *   assignor. used by both
@@ -260,6 +263,31 @@ typedef struct rd_kafka_cgrp_s {
         /** The partitions to incrementally assign following a
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
+
+        /* Current acked assignment, start with an empty list. */
+        rd_kafka_topic_partition_list_t *rkcg_current_assignment;
+
+        /* Assignment the is currently reconciling.
+         * Can be NULL in case there's no reconciliation ongoing. */
+        rd_kafka_topic_partition_list_t *rkcg_target_assignment;
+
+        /* Next assignment that will be reconciled once current
+         * reconciliation finishes. Can be NULL. */
+        rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
+
+        int rkcg_consumer_flags;
+#define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION                      \
+        0x4                                             /* TODO: write         \
+                                                         */
+#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE   0x8  /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10 /* TODO: write */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN                                   \
+        0x20 /* Member is fenced, need to rejoin */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE                       \
+        0x40 /* Member is fenced, rejoining */
+
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */
@@ -386,5 +414,7 @@ rd_kafka_rebalance_protocol2str(rd_kafka_rebalance_protocol_t protocol) {
                 return "NONE";
         }
 }
+
+void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg);
 
 #endif /* _RDKAFKA_CGRP_H_ */

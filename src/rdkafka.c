@@ -704,6 +704,12 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID, "Broker: Unknown topic id"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
               "Broker: The member epoch is fenced by the group coordinator"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID,
+              "Broker: The instance ID is still used by another member in the "
+              "consumer group"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR,
+              "Broker: The assignor or its version range is not supported by "
+              "the consumer group"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
               "Broker: The member epoch is stale"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
@@ -1607,6 +1613,7 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                     [RD_KAFKAP_BrokerHeartbeat]             = rd_true,
                     [RD_KAFKAP_UnregisterBroker]            = rd_true,
                     [RD_KAFKAP_AllocateProducerIds]         = rd_true,
+                    [RD_KAFKAP_ConsumerGroupHeartbeat]      = rd_true,
                 },
             [3 /*hide-unless-non-zero*/] = {
                 /* Hide Admin requests unless they've been used */
@@ -2173,6 +2180,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int ret_errno               = 0;
         const char *conf_err;
+        rd_kafka_assignor_t *cooperative_assignor;
 #ifndef _WIN32
         sigset_t newset, oldset;
 #endif
@@ -2362,6 +2370,26 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 ret_err   = RD_KAFKA_RESP_ERR__INVALID_ARG;
                 ret_errno = EINVAL;
                 goto fail;
+        }
+
+        /* Detect if chosen assignor is cooperative */
+        cooperative_assignor = rd_kafka_assignor_find(rk, "cooperative-sticky");
+        rk->rk_conf.partition_assignors_cooperative =
+            !rk->rk_conf.partition_assignors.rl_cnt ||
+            (cooperative_assignor && cooperative_assignor->rkas_enabled);
+
+        if (!rk->rk_conf.group_remote_assignor) {
+                /* Default remote assignor to the chosen local one. */
+                if (rk->rk_conf.partition_assignors_cooperative) {
+                        rk->rk_conf.group_remote_assignor =
+                            rd_strdup("uniform");
+                } else {
+                        rd_kafka_assignor_t *range_assignor =
+                            rd_kafka_assignor_find(rk, "range");
+                        if (range_assignor && range_assignor->rkas_enabled)
+                                rk->rk_conf.group_remote_assignor =
+                                    rd_strdup("range");
+                }
         }
 
         /* Create Mock cluster */

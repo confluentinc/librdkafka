@@ -718,10 +718,7 @@ int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
         int use_replica_rack = 0;
         int use_client_rack  = 0;
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         for (use_replica_rack = 0; use_replica_rack < 2; use_replica_rack++) {
                 for (use_client_rack = 0; use_client_rack < 2;

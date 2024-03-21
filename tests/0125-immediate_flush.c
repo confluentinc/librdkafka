@@ -136,10 +136,7 @@ int main_0125_immediate_flush(int argc, char **argv) {
 
 int main_0125_immediate_flush_mock(int argc, char **argv) {
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_first_flush_immediate();
 

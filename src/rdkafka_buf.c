@@ -38,6 +38,8 @@ void rd_kafka_buf_destroy_final(rd_kafka_buf_t *rkbuf) {
         case RD_KAFKAP_Metadata:
                 if (rkbuf->rkbuf_u.Metadata.topics)
                         rd_list_destroy(rkbuf->rkbuf_u.Metadata.topics);
+                if (rkbuf->rkbuf_u.Metadata.topic_ids)
+                        rd_list_destroy(rkbuf->rkbuf_u.Metadata.topic_ids);
                 if (rkbuf->rkbuf_u.Metadata.reason)
                         rd_free(rkbuf->rkbuf_u.Metadata.reason);
                 if (rkbuf->rkbuf_u.Metadata.rko)

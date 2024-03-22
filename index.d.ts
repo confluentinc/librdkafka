@@ -72,6 +72,7 @@ export interface WatermarkOffsets{
 export interface TopicPartition {
     topic: string;
     partition: number;
+    error?: LibrdKafkaError;
 }
 
 export interface TopicPartitionOffset extends TopicPartition{
@@ -349,6 +350,56 @@ export interface GroupOverview {
     state: ConsumerGroupStates;
 }
 
+export enum AclOperationTypes {
+    UNKNOWN = 0,
+    ANY = 1,
+    ALL = 2,
+    READ = 3,
+    WRITE = 4,
+    CREATE = 5,
+    DELETE = 6,
+    ALTER = 7,
+    DESCRIBE = 8,
+    CLUSTER_ACTION = 9,
+    DESCRIBE_CONFIGS = 10,
+    ALTER_CONFIGS = 11,
+    IDEMPOTENT_WRITE = 12,
+}
+
+export type MemberDescription = {
+    clientHost: string
+    clientId: string
+    memberId: string
+    memberAssignment: Buffer
+    memberMetadata: Buffer
+    groupInstanceId?: string,
+    assignment: TopicPartition[]
+}
+
+export type Node = {
+    id: number
+    host: string
+    port: number
+    rack?: string
+}
+
+export type GroupDescription = {
+    groupId: string
+    error?: LibrdKafkaError
+    members: MemberDescription[]
+    protocol: string
+    isSimpleConsumerGroup: boolean;
+    protocolType: string
+    partitionAssignor: string
+    state: ConsumerGroupStates
+    coordinator: Node
+    authorizedOperations?: AclOperationTypes[]
+}
+
+export type GroupDescriptions = {
+    groups: GroupDescription[],
+}
+
 export interface IAdminClient {
     createTopic(topic: NewTopic, cb?: (err: LibrdKafkaError) => void): void;
     createTopic(topic: NewTopic, timeout?: number, cb?: (err: LibrdKafkaError) => void): void;
@@ -360,8 +411,13 @@ export interface IAdminClient {
     createPartitions(topic: string, desiredPartitions: number, timeout?: number, cb?: (err: LibrdKafkaError) => void): void;
 
     listGroups(cb?: (err: LibrdKafkaError, result: { groups: GroupOverview[], errors: LibrdKafkaError[] }) => any): void;
-    listGroups(options: { timeout?: number, matchConsumerGroupStates?: ConsumerGroupStates[] },
+    listGroups(options?: { timeout?: number, matchConsumerGroupStates?: ConsumerGroupStates[] },
         cb?: (err: LibrdKafkaError, result: { groups: GroupOverview[], errors: LibrdKafkaError[] }) => any): void;
+
+    describeGroups(groupIds: string[], cb?: (err: LibrdKafkaError, result: GroupDescriptions) => any): void;
+    describeGroups(groupIds: string[],
+        options?: { timeout?: number, includeAuthorizedOperations?: boolean },
+        cb?: (err: LibrdKafkaError, result: GroupDescriptions) => any): void;
 
     disconnect(): void;
 }

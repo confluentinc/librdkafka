@@ -1296,5 +1296,57 @@ void AdminClientListGroups::HandleErrorCallback() {
   callback->Call(argc, argv);
 }
 
+/**
+ * @brief Describe consumer groups in an asynchronous worker.
+ *
+ * This callback will list consumer groups.
+ *
+ */
+AdminClientDescribeGroups::AdminClientDescribeGroups(
+    Nan::Callback* callback, NodeKafka::AdminClient* client,
+    std::vector<std::string>& groups, bool include_authorized_operations,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_groups(groups),
+      m_include_authorized_operations(include_authorized_operations),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientDescribeGroups::~AdminClientDescribeGroups() {
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientDescribeGroups::Execute() {
+  Baton b = m_client->DescribeGroups(m_groups, m_include_authorized_operations,
+                                     m_timeout_ms, &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientDescribeGroups::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+  argv[1] = Conversion::Admin::FromDescribeConsumerGroupsResult(
+      rd_kafka_event_DescribeConsumerGroups_result(m_event_response));
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientDescribeGroups::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
 }  // namespace Workers
 }  // namespace NodeKafka

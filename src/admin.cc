@@ -89,6 +89,7 @@ void AdminClient::Init(v8::Local<v8::Object> exports) {
 
   // Consumer group related operations
   Nan::SetPrototypeMethod(tpl, "listGroups", NodeListGroups);
+  Nan::SetPrototypeMethod(tpl, "describeGroups", NodeDescribeGroups);
 
   Nan::SetPrototypeMethod(tpl, "connect", NodeConnect);
   Nan::SetPrototypeMethod(tpl, "disconnect", NodeDisconnect);
@@ -455,18 +456,88 @@ Baton AdminClient::ListGroups(
     }
 
     // Create queue just for this operation.
-    rd_kafka_queue_t *topic_rkqu = rd_kafka_queue_new(m_client->c_ptr());
+    rd_kafka_queue_t *rkqu = rd_kafka_queue_new(m_client->c_ptr());
 
-    rd_kafka_ListConsumerGroups(m_client->c_ptr(), options, topic_rkqu);
+    rd_kafka_ListConsumerGroups(m_client->c_ptr(), options, rkqu);
 
     // Poll for an event by type in that queue
     // DON'T destroy the event. It is the out parameter, and ownership is
     // the caller's.
     *event_response = PollForEvent(
-        topic_rkqu, RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT, timeout_ms);
+        rkqu, RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT, timeout_ms);
 
     // Destroy the queue since we are done with it.
-    rd_kafka_queue_destroy(topic_rkqu);
+    rd_kafka_queue_destroy(rkqu);
+
+    // Destroy the options we just made because we polled already
+    rd_kafka_AdminOptions_destroy(options);
+
+    // If we got no response from that operation, this is a failure
+    // likely due to time out
+    if (*event_response == NULL) {
+      return Baton(RdKafka::ERR__TIMED_OUT);
+    }
+
+    // Now we can get the error code from the event
+    if (rd_kafka_event_error(*event_response)) {
+      // If we had a special error code, get out of here with it
+      const rd_kafka_resp_err_t errcode = rd_kafka_event_error(*event_response);
+      return Baton(static_cast<RdKafka::ErrorCode>(errcode));
+    }
+
+    // At this point, event_response contains the result, which needs
+    // to be parsed/converted by the caller.
+    return Baton(RdKafka::ERR_NO_ERROR);
+  }
+}
+
+Baton AdminClient::DescribeGroups(std::vector<std::string> &groups,
+                                  bool include_authorized_operations,
+                                  int timeout_ms,
+                                  /* out */ rd_kafka_event_t **event_response) {
+  if (!IsConnected()) {
+    return Baton(RdKafka::ERR__STATE);
+  }
+
+  {
+    scoped_shared_write_lock lock(m_connection_lock);
+    if (!IsConnected()) {
+      return Baton(RdKafka::ERR__STATE);
+    }
+
+    // Make admin options to establish that we are describing groups
+    rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(
+        m_client->c_ptr(), RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
+
+    if (include_authorized_operations) {
+      rd_kafka_error_t *error =
+          rd_kafka_AdminOptions_set_include_authorized_operations(
+              options, include_authorized_operations);
+      if (error) {
+        return Baton::BatonFromErrorAndDestroy(error);
+      }
+    }
+
+    // Create queue just for this operation.
+    rd_kafka_queue_t *rkqu = rd_kafka_queue_new(m_client->c_ptr());
+
+    // Construct a char** to pass to librdkafka. Avoid too many allocations.
+    std::vector<const char *> c_groups(groups.size());
+    for (size_t i = 0; i < groups.size(); i++) {
+      c_groups[i] = groups[i].c_str();
+    }
+
+    rd_kafka_DescribeConsumerGroups(m_client->c_ptr(), &c_groups[0],
+                                    groups.size(), options, rkqu);
+
+    // Poll for an event by type in that queue
+    // DON'T destroy the event. It is the out parameter, and ownership is
+    // the caller's.
+    *event_response = PollForEvent(
+        rkqu, RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT, timeout_ms);
+
+    // Destroy the queue since we are done with it.
+    rd_kafka_queue_destroy(rkqu);
 
     // Destroy the options we just made because we polled already
     rd_kafka_AdminOptions_destroy(options);
@@ -696,10 +767,10 @@ NAN_METHOD(AdminClient::NodeListGroups) {
 
   // Get the match states, or not if they are unset.
   std::vector<rd_kafka_consumer_group_state_t> match_states;
-  v8::Local<v8::String> matchConsumerGroupStatesKey =
+  v8::Local<v8::String> match_consumer_group_states_key =
       Nan::New("matchConsumerGroupStates").ToLocalChecked();
   bool is_match_states_set =
-      Nan::Has(config, matchConsumerGroupStatesKey).FromMaybe(false);
+      Nan::Has(config, match_consumer_group_states_key).FromMaybe(false);
   v8::Local<v8::Array> match_states_array;
 
   if (is_match_states_set) {
@@ -711,6 +782,53 @@ NAN_METHOD(AdminClient::NodeListGroups) {
   // Queue the work.
   Nan::AsyncQueueWorker(new Workers::AdminClientListGroups(
       callback, client, is_match_states_set, match_states, timeout_ms));
+}
+
+/**
+ * Describe Consumer Groups.
+ */
+NAN_METHOD(AdminClient::NodeDescribeGroups) {
+  Nan::HandleScope scope;
+
+  if (info.Length() < 3 || !info[2]->IsFunction()) {
+    // Just throw an exception
+    return Nan::ThrowError("Need to specify a callback");
+  }
+
+  if (!info[0]->IsArray()) {
+    return Nan::ThrowError("Must provide group name array");
+  }
+
+  if (!info[1]->IsObject()) {
+    return Nan::ThrowError("Must provide options object");
+  }
+
+  // Get list of group names to describe.
+  v8::Local<v8::Array> group_names = info[0].As<v8::Array>();
+  if (group_names->Length() == 0) {
+    return Nan::ThrowError("Must provide at least one group name");
+  }
+  std::vector<std::string> group_names_vector =
+      v8ArrayToStringVector(group_names);
+
+  v8::Local<v8::Object> config = info[1].As<v8::Object>();
+
+  // Get the timeout - default 5000.
+  int timeout_ms = GetParameter<int64_t>(config, "timeout", 5000);
+
+  // Get whether to include authorized operations - default false.
+  bool include_authorized_operations =
+      GetParameter<bool>(config, "includeAuthorizedOperations", false);
+
+  // Create the final callback object
+  v8::Local<v8::Function> cb = info[2].As<v8::Function>();
+  Nan::Callback *callback = new Nan::Callback(cb);
+  AdminClient *client = ObjectWrap::Unwrap<AdminClient>(info.This());
+
+  // Queue the work.
+  Nan::AsyncQueueWorker(new Workers::AdminClientDescribeGroups(
+      callback, client, group_names_vector, include_authorized_operations,
+      timeout_ms));
 }
 
 }  // namespace NodeKafka

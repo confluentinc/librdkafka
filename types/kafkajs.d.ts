@@ -1,10 +1,10 @@
 import * as tls from 'tls'
 import { ConsumerGlobalConfig, ConsumerTopicConfig, GlobalConfig, ProducerGlobalConfig, ProducerTopicConfig, TopicConfig } from './config'
-import { ConsumerGroupStates, GroupOverview, LibrdKafkaError } from '../index'
+import { ConsumerGroupStates, GroupOverview, LibrdKafkaError, GroupDescription, GroupDescriptions } from '../index'
 
 // Admin API related interfaces, types etc; and Error types are common, so
 // just re-export them from here too.
-export { ConsumerGroupStates, GroupOverview, LibrdKafkaError } from '../index'
+export { ConsumerGroupStates, GroupOverview, LibrdKafkaError, GroupDescriptions } from '../index'
 
 export type BrokersFunction = () => string[] | Promise<string[]>
 
@@ -409,7 +409,6 @@ export interface TopicOffsets {
   partitions: PartitionOffset[]
 }
 
-
 export interface PartitionOffset {
   partition: number
   offset: string
@@ -431,22 +430,6 @@ export type TopicPartitionOffsetAndMetadata = TopicPartitionOffset & {
 
 export interface OffsetsByTopicPartition {
   topics: TopicOffsets[]
-}
-
-export type MemberDescription = {
-  clientHost: string
-  clientId: string
-  memberId: string
-  memberAssignment: Buffer
-  memberMetadata: Buffer
-}
-
-export type GroupDescription = {
-  groupId: string
-  members: MemberDescription[]
-  protocol: string
-  protocolType: string
-  state: ConsumerGroupStates
 }
 
 export type Consumer = {
@@ -562,4 +545,7 @@ export type Admin = {
     timeout?: number,
     matchConsumerGroupStates?: ConsumerGroupStates[]
   }): Promise<{ groups: GroupOverview[], errors: LibrdKafkaError[] }>
+  describeGroups(
+    groups: string[],
+    options?: {timeout?: number, includeAuthorizedOperations?: boolean }): Promise<GroupDescriptions>
 }

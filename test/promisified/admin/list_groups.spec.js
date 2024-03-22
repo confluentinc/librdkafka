@@ -55,7 +55,7 @@ describe('Admin > listGroups', () => {
                 expect.objectContaining({
                     groupId,
                     isSimpleConsumerGroup: false,
-                    protocolType: '',
+                    protocolType: 'consumer',
                     state: ConsumerGroupStates.STABLE,
                 }),
             ])
@@ -72,7 +72,7 @@ describe('Admin > listGroups', () => {
                 expect.objectContaining({
                     groupId,
                     isSimpleConsumerGroup: false,
-                    protocolType: '',
+                    protocolType: 'consumer',
                     state: ConsumerGroupStates.EMPTY,
                 }),
             ])

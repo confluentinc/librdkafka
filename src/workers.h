@@ -530,6 +530,27 @@ class AdminClientListGroups : public ErrorAwareWorker {
   rd_kafka_event_t *m_event_response;
 };
 
+/**
+ * @brief Describe consumer groups on a remote broker cluster.
+ */
+class AdminClientDescribeGroups : public ErrorAwareWorker {
+ public:
+  AdminClientDescribeGroups(Nan::Callback *, NodeKafka::AdminClient *,
+                            std::vector<std::string> &, bool, const int &);
+  ~AdminClientDescribeGroups();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+
+ private:
+  NodeKafka::AdminClient *m_client;
+  std::vector<std::string> m_groups;
+  const bool m_include_authorized_operations;
+  const int m_timeout_ms;
+  rd_kafka_event_t *m_event_response;
+};
+
 }  // namespace Workers
 
 }  // namespace NodeKafka

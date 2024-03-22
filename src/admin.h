@@ -56,6 +56,9 @@ class AdminClient : public Connection {
                    std::vector<rd_kafka_consumer_group_state_t>& match_states,
                    int timeout_ms,
                    rd_kafka_event_t** event_response);
+  Baton DescribeGroups(std::vector<std::string>& groups,
+                       bool include_authorized_operations, int timeout_ms,
+                       rd_kafka_event_t** event_response);
 
  protected:
   static Nan::Persistent<v8::Function> constructor;
@@ -75,6 +78,7 @@ class AdminClient : public Connection {
 
   // Consumer group operations
   static NAN_METHOD(NodeListGroups);
+  static NAN_METHOD(NodeDescribeGroups);
 
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);

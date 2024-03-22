@@ -61,6 +61,7 @@ int main_0041_fetch_max_bytes(int argc, char **argv) {
         testid = test_id_generate();
         rk     = test_create_producer();
         rkt    = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         test_produce_msgs(rk, rkt, testid, partition, 0, msgcnt / 2, NULL,
                           MAX_BYTES / 10);

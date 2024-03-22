@@ -2299,7 +2299,21 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause_resume(rd_kafka_toppar_t *rktp,
                                                     int flag,
                                                     rd_kafka_replyq_t replyq) {
         int32_t version;
-        rd_kafka_op_t *rko;
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
+
+        if (!pause) {
+                /* If partitions isn't paused, avoid bumping its version,
+                 * as it'll result in resuming fetches from a stale
+                 * next_fetch_start */
+                rd_bool_t paused = rd_false;
+                rd_kafka_toppar_lock(rktp);
+                paused = RD_KAFKA_TOPPAR_IS_PAUSED(rktp);
+                rd_kafka_toppar_unlock(rktp);
+                if (!paused) {
+                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+        }
 
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);
@@ -2310,7 +2324,6 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause_resume(rd_kafka_toppar_t *rktp,
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition, version);
 
-        rko                    = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
         rko->rko_version       = version;
         rko->rko_u.pause.pause = pause;
         rko->rko_u.pause.flag  = flag;
@@ -3117,6 +3130,14 @@ int rd_kafka_topic_partition_cmp_topic(const void *_a, const void *_b) {
         return strcmp(a->topic, b->topic);
 }
 
+/** @brief Compare only the topic id */
+int rd_kafka_topic_partition_cmp_topic_id(const void *_a, const void *_b) {
+        const rd_kafka_topic_partition_t *a = _a;
+        const rd_kafka_topic_partition_t *b = _b;
+        return rd_kafka_Uuid_cmp(rd_kafka_topic_partition_get_topic_id(a),
+                                 rd_kafka_topic_partition_get_topic_id(b));
+}
+
 static int rd_kafka_topic_partition_cmp_opaque(const void *_a,
                                                const void *_b,
                                                void *opaque) {
@@ -3249,6 +3270,21 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic(
         int i = rd_kafka_topic_partition_list_find0(
             rktparlist, topic, RD_KAFKA_PARTITION_UA,
             rd_kafka_topic_partition_cmp_topic);
+        if (i == -1)
+                return NULL;
+        else
+                return &rktparlist->elems[i];
+}
+
+/**
+ * @returns the first element that matches \p topic_id, regardless of partition.
+ */
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_id(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    const rd_kafka_Uuid_t topic_id) {
+        int i = rd_kafka_topic_partition_list_find_by_id0(
+            rktparlist, topic_id, RD_KAFKA_PARTITION_UA,
+            rd_kafka_topic_partition_cmp_topic_id);
         if (i == -1)
                 return NULL;
         else

@@ -87,7 +87,7 @@ static int read_config_file(std::string path,
 }
 
 void conf_init(RdKafka::Conf **conf, RdKafka::Conf **topic_conf, int timeout) {
-  const char *tmp;
+  const char *tmp, *group_protocol;
 
   if (conf)
     *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
@@ -107,6 +107,11 @@ void conf_init(RdKafka::Conf **conf, RdKafka::Conf **topic_conf, int timeout) {
       Test::Fail("TEST_DEBUG failed: " + errstr);
   }
 
+  if (*conf && (group_protocol = test_consumer_group_protocol())) {
+    if ((*conf)->set("group.protocol", group_protocol, errstr) !=
+        RdKafka::Conf::CONF_OK)
+      Test::Fail("TEST_CONSUMER_GROUP_PROTOCOL failed: " + errstr);
+  }
 
   if (timeout)
     test_timeout_set(timeout);

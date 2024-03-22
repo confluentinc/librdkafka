@@ -2180,6 +2180,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int ret_errno               = 0;
         const char *conf_err;
+        char *group_remote_assignor_override = NULL;
         rd_kafka_assignor_t *cooperative_assignor;
 #ifndef _WIN32
         sigset_t newset, oldset;
@@ -2381,14 +2382,18 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         if (!rk->rk_conf.group_remote_assignor) {
                 /* Default remote assignor to the chosen local one. */
                 if (rk->rk_conf.partition_assignors_cooperative) {
+                        group_remote_assignor_override = rd_strdup("uniform");
                         rk->rk_conf.group_remote_assignor =
-                            rd_strdup("uniform");
+                            group_remote_assignor_override;
                 } else {
                         rd_kafka_assignor_t *range_assignor =
                             rd_kafka_assignor_find(rk, "range");
-                        if (range_assignor && range_assignor->rkas_enabled)
-                                rk->rk_conf.group_remote_assignor =
+                        if (range_assignor && range_assignor->rkas_enabled) {
+                                group_remote_assignor_override =
                                     rd_strdup("range");
+                                rk->rk_conf.group_remote_assignor =
+                                    group_remote_assignor_override;
+                        }
                 }
         }
 
@@ -2661,8 +2666,11 @@ fail:
          * that belong to rk_conf and thus needs to be cleaned up.
          * Legacy APIs, sigh.. */
         if (app_conf) {
+                if (group_remote_assignor_override)
+                        rd_free(group_remote_assignor_override);
                 rd_kafka_assignors_term(rk);
                 rd_kafka_interceptors_destroy(&rk->rk_conf);
+
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
         }
 

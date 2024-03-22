@@ -2356,8 +2356,10 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                         mtx_lock(&mcluster->lock);
                         mcgrp = rd_kafka_mock_cgrp_consumer_find(mcluster,
                                                                  &GroupId);
-                        if (!mcgrp)
+                        if (!mcgrp) {
+                                mtx_unlock(&mcluster->lock);
                                 break;
+                        }
 
                         rd_kafka_mock_cgrp_consumer_member_t *member =
                             rd_kafka_mock_cgrp_consumer_member_find(mcgrp,

@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,8 +46,8 @@ using namespace std;
 /** Topic+Partition helper class */
 class Toppar {
  public:
-  Toppar(const string &topic, int32_t partition) :
-      topic(topic), partition(partition) {
+  Toppar(const string &topic, int32_t partition) : partition(partition) {
+    this->topic.append(topic);
   }
 
   Toppar(const RdKafka::TopicPartition *tp) :

@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -164,6 +165,7 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_interval_t rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t rkcg_heartbeat_intvl;    /* Heartbeat intvl */
+        rd_kafka_timer_t rkcg_serve_timer;     /* Timer for next serve. */
         int rkcg_heartbeat_intvl_ms;           /* KIP 848: received
                                                 * heartbeat interval in
                                                 * milliseconds */
@@ -302,6 +304,8 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x20
 /* Member is fenced, rejoining */
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x40
+/* Member is sending an acknowledgement for a reconciled assignment */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK 0x80
 
 
         /** Rejoin the group following a currently in-progress

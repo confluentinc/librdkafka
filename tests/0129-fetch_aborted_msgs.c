@@ -60,6 +60,7 @@ int main_0129_fetch_aborted_msgs(int argc, char **argv) {
                                 (const char *[]) {"max.message.bytes", "10000",
                                                   "segment.bytes", "20000",
                                                   NULL});
+        test_wait_topic_exists(rk, topic, 5000);
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));

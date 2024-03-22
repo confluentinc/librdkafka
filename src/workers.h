@@ -551,6 +551,27 @@ class AdminClientDescribeGroups : public ErrorAwareWorker {
   rd_kafka_event_t *m_event_response;
 };
 
+/**
+ * @brief Delete consumer groups on a remote broker cluster.
+ */
+class AdminClientDeleteGroups : public ErrorAwareWorker {
+ public:
+  AdminClientDeleteGroups(Nan::Callback *, NodeKafka::AdminClient *,
+                            rd_kafka_DeleteGroup_t **, size_t, const int &);
+  ~AdminClientDeleteGroups();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+
+ private:
+  NodeKafka::AdminClient *m_client;
+  rd_kafka_DeleteGroup_t **m_group_list;
+  size_t m_group_cnt;
+  const int m_timeout_ms;
+  rd_kafka_event_t *m_event_response;
+};
+
 }  // namespace Workers
 
 }  // namespace NodeKafka

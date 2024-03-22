@@ -961,6 +961,51 @@ v8::Local<v8::Object> FromDescribeConsumerGroupsResult(
   return returnObject;
 }
 
+/**
+ * @brief Converts a rd_kafka_DeleteGroups_result_t* into a v8 array.
+*/
+v8::Local<v8::Array> FromDeleteGroupsResult(
+    const rd_kafka_DeleteGroups_result_t* result) {
+  /* Return object type:
+    [{
+      groupId: string
+      errorCode?: number
+      error?: LibrdKafkaError
+    }]
+  */
+  v8::Local<v8::Array> returnArray = Nan::New<v8::Array>();
+  size_t result_cnt;
+  const rd_kafka_group_result_t** results =
+      rd_kafka_DeleteGroups_result_groups(result, &result_cnt);
+
+  for (size_t i = 0; i < result_cnt; i++) {
+    const rd_kafka_group_result_t* group_result = results[i];
+    v8::Local<v8::Object> group_object = Nan::New<v8::Object>();
+
+    Nan::Set(group_object, Nan::New("groupId").ToLocalChecked(),
+             Nan::New<v8::String>(rd_kafka_group_result_name(group_result))
+                 .ToLocalChecked());
+
+    const rd_kafka_error_t* error = rd_kafka_group_result_error(group_result);
+    if (!error) {
+      Nan::Set(group_object, Nan::New("errorCode").ToLocalChecked(),
+               Nan::New<v8::Number>(RD_KAFKA_RESP_ERR_NO_ERROR));
+    } else {
+      RdKafka::ErrorCode code =
+          static_cast<RdKafka::ErrorCode>(rd_kafka_error_code(error));
+      const char* msg = rd_kafka_error_string(error);
+
+      Nan::Set(group_object, Nan::New("errorCode").ToLocalChecked(),
+               Nan::New<v8::Number>(code));
+      Nan::Set(group_object, Nan::New("error").ToLocalChecked(),
+               RdKafkaError(code, msg));
+    }
+    Nan::Set(returnArray, i, group_object);
+  }
+
+  return returnArray;
+}
+
 }  // namespace Admin
 
 }  // namespace Conversion

@@ -1299,7 +1299,7 @@ void AdminClientListGroups::HandleErrorCallback() {
 /**
  * @brief Describe consumer groups in an asynchronous worker.
  *
- * This callback will list consumer groups.
+ * This callback will describe consumer groups.
  *
  */
 AdminClientDescribeGroups::AdminClientDescribeGroups(
@@ -1347,6 +1347,63 @@ void AdminClientDescribeGroups::HandleErrorCallback() {
 
   callback->Call(argc, argv);
 }
+
+/**
+ * @brief Delete consumer groups in an asynchronous worker.
+ *
+ * This callback will delete consumer groups.
+ *
+ */
+AdminClientDeleteGroups::AdminClientDeleteGroups(
+    Nan::Callback* callback, NodeKafka::AdminClient* client,
+    rd_kafka_DeleteGroup_t **group_list,
+    size_t group_cnt,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_group_list(group_list),
+      m_group_cnt(group_cnt),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientDeleteGroups::~AdminClientDeleteGroups() {
+  if (m_group_list) {
+    rd_kafka_DeleteGroup_destroy_array(m_group_list, m_group_cnt);
+    free(m_group_list);
+  }
+
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientDeleteGroups::Execute() {
+  Baton b = m_client->DeleteGroups(m_group_list, m_group_cnt, m_timeout_ms, &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientDeleteGroups::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+  argv[1] = Conversion::Admin::FromDeleteGroupsResult(rd_kafka_event_DeleteGroups_result(m_event_response));
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientDeleteGroups::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
 
 }  // namespace Workers
 }  // namespace NodeKafka

@@ -400,6 +400,12 @@ export type GroupDescriptions = {
     groups: GroupDescription[],
 }
 
+export type DeleteGroupsResult = {
+    groupId: string
+    errorCode?: number
+    error?: LibrdKafkaError
+}
+
 export interface IAdminClient {
     createTopic(topic: NewTopic, cb?: (err: LibrdKafkaError) => void): void;
     createTopic(topic: NewTopic, timeout?: number, cb?: (err: LibrdKafkaError) => void): void;
@@ -418,6 +424,11 @@ export interface IAdminClient {
     describeGroups(groupIds: string[],
         options?: { timeout?: number, includeAuthorizedOperations?: boolean },
         cb?: (err: LibrdKafkaError, result: GroupDescriptions) => any): void;
+
+    deleteGroups(groupIds: string[], cb?: (err: LibrdKafkaError, result: DeleteGroupsResult[]) => any): void;
+    deleteGroups(groupIds: string[],
+        options?: { timeout?: number },
+        cb?: (err: LibrdKafkaError, result: DeleteGroupsResult[]) => any): void;
 
     disconnect(): void;
 }

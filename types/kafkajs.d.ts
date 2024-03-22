@@ -1,10 +1,10 @@
 import * as tls from 'tls'
 import { ConsumerGlobalConfig, ConsumerTopicConfig, GlobalConfig, ProducerGlobalConfig, ProducerTopicConfig, TopicConfig } from './config'
-import { ConsumerGroupStates, GroupOverview, LibrdKafkaError, GroupDescription, GroupDescriptions } from '../index'
+import { ConsumerGroupStates, GroupOverview, LibrdKafkaError, GroupDescription, GroupDescriptions, DeleteGroupsResult } from '../index'
 
 // Admin API related interfaces, types etc; and Error types are common, so
 // just re-export them from here too.
-export { ConsumerGroupStates, GroupOverview, LibrdKafkaError, GroupDescriptions } from '../index'
+export { ConsumerGroupStates, GroupOverview, LibrdKafkaError, GroupDescriptions, DeleteGroupsResult } from '../index'
 
 export type BrokersFunction = () => string[] | Promise<string[]>
 
@@ -548,4 +548,5 @@ export type Admin = {
   describeGroups(
     groups: string[],
     options?: {timeout?: number, includeAuthorizedOperations?: boolean }): Promise<GroupDescriptions>
+  deleteGroups(groupIds: string[], options?: { timeout?: number }): Promise<DeleteGroupsResult[]>
 }

@@ -124,6 +124,10 @@ v8::Local<v8::Object> FromConsumerGroupDescription(
     const rd_kafka_ConsumerGroupDescription_t *desc);
 v8::Local<v8::Object> FromDescribeConsumerGroupsResult(
     const rd_kafka_DescribeConsumerGroups_result_t *);
+
+// DeleteGroups: Response
+v8::Local<v8::Array> FromDeleteGroupsResult(
+    const rd_kafka_DeleteGroups_result_t *);
 }  // namespace Admin
 
 namespace TopicPartition {

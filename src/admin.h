@@ -59,6 +59,8 @@ class AdminClient : public Connection {
   Baton DescribeGroups(std::vector<std::string>& groups,
                        bool include_authorized_operations, int timeout_ms,
                        rd_kafka_event_t** event_response);
+  Baton DeleteGroups(rd_kafka_DeleteGroup_t** group_list, size_t group_cnt,
+                     int timeout_ms, rd_kafka_event_t** event_response);
 
  protected:
   static Nan::Persistent<v8::Function> constructor;
@@ -79,6 +81,7 @@ class AdminClient : public Connection {
   // Consumer group operations
   static NAN_METHOD(NodeListGroups);
   static NAN_METHOD(NodeDescribeGroups);
+  static NAN_METHOD(NodeDeleteGroups);
 
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);

@@ -1,10 +1,11 @@
-# confluent-kafka-javascript vNext
+# confluent-kafka-javascript v0.1.11-devel
 
 v0.1.11-devel is a pre-production, early-access release.
 
 ## Features
 
 1. Add support for `eachBatch` in the Consumer API (partial support for API compatibility).
+2. Add support for `listGroups`, `describeGroups` and `deleteGroups` in the Admin API.
 
 
 # confluent-kafka-javascript v0.1.10-devel

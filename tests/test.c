@@ -258,6 +258,7 @@ _TEST_DECL(0140_commit_metadata);
 _TEST_DECL(0142_reauthentication);
 _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
+_TEST_DECL(0146_metadata_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -512,6 +513,7 @@ struct test tests[] = {
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0146_metadata_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */
@@ -7131,7 +7133,48 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
         return mcluster;
 }
 
+/**
+ * @brief Wait that at least \p num matching requests
+ *        have been received by the mock cluster,
+ *        using match function \p match ,
+ *        plus \p confidence_interval_ms has passed
+ *
+ * @param num Number of expected matching request
+ * @param confidence_interval_ms Time to wait after \p num matching requests
+ *                               have been seen
+ * @param match Match function that takes a request and \p opaque
+ * @param opaque Opaque value needed by function \p match
+ *
+ * @return Number of matching requests received.
+ */
+int test_mock_wait_maching_requests(
+    rd_kafka_mock_cluster_t *mcluster,
+    int num,
+    int confidence_interval_ms,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque) {
+        size_t i;
+        rd_kafka_mock_request_t **requests;
+        size_t request_cnt;
+        int matching_requests = 0;
+        rd_bool_t last_time   = rd_true;
 
+        while (matching_requests < num || last_time) {
+                if (matching_requests >= num) {
+                        rd_usleep(confidence_interval_ms * 1000, 0);
+                        last_time = rd_false;
+                }
+                requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
+                matching_requests = 0;
+                for (i = 0; i < request_cnt; i++) {
+                        if (match(requests[i], opaque))
+                                matching_requests++;
+                }
+                rd_kafka_mock_request_destroy_array(requests, request_cnt);
+                rd_usleep(100 * 1000, 0);
+        }
+        return matching_requests;
+}
 
 /**
  * @name Sub-tests

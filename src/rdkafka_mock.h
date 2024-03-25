@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -281,6 +282,24 @@ rd_kafka_mock_partition_set_follower_wmarks(rd_kafka_mock_cluster_t *mcluster,
                                             int64_t lo,
                                             int64_t hi);
 
+/**
+ * @brief Push \p cnt Metadata leader response
+ *        onto the cluster's stack for the given \p topic and \p partition.
+ *
+ * @param topic Topic to change
+ * @param partition  Partition to change in \p topic
+ * @param leader_id Broker id of the leader node
+ * @param leader_epoch Leader epoch corresponding to the given \p leader_id
+ *
+ * @return Push operation error code
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_push_leader_response(rd_kafka_mock_cluster_t *mcluster,
+                                             const char *topic,
+                                             int partition,
+                                             int32_t leader_id,
+                                             int32_t leader_epoch);
 
 /**
  * @brief Disconnects the broker and disallows any new connections.
@@ -387,6 +406,13 @@ typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
  * @brief Destroy a rd_kafka_mock_request_t * and deallocate memory.
  */
 RD_EXPORT void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *mreq);
+
+/**
+ * @brief Destroy a rd_kafka_mock_request_t * array and deallocate it.
+ */
+RD_EXPORT void
+rd_kafka_mock_request_destroy_array(rd_kafka_mock_request_t **mreqs,
+                                    size_t mreq_cnt);
 
 /**
  * @brief Get the broker id to which \p mreq was sent.

@@ -6,6 +6,36 @@ librdkafka v2.3.1 is a maintenance release:
    check the [release notes](https://www.openssl.org/news/cl30.txt).
  * Integration tests can be started in KRaft mode and run against any
    GitHub Kafka branch other than the released versions.
+ * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+   Continue partial implementation by adding a metadata cache by topic id
+   and updating the topic id corresponding to the partition name (#4660)
+ * Fixes to metadata cache expiration, metadata refresh interruption and
+   to avoid usage of stale metadata (#4660).
+ * Fix to main loop timeout calculation leading to a tight loop for a period
+   of 1 ms max (#4660).
+
+
+## Fixes
+
+### General fixes
+
+ * Metadata cache was cleared on full metadata refresh, leading to unnecessary
+   refreshes and accasional `UNKNOWN_TOPIC_OR_PART` errors. Solved by updating
+   cache for existing or hinted entries instead of clearing them.
+   Happening since 2.1.0 (#4660).
+ * Metadata refreshes without partition leader change could lead to a loop of
+   intervaled metadata calls. Solved by stopping metadata refresh when
+   all existing metadata is non-stale. Happening since 2.3.0 (#4660).
+ * A partition migration could happen, using stale metadata, when the partition
+   was undergoing a validation and being retried because of an error.
+   Solved by doing a partition migration only with a non-stale leader epoch.
+   Happening since 2.1.0 (#4660).
+ * In librdkafka main thread loop, when it was awaken less that 1 ms
+   before the expiration of a timeout, it was serving with a zero timeout,
+   leading to increased CPU usage until the timeout was reached.
+   Happening since 1.x (#4660).
+
+
 
 
 # librdkafka v2.3.0

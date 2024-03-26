@@ -103,7 +103,7 @@ static void test_no_duplicate_messages_unnecessary_resume(
         SUB_TEST_PASS();
 }
 
-int main_0145_unnecessary_resume_mock(int argc, char **argv) {
+int main_0145_pause_resume_mock(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SAY("Mock cluster does not support SSL/SASL\n");
                 return 0;

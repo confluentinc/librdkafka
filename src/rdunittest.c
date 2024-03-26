@@ -415,6 +415,7 @@ static int unittest_rdclock(void) {
 
 extern int unittest_string(void);
 extern int unittest_cgrp(void);
+extern int unittest_mock_cluster(void);
 #if WITH_SASL_SCRAM
 extern int unittest_scram(void);
 #endif
@@ -442,6 +443,7 @@ int rd_unittest(void) {
                 {"msg", unittest_msg},
                 {"murmurhash", unittest_murmur2},
                 {"fnv1a", unittest_fnv1a},
+                {"mock", unittest_mock_cluster},
 #if WITH_HDRHISTOGRAM
                 {"rdhdrhistogram", unittest_rdhdrhistogram},
 #endif

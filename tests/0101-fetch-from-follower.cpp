@@ -290,7 +290,7 @@ static void do_fff_test(void) {
   int msgcnt            = 1000;
   const int msgsize     = 100;
   std::string topic_str = Test::mk_topic_name("0101-fetch-from-follower", 1);
-  test_create_topic(NULL, topic_str.c_str(), 1, 3);
+  test_create_topic_wait_exists(NULL, topic_str.c_str(), 1, 3, 5000);
   test_produce_msgs_easy_size(topic_str.c_str(), 0, 0, msgcnt, msgsize);
 
   int leader_id;

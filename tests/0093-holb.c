@@ -110,7 +110,7 @@ int main_0093_holb_consumer(int argc, char **argv) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         test_produce_msgs_easy(topic, testid, 0, msgcnt);
 

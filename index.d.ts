@@ -416,6 +416,9 @@ export interface IAdminClient {
     createPartitions(topic: string, desiredPartitions: number, cb?: (err: LibrdKafkaError) => void): void;
     createPartitions(topic: string, desiredPartitions: number, timeout?: number, cb?: (err: LibrdKafkaError) => void): void;
 
+    listTopics(cb?: (err: LibrdKafkaError, topics: string[]) => any): void;
+    listTopics(options?: { timeout?: number }, cb?: (err: LibrdKafkaError, topics: string[]) => any): void;
+
     listGroups(cb?: (err: LibrdKafkaError, result: { groups: GroupOverview[], errors: LibrdKafkaError[] }) => any): void;
     listGroups(options?: { timeout?: number, matchConsumerGroupStates?: ConsumerGroupStates[] },
         cb?: (err: LibrdKafkaError, result: { groups: GroupOverview[], errors: LibrdKafkaError[] }) => any): void;

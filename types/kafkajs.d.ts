@@ -541,6 +541,7 @@ export type Admin = {
     topics: ITopicConfig[]
   }): Promise<boolean>
   deleteTopics(options: { topics: string[]; timeout?: number }): Promise<void>
+  listTopics(options?: { timeout?: number }): Promise<string[]>
   listGroups(options?: {
     timeout?: number,
     matchConsumerGroupStates?: ConsumerGroupStates[]

@@ -109,7 +109,7 @@ static void verify_range_assignment(rd_kafka_t *c[]) {
         rd_kafka_topic_partition_list_destroy(assignment2);
 }
 
-static void do_test_stragety_ordering(const char *assignor,
+static void do_test_strategy_ordering(const char *assignor,
                                       const char *expected_assignor) {
         rd_kafka_conf_t *conf;
 #define _C_CNT 2
@@ -125,7 +125,7 @@ static void do_test_stragety_ordering(const char *assignor,
         testid = test_id_generate();
 
         topic = test_mk_topic_name("0132-strategy_ordering", 1);
-        test_create_topic(NULL, topic, _PART_CNT, 1);
+        test_create_topic_wait_exists(NULL, topic, _PART_CNT, 1, 5000);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_init(&conf, NULL, 30);
@@ -165,7 +165,15 @@ static void do_test_stragety_ordering(const char *assignor,
 
 
 int main_0132_strategy_ordering(int argc, char **argv) {
-        do_test_stragety_ordering("roundrobin,range", "roundrobin");
-        do_test_stragety_ordering("range,roundrobin", "range");
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP(
+                    "Test meaningful only with classic librdkafka"
+                    " assignors\n");
+                return 0;
+        }
+
+        do_test_strategy_ordering("roundrobin,range", "roundrobin");
+        do_test_strategy_ordering("range,roundrobin", "range");
+
         return 0;
 }

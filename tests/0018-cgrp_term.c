@@ -195,6 +195,7 @@ static void do_test(rd_bool_t with_queue) {
         /* Produce messages */
         rk_p  = test_create_producer();
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
+        test_wait_topic_exists(rk_p, topic, 5000);
 
         for (partition = 0; partition < partition_cnt; partition++) {
                 test_produce_msgs(rk_p, rkt_p, testid, partition,
@@ -260,7 +261,8 @@ static void do_test(rd_bool_t with_queue) {
         /* Let remaining consumers run for a while to take over the now
          * lost partitions. */
 
-        if (test_consumer_group_protocol_generic() &&
+        /* Callback count can vary in KIP-848 */
+        if (test_consumer_group_protocol_classic() &&
             assign_cnt != _CONS_CNT - 1)
                 TEST_FAIL("assign_cnt %d, should be %d\n", assign_cnt,
                           _CONS_CNT - 1);

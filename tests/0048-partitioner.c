@@ -267,7 +267,7 @@ static void do_test_partitioners(void) {
         int pi;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
-        test_create_topic(NULL, topic, part_cnt, 1);
+        test_create_topic_wait_exists(NULL, topic, part_cnt, 1, 5000);
 
         for (pi = 0; ptest[pi].partitioner; pi++) {
                 do_test_partitioner(topic, ptest[pi].partitioner, _MSG_CNT,

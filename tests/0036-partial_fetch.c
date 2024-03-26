@@ -59,6 +59,7 @@ int main_0036_partial_fetch(int argc, char **argv) {
         testid = test_id_generate();
         rk     = test_create_producer();
         rkt    = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         test_produce_msgs(rk, rkt, testid, partition, 0, msgcnt, NULL, msgsize);
 

@@ -48,7 +48,7 @@ void do_test_flush_overrides_linger_ms_time() {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic(rk, topic, 1, 1);
+        test_create_topic_wait_exists(rk, topic, 1, 1, 5000);
 
         /* Produce half set of messages without waiting for delivery. */
         test_produce_msgs2_nowait(rk, topic, 0, 0, 0, msgcnt / 2, NULL, 50,

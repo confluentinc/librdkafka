@@ -2555,6 +2555,10 @@ static void do_test_unclean_destroy(rd_kafka_type_t cltype, int with_mainq) {
          * rely on the controller not being found. */
         test_conf_set(conf, "bootstrap.servers", "");
         test_conf_set(conf, "socket.timeout.ms", "60000");
+        if (test_consumer_group_protocol()) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol());
+        }
 
         rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
@@ -2761,6 +2765,10 @@ static rd_kafka_t *create_admin_client(rd_kafka_type_t cltype) {
          * rely on the controller not being found. */
         test_conf_set(conf, "bootstrap.servers", "");
         test_conf_set(conf, "socket.timeout.ms", MY_SOCKET_TIMEOUT_MS_STR);
+        if (test_consumer_group_protocol()) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol());
+        }
         /* For use with the background queue */
         rd_kafka_conf_set_background_event_cb(conf, background_event_cb);
 

@@ -500,7 +500,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-0", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, -1, 0x0, 5, BeginCommit, DoFlush",
                "producer1, -1, 0x10, 5, BeginAbort, DoFlush");
@@ -554,7 +554,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-0.1", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, -1, 0x0, 5, BeginCommit, DontFlush",
                "producer1, -1, 0x10, 5, BeginAbort, DoFlush");
@@ -598,7 +598,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-0.2", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, -1, 0x10, 5, BeginAbort, DoFlush",
                "producer1, -1, 0x30, 5, BeginCommit, DoFlush");
@@ -642,7 +642,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-1", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
   TestEventCb::topic = topic_name;
 
   run_producer("producer3, -1, 0x10, 5, None, DoFlush",
@@ -682,7 +682,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-1.1", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, -1, 0x30, 5, BeginAbort, DoFlush",
                "producer3, -1, 0x40, 5, None, DoFlush",
@@ -714,7 +714,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-1.2", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, -1, 0x10, 5, BeginCommit, DoFlush",
                "producer1, -1, 0x20, 5, BeginAbort, DoFlush",
@@ -746,7 +746,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-2", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, -1, 0x10, 1, BeginAbort, DontFlush",
                "producer1, -1, 0x20, 1, BeginCommit, DontFlush",
@@ -799,7 +799,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-2.1", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, -1, 0x10, 1, BeginAbort, DoFlush",
                "producer1, -1, 0x20, 1, BeginCommit, DoFlush",
@@ -883,7 +883,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-3", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 2, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 2, 3, 5000);
 
   run_producer("producer1, 0, 0x10, 3, BeginOpen, DoFlush",
                "producer1, 1, 0x20, 3, ContinueOpen, DoFlush",
@@ -928,7 +928,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-3.1", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 2, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 2, 3, 5000);
 
   run_producer("producer1, 0, 0x55, 1, BeginCommit, DoFlush",
                "producer1, 0, 0x10, 3, BeginOpen, DoFlush",
@@ -969,7 +969,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer3, 0, 0x10, 1, None, DoFlush",
                "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
@@ -1004,7 +1004,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4.1", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer3, 0, 0x10, 1, None, DoFlush",
                "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
@@ -1039,7 +1039,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4.2", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer3, 0, 0x10, 1, None, DoFlush",
                "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
@@ -1074,7 +1074,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4.3", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer3, 0, 0x10, 1, None, DoFlush",
                "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
@@ -1111,7 +1111,7 @@ static void do_test_consumer_txn_test(bool use_java_producer) {
 test5:
   topic_name = Test::mk_topic_name("0098-consumer_txn-5", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
 
   run_producer("producer1, 0, 0x10, 2, BeginOpen, DontFlush", "sleep,200",
                "producer1, 0, 0x20, 2, ContinueAbort, DontFlush",
@@ -1167,7 +1167,7 @@ test5:
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-0", 1);
   c          = create_consumer(topic_name, "READ_COMMITTED");
-  Test::create_topic(c, topic_name.c_str(), 1, 3);
+  Test::create_topic_wait_exists(c, topic_name.c_str(), 1, 3, 5000);
   TestEventCb::topic = topic_name;
 
   run_producer("producer3, 0, 0x10, 1, None, DoFlush",

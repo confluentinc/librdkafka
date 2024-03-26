@@ -79,6 +79,12 @@ void test_create_topic(rd_kafka_t *use_rk,
                        int partition_cnt,
                        int replication_factor);
 
+void test_create_topic_wait_exists(rd_kafka_t *use_rk,
+                                   const char *topicname,
+                                   int partition_cnt,
+                                   int replication_factor,
+                                   int timeout);
+
 void test_create_partitions(rd_kafka_t *use_rk,
                             const char *topicname,
                             int new_partition_cnt);
@@ -399,4 +405,12 @@ void test_sub_skip(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
 int test_run_java(const char *cls, const char **argv);
 int test_waitpid(int pid);
+
+const char *test_consumer_group_protocol();
+
+int test_consumer_group_protocol_classic();
+
+int test_consumer_group_protocol_consumer();
+
+
 #endif /* _TESTSHARED_H_ */

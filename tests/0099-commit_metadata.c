@@ -163,7 +163,7 @@ int main_0099_commit_metadata(int argc, char **argv) {
 
         test_str_id_generate(group_id, sizeof(group_id));
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         origin_toppar = rd_kafka_topic_partition_list_new(1);
 

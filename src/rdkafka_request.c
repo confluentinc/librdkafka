@@ -139,12 +139,12 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
         case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
         case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND:
-        case RD_KAFKA_RESP_ERR_INVALID_MSG:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY |
                            RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED;
                 break;
 
         case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS:
+        case RD_KAFKA_RESP_ERR_INVALID_MSG:
                 /* Client-side wait-response/in-queue timeout */
         case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY |
@@ -3932,6 +3932,17 @@ rd_kafka_handle_idempotent_Produce_success(rd_kafka_broker_t *rkb,
                     rk, RD_KAFKA_RESP_ERR__INCONSISTENT, "%s", fatal_err);
 }
 
+/**
+ * @brief Set \p batch error codes, corresponding to the indices that caused
+ *        the error in 'presult->record_errors', to INVALID_RECORD and
+ *        the rest to _INVALID_DIFFERENT_RECORD.
+ *
+ * @param presult Produce result structure
+ * @param batch Batch of messages
+ *
+ * @locks none
+ * @locality broker thread (but not necessarily the leader broker thread)
+ */
 static void rd_kafka_msgbatch_handle_Produce_result_record_errors(
     const rd_kafka_Produce_result_t *presult,
     rd_kafka_msgbatch_t *batch) {
@@ -4056,7 +4067,7 @@ static void rd_kafka_msgbatch_handle_Produce_result(
                                            presult->offset, presult->timestamp,
                                            status);
 
-                /* TODO: write */
+                /* Change error codes if necessary */
                 rd_kafka_msgbatch_handle_Produce_result_record_errors(presult,
                                                                       batch);
                 /* Enqueue messages for delivery report. */

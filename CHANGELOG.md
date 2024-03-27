@@ -2,18 +2,22 @@
 
 librdkafka v2.4.0 is a feature release:
 
-* [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records) Augment ProduceResponse error messaging for specific culprit records (#4583).
-
-
-
-# librdkafka v2.3.1
-
-librdkafka v2.3.1 is a maintenance release:
-
+ * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records) Augment ProduceResponse error messaging for specific culprit records (#4583).
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt).
  * Integration tests can be started in KRaft mode and run against any
    GitHub Kafka branch other than the released versions.
+
+
+## Upgrade considerations
+
+ * With KIP 467, INVALID_MSG (Java: CorruptRecordExpection) will
+   be retried automatically. INVALID_RECORD (Java: InvalidRecordException) instead
+   is not retriable and will be set only to the records that caused the
+   error. Rest of records in the batch will fail with the new error code
+   _INVALID_DIFFERENT_RECORD (Java: KafkaException) and can be retried manually,
+   depending on the application logic.
+
 
 
 # librdkafka v2.3.0

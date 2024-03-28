@@ -857,7 +857,8 @@ static int rd_kafka_mock_handle_ApiVersion(rd_kafka_mock_connection_t *mconn,
  * @param mtopic may be NULL
  */
 static void
-rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_buf_t *resp,
+rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_mock_cluster_t *mcluster,
+                                       rd_kafka_buf_t *resp,
                                        int16_t ApiVersion,
                                        const char *topic,
                                        const rd_kafka_mock_topic_t *mtopic,
@@ -880,20 +881,46 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_buf_t *resp,
         rd_kafka_buf_write_arraycnt(resp, partition_cnt);
 
         for (i = 0; mtopic && i < partition_cnt; i++) {
-                const rd_kafka_mock_partition_t *mpart = &mtopic->partitions[i];
+                rd_kafka_mock_partition_leader_t *mpart_leader;
+                rd_kafka_mock_partition_t *mpart = &mtopic->partitions[i];
                 int r;
 
                 /* Response: ..Partitions.ErrorCode */
                 rd_kafka_buf_write_i16(resp, 0);
                 /* Response: ..Partitions.PartitionIndex */
                 rd_kafka_buf_write_i32(resp, mpart->id);
-                /* Response: ..Partitions.Leader */
-                rd_kafka_buf_write_i32(resp,
-                                       mpart->leader ? mpart->leader->id : -1);
 
-                if (ApiVersion >= 7) {
-                        /* Response: ..Partitions.LeaderEpoch */
-                        rd_kafka_buf_write_i32(resp, mpart->leader_epoch);
+                mpart_leader =
+                    rd_kafka_mock_partition_next_leader_response(mpart);
+                if (mpart_leader) {
+                        rd_kafka_dbg(
+                            mcluster->rk, MOCK, "MOCK",
+                            "MetadataRequest: using next leader response "
+                            "(%" PRId32 ", %" PRId32 ")",
+                            mpart_leader->leader_id,
+                            mpart_leader->leader_epoch);
+
+                        /* Response: ..Partitions.Leader */
+                        rd_kafka_buf_write_i32(resp, mpart_leader->leader_id);
+
+                        if (ApiVersion >= 7) {
+                                /* Response: ..Partitions.LeaderEpoch */
+                                rd_kafka_buf_write_i32(
+                                    resp, mpart_leader->leader_epoch);
+                        }
+                        rd_kafka_mock_partition_leader_destroy(mpart,
+                                                               mpart_leader);
+                        mpart_leader = NULL;
+                } else {
+                        /* Response: ..Partitions.Leader */
+                        rd_kafka_buf_write_i32(
+                            resp, mpart->leader ? mpart->leader->id : -1);
+
+                        if (ApiVersion >= 7) {
+                                /* Response: ..Partitions.LeaderEpoch */
+                                rd_kafka_buf_write_i32(resp,
+                                                       mpart->leader_epoch);
+                        }
                 }
 
                 /* Response: ..Partitions.#ReplicaNodes */
@@ -1010,8 +1037,8 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
                 TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
                         rd_kafka_mock_buf_write_Metadata_Topic(
-                            resp, rkbuf->rkbuf_reqhdr.ApiVersion, mtopic->name,
-                            mtopic, mtopic->err);
+                            mcluster, resp, rkbuf->rkbuf_reqhdr.ApiVersion,
+                            mtopic->name, mtopic, mtopic->err);
                 }
 
         } else if (requested_topics) {
@@ -1033,8 +1060,8 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
                         rd_kafka_mock_buf_write_Metadata_Topic(
-                            resp, rkbuf->rkbuf_reqhdr.ApiVersion, rktpar->topic,
-                            mtopic, err ? err : mtopic->err);
+                            mcluster, resp, rkbuf->rkbuf_reqhdr.ApiVersion,
+                            rktpar->topic, mtopic, err ? err : mtopic->err);
                 }
 
         } else {

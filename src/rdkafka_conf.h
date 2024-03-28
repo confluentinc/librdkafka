@@ -164,7 +164,7 @@ typedef enum {
 } rd_kafka_client_dns_lookup_t;
 
 typedef enum {
-        RD_KAFKA_GROUP_PROTOCOL_GENERIC,
+        RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
         RD_KAFKA_GROUP_PROTOCOL_CONSUMER,
 } rd_kafka_group_protocol_t;
 

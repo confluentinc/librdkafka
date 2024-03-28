@@ -154,6 +154,7 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                 }
 
                 if (err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT ||
+                    err == RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH ||
                     rktpar->err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT) {
                         /* Ongoing transactions are blocking offset retrieval.
                          * This is typically retried from the OffsetFetch
@@ -275,8 +276,9 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
         }
 
 
-
-        if (err) {
+        if (err == RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH) {
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
+        } else if (err) {
                 rd_kafka_dbg(rk, CGRP, "OFFSET",
                              "Offset fetch error for %d partition(s): %s",
                              offsets->cnt, rd_kafka_err2str(err));

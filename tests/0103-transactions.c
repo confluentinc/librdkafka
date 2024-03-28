@@ -143,7 +143,7 @@ static void do_test_basic_producer_txn(rd_bool_t enable_compression) {
         // FIXME: add testing were the txn id is reused (and thus fails)
 
         /* Create topic */
-        test_create_topic(p, topic, partition_cnt, 3);
+        test_create_topic_wait_exists(p, topic, partition_cnt, 3, 5000);
 
         /* Create consumer */
         c_conf = conf;
@@ -348,8 +348,8 @@ void do_test_consumer_producer_txn(void) {
         p1 = test_create_handle(RD_KAFKA_PRODUCER, tmpconf);
 
         /* Create input and output topics */
-        test_create_topic(p1, input_topic, 4, 3);
-        test_create_topic(p1, output_topic, 4, 3);
+        test_create_topic_wait_exists(p1, input_topic, 4, 3, 5000);
+        test_create_topic_wait_exists(p1, output_topic, 4, 3, 5000);
 
         /* Seed input topic with messages */
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p1, 30 * 1000));
@@ -879,7 +879,7 @@ static void do_test_fatal_idempo_error_without_kip360(void) {
 
         p = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic(p, topic, 1, 3);
+        test_create_topic_wait_exists(p, topic, 1, 3, 5000);
 
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 30 * 1000));
@@ -1029,7 +1029,7 @@ static void do_test_empty_txn(rd_bool_t send_offsets, rd_bool_t do_commit) {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         p = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic(p, topic, 1, 3);
+        test_create_topic_wait_exists(p, topic, 1, 3, 5000);
 
         /* Produce some non-txnn messages for the consumer to read and commit */
         test_produce_msgs_easy(topic, testid, 0, msgcnt);
@@ -1130,7 +1130,7 @@ static void do_test_txn_abort_control_message_leader_epoch(void) {
         rd_kafka_conf_set_dr_msg_cb(p_conf, test_dr_msg_cb);
         p = test_create_handle(RD_KAFKA_PRODUCER, p_conf);
 
-        test_create_topic(p, topic, 1, 3);
+        test_create_topic_wait_exists(p, topic, 1, 3, 5000);
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 5000));
 
@@ -1225,7 +1225,7 @@ static void do_test_wmark_isolation_level(void) {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         p = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
 
-        test_create_topic(p, topic, 1, 3);
+        test_create_topic_wait_exists(p, topic, 1, 3, 5000);
 
         /* Produce some non-txn messages to avoid 0 as the committed hwmark */
         test_produce_msgs_easy(topic, testid, 0, 100);

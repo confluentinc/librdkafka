@@ -260,7 +260,8 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
         int32_t ReplicaId = -1, MaxWait, MinBytes, MaxBytes = -1,
                 SessionId = -1, Epoch, TopicsCnt;
         int8_t IsolationLevel;
-        size_t totsize = 0;
+        size_t totsize                 = 0;
+        rd_kafka_mock_broker_t *leader = NULL;
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion <= 14) {
                 rd_kafka_buf_read_i32(rkbuf, &ReplicaId);
@@ -480,8 +481,38 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_write_arraycnt(resp, 0);
                         }
 
+                        /* Partition tags count */
+                        rd_kafka_buf_write_uvarint(
+                            resp,
+                            rkbuf->rkbuf_reqhdr.ApiVersion >= 16 &&
+                                    (err ==
+                                         RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION ||
+                                     err ==
+                                         RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH)
+                                ? 1
+                                : 0);
+
+
                         /* Response: Partition tags */
-                        rd_kafka_buf_write_tags_empty(resp);
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 16 &&
+                            (err ==
+                                 RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION ||
+                             err == RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH)) {
+                                leader = mpart->leader;
+
+                                /* Tag type */
+                                rd_kafka_buf_write_uvarint(resp, 1);
+                                /* Tag len = 4 (leader_id) + 4
+                                 * (leader_epoch) + 1 (tags) */
+                                rd_kafka_buf_write_uvarint(resp, 9);
+                                /* Leader id */
+                                rd_kafka_buf_write_i32(resp, mpart->leader->id);
+                                /* Leader epoch */
+                                rd_kafka_buf_write_i32(resp,
+                                                       mpart->leader_epoch);
+                                /* Remaining tags */
+                                rd_kafka_buf_write_tags_empty(resp);
+                        }
                 }
 
                 /* Response: Topic tags */
@@ -523,10 +554,34 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                 RD_KAFKAP_STR_DUPA(&rack, &RackId);
                 /* Matt might do something sensible with this */
         }
-
+        rd_kafka_buf_skip_tags(rkbuf);
         /* Response: Top level tags */
-        rd_kafka_buf_write_tags_empty(resp);
+        rd_kafka_buf_write_uvarint(
+            resp, rkbuf->rkbuf_reqhdr.ApiVersion >= 16 && leader ? 1 : 0);
 
+
+        /* Response: Partition tags */
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 16 && leader) {
+                /* Tag type */
+                rd_kafka_buf_write_uvarint(resp, 0);
+                /* Tag Len */
+                rd_kafka_buf_write_uvarint(
+                    resp, 4 + strlen(leader->advertised_listener) + 2 + 4 + 2);
+                /* NodeEndpoints array count */
+                rd_kafka_buf_write_arraycnt(resp, 1);
+                /* Leader id */
+                rd_kafka_buf_write_i32(resp, leader->id);
+                /* Leader Hostname */
+                rd_kafka_buf_write_str(resp, leader->advertised_listener, -1);
+                /* Leader Port number */
+                rd_kafka_buf_write_i32(resp, (int32_t)leader->port);
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
+                        /* Leader Rack */
+                        rd_kafka_buf_write_str(resp, leader->rack, -1);
+                }
+                /* Remaining tags */
+                rd_kafka_buf_write_tags_empty(resp);
+        }
         /* If there was no data, delay up to MaxWait.
          * This isn't strictly correct since we should cut the wait short
          * and feed newly produced data if a producer writes to the
@@ -2365,7 +2420,7 @@ const struct rd_kafka_mock_api_handler
     rd_kafka_mock_api_handlers[RD_KAFKAP__NUM] = {
         /* [request-type] = { MinVersion, MaxVersion, FlexVersion, callback } */
         [RD_KAFKAP_Produce]      = {0, 10, 9, rd_kafka_mock_handle_Produce},
-        [RD_KAFKAP_Fetch]        = {0, 15, 12, rd_kafka_mock_handle_Fetch},
+        [RD_KAFKAP_Fetch]        = {0, 16, 12, rd_kafka_mock_handle_Fetch},
         [RD_KAFKAP_ListOffsets]  = {0, 7, 6, rd_kafka_mock_handle_ListOffsets},
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},
         [RD_KAFKAP_OffsetCommit] = {0, 9, 8, rd_kafka_mock_handle_OffsetCommit},

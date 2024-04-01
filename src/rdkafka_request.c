@@ -510,6 +510,8 @@ int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
         const int log_decode_errors = LOG_ERR;
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderId);
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderEpoch);
+        fprintf(stderr, "asdasd read tags LeaderId: %d LeaderEpoch: %d\n",
+                CurrentLeader->LeaderId, CurrentLeader->LeaderEpoch);
         rd_kafka_buf_skip_tags(rkbuf);
         return 1;
 err_parse:
@@ -531,6 +533,8 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
         rd_dassert(!NodeEndpoints->NodeEndpoints);
+        fprintf(stderr, "asdasd read tags NodeEndpointCnt: %d\n",
+                NodeEndpoints->NodeEndpointCnt);
         NodeEndpoints->NodeEndpoints =
             rd_calloc(NodeEndpoints->NodeEndpointCnt,
                       sizeof(*NodeEndpoints->NodeEndpoints));
@@ -544,6 +548,13 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Port);
                 rd_kafka_buf_read_str(rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Rack);
+                fprintf(stderr,
+                        "asdasd read tags NodeId: %d Host: %s Port: %d "
+                        "RackLen: %d\n",
+                        NodeEndpoints->NodeEndpoints[i].NodeId,
+                        NodeEndpoints->NodeEndpoints[i].Host.str,
+                        NodeEndpoints->NodeEndpoints[i].Port,
+                        NodeEndpoints->NodeEndpoints[i].Rack.len);
                 rd_kafka_buf_skip_tags(rkbuf);
         }
         return 1;
@@ -3380,86 +3391,6 @@ err_parse:
         return -1;
 }
 
-/* TODO: Move to metadata merge */
-
-// void rd_kafka_produce_metadata_handle_tags(
-//    rd_kafka_t *rk,
-//    rd_kafkap_produce_reply_tags_t *produce_tags) {
-//        // find the topic id from cache, then merge metadata
-//        const struct rd_kafka_metadata_cache_entry *rkmce =
-//            rd_kafka_metadata_cache_find(rk,
-//            produce_tags->TopicTags->TopicName,
-//                                         rd_true);
-//        if (!rkmce) {
-//                // Add the topic to the metadata cache
-//                return;
-//        }
-//        rd_kafka_metadata_internal_t *mdi = rk->rk_full_metadata;
-//        int i = 0, j = 0, k = 0, l = 0;
-//        for (i = 0; i < mdi->metadata.topic_cnt; i++) {
-//                if (strcmp(mdi->metadata.topics[i].topic,
-//                           produce_tags->TopicTags->TopicName) == 0) {
-//                        for (j = 0; j < mdi->metadata.topics[i].partition_cnt;
-//                             j++) {
-//                                for (k = 0;
-//                                     k <
-//                                     produce_tags->TopicTags->PartitionCnt;
-//                                     k++) {
-//                                        if (mdi->metadata.topics[i]
-//                                                .partitions[j]
-//                                                .id == produce_tags->TopicTags
-//                                                           ->PartitionTags[k]
-//                                                           .Partition) {
-//                                                mdi->topics[i]
-//                                                    .partitions[j]
-//                                                    .leader_epoch =
-//                                                    produce_tags->TopicTags
-//                                                        ->PartitionTags[k]
-//                                                        .CurrentLeader
-//                                                        .LeaderEpoch;
-//                                                for (l = 0;
-//                                                     l <
-//                                                     produce_tags->NodeEndpoints
-//                                                         .NodeEndpointCnt;
-//                                                     l++) {
-//                                                        if (produce_tags
-//                                                                ->NodeEndpoints
-//                                                                .NodeEndpoints
-//                                                                    [l]
-//                                                                .NodeId ==
-//                                                            produce_tags
-//                                                                ->TopicTags
-//                                                                ->PartitionTags
-//                                                                    [k]
-//                                                                .CurrentLeader
-//                                                                .LeaderId) {
-//                                                                // Add rack to
-//                                                                // partition
-//                                                        }
-//                                                }
-//                                        }
-//                                }
-//                        }
-//                }
-//        }
-//        // TODO: Where to update the port and host?
-//        //        for (i = 0; i < mdi->metadata.broker_cnt; i++) {
-//        //                for (j = 0; j <
-//        //                rk->produce_tags->NodeEndpoints.NodeEndpointCnt;
-//        j++)
-//        //                {
-//        //                        if (mdi->brokers[i].id ==
-//        // rk->produce_tags->NodeEndpoints.NodeEndpoints[j].NodeId)
-//        //                        {
-//        //                                mdi->brokers[i].rack =
-//        // rk->produce_tags->NodeEndpoints.NodeEndpoints[j].Rack;
-//        //                        }
-//        //                }
-//        //        }
-//
-//        // TODO: Update the metadata cache
-//}
-
 
 
 /**
@@ -3726,6 +3657,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         } else if (request->rkbuf_reqhdr.ApiVersion >= 9) {
                 /* Partition tags */
                 rd_kafka_buf_skip_tags(rkbuf);
+
                 /* Topic tags */
                 rd_kafka_buf_skip_tags(rkbuf);
 

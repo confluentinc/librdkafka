@@ -218,13 +218,9 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic = {0};
-                /* TODO: Fix bug topic Id from mock topic isn't being used in
-                 * Fetch request. */
-                Topic.str = "test";
-                Topic.len = strlen(Topic.str);
                 int32_t PartitionCnt;
                 rd_kafka_mock_topic_t *mtopic;
-                rd_kafka_Uuid_t TopicId;
+                rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
 
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 13)
                         rd_kafka_buf_read_uuid(rkbuf, &TopicId);
@@ -950,11 +946,18 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_buf_t *resp,
             (!mtopic || err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
                 ? 0
                 : mtopic->partition_cnt;
+        rd_kafka_Uuid_t topic_id =
+            mtopic == NULL ? RD_KAFKA_UUID_ZERO : mtopic->id;
 
         /* Response: Topics.ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
         /* Response: Topics.Name */
         rd_kafka_buf_write_str(resp, topic, -1);
+        if (ApiVersion >= 10) {
+                /* Response: Topics.TopicId */
+                rd_kafka_buf_write_uuid(resp, &topic_id);
+        }
+
         if (ApiVersion >= 1) {
                 /* Response: Topics.IsInternal */
                 rd_kafka_buf_write_bool(resp, rd_false);
@@ -1064,8 +1067,11 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
         for (i = 0; i < TopicsCnt; i++) {
                 rd_kafkap_str_t Topic;
+                rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
                 char *topic;
 
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 10)
+                        rd_kafka_buf_read_uuid(rkbuf, &TopicId);
                 rd_kafka_buf_read_str(rkbuf, &Topic);
                 RD_KAFKAP_STR_DUPA(&topic, &Topic);
 
@@ -2218,7 +2224,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},
         [RD_KAFKAP_OffsetCommit] = {0, 8, 8, rd_kafka_mock_handle_OffsetCommit},
         [RD_KAFKAP_ApiVersion]   = {0, 2, 3, rd_kafka_mock_handle_ApiVersion},
-        [RD_KAFKAP_Metadata]     = {0, 9, 9, rd_kafka_mock_handle_Metadata},
+        [RD_KAFKAP_Metadata]     = {0, 10, 9, rd_kafka_mock_handle_Metadata},
         [RD_KAFKAP_FindCoordinator] = {0, 3, 3,
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,

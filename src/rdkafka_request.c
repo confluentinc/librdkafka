@@ -472,8 +472,6 @@ int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
         const int log_decode_errors = LOG_ERR;
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderId);
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderEpoch);
-        fprintf(stderr, "asdasd read tags LeaderId: %d LeaderEpoch: %d\n",
-                CurrentLeader->LeaderId, CurrentLeader->LeaderEpoch);
         rd_kafka_buf_skip_tags(rkbuf);
         return 1;
 err_parse:
@@ -493,8 +491,6 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         int32_t i;
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
-        fprintf(stderr, "asdasd read tags NodeEndpointCnt: %d\n",
-                NodeEndpoints->NodeEndpointCnt);
         RD_IF_FREE(NodeEndpoints->NodeEndpoints, rd_free);
         NodeEndpoints->NodeEndpoints =
             rd_calloc(NodeEndpoints->NodeEndpointCnt,
@@ -509,13 +505,6 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Port);
                 rd_kafka_buf_read_str(rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Rack);
-                fprintf(stderr,
-                        "asdasd read tags NodeId: %d Host: %s Port: %d "
-                        "RackLen: %d\n",
-                        NodeEndpoints->NodeEndpoints[i].NodeId,
-                        NodeEndpoints->NodeEndpoints[i].Host.str,
-                        NodeEndpoints->NodeEndpoints[i].Port,
-                        NodeEndpoints->NodeEndpoints[i].Rack.len);
                 rd_kafka_buf_skip_tags(rkbuf);
         }
         return 1;

@@ -472,6 +472,8 @@ int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
         const int log_decode_errors = LOG_ERR;
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderId);
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderEpoch);
+        fprintf(stderr, "asdasd read tags LeaderId: %d LeaderEpoch: %d\n",
+                CurrentLeader->LeaderId, CurrentLeader->LeaderEpoch);
         rd_kafka_buf_skip_tags(rkbuf);
         return 1;
 err_parse:
@@ -491,6 +493,8 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         int32_t i;
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
+        fprintf(stderr, "asdasd read tags NodeEndpointCnt: %d\n",
+                NodeEndpoints->NodeEndpointCnt);
         RD_IF_FREE(NodeEndpoints->NodeEndpoints, rd_free);
         NodeEndpoints->NodeEndpoints =
             rd_calloc(NodeEndpoints->NodeEndpointCnt,
@@ -505,6 +509,13 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Port);
                 rd_kafka_buf_read_str(rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Rack);
+                fprintf(stderr,
+                        "asdasd read tags NodeId: %d Host: %s Port: %d "
+                        "RackLen: %d\n",
+                        NodeEndpoints->NodeEndpoints[i].NodeId,
+                        NodeEndpoints->NodeEndpoints[i].Host.str,
+                        NodeEndpoints->NodeEndpoints[i].Port,
+                        NodeEndpoints->NodeEndpoints[i].Rack.len);
                 rd_kafka_buf_skip_tags(rkbuf);
         }
         return 1;
@@ -3085,7 +3096,7 @@ typedef struct rd_kafkap_produce_reply_tags_Partition_s {
 } rd_kafkap_produce_reply_tags_Partition_t;
 
 typedef struct rd_kafkap_produce_reply_tags_Topic_s {
-        char* TopicName;
+        char *TopicName;
         int32_t PartitionCnt;
         rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
 } rd_kafkap_produce_reply_tags_Topic_t;
@@ -3096,23 +3107,25 @@ typedef struct rd_kafkap_produce_reply_tags_s {
         rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
 } rd_kafkap_produce_reply_tags_t;
 
-//static rd_kafkap_produce_reply_tags_t *
-//rd_kafka_produce_reply_tags_new(int32_t TopicArrayCnt) {
+// static rd_kafkap_produce_reply_tags_t *
+// rd_kafka_produce_reply_tags_new(int32_t TopicArrayCnt) {
 //        return rd_calloc(1, sizeof(rd_kafkap_produce_reply_tags_t));
 //}
 
-//void rd_kafka_produce_reply_tags_set_TopicCnt(
+// void rd_kafka_produce_reply_tags_set_TopicCnt(
 //    rd_kafkap_produce_reply_tags_t *reply_tags,
 //    int32_t TopicCnt) {
 //        reply_tags->TopicCnt = TopicCnt;
-//        reply_tags->Topics   = rd_calloc(TopicCnt, sizeof(*reply_tags->Topics));
+//        reply_tags->Topics   = rd_calloc(TopicCnt,
+//        sizeof(*reply_tags->Topics));
 //}
 
 
-static int rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
-                                                          uint64_t tagtype,
-                                                          uint64_t taglen,
-                                                          void *opaque) {
+static int
+rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
+                                                 uint64_t tagtype,
+                                                 uint64_t taglen,
+                                                 void *opaque) {
         rd_kafkap_produce_reply_tags_Partition_t *PartitionTags = opaque;
         switch (tagtype) {
         case 1:
@@ -3128,9 +3141,9 @@ err_parse:
 }
 
 static int rd_kafka_produce_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
-                                                uint64_t tagtype,
-                                                uint64_t taglen,
-                                                void *opaque) {
+                                                  uint64_t tagtype,
+                                                  uint64_t taglen,
+                                                  void *opaque) {
         rd_kafkap_produce_reply_tags_t *tags = opaque;
         switch (tagtype) {
         case 0: /* NodeEndpoints */
@@ -3234,18 +3247,19 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
         if (request->rkbuf_reqhdr.ApiVersion >= 10) {
                 rd_kafkap_produce_reply_tags_Partition_t PartitionTags = {0};
-                rd_kafkap_produce_reply_tags_Topic_t TopicTags = {0};
-                rd_kafkap_produce_reply_tags_t ProduceTags = {0};
+                rd_kafkap_produce_reply_tags_Topic_t TopicTags         = {0};
+                rd_kafkap_produce_reply_tags_t ProduceTags             = {0};
                 PartitionTags.Partition = hdr.Partition;
                 rd_kafka_produce_reply_handle_partition_read_tag(
                     rkbuf, 1, 0, &PartitionTags);
 
-                TopicTags.TopicName = rd_kafkap_str_copy(&topic_name);
-                TopicTags.PartitionCnt = 1;
+                TopicTags.TopicName     = rd_kafkap_str_copy(&topic_name);
+                TopicTags.PartitionCnt  = 1;
                 TopicTags.PartitionTags = &PartitionTags;
-                ProduceTags.TopicCnt = 1;
-                ProduceTags.TopicTags = &TopicTags;
-                rd_kafka_produce_reply_handle_read_tag(rkbuf, 0, 0, &ProduceTags);
+                ProduceTags.TopicCnt    = 1;
+                ProduceTags.TopicTags   = &TopicTags;
+                rd_kafka_produce_reply_handle_read_tag(rkbuf, 0, 0,
+                                                       &ProduceTags);
 
         } else {
                 /* Partition tags */

@@ -2782,6 +2782,19 @@ static RD_UNUSED int rd_kafka_consume_stop0(rd_kafka_toppar_t *rktp) {
         err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
         rd_kafka_q_destroy_owner(tmpq);
 
+        rd_kafka_topic_rdlock(rktp->rktp_rkt);
+        rd_kafka_toppar_lock(rktp);
+        if (rktp->rktp_partition >= rktp->rktp_rkt->rkt_partition_cnt) {
+                /* After stopping an undesired partition that is not present
+                 * in partition list, purge its fetchq and ops.
+                 * Some of them can be present, such as a BARRIER in fetchq,
+                 * that keep a reference to the same partition. */
+                rd_kafka_q_purge(rktp->rktp_fetchq);
+                rd_kafka_q_purge(rktp->rktp_ops);
+        }
+        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_topic_rdunlock(rktp->rktp_rkt);
+
         rd_kafka_set_last_error(err, err ? EINVAL : 0);
 
         return err ? -1 : 0;

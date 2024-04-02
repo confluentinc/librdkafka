@@ -82,6 +82,9 @@ void AdminClient::Init(v8::Local<v8::Object> exports) {
   tpl->SetClassName(Nan::New("AdminClient").ToLocalChecked());
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
+  // Inherited from NodeKafka::Connection
+  Nan::SetPrototypeMethod(tpl, "configureCallbacks", NodeConfigureCallbacks);
+
   // Admin client operations
   Nan::SetPrototypeMethod(tpl, "createTopic", NodeCreateTopic);
   Nan::SetPrototypeMethod(tpl, "deleteTopic", NodeDeleteTopic);

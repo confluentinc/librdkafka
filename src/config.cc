@@ -81,17 +81,8 @@ Conf * Conf::create(RdKafka::Conf::ConfType type, v8::Local<v8::Object> object, 
           return NULL;
       }
     } else {
-      v8::Local<v8::Function> cb = value.As<v8::Function>();
-      rdconf->ConfigureCallback(string_key, cb, true, errstr);
-      if (!errstr.empty()) {
-        delete rdconf;
-        return NULL;
-      }
-      rdconf->ConfigureCallback(string_key, cb, false, errstr);
-      if (!errstr.empty()) {
-        delete rdconf;
-        return NULL;
-      }
+     // Do nothing - Connection::NodeConfigureCallbacks will handle this for each
+     // of the three client types.
     }
   }
 
@@ -100,56 +91,76 @@ Conf * Conf::create(RdKafka::Conf::ConfType type, v8::Local<v8::Object> object, 
 
 void Conf::ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add, std::string &errstr) {
   if (string_key.compare("rebalance_cb") == 0) {
+    NodeKafka::Callbacks::Rebalance *rebalance = rebalance_cb();
     if (add) {
-      if (this->m_rebalance_cb == NULL) {
-        this->m_rebalance_cb = new NodeKafka::Callbacks::Rebalance();
+      if (rebalance == NULL) {
+        rebalance = new NodeKafka::Callbacks::Rebalance();
+        this->set(string_key, rebalance, errstr);
       }
-      this->m_rebalance_cb->dispatcher.AddCallback(cb);
-      this->set(string_key, this->m_rebalance_cb, errstr);
+      rebalance->dispatcher.AddCallback(cb);
+      this->set(string_key, rebalance, errstr);
     } else {
-      if (this->m_rebalance_cb != NULL) {
-        this->m_rebalance_cb->dispatcher.RemoveCallback(cb);
+      if (rebalance == NULL) {
+        rebalance->dispatcher.RemoveCallback(cb);
+        this->set(string_key, rebalance, errstr);
       }
     }
   } else if (string_key.compare("offset_commit_cb") == 0) {
+    NodeKafka::Callbacks::OffsetCommit *offset_commit = offset_commit_cb();
     if (add) {
-      if (this->m_offset_commit_cb == NULL) {
-        this->m_offset_commit_cb = new NodeKafka::Callbacks::OffsetCommit();
+      if (offset_commit == NULL) {
+        offset_commit = new NodeKafka::Callbacks::OffsetCommit();
+        this->set(string_key, offset_commit, errstr);
       }
-      this->m_offset_commit_cb->dispatcher.AddCallback(cb);
-      this->set(string_key, this->m_offset_commit_cb, errstr);
+      offset_commit->dispatcher.AddCallback(cb);
     } else {
-      if (this->m_offset_commit_cb != NULL) {
-        this->m_offset_commit_cb->dispatcher.RemoveCallback(cb);
+      if (offset_commit != NULL) {
+        offset_commit->dispatcher.RemoveCallback(cb);
       }
     }
   }
 }
 
 void Conf::listen() {
-  if (m_rebalance_cb) {
-    m_rebalance_cb->dispatcher.Activate();
+  NodeKafka::Callbacks::Rebalance *rebalance = rebalance_cb();
+  if (rebalance) {
+    rebalance->dispatcher.Activate();
   }
 
-  if (m_offset_commit_cb) {
-    m_offset_commit_cb->dispatcher.Activate();
+  NodeKafka::Callbacks::OffsetCommit *offset_commit = offset_commit_cb();
+  if (offset_commit) {
+    offset_commit->dispatcher.Activate();
   }
 }
 
 void Conf::stop() {
-  if (m_rebalance_cb) {
-    m_rebalance_cb->dispatcher.Deactivate();
+  NodeKafka::Callbacks::Rebalance *rebalance = rebalance_cb();
+  if (rebalance) {
+    rebalance->dispatcher.Deactivate();
   }
 
-  if (m_offset_commit_cb) {
-    m_offset_commit_cb->dispatcher.Deactivate();
+  NodeKafka::Callbacks::OffsetCommit *offset_commit = offset_commit_cb();
+  if (offset_commit) {
+    offset_commit->dispatcher.Deactivate();
   }
 }
 
-Conf::~Conf() {
-  if (m_rebalance_cb) {
-    delete m_rebalance_cb;
+Conf::~Conf() {}
+
+NodeKafka::Callbacks::Rebalance* Conf::rebalance_cb() const {
+  RdKafka::RebalanceCb *cb = NULL;
+  if (this->get(cb) != RdKafka::Conf::CONF_OK) {
+    return NULL;
   }
+  return static_cast<NodeKafka::Callbacks::Rebalance*>(cb);
+}
+
+NodeKafka::Callbacks::OffsetCommit* Conf::offset_commit_cb() const {
+  RdKafka::OffsetCommitCb *cb = NULL;
+  if (this->get(cb) != RdKafka::Conf::CONF_OK) {
+    return NULL;
+  }
+  return static_cast<NodeKafka::Callbacks::OffsetCommit*>(cb);
 }
 
 }  // namespace NodeKafka

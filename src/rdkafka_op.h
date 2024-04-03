@@ -162,6 +162,9 @@ typedef enum {
         RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS,  /**< Admin:
                                                 *   ListConsumerGroupOffsets
                                                 *   u.admin_request */
+        RD_KAFKA_OP_ELECTLEADER,               /**< Admin:
+                                                *   ElectLeader
+                                                *   u.admin_request */
         RD_KAFKA_OP_ADMIN_FANOUT,              /**< Admin: fanout request */
         RD_KAFKA_OP_ADMIN_RESULT,              /**< Admin API .._result_t */
         RD_KAFKA_OP_PURGE,                     /**< Purge queues */

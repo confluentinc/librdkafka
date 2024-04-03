@@ -436,6 +436,27 @@ struct rd_kafka_DeleteAcls_result_response_s {
         rd_list_t matching_acls; /**< Type (rd_kafka_AclBinding_t *) */
 };
 
+/**
+ * @name ElectLeader
+*/
+
+struct rd_kafka_ElectLeader_s {
+        rd_kafka_ElectionType_t electionType;  /*Election Type*/
+        rd_kafka_topic_partition_list_t *partitions;  /*TopicPartitions for election*/
+};
+
+struct rd_kafka_topic_partition_result_s {
+        char *topic;
+        int32_t partition;
+        rd_kafka_resp_err_t err;
+        char *errstr;
+};
+
+typedef struct rd_kafka_ElectLeaderResult_s {
+        rd_kafka_resp_err_t error_code;
+        rd_list_t partitions; /**< Type (rd_kafka_topic_partition_error_t *) */
+} rd_kafka_ElectLeaderResult_t;
+
 /**@}*/
 
 /**

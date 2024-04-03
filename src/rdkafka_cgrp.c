@@ -6462,11 +6462,27 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
 
+        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_GENERIC)
+                return;
+
         if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
                 return;
 
-        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_GENERIC)
+        if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) &&
+            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA &&
+            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                /* When consumer group isn't in join state WAIT_METADATA
+                 * or STEADY, it's possible that some topics aren't present
+                 * in cache and not hinted.
+                 * It uses metadata cache only if it's not a wildcard
+                 * subscription, so skip only those cases. See issue #4589. */
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk,
+                    CGRP | RD_KAFKA_DBG_METADATA | RD_KAFKA_DBG_CONSUMER,
+                    "REJOIN", "Skipping metadata update checks in state %s",
+                    rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
                 return;
+        }
 
         /*
          * Unmatched topics will be added to the errored list.

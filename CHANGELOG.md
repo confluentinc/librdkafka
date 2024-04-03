@@ -9,6 +9,11 @@ librdkafka v2.3.1 is a maintenance release:
  * Fix pipeline inclusion of static binaries (#4666)
  * Fix to main loop timeout calculation leading to a tight loop for a
    max period of 1 ms (#4671).
+ * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+   Continue partial implementation by adding a metadata cache by topic id
+   and updating the topic id corresponding to the partition name (#4660)
+ * Fixes to metadata cache expiration, metadata refresh interruption and
+   to avoid usage of stale metadata (#4660).
 
 
 ## Fixes
@@ -26,6 +31,21 @@ librdkafka v2.3.1 is a maintenance release:
    before the expiration of a timeout, it was serving with a zero timeout,
    leading to increased CPU usage until the timeout was reached.
    Happening since 1.x (#4671).
+ * Metadata cache was cleared on full metadata refresh, leading to unnecessary
+   refreshes and occasional `UNKNOWN_TOPIC_OR_PART` errors. Solved by updating
+   cache for existing or hinted entries instead of clearing them.
+   Happening since 2.1.0 (#4660).
+ * A metadata call before member joins consumer group,
+   could lead to an `UNKNOWN_TOPIC_OR_PART` error. Solved by updating
+   the consumer group following a metadata refresh only in safe states.
+   Happening since 2.1.0 (#4660).
+ * Metadata refreshes without partition leader change could lead to a loop of
+   metadata calls at fixed intervals. Solved by stopping metadata refresh when
+   all existing metadata is non-stale. Happening since 2.3.0 (#4660).
+ * A partition migration could happen, using stale metadata, when the partition
+   was undergoing a validation and being retried because of an error.
+   Solved by doing a partition migration only with a non-stale leader epoch.
+   Happening since 2.1.0 (#4660).
 
 
 

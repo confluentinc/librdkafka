@@ -2676,7 +2676,6 @@ fail:
                         rd_free(group_remote_assignor_override);
                 rd_kafka_assignors_term(rk);
                 rd_kafka_interceptors_destroy(&rk->rk_conf);
-
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
         }
 

@@ -152,10 +152,10 @@ blocks:
             - examples/rdkafka_example -X builtin.features
             - ldd src/librdkafka.so.1
             - ldd src-cpp/librdkafka++.so.1
+            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
-            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - export TEST_KAFKA_VERSION=3.7.0
             - (cd tests && python3 broker_version_tests.py trunk --kraft
               --conf '{"conf":["group.coordinator.rebalance.protocols=classic,consumer"]}'

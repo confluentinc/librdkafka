@@ -618,7 +618,9 @@ rd_kafka_mock_topic_new(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_topic_t *mtopic;
         int i;
 
-        mtopic          = rd_calloc(1, sizeof(*mtopic));
+        mtopic = rd_calloc(1, sizeof(*mtopic));
+        /* Assign random topic id */
+        mtopic->id      = rd_kafka_Uuid_random();
         mtopic->name    = rd_strdup(topic);
         mtopic->cluster = mcluster;
 
@@ -665,6 +667,28 @@ rd_kafka_mock_topic_find_by_kstr(const rd_kafka_mock_cluster_t *mcluster,
                 if (!strncmp(mtopic->name, kname->str,
                              RD_KAFKAP_STR_LEN(kname)) &&
                     mtopic->name[RD_KAFKAP_STR_LEN(kname)] == '\0')
+                        return (rd_kafka_mock_topic_t *)mtopic;
+        }
+
+        return NULL;
+}
+
+/**
+ * @brief Find a mock topic by id.
+ *
+ * @param mcluster Cluster to search in.
+ * @param id Topic id to find.
+ * @return Found topic or NULL.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+rd_kafka_mock_topic_t *
+rd_kafka_mock_topic_find_by_id(const rd_kafka_mock_cluster_t *mcluster,
+                               rd_kafka_Uuid_t id) {
+        const rd_kafka_mock_topic_t *mtopic;
+
+        TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
+                if (!rd_kafka_Uuid_cmp(mtopic->id, id))
                         return (rd_kafka_mock_topic_t *)mtopic;
         }
 

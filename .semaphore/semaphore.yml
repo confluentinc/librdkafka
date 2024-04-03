@@ -112,7 +112,7 @@ blocks:
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
       prologue:
         commands:
-          - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       jobs:
         - name: 'Build and integration tests'
           commands:
@@ -120,7 +120,7 @@ blocks:
             - sudo dpkg -i rapidjson-dev.deb
             - python3 -m pip install -U pip
             - python3 -m pip -V
-            - python3 -m pip install -r tests/requirements.txt
+            - (cd tests && python3 -m pip install -r requirements.txt)
             - ./configure --install-deps
             # split these up
             - ./packaging/tools/rdutcoverage.sh
@@ -147,7 +147,7 @@ blocks:
           type: s1-prod-ubuntu20-04-amd64-2
       prologue:
         commands:
-          - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
@@ -203,7 +203,7 @@ blocks:
           type: s1-prod-ubuntu20-04-arm64-1
       prologue:
         commands:
-          - docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'

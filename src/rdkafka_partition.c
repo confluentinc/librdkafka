@@ -3265,7 +3265,7 @@ int rd_kafka_topic_partition_list_find_by_id_idx(
 /**
  * @returns the first element that matches \p topic, regardless of partition.
  */
-rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic(
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_name(
     const rd_kafka_topic_partition_list_t *rktparlist,
     const char *topic) {
         int i = rd_kafka_topic_partition_list_find0(

@@ -268,43 +268,43 @@ typedef struct rd_kafka_cgrp_s {
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
 
-        /* Current acked assignment, start with an empty list. */
+        /** Current acked assignment, start with an empty list. */
         rd_kafka_topic_partition_list_t *rkcg_current_assignment;
 
-        /* Assignment the is currently reconciling.
-         * Can be NULL in case there's no reconciliation ongoing. */
+        /** Assignment the is currently reconciling.
+         *  Can be NULL in case there's no reconciliation ongoing. */
         rd_kafka_topic_partition_list_t *rkcg_target_assignment;
 
-        /* Next assignment that will be reconciled once current
-         * reconciliation finishes. Can be NULL. */
+        /** Next assignment that will be reconciled once current
+         *  reconciliation finishes. Can be NULL. */
         rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
 
-        /* Number of backoff retries when expediting next heartbeat. */
+        /** Number of backoff retries when expediting next heartbeat. */
         int rkcg_expedite_heartbeat_retries;
 
-        /* Flags for KIP-848 state machine. */
+        /** Flags for KIP-848 state machine. */
         int rkcg_consumer_flags;
-/* Coordinator is waiting for an acknowledgement of currently reconciled
- * target assignment. Cleared when an HB succeeds
- * after reconciliation finishes. */
+/** Coordinator is waiting for an acknowledgement of currently reconciled
+ *  target assignment. Cleared when an HB succeeds
+ *  after reconciliation finishes. */
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK 0x1
-/* A new subscription needs to be sent to the Coordinator. */
+/** A new subscription needs to be sent to the Coordinator. */
 #define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2
-/* A new subscription is being sent to the Coordinator. */
+/** A new subscription is being sent to the Coordinator. */
 #define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION 0x4
-/* Consumer has subscribed at least once,
- * if it didn't happen rebalance protocol is still
- * considered NONE, otherwise it depends on the
- * configured partition assignors. */
+/** Consumer has subscribed at least once,
+ *  if it didn't happen rebalance protocol is still
+ *  considered NONE, otherwise it depends on the
+ *  configured partition assignors. */
 #define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8
-/* Send a complete request in next heartbeat,
- * but don't send the acknowledgement if it's not required */
+/** Send a complete request in next heartbeat,
+ *  but don't send the acknowledgement if it's not required */
 #define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10
-/* Member is fenced, need to rejoin */
+/** Member is fenced, need to rejoin */
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x20
-/* Member is fenced, rejoining */
+/** Member is fenced, rejoining */
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x40
-/* Member is sending an acknowledgement for a reconciled assignment */
+/** Member is sending an acknowledgement for a reconciled assignment */
 #define RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK 0x80
 
 

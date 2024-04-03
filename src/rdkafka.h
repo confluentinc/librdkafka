@@ -5515,6 +5515,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT 0x200000
 /** ListOffsets_result_t */
 #define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x400000
+/** ElectLeaders_result_t */
+#define RD_KAFKA_EVENT_ELECTLEADER_RESULT 0x800000
 
 /**
  * @returns the event type for the given event.
@@ -5673,6 +5675,7 @@ int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT
  *  - RD_KAFKA_EVENT_LISTOFFSETS_RESULT
+ *  - RD_KAFKA_EVENT_ELECTLEADER_RESULT
  */
 RD_EXPORT
 void *rd_kafka_event_opaque(rd_kafka_event_t *rkev);
@@ -5796,6 +5799,8 @@ typedef rd_kafka_event_t rd_kafka_DescribeUserScramCredentials_result_t;
 typedef rd_kafka_event_t rd_kafka_AlterUserScramCredentials_result_t;
 /*! ListOffsets result type */
 typedef rd_kafka_event_t rd_kafka_ListOffsets_result_t;
+/*! ElectLeader result type */
+typedef rd_kafka_event_t rd_kafka_ElectLeader_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -6067,6 +6072,21 @@ rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_AlterUserScramCredentials_result_t *
 rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ElectLeader result.
+ *
+ * @returns the result of a ElectLeader request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ */
+
+RD_EXPORT const rd_kafka_ElectLeader_result_t *
+rd_kafka_event_ElectLeader_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -6980,6 +7000,7 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
         RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
         RD_KAFKA_ADMIN_OP_LISTOFFSETS,     /**< ListOffsets */
+        RD_KAFKA_ADMIN_OP_ELECTLEADER,     /**< ElectLeader */
         RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
@@ -9847,6 +9868,118 @@ RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
                                    size_t del_acls_cnt,
                                    const rd_kafka_AdminOptions_t *options,
                                    rd_kafka_queue_t *rkqu);
+
+/**
+*
+* ElectLeader - Perform Preferred or Unclean Election on specific topic partitions
+*
+*/
+
+typedef struct rd_kafka_ElectLeader_s rd_kafka_ElectLeader_t;
+
+/**
+* @enum rd_kafka_ElectionType_t
+* @brief Apache Kafka Election Types
+*/
+typedef enum rd_kafka_ElectionType_{
+    RD_KAFKA_ELECTION_TYPE_PREFERRED = 0, /**< Preferred Replica Election */
+    RD_KAFKA_ELECTION_TYPE_UNCLEAN = 1    /**< Unclean Election */
+} rd_kafka_ElectionType_t;
+
+
+/**
+ * @brief Create a new ElectLeader object. This object is later passed to
+ *        rd_kafka_ElectLeader().
+ * 
+ * \p electionType specifies the type of election to be performed, 
+ * Preferred or Unclean.
+ * \p partitions must contain \c topic and \c partition where the
+ *  leader election need to be performed. 
+ * 
+ * @param electionType The eelection type that needs to be performed,
+ *  preferred or unclean.
+ * @param partitions The topic partition where the leader election 
+ * needs to be performed.
+ * 
+ * @returns a new allocated ElectLeader object.
+ *          Use rd_kafka_ElectLeader_destroy() to free object when done.
+*/
+RD_EXPORT rd_kafka_ElectLeader_t *rd_kafka_ElectLeader_new (
+    rd_kafka_ElectionType_t electionType, 
+    rd_kafka_topic_partition_list_t *partitions);
+
+RD_EXPORT rd_kafka_ElectLeader_t *rd_kafka_ElectLeader_copy(
+    const rd_kafka_ElectLeader_t *elect_leader);
+
+RD_EXPORT rd_kafka_topic_partition_list_t *rd_kafka_ElectLeader_partitions(
+    const rd_kafka_ElectLeader_t *elect_leader);
+
+RD_EXPORT rd_kafka_ElectionType_t rd_kafka_ElectLeader_election_type(
+    const rd_kafka_ElectLeader_t *elect_leader);
+/**
+ * @brief Destroy and free an ElectLeader object previously created with 
+ *        rd_kafka_ElectLeader_new()
+*/
+RD_EXPORT void 
+rd_kafka_ElectLeader_destroy (rd_kafka_ElectLeader_t *elect_leader);
+
+/**
+ * @brief Elect Leaders for Topic Partitions specified in the list 
+ *        according to the specified election type.
+ * 
+ * @param rk Client instance.
+ * @param elect_leader The topic partition where elections needs to 
+ *                     take place and the required electionType.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ * 
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 60 seconds.
+ *    Controls how long the brokers will wait for records to be deleted.
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms.
+ *    Controls how long \c rdkafka will wait for the request to complete.
+ * 
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_ELECTLEADER_RESULT
+*/
+RD_EXPORT void 
+rd_kafka_ElectLeader (rd_kafka_t *rk, 
+                      rd_kafka_ElectLeader_t *elect_leader, 
+                      const rd_kafka_AdminOptions_t *options,
+                      rd_kafka_queue_t *rkqu);
+
+typedef struct rd_kafka_topic_partition_result_s rd_kafka_topic_partition_result_t ;
+
+RD_EXPORT rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_new(
+        const char *topic, int32_t partition, rd_kafka_resp_err_t err, const char *errstr);
+
+
+RD_EXPORT const char* rd_kafka_topic_partition_result_topic(
+    rd_kafka_topic_partition_result_t   *desc);
+
+RD_EXPORT int32_t rd_kafka_topic_partition_result_partition(
+    rd_kafka_topic_partition_result_t   *desc);
+
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
+    rd_kafka_topic_partition_result_t   *desc);
+
+RD_EXPORT const char* rd_kafka_topic_partition_result_error_string(
+    rd_kafka_topic_partition_result_t   *desc);
+
+RD_EXPORT void rd_kafka_topic_partition_result_destroy(
+    rd_kafka_topic_partition_result_t   *desc);
+
+RD_EXPORT void rd_kafka_topic_partition_result_destroy_array(
+    rd_kafka_topic_partition_result_t   **descs,
+    int32_t desc_cnt);
+
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_ElectionResult_error(
+        const rd_kafka_ElectLeader_result_t *result) ;
+
+RD_EXPORT rd_kafka_topic_partition_result_t **rd_kafka_ElectionResult_partition(
+        const rd_kafka_ElectLeader_result_t *result, 
+        size_t *cntp);
+
 
 /**@}*/
 

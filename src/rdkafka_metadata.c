@@ -874,7 +874,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         if (missing_topics) {
                 char *topic;
                 rd_rkb_dbg(rkb, TOPIC, "METADATA",
-                           "%d/%d requested topic(s) seen in metadata",
+                           "%d/%d requested topic(s) seen in metadata"
+                           " (lookup by name)",
                            rd_list_cnt(requested_topics) -
                                rd_list_cnt(missing_topics),
                            rd_list_cnt(requested_topics));
@@ -904,7 +905,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         if (missing_topic_ids) {
                 rd_kafka_Uuid_t *topic_id;
                 rd_rkb_dbg(rkb, TOPIC, "METADATA",
-                           "%d/%d requested topic(s) seen in metadata",
+                           "%d/%d requested topic(s) seen in metadata"
+                           " (lookup by id)",
                            rd_list_cnt(requested_topic_ids) -
                                rd_list_cnt(missing_topic_ids),
                            rd_list_cnt(requested_topic_ids));
@@ -1006,7 +1008,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         if (requested_topics)
                 rd_kafka_metadata_cache_purge_hints(rk, requested_topics);
         if (requested_topic_ids)
-                rd_kafka_metadata_cache_purge_hints(rk, requested_topic_ids);
+                rd_kafka_metadata_cache_purge_hints_by_id(rk,
+                                                          requested_topic_ids);
 
         if (cache_changes) {
                 rd_kafka_metadata_cache_propagate_changes(rk);

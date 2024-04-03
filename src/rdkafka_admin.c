@@ -1668,7 +1668,8 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
             options->for_api == RD_KAFKA_ADMIN_OP_DELETETOPICS ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS ||
             options->for_api == RD_KAFKA_ADMIN_OP_DELETERECORDS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_LISTOFFSETS)
+            options->for_api == RD_KAFKA_ADMIN_OP_LISTOFFSETS  ||
+            options->for_api == RD_KAFKA_ADMIN_OP_ELECTLEADER)
                 rd_kafka_confval_init_int(&options->operation_timeout,
                                           "operation_timeout", -1, 3600 * 1000,
                                           rk->rk_conf.admin.request_timeout_ms);
@@ -4107,6 +4108,308 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+
+rd_kafka_ElectLeader_t *rd_kafka_ElectLeader_new(
+    rd_kafka_ElectionType_t election_type,
+    rd_kafka_topic_partition_list_t *partitions
+    ) {
+        rd_kafka_ElectLeader_t *elect_leader;
+
+        elect_leader = rd_calloc(1, sizeof(*elect_leader));
+        elect_leader->partitions =
+            rd_kafka_topic_partition_list_copy(partitions);
+        elect_leader->electionType = election_type;
+
+        return elect_leader;
+}
+
+rd_kafka_ElectLeader_t *rd_kafka_ElectLeader_copy(
+    const rd_kafka_ElectLeader_t *elect_leader) {
+        return rd_kafka_ElectLeader_new(elect_leader->electionType, elect_leader->partitions);
+}
+
+rd_kafka_topic_partition_list_t *rd_kafka_ElectLeader_partitions(
+    const rd_kafka_ElectLeader_t *elect_leader) {
+        return elect_leader->partitions;
+}
+
+rd_kafka_ElectionType_t rd_kafka_ElectLeader_election_type(
+    const rd_kafka_ElectLeader_t *elect_leader) {
+        return elect_leader->electionType;
+}
+
+void rd_kafka_ElectLeader_destroy(rd_kafka_ElectLeader_t *elect_leader) {
+        rd_kafka_topic_partition_list_destroy(elect_leader->partitions);
+        rd_free(elect_leader);
+}
+
+static void rd_kafka_ElectLeader_free(void *ptr) {
+        rd_kafka_ElectLeader_destroy(ptr);
+}
+
+rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_new(
+        const char *topic, int32_t partition, rd_kafka_resp_err_t err, const char *errstr) {
+
+        rd_kafka_topic_partition_result_t *desc;
+
+        desc = rd_calloc(1, sizeof(*desc));
+        desc->topic = rd_strdup(topic);
+        desc->partition = partition;
+        desc->err = err;
+        desc->errstr = rd_strdup(errstr);
+
+        return desc;
+}
+
+const char* rd_kafka_topic_partition_result_topic(rd_kafka_topic_partition_result_t *desc) {
+        return desc->topic;
+}
+
+int32_t rd_kafka_topic_partition_result_partition(rd_kafka_topic_partition_result_t *desc) {
+        return desc->partition;
+}
+
+rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(rd_kafka_topic_partition_result_t *desc) {
+        return desc->err;
+}
+
+const char* rd_kafka_topic_partition_result_error_string(rd_kafka_topic_partition_result_t *desc) {
+        return desc->errstr;
+}
+
+void rd_kafka_topic_partition_result_destroy(rd_kafka_topic_partition_result_t *desc) {
+        rd_free(desc->topic);
+        rd_free(desc->errstr);
+        rd_free(desc);
+}
+
+void rd_kafka_topic_partition_result_destroy_array(
+    rd_kafka_topic_partition_result_t **descs,
+    int32_t desc_cnt) {
+        int32_t i;
+        for (i = 0; i < desc_cnt; i++){
+                rd_kafka_topic_partition_result_destroy(descs[i]);
+        }
+}
+
+static void rd_kafka_topic_partition_result_free(void *ptr) {
+        rd_kafka_topic_partition_result_destroy(ptr);
+}
+
+static rd_kafka_ElectLeaderResult_t *rd_kafka_ElectLeaderResult_new(
+         rd_kafka_resp_err_t err) {
+        
+        rd_kafka_ElectLeaderResult_t *result;
+
+        result->error_code = err;
+        rd_list_init(&result->partitions, 0, rd_kafka_topic_partition_result_free);
+        
+        return result;
+}
+
+static const rd_kafka_ElectLeaderResult_t *rd_kafka_ElectLeader_result(
+        const rd_kafka_ElectLeader_result_t *result) {
+        return (const rd_kafka_ElectLeaderResult_t *)rd_list_elem(&result->rko_u.admin_result.results, 0);
+}
+
+rd_kafka_resp_err_t rd_kafka_ElectionResult_error(
+        const rd_kafka_ElectLeader_result_t *result) {
+                const rd_kafka_ElectLeaderResult_t *res;
+                res = rd_kafka_ElectLeader_result(result);
+        return res->error_code;
+}
+
+rd_kafka_topic_partition_result_t **rd_kafka_ElectionResult_partition(
+        const rd_kafka_ElectLeader_result_t *result, 
+        size_t *cntp) {
+        
+        const rd_kafka_ElectLeaderResult_t *res;
+
+        res = rd_kafka_ElectLeader_result(result);
+        *cntp = rd_list_cnt(&res->partitions);
+
+        return (rd_kafka_topic_partition_result_t **)res->partitions.rl_elems;
+}
+
+static void rd_kafka_ElectLeaderResult_destroy(rd_kafka_ElectLeaderResult_t *result) {
+        rd_list_destroy(&result->partitions);
+        rd_free(result);
+}
+
+static void rd_kafka_ElectLeaderResult_free(void *ptr) {
+        rd_kafka_ElectLeaderResult_destroy(ptr);
+}
+
+
+
+/**
+ * @brief Parse ElectLeaderResponse and create ADMIN_RESULT op.
+*/
+static rd_kafka_resp_err_t rd_kafka_ElectLeaderResponse_parse(
+    rd_kafka_op_t *rko_req, 
+    rd_kafka_op_t **rko_resultp, 
+    rd_kafka_buf_t *reply,
+    char *errstr, 
+    size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result = NULL;
+        rd_kafka_ElectLeaderResult_t *result = NULL;
+        int16_t error_code = 0;
+        int32_t TopicArrayCnt;
+        int i;
+
+        printf("Inside rd_kafka_ElectLeaderResponse_parse\n");
+
+        rd_kafka_buf_read_throttle_time(reply);
+
+        if(rd_kafka_buf_ApiVersion(reply) >= 1){
+                rd_kafka_buf_read_i16(reply, &error_code);
+                printf("Error code: %d\n", error_code);
+        }
+        
+        /* #partitions */
+        rd_kafka_buf_read_arraycnt(reply, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
+
+        printf("TopicArrayCnt: %d\n", TopicArrayCnt);
+
+        result = rd_kafka_ElectLeaderResult_new(error_code);
+
+        rd_list_init(&result->partitions, TopicArrayCnt, rd_kafka_topic_partition_result_free);
+
+        for (i = 0; i < TopicArrayCnt; i++) {
+                rd_kafka_topic_partition_result_t *desc;
+                rd_kafkap_str_t ktopic;
+                char *topic = NULL;
+                int32_t partition = -1;
+                int16_t error_code = 0;
+                rd_kafkap_str_t error_msg;
+                char *this_errstr = NULL;
+                int32_t PartArrayCnt;
+
+                rd_kafka_buf_read_str(reply, &ktopic);
+                RD_KAFKAP_STR_DUPA(&topic, &ktopic);
+
+                rd_kafka_buf_read_arraycnt(reply, &PartArrayCnt, RD_KAFKAP_PARTITIONS_MAX);
+
+                printf("PartArrayCnt: %d\n", PartArrayCnt);
+
+                while (PartArrayCnt-- > 0) {
+                        rd_kafka_buf_read_i32(reply, &partition);
+                        rd_kafka_buf_read_i16(reply, &error_code);
+                        rd_kafka_buf_read_str(reply, &error_msg);
+
+                        if (error_code) {
+                                if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                                    RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                        this_errstr =
+                                            (char *)rd_kafka_err2str(error_code);
+                                else
+                                        RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
+                        }
+                        printf("Topic: %s\n", topic);
+                        printf("Partition: %d\n", partition);
+                        printf("Error code: %d\n", error_code);
+                        printf("Error message: %s\n", this_errstr);
+
+                        desc = rd_kafka_topic_partition_result_new(topic, partition,
+                                              error_code, this_errstr);
+                        
+                        rd_list_add(&result->partitions, desc);
+                }
+        }
+
+        if(rd_kafka_buf_ApiVersion(reply) >= 2){
+                rd_kafka_buf_skip_tags(reply);
+        }
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                     rd_kafka_ElectLeaderResult_free);
+
+        rd_list_add(&rko_result->rko_u.admin_result.results, result);
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+err_parse:
+
+        if (result)
+                rd_kafka_ElectLeaderResult_destroy(result);
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "ElectLeader response protocol parse failure: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+
+        return reply->rkbuf_err;
+}
+
+void rd_kafka_ElectLeader(rd_kafka_t *rk,
+                          rd_kafka_ElectLeader_t *elect_leader,
+                          const rd_kafka_AdminOptions_t *options,
+                          rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        rd_kafka_topic_partition_list_t *copied_partitions;
+
+        printf("Inside rd_kafka_ElectLeader\n");
+
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_ElectLeaderRequest,
+            rd_kafka_ElectLeaderResponse_parse,
+        };
+
+        rd_assert(rkqu);
+
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_ELECTLEADER, RD_KAFKA_EVENT_ELECTLEADER_RESULT, &cbs,
+            options, rkqu->rkqu_q);
+        
+        /* The topic partitions should not be null. */
+        if(elect_leader->partitions == NULL){
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "No partitions specified");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        /* Non empty topic_partition_list should be present */
+        if(elect_leader->partitions->cnt == 0){
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "No partitions specified");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        printf("Partition count: %d\n", elect_leader->partitions->cnt);
+        
+        /* Duplicate topic partitions should not be present in the list */
+        copied_partitions = rd_kafka_topic_partition_list_copy(elect_leader->partitions);
+        if(rd_kafka_topic_partition_list_has_duplicates(copied_partitions,rd_false /* check partition*/)){
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Duplicate partitions specified");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        printf("No duplicate partitions\n");
+
+
+        rd_list_init(&rko->rko_u.admin_request.args, 1,
+                     rd_kafka_ElectLeader_free);
+
+        printf("List initialized\n");
+        rd_list_add(&rko->rko_u.admin_request.args, rd_kafka_ElectLeader_copy(elect_leader));
+        printf("Added to list\n");
+
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
 
 /**
  * @brief Should the received error code cause a metadata refresh?
@@ -7046,7 +7349,7 @@ void rd_kafka_ListConsumerGroupOffsets(
                                            "ListConsumerGroupOffsets must "
                                            "be passed");
                 goto fail;
-        }
+        } 
 
         if (list_grpoffsets[0]->partitions != NULL &&
             list_grpoffsets[0]->partitions->cnt == 0) {

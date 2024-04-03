@@ -3,9 +3,22 @@
 librdkafka v2.3.1 is a maintenance release:
 
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
-   check the [release notes](https://www.openssl.org/news/cl30.txt).
+   check the [release notes](https://www.openssl.org/news/cl30.txt) (#4586).
  * Integration tests can be started in KRaft mode and run against any
-   GitHub Kafka branch other than the released versions.
+   GitHub Kafka branch other than the released versions (#4635).
+ * Fix memory leak while stopping an unknown partition (#).
+
+
+## Fixes
+
+### Consumer fixes
+
+  * When stopping a partition that isn't known to the client a reference
+    to that partition was kept in the fetchq of the same,
+    leading to a memory leak.
+    Solved by purging the fetch and ops queue of the unknown partition
+    when it's stopped. Happening since v2.0.2 (#).
+
 
 
 # librdkafka v2.3.0

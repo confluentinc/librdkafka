@@ -4274,8 +4274,6 @@ static rd_kafka_resp_err_t rd_kafka_ElectLeaderResponse_parse(
 
         result = rd_kafka_ElectLeaderResult_new(error_code);
 
-        rd_list_init(&result->partitions, TopicArrayCnt, rd_kafka_topic_partition_result_free);
-
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafka_topic_partition_result_t *desc;
                 rd_kafkap_str_t ktopic;

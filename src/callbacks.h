@@ -53,6 +53,7 @@ class Dispatcher {
             static_cast<Dispatcher*>(async->data);
      dispatcher->Flush();
   }
+  static void AsyncHandleCloseCallback(uv_handle_t *);
 
   uv_async_t *async;
 };

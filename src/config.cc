@@ -145,7 +145,11 @@ void Conf::stop() {
   }
 }
 
-Conf::~Conf() {}
+Conf::~Conf() {
+  // Delete the rdconf object, since that's what we are internally.
+  RdKafka::Conf *rdconf = static_cast<RdKafka::Conf*>(this);
+  delete rdconf;
+}
 
 NodeKafka::Callbacks::Rebalance* Conf::rebalance_cb() const {
   RdKafka::RebalanceCb *cb = NULL;

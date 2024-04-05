@@ -248,6 +248,23 @@ class OffsetCommit : public RdKafka::OffsetCommitCb {
   v8::Persistent<v8::Function> m_cb;
 };
 
+class OAuthBearerTokenRefreshDispatcher : public Dispatcher {
+ public:
+  OAuthBearerTokenRefreshDispatcher(){};
+  ~OAuthBearerTokenRefreshDispatcher(){};
+  void Add(const std::string &oauthbearer_config);
+  void Flush();
+
+ private:
+  std::string m_oauthbearer_config;
+};
+
+class OAuthBearerTokenRefresh : public RdKafka::OAuthBearerTokenRefreshCb {
+ public:
+  void oauthbearer_token_refresh_cb(RdKafka::Handle *, const std::string &);
+  OAuthBearerTokenRefreshDispatcher dispatcher;
+};
+
 class Partitioner : public RdKafka::PartitionerCb {
  public:
   Partitioner();

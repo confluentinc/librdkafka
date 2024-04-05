@@ -143,6 +143,26 @@ std::vector<std::string> v8ArrayToStringVector(v8::Local<v8::Array> parameter) {
   return newItem;
 }
 
+std::list<std::string> v8ArrayToStringList(v8::Local<v8::Array> parameter) {
+  std::list<std::string> newItem;
+  if (parameter->Length() >= 1) {
+    for (unsigned int i = 0; i < parameter->Length(); i++) {
+      v8::Local<v8::Value> v;
+      if (!Nan::Get(parameter, i).ToLocal(&v)) {
+        continue;
+      }
+      Nan::MaybeLocal<v8::String> p = Nan::To<v8::String>(v);
+      if (p.IsEmpty()) {
+        continue;
+      }
+      Nan::Utf8String pVal(p.ToLocalChecked());
+      std::string pString(*pVal);
+      newItem.push_back(pString);
+    }
+  }
+  return newItem;
+}
+
 template<> v8::Local<v8::Array> GetParameter<v8::Local<v8::Array> >(
   v8::Local<v8::Object> object, std::string field_name, v8::Local<v8::Array> def) {
   v8::Local<v8::String> field = Nan::New(field_name.c_str()).ToLocalChecked();

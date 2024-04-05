@@ -73,6 +73,9 @@ void Producer::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "queryWatermarkOffsets", NodeQueryWatermarkOffsets);  // NOLINT
   Nan::SetPrototypeMethod(tpl, "poll", NodePoll);
   Nan::SetPrototypeMethod(tpl, "setSaslCredentials", NodeSetSaslCredentials);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerToken", NodeSetOAuthBearerToken);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerTokenFailure",
+                          NodeSetOAuthBearerTokenFailure);
 
   /*
    * @brief Methods exposed to do with message production
@@ -176,25 +179,33 @@ Baton Producer::Connect() {
   }
 
   std::string errstr;
+
+  Baton baton = setupSaslOAuthBearerConfig();
+  if (baton.err() != RdKafka::ERR_NO_ERROR) {
+    return baton;
+  }
+
   {
     scoped_shared_read_lock lock(m_connection_lock);
     m_client = RdKafka::Producer::create(m_gconfig, errstr);
   }
 
   if (!m_client) {
-    // @todo implement errstr into this somehow
     return Baton(RdKafka::ERR__STATE, errstr);
   }
 
-  return Baton(RdKafka::ERR_NO_ERROR);
+  baton = setupSaslOAuthBearerBackgroundQueue();
+  return baton;
 }
 
 void Producer::ActivateDispatchers() {
+  m_gconfig->listen();               // From global config.
   m_event_cb.dispatcher.Activate();  // From connection
   m_dr_cb.dispatcher.Activate();
 }
 
 void Producer::DeactivateDispatchers() {
+  m_gconfig->stop();                   // From global config.
   m_event_cb.dispatcher.Deactivate();  // From connection
   m_dr_cb.dispatcher.Deactivate();
 }

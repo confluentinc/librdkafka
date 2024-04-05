@@ -39,14 +39,28 @@ AdminClient::~AdminClient() {
 }
 
 Baton AdminClient::Connect() {
-  std::string errstr;
+  if (IsConnected()) {
+    return Baton(RdKafka::ERR_NO_ERROR);
+  }
 
+  Baton baton = setupSaslOAuthBearerConfig();
+  if (baton.err() != RdKafka::ERR_NO_ERROR) {
+    return baton;
+  }
+
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  ActivateDispatchers();
+
+  std::string errstr;
   {
     scoped_shared_write_lock lock(m_connection_lock);
     m_client = RdKafka::Producer::create(m_gconfig, errstr);
   }
 
   if (!m_client || !errstr.empty()) {
+    DeactivateDispatchers();
     return Baton(RdKafka::ERR__STATE, errstr);
   }
 
@@ -54,7 +68,12 @@ Baton AdminClient::Connect() {
     rkqu = rd_kafka_queue_new(m_client->c_ptr());
   }
 
-  return Baton(RdKafka::ERR_NO_ERROR);
+  baton = setupSaslOAuthBearerBackgroundQueue();
+  if (baton.err() != RdKafka::ERR_NO_ERROR) {
+    DeactivateDispatchers();
+  }
+
+  return baton;
 }
 
 Baton AdminClient::Disconnect() {
@@ -65,6 +84,8 @@ Baton AdminClient::Disconnect() {
       rd_kafka_queue_destroy(rkqu);
       rkqu = NULL;
     }
+
+    DeactivateDispatchers();
 
     delete m_client;
     m_client = NULL;
@@ -99,6 +120,9 @@ void AdminClient::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "disconnect", NodeDisconnect);
   Nan::SetPrototypeMethod(tpl, "setSaslCredentials", NodeSetSaslCredentials);
   Nan::SetPrototypeMethod(tpl, "getMetadata", NodeGetMetadata);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerToken", NodeSetOAuthBearerToken);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerTokenFailure",
+                          NodeSetOAuthBearerTokenFailure);
 
   constructor.Reset(
     (tpl->GetFunction(Nan::GetCurrentContext())).ToLocalChecked());

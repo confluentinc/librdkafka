@@ -48,6 +48,11 @@ Baton KafkaConsumer::Connect() {
     return Baton(RdKafka::ERR_NO_ERROR);
   }
 
+  Baton baton = setupSaslOAuthBearerConfig();
+  if (baton.err() != RdKafka::ERR_NO_ERROR) {
+    return baton;
+  }
+
   std::string errstr;
   {
     scoped_shared_write_lock lock(m_connection_lock);
@@ -56,6 +61,11 @@ Baton KafkaConsumer::Connect() {
 
   if (!m_client || !errstr.empty()) {
     return Baton(RdKafka::ERR__STATE, errstr);
+  }
+
+  baton = setupSaslOAuthBearerBackgroundQueue();
+  if (baton.err() != RdKafka::ERR_NO_ERROR) {
+    return baton;
   }
 
   if (m_partitions.size() > 0) {
@@ -569,6 +579,9 @@ void KafkaConsumer::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "offsetsForTimes", NodeOffsetsForTimes);
   Nan::SetPrototypeMethod(tpl, "getWatermarkOffsets", NodeGetWatermarkOffsets);
   Nan::SetPrototypeMethod(tpl, "setSaslCredentials", NodeSetSaslCredentials);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerToken", NodeSetOAuthBearerToken);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerTokenFailure",
+                          NodeSetOAuthBearerTokenFailure);
 
   /*
    * @brief Methods exposed to do with message retrieval
@@ -644,6 +657,7 @@ void KafkaConsumer::New(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     }
   }
 
+  // TODO: fix this - this memory is leaked.
   KafkaConsumer* consumer = new KafkaConsumer(gconfig, tconfig);
 
   // Wrap it

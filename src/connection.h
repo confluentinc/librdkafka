@@ -57,6 +57,9 @@ class Connection : public Nan::ObjectWrap {
   Baton QueryWatermarkOffsets(std::string, int32_t, int64_t*, int64_t*, int);
   Baton OffsetsForTimes(std::vector<RdKafka::TopicPartition*> &, int);
   Baton SetSaslCredentials(std::string, std::string);
+  Baton SetOAuthBearerToken(const std::string&, int64_t, const std::string&,
+                            const std::list<std::string>&);
+  Baton SetOAuthBearerTokenFailure(const std::string&);
 
   RdKafka::Handle* GetClient();
 
@@ -76,7 +79,10 @@ class Connection : public Nan::ObjectWrap {
 
   static Nan::Persistent<v8::Function> constructor;
   static void New(const Nan::FunctionCallbackInfo<v8::Value>& info);
-  Baton rdkafkaErrorToBaton(RdKafka::Error* error);
+  static Baton rdkafkaErrorToBaton(RdKafka::Error* error);
+
+  Baton setupSaslOAuthBearerConfig();
+  Baton setupSaslOAuthBearerBackgroundQueue();
 
   bool m_has_been_disconnected;
   bool m_is_closing;
@@ -94,6 +100,8 @@ class Connection : public Nan::ObjectWrap {
   static NAN_METHOD(NodeQueryWatermarkOffsets);
   static NAN_METHOD(NodeOffsetsForTimes);
   static NAN_METHOD(NodeSetSaslCredentials);
+  static NAN_METHOD(NodeSetOAuthBearerToken);
+  static NAN_METHOD(NodeSetOAuthBearerTokenFailure);
 };
 
 }  // namespace NodeKafka

@@ -80,6 +80,34 @@ Baton Connection::rdkafkaErrorToBaton(RdKafka::Error* error) {
   }
 }
 
+// If OAUTHBEARER authentication is set up, then push the callbacks onto the
+// SASL queue so we don't need to keep polling. This method should be called
+// before the client is created.
+Baton Connection::setupSaslOAuthBearerConfig() {
+  if (!m_gconfig->is_sasl_oauthbearer()) {
+    return Baton(RdKafka::ERR_NO_ERROR);
+  }
+
+  std::string errstr;
+  if (m_gconfig->enable_sasl_queue(true, errstr) != RdKafka::Conf::CONF_OK) {
+    return Baton(RdKafka::ERR__STATE, errstr);
+  }
+
+  return Baton(RdKafka::ERR_NO_ERROR);
+}
+
+// If OAUTHBEARER authentication is set up, then handle the callbacks on
+// the background thread. This method should be called after the client is
+// created and only if `setupSaslOAuthBearerConfig` is called earlier.
+Baton Connection::setupSaslOAuthBearerBackgroundQueue() {
+  if (!m_gconfig->is_sasl_oauthbearer()) {
+    return Baton(RdKafka::ERR_NO_ERROR);
+  }
+
+  RdKafka::Error* error = m_client->sasl_background_callbacks_enable();
+  return rdkafkaErrorToBaton(error);
+}
+
 RdKafka::TopicPartition* Connection::GetPartition(std::string &topic) {
   return RdKafka::TopicPartition::create(topic, RdKafka::Topic::PARTITION_UA);
 }
@@ -245,6 +273,49 @@ Baton Connection::SetSaslCredentials(
   }
 
   return rdkafkaErrorToBaton(error);
+}
+
+Baton Connection::SetOAuthBearerToken(
+    const std::string& value, int64_t lifetime_ms,
+    const std::string& principal_name,
+    const std::list<std::string>& extensions) {
+  RdKafka::ErrorCode error_code;
+  std::string errstr;
+
+  if (IsConnected()) {
+    scoped_shared_read_lock lock(m_connection_lock);
+    if (IsConnected()) {
+      error_code = m_client->oauthbearer_set_token(
+          value, lifetime_ms, principal_name, extensions, errstr);
+    } else {
+      return Baton(RdKafka::ERR__STATE);
+    }
+  } else {
+    return Baton(RdKafka::ERR__STATE);
+  }
+
+  if (error_code != RdKafka::ERR_NO_ERROR) {
+    return Baton(error_code, errstr);
+  }
+
+  return Baton(error_code);
+}
+
+Baton Connection::SetOAuthBearerTokenFailure(const std::string& errstr) {
+  RdKafka::ErrorCode error_code;
+
+  if (IsConnected()) {
+    scoped_shared_read_lock lock(m_connection_lock);
+    if (IsConnected()) {
+      error_code = m_client->oauthbearer_set_token_failure(errstr);
+    } else {
+      return Baton(RdKafka::ERR__STATE);
+    }
+  } else {
+    return Baton(RdKafka::ERR__STATE);
+  }
+
+  return Baton(error_code);
 }
 
 void Connection::ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add) {
@@ -483,6 +554,79 @@ NAN_METHOD(Connection::NodeConfigureCallbacks) {
   }
 
   info.GetReturnValue().Set(Nan::True());
+}
+
+NAN_METHOD(Connection::NodeSetOAuthBearerToken) {
+  if (!info[0]->IsString()) {
+    Nan::ThrowError("1st parameter must be a token string");
+    return;
+  }
+
+  if (!info[1]->IsNumber()) {
+    Nan::ThrowError("2nd parameter must be a lifetime_ms number");
+    return;
+  }
+
+  if (!info[2]->IsString()) {
+    Nan::ThrowError("3rd parameter must be a principal_name string");
+    return;
+  }
+
+  if (!info[3]->IsNullOrUndefined() && !info[3]->IsArray()) {
+    Nan::ThrowError("4th parameter must be an extensions array or null");
+    return;
+  }
+
+  // Get string pointer for the token
+  Nan::Utf8String tokenUtf8(Nan::To<v8::String>(info[0]).ToLocalChecked());
+  std::string token(*tokenUtf8);
+
+  // Get the lifetime_ms
+  int64_t lifetime_ms = Nan::To<int64_t>(info[1]).FromJust();
+
+  // Get string pointer for the principal_name
+  Nan::Utf8String principal_nameUtf8(
+      Nan::To<v8::String>(info[2]).ToLocalChecked());
+  std::string principal_name(*principal_nameUtf8);
+
+  // Get the extensions (if any)
+  std::list<std::string> extensions;
+  if (!info[3]->IsNullOrUndefined()) {
+    v8::Local<v8::Array> extensionsArray = info[3].As<v8::Array>();
+    extensions = v8ArrayToStringList(extensionsArray);
+  }
+
+  Connection* obj = ObjectWrap::Unwrap<Connection>(info.This());
+  Baton b =
+      obj->SetOAuthBearerToken(token, lifetime_ms, principal_name, extensions);
+
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    v8::Local<v8::Value> errorObject = b.ToObject();
+    return Nan::ThrowError(errorObject);
+  }
+
+  info.GetReturnValue().Set(Nan::Null());
+}
+
+NAN_METHOD(Connection::NodeSetOAuthBearerTokenFailure) {
+  if (!info[0]->IsString()) {
+    Nan::ThrowError("1st parameter must be an error string");
+    return;
+  }
+
+  // Get string pointer for the error string
+  Nan::Utf8String errstrUtf8(Nan::To<v8::String>(info[0]).ToLocalChecked());
+  std::string errstr(*errstrUtf8);
+
+  Connection* obj = ObjectWrap::Unwrap<Connection>(info.This());
+  Baton b = obj->SetOAuthBearerTokenFailure(errstr);
+
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    v8::Local<v8::Value> errorObject = b.ToObject();
+    return Nan::ThrowError(errorObject);
+  }
+
+  info.GetReturnValue().Set(Nan::Null());
 }
 
 }  // namespace NodeKafka

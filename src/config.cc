@@ -81,8 +81,8 @@ Conf * Conf::create(RdKafka::Conf::ConfType type, v8::Local<v8::Object> object, 
           return NULL;
       }
     } else {
-     // Do nothing - Connection::NodeConfigureCallbacks will handle this for each
-     // of the three client types.
+     // Do nothing - NodeConfigureCallbacks will handle this for each
+     // of the three client types, called from within JavaScript.
     }
   }
 
@@ -118,6 +118,23 @@ void Conf::ConfigureCallback(const std::string &string_key, const v8::Local<v8::
         offset_commit->dispatcher.RemoveCallback(cb);
       }
     }
+  } else if (string_key.compare("oauthbearer_token_refresh_cb") == 0) {
+    NodeKafka::Callbacks::OAuthBearerTokenRefresh *oauthbearer_token_refresh =
+        oauthbearer_token_refresh_cb();
+    if (add) {
+      if (oauthbearer_token_refresh == NULL) {
+        oauthbearer_token_refresh =
+            new NodeKafka::Callbacks::OAuthBearerTokenRefresh();
+        this->set(string_key, oauthbearer_token_refresh, errstr);
+      }
+      oauthbearer_token_refresh->dispatcher.AddCallback(cb);
+    } else {
+      if (oauthbearer_token_refresh != NULL) {
+        oauthbearer_token_refresh->dispatcher.RemoveCallback(cb);
+      }
+    }
+  } else {
+    errstr = "Invalid callback type";
   }
 }
 
@@ -131,6 +148,12 @@ void Conf::listen() {
   if (offset_commit) {
     offset_commit->dispatcher.Activate();
   }
+
+  NodeKafka::Callbacks::OAuthBearerTokenRefresh *oauthbearer_token_refresh =
+      oauthbearer_token_refresh_cb();
+  if (oauthbearer_token_refresh) {
+    oauthbearer_token_refresh->dispatcher.Activate();
+  }
 }
 
 void Conf::stop() {
@@ -142,6 +165,12 @@ void Conf::stop() {
   NodeKafka::Callbacks::OffsetCommit *offset_commit = offset_commit_cb();
   if (offset_commit) {
     offset_commit->dispatcher.Deactivate();
+  }
+
+  NodeKafka::Callbacks::OAuthBearerTokenRefresh *oauthbearer_token_refresh =
+      oauthbearer_token_refresh_cb();
+  if (oauthbearer_token_refresh) {
+    oauthbearer_token_refresh->dispatcher.Deactivate();
   }
 }
 
@@ -165,6 +194,23 @@ NodeKafka::Callbacks::OffsetCommit* Conf::offset_commit_cb() const {
     return NULL;
   }
   return static_cast<NodeKafka::Callbacks::OffsetCommit*>(cb);
+}
+
+NodeKafka::Callbacks::OAuthBearerTokenRefresh *
+Conf::oauthbearer_token_refresh_cb() const {
+  RdKafka::OAuthBearerTokenRefreshCb *cb = NULL;
+  if (this->get(cb) != RdKafka::Conf::CONF_OK) {
+    return NULL;
+  }
+  return static_cast<NodeKafka::Callbacks::OAuthBearerTokenRefresh *>(cb);
+}
+
+bool Conf::is_sasl_oauthbearer() const {
+  std::string sasl_mechanism;
+  if (this->get("sasl.mechanisms", sasl_mechanism) != RdKafka::Conf::CONF_OK) {
+    return false;
+  }
+  return sasl_mechanism.compare("OAUTHBEARER") == 0;
 }
 
 }  // namespace NodeKafka

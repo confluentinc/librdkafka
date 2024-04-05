@@ -200,6 +200,11 @@ ProducerConnect::ProducerConnect(Nan::Callback *callback, Producer* producer):
 ProducerConnect::~ProducerConnect() {}
 
 void ProducerConnect::Execute() {
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  producer->ActivateDispatchers();
+
   Baton b = producer->Connect();
 
   if (b.err() != RdKafka::ERR_NO_ERROR) {
@@ -218,14 +223,13 @@ void ProducerConnect::HandleOKCallback() {
 
   v8::Local<v8::Value> argv[argc] = { Nan::Null(), obj};
 
-  // Activate the dispatchers
-  producer->ActivateDispatchers();
-
   callback->Call(argc, argv);
 }
 
 void ProducerConnect::HandleErrorCallback() {
   Nan::HandleScope scope;
+
+  producer->DeactivateDispatchers();
 
   const unsigned int argc = 1;
   v8::Local<v8::Value> argv[argc] = { GetErrorObject() };
@@ -558,6 +562,11 @@ KafkaConsumerConnect::KafkaConsumerConnect(Nan::Callback *callback,
 KafkaConsumerConnect::~KafkaConsumerConnect() {}
 
 void KafkaConsumerConnect::Execute() {
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  consumer->ActivateDispatchers();
+
   Baton b = consumer->Connect();
   // consumer->Wait();
 
@@ -577,13 +586,14 @@ void KafkaConsumerConnect::HandleOKCallback() {
     Nan::New(consumer->Name()).ToLocalChecked());
 
   v8::Local<v8::Value> argv[argc] = { Nan::Null(), obj };
-  consumer->ActivateDispatchers();
 
   callback->Call(argc, argv);
 }
 
 void KafkaConsumerConnect::HandleErrorCallback() {
   Nan::HandleScope scope;
+
+  consumer->DeactivateDispatchers();
 
   const unsigned int argc = 1;
   v8::Local<v8::Value> argv[argc] = { Nan::Error(ErrorMessage()) };

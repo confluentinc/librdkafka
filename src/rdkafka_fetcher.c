@@ -640,8 +640,9 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
-                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
-                                          Throttle_Time);
+                rd_kafka_buf_handle_throttle(rkb, rkb->rkb_rk->rk_rep,
+                                          Throttle_Time,
+                                          rd_kafka_buf_ApiVersion(request) >= 8);
         }
 
         if (rd_kafka_buf_ApiVersion(request) >= 7) {

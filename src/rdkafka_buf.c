@@ -536,3 +536,21 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
 
         rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_NEED_MAKE;
 }
+
+void rd_kafka_buf_handle_throttle(rd_kafka_broker_t *rkb,
+                               rd_kafka_q_t *rkq,
+                               int throttle_time,
+                               rd_bool_t need_client_throttle) {
+        if (unlikely(throttle_time > 0)) {
+                rd_avg_add(&rkb->rkb_avg_throttle, throttle_time);
+                if (need_client_throttle) {
+                        rd_ts_t throttled_ts = rd_clock() + throttle_time * 1000;
+                        mtx_lock(&rkb->rkb_ts_throttled.lock);
+                        if (rkb->rkb_ts_throttled.throttle_ts < throttled_ts)
+                                rkb->rkb_ts_throttled.throttle_ts = throttled_ts;
+                        mtx_unlock(&rkb->rkb_ts_throttled.lock);
+                }
+        }
+
+        rd_kafka_op_throttle_time(rkb, rkq, throttle_time);
+}

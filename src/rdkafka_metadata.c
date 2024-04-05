@@ -545,7 +545,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_broker_unlock(rkb);
 
         if (ApiVersion >= 3)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 6);
 
         /* Read Brokers */
         rd_kafka_buf_read_arraycnt(rkbuf, &md->broker_cnt,

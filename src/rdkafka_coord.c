@@ -359,7 +359,7 @@ static void rd_kafka_coord_req_handle_FindCoordinator(rd_kafka_t *rk,
                 goto err;
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1)
-                rd_kafka_buf_read_throttle_time(rkbuf);
+                rd_kafka_buf_read_throttle_time(rkbuf, 2);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 

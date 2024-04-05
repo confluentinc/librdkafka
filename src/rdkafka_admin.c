@@ -2009,7 +2009,7 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
         if (rd_kafka_buf_ApiVersion(reply) >= 2) {
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(reply, &Throttle_Time);
-                rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+                rd_kafka_buf_handle_throttle(rkb, rk->rk_rep, Throttle_Time, rd_kafka_buf_ApiVersion(reply) >= 3);
         }
 
         /* #topics */
@@ -2234,7 +2234,8 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
         if (rd_kafka_buf_ApiVersion(reply) >= 1) {
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(reply, &Throttle_Time);
-                rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+                rd_kafka_buf_handle_throttle(rkb, rk->rk_rep, Throttle_Time,
+                        rd_kafka_buf_ApiVersion(reply) >= 2);
         }
 
         /* #topics */
@@ -2508,8 +2509,8 @@ rd_kafka_CreatePartitionsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
-
+        rd_kafka_buf_handle_throttle(rkb, rk->rk_rep, Throttle_Time,
+                rd_kafka_buf_ApiVersion(reply) >= 1);
         /* #topics */
         rd_kafka_buf_read_i32(reply, &topic_cnt);
 
@@ -3077,7 +3078,8 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_buf_handle_throttle(rkb, rk->rk_rep, Throttle_Time,
+                rd_kafka_buf_ApiVersion(reply) >= 1);
 
         rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
@@ -3270,7 +3272,7 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_buf_handle_throttle(rkb, rk->rk_rep, Throttle_Time, 1);
 
         rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
@@ -3542,7 +3544,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_ConfigEntry_t *entry     = NULL;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_buf_handle_throttle(rkb, rk->rk_rep, Throttle_Time, rd_kafka_buf_ApiVersion(reply) >= 2);
 
         /* #resources */
         rd_kafka_buf_read_i32(reply, &res_cnt);
@@ -3930,7 +3932,7 @@ rd_kafka_DeleteRecordsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_op_t *rko_result;
         rd_kafka_topic_partition_list_t *offsets;
 
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 1);
 
 
         const rd_kafka_topic_partition_field_t fields[] = {
@@ -4631,7 +4633,7 @@ rd_kafka_DeleteGroupsResponse_parse(rd_kafka_op_t *rko_req,
         int i;
         rd_kafka_op_t *rko_result = NULL;
 
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 1);
 
         /* #group_error_codes */
         rd_kafka_buf_read_i32(reply, &group_cnt);
@@ -4918,7 +4920,7 @@ rd_kafka_OffsetDeleteResponse_parse(rd_kafka_op_t *rko_req,
                 return ErrorCode;
         }
 
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 0);
 
 
         const rd_kafka_topic_partition_field_t fields[] = {
@@ -5298,7 +5300,7 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t acl_cnt;
         int i;
 
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 1);
 
         rd_kafka_buf_read_arraycnt(reply, &acl_cnt, 100000);
 
@@ -5422,7 +5424,7 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
         int16_t error_code;
         rd_kafkap_str_t error_msg;
 
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 1);
 
         rd_kafka_buf_read_i16(reply, &error_code);
         rd_kafka_buf_read_str(reply, &error_msg);
@@ -5721,7 +5723,7 @@ rd_kafka_DescribeUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
         rko_result = rd_kafka_admin_result_new(rko_req);
 
         /* ThrottleTimeMs */
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 0);
 
         /* ErrorCode */
         rd_kafka_buf_read_i16(reply, &ErrorCode);
@@ -6200,7 +6202,7 @@ rd_kafka_AlterUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
         rko_result = rd_kafka_admin_result_new(rko_req);
 
         /* ThrottleTimeMs */
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 0);
 
         /* #Results */
         rd_kafka_buf_read_arraycnt(reply, &num_results, 10000);
@@ -6459,7 +6461,7 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
         int i;
         int j;
 
-        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_throttle_time(reply, 1);
 
         /* #responses */
         rd_kafka_buf_read_arraycnt(reply, &res_cnt, 100000);
@@ -7309,7 +7311,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         if (api_version >= 1) {
-                rd_kafka_buf_read_throttle_time(reply);
+                rd_kafka_buf_read_throttle_time(reply, 2);
         }
         rd_kafka_buf_read_i16(reply, &error_code);
         if (error_code) {
@@ -8020,7 +8022,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         if (api_version >= 1) {
-                rd_kafka_buf_read_throttle_time(reply);
+                rd_kafka_buf_read_throttle_time(reply, 2);
         }
 
         rd_kafka_buf_read_arraycnt(reply, &cnt, 100000);

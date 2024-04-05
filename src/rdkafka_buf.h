@@ -792,13 +792,15 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
  * @brief Read throttle_time_ms (i32) from response and pass the value
  *        to the throttle handling code.
  */
-#define rd_kafka_buf_read_throttle_time(rkbuf)                                 \
+#define rd_kafka_buf_read_throttle_time(rkbuf, throttle_ver)                   \
         do {                                                                   \
                 int32_t _throttle_time_ms;                                     \
                 rd_kafka_buf_read_i32(rkbuf, &_throttle_time_ms);              \
-                rd_kafka_op_throttle_time((rkbuf)->rkbuf_rkb,                  \
-                                          (rkbuf)->rkbuf_rkb->rkb_rk->rk_rep,  \
-                                          _throttle_time_ms);                  \
+                rd_kafka_buf_handle_throttle((rkbuf)->rkbuf_rkb,               \
+                            (rkbuf)->rkbuf_rkb->rkb_rk->rk_rep,                \
+                            _throttle_time_ms,                                 \
+                            (throttle_ver>0 &&                                 \
+                            rd_kafka_buf_ApiVersion(rkbuf) >= throttle_ver));  \
         } while (0)
 
 
@@ -1459,5 +1461,10 @@ static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
         rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
         rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
 }
+
+void rd_kafka_buf_handle_throttle(rd_kafka_broker_t *rkb,
+                               rd_kafka_q_t *rkq,
+                               int throttle_time,
+                               rd_bool_t need_client_throttle);
 
 #endif /* _RDKAFKA_BUF_H_ */

@@ -504,7 +504,7 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
 
                 rd_kafka_msg_destroy(rk, rkm);
 
-                /* 'hdrs' is now owned by 'rkm' */
+                /* 'hdrs' is now owned by 'rkm' and was deleted already by the rd_kafka_msg_destroy call above  */
                 if (hdrs == rkm->rkm_headers)
                 {
                     hdrs = NULL;

@@ -271,6 +271,8 @@ struct rd_kafka_metadata_cache {
 
 
 int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic);
+int rd_kafka_metadata_cache_delete_by_topic_id(rd_kafka_t *rk,
+                                               const rd_kafka_Uuid_t topic_id);
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
 int rd_kafka_metadata_cache_purge_all_hints(rd_kafka_t *rk);
 int rd_kafka_metadata_cache_topic_update(

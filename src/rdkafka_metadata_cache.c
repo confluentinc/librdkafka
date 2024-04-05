@@ -109,6 +109,21 @@ int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic) {
         return rkmce ? 1 : 0;
 }
 
+/**
+ * @brief Delete cache entry by topic id
+ * @locks rd_kafka_wrlock()
+ * @returns 1 if entry was found and removed, else 0.
+ */
+int rd_kafka_metadata_cache_delete_by_topic_id(rd_kafka_t *rk,
+                                               const rd_kafka_Uuid_t topic_id) {
+        struct rd_kafka_metadata_cache_entry *rkmce;
+
+        rkmce = rd_kafka_metadata_cache_find_by_id(rk, topic_id, 1);
+        if (rkmce)
+                rd_kafka_metadata_cache_delete(rk, rkmce, 1);
+        return rkmce ? 1 : 0;
+}
+
 static int rd_kafka_metadata_cache_evict(rd_kafka_t *rk);
 
 /**
@@ -461,36 +476,38 @@ int rd_kafka_metadata_cache_topic_update(
         rd_ts_t now                                 = rd_clock();
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
         int changed        = 1;
-        if (!mdt->topic) {
+        if (likely(mdt->topic && only_existing)) {
+                rkmce = rd_kafka_metadata_cache_find(rk, mdt->topic, 0);
+                if (!rkmce)
+                        return 0;
+        } else if (unlikely(!mdt->topic)) {
                 rkmce =
                     rd_kafka_metadata_cache_find_by_id(rk, mdit->topic_id, 1);
                 if (!rkmce)
                         return 0;
-
-                /* Borrowed pointer from rkmce tmpabuf */
-                mdt->topic = rkmce->rkmce_mtopic.topic;
-        }
-        if (unlikely(mdt->topic && !rkmce && only_existing)) {
-                rkmce = rd_kafka_metadata_cache_find(rk, mdt->topic, 0);
-        }
-        if (unlikely(!mdt->topic || (only_existing && !rkmce))) {
-                return 0;
         }
 
-        /* Cache unknown topics for a short while (100ms) to allow the cgrp
-         * logic to find negative cache hits. */
-        if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-                ts_expires = RD_MIN(ts_expires, now + (100 * 1000));
+        if (!mdt->topic) {
+                /* Cache entry found but no topic name:
+                 * delete it. */
+                changed = rd_kafka_metadata_cache_delete_by_topic_id(
+                    rk, mdit->topic_id);
+        } else {
+                /* Cache unknown topics for a short while (100ms) to allow the
+                 * cgrp logic to find negative cache hits. */
+                if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                        ts_expires = RD_MIN(ts_expires, now + (100 * 1000));
 
-        if (!mdt->err ||
-            mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED ||
-            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-                rd_kafka_metadata_cache_insert(rk, mdt, mdit, now, ts_expires,
-                                               include_racks, brokers,
-                                               broker_cnt);
-        else
-                changed =
-                    rd_kafka_metadata_cache_delete_by_name(rk, mdt->topic);
+                if (!mdt->err ||
+                    mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED ||
+                    mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                        rd_kafka_metadata_cache_insert(
+                            rk, mdt, mdit, now, ts_expires, include_racks,
+                            brokers, broker_cnt);
+                else
+                        changed = rd_kafka_metadata_cache_delete_by_name(
+                            rk, mdt->topic);
+        }
 
         if (changed && propagate)
                 rd_kafka_metadata_cache_propagate_changes(rk);

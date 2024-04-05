@@ -351,8 +351,6 @@ static int rd_kafka_cgrp_set_state(rd_kafka_cgrp_t *rkcg, int state) {
         rkcg->rkcg_ts_statechange = rd_clock();
 
         rd_kafka_brokers_broadcast_state_change(rkcg->rkcg_rk);
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
-                rd_kafka_q_yield(rkcg->rkcg_rk->rk_ops);
 
         return 1;
 }
@@ -370,8 +368,6 @@ void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
                      rd_kafka_cgrp_join_state_names[join_state],
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
         rkcg->rkcg_join_state = join_state;
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
-                rd_kafka_q_yield(rkcg->rkcg_rk->rk_ops);
 }
 
 
@@ -790,7 +786,6 @@ void rd_kafka_cgrp_coord_query(rd_kafka_cgrp_t *rkcg, const char *reason) {
         }
 
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD) {
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_COORD);
         }
 
@@ -4086,7 +4081,6 @@ rd_kafka_cgrp_incremental_assign(rd_kafka_cgrp_t *rkcg,
                                            "incremental assign called");
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_STEADY);
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 if (rkcg->rkcg_subscription) {
                         rd_kafka_cgrp_start_max_poll_interval_timer(rkcg);
                 }
@@ -4345,7 +4339,6 @@ rd_kafka_cgrp_assign(rd_kafka_cgrp_t *rkcg,
                 rd_kafka_assignment_resume(rkcg->rkcg_rk, "assign called");
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_STEADY);
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 if (rkcg->rkcg_subscription) {
                         rd_kafka_cgrp_start_max_poll_interval_timer(rkcg);
                 }
@@ -5772,6 +5765,7 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                 rkcg_subscription = rkcg->rkcg_subscription;
         }
 
+        rkcg->rkcg_expedite_heartbeat_retries++;
         rd_kafka_ConsumerGroupHeartbeatRequest(
             rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
             member_epoch, rkcg_group_instance_id, rkcg_client_rack,
@@ -5800,7 +5794,6 @@ rd_kafka_cgrp_consumer_heartbeat_preconditions_met(rd_kafka_cgrp_t *rkcg) {
 }
 
 void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
-        rd_ts_t now            = rd_clock();
         rd_bool_t full_request = rkcg->rkcg_consumer_flags &
                                  RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
         rd_bool_t send_ack = rd_false;
@@ -5817,8 +5810,6 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE;
 
-                /* Use exponential backoff */
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_revoke_all_rejoin(rkcg, rd_true, rd_true,
                                                 "member fenced - rejoining");
         }
@@ -5847,9 +5838,8 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         if (rd_kafka_cgrp_consumer_heartbeat_preconditions_met(rkcg)) {
                 rd_ts_t heartbeat_interval =
                     rd_interval(&rkcg->rkcg_heartbeat_intvl,
-                                rkcg->rkcg_heartbeat_intvl_ms * 1000, now);
-
-                if (heartbeat_interval >= 0) {
+                                rkcg->rkcg_heartbeat_intvl_ms * 1000, 0);
+                if (heartbeat_interval > 0) {
                         rd_kafka_cgrp_consumer_group_heartbeat(
                             rkcg, full_request, send_ack);
                 } else {
@@ -6092,7 +6082,6 @@ static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
                  * a steady state. */
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_STEADY);
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 if (rkcg->rkcg_subscription) {
                         rd_kafka_cgrp_start_max_poll_interval_timer(rkcg);
                 }
@@ -6131,6 +6120,7 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                 break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 /* If an updated/next subscription is available, schedule it. */
                 if (rd_kafka_trigger_waiting_subscribe_maybe(rkcg))
                         break;
@@ -6147,7 +6137,8 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
 
                 /* FALLTHRU */
 
-        case RD_KAFKA_CGRP_JOIN_STATE_INIT:
+        case RD_KAFKA_CGRP_JOIN_STATE_INIT: {
+                rd_bool_t still_in_group = rd_true;
                 /*
                  * There maybe a case when there are no assignments are
                  * assigned to this consumer. In this case, while terminating
@@ -6155,14 +6146,17 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                  * to intermediate state. In this scenario, last leave call is
                  * done from here.
                  */
-                rd_kafka_cgrp_leave_maybe(rkcg);
+                still_in_group &= !rd_kafka_cgrp_leave_maybe(rkcg);
 
                 /* Check if cgrp is trying to terminate, which is safe to do
                  * in these two states. Otherwise we'll need to wait for
                  * the current state to decommission. */
-                rd_kafka_cgrp_try_terminate(rkcg);
-                break;
+                still_in_group &= !rd_kafka_cgrp_try_terminate(rkcg);
 
+                if (still_in_group)
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
+                break;
+        }
         default:
                 break;
         }
@@ -6195,7 +6189,6 @@ void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg) {
                                      rkcg->rkcg_heartbeat_intvl_ms * 1000);
         /* Set the exponential backoff. */
         rd_interval_backoff(&rkcg->rkcg_heartbeat_intvl, backoff);
-        rkcg->rkcg_expedite_heartbeat_retries++;
 
         /* Awake main loop without enqueuing an op. */
         rd_kafka_q_yield(rk->rk_ops);

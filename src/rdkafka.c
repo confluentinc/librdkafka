@@ -64,6 +64,7 @@
 #endif
 
 #include "rdtime.h"
+#include "rdmap.h"
 #include "crc32c.h"
 #include "rdunittest.h"
 
@@ -5176,6 +5177,17 @@ const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
                    23 /* Removing extra ('=') padding */);
         rd_free(out_base64_str);
         return uuid->base64str;
+}
+
+unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid) {
+        unsigned char bytes[16];
+        memcpy(bytes, &uuid->most_significant_bits, 8);
+        memcpy(&bytes[8], &uuid->least_significant_bits, 8);
+        return rd_bytes_hash(bytes, 16);
+}
+
+unsigned int rd_kafka_Uuid_map_hash(const void *key) {
+        return rd_kafka_Uuid_hash(key);
 }
 
 int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid) {

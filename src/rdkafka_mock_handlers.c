@@ -914,7 +914,11 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_mock_cluster_t *mcluster,
         /* Response: Topics.ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
         /* Response: Topics.Name */
-        rd_kafka_buf_write_str(resp, topic, -1);
+        if (ApiVersion >= 12 && err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID) {
+                rd_kafka_buf_write_str(resp, NULL, -1);
+        } else {
+                rd_kafka_buf_write_str(resp, topic, -1);
+        }
 
         if (ApiVersion >= 10) {
                 if (mtopic) {

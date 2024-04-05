@@ -7216,7 +7216,8 @@ int test_mock_wait_maching_requests(
                                 matching_requests++;
                 }
                 rd_kafka_mock_request_destroy_array(requests, request_cnt);
-                rd_usleep(100 * 1000, 0);
+                if (matching_requests < num || last_time)
+                        rd_usleep(100 * 1000, 0);
         }
         return matching_requests;
 }

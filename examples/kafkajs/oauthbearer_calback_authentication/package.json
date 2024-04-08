@@ -1,0 +1,16 @@
+{
+  "name": "oauthbearer_calback_authentication",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "file:../../..",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

@@ -440,17 +440,19 @@ struct rd_kafka_DeleteAcls_result_response_s {
  * @name ElectLeader
 */
 
+/**
+ * @struct ElectLeader request object
+*/
+
 struct rd_kafka_ElectLeader_s {
         rd_kafka_ElectionType_t electionType;  /*Election Type*/
         rd_kafka_topic_partition_list_t *partitions;  /*TopicPartitions for election*/
 };
 
-struct rd_kafka_topic_partition_result_s {
-        char *topic;
-        int32_t partition;
-        rd_kafka_resp_err_t err;
-        char *errstr;
-};
+
+/**
+ * @struct ElectLeader result object
+ */
 
 typedef struct rd_kafka_ElectLeaderResult_s {
         rd_kafka_resp_err_t error_code;

@@ -122,9 +122,9 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 
 static int print_elect_leader_result(const rd_kafka_ElectLeader_result_t *result) {
         rd_kafka_resp_err_t err;
-        rd_kafka_topic_partition_result_t **results;
+        const rd_kafka_topic_partition_result_t **results;
         size_t results_cnt;
-        int i;
+        size_t i;
         int retval = 0;
 
         err = rd_kafka_ElectionResult_error(result);
@@ -174,19 +174,17 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *event = NULL;
-        rd_kafka_error_t *error = NULL;
         rd_kafka_topic_partition_list_t *partitions;
         rd_kafka_ElectionType_t election_type;
         rd_kafka_ElectLeader_t *elect_leader;
         int i;
-        int partitions_cnt = 0;
         int retval = 0;
 
         if(argc < 3){
                 usage("Invalid number of arguments");
         }
         int etype = parse_int("election_type", argv[0]);
-        printf("%d\n", etype);
+        
         if(etype == 0){
                 election_type = RD_KAFKA_ELECTION_TYPE_PREFERRED;
         } else if(etype == 1){
@@ -200,13 +198,10 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
         if(argc % 2 != 0){
                 usage("Invalid number of arguments");
         }
-        for(int i = 0; i < argc; i+=2){
-                printf("%s %d\n", argv[i], parse_int("partition", argv[i+1]));
+        for(i = 0; i < argc; i+=2){
                 rd_kafka_topic_partition_list_add(
                     partitions, argv[i], parse_int("partition", argv[i+1]));
         }
-
-        partitions_cnt = partitions->cnt;
 
         elect_leader = rd_kafka_ElectLeader_new(election_type, partitions);
 
@@ -233,13 +228,13 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ELECTLEADER);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 30 * 1000 /* 10s */, errstr, sizeof(errstr))) {
+                options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 goto exit;
         }
 
         if(rd_kafka_AdminOptions_set_operation_timeout(
-                options, 30 * 1000 /* 10s */, errstr, sizeof(errstr))) {
+                options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set operation timeout: %s\n", errstr);
                 goto exit;
         }

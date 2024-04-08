@@ -5893,8 +5893,6 @@ rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
         int op_timeout;
         int i;
 
-        printf("rd_kafka_ElectLeaderRequest\n");
-
         if (rd_list_cnt(elect_leaders) == 0) {
                 rd_snprintf(errstr, errstr_size,
                             "No partitions specified for leader election");
@@ -5934,8 +5932,6 @@ rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
                         rd_false /* don't use topic_id */, fields);
         
 
-        
-        printf("rd_kafka_ElectLeaderRequest: partitions count: %d\n", elect_leader->partitions->cnt);
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
         rd_kafka_buf_write_i32(rkbuf, op_timeout);
@@ -5946,8 +5942,6 @@ rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
-
-        printf("Request parsed\n");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

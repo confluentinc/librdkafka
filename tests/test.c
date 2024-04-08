@@ -1803,17 +1803,14 @@ int main(int argc, char **argv) {
 
         TEST_SAY("Git version: %s\n", test_git_version);
 
-        if (!strcmp(test_broker_version_str, "trunk"))
-                test_broker_version_str = "9.9.9.9"; /* for now */
-
         d = 0;
         if (sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d) <
             3) {
-                printf(
-                    "%% Expected broker version to be in format "
-                    "N.N.N (N=int), not %s\n",
-                    test_broker_version_str);
-                exit(1);
+                TEST_SAY(
+                    "Non-numeric broker version, setting version"
+                    " to 9.9.9.9\n");
+                test_broker_version_str = "9.9.9.9";
+                sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d);
         }
         test_broker_version = TEST_BRKVER(a, b, c, d);
         TEST_SAY("Broker version: %s (%d.%d.%d.%d)\n", test_broker_version_str,

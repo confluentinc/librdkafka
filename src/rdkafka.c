@@ -64,6 +64,7 @@
 #endif
 
 #include "rdtime.h"
+#include "rdmap.h"
 #include "crc32c.h"
 #include "rdunittest.h"
 
@@ -2119,7 +2120,10 @@ static int rd_kafka_thread_main(void *arg) {
                                        RD_KAFKA_CGRP_STATE_TERM)))) {
                 rd_ts_t sleeptime = rd_kafka_timers_next(
                     &rk->rk_timers, 1000 * 1000 /*1s*/, 1 /*lock*/);
-                rd_kafka_q_serve(rk->rk_ops, (int)(sleeptime / 1000), 0,
+                /* Use ceiling division to avoid calling serve with a 0 ms
+                 * timeout in a tight loop until 1 ms has passed. */
+                int timeout_ms = (sleeptime + 999) / 1000;
+                rd_kafka_q_serve(rk->rk_ops, timeout_ms, 0,
                                  RD_KAFKA_Q_CB_CALLBACK, NULL, NULL);
                 if (rk->rk_cgrp) /* FIXME: move to timer-triggered */
                         rd_kafka_cgrp_serve(rk->rk_cgrp);
@@ -5176,6 +5180,17 @@ const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
                    23 /* Removing extra ('=') padding */);
         rd_free(out_base64_str);
         return uuid->base64str;
+}
+
+unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid) {
+        unsigned char bytes[16];
+        memcpy(bytes, &uuid->most_significant_bits, 8);
+        memcpy(&bytes[8], &uuid->least_significant_bits, 8);
+        return rd_bytes_hash(bytes, 16);
+}
+
+unsigned int rd_kafka_Uuid_map_hash(const void *key) {
+        return rd_kafka_Uuid_hash(key);
 }
 
 int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid) {

@@ -1,9 +1,32 @@
 # librdkafka v2.3.1
 
-librdkafka v2.3.1 is a feature release:
+librdkafka v2.3.1 is a maintenance release:
 
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt).
+ * Integration tests can be started in KRaft mode and run against any
+   GitHub Kafka branch other than the released versions.
+ * Fix pipeline inclusion of static binaries (#4666)
+ * Fix to main loop timeout calculation leading to a tight loop for a
+   max period of 1 ms (#4671).
+
+
+## Fixes
+
+### General fixes
+
+ * In librdkafka release pipeline a static build containing libsasl2
+   could be chosen instead of the alternative one without it.
+   That caused the libsasl2 dependency to be required in confluent-kafka-go
+   v2.1.0-linux-musl-arm64 and v2.3.0-linux-musl-arm64.
+   Solved by correctly excluding the binary configured with that library,
+   when targeting a static build.
+   Happening since v2.0.2, with specified platforms, when using static binaries (#4666).
+ * When the main thread loop was awakened less than 1 ms
+   before the expiration of a timeout, it was serving with a zero timeout,
+   leading to increased CPU usage until the timeout was reached.
+   Happening since 1.x (#4671).
+
 
 
 # librdkafka v2.3.0

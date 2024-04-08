@@ -274,15 +274,16 @@ int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic);
 int rd_kafka_metadata_cache_delete_by_topic_id(rd_kafka_t *rk,
                                                const rd_kafka_Uuid_t topic_id);
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
-int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
-void rd_kafka_metadata_cache_topic_update(
+int rd_kafka_metadata_cache_purge_all_hints(rd_kafka_t *rk);
+int rd_kafka_metadata_cache_topic_update(
     rd_kafka_t *rk,
     const rd_kafka_metadata_topic_t *mdt,
     const rd_kafka_metadata_topic_internal_t *mdit,
     rd_bool_t propagate,
     rd_bool_t include_metadata,
     rd_kafka_metadata_broker_internal_t *brokers,
-    size_t broker_cnt);
+    size_t broker_cnt,
+    rd_bool_t only_existing);
 void rd_kafka_metadata_cache_propagate_changes(rd_kafka_t *rk);
 struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_find(rd_kafka_t *rk, const char *topic, int valid);

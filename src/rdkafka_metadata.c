@@ -474,12 +474,14 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_metadata_internal_t *mdi = NULL;
         rd_kafka_metadata_t *md           = NULL;
         size_t rkb_namelen;
-        const int log_decode_errors = LOG_ERR;
-        rd_list_t *missing_topics   = NULL;
+        const int log_decode_errors  = LOG_ERR;
+        rd_list_t *missing_topics    = NULL;
+        rd_list_t *missing_topic_ids = NULL;
 
-        const rd_list_t *requested_topics = request_topics;
-        rd_bool_t all_topics              = rd_false;
-        rd_bool_t cgrp_update             = rd_false;
+        const rd_list_t *requested_topics    = request_topics;
+        const rd_list_t *requested_topic_ids = NULL;
+        rd_bool_t all_topics                 = rd_false;
+        rd_bool_t cgrp_update                = rd_false;
         rd_bool_t has_reliable_leader_epochs =
             rd_kafka_has_reliable_leader_epochs(rkb);
         int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
@@ -496,8 +498,9 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_bool_t compute_racks = has_client_rack;
 
         if (request) {
-                requested_topics = request->rkbuf_u.Metadata.topics;
-                all_topics       = request->rkbuf_u.Metadata.all_topics;
+                requested_topics    = request->rkbuf_u.Metadata.topics;
+                requested_topic_ids = request->rkbuf_u.Metadata.topic_ids;
+                all_topics          = request->rkbuf_u.Metadata.all_topics;
                 cgrp_update =
                     request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp;
                 compute_racks |= request->rkbuf_u.Metadata.force_racks;
@@ -519,6 +522,9 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         if (requested_topics)
                 missing_topics =
                     rd_list_copy(requested_topics, rd_list_string_copy, NULL);
+        if (requested_topic_ids)
+                missing_topic_ids =
+                    rd_list_copy(requested_topic_ids, rd_list_Uuid_copy, NULL);
 
         rd_kafka_broker_lock(rkb);
         rkb_namelen = strlen(rkb->rkb_name) + 1;
@@ -833,39 +839,42 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
                                                      &mdi->topics[i]);
 
-                // TODO: Should be done for requested_topic_ids as well.
-                if (requested_topics) {
+                if (requested_topics)
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            md->topics[i].topic,
                                                            (void *)strcmp));
-                        if (!all_topics) {
-                                /* Only update cache when not asking
-                                 * for all topics. */
+                if (requested_topic_ids)
+                        rd_list_free_cb(
+                            missing_topic_ids,
+                            rd_list_remove_cmp(missing_topic_ids,
+                                               &mdi->topics[i].topic_id,
+                                               (void *)rd_kafka_Uuid_ptr_cmp));
+                if (!all_topics) {
+                        /* Only update cache when not asking
+                         * for all topics. */
 
-                                rd_kafka_wrlock(rk);
-                                rd_kafka_metadata_cache_topic_update(
-                                    rk, &md->topics[i], &mdi->topics[i],
-                                    rd_false /*propagate later*/,
-                                    /* use has_client_rack rather than
-                                       compute_racks. We need cached rack ids
-                                       only in case we need to rejoin the group
-                                       if they change and client.rack is set
-                                       (KIP-881). */
-                                    has_client_rack, mdi->brokers,
-                                    md->broker_cnt);
-                                cache_changes++;
-                                rd_kafka_wrunlock(rk);
-                        }
+                        rd_kafka_wrlock(rk);
+                        rd_kafka_metadata_cache_topic_update(
+                            rk, &md->topics[i], &mdi->topics[i],
+                            rd_false /*propagate later*/,
+                            /* use has_client_rack rather than
+                            compute_racks. We need cached rack ids
+                            only in case we need to rejoin the group
+                            if they change and client.rack is set
+                            (KIP-881). */
+                            has_client_rack, mdi->brokers, md->broker_cnt);
+                        cache_changes++;
+                        rd_kafka_wrunlock(rk);
                 }
         }
 
-        // TODO: Should be done for missing_topic_ids as well.
         /* Requested topics not seen in metadata? Propogate to topic code. */
         if (missing_topics) {
                 char *topic;
                 rd_rkb_dbg(rkb, TOPIC, "METADATA",
-                           "%d/%d requested topic(s) seen in metadata",
+                           "%d/%d requested topic(s) seen in metadata"
+                           " (lookup by name)",
                            rd_list_cnt(requested_topics) -
                                rd_list_cnt(missing_topics),
                            rd_list_cnt(requested_topics));
@@ -877,6 +886,42 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
 
                         rkt =
                             rd_kafka_topic_find(rkb->rkb_rk, topic, 1 /*lock*/);
+                        if (rkt) {
+                                /* Received metadata response contained no
+                                 * information about topic 'rkt' and thus
+                                 * indicates the topic is not available in the
+                                 *  cluster.
+                                 * Mark the topic as non-existent */
+                                rd_kafka_topic_wrlock(rkt);
+                                rd_kafka_topic_set_notexists(
+                                    rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                                rd_kafka_topic_wrunlock(rkt);
+
+                                rd_kafka_topic_destroy0(rkt);
+                        }
+                }
+        }
+        if (missing_topic_ids) {
+                rd_kafka_Uuid_t *topic_id;
+                rd_rkb_dbg(rkb, TOPIC, "METADATA",
+                           "%d/%d requested topic(s) seen in metadata"
+                           " (lookup by id)",
+                           rd_list_cnt(requested_topic_ids) -
+                               rd_list_cnt(missing_topic_ids),
+                           rd_list_cnt(requested_topic_ids));
+                for (i = 0; i < rd_list_cnt(missing_topic_ids); i++) {
+                        rd_kafka_Uuid_t *missing_topic_id =
+                            missing_topic_ids->rl_elems[i];
+                        rd_rkb_dbg(rkb, TOPIC, "METADATA", "wanted %s",
+                                   rd_kafka_Uuid_base64str(missing_topic_id));
+                }
+                RD_LIST_FOREACH(topic_id, missing_topic_ids, i) {
+                        rd_kafka_topic_t *rkt;
+
+                        rd_kafka_rdlock(rk);
+                        rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk,
+                                                              *topic_id);
+                        rd_kafka_rdunlock(rk);
                         if (rkt) {
                                 /* Received metadata response contained no
                                  * information about topic 'rkt' and thus
@@ -961,12 +1006,12 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                         rd_kafka_metadata_cache_propagate_changes(rk);
                 rd_kafka_metadata_cache_expiry_start(rk);
         }
-
-
-        // TODO: Should be done for requested_topic_ids as well.
         /* Remove cache hints for the originally requested topics. */
         if (requested_topics)
                 rd_kafka_metadata_cache_purge_hints(rk, requested_topics);
+        if (requested_topic_ids)
+                rd_kafka_metadata_cache_purge_hints_by_id(rk,
+                                                          requested_topic_ids);
 
         rd_kafka_wrunlock(rkb->rkb_rk);
 
@@ -982,7 +1027,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
          * which may contain only a sub-set of the subscribed topics (namely
          * the effective subscription of available topics) as to not
          * propagate non-included topics as non-existent. */
-        if (cgrp_update && (requested_topics || all_topics))
+        if (cgrp_update &&
+            (requested_topics || requested_topic_ids || all_topics))
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
 
@@ -995,10 +1041,10 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         }
 
 done:
-
-        // TODO: Should be done for requested_topic_ids as well.
         if (missing_topics)
                 rd_list_destroy(missing_topics);
+        if (missing_topic_ids)
+                rd_list_destroy(missing_topic_ids);
 
         /* This metadata request was triggered by someone wanting
          * the metadata information back as a reply, so send that reply now.
@@ -1013,7 +1059,6 @@ done:
 err_parse:
         err = rkbuf->rkbuf_err;
 err:
-        // TODO: Should be done for requested_topic_ids as well.
         if (requested_topics) {
                 /* Failed requests shall purge cache hints for
                  * the requested topics. */
@@ -1021,10 +1066,19 @@ err:
                 rd_kafka_metadata_cache_purge_hints(rk, requested_topics);
                 rd_kafka_wrunlock(rkb->rkb_rk);
         }
+        if (requested_topic_ids) {
+                /* Failed requests shall purge cache hints for
+                 * the requested topics. */
+                rd_kafka_wrlock(rkb->rkb_rk);
+                rd_kafka_metadata_cache_purge_hints_by_id(rk,
+                                                          requested_topic_ids);
+                rd_kafka_wrunlock(rkb->rkb_rk);
+        }
 
-        // TODO: Should be done for requested_topic_ids as well.
         if (missing_topics)
                 rd_list_destroy(missing_topics);
+        if (missing_topic_ids)
+                rd_list_destroy(missing_topic_ids);
         rd_tmpabuf_destroy(&tbuf);
 
         return err;

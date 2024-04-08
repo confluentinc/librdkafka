@@ -116,16 +116,23 @@ RdKafka::TopicPartition* Connection::GetPartition(std::string &topic, int partit
   return RdKafka::TopicPartition::create(topic, partition);
 }
 
-bool Connection::IsConnected() {
+bool Connection::IsConnected() const {
   return !m_is_closing && m_client != NULL;
 }
 
-bool Connection::IsClosing() {
+bool Connection::IsClosing() const {
   return m_client != NULL && m_is_closing;
 }
 
 RdKafka::Handle* Connection::GetClient() {
   return m_client;
+}
+
+std::string Connection::Name() const {
+  if (!IsConnected()) {
+    return std::string("");
+  }
+  return std::string(m_client->name());
 }
 
 Baton Connection::CreateTopic(std::string topic_name) {
@@ -627,6 +634,12 @@ NAN_METHOD(Connection::NodeSetOAuthBearerTokenFailure) {
   }
 
   info.GetReturnValue().Set(Nan::Null());
+}
+
+NAN_METHOD(Connection::NodeName) {
+  Connection* obj = ObjectWrap::Unwrap<Connection>(info.This());
+  std::string name = obj->Name();
+  info.GetReturnValue().Set(Nan::New(name).ToLocalChecked());
 }
 
 }  // namespace NodeKafka

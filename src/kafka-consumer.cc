@@ -544,13 +544,6 @@ std::string KafkaConsumer::RebalanceProtocol() {
   return consumer->rebalance_protocol();
 }
 
-std::string KafkaConsumer::Name() {
-  if (!IsConnected()) {
-    return std::string("");
-  }
-  return std::string(m_client->name());
-}
-
 Nan::Persistent<v8::Function> KafkaConsumer::constructor;
 
 void KafkaConsumer::Init(v8::Local<v8::Object> exports) {

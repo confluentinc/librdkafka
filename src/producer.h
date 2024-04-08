@@ -75,8 +75,6 @@ class Producer : public Connection {
     int64_t timestamp, void* opaque,
     RdKafka::Headers* headers);
 
-  std::string Name();
-
   void ActivateDispatchers();
   void DeactivateDispatchers();
 

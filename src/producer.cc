@@ -165,14 +165,6 @@ v8::Local<v8::Object> Producer::NewInstance(v8::Local<v8::Value> arg) {
   return scope.Escape(instance);
 }
 
-
-std::string Producer::Name() {
-  if (!IsConnected()) {
-    return std::string("");
-  }
-  return std::string(m_client->name());
-}
-
 Baton Producer::Connect() {
   if (IsConnected()) {
     return Baton(RdKafka::ERR_NO_ERROR);

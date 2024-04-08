@@ -105,6 +105,7 @@ void AdminClient::Init(v8::Local<v8::Object> exports) {
 
   // Inherited from NodeKafka::Connection
   Nan::SetPrototypeMethod(tpl, "configureCallbacks", NodeConfigureCallbacks);
+  Nan::SetPrototypeMethod(tpl, "name", NodeName);
 
   // Admin client operations
   Nan::SetPrototypeMethod(tpl, "createTopic", NodeCreateTopic);

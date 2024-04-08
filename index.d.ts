@@ -436,8 +436,12 @@ export interface IAdminClient {
     disconnect(): void;
 }
 
+export type EventHandlers = {
+    [event_key: string]: (...args: any[]) => void;
+};
+
 export abstract class AdminClient {
-    static create(conf: GlobalConfig): IAdminClient;
+    static create(conf: GlobalConfig, eventHandlers?: EventHandlers): IAdminClient;
 }
 
 export type RdKafka = {

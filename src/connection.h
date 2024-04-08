@@ -47,8 +47,8 @@ namespace NodeKafka {
 
 class Connection : public Nan::ObjectWrap {
  public:
-  bool IsConnected();
-  bool IsClosing();
+  bool IsConnected() const;
+  bool IsClosing() const;
 
   // Baton<RdKafka::Topic*>
   Baton CreateTopic(std::string);
@@ -72,6 +72,8 @@ class Connection : public Nan::ObjectWrap {
   virtual void DeactivateDispatchers() = 0;
 
   virtual void ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add);
+
+  std::string Name() const;
 
  protected:
   Connection(Conf*, Conf*);
@@ -102,6 +104,7 @@ class Connection : public Nan::ObjectWrap {
   static NAN_METHOD(NodeSetSaslCredentials);
   static NAN_METHOD(NodeSetOAuthBearerToken);
   static NAN_METHOD(NodeSetOAuthBearerTokenFailure);
+  static NAN_METHOD(NodeName);
 };
 
 }  // namespace NodeKafka

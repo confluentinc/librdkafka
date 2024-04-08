@@ -82,8 +82,6 @@ class KafkaConsumer : public Connection {
 
   Baton Seek(const RdKafka::TopicPartition &partition, int timeout_ms);
 
-  std::string Name();
-
   Baton Subscribe(std::vector<std::string>);
   Baton Consume(int timeout_ms);
 

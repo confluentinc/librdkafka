@@ -12,10 +12,18 @@ export type Mechanism = {
   mechanism: string
 }
 
+export interface OauthbearerProviderResponse {
+  value: string,
+  principal: string,
+  lifetime: number, // Lifetime must be in milliseconds.
+  extensions?: Map<string, string> | { [key: string]: string },
+}
+
 type SASLMechanismOptionsMap = {
   plain: { username: string; password: string }
   'scram-sha-256': { username: string; password: string }
   'scram-sha-512': { username: string; password: string }
+  oauthbearer: { oauthBearerProvider: () => Promise<OauthbearerProviderResponse> }
 }
 
 export type SASLMechanism = keyof SASLMechanismOptionsMap

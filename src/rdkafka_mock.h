@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -387,6 +388,13 @@ typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
  * @brief Destroy a rd_kafka_mock_request_t * and deallocate memory.
  */
 RD_EXPORT void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *mreq);
+
+/**
+ * @brief Destroy a rd_kafka_mock_request_t * array and deallocate it.
+ */
+RD_EXPORT void
+rd_kafka_mock_request_destroy_array(rd_kafka_mock_request_t **mreqs,
+                                    size_t mreq_cnt);
 
 /**
  * @brief Get the broker id to which \p mreq was sent.

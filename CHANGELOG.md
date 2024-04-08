@@ -15,6 +15,8 @@ librdkafka v2.3.1 is a maintenance release:
    Continue partial implementation by adding a metadata cache by topic id
    and updating the topic id corresponding to the partition name (#4676)
  * Fix to metadata cache expiration on full metadata refresh (#4677).
+ * Fix for a wrong error returned on full metadata refresh before joining
+   a consumer group (#4678).
 
 
 ## Fixes
@@ -36,6 +38,10 @@ librdkafka v2.3.1 is a maintenance release:
    refreshes and occasional `UNKNOWN_TOPIC_OR_PART` errors. Solved by updating
    cache for existing or hinted entries instead of clearing them.
    Happening since 2.1.0 (#4677).
+ * A metadata call before member joins consumer group,
+   could lead to an `UNKNOWN_TOPIC_OR_PART` error. Solved by updating
+   the consumer group following a metadata refresh only in safe states.
+   Happening since 2.1.0 (#4678).
 
 ### Consumer fixes
 

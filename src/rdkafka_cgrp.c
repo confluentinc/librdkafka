@@ -888,7 +888,7 @@ err_parse:
         goto err;
 }
 
-static void rd_kafka_cgrp_consumer_destroy(rd_kafka_cgrp_t *rkcg) {
+static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 return;
 
@@ -903,14 +903,6 @@ static void rd_kafka_cgrp_consumer_destroy(rd_kafka_cgrp_t *rkcg) {
         rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);
         rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK &
                                      ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
-}
-
-static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
-        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
-                return;
-
-        rd_kafka_cgrp_consumer_destroy(rkcg);
-        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
 }
 
 /**
@@ -1374,6 +1366,7 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
 
         rd_kafka_cgrp_consumer_reset(rkcg);
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
+        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
 }
 
 
@@ -3316,7 +3309,7 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
 
         /* Destroy KIP-848 consumer group structures */
-        rd_kafka_cgrp_consumer_destroy(rkcg);
+        rd_kafka_cgrp_consumer_reset(rkcg);
 }
 
 
@@ -4900,6 +4893,9 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb(rd_kafka_timers_t *rkts,
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
                 rd_kafka_cgrp_consumer_leave(rkcg);
+                rkcg->rkcg_consumer_flags |=
+                    RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
         } else {
                 /* Leave the group before calling rebalance since the standard
                  * leave will be triggered first after the rebalance callback
@@ -4916,12 +4912,12 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb(rd_kafka_timers_t *rkts,
                  * reset it now to avoid an ERR_UNKNOWN_MEMBER_ID on the next
                  * join. */
                 rd_kafka_cgrp_set_member_id(rkcg, "");
-        }
 
-        /* Trigger rebalance */
-        rd_kafka_cgrp_revoke_all_rejoin_maybe(rkcg, rd_true /*lost*/,
-                                              rd_true /*initiating*/,
-                                              "max.poll.interval.ms exceeded");
+                /* Trigger rebalance */
+                rd_kafka_cgrp_revoke_all_rejoin_maybe(
+                    rkcg, rd_true /*lost*/, rd_true /*initiating*/,
+                    "max.poll.interval.ms exceeded");
+        }
 }
 
 

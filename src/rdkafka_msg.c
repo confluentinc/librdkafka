@@ -478,8 +478,7 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
                                            rd_kafka_err2str(err));
                 goto err;
         }
-        // now 'hdrs' owned by rkm as no error occurred
-        // make NULL to avoid double free in message + on error
+        /* 'hdrs' is now owned by 'rkm' */
         hdrs = NULL;
 
         /* Partition the message */

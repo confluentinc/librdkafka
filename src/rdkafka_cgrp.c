@@ -2333,10 +2333,6 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
 
         rd_list_init(&topics, 8, rd_free);
 
-        /* Insert all non-wildcard topics in cache. */
-        rd_kafka_metadata_cache_hint_rktparlist(
-            rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL, 0 /*dont replace*/);
-
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) {
                 /* For wildcard subscriptions make sure the
                  * cached full metadata isn't too old. */
@@ -5005,6 +5001,19 @@ rd_kafka_cgrp_calculate_subscribe_revoking_partitions(
         return revoking;
 }
 
+static void
+rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
+                               rd_kafka_topic_partition_list_t *rktparlist) {
+        rkcg->rkcg_subscription = rktparlist;
+        if (rkcg->rkcg_subscription) {
+                /* Insert all non-wildcard topics in cache immediately.
+                 * to avoid problems with subsequent metadata
+                 * requests. */
+                rd_kafka_metadata_cache_hint_rktparlist(
+                    rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL,
+                    0 /*dont replace*/);
+        }
+}
 
 /**
  * @brief Handle a new subscription that is modifying an existing subscription
@@ -5037,7 +5046,7 @@ rd_kafka_cgrp_modify_subscription(rd_kafka_cgrp_t *rkcg,
             rkcg, unsubscribing_topics);
 
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
-        rkcg->rkcg_subscription = rktparlist;
+        rd_kafka_cgrp_subscription_set(rkcg, rktparlist);
 
         if (rd_kafka_cgrp_metadata_refresh(rkcg, &metadata_age,
                                            "modify subscription") == 1) {
@@ -5146,7 +5155,7 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
 
         if (rkcg->rkcg_subscription) {
                 rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
-                rkcg->rkcg_subscription = NULL;
+                rd_kafka_cgrp_subscription_set(rkcg, NULL);
         }
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_GENERIC)
@@ -5244,7 +5253,7 @@ rd_kafka_cgrp_subscribe(rd_kafka_cgrp_t *rkcg,
         if (rd_kafka_topic_partition_list_regex_cnt(rktparlist) > 0)
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
 
-        rkcg->rkcg_subscription = rktparlist;
+        rd_kafka_cgrp_subscription_set(rkcg, rktparlist);
 
         rd_kafka_cgrp_join(rkcg);
 
@@ -5909,8 +5918,7 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
                     RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
                     RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
 
-                rkcg->rkcg_subscription = rktparlist;
-
+                rd_kafka_cgrp_subscription_set(rkcg, rktparlist);
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
         } else {
                 rd_kafka_cgrp_unsubscribe(rkcg, rd_true /*leave group*/);

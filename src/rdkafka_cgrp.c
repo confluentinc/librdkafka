@@ -5837,19 +5837,31 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         }
 
         if (rd_kafka_cgrp_consumer_heartbeat_preconditions_met(rkcg)) {
-                rd_ts_t heartbeat_interval =
+                rd_ts_t next_heartbeat =
                     rd_interval(&rkcg->rkcg_heartbeat_intvl,
                                 rkcg->rkcg_heartbeat_intvl_ms * 1000, 0);
-                if (heartbeat_interval > 0) {
+                if (next_heartbeat > 0) {
                         rd_kafka_cgrp_consumer_group_heartbeat(
                             rkcg, full_request, send_ack);
+                        next_heartbeat = rkcg->rkcg_heartbeat_intvl_ms * 1000;
                 } else {
+                        next_heartbeat = -1 * next_heartbeat;
+                }
+                if (likely(rkcg->rkcg_heartbeat_intvl_ms > 0)) {
+                        if (rkcg->rkcg_serve_timer.rtmr_next >
+                            (rd_clock() + next_heartbeat)) {
+                                /* We stop the timer if it expires later
+                                 * than expected and restart it below. */
+                                rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
+                                                    &rkcg->rkcg_serve_timer, 0);
+                        }
+
                         /* Scheduling a timer yields the main loop so
                          * 'restart' has to be set to false to avoid a tight
                          * loop. */
                         rd_kafka_timer_start_oneshot(
                             &rkcg->rkcg_rk->rk_timers, &rkcg->rkcg_serve_timer,
-                            rd_false /*don't restart*/, -1 * heartbeat_interval,
+                            rd_false /*don't restart*/, next_heartbeat,
                             rd_kafka_cgrp_serve_timer_cb, NULL);
                 }
         }
@@ -6191,8 +6203,10 @@ void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg) {
         /* Set the exponential backoff. */
         rd_interval_backoff(&rkcg->rkcg_heartbeat_intvl, backoff);
 
-        /* Awake main loop without enqueuing an op. */
-        rd_kafka_q_yield(rk->rk_ops);
+        /* Scheduling the timer awakes main loop too. */
+        rd_kafka_timer_start_oneshot(&rkcg->rkcg_rk->rk_timers,
+                                     &rkcg->rkcg_serve_timer, rd_true, backoff,
+                                     rd_kafka_cgrp_serve_timer_cb, NULL);
 }
 
 /**

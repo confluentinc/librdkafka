@@ -74,7 +74,7 @@ static void usage(const char *reason, ...) {
         fprintf(stderr,
                 "Elect Leaders usage examples\n"
                 "\n"
-                "Usage: %s <options> <election_type> "
+                "Usage: %s <options> <election_type( 0(Preffered)/ 1(Unclean))> "
                 "<topic1> <partition1> ...\n"
                 "\n"
                 "Options:\n"

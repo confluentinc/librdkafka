@@ -2305,11 +2305,11 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause_resume(rd_kafka_toppar_t *rktp,
                 /* If partitions isn't paused, avoid bumping its version,
                  * as it'll result in resuming fetches from a stale
                  * next_fetch_start */
-                rd_bool_t paused = rd_false;
+                rd_bool_t is_paused = rd_false;
                 rd_kafka_toppar_lock(rktp);
-                paused = RD_KAFKA_TOPPAR_IS_PAUSED(rktp);
+                is_paused = RD_KAFKA_TOPPAR_IS_PAUSED(rktp);
                 rd_kafka_toppar_unlock(rktp);
-                if (!paused) {
+                if (!is_paused) {
                         rko->rko_replyq = replyq;
                         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
                         return RD_KAFKA_RESP_ERR_NO_ERROR;

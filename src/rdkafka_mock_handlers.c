@@ -219,8 +219,8 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic = {0};
                 int32_t PartitionCnt;
-                rd_kafka_mock_topic_t *mtopic;
-                rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
+                rd_kafka_mock_topic_t *mtopic = NULL;
+                rd_kafka_Uuid_t TopicId       = RD_KAFKA_UUID_ZERO;
 
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 13)
                         rd_kafka_buf_read_uuid(rkbuf, &TopicId);
@@ -235,7 +235,6 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                 else
                         mtopic =
                             rd_kafka_mock_topic_find_by_kstr(mcluster, &Topic);
-                mtopic = rd_kafka_mock_topic_find_by_kstr(mcluster, &Topic);
 
                 /* Response: Topic */
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 13)

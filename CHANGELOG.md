@@ -14,6 +14,7 @@ librdkafka v2.3.1 is a maintenance release:
  * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
    Continue partial implementation by adding a metadata cache by topic id
    and updating the topic id corresponding to the partition name (#4676)
+ * Fix to metadata cache expiration on full metadata refresh (#4677).
 
 
 ## Fixes
@@ -31,6 +32,10 @@ librdkafka v2.3.1 is a maintenance release:
    before the expiration of a timeout, it was serving with a zero timeout,
    leading to increased CPU usage until the timeout was reached.
    Happening since 1.x (#4671).
+ * Metadata cache was cleared on full metadata refresh, leading to unnecessary
+   refreshes and occasional `UNKNOWN_TOPIC_OR_PART` errors. Solved by updating
+   cache for existing or hinted entries instead of clearing them.
+   Happening since 2.1.0 (#4677).
 
 ### Consumer fixes
 

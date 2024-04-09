@@ -773,7 +773,7 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_by_id(
     rd_kafka_Uuid_t topic_id,
     int32_t partition);
 
-int rd_kafka_topic_partition_list_find_by_id_idx(
+int rd_kafka_topic_partition_list_find_idx_by_id(
     const rd_kafka_topic_partition_list_t *rktparlist,
     rd_kafka_Uuid_t topic_id,
     int32_t partition);

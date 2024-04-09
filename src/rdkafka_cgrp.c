@@ -6015,9 +6015,6 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
 
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
-                /* If an updated/next subscription is available, schedule it. */
-                if (rd_kafka_trigger_waiting_subscribe_maybe(rkcg))
-                        break;
 
                 if (rkcg->rkcg_rebalance_rejoin) {
                         rkcg->rkcg_rebalance_rejoin = rd_false;

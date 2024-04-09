@@ -3252,7 +3252,7 @@ int rd_kafka_topic_partition_list_find_idx(
  * @brief Search 'rktparlist' for \p topic_id and \p partition.
  * @returns the elems[] index or -1 on miss.
  */
-int rd_kafka_topic_partition_list_find_by_id_idx(
+int rd_kafka_topic_partition_list_find_idx_by_id(
     const rd_kafka_topic_partition_list_t *rktparlist,
     rd_kafka_Uuid_t topic_id,
     int32_t partition) {

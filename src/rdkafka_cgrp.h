@@ -288,24 +288,23 @@ typedef struct rd_kafka_cgrp_s {
  *  target assignment. Cleared when an HB succeeds
  *  after reconciliation finishes. */
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK 0x1
+/** Member is sending an acknowledgement for a reconciled assignment */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK 0x2
 /** A new subscription needs to be sent to the Coordinator. */
-#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x4
 /** A new subscription is being sent to the Coordinator. */
-#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION 0x4
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION 0x8
 /** Consumer has subscribed at least once,
  *  if it didn't happen rebalance protocol is still
  *  considered NONE, otherwise it depends on the
  *  configured partition assignors. */
-#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x8
-/** Send a complete request in next heartbeat,
- *  but don't send the acknowledgement if it's not required */
-#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10
+#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x10
+/** Send a complete request in next heartbeat */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x20
 /** Member is fenced, need to rejoin */
-#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x20
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x40
 /** Member is fenced, rejoining */
-#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x40
-/** Member is sending an acknowledgement for a reconciled assignment */
-#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK 0x80
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x80
 
 
         /** Rejoin the group following a currently in-progress

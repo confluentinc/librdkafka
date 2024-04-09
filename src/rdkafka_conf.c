@@ -1136,7 +1136,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "the only supported group "
      "protocol type is `consumer`.",
      .sdef = "consumer"},
-    {_RK_GLOBAL | _RK_CGRP | _RK_HIGH | _RK_HIDDEN, "group.protocol", _RK_C_S2I,
+    {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "group.protocol", _RK_C_S2I,
      _RK(group_protocol),
      "Group protocol to use. Use `classic` for the original protocol and "
      "`consumer` for the new "
@@ -1146,8 +1146,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .vdef = RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
      .s2i  = {{RD_KAFKA_GROUP_PROTOCOL_CLASSIC, "classic"},
              {RD_KAFKA_GROUP_PROTOCOL_CONSUMER, "consumer"}}},
-    {_RK_GLOBAL | _RK_CGRP | _RK_MED | _RK_HIDDEN, "group.remote.assignor",
-     _RK_C_STR, _RK(group_remote_assignor),
+    {_RK_GLOBAL | _RK_CGRP | _RK_MED, "group.remote.assignor", _RK_C_STR,
+     _RK(group_remote_assignor),
      "Server side assignor to use. Keep it null to make server select a "
      "suitable assignor for the group. "
      "Available assignors: uniform or range. Default is null",

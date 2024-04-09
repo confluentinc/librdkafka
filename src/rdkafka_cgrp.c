@@ -5864,123 +5864,6 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
 }
 
 /**
- * @brief Get list of topics that need to be removed from \p rkcg
- *        rkcg_group_assignment following a subscription change to
- *        \p subscription.
- *
- * @param rkcg Affected consumer group.
- * @param subscription New subscription as a list of topics with optional
- *                     regexes.
- *
- * @return NULL when no topics have to be removed, a
- *         list of topics otherwise.
- *
- * @locality rdkafka main thread
- * @locks none
- */
-static rd_kafka_topic_partition_list_t *
-rd_kafka_cgrp_consumer_get_unsubscribing_topics(
-    rd_kafka_cgrp_t *rkcg,
-    rd_kafka_topic_partition_list_t *subscription) {
-        int i;
-        rd_kafka_topic_partition_list_t *result;
-        if (!rkcg->rkcg_group_assignment)
-                return NULL;
-
-        result =
-            rd_kafka_topic_partition_list_new(rkcg->rkcg_group_assignment->cnt);
-
-        /* TODO: Something that isn't O(N*M). */
-        for (i = 0; i < rkcg->rkcg_group_assignment->cnt; i++) {
-                int j;
-                const char *topic = rkcg->rkcg_group_assignment->elems[i].topic;
-                if (i > 0) {
-                        const char *prev_topic =
-                            rkcg->rkcg_group_assignment->elems[i - 1].topic;
-                        if (!rd_strcmp(prev_topic, topic))
-                                continue;
-                }
-
-                for (j = 0; j < subscription->cnt; j++) {
-                        const char *pattern = subscription->elems[j].topic;
-                        if (rd_kafka_topic_match(rkcg->rkcg_rk, pattern,
-                                                 topic)) {
-                                break;
-                        }
-                }
-
-                if (j == subscription->cnt)
-                        rd_kafka_topic_partition_list_add(
-                            result, topic, RD_KAFKA_PARTITION_UA);
-        }
-
-        if (result->cnt == 0) {
-                rd_kafka_topic_partition_list_destroy(result);
-                return NULL;
-        }
-
-        return result;
-}
-
-/**
- * @brief React to subscription changes in consumer group \p cgrp .
- *        Revoke topics not subscribed anymore immediately,
- *        without waiting for a target assignment first.
- *
- * @param rkcg Consumer group.
- * @param subscription List of topics in new subscription.
- *
- * @locality rdkafka main thread
- * @locks none
- */
-static void rd_kafka_cgrp_consumer_propagate_subscription_changes(
-    rd_kafka_cgrp_t *rkcg,
-    rd_kafka_topic_partition_list_t *subscription) {
-        rd_kafka_topic_partition_list_t *unsubscribing_topics;
-        rd_kafka_topic_partition_list_t *revoking;
-        int old_cnt =
-            rkcg->rkcg_subscription ? rkcg->rkcg_subscription->cnt : 0;
-
-        /* Topics in rkcg_subscribed_topics that don't match any pattern in
-         * the new subscription. */
-        unsubscribing_topics =
-            rd_kafka_cgrp_consumer_get_unsubscribing_topics(rkcg, subscription);
-
-        /* Currently assigned topic partitions that are no longer desired. */
-        revoking = rd_kafka_cgrp_calculate_subscribe_revoking_partitions(
-            rkcg, unsubscribing_topics);
-
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP | RD_KAFKA_DBG_CONSUMER, "SUBSCRIBE",
-                     "Group \"%.*s\": modifying subscription of size %d to "
-                     "new subscription of size %d, removing %d topic(s), "
-                     "revoking %d partition(s) (join-state %s)",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), old_cnt,
-                     subscription->cnt,
-                     unsubscribing_topics ? unsubscribing_topics->cnt : 0,
-                     revoking ? revoking->cnt : 0,
-                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
-
-        if (unsubscribing_topics)
-                rd_kafka_topic_partition_list_destroy(unsubscribing_topics);
-
-
-        if (revoking) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER | RD_KAFKA_DBG_CGRP,
-                             "REBALANCE",
-                             "Group \"%.*s\" revoking "
-                             "%d of %d partition(s)",
-                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                             revoking->cnt, rkcg->rkcg_group_assignment->cnt);
-
-                rd_kafka_rebalance_op_incr(
-                    rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS, revoking,
-                    rd_false /*rejoin*/, "subscribe");
-
-                rd_kafka_topic_partition_list_destroy(revoking);
-        }
-}
-
-/**
  * Set new atomic topic subscription (KIP-848).
  *
  * @locality rdkafka main thread
@@ -6009,9 +5892,6 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
 
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
         if (rktparlist) {
-                rd_kafka_cgrp_consumer_propagate_subscription_changes(
-                    rkcg, rktparlist);
-
                 if (rkcg->rkcg_subscription)
                         rd_kafka_topic_partition_list_destroy(
                             rkcg->rkcg_subscription);

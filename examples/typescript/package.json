@@ -10,7 +10,6 @@
   "license": "MIT",
   "dependencies": {
     "@confluentinc/kafka-javascript": "file:../..",
-    "node-rdkafka": "^2.18.0",
     "typescript": "^5.4.4"
   },
   "devDependencies": {

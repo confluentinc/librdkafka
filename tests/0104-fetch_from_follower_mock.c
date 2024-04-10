@@ -29,8 +29,6 @@
 
 #include "test.h"
 
-#include "../src/rdkafka_protocol.h"
-
 /**
  * @name Fetch from follower tests using the mock broker.
  */

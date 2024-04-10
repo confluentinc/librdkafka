@@ -6,6 +6,20 @@ librdkafka v2.3.1 is a maintenance release:
    check the [release notes](https://www.openssl.org/news/cl30.txt).
  * Integration tests can be started in KRaft mode and run against any
    GitHub Kafka branch other than the released versions.
+ * Fix for a loop of ListOffset requests, happening in a Fetch From Follower
+   scenario, if such request is made to the follower (#4616, @kphelps).
+
+
+## Fixes
+
+### Consumer fixes
+
+  * When an out of range on a follower caused an offset reset, the corresponding
+    ListOffsets request is made to the follower, causing a repeated
+    "Not leader for partition" error. Fixed by sending the request always
+    to the leader.
+    Happening since 1.5.0 (tested version) or previous ones (#4616).
+
 
 
 # librdkafka v2.3.0

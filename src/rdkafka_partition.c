@@ -2299,7 +2299,22 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause_resume(rd_kafka_toppar_t *rktp,
                                                     int flag,
                                                     rd_kafka_replyq_t replyq) {
         int32_t version;
-        rd_kafka_op_t *rko;
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
+
+        if (!pause) {
+                /* If partitions isn't paused, avoid bumping its version,
+                 * as it'll result in resuming fetches from a stale
+                 * next_fetch_start */
+                rd_bool_t is_paused = rd_false;
+                rd_kafka_toppar_lock(rktp);
+                is_paused = RD_KAFKA_TOPPAR_IS_PAUSED(rktp);
+                rd_kafka_toppar_unlock(rktp);
+                if (!is_paused) {
+                        rko->rko_replyq = replyq;
+                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+        }
 
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);
@@ -2310,7 +2325,6 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause_resume(rd_kafka_toppar_t *rktp,
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition, version);
 
-        rko                    = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
         rko->rko_version       = version;
         rko->rko_u.pause.pause = pause;
         rko->rko_u.pause.flag  = flag;

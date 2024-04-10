@@ -1,4 +1,4 @@
-# librdkafka v2.4.0 (can change)
+# librdkafka v2.4.0
 
 librdkafka v2.4.0 is a feature release:
 
@@ -12,6 +12,16 @@ librdkafka v2.4.0 is a feature release:
    max period of 1 ms (#4671).
  * Fixed a bug causing duplicate message consumption from a stale
    fetch start offset in some particular cases (#4636)
+
+
+## Upgrade considerations
+
+ * With KIP 467, INVALID_MSG (Java: CorruptRecordExpection) will
+   be retried automatically. INVALID_RECORD (Java: InvalidRecordException) instead
+   is not retriable and will be set only to the records that caused the
+   error. Rest of records in the batch will fail with the new error code
+   _INVALID_DIFFERENT_RECORD (Java: KafkaException) and can be retried manually,
+   depending on the application logic (#4583).
 
 
 ## Fixes
@@ -37,17 +47,6 @@ librdkafka v2.4.0 is a feature release:
    That could also happen if resuming a partition that wasn't paused.
    Fixed by ensuring that a resume operation is completely a no-op when
    the partition isn't paused (#4636).
-
-
-
-## Upgrade considerations
-
- * With KIP 467, INVALID_MSG (Java: CorruptRecordExpection) will
-   be retried automatically. INVALID_RECORD (Java: InvalidRecordException) instead
-   is not retriable and will be set only to the records that caused the
-   error. Rest of records in the batch will fail with the new error code
-   _INVALID_DIFFERENT_RECORD (Java: KafkaException) and can be retried manually,
-   depending on the application logic.
 
 
 

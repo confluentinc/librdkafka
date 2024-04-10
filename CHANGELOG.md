@@ -7,6 +7,37 @@ librdkafka v2.4.0 is a feature release:
    check the [release notes](https://www.openssl.org/news/cl30.txt).
  * Integration tests can be started in KRaft mode and run against any
    GitHub Kafka branch other than the released versions.
+ * Fix pipeline inclusion of static binaries (#4666)
+ * Fix to main loop timeout calculation leading to a tight loop for a
+   max period of 1 ms (#4671).
+ * Fixed a bug causing duplicate message consumption from a stale
+   fetch start offset in some particular cases (#4636)
+
+
+## Fixes
+
+### General fixes
+
+ * In librdkafka release pipeline a static build containing libsasl2
+   could be chosen instead of the alternative one without it.
+   That caused the libsasl2 dependency to be required in confluent-kafka-go
+   v2.1.0-linux-musl-arm64 and v2.3.0-linux-musl-arm64.
+   Solved by correctly excluding the binary configured with that library,
+   when targeting a static build.
+   Happening since v2.0.2, with specified platforms, when using static binaries (#4666).
+ * When the main thread loop was awakened less than 1 ms
+   before the expiration of a timeout, it was serving with a zero timeout,
+   leading to increased CPU usage until the timeout was reached.
+   Happening since 1.x (#4671).
+
+### Consumer fixes
+
+ * In case of subscription change with a consumer using the cooperative assignor
+   it could resume fetching from a previous position.
+   That could also happen if resuming a partition that wasn't paused.
+   Fixed by ensuring that a resume operation is completely a no-op when
+   the partition isn't paused (#4636).
+
 
 
 ## Upgrade considerations

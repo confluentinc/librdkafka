@@ -257,6 +257,7 @@ _TEST_DECL(0140_commit_metadata);
 _TEST_DECL(0142_reauthentication);
 _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
+_TEST_DECL(0145_pause_resume_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -511,6 +512,7 @@ struct test tests[] = {
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */

@@ -11,6 +11,8 @@ librdkafka v2.3.1 is a maintenance release:
    max period of 1 ms (#4671).
  * Fixed a bug causing duplicate message consumption from a stale
    fetch start offset in some particular cases (#4636)
+ * Fix for a loop of ListOffset requests, happening in a Fetch From Follower
+   scenario, if such request is made to the follower (#4616, @kphelps).
 
 
 ## Fixes
@@ -36,6 +38,11 @@ librdkafka v2.3.1 is a maintenance release:
    That could also happen if resuming a partition that wasn't paused.
    Fixed by ensuring that a resume operation is completely a no-op when
    the partition isn't paused (#4636).
+  * When an out of range on a follower caused an offset reset, the corresponding
+    ListOffsets request is made to the follower, causing a repeated
+    "Not leader for partition" error. Fixed by sending the request always
+    to the leader.
+    Happening since 1.5.0 (tested version) or previous ones (#4616).
 
 
 

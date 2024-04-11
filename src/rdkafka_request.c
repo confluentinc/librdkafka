@@ -2533,31 +2533,65 @@ done:
                 rd_kafka_op_destroy(rko);
 }
 
-
 /**
- * @brief Internal implementation of MetadataRequest (does not send).
+ * @brief Internal implementation of MetadataRequest.
  *
- * @param force - rd_true: force a full request (including all topics and
- *                         brokers) even if there is such a request already
- *                         in flight.
- *              - rd_false: check if there are multiple outstanding full
- *                          requests, and don't send one if there is already
- *                          one present. (See note below.)
+ *        - !topics && !topic_ids: only request brokers (if supported by
+ *          broker, else all topics)
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
+ *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
+ *          are requested
+ *        - else: all topics in cluster are requested
  *
- * If full metadata for all topics is requested (or
- * all brokers, which results in all-topics on older brokers) and there is
- * already a full request in transit then this function will return
- * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
- * If \p rko is non-NULL or if \p force is true, the request is sent regardless.
+ * @param topics A list of topic names (char *) to request.
+ * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
+ * @param reason Metadata request reason
+ * @param allow_auto_create_topics Allow broker-side auto topic creation.
+ *                                 This is best-effort, depending on broker
+ *                                 config and version.
+ * @param include_cluster_authorized_operations Request for cluster
+ *                                              authorized operations.
+ * @param include_topic_authorized_operations Request for topic
+ *                                            authorized operations.
+ * @param cgrp_update Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks Force partition to rack mapping computation in
+ *                    parse_Metadata (see comment there).
+ * @param rko         (optional) rko with replyq for handling response.
+ *                    Specifying an rko forces a metadata request even if
+ *                    there is already a matching one in-transit.
+ * @param resp_cb Callback to be used for handling response.
+ * @param replyq replyq on which response is handled.
+ * @param force rd_true: force a full request (including all topics and
+ *                       brokers) even if there is such a request already
+ *                       in flight.
+ *              rd_false: check if there are multiple outstanding full
+ *                        requests, and don't send one if there is already
+ *                        one present. (See note below.)
+ * @param opaque (optional) parameter to be passed to resp_cb.
  *
- * \p include_cluster_authorized_operations should not be set unless this
- * MetadataRequest is for an admin operation. \sa
- * rd_kafka_MetadataRequest_admin().
+ * @return Error code:
+ *         If full metadata for all topics is requested (or
+ *         all brokers, which results in all-topics on older brokers) and
+ *         there is already a full request in transit then this function
+ *         will return  RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS,
+ *         otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
+ *
+ * @remark Either \p topics or \p topic_ids must be set, but not both.
+ * @remark If \p rko is specified, \p resp_cb, \p replyq, \p force, \p opaque
+ *         should be NULL or rd_false.
+ * @remark If \p rko is non-NULL or if \p force is true,
+ *         the request is sent regardless.
+ * @remark \p include_cluster_authorized_operations and
+ *         \p include_topic_authorized_operations should not be set unless this
+ *         MetadataRequest is for an admin operation.
+ *
+ * @sa rd_kafka_MetadataRequest().
+ * @sa rd_kafka_MetadataRequest_resp_cb().
  */
 static rd_kafka_resp_err_t
 rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                           const rd_list_t *topics,
-                          rd_list_t *topic_ids,
+                          const rd_list_t *topic_ids,
                           const char *reason,
                           rd_bool_t allow_auto_create_topics,
                           rd_bool_t include_cluster_authorized_operations,
@@ -2647,6 +2681,9 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                                          .rkmc_full_topics_sent;
 
         } else {
+                /* Cannot request topics by name and id at the same time */
+                rd_dassert(!(topic_cnt > 0 && topic_id_cnt > 0));
+
                 /* request cnt topics */
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
                                                total_topic_cnt);
@@ -2791,27 +2828,52 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-
 /**
- * @brief Construct a MetadataRequest which uses an optional rko, and the
- * default handler callback.
- * @sa rd_kafka_MetadataRequest.
+ * @brief Construct and enqueue a MetadataRequest
+ *
+ *        - !topics && !topic_ids: only request brokers (if supported by
+ *          broker, else all topics)
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
+ *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
+ *          are requested
+ *        - else: all topics in cluster are requested
+ *
+ * @param topics A list of topic names (char *) to request.
+ * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
+ * @param reason    - metadata request reason
+ * @param allow_auto_create_topics - allow broker-side auto topic creation.
+ *                                   This is best-effort, depending on broker
+ *                                   config and version.
+ * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks - Force partition to rack mapping computation in
+ *                      parse_Metadata (see comment there).
+ * @param rko       - (optional) rko with replyq for handling response.
+ *                    Specifying an rko forces a metadata request even if
+ *                    there is already a matching one in-transit.
+ *
+ * @return Error code:
+ *         If full metadata for all topics is requested (or
+ *         all brokers, which results in all-topics on older brokers) and
+ *         there is already a full request in transit then this function
+ *         will return  RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS,
+ *         otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
+ *         If \p rko is non-NULL, the request is sent regardless.
+ *
+ * @remark Either \p topics or \p topic_ids must be set, but not both.
  */
-static rd_kafka_resp_err_t
-rd_kafka_MetadataRequest_op(rd_kafka_broker_t *rkb,
-                            const rd_list_t *topics,
-                            rd_list_t *topic_ids,
-                            const char *reason,
-                            rd_bool_t allow_auto_create_topics,
-                            rd_bool_t include_cluster_authorized_operations,
-                            rd_bool_t include_topic_authorized_operations,
-                            rd_bool_t cgrp_update,
-                            rd_bool_t force_racks,
-                            rd_kafka_op_t *rko) {
+rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
+                                             const rd_list_t *topics,
+                                             rd_list_t *topic_ids,
+                                             const char *reason,
+                                             rd_bool_t allow_auto_create_topics,
+                                             rd_bool_t cgrp_update,
+                                             rd_bool_t force_racks,
+                                             rd_kafka_op_t *rko) {
         return rd_kafka_MetadataRequest0(
             rkb, topics, topic_ids, reason, allow_auto_create_topics,
-            include_cluster_authorized_operations,
-            include_topic_authorized_operations, cgrp_update, force_racks, rko,
+            rd_false /*don't include cluster authorized operations*/,
+            rd_false /*don't include topic authorized operations*/, cgrp_update,
+            force_racks, rko,
             /* We use the default rd_kafka_handle_Metadata rather than a custom
                resp_cb */
             NULL,
@@ -2824,75 +2886,47 @@ rd_kafka_MetadataRequest_op(rd_kafka_broker_t *rkb,
 }
 
 /**
- * @brief Construct MetadataRequest (does not send)
+ * @brief Construct and enqueue a MetadataRequest which use
+ *        response callback \p resp_cb instead of a rko.
  *
- * \p topics is a list of topic names (char *) to request.
+ *        - !topics && !topic_ids: only request brokers (if supported by
+ *          broker, else all topics)
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
+ *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
+ *          are requested
+ *        - else: all topics in cluster are requested
  *
- * !topics          - only request brokers (if supported by broker, else
- *                    all topics)
- *  topics.cnt==0   - all topics in cluster are requested
- *  topics.cnt >0   - only specified topics are requested
+ * @param topics A list of topic names (char *) to request.
+ * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
+ * @param reason Metadata request reason
+ * @param allow_auto_create_topics Allow broker-side auto topic creation.
+ *                                 This is best-effort, depending on broker
+ *                                 config and version.
+ * @param include_cluster_authorized_operations Request for cluster
+ *                                              authorized operations.
+ * @param include_topic_authorized_operations Request for topic
+ *                                            authorized operations.
+ * @param cgrp_update Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks Force partition to rack mapping computation in
+ *                    parse_Metadata (see comment there).
+ * @param resp_cb Callback to be used for handling response.
+ * @param replyq replyq on which response is handled.
+ * @param force Force request even if in progress.
+ * @param opaque (optional) parameter to be passed to resp_cb.
  *
- * @param reason    - metadata request reason
- * @param allow_auto_create_topics - allow broker-side auto topic creation.
- *                                   This is best-effort, depending on broker
- *                                   config and version.
- * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
- * @param force_racks - Force partition to rack mapping computation in
- *                      parse_Metadata (see comment there).
- * @param rko       - (optional) rko with replyq for handling response.
- *                    Specifying an rko forces a metadata request even if
- *                    there is already a matching one in-transit.
+ * @return Error code:
+ *         If full metadata for all topics is requested (or
+ *         all brokers, which results in all-topics on older brokers) and
+ *         there is already a full request in transit then this function
+ *         will return  RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS,
+ *         otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
  *
- * If full metadata for all topics is requested (or
- * all brokers, which results in all-topics on older brokers) and there is
- * already a full request in transit then this function will return
- * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
- * If \p rko is non-NULL, the request is sent regardless.
- */
-rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
-                                             const rd_list_t *topics,
-                                             rd_list_t *topic_ids,
-                                             const char *reason,
-                                             rd_bool_t allow_auto_create_topics,
-                                             rd_bool_t cgrp_update,
-                                             rd_bool_t force_racks,
-                                             rd_kafka_op_t *rko) {
-        return rd_kafka_MetadataRequest_op(
-            rkb, topics, topic_ids, reason, allow_auto_create_topics,
-            /* Cluster and Topic authorized operations are used by admin
-             * operations only. For non-admin operation cases, NEVER set them to
-             * true, since it changes the metadata max version to be 10, until
-             * KIP-700 can be implemented. */
-            rd_false, rd_false, cgrp_update, force_racks, rko);
-}
-
-
-/**
- * @brief Construct MetadataRequest for use with AdminAPI (does not send).
- *
- * \p topics is a list of topic names (char *) to request.
- *
- * !topics          - only request brokers (if supported by broker, else
- *                    all topics)
- *  topics.cnt==0   - all topics in cluster are requested
- *  topics.cnt >0   - only specified topics are requested
- *
- * @param reason    - metadata request reason
- * @param include_cluster_authorized_operations - request for cluster
- *                      authorized operations.
- * @param include_topic_authorized_operations - request for topic authorized
- *                      operations.
- * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
- * @param force_racks - Force partition to rack mapping computation in
- *                      parse_Metadata (see comment there).
- * @param resp_cb - callback to be used for handling response.
- * @param replyq - replyq on which response is handled.
- * @param opaque - (optional) parameter to be passed to resp_cb.
+ *  @remark Either \p topics or \p topic_ids must be set, but not both.
  */
 rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_kafka_broker_t *rkb,
     const rd_list_t *topics,
+    const rd_list_t *topics_ids,
     const char *reason,
     rd_bool_t allow_auto_create_topics,
     rd_bool_t include_cluster_authorized_operations,
@@ -2904,11 +2938,10 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_bool_t force,
     void *opaque) {
         return rd_kafka_MetadataRequest0(
-            rkb, topics, NULL, reason, allow_auto_create_topics,
+            rkb, topics, topics_ids, reason, allow_auto_create_topics,
             include_cluster_authorized_operations,
             include_topic_authorized_operations, cgrp_update, force_racks,
-            NULL /* No op - using custom resp_cb. */, resp_cb, replyq,
-            rd_true /* Admin operation metadata requests are always forced. */,
+            NULL /* No op - using custom resp_cb. */, resp_cb, replyq, force,
             opaque);
 }
 

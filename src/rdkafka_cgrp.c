@@ -6462,10 +6462,10 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
 
-        if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
+        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_GENERIC)
                 return;
 
-        if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_GENERIC)
+        if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
                 return;
 
         /*

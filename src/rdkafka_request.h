@@ -314,6 +314,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
 rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_kafka_broker_t *rkb,
     const rd_list_t *topics,
+    const rd_list_t *topic_ids,
     const char *reason,
     rd_bool_t allow_auto_create_topics,
     rd_bool_t include_cluster_authorized_operations,

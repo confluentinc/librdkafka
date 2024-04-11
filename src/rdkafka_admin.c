@@ -1507,7 +1507,7 @@ rd_kafka_admin_MetadataRequest(rd_kafka_broker_t *rkb,
                                rd_kafka_replyq_t replyq,
                                void *opaque) {
         return rd_kafka_MetadataRequest_resp_cb(
-            rkb, topics, reason,
+            rkb, topics, NULL, reason,
             rd_false /* No admin operation requires topic creation. */,
             include_cluster_authorized_operations,
             include_topic_authorized_operations,

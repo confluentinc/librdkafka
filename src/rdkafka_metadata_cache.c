@@ -80,8 +80,14 @@ static RD_INLINE void
 rd_kafka_metadata_cache_delete(rd_kafka_t *rk,
                                struct rd_kafka_metadata_cache_entry *rkmce,
                                int unlink_avl) {
-        if (unlink_avl)
+        if (unlink_avl) {
                 RD_AVL_REMOVE_ELM(&rk->rk_metadata_cache.rkmc_avl, rkmce);
+                if (!RD_KAFKA_UUID_IS_ZERO(
+                        rkmce->rkmce_metadata_internal_topic.topic_id)) {
+                        RD_AVL_REMOVE_ELM(&rk->rk_metadata_cache.rkmc_avl_by_id,
+                                          rkmce);
+                }
+        }
         TAILQ_REMOVE(&rk->rk_metadata_cache.rkmc_expiry, rkmce, rkmce_link);
         rd_kafka_assert(NULL, rk->rk_metadata_cache.rkmc_cnt > 0);
         rk->rk_metadata_cache.rkmc_cnt--;
@@ -98,6 +104,21 @@ int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic) {
         struct rd_kafka_metadata_cache_entry *rkmce;
 
         rkmce = rd_kafka_metadata_cache_find(rk, topic, 1);
+        if (rkmce)
+                rd_kafka_metadata_cache_delete(rk, rkmce, 1);
+        return rkmce ? 1 : 0;
+}
+
+/**
+ * @brief Delete cache entry by topic id
+ * @locks rd_kafka_wrlock()
+ * @returns 1 if entry was found and removed, else 0.
+ */
+int rd_kafka_metadata_cache_delete_by_topic_id(rd_kafka_t *rk,
+                                               const rd_kafka_Uuid_t topic_id) {
+        struct rd_kafka_metadata_cache_entry *rkmce;
+
+        rkmce = rd_kafka_metadata_cache_find_by_id(rk, topic_id, 1);
         if (rkmce)
                 rd_kafka_metadata_cache_delete(rk, rkmce, 1);
         return rkmce ? 1 : 0;
@@ -221,6 +242,25 @@ rd_kafka_metadata_cache_find(rd_kafka_t *rk, const char *topic, int valid) {
         return NULL;
 }
 
+/**
+ * @brief Find cache entry by topic id
+ *
+ * @param valid: entry must be valid (not hint)
+ *
+ * @locks rd_kafka_*lock()
+ */
+struct rd_kafka_metadata_cache_entry *
+rd_kafka_metadata_cache_find_by_id(rd_kafka_t *rk,
+                                   const rd_kafka_Uuid_t topic_id,
+                                   int valid) {
+        struct rd_kafka_metadata_cache_entry skel, *rkmce;
+        skel.rkmce_metadata_internal_topic.topic_id = topic_id;
+        rkmce = RD_AVL_FIND(&rk->rk_metadata_cache.rkmc_avl_by_id, &skel);
+        if (rkmce && (!valid || RD_KAFKA_METADATA_CACHE_VALID(rkmce)))
+                return rkmce;
+        return NULL;
+}
+
 
 /**
  * @brief Partition (id) comparator
@@ -247,7 +287,7 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
     rd_bool_t include_racks,
     rd_kafka_metadata_broker_internal_t *brokers_internal,
     size_t broker_cnt) {
-        struct rd_kafka_metadata_cache_entry *rkmce, *old;
+        struct rd_kafka_metadata_cache_entry *rkmce, *old, *old_by_id = NULL;
         rd_tmpabuf_t tbuf;
         int i;
 
@@ -350,8 +390,28 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
         /* Insert (and replace existing) entry. */
         old = RD_AVL_INSERT(&rk->rk_metadata_cache.rkmc_avl, rkmce,
                             rkmce_avlnode);
-        if (old)
+        /* Insert (and replace existing) entry into the AVL tree sorted
+         * by topic id. */
+        if (!RD_KAFKA_UUID_IS_ZERO(
+                rkmce->rkmce_metadata_internal_topic.topic_id)) {
+                /* If topic id isn't zero insert cache entry into this tree */
+                old_by_id = RD_AVL_INSERT(&rk->rk_metadata_cache.rkmc_avl_by_id,
+                                          rkmce, rkmce_avlnode_by_id);
+        } else if (old && !RD_KAFKA_UUID_IS_ZERO(
+                              old->rkmce_metadata_internal_topic.topic_id)) {
+                /* If it had a topic id, remove it from the tree */
+                RD_AVL_REMOVE_ELM(&rk->rk_metadata_cache.rkmc_avl_by_id, old);
+        }
+        if (old) {
+                /* Delete and free old cache entry */
                 rd_kafka_metadata_cache_delete(rk, old, 0);
+        }
+        if (old_by_id && old_by_id != old) {
+                /* If there was a different cache entry in this tree,
+                 * remove and free it. */
+                RD_AVL_REMOVE_ELM(&rk->rk_metadata_cache.rkmc_avl, old_by_id);
+                rd_kafka_metadata_cache_delete(rk, old_by_id, 0);
+        }
 
         /* Explicitly not freeing the tmpabuf since rkmce points to its
          * memory. */
@@ -414,6 +474,8 @@ void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk) {
  * For permanent errors (authorization failures), we keep
  * the entry cached for metadata.max.age.ms.
  *
+ * @return 1 on metadata change, 0 when no change was applied
+ *
  * @remark The cache expiry timer will not be updated/started,
  *         call rd_kafka_metadata_cache_expiry_start() instead.
  *
@@ -427,24 +489,38 @@ void rd_kafka_metadata_cache_topic_update(
     rd_bool_t include_racks,
     rd_kafka_metadata_broker_internal_t *brokers,
     size_t broker_cnt) {
-        rd_ts_t now        = rd_clock();
+        struct rd_kafka_metadata_cache_entry *rkmce = NULL;
+        rd_ts_t now                                 = rd_clock();
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
         int changed        = 1;
+        if (unlikely(!mdt->topic)) {
+                rkmce =
+                    rd_kafka_metadata_cache_find_by_id(rk, mdit->topic_id, 1);
+                if (!rkmce)
+                        return;
+        }
 
-        /* Cache unknown topics for a short while (100ms) to allow the cgrp
-         * logic to find negative cache hits. */
-        if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-                ts_expires = RD_MIN(ts_expires, now + (100 * 1000));
+        if (unlikely(!mdt->topic)) {
+                /* Cache entry found but no topic name:
+                 * delete it. */
+                changed = rd_kafka_metadata_cache_delete_by_topic_id(
+                    rk, mdit->topic_id);
+        } else {
+                /* Cache unknown topics for a short while (100ms) to allow the
+                 * cgrp logic to find negative cache hits. */
+                if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                        ts_expires = RD_MIN(ts_expires, now + (100 * 1000));
 
-        if (!mdt->err ||
-            mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED ||
-            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-                rd_kafka_metadata_cache_insert(rk, mdt, mdit, now, ts_expires,
-                                               include_racks, brokers,
-                                               broker_cnt);
-        else
-                changed =
-                    rd_kafka_metadata_cache_delete_by_name(rk, mdt->topic);
+                if (!mdt->err ||
+                    mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED ||
+                    mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                        rd_kafka_metadata_cache_insert(
+                            rk, mdt, mdit, now, ts_expires, include_racks,
+                            brokers, broker_cnt);
+                else
+                        changed = rd_kafka_metadata_cache_delete_by_name(
+                            rk, mdt->topic);
+        }
 
         if (changed && propagate)
                 rd_kafka_metadata_cache_propagate_changes(rk);
@@ -481,6 +557,40 @@ void rd_kafka_metadata_cache_purge_hints(rd_kafka_t *rk,
                 rd_kafka_dbg(rk, METADATA, "METADATA",
                              "Purged %d/%d cached topic hint(s)", cnt,
                              rd_list_cnt(topics));
+                rd_kafka_metadata_cache_propagate_changes(rk);
+        }
+}
+
+/**
+ * @brief Remove cache hints for topic ids in \p topic_ids
+ *        This is done when the Metadata response has been parsed and
+ *        replaced hints with existing topic information, thus this will
+ *        only remove unmatched topics from the cache.
+ *
+ * @locks rd_kafka_wrlock()
+ */
+void rd_kafka_metadata_cache_purge_hints_by_id(rd_kafka_t *rk,
+                                               const rd_list_t *topic_ids) {
+        const rd_kafka_Uuid_t *topic_id;
+        int i;
+        int cnt = 0;
+
+        RD_LIST_FOREACH(topic_id, topic_ids, i) {
+                struct rd_kafka_metadata_cache_entry *rkmce;
+
+                if (!(rkmce = rd_kafka_metadata_cache_find_by_id(rk, *topic_id,
+                                                                 0 /*any*/)) ||
+                    RD_KAFKA_METADATA_CACHE_VALID(rkmce))
+                        continue;
+
+                rd_kafka_metadata_cache_delete(rk, rkmce, 1 /*unlink avl*/);
+                cnt++;
+        }
+
+        if (cnt > 0) {
+                rd_kafka_dbg(rk, METADATA, "METADATA",
+                             "Purged %d/%d cached topic hint(s)", cnt,
+                             rd_list_cnt(topic_ids));
                 rd_kafka_metadata_cache_propagate_changes(rk);
         }
 }
@@ -589,6 +699,16 @@ static int rd_kafka_metadata_cache_entry_cmp(const void *_a, const void *_b) {
         return strcmp(a->rkmce_mtopic.topic, b->rkmce_mtopic.topic);
 }
 
+/**
+ * @brief Cache entry comparator (on topic id)
+ */
+static int rd_kafka_metadata_cache_entry_by_id_cmp(const void *_a,
+                                                   const void *_b) {
+        const struct rd_kafka_metadata_cache_entry *a = _a, *b = _b;
+        return rd_kafka_Uuid_cmp(a->rkmce_metadata_internal_topic.topic_id,
+                                 b->rkmce_metadata_internal_topic.topic_id);
+}
+
 
 /**
  * @brief Initialize the metadata cache
@@ -598,6 +718,8 @@ static int rd_kafka_metadata_cache_entry_cmp(const void *_a, const void *_b) {
 void rd_kafka_metadata_cache_init(rd_kafka_t *rk) {
         rd_avl_init(&rk->rk_metadata_cache.rkmc_avl,
                     rd_kafka_metadata_cache_entry_cmp, 0);
+        rd_avl_init(&rk->rk_metadata_cache.rkmc_avl_by_id,
+                    rd_kafka_metadata_cache_entry_by_id_cmp, 0);
         TAILQ_INIT(&rk->rk_metadata_cache.rkmc_expiry);
         mtx_init(&rk->rk_metadata_cache.rkmc_full_lock, mtx_plain);
         mtx_init(&rk->rk_metadata_cache.rkmc_cnd_lock, mtx_plain);
@@ -620,6 +742,7 @@ void rd_kafka_metadata_cache_destroy(rd_kafka_t *rk) {
         mtx_destroy(&rk->rk_metadata_cache.rkmc_cnd_lock);
         cnd_destroy(&rk->rk_metadata_cache.rkmc_cnd);
         rd_avl_destroy(&rk->rk_metadata_cache.rkmc_avl);
+        rd_avl_destroy(&rk->rk_metadata_cache.rkmc_avl_by_id);
 }
 
 

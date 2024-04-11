@@ -12,6 +12,9 @@ librdkafka v2.4.0 is a feature release:
    max period of 1 ms (#4671).
  * Fixed a bug causing duplicate message consumption from a stale
    fetch start offset in some particular cases (#4636)
+ * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+   Continue partial implementation by adding a metadata cache by topic id
+   and updating the topic id corresponding to the partition name (#4676)
 
 
 ## Upgrade considerations

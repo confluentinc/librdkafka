@@ -500,7 +500,7 @@ void rd_kafka_metadata_cache_topic_update(
                         return;
         }
 
-        if (!mdt->topic) {
+        if (unlikely(!mdt->topic)) {
                 /* Cache entry found but no topic name:
                  * delete it. */
                 changed = rd_kafka_metadata_cache_delete_by_topic_id(

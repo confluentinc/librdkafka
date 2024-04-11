@@ -288,12 +288,12 @@ struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_find(rd_kafka_t *rk, const char *topic, int valid);
 struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_find_by_id(rd_kafka_t *rk,
-                                   const rd_kafka_Uuid_t,
+                                   const rd_kafka_Uuid_t topic_id,
                                    int valid);
 void rd_kafka_metadata_cache_purge_hints(rd_kafka_t *rk,
                                          const rd_list_t *topics);
 void rd_kafka_metadata_cache_purge_hints_by_id(rd_kafka_t *rk,
-                                               const rd_list_t *topics);
+                                               const rd_list_t *topic_ids);
 int rd_kafka_metadata_cache_hint(rd_kafka_t *rk,
                                  const rd_list_t *topics,
                                  rd_list_t *dst,

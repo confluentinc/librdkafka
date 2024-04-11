@@ -2537,10 +2537,10 @@ done:
  *
  *        - !topics && !topic_ids: only request brokers (if supported by
  *          broker, else all topics)
- *        - topics.cnt == 0 || topic_ids.cnt == 0: all topics in cluster
- *          are requested
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
  *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
  *          are requested
+ *        - else: all topics in cluster are requested
  *
  * @param topics A list of topic names (char *) to request.
  * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
@@ -2576,8 +2576,10 @@ done:
  *         otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
  *
  * @remark Either \p topics or \p topic_ids must be set, but not both.
- *         If \p rko is specified, \p resp_cb, \p replyq, \p force, \p opaque
+ * @remark If \p rko is specified, \p resp_cb, \p replyq, \p force, \p opaque
  *         should be NULL or rd_false.
+ * @remark If \p rko is non-NULL or if \p force is true,
+ *         the request is sent regardless.
  * @remark \p include_cluster_authorized_operations and
  *         \p include_topic_authorized_operations should not be set unless this
  *         MetadataRequest is for an admin operation.
@@ -2678,6 +2680,9 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                                          .rkmc_full_topics_sent;
 
         } else {
+                /* Cannot request topics by name and id at the same time */
+                rd_dassert(!(topic_cnt > 0 && topic_id_cnt > 0));
+
                 /* request cnt topics */
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
                                                total_topic_cnt);
@@ -2827,10 +2832,10 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
  *
  *        - !topics && !topic_ids: only request brokers (if supported by
  *          broker, else all topics)
- *        - topics.cnt == 0 || topic_ids.cnt == 0: all topics in cluster
- *          are requested
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
  *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
  *          are requested
+ *        - else: all topics in cluster are requested
  *
  * @param topics A list of topic names (char *) to request.
  * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
@@ -2885,10 +2890,10 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
  *
  *        - !topics && !topic_ids: only request brokers (if supported by
  *          broker, else all topics)
- *        - topics.cnt == 0 || topic_ids.cnt == 0: all topics in cluster
- *          are requested
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
  *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
  *          are requested
+ *        - else: all topics in cluster are requested
  *
  * @param topics A list of topic names (char *) to request.
  * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.

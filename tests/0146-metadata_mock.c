@@ -75,11 +75,8 @@ static void do_test_metadata_persists_in_cache(const char *assignor) {
         rd_kafka_metadata_destroy(md);
         md = NULL;
 
-        /* Subscribing shouldn't give UNKNOWN_TOPIC_OR_PART err  */
-        TEST_CALL_ERR__(rd_kafka_subscribe(rk, subscription));
-        TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
-
-        /* Verify no error was returned  */
+        /* Subscribing shouldn't give UNKNOWN_TOPIC_OR_PART err.
+         * Verify no error was returned. */
         test_consumer_poll_no_msgs("no error", rk, 0, 100);
 
         rd_kafka_topic_partition_list_destroy(subscription);

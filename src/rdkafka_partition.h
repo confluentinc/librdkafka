@@ -724,7 +724,7 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     const char *topic,
     int32_t partition);
 
-void rd_kafka_topic_partition_list_add_copy(
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_copy(
     rd_kafka_topic_partition_list_t *rktparlist,
     const rd_kafka_topic_partition_t *rktpar);
 

@@ -155,8 +155,7 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
 
                 if (err == RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH ||
                     rktpar->err == RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH) {
-                        /* TODO: Explain. */
-                        rktpar->offset = RD_KAFKA_OFFSET_STORED;
+                        rd_kafka_topic_partition_t *rktpar_copy;
 
                         rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
                                      "Adding %s [%" PRId32
@@ -164,8 +163,13 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                                      "list because of stale member epoch",
                                      rktpar->topic, rktpar->partition);
 
-                        rd_kafka_topic_partition_list_add_copy(
+                        rktpar_copy = rd_kafka_topic_partition_list_add_copy(
                             rk->rk_consumer.assignment.pending, rktpar);
+                        /* Need to reset offset to STORED to query for
+                         * the committed offset again.
+                         * Not necessary for UNSTABLE_OFFSET_COMMIT
+                         * because the buffer is retried there. */
+                        rktpar_copy->offset = RD_KAFKA_OFFSET_STORED;
 
                 } else if (err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT ||
                            rktpar->err ==
@@ -225,7 +229,8 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                 /* Do nothing for request-level errors (err is set). */
         }
 
-        /* TODO: Explain */
+        /* In case of stale member epoch we retry to serve the
+         * assignment only after a successful ConsumerGroupHeartbeat. */
         if (offsets->cnt > 0 && err != RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH)
                 rd_kafka_assignment_serve(rk);
 }

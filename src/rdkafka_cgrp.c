@@ -3508,7 +3508,6 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
 static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
                                              rd_kafka_op_t *rko,
                                              const char *reason) {
-
         /* wait_coord_q is disabled session.timeout.ms after
          * group close() has been initated. */
         if (rko->rko_u.offset_commit.ts_timeout != 0 ||
@@ -3530,6 +3529,50 @@ static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
         rko->rko_u.offset_commit.ts_timeout =
             rd_clock() +
             (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000);
+        rd_kafka_q_enq(rkcg->rkcg_wait_coord_q, rko);
+
+        return 1;
+}
+
+/**
+ * @brief Defer offset commit (rko) until coordinator is available (KIP-848).
+ *
+ * @returns 1 if the rko was deferred or 0 if the defer queue is disabled
+ *          or rko already deferred.
+ */
+static int rd_kafka_cgrp_consumer_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
+                                                      rd_kafka_op_t *rko,
+                                                      const char *reason) {
+        /* wait_coord_q is disabled session.timeout.ms after
+         * group close() has been initated. */
+        if ((rko->rko_u.offset_commit.ts_timeout != 0 &&
+             rd_clock() >= rko->rko_u.offset_commit.ts_timeout) ||
+            !rd_kafka_q_ready(rkcg->rkcg_wait_coord_q))
+                return 0;
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+                     "Group \"%s\": "
+                     "unable to OffsetCommit in state %s: %s: "
+                     "coordinator (%s) is unavailable: "
+                     "retrying later",
+                     rkcg->rkcg_group_id->str,
+                     rd_kafka_cgrp_state_names[rkcg->rkcg_state], reason,
+                     rkcg->rkcg_curr_coord
+                         ? rd_kafka_broker_name(rkcg->rkcg_curr_coord)
+                         : "none");
+
+        rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+        /* In consumer protocol session.timeout.ms
+         * isn't used, we rely only on the coordinator
+         * sending UNKNOWN_MEMBER_ID when
+         * session expires, but we're not stopping the HBs.
+         * What if we cannot reach the
+         * coordinator? Should receive the
+         * session timeout and enforce it in KIP 848 too?
+         * That can also happens to a member that is fenced but cannot
+         * reach the coordinator to know it, it continues fetching,
+         * if it can, but cannot commit. */
+        rko->rko_u.offset_commit.ts_timeout = INT64_MAX;
         rd_kafka_q_enq(rkcg->rkcg_wait_coord_q, rko);
 
         return 1;
@@ -3733,7 +3776,6 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
                                      rd_kafka_err2str(err));
         }
 
-
         /*
          * Error handling
          */
@@ -3766,9 +3808,12 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
                 return; /* Retrying */
 
         case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
-                rd_assert(rkcg->rkcg_group_protocol ==
-                          RD_KAFKA_GROUP_PROTOCOL_CONSUMER);
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
+                if (!rd_strcmp(rko_orig->rko_u.offset_commit.reason, "manual"))
+                        /* Don't retry manual commits giving this error.
+                         * TODO: do this in a faster and cleaner way
+                         * with a bool. */
+                        break;
                 /* Continue */
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
@@ -3778,9 +3823,13 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
                 /* Future-proofing, see timeout_scan(). */
                 rd_kafka_assert(NULL, err != RD_KAFKA_RESP_ERR__WAIT_COORD);
-
-                if (rd_kafka_cgrp_defer_offset_commit(rkcg, rko_orig,
-                                                      rd_kafka_err2str(err)))
+                if (rkcg->rkcg_group_protocol ==
+                        RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
+                    rd_kafka_cgrp_consumer_defer_offset_commit(
+                        rkcg, rko_orig, rd_kafka_err2str(err)))
+                        return;
+                else if (rd_kafka_cgrp_defer_offset_commit(
+                             rkcg, rko_orig, rd_kafka_err2str(err)))
                         return;
                 break;
 

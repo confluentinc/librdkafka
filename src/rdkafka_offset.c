@@ -380,7 +380,56 @@ rd_kafka_commit0(rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Check partition level errors and returns last partition error.
+ *        Also sets said errors to the list of partitions to commit,
+ *        if passed.
+ *
+ * @param offset List of partitions being committed (optional)
+ */
+static rd_kafka_resp_err_t
+rd_kafka_commit_reply_err(rd_kafka_op_t *rko,
+                          const rd_kafka_topic_partition_list_t *offsets) {
+        rd_kafka_resp_err_t err = rko->rko_err;
+        if (rko->rko_u.offset_commit.partitions) {
+                /* Check partition-level errors. */
+                int i;
+                rd_kafka_topic_partition_list_t *committed_partitions =
+                    rko->rko_u.offset_commit.partitions;
+                for (i = 0; i < committed_partitions->cnt; i++) {
+                        rd_kafka_topic_partition_t *committed_partition =
+                            &committed_partitions->elems[i];
+                        if (committed_partition->err !=
+                                RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH &&
+                            committed_partition->err !=
+                                RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID) {
+                                /* FIXME: should it return the partition level
+                                 * error for all errors?
+                                 * Doing that requires changing tests
+                                 * 0117 and 0130. */
+                                continue;
+                        }
 
+                        err = committed_partition->err
+                                  ? committed_partition->err
+                                  : err;
+
+                        /* Reflect committed partition error to
+                         * passed partition. */
+                        if (committed_partition->err && offsets) {
+                                rd_kafka_topic_partition_t
+                                    *requested_partition =
+                                        rd_kafka_topic_partition_list_find(
+                                            offsets, committed_partition->topic,
+                                            committed_partition->partition);
+                                if (requested_partition)
+                                        requested_partition->err =
+                                            committed_partition->err;
+                        }
+                }
+        }
+        return err;
+}
 
 /**
  * NOTE: 'offsets' may be NULL, see official documentation.
@@ -404,8 +453,22 @@ rd_kafka_commit(rd_kafka_t *rk,
 
         err = rd_kafka_commit0(rk, offsets, NULL, rq, NULL, NULL, "manual");
 
-        if (!err && !async)
-                err = rd_kafka_q_wait_result(repq, RD_POLL_INFINITE);
+        if (!err && !async) {
+                if (rkcg->rkcg_group_protocol ==
+                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                        rd_kafka_op_t *rko;
+                        rko = rd_kafka_q_pop(
+                            repq, rd_timeout_us(RD_POLL_INFINITE), 0);
+                        if (!rko)
+                                err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                        else {
+                                err = rd_kafka_commit_reply_err(rko, offsets);
+                                rd_kafka_op_destroy(rko);
+                        }
+                } else {
+                        err = rd_kafka_q_wait_result(repq, RD_POLL_INFINITE);
+                }
+        }
 
         if (!async)
                 rd_kafka_q_destroy_owner(repq);

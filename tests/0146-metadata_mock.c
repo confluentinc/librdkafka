@@ -113,7 +113,6 @@ static void do_test_fast_metadata_refresh_stops(void) {
 
         test_conf_init(&conf, NULL, 10);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
-        test_conf_set(conf, "group.id", topic);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -141,6 +140,7 @@ static void do_test_fast_metadata_refresh_stops(void) {
 
         SUB_TEST_PASS();
 }
+
 /**
  * @brief A metadata call for an existing topic, just after subscription,
  *        must not cause a UNKNOWN_TOPIC_OR_PART error.

@@ -86,13 +86,53 @@ static void do_test_metadata_persists_in_cache(const char *assignor) {
 
         SUB_TEST_PASS();
 }
+/**
+ * @brief A metadata call for an existing topic, just after subscription,
+ *        must not cause a UNKNOWN_TOPIC_OR_PART error.
+ *        See issue #4589.
+ */
+static void do_test_metadata_call_before_join(void) {
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_conf_t *conf;
+        const struct rd_kafka_metadata *metadata;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+
+        test_conf_init(&conf, NULL, 10);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", topic);
+
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+
+        test_consumer_subscribe(rk, topic);
+
+        TEST_CALL_ERR__(rd_kafka_metadata(rk, 1, 0, &metadata, 5000));
+        rd_kafka_metadata_destroy(metadata);
+
+        test_consumer_poll_no_msgs("no errors", rk, 0, 1000);
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
 
 int main_0146_metadata_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
+        /* No need to test the "roundrobin" assignor case,
+         * as this is just for checking the two code paths:
+         * EAGER or COOPERATIVE one, and "range" is EAGER too. */
         do_test_metadata_persists_in_cache("range");
-
         do_test_metadata_persists_in_cache("cooperative-sticky");
+
+        do_test_metadata_call_before_join();
 
         return 0;
 }

@@ -16,6 +16,8 @@ librdkafka v2.4.0 is a feature release:
    Continue partial implementation by adding a metadata cache by topic id
    and updating the topic id corresponding to the partition name (#4676)
  * Fix to metadata cache expiration on full metadata refresh (#4677).
+ * Fix for a wrong error returned on full metadata refresh before joining
+   a consumer group (#4678).
 
 
 ## Upgrade considerations
@@ -32,29 +34,40 @@ librdkafka v2.4.0 is a feature release:
 
 ### General fixes
 
- * In librdkafka release pipeline a static build containing libsasl2
+ * Issues: [confluentinc/confluent-kafka-go#981](https://github.com/confluentinc/confluent-kafka-go/issues/981).
+   In librdkafka release pipeline a static build containing libsasl2
    could be chosen instead of the alternative one without it.
    That caused the libsasl2 dependency to be required in confluent-kafka-go
    v2.1.0-linux-musl-arm64 and v2.3.0-linux-musl-arm64.
    Solved by correctly excluding the binary configured with that library,
    when targeting a static build.
-   Happening since v2.0.2, with specified platforms, when using static binaries (#4666).
- * When the main thread loop was awakened less than 1 ms
+   Happening since v2.0.2, with specified platforms,
+   when using static binaries (#4666).
+ * Issues: #4684.
+   When the main thread loop was awakened less than 1 ms
    before the expiration of a timeout, it was serving with a zero timeout,
    leading to increased CPU usage until the timeout was reached.
-   Happening since 1.x (#4671).
- * Metadata cache was cleared on full metadata refresh, leading to unnecessary
+   Happening since 1.x.
+ * Issues: #4685.
+   Metadata cache was cleared on full metadata refresh, leading to unnecessary
    refreshes and occasional `UNKNOWN_TOPIC_OR_PART` errors. Solved by updating
    cache for existing or hinted entries instead of clearing them.
    Happening since 2.1.0 (#4677).
+ * Issues: #4589.
+   A metadata call before member joins consumer group,
+   could lead to an `UNKNOWN_TOPIC_OR_PART` error. Solved by updating
+   the consumer group following a metadata refresh only in safe states.
+   Happening since 2.1.0 (#4678).
 
 ### Consumer fixes
 
- * In case of subscription change with a consumer using the cooperative assignor
+ * Issues: #4686.
+   In case of subscription change with a consumer using the cooperative assignor
    it could resume fetching from a previous position.
    That could also happen if resuming a partition that wasn't paused.
    Fixed by ensuring that a resume operation is completely a no-op when
-   the partition isn't paused (#4636).
+   the partition isn't paused.
+   Happening since 1.x (#4636).
 
 
 

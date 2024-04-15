@@ -126,9 +126,12 @@ static void do_test_metadata_call_before_join(void) {
 int main_0146_metadata_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
+        /* No need to test the "roundrobin" assignor case,
+         * as this is just for checking the two code paths:
+         * EAGER or COOPERATIVE one, and "range" is EAGER too. */
         do_test_metadata_persists_in_cache("range");
-
         do_test_metadata_persists_in_cache("cooperative-sticky");
+
         do_test_metadata_call_before_join();
 
         return 0;

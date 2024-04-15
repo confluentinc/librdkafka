@@ -182,44 +182,26 @@ static int rd_kafka_metadata_cache_evict(rd_kafka_t *rk) {
 
 
 /**
- * @brief Evict timed out entries from cache based on their insert/update time
- *        rather than expiry time. Any entries older than \p ts will be evicted.
+ * @brief Remove all cache hints,.
+ *        This is done when the Metadata response has been parsed and
+ *        replaced hints with existing topic information, thus this will
+ *        only remove unmatched topics from the cache.
  *
- * @returns the number of entries evicted.
+ * @returns the number of purged hints
  *
  * @locks_required rd_kafka_wrlock()
  */
-int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts) {
+int rd_kafka_metadata_cache_purge_all_hints(rd_kafka_t *rk) {
         int cnt = 0;
         struct rd_kafka_metadata_cache_entry *rkmce, *tmp;
 
         TAILQ_FOREACH_SAFE(rkmce, &rk->rk_metadata_cache.rkmc_expiry,
                            rkmce_link, tmp) {
-                if (rkmce->rkmce_ts_insert <= ts) {
+                if (!RD_KAFKA_METADATA_CACHE_VALID(rkmce)) {
                         rd_kafka_metadata_cache_delete(rk, rkmce, 1);
                         cnt++;
                 }
         }
-
-        /* Update expiry timer */
-        rkmce = TAILQ_FIRST(&rk->rk_metadata_cache.rkmc_expiry);
-        if (rkmce)
-                rd_kafka_timer_start(&rk->rk_timers,
-                                     &rk->rk_metadata_cache.rkmc_expiry_tmr,
-                                     rkmce->rkmce_ts_expires - rd_clock(),
-                                     rd_kafka_metadata_cache_evict_tmr_cb, rk);
-        else
-                rd_kafka_timer_stop(&rk->rk_timers,
-                                    &rk->rk_metadata_cache.rkmc_expiry_tmr, 1);
-
-        rd_kafka_dbg(rk, METADATA, "METADATA",
-                     "Expired %d entries older than %dms from metadata cache "
-                     "(%d entries remain)",
-                     cnt, (int)((rd_clock() - ts) / 1000),
-                     rk->rk_metadata_cache.rkmc_cnt);
-
-        if (cnt)
-                rd_kafka_metadata_cache_propagate_changes(rk);
 
         return cnt;
 }
@@ -474,6 +456,9 @@ void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk) {
  * For permanent errors (authorization failures), we keep
  * the entry cached for metadata.max.age.ms.
  *
+ * @param only_existing Update only existing metadata cache entries,
+ *                      either valid or hinted.
+ *
  * @return 1 on metadata change, 0 when no change was applied
  *
  * @remark The cache expiry timer will not be updated/started,
@@ -481,31 +466,31 @@ void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk) {
  *
  * @locks rd_kafka_wrlock()
  */
-void rd_kafka_metadata_cache_topic_update(
+int rd_kafka_metadata_cache_topic_update(
     rd_kafka_t *rk,
     const rd_kafka_metadata_topic_t *mdt,
     const rd_kafka_metadata_topic_internal_t *mdit,
     rd_bool_t propagate,
     rd_bool_t include_racks,
     rd_kafka_metadata_broker_internal_t *brokers,
-    size_t broker_cnt) {
+    size_t broker_cnt,
+    rd_bool_t only_existing) {
         struct rd_kafka_metadata_cache_entry *rkmce = NULL;
         rd_ts_t now                                 = rd_clock();
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
         int changed        = 1;
-        if (unlikely(!mdt->topic)) {
-                rkmce =
-                    rd_kafka_metadata_cache_find_by_id(rk, mdit->topic_id, 1);
+        if (only_existing) {
+                if (likely(mdt->topic != NULL)) {
+                        rkmce = rd_kafka_metadata_cache_find(rk, mdt->topic, 0);
+                } else {
+                        rkmce = rd_kafka_metadata_cache_find_by_id(
+                            rk, mdit->topic_id, 1);
+                }
                 if (!rkmce)
-                        return;
+                        return 0;
         }
 
-        if (unlikely(!mdt->topic)) {
-                /* Cache entry found but no topic name:
-                 * delete it. */
-                changed = rd_kafka_metadata_cache_delete_by_topic_id(
-                    rk, mdit->topic_id);
-        } else {
+        if (likely(mdt->topic != NULL)) {
                 /* Cache unknown topics for a short while (100ms) to allow the
                  * cgrp logic to find negative cache hits. */
                 if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
@@ -520,10 +505,17 @@ void rd_kafka_metadata_cache_topic_update(
                 else
                         changed = rd_kafka_metadata_cache_delete_by_name(
                             rk, mdt->topic);
+        } else {
+                /* Cache entry found but no topic name:
+                 * delete it. */
+                changed = rd_kafka_metadata_cache_delete_by_topic_id(
+                    rk, mdit->topic_id);
         }
 
         if (changed && propagate)
                 rd_kafka_metadata_cache_propagate_changes(rk);
+
+        return changed;
 }
 
 

@@ -2056,7 +2056,7 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
 
         rd_kafka_wrlock(rkt->rkt_rk);
         rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, &mdit, rd_true,
-                                             rd_false, NULL, 0);
+                                             rd_false, NULL, 0, rd_false);
         rd_kafka_topic_metadata_update(rkt, &mdt, &mdit, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
         rd_free(partitions);

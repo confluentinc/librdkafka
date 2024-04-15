@@ -3422,11 +3422,11 @@ rd_kafka_cgrp_incremental_assign(rd_kafka_cgrp_t *rkcg,
                          * call, which would be costly (once per message),
                          * set up an intervalled timer that checks a timestamp
                          * (that is updated on ..poll()).
-                         * The timer interval is 2 hz. */
+                         * The timer interval is 4 hz. */
                         rd_kafka_timer_start(
                             &rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_max_poll_interval_tmr,
-                            500 * 1000ll /* 500ms */,
+                            250 * 1000ll /* 250ms */,
                             rd_kafka_cgrp_max_poll_interval_check_tmr_cb, rkcg);
                 }
         }
@@ -3688,11 +3688,11 @@ rd_kafka_cgrp_assign(rd_kafka_cgrp_t *rkcg,
                          * call, which would be costly (once per message),
                          * set up an intervalled timer that checks a timestamp
                          * (that is updated on ..poll()).
-                         * The timer interval is 2 hz. */
+                         * The timer interval is 4 hz. */
                         rd_kafka_timer_start(
                             &rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_max_poll_interval_tmr,
-                            500 * 1000ll /* 500ms */,
+                            250 * 1000ll /* 250ms */,
                             rd_kafka_cgrp_max_poll_interval_check_tmr_cb, rkcg);
                 }
         }

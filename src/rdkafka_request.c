@@ -2308,7 +2308,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
          * 2) Remove usage of `group_session_timeout_ms` altogether
          *    from the new protocol defined in KIP-848.
          */
-        if(rkb->rkb_rk->rk_cgrp->rkcg_heartbeat_intvl_ms > 0) {
+        if (rkb->rkb_rk->rk_cgrp->rkcg_heartbeat_intvl_ms > 0) {
                 rd_kafka_buf_set_abs_timeout(
                     rkbuf, rkb->rkb_rk->rk_cgrp->rkcg_heartbeat_intvl_ms, 0);
         } else {

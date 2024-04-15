@@ -399,6 +399,7 @@ struct rd_kafka_op_s {
                         rd_kafka_msgq_t msgq;
                         rd_kafka_msgq_t msgq2;
                         int do_purge2;
+                        rd_kafka_Produce_result_t *presult;
                 } dr;
 
                 struct {

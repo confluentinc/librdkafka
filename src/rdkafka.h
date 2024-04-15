@@ -407,6 +407,9 @@ typedef enum {
         RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET = -140,
         /** Partition log truncation detected */
         RD_KAFKA_RESP_ERR__LOG_TRUNCATION = -139,
+        /** A different record in the batch was invalid
+         *  and this message failed persisting. */
+        RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD = -138,
 
         /** End internal error codes */
         RD_KAFKA_RESP_ERR__END = -100,
@@ -1490,6 +1493,16 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  */
 RD_EXPORT
 const char *rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage);
+
+/**
+ * @brief Returns the error string for an errored produced rd_kafka_message_t or
+ * NULL if there was no error.
+ *
+ * @remark This function MUST used with the producer.
+ */
+RD_EXPORT
+const char *
+rd_kafka_message_produce_errstr(const rd_kafka_message_t *rkmessage);
 
 
 /**

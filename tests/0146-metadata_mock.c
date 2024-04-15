@@ -28,6 +28,12 @@
 
 #include "test.h"
 
+#include "../src/rdkafka_proto.h"
+
+static rd_bool_t is_metadata_request(rd_kafka_mock_request_t *request,
+                                     void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Metadata;
+}
 
 /**
  * @brief Metadata should persists in cache after
@@ -86,6 +92,55 @@ static void do_test_metadata_persists_in_cache(const char *assignor) {
 
         SUB_TEST_PASS();
 }
+
+/**
+ * @brief No loop of metadata requests should be started
+ *        when a metadata request is made without leader epoch change.
+ *        See issue #4577
+ */
+static void do_test_fast_metadata_refresh_stops(void) {
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_conf_t *conf;
+        int metadata_requests;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        test_conf_init(&conf, NULL, 10);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* This error triggers a metadata refresh but no leader change
+         * happened */
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_Produce, 1,
+            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+        test_produce_msgs2(rk, topic, 0, 0, 0, 1, NULL, 5);
+
+        /* First call is for getting initial metadata,
+         * second one happens after the error,
+         * it should stop refreshing metadata after that. */
+        metadata_requests = test_mock_wait_maching_requests(
+            mcluster, 2, 500, is_metadata_request, NULL);
+        TEST_ASSERT(metadata_requests == 2,
+                    "Expected 2 metadata request, got %d", metadata_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 /**
  * @brief A metadata call for an existing topic, just after subscription,
  *        must not cause a UNKNOWN_TOPIC_OR_PART error.
@@ -133,6 +188,8 @@ int main_0146_metadata_mock(int argc, char **argv) {
         do_test_metadata_persists_in_cache("cooperative-sticky");
 
         do_test_metadata_call_before_join();
+
+        do_test_fast_metadata_refresh_stops();
 
         return 0;
 }

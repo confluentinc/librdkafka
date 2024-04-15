@@ -33,13 +33,6 @@
 const int32_t retry_ms     = 100;
 const int32_t retry_max_ms = 1000;
 
-static void free_mock_requests(rd_kafka_mock_request_t **requests,
-                               size_t request_cnt) {
-        size_t i;
-        for (i = 0; i < request_cnt; i++)
-                rd_kafka_mock_request_destroy(requests[i]);
-        rd_free(requests);
-}
 /**
  * @brief find_coordinator test
  * We fail the request with RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
@@ -112,7 +105,7 @@ static void test_find_coordinator(rd_kafka_mock_cluster_t *mcluster,
                     rd_kafka_mock_request_timestamp(requests[i]);
         }
         rd_kafka_destroy(consumer);
-        free_mock_requests(requests, request_cnt);
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
         rd_kafka_mock_clear_requests(mcluster);
         SUB_TEST_PASS();
 }
@@ -166,7 +159,7 @@ static void helper_exponential_backoff(rd_kafka_mock_cluster_t *mcluster,
                 previous_request_ts =
                     rd_kafka_mock_request_timestamp(requests[i]);
         }
-        free_mock_requests(requests, request_cnt);
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
 }
 /**
  * @brief offset_commit test
@@ -297,7 +290,7 @@ static void helper_find_coordinator_trigger(rd_kafka_mock_cluster_t *mcluster,
                         }
                 }
         }
-        free_mock_requests(requests, request_cnt);
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
         if (num_request != 1)
                 TEST_FAIL("No request was made.");
 }
@@ -451,7 +444,7 @@ static void test_produce_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
         }
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(producer);
-        free_mock_requests(requests, request_cnt);
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
         rd_kafka_mock_clear_requests(mcluster);
         SUB_TEST_PASS();
 }
@@ -511,7 +504,7 @@ static void test_fetch_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
                         previous_request_was_Fetch = rd_false;
         }
         rd_kafka_destroy(consumer);
-        free_mock_requests(requests, request_cnt);
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
         rd_kafka_mock_clear_requests(mcluster);
         TEST_ASSERT(
             Metadata_after_Fetch,

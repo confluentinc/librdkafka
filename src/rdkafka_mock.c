@@ -2673,8 +2673,16 @@ rd_kafka_mock_request_copy(rd_kafka_mock_request_t *mrequest) {
         return request;
 }
 
-void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *element) {
-        rd_free(element);
+void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *mrequest) {
+        rd_free(mrequest);
+}
+
+void rd_kafka_mock_request_destroy_array(rd_kafka_mock_request_t **mrequests,
+                                         size_t mrequest_cnt) {
+        size_t i;
+        for (i = 0; i < mrequest_cnt; i++)
+                rd_kafka_mock_request_destroy(mrequests[i]);
+        rd_free(mrequests);
 }
 
 static void rd_kafka_mock_request_free(void *element) {

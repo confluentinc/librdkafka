@@ -18,6 +18,7 @@ librdkafka v2.4.0 is a feature release:
  * Fix to metadata cache expiration on full metadata refresh (#4677).
  * Fix for a wrong error returned on full metadata refresh before joining
    a consumer group (#4678).
+ * Fix to metadata refresh interruption (#4679).
 
 
 ## Upgrade considerations
@@ -58,6 +59,10 @@ librdkafka v2.4.0 is a feature release:
    could lead to an `UNKNOWN_TOPIC_OR_PART` error. Solved by updating
    the consumer group following a metadata refresh only in safe states.
    Happening since 2.1.0 (#4678).
+ * Issues: #4577.
+   Metadata refreshes without partition leader change could lead to a loop of
+   metadata calls at fixed intervals. Solved by stopping metadata refresh when
+   all existing metadata is non-stale. Happening since 2.3.0 (#4679).
 
 ### Consumer fixes
 

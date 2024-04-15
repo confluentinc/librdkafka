@@ -2978,8 +2978,12 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
 
 /**
  * @brief Creates a copy of \p rktpar and adds it to \p rktparlist
+ *
+ * @return Copy of passed partition that was added to the list
+ *
+ * @remark Ownership of returned partition remains of the list.
  */
-void rd_kafka_topic_partition_list_add_copy(
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_copy(
     rd_kafka_topic_partition_list_t *rktparlist,
     const rd_kafka_topic_partition_t *rktpar) {
         rd_kafka_topic_partition_t *dst;
@@ -2988,6 +2992,7 @@ void rd_kafka_topic_partition_list_add_copy(
             __FUNCTION__, __LINE__, rktparlist, rktpar->topic,
             rktpar->partition, NULL, rktpar->_private);
         rd_kafka_topic_partition_update(dst, rktpar);
+        return dst;
 }
 
 

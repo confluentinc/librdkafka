@@ -3344,7 +3344,11 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
         if (likely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)))
                 return 0;
 
-        /* Check if wait-coord queue has timed out. */
+        /* Check if wait-coord queue has timed out.
+           
+           FIXME: Remove usage of `group_session_timeout_ms` for the new
+                  consumer group protocol implementation defined in KIP-848.
+        */
         if (rd_kafka_q_len(rkcg->rkcg_wait_coord_q) > 0 &&
             rkcg->rkcg_ts_terminate +
                     (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000) <
@@ -3515,7 +3519,6 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
 static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
                                              rd_kafka_op_t *rko,
                                              const char *reason) {
-
         /* wait_coord_q is disabled session.timeout.ms after
          * group close() has been initated. */
         if (rko->rko_u.offset_commit.ts_timeout != 0 ||
@@ -3534,6 +3537,11 @@ static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
                          : "none");
 
         rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+        
+        /* FIXME: Remove `group_session_timeout_ms` for the new protocol
+         * defined in KIP-848 as this property is deprecated from client
+         * side in the new protocol.
+         */
         rko->rko_u.offset_commit.ts_timeout =
             rd_clock() +
             (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000);
@@ -3740,7 +3748,6 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
                                      rd_kafka_err2str(err));
         }
 
-
         /*
          * Error handling
          */
@@ -3773,10 +3780,10 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
                 return; /* Retrying */
 
         case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
-                rd_assert(rkcg->rkcg_group_protocol ==
-                          RD_KAFKA_GROUP_PROTOCOL_CONSUMER);
+                /* FIXME: Add logs.*/
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
-                /* Continue */
+                break;
+
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR__TRANSPORT:
@@ -6077,6 +6084,9 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
         }
 }
 
+/**
+ * FIXME: Add reason and logging.
+ */
 void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 return;

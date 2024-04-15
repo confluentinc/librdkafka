@@ -187,6 +187,7 @@ _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
+_TEST_DECL(0076_produce_retry_mock);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
 _TEST_DECL(0079_fork);
@@ -419,6 +420,7 @@ struct test tests[] = {
     _TEST(0075_retry, TEST_F_SOCKEM),
 #endif
     _TEST(0076_produce_retry, TEST_F_SOCKEM),
+    _TEST(0076_produce_retry_mock, TEST_F_LOCAL),
     _TEST(0077_compaction,
           0,
           /* The test itself requires message headers */

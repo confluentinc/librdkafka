@@ -45,7 +45,7 @@
 
 
 /** @brief The maxium ProduceRequestion ApiVersion supported by librdkafka */
-static const int16_t rd_kafka_ProduceRequest_max_version = 7;
+static const int16_t rd_kafka_ProduceRequest_max_version = 8;
 
 
 typedef struct rd_kafka_msgset_writer_s {
@@ -267,6 +267,7 @@ static void rd_kafka_msgset_writer_alloc_buf(rd_kafka_msgset_writer_t *msetw) {
          * ProduceRequest header sizes
          */
         switch (msetw->msetw_ApiVersion) {
+        case 8:
         case 7:
         case 6:
         case 5:

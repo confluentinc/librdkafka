@@ -28,6 +28,7 @@
 
 #include "test.h"
 #include "rdkafka.h"
+#include "../src/rdkafka_proto.h"
 
 #include <stdarg.h>
 #include <errno.h>
@@ -320,6 +321,89 @@ static void do_test_produce_retries_disconnect(const char *topic,
                  idempotence, try_fail, should_fail);
 }
 
+/**
+ * TODO: replace with rd_kafka_mock_request_destroy_array when merged
+ */
+static void free_mock_requests(rd_kafka_mock_request_t **requests,
+                               size_t request_cnt) {
+        size_t i;
+        for (i = 0; i < request_cnt; i++)
+                rd_kafka_mock_request_destroy(requests[i]);
+        rd_free(requests);
+}
+
+/**
+ * @brief Wait at least \p num produce requests
+ *        have been received by the mock cluster
+ *        plus \p confidence_interval_ms has passed
+ *
+ * @return Number of produce requests received.
+ */
+static int wait_produce_requests_done(rd_kafka_mock_cluster_t *mcluster,
+                                      int num,
+                                      int confidence_interval_ms) {
+        size_t i;
+        rd_kafka_mock_request_t **requests;
+        size_t request_cnt;
+        int matching_requests = 0;
+        rd_bool_t last_time   = rd_true;
+
+        while (matching_requests < num || last_time) {
+                if (matching_requests >= num) {
+                        rd_usleep(confidence_interval_ms * 1000, 0);
+                        last_time = rd_false;
+                }
+                requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
+                matching_requests = 0;
+                for (i = 0; i < request_cnt; i++) {
+                        if (rd_kafka_mock_request_api_key(requests[i]) ==
+                            RD_KAFKAP_Produce)
+                                matching_requests++;
+                }
+                free_mock_requests(requests, request_cnt);
+                rd_usleep(100 * 1000, 0);
+        }
+        return matching_requests;
+}
+
+/**
+ * @brief Producer should retry produce requests after receiving
+ *        INVALID_MSG from the broker.
+ */
+static void do_test_produce_retry_invalid_msg(rd_kafka_mock_cluster_t *mcluster,
+                                              const char *bootstraps) {
+        rd_kafka_t *producer;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_conf_t *conf;
+        int produce_request_cnt;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+
+        SUB_TEST_QUICK();
+
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt      = test_create_producer_topic(producer, topic, NULL);
+
+        rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_Produce, 1,
+                                          RD_KAFKA_RESP_ERR_INVALID_MSG);
+        test_produce_msgs(producer, rkt, 0, RD_KAFKA_PARTITION_UA, 0, 1,
+                          "hello", 6);
+        produce_request_cnt = wait_produce_requests_done(mcluster, 2, 100);
+        TEST_ASSERT(produce_request_cnt == 2,
+                    "Expected 2 produce requests, got %d\n",
+                    produce_request_cnt);
+
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(producer);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        SUB_TEST_PASS();
+}
 
 int main_0076_produce_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0076_produce_retry", 1);
@@ -345,6 +429,22 @@ int main_0076_produce_retry(int argc, char **argv) {
         }
         /* No idempotence, try fail, should fail. */
         do_test_produce_retries_disconnect(topic, 0, 1, 1);
+
+        return 0;
+}
+
+int main_0076_produce_retry_mock(int argc, char **argv) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
+                return 0;
+        }
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        do_test_produce_retry_invalid_msg(mcluster, bootstraps);
+        test_mock_cluster_destroy(mcluster);
 
         return 0;
 }

@@ -490,7 +490,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
         int broker_changes         = 0;
         int cache_changes          = 0;
-        rd_ts_t ts_start           = rd_clock();
+
         /* If client rack is present, the metadata cache (topic or full) needs
          * to contain the partition to rack map. */
         rd_bool_t has_client_rack = rk->rk_conf.client_rack &&
@@ -850,23 +850,24 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                             rd_list_remove_cmp(missing_topic_ids,
                                                &mdi->topics[i].topic_id,
                                                (void *)rd_kafka_Uuid_ptr_cmp));
-                if (!all_topics) {
-                        /* Only update cache when not asking
-                         * for all topics. */
-
-                        rd_kafka_wrlock(rk);
-                        rd_kafka_metadata_cache_topic_update(
-                            rk, &md->topics[i], &mdi->topics[i],
-                            rd_false /*propagate later*/,
-                            /* use has_client_rack rather than
-                            compute_racks. We need cached rack ids
-                            only in case we need to rejoin the group
-                            if they change and client.rack is set
-                            (KIP-881). */
-                            has_client_rack, mdi->brokers, md->broker_cnt);
-                        cache_changes++;
-                        rd_kafka_wrunlock(rk);
-                }
+                /* Only update cache when not asking
+                 * for all topics or cache entry
+                 * already exists. */
+                rd_kafka_wrlock(rk);
+                cache_changes +=
+                rd_kafka_metadata_cache_topic_update(
+                        rk, &md->topics[i], &mdi->topics[i],
+                        rd_false /*propagate later*/,
+                        /* use has_client_rack rather than
+                        compute_racks. We need cached rack ids
+                        only in case we need to rejoin the group
+                        if they change and client.rack is set
+                        (KIP-881). */
+                        has_client_rack, mdi->brokers,
+                        md->broker_cnt,
+                        all_topics /*cache entry needs to exist
+                                    *if all_topics*/);
+                rd_kafka_wrunlock(rk);
         }
 
         /* Requested topics not seen in metadata? Propogate to topic code. */
@@ -979,9 +980,10 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         }
 
         if (all_topics) {
-                /* Expire all cache entries that were not updated. */
-                rd_kafka_metadata_cache_evict_by_age(rkb->rkb_rk, ts_start);
-
+                /* All hints have been replaced by the corresponding entry.
+                 * Rest of hints can be removed as topics aren't present
+                 * in full metadata. */
+                rd_kafka_metadata_cache_purge_all_hints(rkb->rkb_rk);
                 if (rkb->rkb_rk->rk_full_metadata)
                         rd_kafka_metadata_destroy(
                             &rkb->rkb_rk->rk_full_metadata->metadata);
@@ -1001,10 +1003,6 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                            "Caching full metadata with "
                            "%d broker(s) and %d topic(s): %s",
                            md->broker_cnt, md->topic_cnt, reason);
-        } else {
-                if (cache_changes)
-                        rd_kafka_metadata_cache_propagate_changes(rk);
-                rd_kafka_metadata_cache_expiry_start(rk);
         }
         /* Remove cache hints for the originally requested topics. */
         if (requested_topics)
@@ -1012,6 +1010,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         if (requested_topic_ids)
                 rd_kafka_metadata_cache_purge_hints_by_id(rk,
                                                           requested_topic_ids);
+
+        if (cache_changes) {
+                rd_kafka_metadata_cache_propagate_changes(rk);
+                rd_kafka_metadata_cache_expiry_start(rk);
+        }
 
         rd_kafka_wrunlock(rkb->rkb_rk);
 

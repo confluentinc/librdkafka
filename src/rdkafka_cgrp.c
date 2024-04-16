@@ -785,9 +785,8 @@ void rd_kafka_cgrp_coord_query(rd_kafka_cgrp_t *rkcg, const char *reason) {
                 return;
         }
 
-        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD) {
+        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD)
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_COORD);
-        }
 
         rd_kafka_broker_destroy(rkb);
 
@@ -901,8 +900,13 @@ static void rd_kafka_cgrp_consumer_reset(rd_kafka_cgrp_t *rkcg) {
                    rd_kafka_topic_partition_list_destroy);
         rkcg->rkcg_next_target_assignment = NULL;
         rkcg->rkcg_current_assignment = rd_kafka_topic_partition_list_new(0);
-        rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK &
-                                     ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
+
+        /* Leave only specified flags, reset the rest */
+        rkcg->rkcg_consumer_flags =
+            (rkcg->rkcg_consumer_flags &
+             RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE) |
+            (rkcg->rkcg_consumer_flags &
+             RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE);
 }
 
 /**
@@ -2704,45 +2708,44 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
         for (i = 0; i < assignment->cnt; i++) {
                 struct rd_kafka_metadata_cache_entry *rkmce;
                 rd_kafka_topic_partition_t *rktpar;
+                char *topic_name = NULL;
                 rd_kafka_Uuid_t request_topic_id =
                     rd_kafka_topic_partition_get_topic_id(
                         &assignment->elems[i]);
+
                 rd_kafka_rdlock(rk);
                 rkmce =
                     rd_kafka_metadata_cache_find_by_id(rk, request_topic_id, 1);
 
-                if (rkmce) {
-                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
-                            assignment_with_metadata, request_topic_id,
-                            rkmce->rkmce_mtopic.topic,
-                            assignment->elems[i].partition);
-                        rd_kafka_rdunlock(rk);
-                        continue;
-                }
+                if (rkmce)
+                        topic_name = rd_strdup(rkmce->rkmce_mtopic.topic);
                 rd_kafka_rdunlock(rk);
 
-                rktpar = rd_kafka_topic_partition_list_find_topic_by_id(
-                    rkcg->rkcg_current_assignment, request_topic_id);
-                if (rktpar) {
+                if (unlikely(!topic_name)) {
+                        rktpar = rd_kafka_topic_partition_list_find_topic_by_id(
+                            rkcg->rkcg_current_assignment, request_topic_id);
+                        if (rktpar)
+                                topic_name = rd_strdup(rktpar->topic);
+                }
+
+                if (likely(topic_name != NULL)) {
                         rd_kafka_topic_partition_list_add_with_topic_name_and_id(
                             assignment_with_metadata, request_topic_id,
-                            rktpar->topic, assignment->elems[i].partition);
+                            topic_name, assignment->elems[i].partition);
+                        rd_free(topic_name);
                         continue;
                 }
 
                 if (missing_topic_ids) {
-                        rd_kafka_Uuid_t topic_id;
                         if (unlikely(!*missing_topic_ids))
                                 *missing_topic_ids =
                                     rd_list_new(1, rd_list_Uuid_destroy);
-                        topic_id = rd_kafka_topic_partition_get_topic_id(
-                            &assignment->elems[i]);
                         rd_list_add(*missing_topic_ids,
-                                    rd_kafka_Uuid_copy(&topic_id));
+                                    rd_kafka_Uuid_copy(&request_topic_id));
                 }
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
                              "Metadata not found for the "
-                             "assigned topic id - %s."
+                             "assigned topic id: %s."
                              " Continuing without it",
                              rd_kafka_Uuid_base64str(&request_topic_id));
         }

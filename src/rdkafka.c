@@ -2381,7 +2381,11 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         if (!rk->rk_conf.group_remote_assignor) {
                 rd_kafka_assignor_t *cooperative_assignor;
 
-                /* Detect if chosen assignor is cooperative */
+                /* Detect if chosen assignor is cooperative
+                 * FIXME: remove this compatibility altogether
+                 * and apply the breaking changes that will be required
+                 * in next major version. */
+
                 cooperative_assignor =
                     rd_kafka_assignor_find(rk, "cooperative-sticky");
                 rk->rk_conf.partition_assignors_cooperative =
@@ -2402,6 +2406,10 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                     rd_kafka_assignor_find(rk, "range");
                                 if (range_assignor &&
                                     range_assignor->rkas_enabled) {
+                                        rd_kafka_log(
+                                            rk, LOG_WARNING, "ASSIGNOR",
+                                            "\"range\" assignor is sticky "
+                                            "with group protocol CONSUMER");
                                         group_remote_assignor_override =
                                             rd_strdup("range");
                                         rk->rk_conf.group_remote_assignor =
@@ -2412,10 +2420,13 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                             "roundrobin assignor isn't "
                                             "available"
                                             "with group protocol CONSUMER, "
-                                            "reverting group protocol "
-                                            "to CLASSIC");
-                                        rk->rk_conf.group_protocol =
-                                            RD_KAFKA_GROUP_PROTOCOL_CLASSIC;
+                                            "using the \"uniform\" one. "
+                                            "It's similar, "
+                                            "but it's also sticky");
+                                        group_remote_assignor_override =
+                                            rd_strdup("uniform");
+                                        rk->rk_conf.group_remote_assignor =
+                                            group_remote_assignor_override;
                                 }
                         }
                 }

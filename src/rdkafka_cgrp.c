@@ -3550,6 +3550,45 @@ static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
         return 1;
 }
 
+/**
+ * @brief Defer offset commit (rko) until coordinator is available (KIP-848).
+ *
+ * @returns 1 if the rko was deferred or 0 if the defer queue is disabled
+ *          or rko already deferred.
+ */
+static int rd_kafka_cgrp_consumer_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
+                                                      rd_kafka_op_t *rko,
+                                                      const char *reason) {
+        /* wait_coord_q is disabled session.timeout.ms after
+         * group close() has been initated. */
+        if ((rko->rko_u.offset_commit.ts_timeout != 0 &&
+             rd_clock() >= rko->rko_u.offset_commit.ts_timeout) ||
+            !rd_kafka_q_ready(rkcg->rkcg_wait_coord_q))
+                return 0;
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+                     "Group \"%s\": "
+                     "unable to OffsetCommit in state %s: %s: "
+                     "retrying later",
+                     rkcg->rkcg_group_id->str,
+                     rd_kafka_cgrp_state_names[rkcg->rkcg_state], reason);
+
+        rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+
+        if (!rko->rko_u.offset_commit.ts_timeout) {
+                rko->rko_u.offset_commit.ts_timeout =
+                    rd_clock() +
+                    (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000);
+        }
+
+        /* Reset partition level error before retrying */
+        rd_kafka_topic_partition_list_set_err(
+            rko->rko_u.offset_commit.partitions, RD_KAFKA_RESP_ERR_NO_ERROR);
+
+        rd_kafka_q_enq(rkcg->rkcg_wait_coord_q, rko);
+
+        return 1;
+}
 
 /**
  * @brief Update the committed offsets for the partitions in \p offsets,
@@ -3781,7 +3820,15 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
                 /* FIXME: Add logs.*/
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
+                if (!rd_strcmp(rko_orig->rko_u.offset_commit.reason, "manual"))
+                        /* Don't retry manual commits giving this error.
+                         * TODO: do this in a faster and cleaner way
+                         * with a bool. */
+                        break;
+
+                if (rd_kafka_cgrp_consumer_defer_offset_commit(
+                        rkcg, rko_orig, rd_kafka_err2str(err)))
+                        return;
                 break;
 
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:

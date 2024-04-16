@@ -459,7 +459,7 @@ rd_kafka_commit(rd_kafka_t *rk,
                         /*
                          * FIXME: Update `rd_kafka_q_wait_result` to use a
                          *        generic error callback.
-                        */
+                         */
                         rd_kafka_op_t *rko;
                         rko = rd_kafka_q_pop(
                             repq, rd_timeout_us(RD_POLL_INFINITE), 0);

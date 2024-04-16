@@ -3345,7 +3345,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
                 return 0;
 
         /* Check if wait-coord queue has timed out.
-           
+
            FIXME: Remove usage of `group_session_timeout_ms` for the new
                   consumer group protocol implementation defined in KIP-848.
         */
@@ -3537,7 +3537,7 @@ static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
                          : "none");
 
         rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
-        
+
         /* FIXME: Remove `group_session_timeout_ms` for the new protocol
          * defined in KIP-848 as this property is deprecated from client
          * side in the new protocol.

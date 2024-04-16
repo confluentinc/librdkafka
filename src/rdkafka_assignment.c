@@ -254,7 +254,6 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
                                                    rd_kafka_buf_t *reply,
                                                    rd_kafka_buf_t *request,
                                                    void *opaque) {
-
         rd_kafka_topic_partition_list_t *offsets = NULL;
         int64_t *req_assignment_version          = (int64_t *)opaque;
         /* Only allow retries if there's been no change to the assignment,
@@ -302,8 +301,6 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
         if (err) {
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
-                        rd_assert(rk->rk_cgrp->rkcg_group_protocol ==
-                                  RD_KAFKA_GROUP_PROTOCOL_CONSUMER);
                         rk->rk_cgrp->rkcg_consumer_flags |=
                             RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING;
                         /* Fallback */

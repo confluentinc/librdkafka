@@ -90,12 +90,21 @@ static void test_single_partition(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+        const int topicSuffixLength = 56, clientIdLength = 239;
+        char *topicSuffix, *clientId;
 
         SUB_TEST_QUICK();
 
         msgid_next = 0;
 
         test_conf_init(&conf, &topic_conf, 20);
+
+        clientId = (char *)malloc(clientIdLength + 1 * sizeof(char));
+        for (i = 0; i < clientIdLength; i++) {
+                clientId[i] = 'c';
+        }
+        clientId[clientIdLength] = '\0';
+        rd_kafka_conf_set(conf, "client.id", clientId, NULL, 0);
 
         /* Set delivery report callback */
         rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
@@ -106,7 +115,14 @@ static void test_single_partition(void) {
         TEST_SAY("test_single_partition: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        topicSuffix = (char *)malloc(topicSuffixLength + 1 * sizeof(char));
+        for (i = 0; i < topicSuffixLength; i++) {
+                topicSuffix[i] = 'b';
+        }
+        topicSuffix[topicSuffixLength] = '\0';
+
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name(topicSuffix, 0),
+                                 topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -177,6 +193,9 @@ static void test_single_partition(void) {
         /* Destroy rdkafka instance */
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
+
+        free(clientId);
+        free(topicSuffix);
 
         SUB_TEST_PASS();
 }

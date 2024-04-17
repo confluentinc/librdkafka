@@ -203,7 +203,7 @@ static void do_test_stale_metadata_doesnt_migrate_partition(void) {
         /* Partition doesn't have to migrate back to broker 1 */
         rd_usleep(2000 * 1000, 0);
         rd_kafka_mock_start_request_tracking(mcluster);
-        fetch_requests = test_mock_wait_maching_requests(
+        fetch_requests = test_mock_wait_matching_requests(
             mcluster, 0, 500, is_fetch_request, NULL);
         TEST_ASSERT(fetch_requests == 0,
                     "No fetch request should be received by broker 1, got %d",

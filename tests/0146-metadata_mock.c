@@ -129,7 +129,7 @@ static void do_test_fast_metadata_refresh_stops(void) {
         /* First call is for getting initial metadata,
          * second one happens after the error,
          * it should stop refreshing metadata after that. */
-        metadata_requests = test_mock_wait_maching_requests(
+        metadata_requests = test_mock_wait_matching_requests(
             mcluster, 2, 500, is_metadata_request, NULL);
         TEST_ASSERT(metadata_requests == 2,
                     "Expected 2 metadata request, got %d", metadata_requests);

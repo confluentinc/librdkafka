@@ -6490,7 +6490,7 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                 result_response =
                     rd_kafka_DeleteAcls_result_response_new(error_code, errstr);
 
-                /* #maching_acls */
+                /* #matching_acls */
                 rd_kafka_buf_read_arraycnt(reply, &matching_acls_cnt, 100000);
                 for (j = 0; j < (int)matching_acls_cnt; j++) {
                         int16_t acl_error_code;

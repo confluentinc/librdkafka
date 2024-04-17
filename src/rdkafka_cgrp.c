@@ -3820,6 +3820,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
                 /* FIXME: Add logs.*/
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
                 if (!rd_strcmp(rko_orig->rko_u.offset_commit.reason, "manual"))
                         /* Don't retry manual commits giving this error.
                          * TODO: do this in a faster and cleaner way

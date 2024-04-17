@@ -2979,6 +2979,16 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 }
         }
 
+        if (rkcg->rkcg_consumer_flags &
+                RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING &&
+            rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                /* TODO: Check if this should be done only for the steady state?
+                 */
+                rd_kafka_assignment_serve(rk);
+                rkcg->rkcg_consumer_flags &=
+                    ~RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING;
+        }
+
         if (rkcg->rkcg_next_target_assignment) {
                 if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) {
                         rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
@@ -3092,8 +3102,8 @@ err:
                 /* Re-query for coordinator */
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg);
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
@@ -3334,7 +3344,11 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
         if (likely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)))
                 return 0;
 
-        /* Check if wait-coord queue has timed out. */
+        /* Check if wait-coord queue has timed out.
+
+           FIXME: Remove usage of `group_session_timeout_ms` for the new
+                  consumer group protocol implementation defined in KIP-848.
+        */
         if (rd_kafka_q_len(rkcg->rkcg_wait_coord_q) > 0 &&
             rkcg->rkcg_ts_terminate +
                     (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000) <
@@ -3505,7 +3519,6 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
 static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
                                              rd_kafka_op_t *rko,
                                              const char *reason) {
-
         /* wait_coord_q is disabled session.timeout.ms after
          * group close() has been initated. */
         if (rko->rko_u.offset_commit.ts_timeout != 0 ||
@@ -3524,6 +3537,11 @@ static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
                          : "none");
 
         rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+
+        /* FIXME: Remove `group_session_timeout_ms` for the new protocol
+         * defined in KIP-848 as this property is deprecated from client
+         * side in the new protocol.
+         */
         rko->rko_u.offset_commit.ts_timeout =
             rd_clock() +
             (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000);
@@ -3532,6 +3550,45 @@ static int rd_kafka_cgrp_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
         return 1;
 }
 
+/**
+ * @brief Defer offset commit (rko) until coordinator is available (KIP-848).
+ *
+ * @returns 1 if the rko was deferred or 0 if the defer queue is disabled
+ *          or rko already deferred.
+ */
+static int rd_kafka_cgrp_consumer_defer_offset_commit(rd_kafka_cgrp_t *rkcg,
+                                                      rd_kafka_op_t *rko,
+                                                      const char *reason) {
+        /* wait_coord_q is disabled session.timeout.ms after
+         * group close() has been initated. */
+        if ((rko->rko_u.offset_commit.ts_timeout != 0 &&
+             rd_clock() >= rko->rko_u.offset_commit.ts_timeout) ||
+            !rd_kafka_q_ready(rkcg->rkcg_wait_coord_q))
+                return 0;
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+                     "Group \"%s\": "
+                     "unable to OffsetCommit in state %s: %s: "
+                     "retrying later",
+                     rkcg->rkcg_group_id->str,
+                     rd_kafka_cgrp_state_names[rkcg->rkcg_state], reason);
+
+        rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+
+        if (!rko->rko_u.offset_commit.ts_timeout) {
+                rko->rko_u.offset_commit.ts_timeout =
+                    rd_clock() +
+                    (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000);
+        }
+
+        /* Reset partition level error before retrying */
+        rd_kafka_topic_partition_list_set_err(
+            rko->rko_u.offset_commit.partitions, RD_KAFKA_RESP_ERR_NO_ERROR);
+
+        rd_kafka_q_enq(rkcg->rkcg_wait_coord_q, rko);
+
+        return 1;
+}
 
 /**
  * @brief Update the committed offsets for the partitions in \p offsets,
@@ -3730,18 +3787,23 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
                                      rd_kafka_err2str(err));
         }
 
-
         /*
          * Error handling
          */
         switch (err) {
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
-                /* Revoke assignment and rebalance on unknown member */
-                rd_kafka_cgrp_set_member_id(rk->rk_cgrp, "");
-                rd_kafka_cgrp_revoke_all_rejoin_maybe(
-                    rkcg, rd_true /*assignment is lost*/,
-                    rd_true /*this consumer is initiating*/,
-                    "OffsetCommit error: Unknown member");
+                if (rkcg->rkcg_group_protocol ==
+                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp);
+                } else {
+                        /* Revoke assignment and rebalance on unknown member */
+                        rd_kafka_cgrp_set_member_id(rk->rk_cgrp, "");
+                        rd_kafka_cgrp_revoke_all_rejoin_maybe(
+                            rkcg, rd_true /*assignment is lost*/,
+                            rd_true /*this consumer is initiating*/,
+                            "OffsetCommit error: Unknown member");
+                }
                 break;
 
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
@@ -3755,6 +3817,20 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         case RD_KAFKA_RESP_ERR__IN_PROGRESS:
                 return; /* Retrying */
+
+        case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
+                /* FIXME: Add logs.*/
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(rk->rk_cgrp);
+                if (!rd_strcmp(rko_orig->rko_u.offset_commit.reason, "manual"))
+                        /* Don't retry manual commits giving this error.
+                         * TODO: do this in a faster and cleaner way
+                         * with a bool. */
+                        break;
+
+                if (rd_kafka_cgrp_consumer_defer_offset_commit(
+                        rkcg, rko_orig, rd_kafka_err2str(err)))
+                        return;
+                break;
 
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
@@ -6056,6 +6132,9 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
         }
 }
 
+/**
+ * FIXME: Add reason and logging.
+ */
 void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 return;

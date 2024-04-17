@@ -2301,8 +2301,20 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
-        rd_kafka_buf_set_abs_timeout(
-            rkbuf, rkb->rkb_rk->rk_conf.group_session_timeout_ms, 0);
+        /* FIXME:
+         * 1) Improve this timeout to something less than
+         *    `rkcg_heartbeat_intvl_ms` so that the next heartbeat
+         *    is not skipped.
+         * 2) Remove usage of `group_session_timeout_ms` altogether
+         *    from the new protocol defined in KIP-848.
+         */
+        if (rkb->rkb_rk->rk_cgrp->rkcg_heartbeat_intvl_ms > 0) {
+                rd_kafka_buf_set_abs_timeout(
+                    rkbuf, rkb->rkb_rk->rk_cgrp->rkcg_heartbeat_intvl_ms, 0);
+        } else {
+                rd_kafka_buf_set_abs_timeout(
+                    rkbuf, rkb->rkb_rk->rk_conf.group_session_timeout_ms, 0);
+        }
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }

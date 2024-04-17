@@ -380,8 +380,6 @@ rd_kafka_commit0(rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-
-
 /**
  * NOTE: 'offsets' may be NULL, see official documentation.
  */

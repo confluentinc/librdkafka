@@ -7176,7 +7176,7 @@ static size_t test_mock_get_matching_request_cnt(
  *
  * @return Number of matching requests received.
  */
-size_t test_mock_wait_maching_requests(
+size_t test_mock_wait_matching_requests(
     rd_kafka_mock_cluster_t *mcluster,
     size_t expected_cnt,
     int confidence_interval_ms,

@@ -262,6 +262,7 @@ _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
 _TEST_DECL(0147_consumer_group_consumer_mock);
+_TEST_DECL(0148_offset_fetch_commit_error_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -520,7 +521,7 @@ struct test tests[] = {
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
     _TEST(0147_consumer_group_consumer_mock, TEST_F_LOCAL),
-
+    _TEST(0148_offset_fetch_commit_error_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

@@ -224,6 +224,7 @@ static void do_test_offset_commit_request_timed_out(rd_bool_t auto_commit) {
                                           RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT);
 
         if (!auto_commit)
+                /* FIXME: this should return REQUEST_TIMED_OUT error */
                 TEST_CALL_ERR__(rd_kafka_commit(c1, NULL, 0 /*sync*/));
 
         /* Rely on consumer_close() doing final commit

@@ -4428,7 +4428,7 @@ RD_EXPORT int rd_kafka_assignment_lost(rd_kafka_t *rk);
  *          a fatal error.
  *
  *          FIXME: Update below documentation.
- * 
+ *
  *          RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH is returned, when
  *          using `group.protocol=consumer`, if the commit failed because the
  *          member has switched to a new member epoch.

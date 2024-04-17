@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -164,7 +165,10 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_interval_t rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t rkcg_heartbeat_intvl;    /* Heartbeat intvl */
-        int rkcg_heartbeat_intvl_ms;           /* TODO: write */
+        rd_kafka_timer_t rkcg_serve_timer;     /* Timer for next serve. */
+        int rkcg_heartbeat_intvl_ms;           /* KIP 848: received
+                                                * heartbeat interval in
+                                                * milliseconds */
         rd_interval_t rkcg_join_intvl;         /* JoinGroup interval */
         rd_interval_t rkcg_timeout_scan_intvl; /* Timeout scanner */
 
@@ -264,29 +268,43 @@ typedef struct rd_kafka_cgrp_s {
          *  currently in-progress incremental unassign. */
         rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
 
-        /* Current acked assignment, start with an empty list. */
+        /** Current acked assignment, start with an empty list. */
         rd_kafka_topic_partition_list_t *rkcg_current_assignment;
 
-        /* Assignment the is currently reconciling.
-         * Can be NULL in case there's no reconciliation ongoing. */
+        /** Assignment the is currently reconciling.
+         *  Can be NULL in case there's no reconciliation ongoing. */
         rd_kafka_topic_partition_list_t *rkcg_target_assignment;
 
-        /* Next assignment that will be reconciled once current
-         * reconciliation finishes. Can be NULL. */
+        /** Next assignment that will be reconciled once current
+         *  reconciliation finishes. Can be NULL. */
         rd_kafka_topic_partition_list_t *rkcg_next_target_assignment;
 
+        /** Number of backoff retries when expediting next heartbeat. */
+        int rkcg_expedite_heartbeat_retries;
+
+        /** Flags for KIP-848 state machine. */
         int rkcg_consumer_flags;
-#define RD_KAFKA_CGRP_CONSUMER_F_WAITS_ACK             0x1 /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x2 /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION                      \
-        0x4                                             /* TODO: write         \
-                                                         */
-#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE   0x8  /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x10 /* TODO: write */
-#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN                                   \
-        0x20 /* Member is fenced, need to rejoin */
-#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE                       \
-        0x40 /* Member is fenced, rejoining */
+/** Coordinator is waiting for an acknowledgement of currently reconciled
+ *  target assignment. Cleared when an HB succeeds
+ *  after reconciliation finishes. */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK 0x1
+/** Member is sending an acknowledgement for a reconciled assignment */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK 0x2
+/** A new subscription needs to be sent to the Coordinator. */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION 0x4
+/** A new subscription is being sent to the Coordinator. */
+#define RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION 0x8
+/** Consumer has subscribed at least once,
+ *  if it didn't happen rebalance protocol is still
+ *  considered NONE, otherwise it depends on the
+ *  configured partition assignors. */
+#define RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE 0x10
+/** Send a complete request in next heartbeat */
+#define RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST 0x20
+/** Member is fenced, need to rejoin */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN 0x40
+/** Member is fenced, rejoining */
+#define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x80
 
 
         /** Rejoin the group following a currently in-progress

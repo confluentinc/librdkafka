@@ -1279,7 +1279,7 @@ int verifyValidityAndBalance0(const char *func,
                                  * it means the assignment strategy failed to
                                  * properly balance the partitions. */
                                 if (!balanced &&
-                                    rd_kafka_topic_partition_list_find_topic(
+                                    rd_kafka_topic_partition_list_find_topic_by_name(
                                         otherPartitions, partition->topic)) {
                                         RD_UT_WARN(
                                             "Some %s partition(s) can be "

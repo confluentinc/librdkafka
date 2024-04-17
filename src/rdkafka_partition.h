@@ -768,14 +768,23 @@ int rd_kafka_topic_partition_list_find_idx(
     const char *topic,
     int32_t partition);
 
-int rd_kafka_topic_partition_list_find_by_id_idx(
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_by_id(
     const rd_kafka_topic_partition_list_t *rktparlist,
     rd_kafka_Uuid_t topic_id,
     int32_t partition);
 
-rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic(
+int rd_kafka_topic_partition_list_find_idx_by_id(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_Uuid_t topic_id,
+    int32_t partition);
+
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_name(
     const rd_kafka_topic_partition_list_t *rktparlist,
     const char *topic);
+
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_id(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_Uuid_t topic_id);
 
 void rd_kafka_topic_partition_list_sort_by_topic(
     rd_kafka_topic_partition_list_t *rktparlist);

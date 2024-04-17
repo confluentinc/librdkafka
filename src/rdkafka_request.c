@@ -449,6 +449,11 @@ int rd_kafka_buf_write_topic_partitions(
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_ERR:
                                 rd_kafka_buf_write_i16(rkbuf, rktpar->err);
                                 break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP:
+                                /* Current implementation is just
+                                 * sending a NULL value */
+                                rd_kafka_buf_write_i64(rkbuf, -1);
+                                break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA:
                                 /* Java client 0.9.0 and broker <0.10.0 can't
                                  * parse Null metadata fields, so as a
@@ -460,11 +465,6 @@ int rd_kafka_buf_write_topic_partitions(
                                         rd_kafka_buf_write_str(
                                             rkbuf, rktpar->metadata,
                                             rktpar->metadata_size);
-                                break;
-                        case RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP:
-                                /* Current implementation is just
-                                 * sending a NULL value */
-                                rd_kafka_buf_write_i64(rkbuf, -1);
                                 break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP:
                                 break;
@@ -2253,7 +2253,6 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                 rkbuf_size += next_subscription_size;
         if (remote_assignor)
                 rkbuf_size += RD_KAFKAP_STR_SIZE(remote_assignor);
-        rkbuf_size += 4; /* Client Assignors */
         if (current_assignments)
                 rkbuf_size += (current_assignments->cnt * (16 + 100));
         rkbuf_size += 4; /* TopicPartitions */
@@ -2745,8 +2744,6 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 int i;
                 rd_kafka_Uuid_t *topic_id;
 
-                /* KIP848TODO: Properly handle usecases for this similar to
-                 * Metadata.topics */
                 /* Maintain a copy of the topics list so we can purge
                  * hints from the metadata cache on error. */
                 rkbuf->rkbuf_u.Metadata.topic_ids =

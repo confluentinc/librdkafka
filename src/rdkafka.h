@@ -4427,11 +4427,13 @@ RD_EXPORT int rd_kafka_assignment_lost(rd_kafka_t *rk);
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
  *          a fatal error.
  *
+ *          FIXME: Update below documentation.
+ * 
  *          RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH is returned, when
  *          using `group.protocol=consumer`, if the commit failed because the
  *          member has switched to a new member epoch.
  *          This error code can be retried.
- *          Partition level error is also set in the \p offsets`.
+ *          Partition level error is also set in the \p offsets.
  *
  *          RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID is returned, when
  *          using `group.protocol=consumer`, if the member has been

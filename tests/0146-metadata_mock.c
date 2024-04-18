@@ -35,6 +35,11 @@ static rd_bool_t is_metadata_request(rd_kafka_mock_request_t *request,
         return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Metadata;
 }
 
+static rd_bool_t is_fetch_request(rd_kafka_mock_request_t *request,
+                                  void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Fetch;
+}
+
 /**
  * @brief Metadata should persists in cache after
  *        a full metadata refresh.
@@ -142,6 +147,76 @@ static void do_test_fast_metadata_refresh_stops(void) {
 }
 
 /**
+ * @brief A stale leader received while validating shouldn't
+ *        migrate back the partition to that stale broker.
+ */
+static void do_test_stale_metadata_doesnt_migrate_partition(void) {
+        int i, fetch_requests;
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_conf_t *conf;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        test_conf_init(&conf, NULL, 10);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", topic);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "fetch.error.backoff.ms", "10");
+        test_conf_set(conf, "fetch.wait.max.ms", "10");
+
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+
+        test_consumer_subscribe(rk, topic);
+
+        /* Produce and consume to leader 1 */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, 1, 0, "bootstrap.servers",
+                                 bootstraps, NULL);
+        test_consumer_poll_exact("read first", rk, 0, 0, 0, 1, rd_true, NULL);
+
+        /* Change leader to 2, Fetch fails, refreshes metadata. */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        for (i = 0; i < 5; i++) {
+                /* Validation fails, metadata refreshed again */
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, 2, RD_KAFKAP_OffsetForLeaderEpoch, 1,
+                    RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR, 1000);
+        }
+
+        /* Wait partition migrates to broker 2 */
+        rd_usleep(100 * 1000, 0);
+
+        /* Return stale metadata */
+        for (i = 0; i < 10; i++) {
+                rd_kafka_mock_partition_push_leader_response(
+                    mcluster, topic, 0, 1 /*leader id*/, 0 /*leader epoch*/);
+        }
+
+        /* Partition doesn't have to migrate back to broker 1 */
+        rd_usleep(2000 * 1000, 0);
+        rd_kafka_mock_start_request_tracking(mcluster);
+        fetch_requests = test_mock_wait_matching_requests(
+            mcluster, 0, 500, is_fetch_request, NULL);
+        TEST_ASSERT(fetch_requests == 0,
+                    "No fetch request should be received by broker 1, got %d",
+                    fetch_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief A metadata call for an existing topic, just after subscription,
  *        must not cause a UNKNOWN_TOPIC_OR_PART error.
  *        See issue #4589.
@@ -190,6 +265,8 @@ int main_0146_metadata_mock(int argc, char **argv) {
         do_test_metadata_call_before_join();
 
         do_test_fast_metadata_refresh_stops();
+
+        do_test_stale_metadata_doesnt_migrate_partition();
 
         return 0;
 }

@@ -2193,7 +2193,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         size_t rkbuf_size = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 1, &features);
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 0, &features);
 
         if (rd_rkb_is_dbg(rkb, CGRP)) {
                 char current_assignments_str[512] = "NULL";

@@ -7307,7 +7307,7 @@ const char *test_consumer_group_protocol() {
 
 int test_consumer_group_protocol_generic() {
         return !test_consumer_group_protocol_str ||
-               !strcmp(test_consumer_group_protocol_str, "generic");
+               !strcmp(test_consumer_group_protocol_str, "classic");
 }
 
 int test_consumer_group_protocol_consumer() {

@@ -246,7 +246,7 @@ static RD_INLINE RD_UNUSED void rtrim(char *str) {
                 return RET;                                                    \
         }                                                                      \
         if (test_consumer_group_protocol() &&                                  \
-            strcmp(test_consumer_group_protocol(), "generic")) {               \
+            strcmp(test_consumer_group_protocol(), "classic")) {               \
                 TEST_SKIP(                                                     \
                     "Mock cluster cannot be used "                             \
                     "with group.protocol=%s\n",                                \

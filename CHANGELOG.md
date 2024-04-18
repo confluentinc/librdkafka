@@ -20,6 +20,8 @@ librdkafka v2.4.0 is a feature release:
    a consumer group (#4678).
  * Fix to metadata refresh interruption (#4679).
  * Fix for an undesired partition migration with stale leader epoch (#4680).
+ * Fix hang in cooperative consumer mode if an assignment is processed
+   while closing the consumer (#4528).
 
 
 ## Upgrade considerations
@@ -79,6 +81,12 @@ librdkafka v2.4.0 is a feature release:
    Fixed by ensuring that a resume operation is completely a no-op when
    the partition isn't paused.
    Happening since 1.x (#4636).
+ * Issues: #4527.
+   While using the cooperative assignor, given an assignment is received while closing the consumer
+   it's possible that it gets stuck in state WAIT_ASSIGN_CALL, while the method is converted to
+   a full unassign. Solved by changing state from WAIT_ASSIGN_CALL to WAIT_UNASSIGN_CALL
+   while doing this conversion.
+   Happening since 1.x (#4528).
 
 
 

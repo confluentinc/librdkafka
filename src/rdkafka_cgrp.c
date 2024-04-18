@@ -1369,7 +1369,7 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
 
         rd_kafka_cgrp_consumer_reset(rkcg);
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
-        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg, "rejoin");
+        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg, "rejoining");
 }
 
 
@@ -2640,10 +2640,9 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
     rd_kafka_cgrp_t *rkcg,
     rd_kafka_topic_partition_list_t *new_target_assignment,
     rd_bool_t clear_next_assignment) {
-        rd_bool_t is_assignment_different = rd_false,
-                  has_next_target_assignment_to_clear =
-                      rkcg->rkcg_next_target_assignment &&
-                      clear_next_assignment;
+        rd_bool_t is_assignment_different = rd_false;
+        rd_bool_t has_next_target_assignment_to_clear =
+            rkcg->rkcg_next_target_assignment && clear_next_assignment;
         if (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
                              "Reconciliation in progress, "
@@ -2666,8 +2665,9 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
                 }
 
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
-                             "Assignment is the same, "
-                             "next assignment %s",
+                             "Not reconciling new assignment: "
+                             "Assignment is the same. "
+                             "Next assignment %s",
                              (has_next_target_assignment_to_clear
                                   ? "cleared"
                                   : "not cleared"));
@@ -2698,8 +2698,8 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
 
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
                                      "Reconciliation starts with new target "
-                                     "assignment \"%s\", "
-                                     "next assignment %s",
+                                     "assignment \"%s\". "
+                                     "Next assignment %s",
                                      rkcg_target_assignment_str,
                                      (has_next_target_assignment_to_clear
                                           ? "cleared"
@@ -6207,7 +6207,7 @@ void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg,
         rd_interval_backoff(&rkcg->rkcg_heartbeat_intvl, backoff);
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
-                     "Expediting next heartbeat "
+                     "Expediting next heartbeat"
                      ", with backoff %" PRId64 ": %s",
                      backoff, reason);
 

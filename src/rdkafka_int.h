@@ -1059,7 +1059,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
                              rk->rk_cgrp->rkcg_flags &
                                  RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED)) {
                         rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                            rk->rk_cgrp);
+                            rk->rk_cgrp,
+                            "app polled after poll interval exceeded");
                 }
         }
 }

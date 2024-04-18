@@ -434,6 +434,7 @@ rd_kafka_rebalance_protocol2str(rd_kafka_rebalance_protocol_t protocol) {
         }
 }
 
-void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg);
+void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg,
+                                                    const char *reason);
 
 #endif /* _RDKAFKA_CGRP_H_ */

@@ -879,9 +879,14 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
         rd_kafka_log0(&rk->rk_conf, rk, NULL, level, RD_KAFKA_DBG_NONE, fac,   \
                       __VA_ARGS__)
 
+#define rd_kafka_conf_is_dbg(conf, ctx)                                        \
+        unlikely((conf).debug &(RD_KAFKA_DBG_##ctx))
+
+#define rd_kafka_is_dbg(rk, ctx) (rd_kafka_conf_is_dbg(rk->rk_conf, ctx))
+
 #define rd_kafka_dbg(rk, ctx, fac, ...)                                        \
         do {                                                                   \
-                if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_##ctx)))      \
+                if (rd_kafka_is_dbg(rk, ctx))                                  \
                         rd_kafka_log0(&rk->rk_conf, rk, NULL, LOG_DEBUG,       \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -889,7 +894,7 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 /* dbg() not requiring an rk, just the conf object, for early logging */
 #define rd_kafka_dbg0(conf, ctx, fac, ...)                                     \
         do {                                                                   \
-                if (unlikely((conf)->debug & (RD_KAFKA_DBG_##ctx)))            \
+                if (rd_kafka_conf_is_dbg(*conf, ctx))                          \
                         rd_kafka_log0(conf, NULL, NULL, LOG_DEBUG,             \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -909,10 +914,11 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 #define rd_rkb_log(rkb, level, fac, ...)                                       \
         rd_rkb_log0(rkb, level, RD_KAFKA_DBG_NONE, fac, __VA_ARGS__)
 
+#define rd_rkb_is_dbg(rkb, ctx) rd_kafka_is_dbg((rkb)->rkb_rk, ctx)
+
 #define rd_rkb_dbg(rkb, ctx, fac, ...)                                         \
         do {                                                                   \
-                if (unlikely((rkb)->rkb_rk->rk_conf.debug &                    \
-                             (RD_KAFKA_DBG_##ctx))) {                          \
+                if (rd_rkb_is_dbg(rkb, ctx)) {                                 \
                         rd_rkb_log0(rkb, LOG_DEBUG, (RD_KAFKA_DBG_##ctx), fac, \
                                     __VA_ARGS__);                              \
                 }                                                              \
@@ -953,10 +959,15 @@ static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code(rd_kafka_t *rk) {
         /* This is an optimization to avoid an atomic read which are costly
          * on some platforms:
-         * Fatal errors are currently only raised by the idempotent producer
-         * and static consumers (group.instance.id). */
+         * Fatal errors are currently raised by:
+         * 1) the idempotent producer
+         * 2) static consumers (group.instance.id)
+         * 3) Group using consumer protocol (Introduced in KIP-848). See exact
+         *    errors in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat() */
         if ((rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence) ||
-            (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_conf.group_instance_id))
+            (rk->rk_type == RD_KAFKA_CONSUMER &&
+             (rk->rk_conf.group_instance_id ||
+              rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)))
                 return rd_atomic32_get(&rk->rk_fatal.err);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -1040,8 +1051,18 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
  * @locks none
  */
 static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER)
+        if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+                if (unlikely(rk->rk_cgrp &&
+                             rk->rk_cgrp->rkcg_group_protocol ==
+                                 RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
+                             rk->rk_cgrp->rkcg_flags &
+                                 RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED)) {
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp,
+                            "app polled after poll interval exceeded");
+                }
+        }
 }
 
 

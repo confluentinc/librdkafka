@@ -303,10 +303,13 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
                         rk->rk_cgrp->rkcg_consumer_flags |=
                             RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING;
-                        /* Fallback */
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp,
+                            "OffsetFetch error: Stale member epoch");
+                        break;
                 case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                         rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                            rk->rk_cgrp);
+                            rk->rk_cgrp, "OffsetFetch error: Unknown member");
                         break;
                 default:
                         rd_kafka_dbg(

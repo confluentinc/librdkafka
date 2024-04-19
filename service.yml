@@ -5,6 +5,7 @@ git:
   enable: true
 github:
   enable: true
+  repo_name: confluentinc/confluent-kafka-javascript
 codeowners:
   enable: true
 semaphore:

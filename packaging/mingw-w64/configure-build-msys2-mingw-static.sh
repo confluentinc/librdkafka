@@ -2,10 +2,15 @@
 
 set -e
 
+
+export LDFLAGS="-fno-stack-protector"
+export CFLAGS="-fno-stack-protector"
+
 cmake \
     -G "MinGW Makefiles" \
     -D CMAKE_INSTALL_PREFIX="$PWD/dest/" \
     -D RDKAFKA_BUILD_STATIC=ON \
+    -D CMAKE_C_FLAGS="-fno-stack-protector" \
     .
 
 $mingw64 mingw32-make

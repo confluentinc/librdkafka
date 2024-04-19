@@ -10144,6 +10144,25 @@ RD_EXPORT const rd_kafka_topic_partition_result_t **rd_kafka_ElectionResult_part
         const rd_kafka_ElectLeader_result_t *result, 
         size_t *cntp);
 
+/**
+ * @brief Get the rd_kafka_topic_partition_result_t object at index \p idx from the
+ *       rd_kafka_topic_partition_result_t array.
+ * 
+ * @param result The array of rd_kafka_topic_partition_result_t objects.
+ * @param idx The index of the object to be retrieved.
+ * 
+ * @returns the rd_kafka_topic_partition_result_t object at index \p idx from the
+ *         rd_kafka_topic_partition_result_t array.
+ * 
+ * @remark The index \p idx must be less than the size of the array.
+ * 
+ * 
+*/
+
+RD_EXPORT const rd_kafka_topic_partition_result_t *rd_kafka_ElectionResult_partition_by_idx(
+        const rd_kafka_topic_partition_result_t **result, 
+        size_t idx);
+
 
 /**@}*/
 

@@ -4305,6 +4305,12 @@ const rd_kafka_topic_partition_result_t **rd_kafka_ElectionResult_partition(
         return (const rd_kafka_topic_partition_result_t **)res->partitions.rl_elems;
 }
 
+const rd_kafka_topic_partition_result_t *rd_kafka_ElectionResult_partition_by_idx(
+        const rd_kafka_topic_partition_result_t **result, 
+        size_t idx) {
+        return result[idx];
+}
+
 /**
  * @brief Destroys the rd_kafka_ElectLeaderResult_t object.
 */

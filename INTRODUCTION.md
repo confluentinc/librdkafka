@@ -1933,7 +1933,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-455 - AdminAPI: Replica assignment                                   | 2.4.0 (WIP)                 | Not supported                                                                                 |
 | KIP-460 - AdminAPI: electPreferredLeader                                 | 2.4.0                       | Not supported                                                                                 |
 | KIP-464 - AdminAPI: defaults for createTopics                            | 2.4.0                       | Supported                                                                                     |
-| KIP-467 - Per-message (sort of) error codes in ProduceResponse           | 2.4.0 (WIP)                 | Not supported                                                                                 |
+| KIP-467 - Per-message (sort of) error codes in ProduceResponse           | 2.4.0                       | Supported                                                                                     |
 | KIP-480 - Sticky partitioner                                             | 2.4.0                       | Supported                                                                                     |
 | KIP-482 - Optional fields in Kafka protocol                              | 2.4.0                       | Partially supported (ApiVersionRequest)                                                       |
 | KIP-496 - AdminAPI: delete offsets                                       | 2.4.0                       | Supported                                                                                     |
@@ -1967,50 +1967,50 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.5.0, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.7.0, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 
 
-| ApiKey  | Request name                  | Kafka max   | librdkafka max          |
-| ------- | ------------------------------| ----------- | ----------------------- |
-| 0       | Produce                       | 9           | 7                       |
-| 1       | Fetch                         | 15          | 11                      |
-| 2       | ListOffsets                   | 8           | 7                       |
-| 3       | Metadata                      | 12          | 12                      |
-| 8       | OffsetCommit                  | 8           | 7                       |
-| 9       | OffsetFetch                   | 8           | 7                       |
-| 10      | FindCoordinator               | 4           | 2                       |
-| 11      | JoinGroup                     | 9           | 5                       |
-| 12      | Heartbeat                     | 4           | 3                       |
-| 13      | LeaveGroup                    | 5           | 1                       |
-| 14      | SyncGroup                     | 5           | 3                       |
-| 15      | DescribeGroups                | 5           | 4                       |
-| 16      | ListGroups                    | 4           | 4                       |
-| 17      | SaslHandshake                 | 1           | 1                       |
-| 18      | ApiVersions                   | 3           | 3                       |
-| 19      | CreateTopics                  | 7           | 4                       |
-| 20      | DeleteTopics                  | 6           | 1                       |
-| 21      | DeleteRecords                 | 2           | 1                       |
-| 22      | InitProducerId                | 4           | 4                       |
-| 23      | OffsetForLeaderEpoch          | 4           | 2                       |
-| 24      | AddPartitionsToTxn            | 4           | 0                       |
-| 25      | AddOffsetsToTxn               | 3           | 0                       |
-| 26      | EndTxn                        | 3           | 1                       |
-| 28      | TxnOffsetCommit               | 3           | 3                       |
-| 29      | DescribeAcls                  | 3           | 1                       |
-| 30      | CreateAcls                    | 3           | 1                       |
-| 31      | DeleteAcls                    | 3           | 1                       |
-| 32      | DescribeConfigs               | 4           | 1                       |
-| 33      | AlterConfigs                  | 2           | 2                       |
-| 36      | SaslAuthenticate              | 2           | 1                       |
-| 37      | CreatePartitions              | 3           | 0                       |
-| 42      | DeleteGroups                  | 2           | 1                       |
-| 44      | IncrementalAlterConfigs       | 1           | 1                       |
-| 47      | OffsetDelete                  | 0           | 0                       |
-| 50      | DescribeUserScramCredentials  | 0           | 0                       |
-| 51      | AlterUserScramCredentials     | 0           | 0                       |
-
+| ApiKey  | Request name                  | Kafka max  | librdkafka max |
+| ------- | ----------------------------- | ---------- | -------------- |
+| 0       | Produce                       | 10         | 8              |
+| 1       | Fetch                         | 16         | 11             |
+| 2       | ListOffsets                   | 8          | 7              |
+| 3       | Metadata                      | 12         | 12             |
+| 8       | OffsetCommit                  | 9          | 9              |
+| 9       | OffsetFetch                   | 9          | 9              |
+| 10      | FindCoordinator               | 4          | 2              |
+| 11      | JoinGroup                     | 9          | 5              |
+| 12      | Heartbeat                     | 4          | 3              |
+| 13      | LeaveGroup                    | 5          | 1              |
+| 14      | SyncGroup                     | 5          | 3              |
+| 15      | DescribeGroups                | 5          | 4              |
+| 16      | ListGroups                    | 4          | 4              |
+| 17      | SaslHandshake                 | 1          | 1              |
+| 18      | ApiVersions                   | 3          | 3              |
+| 19      | CreateTopics                  | 7          | 4              |
+| 20      | DeleteTopics                  | 6          | 1              |
+| 21      | DeleteRecords                 | 2          | 1              |
+| 22      | InitProducerId                | 4          | 4              |
+| 23      | OffsetForLeaderEpoch          | 4          | 2              |
+| 24      | AddPartitionsToTxn            | 4          | 0              |
+| 25      | AddOffsetsToTxn               | 3          | 0              |
+| 26      | EndTxn                        | 3          | 1              |
+| 28      | TxnOffsetCommit               | 3          | 3              |
+| 29      | DescribeAcls                  | 3          | 1              |
+| 30      | CreateAcls                    | 3          | 1              |
+| 31      | DeleteAcls                    | 3          | 1              |
+| 32      | DescribeConfigs               | 4          | 1              |
+| 33      | AlterConfigs                  | 2          | 2              |
+| 36      | SaslAuthenticate              | 2          | 1              |
+| 37      | CreatePartitions              | 3          | 0              |
+| 42      | DeleteGroups                  | 2          | 1              |
+| 44      | IncrementalAlterConfigs       | 1          | 1              |
+| 47      | OffsetDelete                  | 0          | 0              |
+| 50      | DescribeUserScramCredentials  | 0          | 0              |
+| 51      | AlterUserScramCredentials     | 0          | 0              |
+| 68      | ConsumerGroupHeartbeat        | 0          | 0              |
 
 # Recommendations for language binding developers
 

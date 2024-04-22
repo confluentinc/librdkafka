@@ -240,6 +240,20 @@ static RD_INLINE RD_UNUSED void rtrim(char *str) {
                 TEST_UNLOCK();                                                 \
         } while (0)
 
+#define TEST_SKIP_MOCK_CLUSTER(RET)                                            \
+        if (test_needs_auth()) {                                               \
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");         \
+                return RET;                                                    \
+        }                                                                      \
+        if (test_consumer_group_protocol() &&                                  \
+            strcmp(test_consumer_group_protocol(), "classic")) {               \
+                TEST_SKIP(                                                     \
+                    "Mock cluster cannot be used "                             \
+                    "with group.protocol=%s\n",                                \
+                    test_consumer_group_protocol());                           \
+                return RET;                                                    \
+        }
+
 
 void test_conf_init(rd_kafka_conf_t **conf,
                     rd_kafka_topic_conf_t **topic_conf,
@@ -845,13 +859,23 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
                                                const char **bootstraps);
-
-
+size_t test_mock_wait_matching_requests(
+    rd_kafka_mock_cluster_t *mcluster,
+    size_t num,
+    int confidence_interval_ms,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque);
 
 int test_error_is_not_fatal_cb(rd_kafka_t *rk,
                                rd_kafka_resp_err_t err,
                                const char *reason);
 
+
+const char *test_consumer_group_protocol();
+
+int test_consumer_group_protocol_generic();
+
+int test_consumer_group_protocol_consumer();
 
 /**
  * @brief Calls rdkafka function (with arguments)

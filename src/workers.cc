@@ -808,11 +808,13 @@ void KafkaConsumerConsumeLoop::HandleErrorCallback() {
 KafkaConsumerConsumeNum::KafkaConsumerConsumeNum(Nan::Callback *callback,
                                      KafkaConsumer* consumer,
                                      const uint32_t & num_messages,
-                                     const int & timeout_ms) :
+                                     const int & timeout_ms,
+                                     bool timeout_only_for_first_message) :
   ErrorAwareWorker(callback),
   m_consumer(consumer),
   m_num_messages(num_messages),
-  m_timeout_ms(timeout_ms) {}
+  m_timeout_ms(timeout_ms),
+  m_timeout_only_for_first_message(timeout_only_for_first_message) {}
 
 KafkaConsumerConsumeNum::~KafkaConsumerConsumeNum() {}
 
@@ -849,6 +851,14 @@ void KafkaConsumerConsumeNum::Execute() {
           break;
         case RdKafka::ERR_NO_ERROR:
           m_messages.push_back(b.data<RdKafka::Message*>());
+
+          // This allows getting ready messages, while not waiting for new ones.
+          // This is useful when we want to get the as many messages as possible
+          // within the timeout but not wait if we already have one or more messages.
+          if (m_timeout_only_for_first_message) {
+            timeout_ms = 1;
+          }
+
           break;
         default:
           // Set the error for any other errors and break

@@ -22,6 +22,11 @@ librdkafka v2.4.0 is a feature release:
  * Fix for an undesired partition migration with stale leader epoch (#4680).
  * Fix hang in cooperative consumer mode if an assignment is processed
    while closing the consumer (#4528).
+ * Upgrade OpenSSL to v3.0.13 (while building from source) with various security fixes,
+   check the [release notes](https://www.openssl.org/news/cl30.txt)
+   (@janjwerner-confluent, #4690).
+ * Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.7.1 (@janjwerner-confluent, #4690).
+
 
 
 ## Upgrade considerations

@@ -157,9 +157,9 @@ blocks:
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - export TEST_KAFKA_VERSION=3.7.0
-            - (cd tests && python3 broker_version_tests.py trunk --kraft
-              --conf '{"conf":["group.coordinator.rebalance.protocols=classic,consumer"]}'
-              --rdkconf '{"args":"-Q -E"}')
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version trunk
+              --cpversion 7.6.0 --conf '["group.coordinator.rebalance.protocols=classic,consumer"]'
+              --cmd 'TEST_CONSUMER_GROUP_PROTOCOL=consumer make quick')
 
 
   - name: 'Linux x64: release artifact docker builds'

@@ -136,6 +136,7 @@ type Sender = {
 export type Producer = Sender & {
   connect(): Promise<void>
   disconnect(): Promise<void>
+  flush(args?: {timeout?: number}): Promise<void>
 }
 
 export interface RetryOptions {
@@ -460,6 +461,7 @@ export type Consumer = {
   subscribe(subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic): Promise<void>
   stop(): Promise<void>
   run(config?: ConsumerRunConfig): Promise<void>
+  storeOffsets(topicPartitions: Array<TopicPartitionOffsetAndMetadata>): void
   commitOffsets(topicPartitions: Array<TopicPartitionOffsetAndMetadata>): Promise<void>
   seek(topicPartitionOffset: TopicPartitionOffset): Promise<void>
   describeGroup(): Promise<GroupDescription>

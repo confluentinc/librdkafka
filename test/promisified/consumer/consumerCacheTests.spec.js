@@ -1,6 +1,5 @@
 jest.setTimeout(30000)
 
-const { is } = require('bluebird');
 const {
     secureRandom,
     createTopic,

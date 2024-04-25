@@ -380,7 +380,7 @@ class Package (object):
                         attr = attr[1:]
 
                         if attr in a.info and \
-                           a.info[attr] != m.attributes[origattr]:
+                           a.info[attr] == m.attributes[origattr]:
                             found = False
                             break
                     else:

@@ -858,6 +858,79 @@ static void do_test_adherence_to_hb_interval(void) {
         SUB_TEST_PASS();
 }
 
+typedef enum do_test_quick_unsubscribe_variation_t {
+        /* No mock cluster, no coordinator available. */
+        DO_TEST_QUICK_UNSUBSCRIBE_VARIATION_NO_CLUSTER = 0,
+        /* Mock cluster is ready */
+        DO_TEST_QUICK_UNSUBSCRIBE_VARIATION_CLUSTER_READY = 1,
+        DO_TEST_QUICK_UNSUBSCRIBE_VARIATION__CNT
+} do_test_quick_unsubscribe_variation_t;
+
+/**
+ * @brief A series of subscribe and unsubscribe call shouldn't cause
+ *        assert failures.
+ *
+ * @param variation Test variation.
+ *
+ * @sa `do_test_quick_unsubscribe_variation_t`
+ */
+static void
+do_test_quick_unsubscribe(do_test_quick_unsubscribe_variation_t variation) {
+        int i;
+        rd_kafka_t *c;
+        rd_kafka_topic_partition_list_t *subscription;
+        rd_kafka_mock_cluster_t *mcluster = NULL;
+        const char *bootstraps            = "localhost:9999";
+        const char *topic                 = test_mk_topic_name(__FUNCTION__, 0);
+
+        SUB_TEST_QUICK(
+            "%s", variation == DO_TEST_QUICK_UNSUBSCRIBE_VARIATION_NO_CLUSTER
+                      ? "no cluster"
+                      : "mock cluster ready");
+
+        if (variation == DO_TEST_QUICK_UNSUBSCRIBE_VARIATION_NO_CLUSTER) {
+                test_curr->is_fatal_cb = error_is_fatal_cb;
+                allowed_error          = RD_KAFKA_RESP_ERR__TRANSPORT;
+        } else if (variation ==
+                   DO_TEST_QUICK_UNSUBSCRIBE_VARIATION_CLUSTER_READY) {
+                mcluster = test_mock_cluster_new(1, &bootstraps);
+                rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        }
+
+        c = create_consumer(bootstraps, topic, rd_true);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+
+        for (i = 0; i < 2; i++) {
+                TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
+                TEST_CALL_ERR__(rd_kafka_unsubscribe(c));
+        }
+
+        rd_kafka_topic_partition_list_destroy(subscription);
+        rd_kafka_destroy(c);
+        RD_IF_FREE(mcluster, test_mock_cluster_destroy);
+
+        test_curr->is_fatal_cb = NULL;
+        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test all `do_test_quick_unsubscribe` variations.
+ *
+ * @sa `do_test_quick_unsubscribe_variation_t`
+ */
+static void do_test_quick_unsubscribe_tests(void) {
+        do_test_quick_unsubscribe_variation_t variation;
+        for (variation = DO_TEST_QUICK_UNSUBSCRIBE_VARIATION_NO_CLUSTER;
+             variation < DO_TEST_QUICK_UNSUBSCRIBE_VARIATION__CNT;
+             variation++) {
+                do_test_quick_unsubscribe(variation);
+        }
+}
+
 int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -875,6 +948,8 @@ int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         do_test_metadata_unknown_topic_id_tests();
 
         do_test_adherence_to_hb_interval();
+
+        do_test_quick_unsubscribe_tests();
 
         return 0;
 }

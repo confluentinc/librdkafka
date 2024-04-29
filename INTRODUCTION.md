@@ -72,6 +72,7 @@ librdkafka also provides a native C++ interface.
                 - [Auto offset reset](#auto-offset-reset)
         - [Consumer groups](#consumer-groups)
             - [Static consumer groups](#static-consumer-groups)
+            - [Next generation of the consumer group protocol](#next-generation-of-the-consumer-group-protocol-kip-848)
         - [Topics](#topics)
             - [Unknown or unauthorized topics](#unknown-or-unauthorized-topics)
             - [Topic metadata propagation for newly created topics](#topic-metadata-propagation-for-newly-created-topics)
@@ -1540,6 +1541,96 @@ the original fatal error code and reason.
 To read more about static group membership, see [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances).
 
 
+### Next generation of the consumer group protocol: [KIP 848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)
+
+Starting from librdkafka 2.4.0 the next generation consumer group rebalance protocol
+is in **Early Availability**. It means it's still  _not production-ready_ and
+_not supported_, given it's still under validation and lacking some needed features.
+
+With this protocol the role of the Group Leader (a member) is removed and
+the assignment is calculated by the Group Coordinator (a broker) and sent
+to each member through heartbeats.
+
+To test it, a Kafka cluster must be set up, in KRaft mode, and the new group
+protocol enabled with the `group.coordinator.rebalance.protocols` property.
+Broker version must be Apache Kafka 3.7.0 or newer.
+
+Client side, it can be enabled by setting the new property `group.protocol=consumer`.
+A second property named `group.remote.assignor` is added to choose desired
+remote assignor.
+
+**Available features**
+
+- Subscription to one or more topics
+- Rebalance callbacks (see contract changes)
+- Static group membership
+- Configure remote assignor
+- Max poll interval is enforced
+- Offline upgrade from an empty consumer group with committed offsets
+
+**Missing features**
+
+- Regular expression support when subscribing
+- AdminClient changes as described in the KIP
+- Client side assignors as described in the KIP
+- Online upgrade of a non-empty consumer group
+
+**Contract changes**
+
+Along with the new feature there are some needed contract changes,
+so the protocol will be enabled by default only with a librdkafka major release.
+
+ - These client properties are deprecated: `partition.assignment.strategy`,
+ replaced by `group.remote.assignor`;
+`session.timeout.ms` and `heartbeat.interval.ms`, replaced by broker configurations
+`group.consumer.session.timeout.ms` and `group.consumer.heartbeat.interval.ms`.
+
+ - Protocol rebalance is fully incremental, so the only allowed functions to
+   use in a rebalance callback will be `rd_kafka_incremental_assign` and
+   `rd_kafka_incremental_unassign`. Currently you can still use existing code
+   and the expected function to call is determined based on the chosen
+   `partition.assignment.strategy` but this will be removed already in next
+   release.
+
+   When setting the `group.remote.assignor` property, it's already
+   required to use the incremental assign and unassign functions.
+
+ - With a static group membership, if two members are using the same
+   `group.instance.id`, the one that joins the consumer group last will be
+   fenced, with the fatal `UNRELEASED_INSTANCE_ID` error. Before, it was the existing
+   member to be fenced. This was changed to avoid two members contending the
+   same id. It also means that any instance that crashes won't be automatically
+   replaced by a new instance until session times out and it's especially required
+   to check that consumers are being closed properly on shutdown. Ensuring that
+   no two instances with same `group.instance.id` are running at any time
+   is also important.
+
+ - Session timeout is remote only and, if the Coordinator isn't reachable
+   by a member, this will continue to fetch messages, even if it won't be able to
+   commit them. Otherwise, the member will be fenced as soon as it receives an
+   heartbeat response from the Coordinator.
+   With `classic` protocol, instead, member stops fetching when session timeout
+   expires on the client.
+
+   For the same reason, when closing or unsubscribing with auto-commit set,
+   the member will try to commit until a specific timeout has passed.
+   Currently the timeout is the same as the `classic` protocol and it corresponds
+   to the deprecated `session.timeout.ms`, but it will change before the feature
+   reaches a stable state.
+
+ - An `UNKNOWN_TOPIC_OR_PART` error won't be received when a consumer is
+   subscribing to a topic that doesn't exist in local cache, as the consumer
+   is still subscribing to the topic and it could be created just after that.
+
+ - A consumer won't do a preliminary Metadata call that returns a
+   `TOPIC_AUTHORIZATION_FAILED`, topic partitions will be assigned to the member
+   by the Coordinator only if it's authorized to consume from the topic.
+
+ - Number of assign/revoke callbacks isn't fixed anymore, as it depends on
+   heartbeat timing.
+
+
+
 ### Note on Batch consume APIs
 
 Using multiple instances of `rd_kafka_consume_batch()` and/or `rd_kafka_consume_batch_queue()`
@@ -1951,7 +2042,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-559 - Make the Kafka Protocol Friendlier with L7 Proxies             | 2.5.0                       | Not supported                                                                                 |
 | KIP-568 - Explicit rebalance triggering on the Consumer                  | 2.6.0                       | Not supported                                                                                 |
 | KIP-659 - Add metadata to DescribeConfigsResponse                        | 2.6.0                       | Not supported                                                                                 |
-| KIP-580 - Exponential backoff for Kafka clients                          | 3.7.0 (WIP)                 | supported                                                                           |
+| KIP-580 - Exponential backoff for Kafka clients                          | 3.7.0 (WIP)                 | Supported                                                                                     |
 | KIP-584 - Versioning scheme for features                                 | WIP                         | Not supported                                                                                 |
 | KIP-588 - Allow producers to recover gracefully from txn timeouts        | 2.8.0 (WIP)                 | Not supported                                                                                 |
 | KIP-601 - Configurable socket connection timeout                         | 2.7.0                       | Supported                                                                                     |
@@ -1961,6 +2052,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 | KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0 (WIP)                 | Supported                                                                                     |
+| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 3.7.0 (EA)                  | Early availability                                                                            |
 
 
 

@@ -33,7 +33,7 @@ librdkafka v2.4.0 is a feature release:
    error. Rest of records in the batch will fail with the new error code
    _INVALID_DIFFERENT_RECORD (Java: KafkaException) and can be retried manually,
    depending on the application logic (#4583).
- * The new consumer group rebalance protocol, defined in KIP 848, is still in **Early Availability**: _not production-ready_, _not supported_.
+ * The new consumer group rebalance protocol, defined in KIP 848, is still in **Early Access**: _not production-ready_, _not supported_.
    It's possible to try it in a non-production enviroment.
    A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available (#4610).
 

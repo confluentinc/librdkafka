@@ -1544,7 +1544,7 @@ To read more about static group membership, see [KIP-345](https://cwiki.apache.o
 ### Next generation of the consumer group protocol: [KIP 848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)
 
 Starting from librdkafka 2.4.0 the next generation consumer group rebalance protocol
-is in **Early Availability**. It means it's still  _not production-ready_ and
+is in **Early Access**. It means it's still  _not production-ready_ and
 _not supported_, given it's still under validation and lacking some needed features.
 
 With this protocol the role of the Group Leader (a member) is removed and
@@ -2052,7 +2052,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 | KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0 (WIP)                 | Supported                                                                                     |
-| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 3.7.0 (EA)                  | Early availability                                                                            |
+| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 3.7.0 (EA)                  | Early Access                                                                                  |
 
 
 

@@ -2418,7 +2418,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                         rd_kafka_log(
                                             rk, LOG_WARNING, "ASSIGNOR",
                                             "roundrobin assignor isn't "
-                                            "available"
+                                            "available "
                                             "with group protocol CONSUMER, "
                                             "using the \"uniform\" one. "
                                             "It's similar, "

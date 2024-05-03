@@ -4,7 +4,7 @@
     "dependencies": [
         {
             "name": "zstd",
-            "version>=": "1.5.6"
+            "version>=": "1.5.5#2"
         },
         {
             "name": "zlib",

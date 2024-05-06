@@ -157,7 +157,7 @@ blocks:
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - export TEST_KAFKA_VERSION=3.7.0
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version trunk
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version 'trunk@f6c9feea76d01a46319b0ca602d70aa855057b07'
               --cpversion 7.6.0 --conf '["group.coordinator.rebalance.protocols=classic,consumer"]'
               --cmd 'TEST_CONSUMER_GROUP_PROTOCOL=consumer make quick')
 

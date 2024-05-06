@@ -37,12 +37,14 @@ librdkafka v2.4.0 is a feature release:
 
 
 ## Early Access
- * The new consumer group rebalance protocol, defined in KIP 848, is still _not production-ready_ and _not supported_.
-   It's possible to try it in a non-production enviroment.
 
-   With this protocol the role of the Group Leader (a member) is removed and
+### [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol): The Next Generation of the Consumer Rebalance Protocol
+ * With this new protocol the role of the Group Leader (a member) is removed and
    the assignment is calculated by the Group Coordinator (a broker) and sent
    to each member through heartbeats.
+
+   The feature is still _not production-ready_ and _not supported_.
+   It's possible to try it in a non-production enviroment.
 
    A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available
    with considerations and steps to follow to test it (#4610).

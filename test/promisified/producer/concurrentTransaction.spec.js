@@ -34,6 +34,7 @@ describe('Producer > Transactional producer', () => {
                 producer1 = newProducer();
                 await producer1.connect();
                 const transaction1 = await producer1.transaction();
+                expect(transaction1.isActive()).toBe(true);
                 await transaction1.send({ topic: topicName, messages: [message] });
 
                 // Producer 2 starts with the same transactional id to cause the concurrent transactions error

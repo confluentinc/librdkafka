@@ -1544,8 +1544,12 @@ To read more about static group membership, see [KIP-345](https://cwiki.apache.o
 ### Next generation of the consumer group protocol: [KIP 848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)
 
 Starting from librdkafka 2.4.0 the next generation consumer group rebalance protocol
-is in **Early Access**. It means it's still  _not production-ready_ and
+defined in KIP 848 is introduced.
+
+**Warning**
+It's still in **Early Access** which means it's  _not production-ready_ and
 _not supported_, given it's still under validation and lacking some needed features.
+Features and their contract might change in future.
 
 With this protocol the role of the Group Leader (a member) is removed and
 the assignment is calculated by the Group Coordinator (a broker) and sent
@@ -1553,7 +1557,8 @@ to each member through heartbeats.
 
 To test it, a Kafka cluster must be set up, in KRaft mode, and the new group
 protocol enabled with the `group.coordinator.rebalance.protocols` property.
-Broker version must be Apache Kafka 3.7.0 or newer.
+Broker version must be Apache Kafka 3.7.0 or newer. See Apache Kafka
+[Release Notes](https://cwiki.apache.org/confluence/display/KAFKA/The+Next+Generation+of+the+Consumer+Rebalance+Protocol+%28KIP-848%29+-+Early+Access+Release+Notes).
 
 Client side, it can be enabled by setting the new property `group.protocol=consumer`.
 A second property named `group.remote.assignor` is added to choose desired
@@ -1568,35 +1573,35 @@ remote assignor.
 - Max poll interval is enforced
 - Offline upgrade from an empty consumer group with committed offsets
 
-**Missing features**
+**Future features**
 
 - Regular expression support when subscribing
 - AdminClient changes as described in the KIP
-- Client side assignors as described in the KIP
-- Online upgrade of a non-empty consumer group
 
 **Contract changes**
 
 Along with the new feature there are some needed contract changes,
 so the protocol will be enabled by default only with a librdkafka major release.
 
- - These client properties are deprecated: `partition.assignment.strategy`,
- replaced by `group.remote.assignor`;
-`session.timeout.ms` and `heartbeat.interval.ms`, replaced by broker configurations
-`group.consumer.session.timeout.ms` and `group.consumer.heartbeat.interval.ms`.
+ - Deprecated client configurations with the new protocol:
+    - `partition.assignment.strategy` replaced by `group.remote.assignor`
+    - `session.timeout.ms` replaced by broker configuration `group.consumer.session.timeout.ms`
+    - `heartbeat.interval.ms`, replaced by broker configuration `group.consumer.heartbeat.interval.ms`
+    - `group.protocol.type` which is not used in the new protocol
 
  - Protocol rebalance is fully incremental, so the only allowed functions to
    use in a rebalance callback will be `rd_kafka_incremental_assign` and
    `rd_kafka_incremental_unassign`. Currently you can still use existing code
    and the expected function to call is determined based on the chosen
-   `partition.assignment.strategy` but this will be removed already in next
+   `partition.assignment.strategy` but this will be removed in next
    release.
 
    When setting the `group.remote.assignor` property, it's already
    required to use the incremental assign and unassign functions.
+   All assignors are sticky with new protocol, including the _range_ one, that wasn't.
 
  - With a static group membership, if two members are using the same
-   `group.instance.id`, the one that joins the consumer group last will be
+   `group.instance.id`, the one that joins the consumer group later will be
    fenced, with the fatal `UNRELEASED_INSTANCE_ID` error. Before, it was the existing
    member to be fenced. This was changed to avoid two members contending the
    same id. It also means that any instance that crashes won't be automatically
@@ -1615,20 +1620,17 @@ so the protocol will be enabled by default only with a librdkafka major release.
    For the same reason, when closing or unsubscribing with auto-commit set,
    the member will try to commit until a specific timeout has passed.
    Currently the timeout is the same as the `classic` protocol and it corresponds
-   to the deprecated `session.timeout.ms`, but it will change before the feature
+   to the `session.timeout.ms`, but it will change before the feature
    reaches a stable state.
 
- - An `UNKNOWN_TOPIC_OR_PART` error won't be received when a consumer is
+ - An `UNKNOWN_TOPIC_OR_PART` error isn't received anymore when a consumer is
    subscribing to a topic that doesn't exist in local cache, as the consumer
    is still subscribing to the topic and it could be created just after that.
 
  - A consumer won't do a preliminary Metadata call that returns a
-   `TOPIC_AUTHORIZATION_FAILED`, topic partitions will be assigned to the member
+   `TOPIC_AUTHORIZATION_FAILED`, as it's happening with group protocol `classic`.
+   Topic partitions will still be assigned to the member
    by the Coordinator only if it's authorized to consume from the topic.
-
- - Number of assign/revoke callbacks isn't fixed anymore, as it depends on
-   heartbeat timing.
-
 
 
 ### Note on Batch consume APIs

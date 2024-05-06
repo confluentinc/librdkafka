@@ -2,7 +2,8 @@
 
 librdkafka v2.4.0 is a feature release:
 
- * [KIP-848 EA](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol): The Next Generation of the Consumer Rebalance Protocol (#4610)
+ * [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol): The Next Generation of the Consumer Rebalance Protocol.
+   **Early Access**: This should be used only for evaluation and must not be used in production. Features and contract of this KIP might change in future (#4610).
  * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records): Augment ProduceResponse error messaging for specific culprit records (#4583).
  * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
    Continue partial implementation by adding a metadata cache by topic id
@@ -33,9 +34,18 @@ librdkafka v2.4.0 is a feature release:
    error. Rest of records in the batch will fail with the new error code
    _INVALID_DIFFERENT_RECORD (Java: KafkaException) and can be retried manually,
    depending on the application logic (#4583).
- * The new consumer group rebalance protocol, defined in KIP 848, is still in **Early Access**: _not production-ready_, _not supported_.
+
+
+## Early Access
+ * The new consumer group rebalance protocol, defined in KIP 848, is still _not production-ready_ and _not supported_.
    It's possible to try it in a non-production enviroment.
-   A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available (#4610).
+
+   With this protocol the role of the Group Leader (a member) is removed and
+   the assignment is calculated by the Group Coordinator (a broker) and sent
+   to each member through heartbeats.
+
+   A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available
+   with considerations and steps to follow to test it (#4610).
 
 
 ## Fixes

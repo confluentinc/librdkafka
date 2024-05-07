@@ -1,3 +1,18 @@
+# confluent-kafka-javascript v0.1.13-devel
+
+v0.1.13-devel is a pre-production, early-access release.
+
+## Features
+
+1. Add support for `storeOffsets` in the consumer API.
+2. Add optimization while consuming, in cases where the size of messages pending in our subscription is less than the consumer cache size.
+
+## Bug Fixes
+
+1. Fix memory leak in incremental assign (@martijnimhoff, #35).
+2. Fix various issues with typings, and reconcile typings, JavaScript code, and MIGRATION.md to be consistent.
+
+
 # confluent-kafka-javascript v0.1.12-devel
 
 v0.1.12-devel is a pre-production, early-access release.

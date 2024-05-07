@@ -1547,8 +1547,8 @@ Starting from librdkafka 2.4.0 the next generation consumer group rebalance prot
 defined in KIP 848 is introduced.
 
 **Warning**
-It's still in **Early Access** which means it's  _not production-ready_ and
-_not supported_, given it's still under validation and lacking some needed features.
+It's still in **Early Access** which means it's  _not production-ready_,
+given it's still under validation and lacking some needed features.
 Features and their contract might change in future.
 
 With this protocol the role of the Group Leader (a member) is removed and

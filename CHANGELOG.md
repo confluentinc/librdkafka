@@ -43,7 +43,7 @@ librdkafka v2.4.0 is a feature release:
    the assignment is calculated by the Group Coordinator (a broker) and sent
    to each member through heartbeats.
 
-   The feature is still _not production-ready_ and _not supported_.
+   The feature is still _not production-ready_.
    It's possible to try it in a non-production enviroment.
 
    A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available

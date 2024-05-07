@@ -97,6 +97,12 @@ blocks:
         - name: "Test"
           commands:
             - make test
+        - name: "Promisified Tests"
+          commands:
+            - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+            - docker compose up -d && sleep 30
+            - docker ps
+            - npx jest --forceExit --no-colors --runInBand --ci test/promisified/producer/
         - name: "ESLint"
           commands:
             - npx eslint lib/kafkajs

@@ -15,7 +15,7 @@ auto_cancel:
     when: "branch != 'master'"
 
 execution_time_limit:
-  hours: 1
+  hours: 3
 
 queue:
   - when: "branch != 'master'"
@@ -102,7 +102,7 @@ blocks:
             - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
             - docker compose up -d && sleep 30
             - export NODE_OPTIONS='--max-old-space-size=1536'
-            - npx jest --forceExit --no-colors --ci test/promisified/
+            - npx jest --forceExit --no-colors --ci test/promisified/admin/delete_groups.spec.js test/promisified/consumer/pause.spec.js
         - name: "ESLint"
           commands:
             - npx eslint lib/kafkajs

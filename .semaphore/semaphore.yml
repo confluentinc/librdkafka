@@ -101,8 +101,8 @@ blocks:
           commands:
             - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
             - docker compose up -d && sleep 30
-            - docker ps
-            - npx jest --forceExit --no-colors --runInBand --ci test/promisified/producer/
+            - export NODE_OPTIONS='--max-old-space-size=1536'
+            - npx jest --forceExit --no-colors --ci test/promisified/
         - name: "ESLint"
           commands:
             - npx eslint lib/kafkajs

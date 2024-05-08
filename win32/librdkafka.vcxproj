@@ -232,6 +232,7 @@
     <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_error.c" />
     <ClCompile Include="..\src\rdkafka_fetcher.c" />
+    <ClCompile Include="..\src\rdkafka_uuid.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />

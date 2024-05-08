@@ -2774,7 +2774,7 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
         }
         if (missing_topic_ids && *missing_topic_ids)
                 rd_list_deduplicate(missing_topic_ids,
-                                    (void *)rd_kafka_Uuid_ptr_cmp);
+                                    (void *)rd_list_Uuid_cmp);
         return assignment_with_metadata;
 }
 

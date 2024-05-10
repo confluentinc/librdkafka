@@ -2985,9 +2985,10 @@ static void rd_kafka_broker_retry_bufs_move(rd_kafka_broker_t *rkb,
  * To avoid extra iterations, the \p err and \p status are set on
  * the message as they are popped off the OP_DR msgq in rd_kafka_poll() et.al
  */
-void rd_kafka_dr_msgq(rd_kafka_topic_t *rkt,
-                      rd_kafka_msgq_t *rkmq,
-                      rd_kafka_resp_err_t err) {
+void rd_kafka_dr_msgq0(rd_kafka_topic_t *rkt,
+                       rd_kafka_msgq_t *rkmq,
+                       rd_kafka_resp_err_t err,
+                       const rd_kafka_Produce_result_t *presult) {
         rd_kafka_t *rk = rkt->rkt_rk;
 
         if (unlikely(rd_kafka_msgq_len(rkmq) == 0))
@@ -2998,7 +2999,11 @@ void rd_kafka_dr_msgq(rd_kafka_topic_t *rkt,
                                 rd_kafka_msgq_len(rkmq));
 
         /* Call on_acknowledgement() interceptors */
-        rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq, err);
+        rd_kafka_interceptors_on_acknowledgement_queue(
+            rk, rkmq,
+            (presult && presult->record_errors_cnt > 1)
+                ? RD_KAFKA_RESP_ERR_NO_ERROR
+                : err);
 
         if (rk->rk_drmode != RD_KAFKA_DR_MODE_NONE &&
             (!rk->rk_conf.dr_err_only || err)) {
@@ -3008,6 +3013,9 @@ void rd_kafka_dr_msgq(rd_kafka_topic_t *rkt,
                 rko               = rd_kafka_op_new(RD_KAFKA_OP_DR);
                 rko->rko_err      = err;
                 rko->rko_u.dr.rkt = rd_kafka_topic_keep(rkt);
+                if (presult)
+                        rko->rko_u.dr.presult =
+                            rd_kafka_Produce_result_copy(presult);
                 rd_kafka_msgq_init(&rko->rko_u.dr.msgq);
 
                 /* Move all messages to op's msgq */

@@ -235,6 +235,16 @@ typedef struct rd_kafka_mock_committed_offset_s {
         rd_kafkap_str_t *metadata; /**< Metadata, allocated separately */
 } rd_kafka_mock_committed_offset_t;
 
+/**
+ * @struct Leader id and epoch to return in a Metadata call.
+ */
+typedef struct rd_kafka_mock_partition_leader_s {
+        /**< Link to prev/next entries */
+        TAILQ_ENTRY(rd_kafka_mock_partition_leader_s) link;
+        int32_t leader_id;    /**< Leader id */
+        int32_t leader_epoch; /**< Leader epoch */
+} rd_kafka_mock_partition_leader_t;
+
 
 TAILQ_HEAD(rd_kafka_mock_msgset_tailq_s, rd_kafka_mock_msgset_s);
 
@@ -276,6 +286,10 @@ typedef struct rd_kafka_mock_partition_s {
         int32_t follower_id; /**< Preferred replica/follower */
 
         struct rd_kafka_mock_topic_s *topic;
+
+        /**< Leader responses */
+        TAILQ_HEAD(, rd_kafka_mock_partition_leader_s)
+        leader_responses;
 } rd_kafka_mock_partition_t;
 
 
@@ -489,6 +503,13 @@ rd_kafka_resp_err_t rd_kafka_mock_partition_leader_epoch_check(
 int64_t rd_kafka_mock_partition_offset_for_leader_epoch(
     const rd_kafka_mock_partition_t *mpart,
     int32_t leader_epoch);
+
+rd_kafka_mock_partition_leader_t *
+rd_kafka_mock_partition_next_leader_response(rd_kafka_mock_partition_t *mpart);
+
+void rd_kafka_mock_partition_leader_destroy(
+    rd_kafka_mock_partition_t *mpart,
+    rd_kafka_mock_partition_leader_t *mpart_leader);
 
 
 /**

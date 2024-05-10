@@ -403,6 +403,7 @@ struct rd_kafka_op_s {
                         rd_kafka_msgq_t msgq;
                         rd_kafka_msgq_t msgq2;
                         int do_purge2;
+                        rd_kafka_Produce_result_t *presult;
                 } dr;
 
                 struct {
@@ -568,6 +569,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
+                               RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
@@ -586,7 +588,9 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_FOLLOWER
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    BROKER_SET_RACK
-                                                  *    COORD_SET (key_type) */
+                                                  *    COORD_SET (key_type)
+                                                  *    PART_PUSH_LEADER_RESPONSE
+                                                  */
                         char *str;               /**< For:
                                                   *    COORD_SET (key) */
                         int32_t partition;       /**< For:
@@ -594,6 +598,7 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    PART_SET_LEADER
                                                   *    APIVERSION_SET (ApiKey)
+                                                  *    PART_PUSH_LEADER_RESPONSE
                                                   */
                         int32_t broker_id;       /**< For:
                                                   *    PART_SET_FOLLOWER
@@ -614,6 +619,12 @@ struct rd_kafka_op_s {
                                                   *    APIVERSION_SET (maxver)
                                                   *    REQUESTED_METRICS_SET (metrics_cnt)
                                                   *    TELEMETRY_PUSH_INTERVAL_SET (interval)
+                                                  */
+                        int32_t leader_id;       /**< Leader id, for:
+                                                  *   PART_PUSH_LEADER_RESPONSE
+                                                  */
+                        int32_t leader_epoch;    /**< Leader epoch, for:
+                                                  *   PART_PUSH_LEADER_RESPONSE
                                                   */
                         char **metrics;          /**< Metrics requested, for:
                                                   *   REQUESTED_METRICS_SET */

@@ -1133,22 +1133,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Group session keepalive heartbeat interval.", 1, 3600 * 1000, 3 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "group.protocol.type", _RK_C_KSTR,
      _RK(group_protocol_type),
-     "Group protocol type for the `generic` group protocol. NOTE: Currently, "
+     "Group protocol type for the `classic` group protocol. NOTE: Currently, "
      "the only supported group "
      "protocol type is `consumer`.",
      .sdef = "consumer"},
-    {_RK_GLOBAL | _RK_CGRP | _RK_HIGH | _RK_HIDDEN, "group.protocol", _RK_C_S2I,
+    {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "group.protocol", _RK_C_S2I,
      _RK(group_protocol),
-     "Group protocol to use. Use `generic` for the original protocol and "
+     "Group protocol to use. Use `classic` for the original protocol and "
      "`consumer` for the new "
-     "protocol introduced in KIP-848. Available protocols: generic or "
-     "consumer. Default is `generic`, "
+     "protocol introduced in KIP-848. Available protocols: classic or "
+     "consumer. Default is `classic`, "
      "but will change to `consumer` in next releases.",
-     .vdef = RD_KAFKA_GROUP_PROTOCOL_GENERIC,
-     .s2i  = {{RD_KAFKA_GROUP_PROTOCOL_GENERIC, "generic"},
+     .vdef = RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
+     .s2i  = {{RD_KAFKA_GROUP_PROTOCOL_CLASSIC, "classic"},
              {RD_KAFKA_GROUP_PROTOCOL_CONSUMER, "consumer"}}},
-    {_RK_GLOBAL | _RK_CGRP | _RK_MED | _RK_HIDDEN, "group.remote.assignor",
-     _RK_C_STR, _RK(group_remote_assignor),
+    {_RK_GLOBAL | _RK_CGRP | _RK_MED, "group.remote.assignor", _RK_C_STR,
+     _RK(group_remote_assignor),
      "Server side assignor to use. Keep it null to make server select a "
      "suitable assignor for the group. "
      "Available assignors: uniform or range. Default is null",
@@ -1394,15 +1394,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
      .sdef = "message.send.max.retries"},
 
-    {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.ms", _RK_C_INT,
-     _RK(retry_backoff_ms),
+    {_RK_GLOBAL | _RK_MED, "retry.backoff.ms", _RK_C_INT, _RK(retry_backoff_ms),
      "The backoff time in milliseconds before retrying a protocol request, "
      "this is the first backoff time, "
      "and will be backed off exponentially until number of retries is "
      "exhausted, and it's capped by retry.backoff.max.ms.",
      1, 300 * 1000, 100},
 
-    {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
+    {_RK_GLOBAL | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
      _RK(retry_backoff_max_ms),
      "The max backoff time in milliseconds before retrying a protocol request, "
      "this is the atmost backoff allowed for exponentially backed off "

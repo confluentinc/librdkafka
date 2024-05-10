@@ -158,10 +158,7 @@ int main_0120_asymmetric_subscription(int argc, char **argv) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
 

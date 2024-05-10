@@ -164,7 +164,7 @@ typedef enum {
 } rd_kafka_client_dns_lookup_t;
 
 typedef enum {
-        RD_KAFKA_GROUP_PROTOCOL_GENERIC,
+        RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
         RD_KAFKA_GROUP_PROTOCOL_CONSUMER,
 } rd_kafka_group_protocol_t;
 
@@ -387,6 +387,7 @@ struct rd_kafka_conf_s {
         rd_kafkap_str_t *group_protocol_type;
         char *partition_assignment_strategy;
         rd_list_t partition_assignors;
+        rd_bool_t partition_assignors_cooperative;
         int enabled_assignor_cnt;
 
         void (*rebalance_cb)(rd_kafka_t *rk,

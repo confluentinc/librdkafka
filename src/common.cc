@@ -325,6 +325,16 @@ v8::Local<v8::Array> ToV8Array(
         Nan::Set(obj, Nan::New("offset").ToLocalChecked(),
           Nan::New<v8::Number>(topic_partition->offset()));
       }
+
+      // If present, size >= 1, since it will include at least the null terminator.
+      if (topic_partition->get_metadata().size() > 0) {
+        Nan::Set(obj, Nan::New("metadata").ToLocalChecked(),
+          Nan::New<v8::String>(
+            reinterpret_cast<const char*>(topic_partition->get_metadata().data()),
+            topic_partition->get_metadata().size() - 1) // null terminator is not required by the constructor.
+          .ToLocalChecked());
+      }
+
       Nan::Set(obj, Nan::New("partition").ToLocalChecked(),
         Nan::New<v8::Number>(topic_partition->partition()));
       Nan::Set(obj, Nan::New("topic").ToLocalChecked(),
@@ -428,7 +438,22 @@ RdKafka::TopicPartition * FromV8Object(v8::Local<v8::Object> topic_partition) {
     return NULL;
   }
 
-  return RdKafka::TopicPartition::create(topic, partition, offset);
+  RdKafka::TopicPartition *toppar = RdKafka::TopicPartition::create(topic, partition, offset);
+
+  v8::Local<v8::String>  metadataKey = Nan::New("metadata").ToLocalChecked();
+  if (Nan::Has(topic_partition, metadataKey).FromMaybe(false)) {
+    v8::Local<v8::Value> metadataValue = Nan::Get(topic_partition, metadataKey).ToLocalChecked();
+
+    if (metadataValue->IsString()) {
+      Nan::Utf8String metadataValueUtf8Str(metadataValue.As<v8::String>());
+      std::string metadataValueStr(*metadataValueUtf8Str);
+      std::vector<unsigned char> metadataVector(metadataValueStr.begin(), metadataValueStr.end());
+      metadataVector.push_back('\0'); // The null terminator is not included in the iterator.
+      toppar->set_metadata(metadataVector);
+    }
+  }
+
+  return toppar;
 }
 
 }  // namespace TopicPartition

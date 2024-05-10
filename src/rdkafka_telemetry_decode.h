@@ -28,7 +28,27 @@
 
 #ifndef _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H
 #define _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H
+#include "rd.h"
+#include "rdkafka_telemetry_decode.h"
+#include "nanopb/pb.h"
+#include "nanopb/pb_encode.h"
+#include "nanopb/pb_decode.h"
+#include "opentelemetry/metrics.pb.h"
+#include "rdkafka_int.h"
+#include "rdkafka_telemetry_encode.h"
+#include "rdunittest.h"
+#include "rdkafka_lz4.h"
+#include "rdgz.h"
+#include "rdkafka_zstd.h"
+#include "snappy.h"
 
+int rd_kafka_telemetry_uncompress_metrics_payload(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_compression_t compression_type,
+    void *compressed_payload,
+    size_t compressed_payload_size,
+    void **uncompressed_payload,
+    size_t *uncompressed_payload_size);
 int rd_kafka_telemetry_decode_metrics(void *buffer,
                                       size_t size,
                                       rd_bool_t is_unit_test);

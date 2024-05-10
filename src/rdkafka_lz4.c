@@ -448,3 +448,105 @@ done:
 
         return err;
 }
+
+/**
+ * @brief Compress \p payload_len bytes of \p payload using LZ4F (framed)
+ *        compression.
+ *
+ * @returns allocated buffer in \p *outbuf, length in \p *outlenp.
+ */
+rd_kafka_resp_err_t rd_kafka_lz4_compress_direct(rd_kafka_broker_t *rkb,
+                                                 int comp_level,
+                                                 void *payload,
+                                                 size_t payload_len,
+                                                 void **outbuf,
+                                                 size_t *outlenp) {
+        LZ4F_compressionContext_t cctx;
+        LZ4F_errorCode_t r;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        size_t len              = payload_len;
+        size_t out_sz;
+        size_t out_of = 0;
+        char *out;
+
+        /* Required by Kafka */
+        const LZ4F_preferences_t prefs = {
+            .frameInfo        = {.blockMode = LZ4F_blockIndependent},
+            .compressionLevel = comp_level};
+
+        *outbuf = NULL;
+
+        out_sz = LZ4F_compressBound(len, NULL) + 1000;
+        if (LZ4F_isError(out_sz)) {
+                rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
+                           "Unable to query LZ4 compressed size "
+                           "(for %" PRIusz " uncompressed bytes): %s",
+                           len, LZ4F_getErrorName(out_sz));
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+        out = rd_malloc(out_sz);
+        if (!out) {
+                rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
+                           "Unable to allocate output buffer "
+                           "(%" PRIusz " bytes): %s",
+                           out_sz, rd_strerror(errno));
+                return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
+        }
+
+        r = LZ4F_createCompressionContext(&cctx, LZ4F_VERSION);
+        if (LZ4F_isError(r)) {
+                rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
+                           "Unable to create LZ4 compression context: %s",
+                           LZ4F_getErrorName(r));
+                rd_free(out);
+                return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
+        }
+
+        r = LZ4F_compressBegin(cctx, out, out_sz, &prefs);
+        if (LZ4F_isError(r)) {
+                rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
+                           "Unable to begin LZ4 compression "
+                           "(out buffer is %" PRIusz " bytes): %s",
+                           out_sz, LZ4F_getErrorName(r));
+                err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
+                goto done;
+        }
+
+        out_of += r;
+        r = LZ4F_compressUpdate(cctx, out + out_of, out_sz - out_of, payload,
+                                payload_len, NULL);
+        if (unlikely(LZ4F_isError(r))) {
+                rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
+                           "LZ4 compression failed "
+                           "(at of %" PRIusz
+                           " bytes, with "
+                           "%" PRIusz
+                           " bytes remaining in out buffer): "
+                           "%s",
+                           payload_len, out_sz - out_of, LZ4F_getErrorName(r));
+                err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
+                goto done;
+        }
+        out_of += r;
+
+        r = LZ4F_compressEnd(cctx, out + out_of, out_sz - out_of, NULL);
+        if (unlikely(LZ4F_isError(r))) {
+                rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
+                           "Failed to finalize LZ4 compression "
+                           "of %" PRIusz " bytes: %s",
+                           len, LZ4F_getErrorName(r));
+                err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
+                goto done;
+        }
+        out_of += r;
+        *outbuf  = out;
+        *outlenp = out_of;
+
+done:
+        LZ4F_freeCompressionContext(cctx);
+
+        if (err)
+                rd_free(out);
+
+        return err;
+}

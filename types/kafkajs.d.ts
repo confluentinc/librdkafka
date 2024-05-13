@@ -72,6 +72,7 @@ export interface KafkaConfig {
   enforceRequestTimeout?: boolean,
   retry?: RetryOptions,
   logLevel?: logLevel,
+  logger?: Logger,
 }
 
 export interface CommonConstructorConfig extends GlobalConfig {
@@ -111,6 +112,8 @@ export interface ProducerConfig {
   compression?: CompressionTypes
   timeout?: number,
   retry?: RetryOptions,
+  logLevel?: logLevel,
+  logger?: Logger,
 }
 
 export interface ProducerConstructorConfig extends ProducerGlobalConfig {
@@ -192,6 +195,8 @@ export interface ConsumerConfig {
   maxBytes?: number
   maxWaitTimeInMs?: number
   retry?: RetryOptions,
+  logLevel?: logLevel,
+  logger?: Logger,
   allowAutoTopicCreation?: boolean
   maxInFlightRequests?: number
   readUncommitted?: boolean
@@ -317,6 +322,8 @@ export type Consumer = Client & {
 
 export interface AdminConfig {
   retry?: RetryOptions
+  logLevel?: logLevel,
+  logger?: Logger,
 }
 
 export interface AdminConstructorConfig extends GlobalConfig {

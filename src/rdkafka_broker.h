@@ -51,7 +51,6 @@ typedef enum {
         /* Any state >= STATE_UP means the Kafka protocol layer
          * is operational (to some degree). */
         RD_KAFKA_BROKER_STATE_UP,
-        RD_KAFKA_BROKER_STATE_UPDATE,
         RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
         RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE,
         RD_KAFKA_BROKER_STATE_AUTH_REQ,
@@ -363,9 +362,7 @@ rd_kafka_broker_get_state(rd_kafka_broker_t *rkb) {
 /**
  * @returns true if the broker state is UP or UPDATE
  */
-#define rd_kafka_broker_state_is_up(state)                                     \
-        ((state) == RD_KAFKA_BROKER_STATE_UP ||                                \
-         (state) == RD_KAFKA_BROKER_STATE_UPDATE)
+#define rd_kafka_broker_state_is_up(state) ((state) == RD_KAFKA_BROKER_STATE_UP)
 
 
 /**

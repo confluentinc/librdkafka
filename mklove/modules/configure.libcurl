@@ -87,7 +87,7 @@ function install_source {
 	--disable-ldap{,s} \
 	--disable-libcurl-option \
         --without-{librtmp,libidn2,winidn,nghttp2,nghttp3,ngtcp2,quiche,brotli} &&
-	time make -j &&
+	time make CPPFLAGS="$CPPFLAGS" -j &&
 	make DESTDIR="${destdir}" prefix=/usr install
     local ret=$?
 

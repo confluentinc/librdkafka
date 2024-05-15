@@ -9,6 +9,7 @@ if [ ! -f ./out.db ]; then
     exit 1
 fi
 
+chmod go+w ./data/grafana.db
 docker build . -t librdkafka_stats_dashboard
 docker run -p 3000:3000 -v $PWD:/mnt -v ./data/grafana.db:/var/lib/grafana/grafana.db \
  -v ./data/grafana.ini:/etc/grafana/grafana.ini librdkafka_stats_dashboard &

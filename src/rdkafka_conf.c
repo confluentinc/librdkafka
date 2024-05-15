@@ -3950,7 +3950,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (conf->reconnect_backoff_max_ms < conf->reconnect_backoff_ms)
                 return "`reconnect.backoff.max.ms` must be >= "
-                       "`reconnect.max.ms`";
+                       "`reconnect.backoff.ms`";
 
         if (conf->sparse_connections) {
                 /* Set sparse connection random selection interval to

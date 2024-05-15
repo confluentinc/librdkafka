@@ -684,5 +684,67 @@ rd_kafka_pid_bump(const rd_kafka_pid_t old) {
 
 /**@}*/
 
+/**
+ * @name Current Leader and NodeEndpoints for KIP-951
+ *       response triggered metadata updates.
+ * @{
+ *
+ */
+typedef struct rd_kafkap_CurrentLeader_s {
+        int32_t LeaderId;
+        int32_t LeaderEpoch;
+} rd_kafkap_CurrentLeader_t;
+
+typedef struct rd_kafkap_NodeEndpoint_s {
+        int32_t NodeId;
+        rd_kafkap_str_t Host;
+        int32_t Port;
+        rd_kafkap_str_t Rack;
+} rd_kafkap_NodeEndpoint_t;
+
+typedef struct rd_kafkap_NodeEndpoints_s {
+        int32_t NodeEndpointCnt;
+        rd_kafkap_NodeEndpoint_t *NodeEndpoints;
+} rd_kafkap_NodeEndpoints_t;
+
+
+typedef struct rd_kafka_fetch_reply_PartitionTags_s {
+        int32_t PartitionId;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafka_fetch_reply_PartitionTags_t;
+
+typedef struct rd_kafka_fetch_reply_TopicTags_s {
+        int32_t PartitionCnt;
+        char *TopicName;
+        rd_kafka_Uuid_t TopicId;
+        rd_kafka_fetch_reply_PartitionTags_t* PartitionTags;
+} rd_kafka_fetch_reply_TopicTags_t;
+
+typedef struct rd_kafka_FetchTags_s {
+        int32_t TopicCnt;
+        rd_kafka_fetch_reply_TopicTags_t* TopicTags;    
+} rd_kafka_FetchTags_t;
+
+typedef struct rd_kafka_fetch_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t* NodeEndpoints;
+        rd_kafka_FetchTags_t* FetchTags;
+} rd_kafka_fetch_reply_tags_t;
+
+static RD_UNUSED rd_kafkap_NodeEndpoints_t* rd_kafkap_NodeEndpoints_new(int32_t size){
+        rd_kafkap_NodeEndpoints_t* NodeEndpoints = rd_malloc(sizeof(rd_kafkap_NodeEndpoints_t));
+        NodeEndpoints->NodeEndpoints = rd_malloc(size*sizeof(rd_kafkap_NodeEndpoint_t));
+        NodeEndpoints->NodeEndpointCnt = size;
+        return NodeEndpoints;
+}
+
+static RD_UNUSED rd_kafka_FetchTags_t* rd_kafka_FetchTags_new(int32_t size){
+        rd_kafka_FetchTags_t* FetchTags = rd_malloc(sizeof(rd_kafka_FetchTags_t));
+        FetchTags->TopicCnt = size;
+        FetchTags->TopicTags = rd_malloc(size*sizeof(rd_kafka_fetch_reply_TopicTags_t));
+        return FetchTags;
+}
+
+/**@}*/
+
 
 #endif /* _RDKAFKA_PROTO_H_ */

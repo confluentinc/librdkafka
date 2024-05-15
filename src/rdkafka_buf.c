@@ -244,6 +244,12 @@ void rd_kafka_bufq_init(rd_kafka_bufq_t *rkbufq) {
         rd_atomic32_init(&rkbufq->rkbq_msg_cnt, 0);
 }
 
+static void rd_kafka_bufq_reset(rd_kafka_bufq_t *rkbufq) {
+        TAILQ_INIT(&rkbufq->rkbq_bufs);
+        rd_atomic32_set(&rkbufq->rkbq_cnt, 0);
+        rd_atomic32_set(&rkbufq->rkbq_msg_cnt, 0);
+}
+
 /**
  * Concat all buffers from 'src' to tail of 'dst'
  */
@@ -252,7 +258,7 @@ void rd_kafka_bufq_concat(rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src) {
         (void)rd_atomic32_add(&dst->rkbq_cnt, rd_atomic32_get(&src->rkbq_cnt));
         (void)rd_atomic32_add(&dst->rkbq_msg_cnt,
                               rd_atomic32_get(&src->rkbq_msg_cnt));
-        rd_kafka_bufq_init(src);
+        rd_kafka_bufq_reset(src);
 }
 
 /**

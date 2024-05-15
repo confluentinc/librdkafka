@@ -870,12 +870,8 @@ int main_0011_produce_batch(int argc, char **argv) {
         test_partitioner();
         if (test_can_create_topics(1))
                 test_per_message_partition_flag();
-<<<<<<< HEAD
 
         test_message_single_partition_record_fail(0);
         test_message_single_partition_record_fail(1);
-=======
-        test_message_single_partition_record_fail();
->>>>>>> e396cb53 (Single Rebased Commit)
         return 0;
 }

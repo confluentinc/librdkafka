@@ -610,14 +610,11 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
         return 0;
 }
 
-<<<<<<< HEAD
 static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
         rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
         return rd_kafka_Uuid_cmp(*a_uuid, *b_uuid);
 }
 
-=======
->>>>>>> e396cb53 (Single Rebased Commit)
 rd_kafka_Uuid_t rd_kafka_Uuid_random();
 
 const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
@@ -626,7 +623,6 @@ unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid);
 
 unsigned int rd_kafka_Uuid_map_hash(const void *key);
 
-<<<<<<< HEAD
 /**
  * @brief UUID copier for rd_list_copy()
  */
@@ -645,8 +641,6 @@ static RD_INLINE RD_UNUSED int rd_list_Uuid_cmp(const void *uuid1,
 }
 
 
-=======
->>>>>>> e396cb53 (Single Rebased Commit)
 /**
  * @name Producer ID and Epoch for the Idempotent Producer
  * @{

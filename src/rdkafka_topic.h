@@ -135,10 +135,6 @@ struct rd_kafka_topic_s {
         rwlock_t rkt_lock;
         rd_kafkap_str_t *rkt_topic;
         rd_kafka_Uuid_t rkt_topic_id;
-<<<<<<< HEAD
-
-=======
->>>>>>> e396cb53 (Single Rebased Commit)
         rd_kafka_toppar_t *rkt_ua; /**< Unassigned partition (-1) */
         rd_kafka_toppar_t **rkt_p; /**< Partition array */
         int32_t rkt_partition_cnt;

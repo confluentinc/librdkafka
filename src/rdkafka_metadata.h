@@ -48,6 +48,11 @@ typedef struct rd_kafka_metadata_partition_internal_s {
 
 /**
  * @brief Metadata topic internal container
+ * // FETCH -> []
+ * // PRODUCE -> push the op with metadata
+ *
+ * In main thread, find the topic id from cache, then merge metadata
+ * Update the cache
  */
 typedef struct rd_kafka_metadata_topic_internal_s {
         /** Internal metadata partition structs.

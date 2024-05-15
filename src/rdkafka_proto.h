@@ -610,11 +610,14 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
         return 0;
 }
 
+<<<<<<< HEAD
 static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
         rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
         return rd_kafka_Uuid_cmp(*a_uuid, *b_uuid);
 }
 
+=======
+>>>>>>> e396cb53 (Single Rebased Commit)
 rd_kafka_Uuid_t rd_kafka_Uuid_random();
 
 const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
@@ -623,6 +626,7 @@ unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid);
 
 unsigned int rd_kafka_Uuid_map_hash(const void *key);
 
+<<<<<<< HEAD
 /**
  * @brief UUID copier for rd_list_copy()
  */
@@ -641,6 +645,8 @@ static RD_INLINE RD_UNUSED int rd_list_Uuid_cmp(const void *uuid1,
 }
 
 
+=======
+>>>>>>> e396cb53 (Single Rebased Commit)
 /**
  * @name Producer ID and Epoch for the Idempotent Producer
  * @{
@@ -722,6 +728,68 @@ rd_kafka_pid_bump(const rd_kafka_pid_t old) {
         rd_kafka_pid_t new_pid = {
             old.id, (int16_t)(((int)old.epoch + 1) & (int)INT16_MAX)};
         return new_pid;
+}
+
+/**@}*/
+
+/**
+ * @name Current Leader and NodeEndpoints for KIP-951
+ *       response triggered metadata updates.
+ * @{
+ *
+ */
+typedef struct rd_kafkap_CurrentLeader_s {
+        int32_t LeaderId;
+        int32_t LeaderEpoch;
+} rd_kafkap_CurrentLeader_t;
+
+typedef struct rd_kafkap_NodeEndpoint_s {
+        int32_t NodeId;
+        rd_kafkap_str_t Host;
+        int32_t Port;
+        rd_kafkap_str_t Rack;
+} rd_kafkap_NodeEndpoint_t;
+
+typedef struct rd_kafkap_NodeEndpoints_s {
+        int32_t NodeEndpointCnt;
+        rd_kafkap_NodeEndpoint_t *NodeEndpoints;
+} rd_kafkap_NodeEndpoints_t;
+
+
+typedef struct rd_kafka_fetch_reply_PartitionTags_s {
+        int32_t PartitionId;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafka_fetch_reply_PartitionTags_t;
+
+typedef struct rd_kafka_fetch_reply_TopicTags_s {
+        int32_t PartitionCnt;
+        char *TopicName;
+        rd_kafka_Uuid_t TopicId;
+        rd_kafka_fetch_reply_PartitionTags_t* PartitionTags;
+} rd_kafka_fetch_reply_TopicTags_t;
+
+typedef struct rd_kafka_FetchTags_s {
+        int32_t TopicCnt;
+        rd_kafka_fetch_reply_TopicTags_t* TopicTags;    
+} rd_kafka_FetchTags_t;
+
+typedef struct rd_kafka_fetch_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t* NodeEndpoints;
+        rd_kafka_FetchTags_t* FetchTags;
+} rd_kafka_fetch_reply_tags_t;
+
+static RD_UNUSED rd_kafkap_NodeEndpoints_t* rd_kafkap_NodeEndpoints_new(int32_t size){
+        rd_kafkap_NodeEndpoints_t* NodeEndpoints = rd_malloc(sizeof(rd_kafkap_NodeEndpoints_t));
+        NodeEndpoints->NodeEndpoints = rd_malloc(size*sizeof(rd_kafkap_NodeEndpoint_t));
+        NodeEndpoints->NodeEndpointCnt = size;
+        return NodeEndpoints;
+}
+
+static RD_UNUSED rd_kafka_FetchTags_t* rd_kafka_FetchTags_new(int32_t size){
+        rd_kafka_FetchTags_t* FetchTags = rd_malloc(sizeof(rd_kafka_FetchTags_t));
+        FetchTags->TopicCnt = size;
+        FetchTags->TopicTags = rd_malloc(size*sizeof(rd_kafka_fetch_reply_TopicTags_t));
+        return FetchTags;
 }
 
 /**@}*/

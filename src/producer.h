@@ -54,6 +54,7 @@ class Producer : public Connection {
   Baton Connect();
   void Disconnect();
   void Poll();
+  Baton SetPollInBackground(bool);
   #if RD_KAFKA_VERSION > 0x00090200
   Baton Flush(int timeout_ms);
   #endif
@@ -103,6 +104,7 @@ class Producer : public Connection {
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);
   static NAN_METHOD(NodePoll);
+  static NAN_METHOD(NodeSetPollInBackground);
   #if RD_KAFKA_VERSION > 0x00090200
   static NAN_METHOD(NodeFlush);
   #endif
@@ -114,6 +116,7 @@ class Producer : public Connection {
 
   Callbacks::Delivery m_dr_cb;
   Callbacks::Partitioner m_partitioner_cb;
+  bool m_is_background_polling;
 };
 
 }  // namespace NodeKafka

@@ -181,6 +181,22 @@ producerRun().then(consumerRun).catch(console.error);
       messages: [ /* ... */ ],
     });
     ```
+  - It's recommended to send a number of messages without awaiting them, and then calling `flush` to ensure all messages are sent, rather than awaiting each message. This is more efficient.
+    Example:
+    ```javascript
+    const kafka = new Kafka({ kafkaJS: { /* ... */ }});
+    const producer = kafka.producer();
+    await producer.connect();
+    for (/*...*/) producer.send({ /* ... */});
+    await producer.flush({timeout: 5000});
+    ```
+
+    However, in case it is desired to await every message, `linger.ms` should be set to 0, to ensure that the default batching behaviour does not cause a delay in awaiting messages.
+    Example:
+    ```javascript
+    const kafka = new Kafka({ kafkaJS: { /* ... */ }});
+    const producer = kafka.producer({ 'linger.ms': 0 });
+    ```
 
 * A transactional producer (with a `transactionId`) set, **cannot** send messages without initiating a transaction using `producer.transaction()`.
 

@@ -268,6 +268,7 @@ export class Producer extends Client<KafkaProducerEvents> {
     produce(topic: string, partition: NumberNullUndefined, message: MessageValue, key?: MessageKey, timestamp?: NumberNullUndefined, opaque?: any, headers?: MessageHeader[]): any;
 
     setPollInterval(interval: number): this;
+    setPollInBackground(set: boolean): void;
 
     static createWriteStream(conf: ProducerGlobalConfig, topicConf: ProducerTopicConfig, streamOptions: WriteStreamOptions): ProducerStream;
 

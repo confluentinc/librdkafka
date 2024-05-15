@@ -33,7 +33,8 @@ namespace NodeKafka {
 Producer::Producer(Conf* gconfig, Conf* tconfig):
   Connection(gconfig, tconfig),
   m_dr_cb(),
-  m_partitioner_cb() {
+  m_partitioner_cb(),
+  m_is_background_polling(false) {
     std::string errstr;
 
     if (m_tconfig)
@@ -72,6 +73,7 @@ void Producer::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "getMetadata", NodeGetMetadata);
   Nan::SetPrototypeMethod(tpl, "queryWatermarkOffsets", NodeQueryWatermarkOffsets);  // NOLINT
   Nan::SetPrototypeMethod(tpl, "poll", NodePoll);
+  Nan::SetPrototypeMethod(tpl, "setPollInBackground", NodeSetPollInBackground);
   Nan::SetPrototypeMethod(tpl, "setSaslCredentials", NodeSetSaslCredentials);
   Nan::SetPrototypeMethod(tpl, "setOAuthBearerToken", NodeSetOAuthBearerToken);
   Nan::SetPrototypeMethod(tpl, "setOAuthBearerTokenFailure",
@@ -330,7 +332,37 @@ Baton Producer::Produce(void* message, size_t size, std::string topic,
 }
 
 void Producer::Poll() {
+  // We're not allowed to call poll when we have forwarded the main
+  // queue to the background queue, as that would indirectly poll
+  // the background queue. However, that's not allowed by librdkafka.
+  if (m_is_background_polling) {
+    return;
+  }
   m_client->poll(0);
+}
+
+Baton Producer::SetPollInBackground(bool set) {
+  scoped_shared_read_lock lock(m_connection_lock);
+  rd_kafka_t* rk = this->m_client->c_ptr();
+  if (!IsConnected()) {
+    return Baton(RdKafka::ERR__STATE, "Producer is disconnected");
+  }
+
+  if (set && !m_is_background_polling) {
+    m_is_background_polling = true;
+    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
+    rd_kafka_queue_t* background_q = rd_kafka_queue_get_background(rk);
+    rd_kafka_queue_forward(main_q, background_q);
+    rd_kafka_queue_destroy(main_q);
+    rd_kafka_queue_destroy(background_q);
+  } else if (!set && m_is_background_polling) {
+    m_is_background_polling = false;
+    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
+    rd_kafka_queue_forward(main_q, NULL);
+    rd_kafka_queue_destroy(main_q);
+  }
+
+  return Baton(RdKafka::ERR_NO_ERROR);
 }
 
 void Producer::ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add) {
@@ -684,6 +716,23 @@ NAN_METHOD(Producer::NodePoll) {
     producer->Poll();
     info.GetReturnValue().Set(Nan::True());
   }
+}
+
+NAN_METHOD(Producer::NodeSetPollInBackground) {
+  Nan::HandleScope scope;
+  if (info.Length() < 1 || !info[0]->IsBoolean()) {
+    // Just throw an exception
+    return Nan::ThrowError(
+        "Need to specify a boolean for setting or unsetting");
+  }
+  bool set = Nan::To<bool>(info[0]).FromJust();
+
+  Producer* producer = ObjectWrap::Unwrap<Producer>(info.This());
+  Baton b = producer->SetPollInBackground(set);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    return Nan::ThrowError(b.errstr().c_str());
+  }
+  info.GetReturnValue().Set(b.ToObject());
 }
 
 Baton Producer::Flush(int timeout_ms) {

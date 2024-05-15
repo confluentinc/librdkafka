@@ -90,8 +90,8 @@ static void test_single_partition(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
-        const int topicSuffixLength = 56, clientIdLength = 239;
-        char *topicSuffix, *clientId;
+        const int topic_suffix_length = 56, client_id_length = 239;
+        char *topic_suffix, *client_id;
 
         SUB_TEST_QUICK();
 
@@ -99,12 +99,12 @@ static void test_single_partition(void) {
 
         test_conf_init(&conf, &topic_conf, 20);
 
-        clientId = (char *)malloc(clientIdLength + 1 * sizeof(char));
-        for (i = 0; i < clientIdLength; i++) {
-                clientId[i] = 'c';
+        client_id = malloc((client_id_length + 1) * sizeof(char));
+        for (i = 0; i < client_id_length; i++) {
+                client_id[i] = 'c';
         }
-        clientId[clientIdLength] = '\0';
-        rd_kafka_conf_set(conf, "client.id", clientId, NULL, 0);
+        client_id[client_id_length] = '\0';
+        rd_kafka_conf_set(conf, "client.id", client_id, NULL, 0);
 
         /* Set delivery report callback */
         rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
@@ -115,13 +115,13 @@ static void test_single_partition(void) {
         TEST_SAY("test_single_partition: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        topicSuffix = (char *)malloc(topicSuffixLength + 1 * sizeof(char));
-        for (i = 0; i < topicSuffixLength; i++) {
-                topicSuffix[i] = 'b';
+        topic_suffix = (char *)malloc(topic_suffix_length + 1 * sizeof(char));
+        for (i = 0; i < topic_suffix_length; i++) {
+                topic_suffix[i] = 'b';
         }
-        topicSuffix[topicSuffixLength] = '\0';
+        topic_suffix[topic_suffix_length] = '\0';
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name(topicSuffix, 0),
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name(topic_suffix, 0),
                                  topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
@@ -194,8 +194,8 @@ static void test_single_partition(void) {
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
 
-        free(clientId);
-        free(topicSuffix);
+        free(client_id);
+        free(topic_suffix);
 
         SUB_TEST_PASS();
 }

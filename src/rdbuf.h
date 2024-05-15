@@ -147,11 +147,7 @@ static RD_INLINE RD_UNUSED size_t rd_buf_write_pos(const rd_buf_t *rbuf) {
  * @returns the number of bytes available for writing (before growing).
  */
 static RD_INLINE RD_UNUSED size_t rd_buf_write_remains(const rd_buf_t *rbuf) {
-        ssize_t remaining =
-            rbuf->rbuf_size - (rbuf->rbuf_len + rbuf->rbuf_erased);
-        if (remaining < 0)
-                return 0;
-        return remaining;
+        return rbuf->rbuf_size - (rbuf->rbuf_len + rbuf->rbuf_erased);
 }
 
 

@@ -665,8 +665,10 @@ size_t rd_buf_erase(rd_buf_t *rbuf, size_t absof, size_t size) {
                 of += toerase;
 
                 /* If segment is now empty, remove it */
-                if (seg->seg_of == 0)
+                if (seg->seg_of == 0) {
                         rd_buf_destroy_segment(rbuf, seg);
+                        rbuf->rbuf_erased -= toerase;
+                }
         }
 
         /* Update absolute offset of remaining segments */

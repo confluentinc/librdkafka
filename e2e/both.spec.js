@@ -424,10 +424,28 @@ describe('Consumer/Producer', function() {
     var headers = [
       { key1: 'value1' },
       { key2: Buffer.from('value2') },
-      { key3: 100 },
-      { key4: 10.1 },
     ];
     run_headers_test(done, headers);
+  });
+
+  it('should not be able to produce any non-string and non-buffer headers: consumeLoop', function(done) {
+    producer.setPollInterval(10);
+
+    const headerCases = [
+      [ { key: 10 } ],
+      [ { key: null }],
+      [ { key: undefined }],
+    ];
+    for (const headerCase of headerCases) {
+      const buffer = Buffer.from('value');
+      const key = 'key';
+      t.throws(
+        () =>  producer.produce(topic, null, buffer, key, null, "", headerCase),
+        'must be string or buffer'
+      );
+    }
+
+    done();
   });
 
   it('should be able to produce and consume messages: empty buffer key and empty value', function(done) {

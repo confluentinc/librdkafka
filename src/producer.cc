@@ -595,18 +595,37 @@ NAN_METHOD(Producer::NodeProduce) {
 
         v8::Local<v8::Array> props = header->GetOwnPropertyNames(
           Nan::GetCurrentContext()).ToLocalChecked();
-        Nan::MaybeLocal<v8::String> v8Key = Nan::To<v8::String>(
-            Nan::Get(props, 0).ToLocalChecked());
-        Nan::MaybeLocal<v8::String> v8Value = Nan::To<v8::String>(
-            Nan::Get(header, v8Key.ToLocalChecked()).ToLocalChecked());
 
+        // TODO: Other properties in the list of properties should not be
+        // ignored, but they are. This is a bug, need to handle it either in JS
+        // or here.
+        Nan::MaybeLocal<v8::String> v8Key =
+            Nan::To<v8::String>(Nan::Get(props, 0).ToLocalChecked());
+
+        // The key must be a string.
+        if (v8Key.IsEmpty()) {
+          Nan::ThrowError("Header key must be a string");
+        }
         Nan::Utf8String uKey(v8Key.ToLocalChecked());
         std::string key(*uKey);
 
-        Nan::Utf8String uValue(v8Value.ToLocalChecked());
-        std::string value(*uValue);
-        headers.push_back(
-          RdKafka::Headers::Header(key, value.c_str(), value.size()));
+        // Valid types for the header are string or buffer.
+        // Other types will throw an error.
+        v8::Local<v8::Value> v8Value =
+            Nan::Get(header, v8Key.ToLocalChecked()).ToLocalChecked();
+
+        if (node::Buffer::HasInstance(v8Value)) {
+          const char* value = node::Buffer::Data(v8Value);
+          const size_t value_len = node::Buffer::Length(v8Value);
+          headers.push_back(RdKafka::Headers::Header(key, value, value_len));
+        } else if (v8Value->IsString()) {
+          Nan::Utf8String uValue(v8Value);
+          std::string value(*uValue);
+          headers.push_back(
+              RdKafka::Headers::Header(key, value.c_str(), value.size()));
+        } else {
+          Nan::ThrowError("Header value must be a string or buffer");
+        }
       }
     }
   }

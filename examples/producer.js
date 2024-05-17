@@ -14,8 +14,19 @@ async function producerStart() {
         res.push(producer.send({
             topic: 'test-topic',
             messages: [
-                { value: 'v222', partition: 1 },
-                { value: 'v11', partition: 0, key: 'x' },
+                {
+                    value: 'v1',
+                    partition: 0,
+                    key: 'x',
+                    headers: {
+                        'header1': ['h1v1', 'h1v2'],
+                        'header3': 'h3v3',
+                    }
+                },
+                {
+                    value: 'v2',
+                    key: 'y',
+                }
             ]
         }));
     }

@@ -22,7 +22,14 @@ async function runProducer() {
     await producer.send({
         topic: 'test-topic',
         messages: [
-            { value: 'Hello World!', key: 'key1' },
+            {
+                value: 'Hello World!',
+                key: 'key1',
+                headers: {
+                    'header1': 'value1',
+                    'header2': [Buffer.from('value2'), 'value3']
+                }
+            },
         ],
     });
 
@@ -52,6 +59,7 @@ async function runConsumer() {
             console.log({
                 key: message.key ? message.key.toString() : null,
                 value: message.value ? message.value.toString() : null,
+                headers: message.headers,
             });
         },
     });

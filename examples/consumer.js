@@ -75,6 +75,7 @@ async function consumerStart() {
       console.log({
         topic,
         partition,
+        headers: message.headers,
         offset: message.offset,
         key: message.key?.toString(),
         value: message.value.toString(),

@@ -1,3 +1,20 @@
+# confluent-kafka-javascript v0.1.14-devel
+
+v0.1.14-devel is a pre-production, early-access release.
+
+## Features
+
+1. Add metadata to offset commit and offset store (non-promisified API).
+2. Add types for logger and loglevel to configuration.
+3. Add Producer polling from background thread. This improves performance for cases when send is awaited on.
+4. Enable consume optimization from v0.1.13-devel (Features #2) by default for the promisified API.
+
+## Bug Fixes
+
+1. Fix issues with the header conversions from promisified API to the non-promisified API to match
+   the type signature and allow Buffers to be passed as header values in the C++ layer.
+
+
 # confluent-kafka-javascript v0.1.13-devel
 
 v0.1.13-devel is a pre-production, early-access release.

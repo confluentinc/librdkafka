@@ -1,3 +1,12 @@
+# confluent-kafka-javascript v0.1.15-devel
+
+v0.1.15-devel is a pre-production, early-access release.
+
+## Features
+
+1. Add Node v22 builds and bump librdkafka version on each version bump of this library.
+
+
 # confluent-kafka-javascript v0.1.14-devel
 
 v0.1.14-devel is a pre-production, early-access release.

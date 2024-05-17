@@ -719,15 +719,29 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         } while (0)
 
 /**
- * Skip a string.
+ * Skip a string without flexver.
  */
-#define rd_kafka_buf_skip_str(rkbuf)                                           \
+#define rd_kafka_buf_skip_str_no_flexver(rkbuf)                                \
         do {                                                                   \
                 int16_t _slen;                                                 \
                 rd_kafka_buf_read_i16(rkbuf, &_slen);                          \
                 rd_kafka_buf_skip(rkbuf, RD_KAFKAP_STR_LEN0(_slen));           \
         } while (0)
 
+/**
+ * Skip a string (generic).
+ */
+#define rd_kafka_buf_skip_str(rkbuf)                                           \
+        do {                                                                   \
+                if ((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {            \
+                        uint64_t _uva;                                         \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_uva);               \
+                        rd_kafka_buf_skip(                                     \
+                            rkbuf, RD_KAFKAP_STR_LEN0(((int64_t)_uva) - 1));   \
+                } else {                                                       \
+                        rd_kafka_buf_skip_str_no_flexver(rkbuf);               \
+                }                                                              \
+        } while (0)
 /**
  * Read Kafka COMPACT_BYTES representation (VARINT+N) or
  * standard BYTES representation(4+N).

@@ -407,7 +407,7 @@ static void enqueue_new_metadata_op(rd_kafka_broker_t *rkb,
         rd_kafka_metadata_t *md           = NULL;
         rd_tmpabuf_t tbuf;
         size_t rkb_namelen;
-        uint32_t i, j;
+        int i, j;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_UPDATE);
 
@@ -545,7 +545,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
         int64_t end_offset;
         uint64_t _tagcnt;
         uint64_t _tag, _taglen;
-        uint32_t i, j;
+        uint32_t i;
 
         rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
         rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
@@ -735,7 +735,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
                      hdr.ErrorCode == RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH)) {
                         *leader_tags_present = rd_true;
                         rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
-                        for (i = 0; i < _tagcnt; i++) {
+                        for (i = 0; (uint64_t)i < _tagcnt; i++) {
                                 rd_kafka_buf_read_uvarint(rkbuf, &_tag);
                                 rd_kafka_buf_read_uvarint(rkbuf, &_taglen);
                                 if (rd_kafka_fetch_reply_handle_partition_read_tag(
@@ -888,7 +888,7 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
 
         if (leader_tags_present) {
                 rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
-                for (i = 0; i < _tagcnt; i++) {
+                for (i = 0; (uint64_t)i < _tagcnt; i++) {
                         rd_kafka_buf_read_uvarint(rkbuf, &_tag);
                         rd_kafka_buf_read_uvarint(rkbuf, &_taglen);
                         if (rd_kafka_fetch_reply_handle_read_tag(

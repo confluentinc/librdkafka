@@ -3834,7 +3834,6 @@ void rd_kafka_handle_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_intern
         rd_kafka_metadata_partition_internal_t* new_partition_internals;
         rd_kafka_metadata_partition_t* new_partitions;
         int index,metadata_partition_index,cache_partition_index;
-        char* rack;
 
         rd_list_t* additional_brokers = rd_list_new(10, rd_free);
         rd_kafka_metadata_broker_t* new_brokers;
@@ -3888,8 +3887,8 @@ void rd_kafka_handle_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_intern
                                         /* Allocate the new racks list */
                                         mdi->topics[i].partitions[idx].racks_cnt = rkmce->rkmce_metadata_internal_topic.partitions[j].racks_cnt;
                                         mdi->topics[i].partitions[idx].racks = rd_malloc(mdi->topics[i].partitions[idx].racks_cnt*sizeof(char *));
-                                        RD_LIST_FOREACH(rack, rkmce->rkmce_metadata_internal_topic.partitions[j].racks, k) {
-                                                mdi->topics[i].partitions[idx].racks[k] = rd_strdup(rack);
+                                        for(k = 0; (size_t)k < mdi->topics[i].partitions[idx].racks_cnt; k++) {
+                                                mdi->topics[i].partitions[idx].racks[k] = rd_strdup(rkmce->rkmce_metadata_internal_topic.partitions[idx].racks[k]);
                                         }
                                 }
                                 if(mdi->metadata.topics[i].partitions[idx].isrs == NULL){
@@ -3941,8 +3940,8 @@ void rd_kafka_handle_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_intern
                                 new_partition_internals->racks_cnt = partition_internals[cache_partition_index]->racks_cnt;
                                 new_partition_internals->racks     = rd_malloc(
                                 sizeof(char *) * new_partition_internals->racks_cnt);
-                                RD_LIST_FOREACH(rack, partition_internals[cache_partition_index]->racks, k) {
-                                        new_partition_internals->racks[k] = rd_strdup(rack);
+                                for(k = 0; (size_t)k < partition_internals[cache_partition_index]->racks_cnt; k++) {
+                                        new_partition_internals->racks[k] = rd_strdup(partition_internals[cache_partition_index]->racks[k]);
                                 }
                                 new_partitions[index].err = partitions[cache_partition_index]->err;
                                 new_partitions[index].replica_cnt = partitions[cache_partition_index]->replica_cnt;
@@ -3958,8 +3957,8 @@ void rd_kafka_handle_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_intern
                                 new_partition_internals->racks_cnt = mdi->topics[i].partitions[metadata_partition_index].racks_cnt;
                                 new_partition_internals->racks     = rd_malloc(
                                 sizeof(char *) * new_partition_internals->racks_cnt);
-                                RD_LIST_FOREACH(rack, mdi->topics[i].partitions[metadata_partition_index].racks, k) {
-                                        new_partition_internals->racks[k] = rd_strdup(rack);
+                                for(k = 0; (size_t)k < mdi->topics[i].partitions[metadata_partition_index].racks_cnt; k++) {
+                                        new_partition_internals->racks[k] = rd_strdup(mdi->topics[i].partitions[metadata_partition_index].racks[k]);
                                 }
                                 new_partitions[index].err = mdi->metadata.topics[i].partitions[metadata_partition_index].err;
                                 new_partitions[index].replica_cnt = mdi->metadata.topics[i].partitions[metadata_partition_index].replica_cnt;
@@ -4022,7 +4021,7 @@ void rd_kafka_handle_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_intern
         for(i=0; i < mdi->metadata.topic_cnt; i++)
         {
                 /* Metadata Cache Topic Update for the topic */
-                rd_kafka_metadata_cache_topic_update(rk, &mdi->metadata.topics[i], &mdi->topics[i], rd_true, rd_true, mdi->metadata.brokers, mdi->metadata.broker_cnt, rd_true);
+                rd_kafka_metadata_cache_topic_update(rk, &mdi->metadata.topics[i], &mdi->topics[i], rd_true, rd_true, mdi->brokers, mdi->metadata.broker_cnt, rd_true);
                 /* Metadata Update for the topic */
                 rd_kafka_topic_metadata_update2(rkb, &mdi->metadata.topics[i], &mdi->topics[i]);
         }

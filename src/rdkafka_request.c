@@ -3468,7 +3468,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
                 if (_tagcnt < 0)
                         goto err_parse;
-                for (i = 0; i < _tagcnt; i++) {
+                for (i = 0; (uint64_t)i < _tagcnt; i++) {
                         /* Partition tags type */
                         rd_kafka_buf_read_uvarint(rkbuf, &_tag);
                         /* Partition tags len */
@@ -3498,7 +3498,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 if (_tagcnt < 0)
                         goto err_parse;
 
-                for (i = 0; i < _tagcnt; i++) {
+                for (i = 0; (uint64_t)i < _tagcnt; i++) {
                         /* Produce Response tags type */
                         rd_kafka_buf_read_uvarint(rkbuf, &_tag);
                         /* Produce Response tags len */

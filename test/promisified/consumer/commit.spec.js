@@ -8,9 +8,8 @@ const {
     createConsumer,
     sleep,
 } = require('../testhelpers');
-const { ErrorCodes } = require('../../../lib').KafkaJS;
 
-describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
+describe('Consumer commit', () => {
     let topicName, groupId, producer, consumer;
 
     beforeEach(async () => {
@@ -25,10 +24,8 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
             groupId,
             maxWaitTimeInMs: 100,
             fromBeginning: true,
-            autoCommit: isAutoCommit,
+            autoCommit: false,
             autoCommitInterval: 500,
-        }, {
-            'enable.auto.offset.store': false,
         });
     });
 
@@ -37,62 +34,7 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         producer && (await producer.disconnect())
     });
 
-    it('should not work if enable.auto.offset.store = true', async () => {
-        let assignment = [];
-        consumer = createConsumer({
-            groupId,
-            maxWaitTimeInMs: 100,
-            fromBeginning: true,
-        }, {
-            /* Set to true manually - the default value with kafkaJS block is false. */
-            'enable.auto.offset.store': true,
-            'rebalance_cb': function (err, asg) {
-                if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
-                    assignment = asg;
-                }
-            }
-        });
-
-        await consumer.connect();
-        await consumer.subscribe({ topic: topicName })
-        await consumer.run({
-            eachMessage: async () => {
-            }
-        });
-        await waitFor(() => assignment.length > 0, () => null, 1000);
-        expect(
-            () => consumer.storeOffsets([{ topic: topicName, partition: 0, offset: '10' }])
-        ).toThrow(/Store can only be called when enable.auto.offset.store is explicitly set to false/);
-    });
-
-    it('should not work if enable.auto.offset.store is unset', async () => {
-        let assignment = [];
-        consumer = createConsumer({
-            groupId,
-            maxWaitTimeInMs: 100,
-            fromBeginning: true,
-        }, {
-            /* Set to true manually - the default value with kafkaJS block is false. */
-            'rebalance_cb': function (err, asg) {
-                if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
-                    assignment = asg;
-                }
-            }
-        });
-
-        await consumer.connect();
-        await consumer.subscribe({ topic: topicName })
-        await consumer.run({
-            eachMessage: async () => {
-            }
-        });
-        await waitFor(() => assignment.length > 0, () => null, 1000);
-        expect(
-            () => consumer.storeOffsets([{ topic: topicName, partition: 0, offset: '10' }])
-        ).toThrow(/Store can only be called when enable.auto.offset.store is explicitly set to false/);
-    });
-
-    it('should commit stored offsets', async () => {
+    it('should commit offsets', async () => {
         /* Evenly distribute 30 messages across 3 partitions */
         let i = 0;
         const messages = Array(3 * 10)
@@ -113,16 +55,11 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
             eachMessage: async ({ topic, partition, message }) => {
                 msgCount++;
                 const offset = (Number(message.offset) + 1).toString();
-                expect(() => consumer.storeOffsets([{ topic, partition, offset }])).not.toThrow();
+                await expect(() => consumer.commitOffsets([{ topic, partition, offset }])).not.toThrow();
             }
         });
         await waitFor(() => msgCount >= 30, () => null, { delay: 100 });
         expect(msgCount).toEqual(30);
-
-        if (!isAutoCommit)
-            await expect(consumer.commitOffsets()).resolves.toBeUndefined();
-        else
-            await sleep(1000); /* Wait for auto-commit */
 
         await consumer.disconnect();
 
@@ -151,7 +88,7 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         expect(msgCount).toEqual(30);
     });
 
-    it('should commit stored offsets with metadata', async () => {
+    it('should commit offsets with metadata', async () => {
         /* Evenly distribute 30 messages across 3 partitions */
         let i = 0;
         const messages = Array(3 * 10)
@@ -173,16 +110,11 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
             eachMessage: async ({ topic, partition, message }) => {
                 msgCount++;
                 const offset = (Number(message.offset) + 1).toString();
-                expect(() => consumer.storeOffsets([{ topic, partition, offset, metadata }])).not.toThrow();
+                await expect(() => consumer.commitOffsets([{ topic, partition, offset, metadata }])).not.toThrow();
             }
         });
         await waitFor(() => msgCount >= 30, () => null, { delay: 100 });
         expect(msgCount).toEqual(30);
-
-        if (!isAutoCommit)
-            await expect(consumer.commitOffsets()).resolves.toBeUndefined();
-        else
-            await sleep(1000); /* Wait for auto-commit */
 
         let committed = await consumer.committed(null, 5000);
         expect(committed).toEqual([
@@ -208,7 +140,7 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         committed = await consumer.committed([
             { topic: topicName, partition: 0 },
             { topic: topicName, partition: 1 },
-            { topic: topicName, partition: 2 }
+            { topic: topicName, partition: 2 },
         ]);
         expect(committed).toEqual([
             { topic: topicName, partition: 0, offset: '10', metadata },

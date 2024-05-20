@@ -79,6 +79,10 @@ export interface TopicPartitionOffset extends TopicPartition{
     offset: number;
 }
 
+export interface TopicPartitionOffsetAndMetadata extends TopicPartitionOffset {
+    metadata?: string | null;
+}
+
 export type TopicPartitionTime = TopicPartitionOffset;
 
 export type EofEvent = TopicPartitionOffset;
@@ -212,17 +216,17 @@ export class KafkaConsumer extends Client<KafkaConsumerEvents> {
 
     assignments(): Assignment[];
 
-    commit(topicPartition: TopicPartitionOffset | TopicPartitionOffset[]): this;
+    commit(topicPartition: TopicPartitionOffsetAndMetadata | TopicPartitionOffsetAndMetadata[]): this;
     commit(): this;
 
     commitMessage(msg: TopicPartitionOffset): this;
 
     commitMessageSync(msg: TopicPartitionOffset): this;
 
-    commitSync(topicPartition: TopicPartitionOffset | TopicPartitionOffset[]): this;
+    commitSync(topicPartition: TopicPartitionOffsetAndMetadata | TopicPartitionOffsetAndMetadata[]): this;
 
-    committed(toppars: TopicPartition[], timeout: number, cb: (err: LibrdKafkaError, topicPartitions: TopicPartitionOffset[]) => void): this;
-    committed(timeout: number, cb: (err: LibrdKafkaError, topicPartitions: TopicPartitionOffset[]) => void): this;
+    committed(toppars: TopicPartition[], timeout: number, cb: (err: LibrdKafkaError, topicPartitions: TopicPartitionOffsetAndMetadata[]) => void): this;
+    committed(timeout: number, cb: (err: LibrdKafkaError, topicPartitions: TopicPartitionOffsetAndMetadata[]) => void): this;
 
     consume(number: number, cb?: (err: LibrdKafkaError, messages: Message[]) => void): void;
     consume(cb: (err: LibrdKafkaError, messages: Message[]) => void): void;
@@ -230,7 +234,7 @@ export class KafkaConsumer extends Client<KafkaConsumerEvents> {
 
     getWatermarkOffsets(topic: string, partition: number): WatermarkOffsets;
 
-    offsetsStore(topicPartitions: TopicPartitionOffset[]): any;
+    offsetsStore(topicPartitions: TopicPartitionOffsetAndMetadata[]): any;
 
     pause(topicPartitions: TopicPartition[]): any;
 

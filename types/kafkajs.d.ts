@@ -311,8 +311,9 @@ export type Consumer = Client & {
   subscribe(subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic): Promise<void>
   stop(): Promise<void>
   run(config?: ConsumerRunConfig): Promise<void>
-  storeOffsets(topicPartitions: Array<TopicPartitionOffset>): void
-  commitOffsets(topicPartitions?: Array<TopicPartitionOffset>): Promise<void>
+  storeOffsets(topicPartitions: Array<TopicPartitionOffsetAndMetadata>): void
+  commitOffsets(topicPartitions?: Array<TopicPartitionOffsetAndMetadata>): Promise<void>
+  committed(topicPartitions?: Array<TopicPartition>, timeout?: number): Promise<TopicPartitionOffsetAndMetadata[]>
   seek(topicPartitionOffset: TopicPartitionOffset): Promise<void>
   pause(topics: Array<{ topic: string; partitions?: number[] }>): void
   paused(): TopicPartitions[]

@@ -30,9 +30,6 @@
 #include "../src/rdkafka_proto.h"
 #include "../src/rdkafka_mock.h"
 
-const int32_t retry_ms     = 100;
-const int32_t retry_max_ms = 1000;
-
 static void free_mock_requests(rd_kafka_mock_request_t **requests,
                                size_t request_cnt) {
         size_t i;
@@ -342,7 +339,7 @@ static void test_fetch(rd_kafka_mock_cluster_t *mcluster, const char *topic,
  * which should trigger the update_metadata_op and the metadata cache should be updated
  * accordingly only for the partition with the changed leader.
  */
-int main_0145_metadata_update_op_mock(int argc, char **argv) {
+int main_0147_metadata_update_op_mock(int argc, char **argv) {
         const char *topic = test_mk_topic_name("topic", 1);
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;

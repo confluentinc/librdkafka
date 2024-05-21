@@ -73,9 +73,10 @@ export interface TopicPartition {
     topic: string;
     partition: number;
     error?: LibrdKafkaError;
+    leaderEpoch?: number;
 }
 
-export interface TopicPartitionOffset extends TopicPartition{
+export interface TopicPartitionOffset extends TopicPartition {
     offset: number;
 }
 

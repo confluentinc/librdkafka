@@ -32,9 +32,9 @@ The following configurations are supported for this early access preview:
 * macOS - arm64/m1.
 * Windows - x64 (experimentally available in EA).
 
-[A supported version of Python](https://devguide.python.org/versions/) must be available on the system for the installation process. [This is required for the `node-gyp` build tool.](https://github.com/nodejs/node-gyp?tab=readme-ov-file#configuring-python-dependency).
-
 Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required.
+
+In case your system configuration is not within the supported ones, [a supported version of Python](https://devguide.python.org/versions/) must be available on the system for the installation process. [This is required for the `node-gyp` build tool.](https://github.com/nodejs/node-gyp?tab=readme-ov-file#configuring-python-dependency).
 
 ```bash
 $ npm install @confluentinc/kafka-javascript

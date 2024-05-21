@@ -210,6 +210,7 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
             fromBeginning: true,
             rebalanceTimeout: 10000,
             sessionTimeout: 10000,
+            autoCommitInterval: 1000,
             clientId: "impatientConsumer",
             autoCommit: isAutoCommit,
         });
@@ -254,8 +255,12 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         await producer.send({ topic: topicName, messages })
 
         /* Wait for the messages - some of them, before starting the
-         * second consumer. */
-        await waitForMessages(messagesConsumed, { number: 1024 });
+         * second consumer.
+         * FIXME: This can get a bit flaky depending on the system, as sometimes
+         * the impatientConsumer consumes all the messages before consumer1TryingToJoin
+         * can be set to true  */
+        await waitForMessages(messagesConsumed, { number: 1024, delay: 100 });
+        consumer1TryingToJoin = true;
 
         await consumer.connect();
         await consumer.subscribe({ topic: topicName });
@@ -265,7 +270,6 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
                 consumer1Messages.push(event);
             }
         });
-        consumer1TryingToJoin = true;
         await waitFor(() => consumer.assignment().length > 0, () => null);
         consumer1TryingToJoin = false;
 

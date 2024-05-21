@@ -110,7 +110,8 @@ describe('Consumer commit', () => {
             eachMessage: async ({ topic, partition, message }) => {
                 msgCount++;
                 const offset = (Number(message.offset) + 1).toString();
-                await expect(() => consumer.commitOffsets([{ topic, partition, offset, metadata }])).not.toThrow();
+                const leaderEpoch = message.leaderEpoch;
+                await expect(() => consumer.commitOffsets([{ topic, partition, offset, metadata, leaderEpoch }])).not.toThrow();
             }
         });
         await waitFor(() => msgCount >= 30, () => null, { delay: 100 });
@@ -118,9 +119,9 @@ describe('Consumer commit', () => {
 
         let committed = await consumer.committed(null, 5000);
         expect(committed).toEqual([
-            { topic: topicName, partition: 0, offset: '10', metadata },
-            { topic: topicName, partition: 1, offset: '10', metadata },
-            { topic: topicName, partition: 2, offset: '10', metadata }
+            { topic: topicName, partition: 0, offset: '10', metadata, leaderEpoch: expect.any(Number) },
+            { topic: topicName, partition: 1, offset: '10', metadata, leaderEpoch: expect.any(Number) },
+            { topic: topicName, partition: 2, offset: '10', metadata, leaderEpoch: expect.any(Number) }
         ]);
 
         await consumer.disconnect();
@@ -143,10 +144,9 @@ describe('Consumer commit', () => {
             { topic: topicName, partition: 2 },
         ]);
         expect(committed).toEqual([
-            { topic: topicName, partition: 0, offset: '10', metadata },
-            { topic: topicName, partition: 1, offset: '10', metadata },
-            { topic: topicName, partition: 2, offset: '10', metadata }
+            { topic: topicName, partition: 0, offset: '10', metadata,leaderEpoch: expect.any(Number) },
+            { topic: topicName, partition: 1, offset: '10', metadata,leaderEpoch: expect.any(Number) },
+            { topic: topicName, partition: 2, offset: '10', metadata,leaderEpoch: expect.any(Number) }
         ]);
     });
-
 });

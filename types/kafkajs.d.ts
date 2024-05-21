@@ -220,6 +220,7 @@ interface MessageSetEntry {
   offset: string
   size: number
   headers?: never
+  leaderEpoch?: number
 }
 
 interface RecordBatchEntry {
@@ -230,6 +231,7 @@ interface RecordBatchEntry {
   offset: string
   headers: IHeaders
   size?: never
+  leaderEpoch?: number
 }
 
 export type Batch = {
@@ -294,6 +296,7 @@ export type TopicPartitions = { topic: string; partitions: number[] }
 export type TopicPartition = {
   topic: string
   partition: number
+  leaderEpoch?: number
 }
 export type TopicPartitionOffset = TopicPartition & {
   offset: string

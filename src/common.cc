@@ -341,6 +341,12 @@ v8::Local<v8::Array> ToV8Array(
         Nan::New<v8::String>(topic_partition->topic().c_str())
         .ToLocalChecked());
 
+      int leader_epoch = topic_partition->get_leader_epoch();
+      if (leader_epoch >= 0) {
+        Nan::Set(obj, Nan::New("leaderEpoch").ToLocalChecked(),
+                 Nan::New<v8::Number>(leader_epoch));
+      }
+
       Nan::Set(array, topic_partition_i, obj);
     }
   }
@@ -385,6 +391,13 @@ v8::Local<v8::Array> ToTopicPartitionV8Array(
     if (include_offset) {
       Nan::Set(obj, Nan::New("offset").ToLocalChecked(),
                Nan::New<v8::Number>(topic_partition.offset));
+    }
+
+    int leader_epoch =
+        rd_kafka_topic_partition_get_leader_epoch(&topic_partition);
+    if (leader_epoch >= 0) {
+      Nan::Set(obj, Nan::New("leaderEpoch").ToLocalChecked(),
+               Nan::New<v8::Number>(leader_epoch));
     }
 
     Nan::Set(array, topic_partition_i, obj);
@@ -440,16 +453,32 @@ RdKafka::TopicPartition * FromV8Object(v8::Local<v8::Object> topic_partition) {
 
   RdKafka::TopicPartition *toppar = RdKafka::TopicPartition::create(topic, partition, offset);
 
-  v8::Local<v8::String>  metadataKey = Nan::New("metadata").ToLocalChecked();
+  v8::Local<v8::String> metadataKey = Nan::New("metadata").ToLocalChecked();
   if (Nan::Has(topic_partition, metadataKey).FromMaybe(false)) {
-    v8::Local<v8::Value> metadataValue = Nan::Get(topic_partition, metadataKey).ToLocalChecked();
+    v8::Local<v8::Value> metadataValue =
+        Nan::Get(topic_partition, metadataKey).ToLocalChecked();
 
     if (metadataValue->IsString()) {
       Nan::Utf8String metadataValueUtf8Str(metadataValue.As<v8::String>());
       std::string metadataValueStr(*metadataValueUtf8Str);
-      std::vector<unsigned char> metadataVector(metadataValueStr.begin(), metadataValueStr.end());
-      metadataVector.push_back('\0'); // The null terminator is not included in the iterator.
+      std::vector<unsigned char> metadataVector(metadataValueStr.begin(),
+                                                metadataValueStr.end());
+      metadataVector.push_back(
+          '\0');  // The null terminator is not included in the iterator.
       toppar->set_metadata(metadataVector);
+    }
+  }
+
+  toppar->set_leader_epoch(-1);
+  v8::Local<v8::String> leaderEpochKey =
+      Nan::New("leaderEpoch").ToLocalChecked();
+  if (Nan::Has(topic_partition, leaderEpochKey).FromMaybe(false)) {
+    v8::Local<v8::Value> leaderEpochValue =
+        Nan::Get(topic_partition, leaderEpochKey).ToLocalChecked();
+
+    if (leaderEpochValue->IsNumber()) {
+      int32_t leaderEpoch = Nan::To<int32_t>(leaderEpochValue).FromJust();
+      toppar->set_leader_epoch(leaderEpoch);
     }
   }
 
@@ -642,6 +671,12 @@ v8::Local<v8::Object> ToV8Object(RdKafka::Message *message,
       Nan::New<v8::Number>(message->partition()));
     Nan::Set(pack, Nan::New<v8::String>("timestamp").ToLocalChecked(),
       Nan::New<v8::Number>(message->timestamp().timestamp));
+
+    int32_t leader_epoch = message->leader_epoch();
+    if (leader_epoch >= 0) {
+      Nan::Set(pack, Nan::New<v8::String>("leaderEpoch").ToLocalChecked(),
+               Nan::New<v8::Number>(leader_epoch));
+    }
 
     return pack;
   } else {

@@ -16,7 +16,7 @@
 # SSL that is the feature, not crypto.
 
 mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "try"
-
+mkl_toggle_option "Feature" ENABLE_SSL_ENGINE "--enable-ssl-engine" "Enable SSL support" "y"
 
 function manual_checks {
     case "$ENABLE_SSL" in

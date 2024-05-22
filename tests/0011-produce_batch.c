@@ -47,6 +47,7 @@ static int msg_partition_wo_flag             = 2;
 static int msg_partition_wo_flag_success     = 0;
 static int invalid_record_fail_cnt           = 0;
 static int invalid_different_record_fail_cnt = 0;
+static int valid_message_cnt                 = 0;
 
 /**
  * Delivery reported callback.
@@ -89,6 +90,8 @@ static void test_single_partition(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+
+        SUB_TEST_QUICK();
 
         msgid_next = 0;
 
@@ -175,7 +178,7 @@ static void test_single_partition(void) {
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
 
-        return;
+        SUB_TEST_PASS();
 }
 
 
@@ -219,6 +222,8 @@ static void test_partitioner(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+
+        SUB_TEST_QUICK();
 
         test_conf_init(&conf, &topic_conf, 30);
 
@@ -299,7 +304,7 @@ static void test_partitioner(void) {
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
 
-        return;
+        SUB_TEST_PASS();
 }
 
 static void dr_per_message_partition_cb(rd_kafka_t *rk,
@@ -339,6 +344,8 @@ static void test_per_message_partition_flag(void) {
         int *rkpartition_counts;
         rd_kafka_message_t *rkmessages;
         const char *topic_name;
+
+        SUB_TEST_QUICK();
 
         test_conf_init(&conf, &topic_conf, 30);
 
@@ -437,7 +444,7 @@ static void test_per_message_partition_flag(void) {
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
 
-        return;
+        SUB_TEST_PASS();
 }
 
 static void
@@ -475,6 +482,8 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+
+        SUB_TEST_QUICK();
 
         test_conf_init(&conf, &topic_conf, 30);
 
@@ -564,23 +573,35 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
 
-        return;
+        SUB_TEST_PASS();
 }
 
 static void
-dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
+dr_message_single_partition_record_fail(rd_kafka_t *rk,
+                                        const rd_kafka_message_t *rkmessage,
+                                        void *opaque) {
+        free(rkmessage->_private);
         if (rkmessage->err) {
                 if (rkmessage->err == RD_KAFKA_RESP_ERR_INVALID_RECORD)
                         invalid_record_fail_cnt++;
                 else if (rkmessage->err ==
                          RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD)
                         invalid_different_record_fail_cnt++;
+        } else {
+                valid_message_cnt++;
         }
         msgcounter--;
 }
 
-
-static void test_message_single_partition_record_fail(void) {
+/**
+ * @brief Some messages fail because of INVALID_RECORD: compacted topic
+ *        but no key was sent.
+ *
+ *        - variation 1: they're in the same batch, rest of messages
+ *                       fail with _INVALID_DIFFERENT_RECORD
+ *        - variation 2: one message per batch, other messages succeed
+ */
+static void test_message_single_partition_record_fail(int variation) {
         int partition = 0;
         int r;
         rd_kafka_t *rk;
@@ -592,13 +613,11 @@ static void test_message_single_partition_record_fail(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
-        const char *topic_name = test_mk_topic_name(
-            "0011_test_message_single_partition_record_fail", 0);
-        static int32_t *avail_brokers;
-        static size_t avail_broker_cnt;
-        avail_brokers           = test_get_broker_ids(NULL, &avail_broker_cnt);
-        invalid_record_fail_cnt = 0;
+        const char *topic_name            = test_mk_topic_name(__FUNCTION__, 1);
+        invalid_record_fail_cnt           = 0;
         invalid_different_record_fail_cnt = 0;
+
+        SUB_TEST_QUICK();
 
         const char *confs_set_append[] = {"cleanup.policy", "APPEND",
                                           "compact"};
@@ -607,9 +626,12 @@ static void test_message_single_partition_record_fail(void) {
                                                "compact"};
 
         test_conf_init(&conf, &topic_conf, 20);
+        if (variation == 1)
+                test_conf_set(conf, "batch.size", "1");
 
         /* Set delivery report callback */
-        rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf,
+                                    dr_message_single_partition_record_fail);
 
 
         /* Create kafka instance */
@@ -623,18 +645,18 @@ static void test_message_single_partition_record_fail(void) {
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
-        rd_sleep(3);
+        test_wait_topic_exists(rk, topic_name, 5000);
 
         test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
                                             topic_name, confs_set_append, 1);
-        rd_sleep(3);
+        rd_sleep(1);
 
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
         for (i = 0; i < msgcnt; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
-                char *t;
+
                 *msgidp = i;
                 rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
@@ -668,6 +690,8 @@ static void test_message_single_partition_record_fail(void) {
                 TEST_FAIL("%i/%i messages failed\n", msgcnt - r, msgcnt);
         }
 
+        for (i = 0; i < msgcnt; i++)
+                free(rkmessages[i].key);
         free(rkmessages);
         TEST_SAY(
             "test_message_single_partition_record_fail: "
@@ -683,7 +707,10 @@ static void test_message_single_partition_record_fail(void) {
             "%d \n",
             invalid_record_fail_cnt, invalid_different_record_fail_cnt);
         TEST_ASSERT(invalid_record_fail_cnt == 10);
-        TEST_ASSERT(invalid_different_record_fail_cnt == 90);
+        if (variation == 0)
+                TEST_ASSERT(invalid_different_record_fail_cnt == 90);
+        else if (variation == 1)
+                TEST_ASSERT(valid_message_cnt == 90);
 
         test_IncrementalAlterConfigs_simple(
             rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_delete_subtract, 1);
@@ -695,9 +722,12 @@ static void test_message_single_partition_record_fail(void) {
         /* Destroy topic */
         rd_kafka_topic_destroy(rkt);
 
+        test_DeleteTopics_simple(rk, NULL, (char **)&topic_name, 1, NULL);
+
         /* Destroy rdkafka instance */
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
+        SUB_TEST_PASS();
 }
 
 
@@ -707,6 +737,8 @@ int main_0011_produce_batch(int argc, char **argv) {
         test_partitioner();
         if (test_can_create_topics(1))
                 test_per_message_partition_flag();
-        test_message_single_partition_record_fail();
+
+        test_message_single_partition_record_fail(0);
+        test_message_single_partition_record_fail(1);
         return 0;
 }

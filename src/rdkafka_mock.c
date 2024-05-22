@@ -469,7 +469,39 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
             mpart, mpart->replicas[rd_jitter(0, replica_cnt - 1)]);
 }
 
+/**
+ * @brief Push a partition leader response to passed \p mpart .
+ */
+static void
+rd_kafka_mock_partition_push_leader_response0(rd_kafka_mock_partition_t *mpart,
+                                              int32_t leader_id,
+                                              int32_t leader_epoch) {
+        rd_kafka_mock_partition_leader_t *leader_response;
 
+        leader_response               = rd_calloc(1, sizeof(*leader_response));
+        leader_response->leader_id    = leader_id;
+        leader_response->leader_epoch = leader_epoch;
+        TAILQ_INSERT_TAIL(&mpart->leader_responses, leader_response, link);
+}
+
+/**
+ * @brief Return the first mocked partition leader response in \p mpart ,
+ *        if available.
+ */
+rd_kafka_mock_partition_leader_t *
+rd_kafka_mock_partition_next_leader_response(rd_kafka_mock_partition_t *mpart) {
+        return TAILQ_FIRST(&mpart->leader_responses);
+}
+
+/**
+ * @brief Unlink and destroy a partition leader response
+ */
+void rd_kafka_mock_partition_leader_destroy(
+    rd_kafka_mock_partition_t *mpart,
+    rd_kafka_mock_partition_leader_t *mpart_leader) {
+        TAILQ_REMOVE(&mpart->leader_responses, mpart_leader, link);
+        rd_free(mpart_leader);
+}
 
 /**
  * @brief Unlink and destroy committed offset
@@ -546,12 +578,17 @@ rd_kafka_mock_commit_offset(rd_kafka_mock_partition_t *mpart,
 static void rd_kafka_mock_partition_destroy(rd_kafka_mock_partition_t *mpart) {
         rd_kafka_mock_msgset_t *mset, *tmp;
         rd_kafka_mock_committed_offset_t *coff, *tmpcoff;
+        rd_kafka_mock_partition_leader_t *mpart_leader, *tmp_mpart_leader;
 
         TAILQ_FOREACH_SAFE(mset, &mpart->msgsets, link, tmp)
         rd_kafka_mock_msgset_destroy(mpart, mset);
 
         TAILQ_FOREACH_SAFE(coff, &mpart->committed_offsets, link, tmpcoff)
         rd_kafka_mock_committed_offset_destroy(mpart, coff);
+
+        TAILQ_FOREACH_SAFE(mpart_leader, &mpart->leader_responses, link,
+                           tmp_mpart_leader)
+        rd_kafka_mock_partition_leader_destroy(mpart, mpart_leader);
 
         rd_list_destroy(&mpart->pidstates);
 
@@ -579,6 +616,7 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
         mpart->update_follower_end_offset   = rd_true;
 
         TAILQ_INIT(&mpart->committed_offsets);
+        TAILQ_INIT(&mpart->leader_responses);
 
         rd_list_init(&mpart->pidstates, 0, rd_free);
 
@@ -618,7 +656,9 @@ rd_kafka_mock_topic_new(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_topic_t *mtopic;
         int i;
 
-        mtopic          = rd_calloc(1, sizeof(*mtopic));
+        mtopic = rd_calloc(1, sizeof(*mtopic));
+        /* Assign random topic id */
+        mtopic->id      = rd_kafka_Uuid_random();
         mtopic->name    = rd_strdup(topic);
         mtopic->cluster = mcluster;
 
@@ -665,6 +705,28 @@ rd_kafka_mock_topic_find_by_kstr(const rd_kafka_mock_cluster_t *mcluster,
                 if (!strncmp(mtopic->name, kname->str,
                              RD_KAFKAP_STR_LEN(kname)) &&
                     mtopic->name[RD_KAFKAP_STR_LEN(kname)] == '\0')
+                        return (rd_kafka_mock_topic_t *)mtopic;
+        }
+
+        return NULL;
+}
+
+/**
+ * @brief Find a mock topic by id.
+ *
+ * @param mcluster Cluster to search in.
+ * @param id Topic id to find.
+ * @return Found topic or NULL.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+rd_kafka_mock_topic_t *
+rd_kafka_mock_topic_find_by_id(const rd_kafka_mock_cluster_t *mcluster,
+                               rd_kafka_Uuid_t id) {
+        const rd_kafka_mock_topic_t *mtopic;
+
+        TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
+                if (!rd_kafka_Uuid_cmp(mtopic->id, id))
                         return (rd_kafka_mock_topic_t *)mtopic;
         }
 
@@ -2073,6 +2135,23 @@ rd_kafka_mock_partition_set_follower_wmarks(rd_kafka_mock_cluster_t *mcluster,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_mock_partition_push_leader_response(rd_kafka_mock_cluster_t *mcluster,
+                                             const char *topic,
+                                             int partition,
+                                             int32_t leader_id,
+                                             int32_t leader_epoch) {
+        rd_kafka_op_t *rko        = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+        rko->rko_u.mock.name      = rd_strdup(topic);
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE;
+        rko->rko_u.mock.partition = partition;
+        rko->rko_u.mock.leader_id = leader_id;
+        rko->rko_u.mock.leader_epoch = leader_epoch;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
                               int32_t broker_id) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
@@ -2354,6 +2433,23 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mpart->follower_end_offset        = rko->rko_u.mock.hi;
                         mpart->update_follower_end_offset = rd_false;
                 }
+                break;
+        case RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE:
+                mpart = rd_kafka_mock_partition_get(
+                    mcluster, rko->rko_u.mock.name, rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Push %s [%" PRId32 "] leader response: (%" PRId32
+                             ", %" PRId32 ")",
+                             rko->rko_u.mock.name, rko->rko_u.mock.partition,
+                             rko->rko_u.mock.leader_id,
+                             rko->rko_u.mock.leader_epoch);
+
+                rd_kafka_mock_partition_push_leader_response0(
+                    mpart, rko->rko_u.mock.leader_id,
+                    rko->rko_u.mock.leader_epoch);
                 break;
 
                 /* Broker commands */
@@ -2649,8 +2745,16 @@ rd_kafka_mock_request_copy(rd_kafka_mock_request_t *mrequest) {
         return request;
 }
 
-void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *element) {
-        rd_free(element);
+void rd_kafka_mock_request_destroy(rd_kafka_mock_request_t *mrequest) {
+        rd_free(mrequest);
+}
+
+void rd_kafka_mock_request_destroy_array(rd_kafka_mock_request_t **mrequests,
+                                         size_t mrequest_cnt) {
+        size_t i;
+        for (i = 0; i < mrequest_cnt; i++)
+                rd_kafka_mock_request_destroy(mrequests[i]);
+        rd_free(mrequests);
 }
 
 static void rd_kafka_mock_request_free(void *element) {

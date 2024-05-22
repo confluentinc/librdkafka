@@ -48,17 +48,18 @@
 int test_level = 2;
 int test_seed  = 0;
 
-char test_mode[64]                     = "bare";
-char test_scenario[64]                 = "default";
-static volatile sig_atomic_t test_exit = 0;
-static char test_topic_prefix[128]     = "rdkafkatest";
-static int test_topic_random           = 0;
-int tests_running_cnt                  = 0;
-int test_concurrent_max                = 5;
-int test_assert_on_fail                = 0;
-double test_timeout_multiplier         = 1.0;
-static char *test_sql_cmd              = NULL;
-int test_session_timeout_ms            = 6000;
+char test_mode[64]                                  = "bare";
+char test_scenario[64]                              = "default";
+static volatile sig_atomic_t test_exit              = 0;
+static char test_topic_prefix[128]                  = "rdkafkatest";
+static int test_topic_random                        = 0;
+int tests_running_cnt                               = 0;
+int test_concurrent_max                             = 5;
+int test_assert_on_fail                             = 0;
+double test_timeout_multiplier                      = 1.0;
+static char *test_sql_cmd                           = NULL;
+int test_session_timeout_ms                         = 6000;
+static const char *test_consumer_group_protocol_str = NULL;
 int test_broker_version;
 static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
@@ -187,6 +188,7 @@ _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
+_TEST_DECL(0076_produce_retry_mock);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
 _TEST_DECL(0079_fork);
@@ -257,6 +259,8 @@ _TEST_DECL(0140_commit_metadata);
 _TEST_DECL(0142_reauthentication);
 _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
+_TEST_DECL(0145_pause_resume_mock);
+_TEST_DECL(0146_metadata_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -418,6 +422,7 @@ struct test tests[] = {
     _TEST(0075_retry, TEST_F_SOCKEM),
 #endif
     _TEST(0076_produce_retry, TEST_F_SOCKEM),
+    _TEST(0076_produce_retry_mock, TEST_F_LOCAL),
     _TEST(0077_compaction,
           0,
           /* The test itself requires message headers */
@@ -511,6 +516,8 @@ struct test tests[] = {
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
+    _TEST(0146_metadata_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */
@@ -763,6 +770,9 @@ static void test_init(void) {
                         exit(1);
                 }
         }
+        test_consumer_group_protocol_str =
+            test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
+
 
 #ifdef _WIN32
         test_init_win32();
@@ -1803,17 +1813,14 @@ int main(int argc, char **argv) {
 
         TEST_SAY("Git version: %s\n", test_git_version);
 
-        if (!strcmp(test_broker_version_str, "trunk"))
-                test_broker_version_str = "9.9.9.9"; /* for now */
-
         d = 0;
         if (sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d) <
             3) {
-                printf(
-                    "%% Expected broker version to be in format "
-                    "N.N.N (N=int), not %s\n",
-                    test_broker_version_str);
-                exit(1);
+                TEST_SAY(
+                    "Non-numeric broker version, setting version"
+                    " to 9.9.9.9\n");
+                test_broker_version_str = "9.9.9.9";
+                sscanf(test_broker_version_str, "%d.%d.%d.%d", &a, &b, &c, &d);
         }
         test_broker_version = TEST_BRKVER(a, b, c, d);
         TEST_SAY("Broker version: %s (%d.%d.%d.%d)\n", test_broker_version_str,
@@ -2035,7 +2042,10 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
                         test_conf_set(conf, "client.id", test_curr->name);
         }
 
-
+        if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol_str);
+        }
 
         /* Creat kafka instance */
         rk = rd_kafka_new(mode, conf, errstr, sizeof(errstr));
@@ -7127,7 +7137,63 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
         return mcluster;
 }
 
+/**
+ * @brief Get current number of matching requests,
+ *        received by mock cluster \p mcluster, matching
+ *        function \p match , called with opaque \p opaque .
+ */
+static size_t test_mock_get_matching_request_cnt(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque) {
+        size_t i;
+        size_t request_cnt;
+        rd_kafka_mock_request_t **requests;
+        size_t matching_request_cnt = 0;
 
+        requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
+
+        for (i = 0; i < request_cnt; i++) {
+                if (match(requests[i], opaque))
+                        matching_request_cnt++;
+        }
+
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
+        return matching_request_cnt;
+}
+
+/**
+ * @brief Wait that at least \p expected_cnt matching requests
+ *        have been received by the mock cluster,
+ *        using match function \p match ,
+ *        plus \p confidence_interval_ms has passed
+ *
+ * @param expected_cnt Number of expected matching request
+ * @param confidence_interval_ms Time to wait after \p expected_cnt matching
+ *                               requests have been seen
+ * @param match Match function that takes a request and \p opaque
+ * @param opaque Opaque value needed by function \p match
+ *
+ * @return Number of matching requests received.
+ */
+size_t test_mock_wait_matching_requests(
+    rd_kafka_mock_cluster_t *mcluster,
+    size_t expected_cnt,
+    int confidence_interval_ms,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque) {
+        size_t matching_request_cnt = 0;
+
+        while (matching_request_cnt < expected_cnt) {
+                matching_request_cnt =
+                    test_mock_get_matching_request_cnt(mcluster, match, opaque);
+                if (matching_request_cnt < expected_cnt)
+                        rd_usleep(100 * 1000, 0);
+        }
+
+        rd_usleep(confidence_interval_ms * 1000, 0);
+        return test_mock_get_matching_request_cnt(mcluster, match, opaque);
+}
 
 /**
  * @name Sub-tests
@@ -7233,4 +7299,18 @@ void test_sub_skip(const char *fmt, ...) {
         TEST_SAYL(1, _C_YEL "[ %s: SKIP: %s ]\n", test_curr->subtest, buf);
 
         test_sub_reset();
+}
+
+const char *test_consumer_group_protocol() {
+        return test_consumer_group_protocol_str;
+}
+
+int test_consumer_group_protocol_generic() {
+        return !test_consumer_group_protocol_str ||
+               !strcmp(test_consumer_group_protocol_str, "classic");
+}
+
+int test_consumer_group_protocol_consumer() {
+        return test_consumer_group_protocol_str &&
+               !strcmp(test_consumer_group_protocol_str, "consumer");
 }

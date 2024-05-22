@@ -64,6 +64,7 @@
 #endif
 
 #include "rdtime.h"
+#include "rdmap.h"
 #include "crc32c.h"
 #include "rdunittest.h"
 
@@ -706,6 +707,12 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID, "Broker: Unknown topic id"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
               "Broker: The member epoch is fenced by the group coordinator"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID,
+              "Broker: The instance ID is still used by another member in the "
+              "consumer group"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR,
+              "Broker: The assignor or its version range is not supported by "
+              "the consumer group"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
               "Broker: The member epoch is stale"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
@@ -1609,6 +1616,7 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                     [RD_KAFKAP_BrokerHeartbeat]             = rd_true,
                     [RD_KAFKAP_UnregisterBroker]            = rd_true,
                     [RD_KAFKAP_AllocateProducerIds]         = rd_true,
+                    [RD_KAFKAP_ConsumerGroupHeartbeat]      = rd_true,
                 },
             [3 /*hide-unless-non-zero*/] = {
                 /* Hide Admin requests unless they've been used */
@@ -2122,7 +2130,10 @@ static int rd_kafka_thread_main(void *arg) {
                                        RD_KAFKA_CGRP_STATE_TERM)))) {
                 rd_ts_t sleeptime = rd_kafka_timers_next(
                     &rk->rk_timers, 1000 * 1000 /*1s*/, 1 /*lock*/);
-                rd_kafka_q_serve(rk->rk_ops, (int)(sleeptime / 1000), 0,
+                /* Use ceiling division to avoid calling serve with a 0 ms
+                 * timeout in a tight loop until 1 ms has passed. */
+                int timeout_ms = (sleeptime + 999) / 1000;
+                rd_kafka_q_serve(rk->rk_ops, timeout_ms, 0,
                                  RD_KAFKA_Q_CB_CALLBACK, NULL, NULL);
                 if (rk->rk_cgrp) /* FIXME: move to timer-triggered */
                         rd_kafka_cgrp_serve(rk->rk_cgrp);
@@ -2175,6 +2186,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int ret_errno               = 0;
         const char *conf_err;
+        char *group_remote_assignor_override = NULL;
 #ifndef _WIN32
         sigset_t newset, oldset;
 #endif
@@ -2364,6 +2376,64 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 ret_err   = RD_KAFKA_RESP_ERR__INVALID_ARG;
                 ret_errno = EINVAL;
                 goto fail;
+        }
+
+        if (!rk->rk_conf.group_remote_assignor) {
+                rd_kafka_assignor_t *cooperative_assignor;
+
+                /* Detect if chosen assignor is cooperative
+                 * FIXME: remove this compatibility altogether
+                 * and apply the breaking changes that will be required
+                 * in next major version. */
+
+                cooperative_assignor =
+                    rd_kafka_assignor_find(rk, "cooperative-sticky");
+                rk->rk_conf.partition_assignors_cooperative =
+                    !rk->rk_conf.partition_assignors.rl_cnt ||
+                    (cooperative_assignor &&
+                     cooperative_assignor->rkas_enabled);
+
+                if (rk->rk_conf.group_protocol ==
+                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                        /* Default remote assignor to the chosen local one. */
+                        if (rk->rk_conf.partition_assignors_cooperative) {
+                                group_remote_assignor_override =
+                                    rd_strdup("uniform");
+                                rk->rk_conf.group_remote_assignor =
+                                    group_remote_assignor_override;
+                        } else {
+                                rd_kafka_assignor_t *range_assignor =
+                                    rd_kafka_assignor_find(rk, "range");
+                                if (range_assignor &&
+                                    range_assignor->rkas_enabled) {
+                                        rd_kafka_log(
+                                            rk, LOG_WARNING, "ASSIGNOR",
+                                            "\"range\" assignor is sticky "
+                                            "with group protocol CONSUMER");
+                                        group_remote_assignor_override =
+                                            rd_strdup("range");
+                                        rk->rk_conf.group_remote_assignor =
+                                            group_remote_assignor_override;
+                                } else {
+                                        rd_kafka_log(
+                                            rk, LOG_WARNING, "ASSIGNOR",
+                                            "roundrobin assignor isn't "
+                                            "available "
+                                            "with group protocol CONSUMER, "
+                                            "using the \"uniform\" one. "
+                                            "It's similar, "
+                                            "but it's also sticky");
+                                        group_remote_assignor_override =
+                                            rd_strdup("uniform");
+                                        rk->rk_conf.group_remote_assignor =
+                                            group_remote_assignor_override;
+                                }
+                        }
+                }
+        } else {
+                /* When users starts setting properties of the new protocol,
+                 * they can only use incremental_assign/unassign. */
+                rk->rk_conf.partition_assignors_cooperative = rd_true;
         }
 
         /* Create Mock cluster */
@@ -2635,6 +2705,8 @@ fail:
          * that belong to rk_conf and thus needs to be cleaned up.
          * Legacy APIs, sigh.. */
         if (app_conf) {
+                if (group_remote_assignor_override)
+                        rd_free(group_remote_assignor_override);
                 rd_kafka_assignors_term(rk);
                 rd_kafka_interceptors_destroy(&rk->rk_conf);
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
@@ -5086,12 +5158,78 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
 }
 
 /**
+ * Returns a new non cryptographically secure UUIDv4 (random).
+ *
+ * @return A UUIDv4.
+ *
+ * @remark Must be freed after use using rd_kafka_Uuid_destroy().
+ */
+rd_kafka_Uuid_t rd_kafka_Uuid_random() {
+        int i;
+        unsigned char rand_values_bytes[16] = {0};
+        uint64_t *rand_values_uint64        = (uint64_t *)rand_values_bytes;
+        unsigned char *rand_values_app;
+        rd_kafka_Uuid_t ret = RD_KAFKA_UUID_ZERO;
+        for (i = 0; i < 16; i += 2) {
+                uint16_t rand_uint16 = (uint16_t)rd_jitter(0, INT16_MAX - 1);
+                /* No need to convert endianess here because it's still only
+                 * a random value. */
+                rand_values_app = (unsigned char *)&rand_uint16;
+                rand_values_bytes[i] |= rand_values_app[0];
+                rand_values_bytes[i + 1] |= rand_values_app[1];
+        }
+
+        rand_values_bytes[6] &= 0x0f; /* clear version */
+        rand_values_bytes[6] |= 0x40; /* version 4 */
+        rand_values_bytes[8] &= 0x3f; /* clear variant */
+        rand_values_bytes[8] |= 0x80; /* IETF variant */
+
+        ret.most_significant_bits  = be64toh(rand_values_uint64[0]);
+        ret.least_significant_bits = be64toh(rand_values_uint64[1]);
+        return ret;
+}
+
+/**
  * @brief Destroy the provided uuid.
  *
  * @param uuid UUID
  */
 void rd_kafka_Uuid_destroy(rd_kafka_Uuid_t *uuid) {
         rd_free(uuid);
+}
+
+/**
+ * @brief Computes canonical encoding for the given uuid string.
+ *        Mainly useful for testing.
+ *
+ * @param uuid UUID for which canonical encoding is required.
+ *
+ * @return canonical encoded string for the given UUID.
+ *
+ * @remark  Must be freed after use.
+ */
+const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid) {
+        int i, j;
+        unsigned char bytes[16];
+        char *ret = rd_calloc(37, sizeof(*ret));
+
+        for (i = 0; i < 8; i++) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+                j = 7 - i;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+                j = i;
+#endif
+                bytes[i]     = (uuid->most_significant_bits >> (8 * j)) & 0xFF;
+                bytes[8 + i] = (uuid->least_significant_bits >> (8 * j)) & 0xFF;
+        }
+
+        rd_snprintf(ret, 37,
+                    "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%"
+                    "02x%02x%02x",
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+                    bytes[6], bytes[7], bytes[8], bytes[9], bytes[10],
+                    bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+        return ret;
 }
 
 const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
@@ -5118,6 +5256,17 @@ const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
                    23 /* Removing extra ('=') padding */);
         rd_free(out_base64_str);
         return uuid->base64str;
+}
+
+unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid) {
+        unsigned char bytes[16];
+        memcpy(bytes, &uuid->most_significant_bits, 8);
+        memcpy(&bytes[8], &uuid->least_significant_bits, 8);
+        return rd_bytes_hash(bytes, 16);
+}
+
+unsigned int rd_kafka_Uuid_map_hash(const void *key) {
+        return rd_kafka_Uuid_hash(key);
 }
 
 int64_t rd_kafka_Uuid_least_significant_bits(const rd_kafka_Uuid_t *uuid) {

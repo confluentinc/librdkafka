@@ -6,7 +6,7 @@ librdkafka v2.5.0 is a feature release.
 
   * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
     [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
-    bugfixes and performance improvements (#).
+    bugfixes and performance improvements (#4726).
 
 
 # librdkafka v2.4.0

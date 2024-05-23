@@ -144,6 +144,7 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
                 break;
 
         case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS:
+        case RD_KAFKA_RESP_ERR_INVALID_MSG:
                 /* Client-side wait-response/in-queue timeout */
         case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY |
@@ -212,11 +213,15 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         rd_kafka_topic_partition_list_t *parts = NULL;
+
+        /* We assume here that the topic partition list is not NULL.
+         * FIXME: check NULL topic array case, if required in future. */
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
@@ -231,7 +236,8 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
 
                 if (use_topic_id) {
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
-                } else {
+                }
+                if (use_topic_name) {
                         rd_kafka_buf_read_str(rkbuf, &kTopic);
                         RD_KAFKAP_STR_DUPA(&topic, &kTopic);
                 }
@@ -276,6 +282,10 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                 case RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA:
                                         rd_assert(!*"metadata not implemented");
                                         break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP:
+                                        rd_assert(
+                                            !*"timestamp not implemented");
+                                        break;
                                 case RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP:
                                         /* Fallback */
                                 case RD_KAFKA_TOPIC_PARTITION_FIELD_END:
@@ -287,9 +297,14 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                 rktpar =
                                     rd_kafka_topic_partition_list_add_with_topic_id(
                                         parts, topic_id, Partition);
-                        } else {
+                                if (use_topic_name)
+                                        rktpar->topic = rd_strdup(topic);
+                        } else if (use_topic_name) {
                                 rktpar = rd_kafka_topic_partition_list_add(
                                     parts, topic, Partition);
+                        } else {
+                                rd_assert(!*"one of use_topic_id and "
+                                          "use_topic_name should be true");
                         }
 
                         /* Use dummy sentinel values that are unlikely to be
@@ -305,8 +320,8 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                     rktpar, CurrentLeaderEpoch);
                         rktpar->err = ErrorCode;
 
-
-                        rd_kafka_buf_skip_tags(rkbuf);
+                        if (fi > 1)
+                                rd_kafka_buf_skip_tags(rkbuf);
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
@@ -327,7 +342,8 @@ err_parse:
  *
  * @returns the number of partitions written to buffer.
  *
- * @remark The \p parts list MUST be sorted.
+ * @remark The \p parts list MUST be sorted by name if use_topic_id is false or
+ * by id.
  */
 int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
@@ -335,13 +351,14 @@ int rd_kafka_buf_write_topic_partitions(
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     const rd_kafka_topic_partition_field_t *fields) {
         size_t of_TopicArrayCnt;
         size_t of_PartArrayCnt = 0;
         int TopicArrayCnt = 0, PartArrayCnt = 0;
         int i;
-        const char *prev_topic = NULL;
-        int cnt                = 0;
+        const rd_kafka_topic_partition_t *prev_topic = NULL;
+        int cnt                                      = 0;
 
         rd_assert(!only_invalid_offsets ||
                   (only_invalid_offsets != skip_invalid_offsets));
@@ -351,6 +368,7 @@ int rd_kafka_buf_write_topic_partitions(
 
         for (i = 0; i < parts->cnt; i++) {
                 const rd_kafka_topic_partition_t *rktpar = &parts->elems[i];
+                rd_bool_t different_topics;
                 int fi;
 
                 if (rktpar->offset < 0) {
@@ -359,7 +377,19 @@ int rd_kafka_buf_write_topic_partitions(
                 } else if (only_invalid_offsets)
                         continue;
 
-                if (!prev_topic || strcmp(rktpar->topic, prev_topic)) {
+                if (use_topic_id) {
+                        different_topics =
+                            !prev_topic ||
+                            rd_kafka_Uuid_cmp(
+                                rd_kafka_topic_partition_get_topic_id(rktpar),
+                                rd_kafka_topic_partition_get_topic_id(
+                                    prev_topic));
+                } else {
+                        different_topics =
+                            !prev_topic ||
+                            strcmp(rktpar->topic, prev_topic->topic);
+                }
+                if (different_topics) {
                         /* Finish previous topic, if any. */
                         if (of_PartArrayCnt > 0) {
                                 rd_kafka_buf_finalize_arraycnt(
@@ -370,16 +400,18 @@ int rd_kafka_buf_write_topic_partitions(
 
 
                         /* Topic */
+                        if (use_topic_name)
+                                rd_kafka_buf_write_str(rkbuf, rktpar->topic,
+                                                       -1);
                         if (use_topic_id) {
                                 rd_kafka_Uuid_t topic_id =
                                     rd_kafka_topic_partition_get_topic_id(
                                         rktpar);
                                 rd_kafka_buf_write_uuid(rkbuf, &topic_id);
-                        } else
-                                rd_kafka_buf_write_str(rkbuf, rktpar->topic,
-                                                       -1);
+                        }
+
                         TopicArrayCnt++;
-                        prev_topic = rktpar->topic;
+                        prev_topic = rktpar;
                         /* New topic so reset partition count */
                         PartArrayCnt = 0;
 
@@ -416,6 +448,11 @@ int rd_kafka_buf_write_topic_partitions(
                                 break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_ERR:
                                 rd_kafka_buf_write_i16(rkbuf, rktpar->err);
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP:
+                                /* Current implementation is just
+                                 * sending a NULL value */
+                                rd_kafka_buf_write_i64(rkbuf, -1);
                                 break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA:
                                 /* Java client 0.9.0 and broker <0.10.0 can't
@@ -1026,7 +1063,7 @@ rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
             RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         *offsets = rd_kafka_buf_read_topic_partitions(
-            rkbuf, rd_false /* don't use topic_id */, 0, fields);
+            rkbuf, rd_false /*don't use topic_id*/, rd_true, 0, fields);
         if (!*offsets)
                 goto err_parse;
 
@@ -1080,8 +1117,8 @@ void rd_kafka_OffsetForLeaderEpochRequest(
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
             rkbuf, parts, rd_false /*include invalid offsets*/,
-            rd_false /*skip valid offsets */, rd_false /* don't use topic_id */,
-            fields);
+            rd_false /*skip valid offsets*/, rd_false /*don't use topic id*/,
+            rd_true /*use topic name*/, fields);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1115,6 +1152,7 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                             rd_bool_t add_part,
                             rd_bool_t allow_retry) {
         const int log_decode_errors = LOG_ERR;
+        int32_t GroupArrayCnt;
         int32_t TopicArrayCnt;
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
         int16_t ApiVersion;
@@ -1132,6 +1170,13 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
         if (ApiVersion >= 3)
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
+        if (ApiVersion >= 8) {
+                rd_kafkap_str_t group_id;
+                // Currently we are supporting only 1 group
+                rd_kafka_buf_read_arraycnt(rkbuf, &GroupArrayCnt, 1);
+                rd_kafka_buf_read_str(rkbuf, &group_id);
+        }
+
         if (!*offsets)
                 *offsets = rd_kafka_topic_partition_list_new(16);
 
@@ -1143,12 +1188,17 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafkap_str_t topic;
+                rd_kafka_Uuid_t *topic_id = NULL;
                 int32_t PartArrayCnt;
                 char *topic_name;
                 int j;
 
                 rd_kafka_buf_read_str(rkbuf, &topic);
-
+                //                if(ApiVersion >= 9) {
+                //                        topic_id = rd_kafka_Uuid_new();
+                //                        rd_kafka_buf_read_uuid(rkbuf,
+                //                        topic_id);
+                //                }
                 rd_kafka_buf_read_arraycnt(rkbuf, &PartArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
 
@@ -1171,10 +1221,18 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
 
                         rktpar = rd_kafka_topic_partition_list_find(
                             *offsets, topic_name, partition);
-                        if (!rktpar && add_part)
-                                rktpar = rd_kafka_topic_partition_list_add(
-                                    *offsets, topic_name, partition);
-                        else if (!rktpar) {
+                        if (!rktpar && add_part) {
+                                if (topic_id) {
+                                        rktpar =
+                                            rd_kafka_topic_partition_list_add_with_topic_id(
+                                                *offsets, *topic_id, partition);
+                                } else {
+                                        rktpar =
+                                            rd_kafka_topic_partition_list_add(
+                                                *offsets, topic_name,
+                                                partition);
+                                }
+                        } else if (!rktpar) {
                                 rd_rkb_dbg(rkb, TOPIC, "OFFSETFETCH",
                                            "OffsetFetchResponse: %s [%" PRId32
                                            "] "
@@ -1236,6 +1294,8 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                         /* Loose ref from get_toppar() */
                         if (rktp)
                                 rd_kafka_toppar_destroy(rktp);
+
+                        RD_IF_FREE(topic_id, rd_kafka_Uuid_destroy);
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
@@ -1361,6 +1421,9 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
  * have usable offsets then no request is sent at all but an empty
  * reply is enqueued on the replyq.
  *
+ * FIXME: Even though the version is upgraded to v9, currently we support
+ *        only a single group.
+ *
  * @param group_id Request offset for this group id.
  * @param parts (optional) List of topic partitions to request,
  *              or NULL to return all topic partitions associated with the
@@ -1372,10 +1435,18 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  const char *group_id,
                                  rd_kafka_topic_partition_list_t *parts,
+                                 rd_bool_t use_topic_id,
+                                 int32_t generation_id_or_member_epoch,
+                                 rd_kafkap_str_t *member_id,
                                  rd_bool_t require_stable_offsets,
                                  int timeout,
                                  rd_kafka_replyq_t replyq,
-                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void (*resp_cb)(rd_kafka_t *,
+                                                 rd_kafka_broker_t *,
+                                                 rd_kafka_resp_err_t,
+                                                 rd_kafka_buf_t *,
+                                                 rd_kafka_buf_t *,
+                                                 void *),
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
@@ -1383,7 +1454,7 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
         int PartCnt       = -1;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_OffsetFetch, 0, 7, NULL);
+            rkb, RD_KAFKAP_OffsetFetch, 0, 9, NULL);
 
         if (parts) {
                 parts_size = parts->cnt * 32;
@@ -1391,12 +1462,33 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
-            /* GroupId + rd_kafka_buf_write_arraycnt_pos +
-             * Topics + RequireStable */
-            32 + 4 + parts_size + 1, ApiVersion >= 6 /*flexver*/);
+            /* GroupId + GenerationIdOrMemberEpoch + MemberId +
+             * rd_kafka_buf_write_arraycnt_pos + Topics + RequireStable */
+            32 + 4 + 50 + 4 + parts_size + 1, ApiVersion >= 6 /*flexver*/);
+
+        if (ApiVersion >= 8) {
+                /*
+                 * Groups array count.
+                 * Currently, only supporting 1 group.
+                 * TODO: Update to use multiple groups.
+                 */
+                rd_kafka_buf_write_arraycnt(rkbuf, 1);
+        }
 
         /* ConsumerGroup */
         rd_kafka_buf_write_str(rkbuf, group_id, -1);
+
+        if (ApiVersion >= 9) {
+                if (!member_id) {
+                        rd_kafkap_str_t *null_member_id =
+                            rd_kafkap_str_new(NULL, -1);
+                        rd_kafka_buf_write_kstr(rkbuf, null_member_id);
+                        rd_kafkap_str_destroy(null_member_id);
+                } else {
+                        rd_kafka_buf_write_kstr(rkbuf, member_id);
+                }
+                rd_kafka_buf_write_i32(rkbuf, generation_id_or_member_epoch);
+        }
 
         if (parts) {
                 /* Sort partitions by topic */
@@ -1410,9 +1502,15 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                 PartCnt = rd_kafka_buf_write_topic_partitions(
                     rkbuf, parts, rd_false /*include invalid offsets*/,
                     rd_false /*skip valid offsets */,
-                    rd_false /* don't use topic_id */, fields);
+                    use_topic_id /* use_topic id */, rd_true /*use topic name*/,
+                    fields);
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, PartCnt);
+        }
+
+        if (ApiVersion >= 8) {
+                // Tags for the groups array
+                rd_kafka_buf_write_tags(rkbuf);
         }
 
         if (ApiVersion >= 7) {
@@ -1551,12 +1649,16 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                              rd_kafka_buf_t *request,
                              rd_kafka_topic_partition_list_t *offsets,
                              rd_bool_t ignore_cgrp) {
-        const int log_decode_errors = LOG_ERR;
-        int32_t TopicArrayCnt;
-        int errcnt  = 0;
-        int partcnt = 0;
-        int i;
-        int actions = 0;
+        const int log_decode_errors                     = LOG_ERR;
+        int errcnt                                      = 0;
+        int partcnt                                     = 0;
+        int actions                                     = 0;
+        rd_kafka_topic_partition_list_t *partitions     = NULL;
+        rd_kafka_topic_partition_t *partition           = NULL;
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
 
         if (err)
                 goto err;
@@ -1564,49 +1666,37 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
         if (rd_kafka_buf_ApiVersion(rkbuf) >= 3)
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
-        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
-        for (i = 0; i < TopicArrayCnt; i++) {
-                rd_kafkap_str_t topic;
-                char *topic_str;
-                int32_t PartArrayCnt;
-                int j;
+        partitions = rd_kafka_buf_read_topic_partitions(
+            rkbuf, rd_false /*don't use topic_id*/, rd_true /*use topic name*/,
+            0, fields);
 
-                rd_kafka_buf_read_str(rkbuf, &topic);
-                rd_kafka_buf_read_i32(rkbuf, &PartArrayCnt);
+        if (!partitions)
+                goto err_parse;
 
-                RD_KAFKAP_STR_DUPA(&topic_str, &topic);
+        partcnt = partitions->cnt;
+        RD_KAFKA_TPLIST_FOREACH(partition, partitions) {
+                rd_kafka_topic_partition_t *rktpar;
 
-                for (j = 0; j < PartArrayCnt; j++) {
-                        int32_t partition;
-                        int16_t ErrorCode;
-                        rd_kafka_topic_partition_t *rktpar;
+                rktpar = rd_kafka_topic_partition_list_find(
+                    offsets, partition->topic, partition->partition);
 
-                        rd_kafka_buf_read_i32(rkbuf, &partition);
-                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+                if (!rktpar) {
+                        /* Received offset for topic/partition we didn't
+                         * ask for, this shouldn't really happen. */
+                        continue;
+                }
 
-                        rktpar = rd_kafka_topic_partition_list_find(
-                            offsets, topic_str, partition);
-
-                        if (!rktpar) {
-                                /* Received offset for topic/partition we didn't
-                                 * ask for, this shouldn't really happen. */
-                                continue;
-                        }
-
-                        rktpar->err = ErrorCode;
-                        if (ErrorCode) {
-                                err = ErrorCode;
-                                errcnt++;
-
-                                /* Accumulate actions for per-partition
-                                 * errors. */
-                                actions |= rd_kafka_handle_OffsetCommit_error(
-                                    rkb, request, rktpar);
-                        }
-
-                        partcnt++;
+                if (partition->err) {
+                        rktpar->err = partition->err;
+                        err         = partition->err;
+                        errcnt++;
+                        /* Accumulate actions for per-partition
+                         * errors. */
+                        actions |= rd_kafka_handle_OffsetCommit_error(
+                            rkb, request, partition);
                 }
         }
+        rd_kafka_topic_partition_list_destroy(partitions);
 
         /* If all partitions failed use error code
          * from last partition as the global error. */
@@ -1674,23 +1764,18 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
                                  void *opaque,
                                  const char *reason) {
         rd_kafka_buf_t *rkbuf;
-        ssize_t of_TopicCnt    = -1;
-        int TopicCnt           = 0;
-        const char *last_topic = NULL;
-        ssize_t of_PartCnt     = -1;
-        int PartCnt            = 0;
-        int tot_PartCnt        = 0;
-        int i;
+        int tot_PartCnt = 0;
         int16_t ApiVersion;
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_OffsetCommit, 0, 7, &features);
+            rkb, RD_KAFKAP_OffsetCommit, 0, 9, &features);
 
         rd_kafka_assert(NULL, offsets != NULL);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_OffsetCommit, 1,
-                                         100 + (offsets->cnt * 128));
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_OffsetCommit, 1,
+                                                 100 + (offsets->cnt * 128),
+                                                 ApiVersion >= 8);
 
         /* ConsumerGroup */
         rd_kafka_buf_write_str(rkbuf, cgmetadata->group_id, -1);
@@ -1715,61 +1800,23 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
         /* Sort offsets by topic */
         rd_kafka_topic_partition_list_sort_by_topic(offsets);
 
-        /* TopicArrayCnt: Will be updated when we know the number of topics. */
-        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+        /* Write partition list, filtering out partitions with valid
+         * offsets */
+        rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
+            ApiVersion >= 6 ? RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH
+                            : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
+            ApiVersion == 1 ? RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP
+                            : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
 
-        for (i = 0; i < offsets->cnt; i++) {
-                rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
-
-                /* Skip partitions with invalid offset. */
-                if (rktpar->offset < 0)
-                        continue;
-
-                if (last_topic == NULL || strcmp(last_topic, rktpar->topic)) {
-                        /* New topic */
-
-                        /* Finalize previous PartitionCnt */
-                        if (PartCnt > 0)
-                                rd_kafka_buf_update_u32(rkbuf, of_PartCnt,
-                                                        PartCnt);
-
-                        /* TopicName */
-                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
-                        /* PartitionCnt, finalized later */
-                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
-                        PartCnt    = 0;
-                        last_topic = rktpar->topic;
-                        TopicCnt++;
-                }
-
-                /* Partition */
-                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
-                PartCnt++;
-                tot_PartCnt++;
-
-                /* Offset */
-                rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
-
-                /* v6: KIP-101 CommittedLeaderEpoch */
-                if (ApiVersion >= 6)
-                        rd_kafka_buf_write_i32(
-                            rkbuf,
-                            rd_kafka_topic_partition_get_leader_epoch(rktpar));
-
-                /* v1: TimeStamp */
-                if (ApiVersion == 1)
-                        rd_kafka_buf_write_i64(rkbuf, -1);
-
-                /* Metadata */
-                /* Java client 0.9.0 and broker <0.10.0 can't parse
-                 * Null metadata fields, so as a workaround we send an
-                 * empty string if it's Null. */
-                if (!rktpar->metadata)
-                        rd_kafka_buf_write_str(rkbuf, "", 0);
-                else
-                        rd_kafka_buf_write_str(rkbuf, rktpar->metadata,
-                                               rktpar->metadata_size);
-        }
+        tot_PartCnt = rd_kafka_buf_write_topic_partitions(
+            rkbuf, offsets, rd_true /*skip invalid offsets*/,
+            rd_false /*include valid offsets */,
+            rd_false /*don't use topic id*/, rd_true /*use topic name*/,
+            fields);
 
         if (tot_PartCnt == 0) {
                 /* No topic+partitions had valid offsets to commit. */
@@ -1777,13 +1824,6 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_destroy(rkbuf);
                 return 0;
         }
-
-        /* Finalize previous PartitionCnt */
-        if (PartCnt > 0)
-                rd_kafka_buf_update_u32(rkbuf, of_PartCnt, PartCnt);
-
-        /* Finalize TopicCnt */
-        rd_kafka_buf_update_u32(rkbuf, of_TopicCnt, TopicCnt);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1851,7 +1891,8 @@ rd_kafka_OffsetDeleteRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_topic_partitions(
             rkbuf, grpoffsets->partitions,
             rd_false /*dont skip invalid offsets*/, rd_false /*any offset*/,
-            rd_false /* don't use topic_id */, fields);
+            rd_false /*don't use topic id*/, rd_true /*use topic name*/,
+            fields);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1881,7 +1922,8 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
         rd_kafka_buf_write_topic_partitions(
             rkbuf, rkgm->rkgm_assignment,
             rd_false /*don't skip invalid offsets*/, rd_false /* any offset */,
-            rd_false /* don't use topic_id */, fields);
+            rd_false /*don't use topic id*/, rd_true /*use topic name*/,
+            fields);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */
@@ -2183,6 +2225,153 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
 
+void rd_kafka_ConsumerGroupHeartbeatRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    const rd_kafkap_str_t *member_id,
+    int32_t member_epoch,
+    const rd_kafkap_str_t *group_instance_id,
+    const rd_kafkap_str_t *rack_id,
+    int32_t rebalance_timeout_ms,
+    const rd_kafka_topic_partition_list_t *subscribe_topics,
+    const rd_kafkap_str_t *remote_assignor,
+    const rd_kafka_topic_partition_list_t *current_assignments,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        size_t rkbuf_size = 0;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 0, &features);
+
+        if (rd_rkb_is_dbg(rkb, CGRP)) {
+                char current_assignments_str[512] = "NULL";
+                char subscribe_topics_str[512]    = "NULL";
+                const char *member_id_str         = "NULL";
+                const char *group_instance_id_str = "NULL";
+                const char *remote_assignor_str   = "NULL";
+
+                if (current_assignments) {
+                        rd_kafka_topic_partition_list_str(
+                            current_assignments, current_assignments_str,
+                            sizeof(current_assignments_str), 0);
+                }
+                if (subscribe_topics) {
+                        rd_kafka_topic_partition_list_str(
+                            subscribe_topics, subscribe_topics_str,
+                            sizeof(subscribe_topics_str), 0);
+                }
+                if (member_id)
+                        member_id_str = member_id->str;
+                if (group_instance_id)
+                        group_instance_id_str = group_instance_id->str;
+                if (remote_assignor)
+                        remote_assignor_str = remote_assignor->str;
+
+                rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
+                           "ConsumerGroupHeartbeat of member id \"%s\", group "
+                           "id \"%s\", "
+                           "generation id %" PRId32
+                           ", group instance id \"%s\""
+                           ", current assignment \"%s\""
+                           ", subscribe topics \"%s\""
+                           ", remote assignor \"%s\"",
+                           member_id_str, group_id->str, member_epoch,
+                           group_instance_id_str, current_assignments_str,
+                           subscribe_topics_str, remote_assignor_str);
+        }
+
+        size_t next_subscription_size = 0;
+
+        if (subscribe_topics) {
+                next_subscription_size =
+                    ((subscribe_topics->cnt * (4 + 50)) + 4);
+        }
+
+        if (group_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(group_id);
+        if (member_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(member_id);
+        rkbuf_size += 4; /* MemberEpoch */
+        if (group_instance_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(group_instance_id);
+        if (rack_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(rack_id);
+        rkbuf_size += 4; /* RebalanceTimeoutMs */
+        if (next_subscription_size)
+                rkbuf_size += next_subscription_size;
+        if (remote_assignor)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(remote_assignor);
+        if (current_assignments)
+                rkbuf_size += (current_assignments->cnt * (16 + 100));
+        rkbuf_size += 4; /* TopicPartitions */
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1, rkbuf_size, rd_true);
+
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+        rd_kafka_buf_write_i32(rkbuf, member_epoch);
+        rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
+        rd_kafka_buf_write_kstr(rkbuf, rack_id);
+        rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
+
+        if (subscribe_topics) {
+                size_t of_TopicsArrayCnt;
+                int topics_cnt = subscribe_topics->cnt;
+
+                /* write Topics */
+                of_TopicsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicsArrayCnt,
+                                               topics_cnt);
+                while (--topics_cnt >= 0)
+                        rd_kafka_buf_write_str(
+                            rkbuf, subscribe_topics->elems[topics_cnt].topic,
+                            -1);
+
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
+
+        rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
+
+        if (current_assignments) {
+                const rd_kafka_topic_partition_field_t
+                    current_assignments_fields[] = {
+                        RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                        RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                rd_kafka_buf_write_topic_partitions(
+                    rkbuf, current_assignments, rd_false, rd_false,
+                    rd_true /*use topic id*/, rd_false /*don't use topic name*/,
+                    current_assignments_fields);
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        /* FIXME:
+         * 1) Improve this timeout to something less than
+         *    `rkcg_heartbeat_intvl_ms` so that the next heartbeat
+         *    is not skipped.
+         * 2) Remove usage of `group_session_timeout_ms` altogether
+         *    from the new protocol defined in KIP-848.
+         */
+        if (rkb->rkb_rk->rk_cgrp->rkcg_heartbeat_intvl_ms > 0) {
+                rd_kafka_buf_set_abs_timeout(
+                    rkbuf, rkb->rkb_rk->rk_cgrp->rkcg_heartbeat_intvl_ms, 0);
+        } else {
+                rd_kafka_buf_set_abs_timeout(
+                    rkbuf, rkb->rkb_rk->rk_conf.group_session_timeout_ms, 0);
+        }
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+}
+
 
 
 /**
@@ -2408,30 +2597,65 @@ done:
                 rd_kafka_op_destroy(rko);
 }
 
-
 /**
- * @brief Internal implementation of MetadataRequest (does not send).
+ * @brief Internal implementation of MetadataRequest.
  *
- * @param force - rd_true: force a full request (including all topics and
- *                         brokers) even if there is such a request already
- *                         in flight.
- *              - rd_false: check if there are multiple outstanding full
- *                          requests, and don't send one if there is already
- *                          one present. (See note below.)
+ *        - !topics && !topic_ids: only request brokers (if supported by
+ *          broker, else all topics)
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
+ *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
+ *          are requested
+ *        - else: all topics in cluster are requested
  *
- * If full metadata for all topics is requested (or
- * all brokers, which results in all-topics on older brokers) and there is
- * already a full request in transit then this function will return
- * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
- * If \p rko is non-NULL or if \p force is true, the request is sent regardless.
+ * @param topics A list of topic names (char *) to request.
+ * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
+ * @param reason Metadata request reason
+ * @param allow_auto_create_topics Allow broker-side auto topic creation.
+ *                                 This is best-effort, depending on broker
+ *                                 config and version.
+ * @param include_cluster_authorized_operations Request for cluster
+ *                                              authorized operations.
+ * @param include_topic_authorized_operations Request for topic
+ *                                            authorized operations.
+ * @param cgrp_update Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks Force partition to rack mapping computation in
+ *                    parse_Metadata (see comment there).
+ * @param rko         (optional) rko with replyq for handling response.
+ *                    Specifying an rko forces a metadata request even if
+ *                    there is already a matching one in-transit.
+ * @param resp_cb Callback to be used for handling response.
+ * @param replyq replyq on which response is handled.
+ * @param force rd_true: force a full request (including all topics and
+ *                       brokers) even if there is such a request already
+ *                       in flight.
+ *              rd_false: check if there are multiple outstanding full
+ *                        requests, and don't send one if there is already
+ *                        one present. (See note below.)
+ * @param opaque (optional) parameter to be passed to resp_cb.
  *
- * \p include_cluster_authorized_operations should not be set unless this
- * MetadataRequest is for an admin operation. \sa
- * rd_kafka_MetadataRequest_admin().
+ * @return Error code:
+ *         If full metadata for all topics is requested (or
+ *         all brokers, which results in all-topics on older brokers) and
+ *         there is already a full request in transit then this function
+ *         will return  RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS,
+ *         otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
+ *
+ * @remark Either \p topics or \p topic_ids must be set, but not both.
+ * @remark If \p rko is specified, \p resp_cb, \p replyq, \p force, \p opaque
+ *         should be NULL or rd_false.
+ * @remark If \p rko is non-NULL or if \p force is true,
+ *         the request is sent regardless.
+ * @remark \p include_cluster_authorized_operations and
+ *         \p include_topic_authorized_operations should not be set unless this
+ *         MetadataRequest is for an admin operation.
+ *
+ * @sa rd_kafka_MetadataRequest().
+ * @sa rd_kafka_MetadataRequest_resp_cb().
  */
 static rd_kafka_resp_err_t
 rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                           const rd_list_t *topics,
+                          const rd_list_t *topic_ids,
                           const char *reason,
                           rd_bool_t allow_auto_create_topics,
                           rd_bool_t include_cluster_authorized_operations,
@@ -2447,6 +2671,8 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
         size_t of_TopicArrayCnt;
         int features;
+        int topic_id_cnt;
+        int total_topic_cnt;
         int topic_cnt                  = topics ? rd_list_cnt(topics) : 0;
         int *full_incr                 = NULL;
         void *handler_arg              = NULL;
@@ -2463,9 +2689,15 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_Metadata, 0, metadata_max_version, &features);
 
+        topic_id_cnt =
+            (ApiVersion >= 10 && topic_ids) ? rd_list_cnt(topic_ids) : 0;
+        rd_assert(topic_id_cnt == 0 || ApiVersion >= 12);
+
+        total_topic_cnt = topic_cnt + topic_id_cnt;
+
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_Metadata, 1,
-            4 + (66 /* 50 for topic name and 16 for topic id */ * topic_cnt) +
+            4 + ((50 /*topic name */ + 16 /* topic id */) * total_topic_cnt) +
                 1,
             ApiVersion >= 9);
 
@@ -2479,7 +2711,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         /* TopicArrayCnt */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
-        if (!topics) {
+        if (!topics && !topic_ids) {
                 /* v0: keep 0, brokers only not available,
                  * request all topics */
                 /* v1-8: 0 means empty array, brokers only */
@@ -2494,7 +2726,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 full_incr =
                     &rkb->rkb_rk->rk_metadata_cache.rkmc_full_brokers_sent;
 
-        } else if (topic_cnt == 0) {
+        } else if (total_topic_cnt == 0) {
                 /* v0: keep 0, request all topics */
                 if (ApiVersion >= 1 && ApiVersion < 9) {
                         /* v1-8: update to -1, all topics */
@@ -2513,14 +2745,17 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                                          .rkmc_full_topics_sent;
 
         } else {
+                /* Cannot request topics by name and id at the same time */
+                rd_dassert(!(topic_cnt > 0 && topic_id_cnt > 0));
+
                 /* request cnt topics */
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
-                                               topic_cnt);
+                                               total_topic_cnt);
 
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "Request metadata for %d topic(s): "
                            "%s",
-                           topic_cnt, reason);
+                           total_topic_cnt, reason);
         }
 
         if (full_incr) {
@@ -2562,12 +2797,26 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
 
                 RD_LIST_FOREACH(topic, topics, i) {
                         if (ApiVersion >= 10) {
-                                /* FIXME: Not supporting topic id in the request
-                                 * right now. Update this to correct topic
-                                 * id once KIP-516 is fully implemented. */
                                 rd_kafka_buf_write_uuid(rkbuf, &zero_uuid);
                         }
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
+                        /* Tags for previous topic */
+                        rd_kafka_buf_write_tags(rkbuf);
+                }
+        }
+
+        if (ApiVersion >= 10 && topic_id_cnt > 0) {
+                int i;
+                rd_kafka_Uuid_t *topic_id;
+
+                /* Maintain a copy of the topics list so we can purge
+                 * hints from the metadata cache on error. */
+                rkbuf->rkbuf_u.Metadata.topic_ids =
+                    rd_list_copy(topic_ids, rd_list_Uuid_copy, NULL);
+
+                RD_LIST_FOREACH(topic_id, topic_ids, i) {
+                        rd_kafka_buf_write_uuid(rkbuf, topic_id);
+                        rd_kafka_buf_write_str(rkbuf, NULL, -1);
                         /* Tags for previous topic */
                         rd_kafka_buf_write_tags(rkbuf);
                 }
@@ -2641,26 +2890,52 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-
 /**
- * @brief Construct a MetadataRequest which uses an optional rko, and the
- * default handler callback.
- * @sa rd_kafka_MetadataRequest.
+ * @brief Construct and enqueue a MetadataRequest
+ *
+ *        - !topics && !topic_ids: only request brokers (if supported by
+ *          broker, else all topics)
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
+ *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
+ *          are requested
+ *        - else: all topics in cluster are requested
+ *
+ * @param topics A list of topic names (char *) to request.
+ * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
+ * @param reason    - metadata request reason
+ * @param allow_auto_create_topics - allow broker-side auto topic creation.
+ *                                   This is best-effort, depending on broker
+ *                                   config and version.
+ * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks - Force partition to rack mapping computation in
+ *                      parse_Metadata (see comment there).
+ * @param rko       - (optional) rko with replyq for handling response.
+ *                    Specifying an rko forces a metadata request even if
+ *                    there is already a matching one in-transit.
+ *
+ * @return Error code:
+ *         If full metadata for all topics is requested (or
+ *         all brokers, which results in all-topics on older brokers) and
+ *         there is already a full request in transit then this function
+ *         will return  RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS,
+ *         otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
+ *         If \p rko is non-NULL, the request is sent regardless.
+ *
+ * @remark Either \p topics or \p topic_ids must be set, but not both.
  */
-static rd_kafka_resp_err_t
-rd_kafka_MetadataRequest_op(rd_kafka_broker_t *rkb,
-                            const rd_list_t *topics,
-                            const char *reason,
-                            rd_bool_t allow_auto_create_topics,
-                            rd_bool_t include_cluster_authorized_operations,
-                            rd_bool_t include_topic_authorized_operations,
-                            rd_bool_t cgrp_update,
-                            rd_bool_t force_racks,
-                            rd_kafka_op_t *rko) {
+rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
+                                             const rd_list_t *topics,
+                                             rd_list_t *topic_ids,
+                                             const char *reason,
+                                             rd_bool_t allow_auto_create_topics,
+                                             rd_bool_t cgrp_update,
+                                             rd_bool_t force_racks,
+                                             rd_kafka_op_t *rko) {
         return rd_kafka_MetadataRequest0(
-            rkb, topics, reason, allow_auto_create_topics,
-            include_cluster_authorized_operations,
-            include_topic_authorized_operations, cgrp_update, force_racks, rko,
+            rkb, topics, topic_ids, reason, allow_auto_create_topics,
+            rd_false /*don't include cluster authorized operations*/,
+            rd_false /*don't include topic authorized operations*/, cgrp_update,
+            force_racks, rko,
             /* We use the default rd_kafka_handle_Metadata rather than a custom
                resp_cb */
             NULL,
@@ -2673,74 +2948,47 @@ rd_kafka_MetadataRequest_op(rd_kafka_broker_t *rkb,
 }
 
 /**
- * @brief Construct MetadataRequest (does not send)
+ * @brief Construct and enqueue a MetadataRequest which use
+ *        response callback \p resp_cb instead of a rko.
  *
- * \p topics is a list of topic names (char *) to request.
+ *        - !topics && !topic_ids: only request brokers (if supported by
+ *          broker, else all topics)
+ *        - topics.cnt > 0 && topic_ids.cnt > 0: invalid request
+ *        - topics.cnt > 0 || topic_ids.cnt > 0: only specified topics
+ *          are requested
+ *        - else: all topics in cluster are requested
  *
- * !topics          - only request brokers (if supported by broker, else
- *                    all topics)
- *  topics.cnt==0   - all topics in cluster are requested
- *  topics.cnt >0   - only specified topics are requested
+ * @param topics A list of topic names (char *) to request.
+ * @param topic_ids A list of topic ids (rd_kafka_Uuid_t *) to request.
+ * @param reason Metadata request reason
+ * @param allow_auto_create_topics Allow broker-side auto topic creation.
+ *                                 This is best-effort, depending on broker
+ *                                 config and version.
+ * @param include_cluster_authorized_operations Request for cluster
+ *                                              authorized operations.
+ * @param include_topic_authorized_operations Request for topic
+ *                                            authorized operations.
+ * @param cgrp_update Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks Force partition to rack mapping computation in
+ *                    parse_Metadata (see comment there).
+ * @param resp_cb Callback to be used for handling response.
+ * @param replyq replyq on which response is handled.
+ * @param force Force request even if in progress.
+ * @param opaque (optional) parameter to be passed to resp_cb.
  *
- * @param reason    - metadata request reason
- * @param allow_auto_create_topics - allow broker-side auto topic creation.
- *                                   This is best-effort, depending on broker
- *                                   config and version.
- * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
- * @param force_racks - Force partition to rack mapping computation in
- *                      parse_Metadata (see comment there).
- * @param rko       - (optional) rko with replyq for handling response.
- *                    Specifying an rko forces a metadata request even if
- *                    there is already a matching one in-transit.
+ * @return Error code:
+ *         If full metadata for all topics is requested (or
+ *         all brokers, which results in all-topics on older brokers) and
+ *         there is already a full request in transit then this function
+ *         will return  RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS,
+ *         otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
  *
- * If full metadata for all topics is requested (or
- * all brokers, which results in all-topics on older brokers) and there is
- * already a full request in transit then this function will return
- * RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS otherwise RD_KAFKA_RESP_ERR_NO_ERROR.
- * If \p rko is non-NULL, the request is sent regardless.
- */
-rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
-                                             const rd_list_t *topics,
-                                             const char *reason,
-                                             rd_bool_t allow_auto_create_topics,
-                                             rd_bool_t cgrp_update,
-                                             rd_bool_t force_racks,
-                                             rd_kafka_op_t *rko) {
-        return rd_kafka_MetadataRequest_op(
-            rkb, topics, reason, allow_auto_create_topics,
-            /* Cluster and Topic authorized operations are used by admin
-             * operations only. For non-admin operation cases, NEVER set them to
-             * true, since it changes the metadata max version to be 10, until
-             * KIP-700 can be implemented. */
-            rd_false, rd_false, cgrp_update, force_racks, rko);
-}
-
-
-/**
- * @brief Construct MetadataRequest for use with AdminAPI (does not send).
- *
- * \p topics is a list of topic names (char *) to request.
- *
- * !topics          - only request brokers (if supported by broker, else
- *                    all topics)
- *  topics.cnt==0   - all topics in cluster are requested
- *  topics.cnt >0   - only specified topics are requested
- *
- * @param reason    - metadata request reason
- * @param include_cluster_authorized_operations - request for cluster
- *                      authorized operations.
- * @param include_topic_authorized_operations - request for topic authorized
- *                      operations.
- * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
- * @param force_racks - Force partition to rack mapping computation in
- *                      parse_Metadata (see comment there).
- * @param resp_cb - callback to be used for handling response.
- * @param replyq - replyq on which response is handled.
- * @param opaque - (optional) parameter to be passed to resp_cb.
+ *  @remark Either \p topics or \p topic_ids must be set, but not both.
  */
 rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_kafka_broker_t *rkb,
     const rd_list_t *topics,
+    const rd_list_t *topics_ids,
     const char *reason,
     rd_bool_t allow_auto_create_topics,
     rd_bool_t include_cluster_authorized_operations,
@@ -2752,11 +3000,10 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_bool_t force,
     void *opaque) {
         return rd_kafka_MetadataRequest0(
-            rkb, topics, reason, allow_auto_create_topics,
+            rkb, topics, topics_ids, reason, allow_auto_create_topics,
             include_cluster_authorized_operations,
             include_topic_authorized_operations, cgrp_update, force_racks,
-            NULL /* No op - using custom resp_cb. */, resp_cb, replyq,
-            rd_true /* Admin operation metadata requests are always forced. */,
+            NULL /* No op - using custom resp_cb. */, resp_cb, replyq, force,
             opaque);
 }
 
@@ -3079,22 +3326,6 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
 }
 
-typedef struct rd_kafkap_produce_reply_tags_Partition_s {
-        int32_t Partition;
-        rd_kafkap_CurrentLeader_t CurrentLeader;
-} rd_kafkap_produce_reply_tags_Partition_t;
-
-typedef struct rd_kafkap_produce_reply_tags_Topic_s {
-        char *TopicName;
-        int32_t PartitionCnt;
-        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
-} rd_kafkap_produce_reply_tags_Topic_t;
-
-typedef struct rd_kafkap_produce_reply_tags_s {
-        rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        int32_t TopicCnt;
-        rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
-} rd_kafkap_produce_reply_tags_t;
 
 // static rd_kafkap_produce_reply_tags_t *
 // rd_kafka_produce_reply_tags_new(int32_t TopicArrayCnt) {
@@ -3117,7 +3348,7 @@ rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
                                                  void *opaque) {
         rd_kafkap_produce_reply_tags_Partition_t *PartitionTags = opaque;
         switch (tagtype) {
-        case 1:
+        case 0:
                 if (rd_kafka_buf_read_CurrentLeader(
                         rkbuf, &PartitionTags->CurrentLeader) == -1)
                         goto err_parse;
@@ -3146,6 +3377,86 @@ static int rd_kafka_produce_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
 err_parse:
         return -1;
 }
+
+/* TODO: Move to metadata merge */
+
+// void rd_kafka_produce_metadata_handle_tags(
+//    rd_kafka_t *rk,
+//    rd_kafkap_produce_reply_tags_t *produce_tags) {
+//        // find the topic id from cache, then merge metadata
+//        const struct rd_kafka_metadata_cache_entry *rkmce =
+//            rd_kafka_metadata_cache_find(rk,
+//            produce_tags->TopicTags->TopicName,
+//                                         rd_true);
+//        if (!rkmce) {
+//                // Add the topic to the metadata cache
+//                return;
+//        }
+//        rd_kafka_metadata_internal_t *mdi = rk->rk_full_metadata;
+//        int i = 0, j = 0, k = 0, l = 0;
+//        for (i = 0; i < mdi->metadata.topic_cnt; i++) {
+//                if (strcmp(mdi->metadata.topics[i].topic,
+//                           produce_tags->TopicTags->TopicName) == 0) {
+//                        for (j = 0; j < mdi->metadata.topics[i].partition_cnt;
+//                             j++) {
+//                                for (k = 0;
+//                                     k <
+//                                     produce_tags->TopicTags->PartitionCnt;
+//                                     k++) {
+//                                        if (mdi->metadata.topics[i]
+//                                                .partitions[j]
+//                                                .id == produce_tags->TopicTags
+//                                                           ->PartitionTags[k]
+//                                                           .Partition) {
+//                                                mdi->topics[i]
+//                                                    .partitions[j]
+//                                                    .leader_epoch =
+//                                                    produce_tags->TopicTags
+//                                                        ->PartitionTags[k]
+//                                                        .CurrentLeader
+//                                                        .LeaderEpoch;
+//                                                for (l = 0;
+//                                                     l <
+//                                                     produce_tags->NodeEndpoints
+//                                                         .NodeEndpointCnt;
+//                                                     l++) {
+//                                                        if (produce_tags
+//                                                                ->NodeEndpoints
+//                                                                .NodeEndpoints
+//                                                                    [l]
+//                                                                .NodeId ==
+//                                                            produce_tags
+//                                                                ->TopicTags
+//                                                                ->PartitionTags
+//                                                                    [k]
+//                                                                .CurrentLeader
+//                                                                .LeaderId) {
+//                                                                // Add rack to
+//                                                                // partition
+//                                                        }
+//                                                }
+//                                        }
+//                                }
+//                        }
+//                }
+//        }
+//        // TODO: Where to update the port and host?
+//        //        for (i = 0; i < mdi->metadata.broker_cnt; i++) {
+//        //                for (j = 0; j <
+//        //                rk->produce_tags->NodeEndpoints.NodeEndpointCnt;
+//        j++)
+//        //                {
+//        //                        if (mdi->brokers[i].id ==
+//        // rk->produce_tags->NodeEndpoints.NodeEndpoints[j].NodeId)
+//        //                        {
+//        //                                mdi->brokers[i].rack =
+//        // rk->produce_tags->NodeEndpoints.NodeEndpoints[j].Rack;
+//        //                        }
+//        //                }
+//        //        }
+//
+//        // TODO: Update the metadata cache
+//}
 
 
 
@@ -3234,31 +3545,197 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                         result->errstr = RD_KAFKAP_STR_DUP(&ErrorMessage);
         }
 
-        if (request->rkbuf_reqhdr.ApiVersion >= 10) {
+        if (request->rkbuf_reqhdr.ApiVersion >= 10 &&
+            hdr.ErrorCode == RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION) {
                 rd_kafkap_produce_reply_tags_Partition_t PartitionTags = {0};
                 rd_kafkap_produce_reply_tags_Topic_t TopicTags         = {0};
                 rd_kafkap_produce_reply_tags_t ProduceTags             = {0};
+                int i, j;
                 PartitionTags.Partition = hdr.Partition;
-                rd_kafka_produce_reply_handle_partition_read_tag(
-                    rkbuf, 1, 0, &PartitionTags);
+                uint64_t _tagcnt;
+                uint64_t _tag, _taglen;
+                rd_kafka_op_t *rko;
+                rd_kafka_metadata_internal_t *mdi = NULL;
+                rd_kafka_metadata_t *md           = NULL;
+                rd_tmpabuf_t tbuf;
+                size_t rkb_namelen;
+                int32_t Throttle_Time;
 
-                TopicTags.TopicName     = rd_kafkap_str_copy(&topic_name);
+                /* Partition tags count */
+                rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
+                if (_tagcnt < 0)
+                        goto err_parse;
+                for (i = 0; i < _tagcnt; i++) {
+                        /* Partition tags type */
+                        rd_kafka_buf_read_uvarint(rkbuf, &_tag);
+                        /* Partition tags len */
+                        rd_kafka_buf_read_uvarint(rkbuf, &_taglen);
+                        if (rd_kafka_produce_reply_handle_partition_read_tag(
+                                rkbuf, _tag, _taglen, &PartitionTags) == -1)
+                                goto err_parse;
+                }
+
+                /* Topic tags */
+                rd_kafka_buf_skip_tags(rkbuf);
+
+                TopicTags.TopicName =
+                    rd_strndup(topic_name.str, topic_name.len);
                 TopicTags.PartitionCnt  = 1;
                 TopicTags.PartitionTags = &PartitionTags;
                 ProduceTags.TopicCnt    = 1;
                 ProduceTags.TopicTags   = &TopicTags;
-                rd_kafka_produce_reply_handle_read_tag(rkbuf, 0, 0,
-                                                       &ProduceTags);
 
-        } else {
+                /* Throttle_Time */
+                rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
+                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
+                                          Throttle_Time);
+
+                /* Produce Response tags count */
+                rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
+                if (_tagcnt < 0)
+                        goto err_parse;
+
+                for (i = 0; i < _tagcnt; i++) {
+                        /* Produce Response tags type */
+                        rd_kafka_buf_read_uvarint(rkbuf, &_tag);
+                        /* Produce Response tags len */
+                        rd_kafka_buf_read_uvarint(rkbuf, &_taglen);
+
+                        if (rd_kafka_produce_reply_handle_read_tag(
+                                rkbuf, _tag, _taglen, &ProduceTags) == -1)
+                                goto err_parse;
+                }
+
+                rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_951);
+
+                rd_kafka_broker_lock(rkb);
+                rkb_namelen = strlen(rkb->rkb_name) + 1;
+
+                rd_tmpabuf_new(&tbuf, 0, rd_false /*dont assert on fail*/);
+                rd_tmpabuf_add_alloc(&tbuf, sizeof(*mdi));
+                rd_tmpabuf_add_alloc(&tbuf, rkb_namelen);
+
+                rd_tmpabuf_add_alloc(&tbuf, rkbuf->rkbuf_totlen * 5);
+                rd_tmpabuf_finalize(&tbuf);
+
+                if (!(mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi))))
+                        goto err_parse;
+
+                md                 = &mdi->metadata;
+                md->orig_broker_id = rkb->rkb_nodeid;
+                md->orig_broker_name =
+                    rd_tmpabuf_write(&tbuf, rkb->rkb_name, rkb_namelen);
+                rd_kafka_broker_unlock(rkb);
+
+                md->broker_cnt = ProduceTags.NodeEndpoints.NodeEndpointCnt;
+
+                if (!(md->brokers = rd_tmpabuf_alloc(
+                          &tbuf, md->broker_cnt * sizeof(*md->brokers))))
+                        goto err_parse;
+
+                if (!(mdi->brokers = rd_tmpabuf_alloc(
+                          &tbuf, md->broker_cnt * sizeof(*mdi->brokers))))
+                        goto err_parse;
+
+                if (!(mdi->brokers_sorted = rd_tmpabuf_alloc(
+                          &tbuf,
+                          md->broker_cnt * sizeof(*mdi->brokers_sorted))))
+                        goto err_parse;
+
+                for (i = 0; i < ProduceTags.NodeEndpoints.NodeEndpointCnt;
+                     i++) {
+                        md->brokers[i].id =
+                            ProduceTags.NodeEndpoints.NodeEndpoints[i].NodeId;
+                        md->brokers[i].host = rd_strndup(
+                            ProduceTags.NodeEndpoints.NodeEndpoints[i].Host.str,
+                            ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                                .Host.len);
+                        md->brokers[i].port =
+                            ProduceTags.NodeEndpoints.NodeEndpoints[i].Port;
+
+                        if (ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                                .Rack.len >= 0)
+                                mdi->brokers[i].rack_id = rd_strndup(
+                                    ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                                        .Rack.str,
+                                    ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                                        .Rack.len);
+                        mdi->brokers[i].id =
+                            ProduceTags.NodeEndpoints.NodeEndpoints[i].NodeId;
+                }
+                qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[0]),
+                      rd_kafka_metadata_broker_internal_cmp);
+                memcpy(mdi->brokers_sorted, md->brokers,
+                       sizeof(*mdi->brokers_sorted) * md->broker_cnt);
+                qsort(mdi->brokers_sorted, md->broker_cnt,
+                      sizeof(*mdi->brokers_sorted),
+                      rd_kafka_metadata_broker_cmp);
+
+                md->topic_cnt = ProduceTags.TopicCnt;
+                if (!(md->topics = rd_tmpabuf_alloc(
+                          &tbuf, md->topic_cnt * sizeof(*md->topics))))
+                        goto err_parse;
+                if (!(mdi->topics = rd_tmpabuf_alloc(
+                          &tbuf, md->topic_cnt * sizeof(*mdi->topics))))
+                        goto err_parse;
+
+
+                for (i = 0; i < md->topic_cnt; i++) {
+                        md->topics[i].topic = rd_strndup(
+                            ProduceTags.TopicTags[i].TopicName,
+                            strlen(ProduceTags.TopicTags[i].TopicName));
+                        md->topics[i].partition_cnt =
+                            ProduceTags.TopicTags[i].PartitionCnt;
+                        if (!(md->topics[i].partitions = rd_tmpabuf_alloc(
+                                  &tbuf,
+                                  md->topics[i].partition_cnt *
+                                      sizeof(*md->topics[i].partitions))))
+                                goto err_parse;
+                        if (!(mdi->topics[i].partitions = rd_tmpabuf_alloc(
+                                  &tbuf,
+                                  md->topics[i].partition_cnt *
+                                      sizeof(*mdi->topics[i].partitions))))
+                                goto err_parse;
+
+                        for (j = 0; j < md->topics[i].partition_cnt; j++) {
+                                md->topics[i].partitions[j].id =
+                                    ProduceTags.TopicTags[i]
+                                        .PartitionTags[j]
+                                        .Partition;
+                                md->topics[i].partitions[j].leader =
+                                    ProduceTags.TopicTags[i]
+                                        .PartitionTags[j]
+                                        .CurrentLeader.LeaderId;
+                                mdi->topics[i].partitions[j].id =
+                                    ProduceTags.TopicTags[i]
+                                        .PartitionTags[j]
+                                        .Partition;
+                                mdi->topics[i].partitions[j].leader_epoch =
+                                    ProduceTags.TopicTags[i]
+                                        .PartitionTags[j]
+                                        .CurrentLeader.LeaderEpoch;
+                        }
+                }
+
+
+                rko->rko_u.metadata.mdi = mdi;
+                rd_kafka_q_enq(rkb->rkb_rk->rk_ops, rko);
+
+        } else if (request->rkbuf_reqhdr.ApiVersion >= 9) {
                 /* Partition tags */
                 rd_kafka_buf_skip_tags(rkbuf);
-
                 /* Topic tags */
                 rd_kafka_buf_skip_tags(rkbuf);
-        }
 
-        if (request->rkbuf_reqhdr.ApiVersion >= 1) {
+                int32_t Throttle_Time;
+                rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
+
+                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
+                                          Throttle_Time);
+
+                /* Produce Response tags */
+                rd_kafka_buf_skip_tags(rkbuf);
+        } else {
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
@@ -4085,6 +4562,17 @@ rd_kafka_handle_idempotent_Produce_success(rd_kafka_broker_t *rkb,
                     rk, RD_KAFKA_RESP_ERR__INCONSISTENT, "%s", fatal_err);
 }
 
+/**
+ * @brief Set \p batch error codes, corresponding to the indices that caused
+ *        the error in 'presult->record_errors', to INVALID_RECORD and
+ *        the rest to _INVALID_DIFFERENT_RECORD.
+ *
+ * @param presult Produce result structure
+ * @param batch Batch of messages
+ *
+ * @locks none
+ * @locality broker thread (but not necessarily the leader broker thread)
+ */
 static void rd_kafka_msgbatch_handle_Produce_result_record_errors(
     const rd_kafka_Produce_result_t *presult,
     rd_kafka_msgbatch_t *batch) {
@@ -4209,7 +4697,7 @@ static void rd_kafka_msgbatch_handle_Produce_result(
                                            presult->offset, presult->timestamp,
                                            status);
 
-                /* TODO: write */
+                /* Change error codes if necessary */
                 rd_kafka_msgbatch_handle_Produce_result_record_errors(presult,
                                                                       batch);
                 /* Enqueue messages for delivery report. */
@@ -4614,7 +5102,8 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
             rkbuf, partitions, rd_false /*don't skip invalid offsets*/,
-            rd_false /*any offset*/, rd_false /* don't use topic_id */, fields);
+            rd_false /*any offset*/, rd_false /*don't use topic id*/,
+            rd_true /*use topic name*/, fields);
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

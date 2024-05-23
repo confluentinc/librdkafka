@@ -273,6 +273,24 @@ struct rd_kafka_admin_fanout_worker_cbs;
 #define RD_KAFKA_OP_TYPE_ASSERT(rko, type)                                     \
         rd_assert(((rko)->rko_type & ~RD_KAFKA_OP_FLAGMASK) == (type))
 
+
+typedef struct rd_kafkap_produce_reply_tags_Partition_s {
+        int32_t Partition;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafkap_produce_reply_tags_Partition_t;
+
+typedef struct rd_kafkap_produce_reply_tags_Topic_s {
+        char *TopicName;
+        int32_t PartitionCnt;
+        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
+} rd_kafkap_produce_reply_tags_Topic_t;
+
+typedef struct rd_kafkap_produce_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        int32_t TopicCnt;
+        rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
+} rd_kafkap_produce_reply_tags_t;
+
 struct rd_kafka_op_s {
         TAILQ_ENTRY(rd_kafka_op_s) rko_link;
 
@@ -566,6 +584,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
+                               RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
@@ -581,7 +600,9 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_FOLLOWER
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    BROKER_SET_RACK
-                                                  *    COORD_SET (key_type) */
+                                                  *    COORD_SET (key_type)
+                                                  *    PART_PUSH_LEADER_RESPONSE
+                                                  */
                         char *str;               /**< For:
                                                   *    COORD_SET (key) */
                         int32_t partition;       /**< For:
@@ -589,6 +610,7 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    PART_SET_LEADER
                                                   *    APIVERSION_SET (ApiKey)
+                                                  *    PART_PUSH_LEADER_RESPONSE
                                                   */
                         int32_t broker_id;       /**< For:
                                                   *    PART_SET_FOLLOWER
@@ -607,6 +629,12 @@ struct rd_kafka_op_s {
                                                   *    TOPIC_CREATE (repl fact)
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    APIVERSION_SET (maxver)
+                                                  */
+                        int32_t leader_id;       /**< Leader id, for:
+                                                  *   PART_PUSH_LEADER_RESPONSE
+                                                  */
+                        int32_t leader_epoch;    /**< Leader epoch, for:
+                                                  *   PART_PUSH_LEADER_RESPONSE
                                                   */
                 } mock;
 

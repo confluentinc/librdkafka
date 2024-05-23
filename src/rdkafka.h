@@ -167,7 +167,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION 0x020300ff
+#define RD_KAFKA_VERSION 0x020400ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -638,6 +638,12 @@ typedef enum {
         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID = 100,
         /** The member epoch is fenced by the group coordinator */
         RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
+        /** The instance ID is still used by another member in the
+         *  consumer group */
+        RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID = 111,
+        /** The assignor or its version range is not supported by the consumer
+         *  group */
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR = 112,
         /** The member epoch is stale */
         RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH = 113,
         RD_KAFKA_RESP_ERR_END_ALL,
@@ -4420,6 +4426,21 @@ RD_EXPORT int rd_kafka_assignment_lost(rd_kafka_t *rk);
  *          or successfully scheduled if asynchronous, or failed.
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
  *          a fatal error.
+ *
+ *          FIXME: Update below documentation.
+ *
+ *          RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH is returned, when
+ *          using `group.protocol=consumer`, if the commit failed because the
+ *          member has switched to a new member epoch.
+ *          This error code can be retried.
+ *          Partition level error is also set in the \p offsets.
+ *
+ *          RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID is returned, when
+ *          using `group.protocol=consumer`, if the member has been
+ *          removed from the consumer group
+ *          This error code is permanent, uncommitted messages will be
+ *          reprocessed by this or a different member and committed there.
+ *          Partition level error is also set in the \p offsets.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit(rd_kafka_t *rk,

@@ -2387,7 +2387,6 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
-        rd_kafka_resp_err_t err;
         rd_kafka_Uuid_t ClientInstanceId;
         int32_t SubscriptionId;
         rd_bool_t terminating;

@@ -462,7 +462,8 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         // RD_UT_ASSERT(strcmp(unit_test_data.metric_unit, "1") == 0,
         //              "Metric unit mismatch");
         if (is_double)
-                RD_UT_ASSERT(unit_test_data.metric_value_double == 1.0,
+                RD_UT_ASSERT((unit_test_data.metric_value_double - 1.0) <
+                                 0.0001,
                              "Metric value mismatch");
         else
                 RD_UT_ASSERT(unit_test_data.metric_value_int == 1,

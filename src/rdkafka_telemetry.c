@@ -231,7 +231,6 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
             rd_jitter(100 - RD_KAFKA_TELEMETRY_PUSH_JITTER,
                       100 + RD_KAFKA_TELEMETRY_PUSH_JITTER) /
             100.0;
-        rd_kafka_broker_t *rkb;
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_dbg(rk, TELEMETRY, "GETERR",
@@ -374,7 +373,8 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
                                          void **compressed_payload,
                                          size_t *compressed_payload_size) {
         rd_kafka_compression_t compression_used = RD_KAFKA_COMPRESSION_NONE;
-        int i, r = -1;
+        size_t i;
+        int r = -1;
 
         for (i = 0; i < rk->rk_telemetry.accepted_compression_types_cnt; i++) {
                 rd_kafka_compression_t compression_type =
@@ -465,7 +465,8 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                 compressed_metrics_payload_size = metrics_payload_size;
         }
 
-        if (metrics_payload_size > rk->rk_telemetry.telemetry_max_bytes) {
+        if (metrics_payload_size >
+            (size_t)rk->rk_telemetry.telemetry_max_bytes) {
                 rd_kafka_log(rk, LOG_WARNING, "TELEMETRY",
                              "Metrics payload size %" PRIdsz
                              " exceeds telemetry_max_bytes %" PRId32

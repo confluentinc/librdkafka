@@ -115,6 +115,17 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        /* Set bootstrap broker(s) as a comma-separated list of
+         * host or host:port (default port 9092).
+         * librdkafka will use the bootstrap brokers to acquire the full
+         * set of brokers from the cluster. */
+        if (rd_kafka_conf_set(conf, "group.protocol", "consumer", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return 1;
+        }
+
         /* Set the consumer group id.
          * All consumers sharing the same group id will join the same
          * group, and the subscribed topic' partitions will be assigned

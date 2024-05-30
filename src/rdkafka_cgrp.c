@@ -445,8 +445,11 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
-        rkcg->rkcg_group_remote_assignor =
-            rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
+
+        if(rkcg->rkcg_group_remote_assignor)
+                rkcg->rkcg_group_remote_assignor =
+                    rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
+
         if (!RD_KAFKAP_STR_LEN(rkcg->rkcg_rk->rk_conf.client_rack))
                 rkcg->rkcg_client_rack = rd_kafkap_str_new(NULL, -1);
         else

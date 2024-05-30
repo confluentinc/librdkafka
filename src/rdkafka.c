@@ -2389,6 +2389,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
          * 
          * * Raise a warning with Range protocol? Check java client
          * 
+         * * Check logs related to cooperative protocol
+         *      %4|1717096358.410|ASSIGN|0147_consumer_group_consumer_mock#consumer-26| [thrd:main]: Group "rdkafkatest_do_test_consumer_group_heartbeat_retriable_error": application *assign() call failed: Changes to the current assignment must be made using incremental_assign() or incremental_unassign() when rebalance protocol type is COOPERATIVE
+         * 
         */
         if (rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 rk->rk_conf.partition_assignors_cooperative = rd_true;

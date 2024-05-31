@@ -124,6 +124,24 @@ typedef struct rd_kafkap_produce_reply_tags_s {
         rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
 } rd_kafkap_produce_reply_tags_t;
 
+typedef struct rd_kafkap_fetch_reply_PartitionTags_s {
+        int32_t PartitionId;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafkap_fetch_reply_PartitionTags_t;
+
+typedef struct rd_kafkap_fetch_reply_TopicTags_s {
+        int32_t PartitionCnt;
+        char *TopicName;
+        rd_kafka_Uuid_t TopicId;
+        rd_kafkap_fetch_reply_PartitionTags_t *PartitionTags;
+} rd_kafkap_fetch_reply_TopicTags_t;
+
+typedef struct rd_kafkap_fetch_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        int32_t TopicCnt;
+        rd_kafkap_fetch_reply_TopicTags_t *TopicTags;
+} rd_kafkap_fetch_reply_tags_t;
+
 /**@}*/
 
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(

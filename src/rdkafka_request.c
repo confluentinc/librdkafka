@@ -510,6 +510,7 @@ int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
         const int log_decode_errors = LOG_ERR;
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderId);
         rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderEpoch);
+        //TODO: Remove
         fprintf(stderr, "asdasd read tags LeaderId: %d LeaderEpoch: %d\n",
                 CurrentLeader->LeaderId, CurrentLeader->LeaderEpoch);
         rd_kafka_buf_skip_tags(rkbuf);
@@ -533,6 +534,7 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
         rd_dassert(!NodeEndpoints->NodeEndpoints);
+        //TODO: Remove
         fprintf(stderr, "asdasd read tags NodeEndpointCnt: %d\n",
                 NodeEndpoints->NodeEndpointCnt);
         NodeEndpoints->NodeEndpoints =
@@ -548,6 +550,7 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Port);
                 rd_kafka_buf_read_str(rkbuf,
                                       &NodeEndpoints->NodeEndpoints[i].Rack);
+                //TODO: Remove
                 fprintf(stderr,
                         "asdasd read tags NodeId: %d Host: %s Port: %d "
                         "RackLen: %d\n",
@@ -3338,21 +3341,6 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         else /* in broker thread */
                 rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
 }
-
-
-// static rd_kafkap_produce_reply_tags_t *
-// rd_kafka_produce_reply_tags_new(int32_t TopicArrayCnt) {
-//        return rd_calloc(1, sizeof(rd_kafkap_produce_reply_tags_t));
-//}
-
-// void rd_kafka_produce_reply_tags_set_TopicCnt(
-//    rd_kafkap_produce_reply_tags_t *reply_tags,
-//    int32_t TopicCnt) {
-//        reply_tags->TopicCnt = TopicCnt;
-//        reply_tags->Topics   = rd_calloc(TopicCnt,
-//        sizeof(*reply_tags->Topics));
-//}
-
 
 static int
 rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,

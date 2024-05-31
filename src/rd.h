@@ -237,7 +237,8 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 
 #define RD_STRINGIFY(X) #X
 
-
+#define RD_CALLBACK(cb, name, ...) \
+        (cb->name(cb->opaque, __VA_ARGS__))
 
 #define RD_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define RD_MAX(a, b) ((a) > (b) ? (a) : (b))

@@ -235,6 +235,7 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
 }
 
 typedef enum {
+        /* TODO: add documentation */
         RD_KAFKA_TELEMETRY_AWAIT_BROKER,
         RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED,
         RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,

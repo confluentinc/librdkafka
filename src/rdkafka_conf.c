@@ -1493,7 +1493,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      0, 1, 1},
 
 
-
     /*
      * Topic properties
      */

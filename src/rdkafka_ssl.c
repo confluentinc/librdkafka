@@ -476,7 +476,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
-                if (!X509_VERIFY_PARAM_set1_host(param, name, 0))
+                if (!X509_VERIFY_PARAM_set1_host(param, name,
+                                                 strnlen(name, sizeof(name))))
                         goto fail;
         }
 #else

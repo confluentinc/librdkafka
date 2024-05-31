@@ -219,7 +219,8 @@ rd_kafka_metadata_new_topic_with_partition_replicas_mock(int replication_factor,
  */
 
 struct rd_kafka_metadata_cache_entry {
-        rd_avl_node_t rkmce_avlnode;                           /* rkmc_avl */
+        rd_avl_node_t rkmce_avlnode;       /* rkmc_avl */
+        rd_avl_node_t rkmce_avlnode_by_id; /* rkmc_avl_by_id */
         TAILQ_ENTRY(rd_kafka_metadata_cache_entry) rkmce_link; /* rkmc_expiry */
         rd_ts_t rkmce_ts_expires;                              /* Expire time */
         rd_ts_t rkmce_ts_insert;                               /* Insert time */
@@ -243,6 +244,7 @@ struct rd_kafka_metadata_cache_entry {
 
 struct rd_kafka_metadata_cache {
         rd_avl_t rkmc_avl;
+        rd_avl_t rkmc_avl_by_id;
         TAILQ_HEAD(, rd_kafka_metadata_cache_entry) rkmc_expiry;
         rd_kafka_timer_t rkmc_expiry_tmr;
         int rkmc_cnt;
@@ -269,21 +271,30 @@ struct rd_kafka_metadata_cache {
 
 
 int rd_kafka_metadata_cache_delete_by_name(rd_kafka_t *rk, const char *topic);
+int rd_kafka_metadata_cache_delete_by_topic_id(rd_kafka_t *rk,
+                                               const rd_kafka_Uuid_t topic_id);
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
-int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
-void rd_kafka_metadata_cache_topic_update(
+int rd_kafka_metadata_cache_purge_all_hints(rd_kafka_t *rk);
+int rd_kafka_metadata_cache_topic_update(
     rd_kafka_t *rk,
     const rd_kafka_metadata_topic_t *mdt,
     const rd_kafka_metadata_topic_internal_t *mdit,
     rd_bool_t propagate,
     rd_bool_t include_metadata,
     rd_kafka_metadata_broker_internal_t *brokers,
-    size_t broker_cnt);
+    size_t broker_cnt,
+    rd_bool_t only_existing);
 void rd_kafka_metadata_cache_propagate_changes(rd_kafka_t *rk);
 struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_find(rd_kafka_t *rk, const char *topic, int valid);
+struct rd_kafka_metadata_cache_entry *
+rd_kafka_metadata_cache_find_by_id(rd_kafka_t *rk,
+                                   const rd_kafka_Uuid_t topic_id,
+                                   int valid);
 void rd_kafka_metadata_cache_purge_hints(rd_kafka_t *rk,
                                          const rd_list_t *topics);
+void rd_kafka_metadata_cache_purge_hints_by_id(rd_kafka_t *rk,
+                                               const rd_list_t *topic_ids);
 int rd_kafka_metadata_cache_hint(rd_kafka_t *rk,
                                  const rd_list_t *topics,
                                  rd_list_t *dst,

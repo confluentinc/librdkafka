@@ -342,24 +342,6 @@ static void rd_kafka_fetch_reply_handle_partition_error(
         rd_kafka_toppar_fetch_backoff(rkb, rktp, err);
 }
 
-typedef struct rd_kafkap_fetch_reply_PartitionTags_s {
-        int32_t PartitionId;
-        rd_kafkap_CurrentLeader_t CurrentLeader;
-} rd_kafkap_fetch_reply_PartitionTags_t;
-
-typedef struct rd_kafkap_fetch_reply_TopicTags_s {
-        int32_t PartitionCnt;
-        char *TopicName;
-        rd_kafka_Uuid_t TopicId;
-        rd_kafkap_fetch_reply_PartitionTags_t *PartitionTags;
-} rd_kafkap_fetch_reply_TopicTags_t;
-
-typedef struct rd_kafkap_fetch_reply_tags_s {
-        rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        int32_t TopicCnt;
-        rd_kafkap_fetch_reply_TopicTags_t *TopicTags;
-} rd_kafkap_fetch_reply_tags_t;
-
 static int rd_kafka_fetch_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
                                                           uint64_t tagtype,
                                                           uint64_t taglen,
@@ -373,7 +355,6 @@ static int rd_kafka_fetch_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
                         goto err_parse;
                 return 1;
         default:
-                // TODO: Create enum for tags
                 rd_kafka_buf_skip(rkbuf, taglen);
                 return 0;
         }
@@ -407,7 +388,7 @@ static void enqueue_new_metadata_op(rd_kafka_broker_t *rkb,
         rd_kafka_metadata_t *md           = NULL;
         rd_tmpabuf_t tbuf;
         size_t rkb_namelen;
-        uint32_t i, j;
+        int i, j;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_951);
 
@@ -545,7 +526,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
         int64_t end_offset;
         uint64_t _tagcnt;
         uint64_t _tag, _taglen;
-        uint32_t i, j;
+        int i;
 
         rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
         rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
@@ -733,11 +714,12 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
                     (hdr.ErrorCode ==
                          RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION ||
                      hdr.ErrorCode == RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH)) {
+                        // TODO: Remove
                         fprintf(stderr,
                                 "asdasd in fetch partition reading tags\n");
                         *leader_tags_present = rd_true;
                         rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
-                        for (i = 0; i < _tagcnt; i++) {
+                        for (i = 0; i < (int)_tagcnt; i++) {
                                 rd_kafka_buf_read_uvarint(rkbuf, &_tag);
                                 rd_kafka_buf_read_uvarint(rkbuf, &_taglen);
                                 if (rd_kafka_fetch_reply_handle_partition_read_tag(
@@ -892,7 +874,7 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
         /* Top level tags */
         if (leader_tags_present) {
                 rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
-                for (i = 0; i < _tagcnt; i++) {
+                for (i = 0; i < (int)_tagcnt; i++) {
                         rd_kafka_buf_read_uvarint(rkbuf, &_tag);
                         rd_kafka_buf_read_uvarint(rkbuf, &_taglen);
                         if (rd_kafka_fetch_reply_handle_read_tag(

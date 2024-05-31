@@ -176,19 +176,17 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
 
                         /* Partition tags */
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 10 &&
-                            err ==
-                                RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION) {
+                            err == RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION) {
                                 /* Tag type */
                                 rd_kafka_buf_write_uvarint(resp, 0);
                                 /* Tag len = 4 (leader_id) + 4
-                                         * (leader_epoch) + 1 (tags) */
+                                 * (leader_epoch) + 1 (tags) */
                                 rd_kafka_buf_write_uvarint(resp, 9);
                                 /* Leader id */
-                                rd_kafka_buf_write_i32(
-                                    resp, mpart->leader->id);
+                                rd_kafka_buf_write_i32(resp, mpart->leader->id);
                                 /* Leader epoch */
-                                rd_kafka_buf_write_i32(
-                                    resp, mpart->leader_epoch);
+                                rd_kafka_buf_write_i32(resp,
+                                                       mpart->leader_epoch);
                                 /* Remaining tags */
                                 rd_kafka_buf_write_tags_empty(resp);
                         }

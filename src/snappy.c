@@ -1534,42 +1534,6 @@ int rd_kafka_snappy_compress_iov(struct snappy_env *env,
 }
 EXPORT_SYMBOL(rd_kafka_snappy_compress_iov);
 
-/**
- * rd_kafka_snappy_compress - Compress a buffer using the snappy compressor.
- * @env: Preallocated environment
- * @input: Input buffer
- * @input_length: Length of input_buffer
- * @compressed: Output buffer for compressed data
- * @compressed_length: The real length of the output written here.
- *
- * Return 0 on success, otherwise an negative error code.
- *
- * The output buffer must be at least
- * rd_kafka_snappy_max_compressed_length(input_length) bytes long.
- *
- * Requires a preallocated environment from rd_kafka_snappy_init_env.
- * The environment does not keep state over individual calls
- * of this function, just preallocates the memory.
- */
-int rd_kafka_snappy_compress(struct snappy_env *env,
-		    const char *input,
-		    size_t input_length,
-		    char *compressed, size_t *compressed_length)
-{
-	struct iovec iov_in = {
-		.iov_base = (char *)input,
-		.iov_len = input_length,
-	};
-	struct iovec iov_out = {
-		.iov_base = compressed,
-		.iov_len = 0xffffffff,
-	};
-        return rd_kafka_snappy_compress_iov(env,
-                                            &iov_in, 1, input_length,
-                                            &iov_out);
-}
-EXPORT_SYMBOL(rd_kafka_snappy_compress);
-
 int rd_kafka_snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
 			   size_t input_len, char *uncompressed)
 {

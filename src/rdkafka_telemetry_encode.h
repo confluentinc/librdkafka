@@ -192,6 +192,6 @@ static const rd_kafka_telemetry_metric_info_t
                  .type   = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };
 
-void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size);
+rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H */

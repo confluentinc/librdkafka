@@ -2854,6 +2854,7 @@ static void rd_kafka_mock_request_free(void *element) {
 void rd_kafka_mock_start_request_tracking(rd_kafka_mock_cluster_t *mcluster) {
         mtx_lock(&mcluster->lock);
         mcluster->track_requests = rd_true;
+        rd_list_clear(&mcluster->request_list);
         rd_list_init(&mcluster->request_list, 32, rd_kafka_mock_request_free);
         mtx_unlock(&mcluster->lock);
 }

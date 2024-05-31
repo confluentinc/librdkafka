@@ -629,9 +629,9 @@ static void serialize_metric_data(
  * returns the serialized data. Currently only supports encoding of connection
  * creation total by default
  */
-void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
+rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         size_t message_size;
-        uint8_t *buffer;
+        void *buffer;
         pb_ostream_t stream;
         bool status;
         char **metric_names;
@@ -640,6 +640,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
             rk->rk_telemetry.matched_metrics_cnt;
         size_t total_metrics_count = metrics_to_encode_count;
         size_t i, metric_idx = 0;
+        rd_buf_t *rbuf;
 
         for (i = 0; i < metrics_to_encode_count; i++) {
                 if (is_per_broker_metric(rk, (int)i)) {
@@ -816,7 +817,10 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
                 return NULL;
         }
 
-        buffer = rd_malloc(message_size);
+        rbuf = rd_buf_new(1, message_size);
+        rd_buf_write_ensure(rbuf, message_size, message_size);
+        message_size = rd_buf_get_writable(rbuf, &buffer);
+
         stream = pb_ostream_from_buffer(buffer, message_size);
         status = pb_encode(&stream,
                            opentelemetry_proto_metrics_v1_MetricsData_fields,
@@ -825,7 +829,7 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         if (!status) {
                 rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Encoding failed: %s",
                              PB_GET_ERROR(&stream));
-                rd_free(buffer);
+                rd_buf_destroy_free(rbuf);
                 free_metrics(metrics, metric_names, data_points,
                              datapoint_attributes_key_values,
                              total_metrics_count);
@@ -845,9 +849,9 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                      "Push Telemetry metrics encoded, size: %ld",
                      stream.bytes_written);
-        *size = message_size;
+        rd_buf_write(rbuf, NULL, stream.bytes_written);
 
         reset_historical_metrics(rk);
 
-        return (void *)buffer;
+        return rbuf;
 }

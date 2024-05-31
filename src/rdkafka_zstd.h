@@ -59,10 +59,10 @@ rd_kafka_resp_err_t rd_kafka_zstd_compress(rd_kafka_broker_t *rkb,
  * payload.
  * @returns allocated buffer in \p *outbuf, length in \p *outlenp.
  */
-rd_kafka_resp_err_t rd_kafka_zstd_compress_direct(rd_kafka_broker_t *rkb,
-                                                  int comp_level,
-                                                  void *payload,
-                                                  size_t payload_len,
-                                                  void **outbuf,
-                                                  size_t *outlenp);
+rd_kafka_resp_err_t rd_kafka_zstd_compress_payload(rd_kafka_broker_t *rkb,
+                                                   int comp_level,
+                                                   void *payload,
+                                                   size_t payload_len,
+                                                   void **outbuf,
+                                                   size_t *outlenp);
 #endif /* _RDZSTD_H_ */

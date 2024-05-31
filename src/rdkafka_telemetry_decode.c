@@ -469,17 +469,15 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         rkb->rkb_c_historic.ts_last = rd_uclock() * 1000;
         TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
 
-        size_t metrics_payload_size = 0;
         clear_unit_test_data();
 
-        void *metrics_payload =
-            rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
-        RD_UT_SAY("metrics_payload_size: %zu", metrics_payload_size);
+        rd_buf_t *metrics_payload = rd_kafka_telemetry_encode_metrics(rk);
+        RD_UT_SAY("metrics_payload_size: %zu", metrics_payload->rbuf_len);
 
-        RD_UT_ASSERT(metrics_payload_size != 0, "Metrics payload zero");
+        RD_UT_ASSERT(metrics_payload->rbuf_len != 0, "Metrics payload zero");
 
         bool decode_status = rd_kafka_telemetry_decode_metrics(
-            &cbs, metrics_payload, metrics_payload_size);
+            &cbs, metrics_payload->rbuf_wpos->seg_p, metrics_payload->rbuf_len);
 
         RD_UT_ASSERT(decode_status == 1, "Decoding failed");
         RD_UT_ASSERT(unit_test_data.type == expected_type,
@@ -499,7 +497,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         RD_UT_ASSERT(unit_test_data.metric_time != 0, "Metric time mismatch");
 
         rd_free(rk->rk_telemetry.matched_metrics);
-        rd_free(metrics_payload);
+        rd_buf_destroy_free(metrics_payload);
         rd_free(rkb);
         rd_free(rk);
         RD_UT_PASS();

@@ -172,6 +172,82 @@ void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata) {
         rd_free((void *)metadata);
 }
 
+rd_kafka_metadata_internal_t* foo(rd_kafka_fetch_reply_tags_t* fetch_reply_tags){
+        int i, j;
+        rd_kafka_metadata_internal_t *mdi = NULL;
+        rd_kafka_metadata_t *md           = NULL;
+        rd_tmpabuf_t tbuf;
+        rd_tmpabuf_new(&tbuf, 0, rd_false /*dont assert on fail*/);
+        rd_tmpabuf_add_alloc(&tbuf, sizeof(*mdi));
+        rd_tmpabuf_finalize(&tbuf);
+        mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi));
+        md  = &mdi->metadata;
+
+        mdi->brokers = rd_tmpabuf_alloc(&tbuf, fetch_reply_tags->NodeEndpoints->NodeEndpointCnt *
+                        sizeof(*mdi->brokers));
+        mdi->brokers_sorted = rd_tmpabuf_alloc(&tbuf, fetch_reply_tags->NodeEndpoints->NodeEndpointCnt *
+                        sizeof(*mdi->brokers_sorted));
+        md->broker_cnt = fetch_reply_tags->NodeEndpoints->NodeEndpointCnt;
+
+        for (i = 0; i < fetch_reply_tags->NodeEndpoints->NodeEndpointCnt; i++) {
+                md->brokers[i].id =
+                        fetch_reply_tags->NodeEndpoints->NodeEndpoints[i].NodeId;
+                md->brokers[i].host = rd_strndup(
+                        fetch_reply_tags->NodeEndpoints->NodeEndpoints[i].Host.str,
+                        fetch_reply_tags->NodeEndpoints->NodeEndpoints[i]
+                        .Host.len);
+                md->brokers[i].port =
+                        fetch_reply_tags->NodeEndpoints->NodeEndpoints[i].Port;
+                mdi->brokers[i].rack_id = rd_strndup(
+                        fetch_reply_tags->NodeEndpoints->NodeEndpoints[i].Rack.str,
+                        fetch_reply_tags->NodeEndpoints->NodeEndpoints[i]
+                        .Rack.len);
+                mdi->brokers[i].id =
+                        fetch_reply_tags->NodeEndpoints->NodeEndpoints[i].NodeId;
+        }
+        qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[0]),
+                rd_kafka_metadata_broker_internal_cmp);
+        memcpy(mdi->brokers_sorted, md->brokers,
+                sizeof(*mdi->brokers_sorted) * md->broker_cnt);
+        qsort(mdi->brokers_sorted, md->broker_cnt,
+                sizeof(*mdi->brokers_sorted),
+                rd_kafka_metadata_broker_cmp);
+
+        md->topics    = rd_tmpabuf_alloc(&tbuf, fetch_reply_tags->FetchTags->TopicCnt *
+                                                        sizeof(*md->topics));
+        md->topic_cnt = fetch_reply_tags->FetchTags->TopicCnt;
+        mdi->topics   = rd_tmpabuf_alloc(&tbuf, fetch_reply_tags->FetchTags->TopicCnt *
+                                                        sizeof(*mdi->topics));
+
+        for (i = 0; i < fetch_reply_tags->FetchTags->TopicCnt; i++) {
+                md->topics[i].topic = rd_strndup(
+                        fetch_reply_tags->FetchTags->TopicTags[i].TopicName,
+                        strlen(fetch_reply_tags->FetchTags->TopicTags[i].TopicName));
+                md->topics[i].partition_cnt =
+                        fetch_reply_tags->FetchTags->TopicTags[i].PartitionCnt;
+                md->topics[i].partitions = rd_tmpabuf_alloc(
+                        &tbuf, fetch_reply_tags->FetchTags->TopicTags[i].PartitionCnt *
+                                sizeof(*md->topics[i].partitions));
+                mdi->topics[i].topic_id = fetch_reply_tags->FetchTags->TopicTags[i].TopicId;
+                mdi->topics[i].partitions = rd_tmpabuf_alloc(
+                        &tbuf, fetch_reply_tags->FetchTags->TopicTags[i].PartitionCnt *
+                                sizeof(*mdi->topics[i].partitions));
+                for (j = 0; j < fetch_reply_tags->FetchTags->TopicTags[i].PartitionCnt;
+                        j++) {
+                        md->topics[i].partitions[j].id =
+                                fetch_reply_tags->FetchTags->TopicTags[i].PartitionTags[j].PartitionId;
+                        md->topics[i].partitions[j].leader =
+                                fetch_reply_tags->FetchTags->TopicTags[i].PartitionTags[j].CurrentLeader.LeaderId;
+                        mdi->topics[i].partitions[j].id =
+                                fetch_reply_tags->FetchTags->TopicTags[i].PartitionTags[j].PartitionId;
+                        mdi->topics[i].partitions[j].leader_epoch =
+                                fetch_reply_tags->FetchTags->TopicTags[i]
+                                .PartitionTags[j]
+                                .CurrentLeader.LeaderEpoch;
+                }
+        }
+        return mdi;
+}
 
 static rd_kafka_metadata_internal_t *rd_kafka_metadata_copy_internal(
     const rd_kafka_metadata_internal_t *src_internal,

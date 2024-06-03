@@ -100,7 +100,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                          * problems across disconnects. */
 
         rd_kafka_q_t *rkb_ops;
-
+        rd_kafka_fetch_reply_tags_t fetch_reply_tags;
         mtx_t rkb_lock;
 
         int rkb_blocking_max_ms; /* Maximum IO poll blocking
@@ -331,6 +331,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 
         rd_kafka_timer_t rkb_sasl_reauth_tmr;
+        rd_kafkap_produce_reply_tags_t *produce_tags;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

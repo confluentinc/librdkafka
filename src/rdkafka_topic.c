@@ -196,13 +196,14 @@ rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk,
                                                   rd_kafka_Uuid_t topic_id) {
         rd_kafka_topic_t *rkt;
 
+        rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
                 if (!rd_kafka_Uuid_cmp(rkt->rkt_topic_id, topic_id)) {
                         rd_kafka_topic_keep(rkt);
                         break;
                 }
         }
-
+        rd_kafka_rdunlock(rk);
         return rkt;
 }
 

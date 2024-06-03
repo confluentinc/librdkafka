@@ -730,6 +730,18 @@ static void test_message_single_partition_record_fail(int variation) {
         SUB_TEST_PASS();
 }
 
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
+        if (rkmessage->err) {
+                if (rkmessage->err == RD_KAFKA_RESP_ERR_INVALID_RECORD)
+                        invalid_record_fail_cnt++;
+                else if (rkmessage->err ==
+                         RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD)
+                        invalid_different_record_fail_cnt++;
+        }
+        msgcounter--;
+}
+
 
 int main_0011_produce_batch(int argc, char **argv) {
         test_message_partitioner_wo_per_message_flag();

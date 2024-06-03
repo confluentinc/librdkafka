@@ -127,12 +127,12 @@ typedef struct rd_kafka_fetch_pos_s {
 /**
  * Protocol level sanity
  */
-#define RD_KAFKAP_BROKERS_MAX    10000
-#define RD_KAFKAP_TOPICS_MAX     1000000
-#define RD_KAFKAP_PARTITIONS_MAX 100000
-#define RD_KAFKAP_GROUPS_MAX     100000
-#define RD_KAFKAP_CONFIGS_MAX    10000
-
+#define RD_KAFKAP_BROKERS_MAX              10000
+#define RD_KAFKAP_TOPICS_MAX               1000000
+#define RD_KAFKAP_PARTITIONS_MAX           100000
+#define RD_KAFKAP_GROUPS_MAX               100000
+#define RD_KAFKAP_CONFIGS_MAX              10000
+#define RD_KAFKAP_ABORTED_TRANSACTIONS_MAX 1000000
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
@@ -275,6 +275,7 @@ struct rd_kafka_s {
         int rk_topic_cnt;
 
         struct rd_kafka_cgrp_s *rk_cgrp;
+        rd_kafkap_produce_reply_tags_t *produce_tags;
 
         rd_kafka_conf_t rk_conf;
         rd_kafka_q_t *rk_logq; /* Log queue if `log.queue` set */

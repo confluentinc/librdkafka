@@ -100,7 +100,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                          * problems across disconnects. */
 
         rd_kafka_q_t *rkb_ops;
-
+        rd_kafka_fetch_reply_tags_t fetch_reply_tags;
         mtx_t rkb_lock;
 
         int rkb_blocking_max_ms; /* Maximum IO poll blocking

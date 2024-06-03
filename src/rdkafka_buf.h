@@ -823,6 +823,29 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         } while (0)
 
 /**
+ * @brief Read KIP-482 Tags at the current position in the buffer using
+ *        the `read_tag` function receiving the `opaque' pointer.
+ */
+#define rd_kafka_buf_read_tags(rkbuf, read_tag, opaque)                        \
+        do {                                                                   \
+                uint64_t _tagcnt;                                              \
+                if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \
+                        break;                                                 \
+                rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);                    \
+                while (_tagcnt-- > 0) {                                        \
+                        uint64_t _tagtype, _taglen;                            \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_tagtype);           \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_taglen);            \
+                        int _read_tag_resp =                                   \
+                            read_tag(rkbuf, _tagtype, _taglen, opaque);        \
+                        if (_read_tag_resp == -1)                              \
+                                goto err_parse;                                \
+                        if (!_read_tag_resp && _taglen > 0)                    \
+                                rd_kafka_buf_skip(rkbuf, (size_t)(_taglen));   \
+                }                                                              \
+        } while (0)
+
+/**
  * @brief Write tags at the current position in the buffer.
  * @remark Currently always writes empty tags.
  * @remark Change to ..write_uvarint() when actual tags are supported.

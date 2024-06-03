@@ -3789,6 +3789,250 @@ static void rd_kafka_get_offsets_for_times_resp_cb(rd_kafka_t *rk,
         state->wait_reply--;
 }
 
+int rd_kafka_find_partition_mdt_idx(rd_kafka_metadata_topic_t *mdt, int partition_id){
+        int lo,hi,mid;
+        lo = 0;
+        hi = mdt->partition_cnt - 1;
+        /* Since the partitions in metadata topic internal are sorted we can binary search for the partition_id */
+        while(lo <= hi){
+               mid = (lo+hi)/2;
+               if(mdt->partitions[mid].id == partition_id){
+                        return mid;
+               }else if(mdt->partitions[mid].id < partition_id){
+                        lo = mid + 1;
+               }else    hi = mid - 1;
+        }
+        return -1;
+}
+
+int rd_kafka_find_broker_metadata_idx(rd_kafka_metadata_t *metadata, int broker_id){
+        int lo,hi,mid;
+        lo = 0;
+        hi = metadata->broker_cnt - 1;
+        /* Since the brokers in metadata are sorted we can binary search for the broker_id */
+        while(lo <= hi){
+               mid = (lo+hi)/2;
+               if(metadata->brokers[mid].id == broker_id){
+                        return mid;
+               }else if(metadata->brokers[mid].id < broker_id){
+                        lo = mid + 1;
+               }else    hi = mid - 1;
+        }
+        return -1;
+}
+
+void rd_kafka_handle_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t* mdi) {
+        rd_kafka_broker_t *rkb = NULL;
+        struct rd_kafka_metadata_cache_entry *rkmce;
+        int i,j,k;
+        int partition_cnt;
+        rd_kafka_metadata_partition_internal_t** partition_internals;
+        rd_kafka_metadata_partition_t** partitions;
+        int partition_size;
+
+        int new_partition_cnt;
+        rd_kafka_metadata_partition_internal_t* new_partition_internals;
+        rd_kafka_metadata_partition_t* new_partitions;
+        int index,metadata_partition_index,cache_partition_index;
+        char* rack;
+
+        rd_list_t additional_brokers = rd_list_new(10, rd_free);
+        rd_kafka_metadata_broker_t* new_brokers;
+        rd_kafka_metadata_broker_internal_t* new_brokers_internal;
+        int new_broker_cnt;
+
+        /* Merge the cached metadata into our metadata */
+        for(i=0;i<mdi->metadata.topic_cnt;i++){
+                rkmce = rd_kafka_metadata_cache_find(rk, mdi->metadata.topics[i].topic, 1);
+                /* If the topic is not in our cache we can simply push the whole topic in the cache */
+                if(rkmce == NULL)
+                        continue;
+                
+                /* If the topic is in the cache, we need to merge both the information,
+                 * as broker only has updated information for a known partition or complete information for a new partition
+                 * and the cache has complete information of an un-updated partition */
+                partition_size = rkmce->rkmce_mtopic.partition_cnt;
+                partition_cnt = 0;
+                partition_internals = rd_malloc(partition_size*sizeof(rd_kafka_metadata_partition_internal_t*));
+                partitions = rd_malloc(partition_size*sizeof(rd_kafka_metadata_partition_t*));
+                /* Now we will iterate for each partition of rkmce partitions */
+                for(j=0;j<partition_size;j++){
+                        
+                        int idx = rd_kafka_find_partition_mdt_idx(&mdi->metadata.topics[i],rkmce->rkmce_metadata_internal_topic.partitions[j].id);
+                        if( idx == -1){
+                                /* If the partition is not available in broker metadata then we will simply add it to the topic later */
+                                partition_internals[partition_cnt] = &rkmce->rkmce_metadata_internal_topic.partitions[j];
+                                partitions[partition_cnt] = &rkmce->rkmce_mtopic.partitions[j];
+                                partition_cnt++;
+
+                                /* The leader broker of this partition if not present in the borkers_sorted & nor repeated */
+                                /* Add the broker in the additional_brokers list */
+                                if(rd_kafka_find_broker_metadata_idx(&mdi->metadata,rkmce->rkmce_mtopic.partitions[j].leader) == -1){
+                                        rd_bool_t added = rd_false;
+                                        for(k=0;k<additional_brokers.rl_cnt;k++){
+                                                if(additional_brokers.rl_elems[k]* == rkmce->rkmce_mtopic.partitions[j].leader){
+                                                        added = rd_true;
+                                                        break;
+                                                }
+                                        }
+                                        if(!added){
+                                                rd_kafka_metadata_broker_t* broker = rd_malloc(sizeof(rd_kafka_metadata_broker_t));
+                                                broker->id = rkmce->rkmce_mtopic.partitions[j].leader;
+                                                rd_list_add(additional_brokers, broker);
+                                        }
+                                }
+                        } else {
+
+                                /* The epoch should always be updated */
+                                if (mdi->topics[i].partitions[idx]->racks == NULL ){
+                                        /* Allocate the new racks list */
+                                        mdi->topics[i].partitions[idx]->racks_cnt = rkmce->rkmce_metadata_internal_topic.partitions[j].racks_cnt;
+                                        mdi->topics[i].partitions[idx]->racks = rd_malloc(part->racks_cnt*sizeof(char *));
+                                        RD_LIST_FOREACH(rack, rkmce->rkmce_metadata_internal_topic.partitions[j].racks, k) {
+                                                mdi->topics[i].partitions[idx]->racks[k] = rd_strdup(rack);
+                                        }
+                                }
+                                if(mdi->metadata.topics[i].partitions[idx].isrs == NULL){
+                                        mdi->metadata.topics[i].partitions[idx].isrs =  rkmce->rkmce_mtopic.partitions[j].isrs;
+                                        mdi->metadata.topics[i].partitions[idx].isr_cnt = rkmce->rkmce_mtopic.partitions[j].isr_cnt;
+                                }
+                                if(mdi->metadata.topics[i].partitions[idx].replicas == NULL){
+                                        mdi->metadata.topics[i].partitions[idx].replicas = rkmce->rkmce_mtopic.partitions[j].replicas;
+                                        mdi->metadata.topics[i].partitions[idx].replica_cnt = rkmce->rkmce_mtopic.partitions[j].replica_cnt;
+                                }
+                                if(mdi->metadata.topics[i].partitions[idx].leader == 0){
+                                        mdi->metadata.topics[i].partitions[idx].leader = rkmce->rkmce_mtopic.partitions[j].leader;
+                                        /* If the old leader for the partition is not in the brokers_sorted & nor repeated */
+                                        /* Add the broker in the additional_brokers list */
+                                        if(rd_kafka_find_broker_metadata_idx(&mdi->metadata,rkmce->rkmce_mtopic.partitions[j].leader) == -1){
+                                                rd_bool_t added = rd_false;
+                                                for(k=0;k<additional_brokers.rl_cnt;k++){
+                                                        if(additional_brokers.rl_elems[k]* == rkmce->rkmce_mtopic.partitions[j].leader){
+                                                                added = rd_true;
+                                                                break;
+                                                        }
+                                                }
+                                                if(!added){
+                                                        rd_kafka_metadata_broker_t* broker = rd_malloc(sizeof(rd_kafka_metadata_broker_t));
+                                                        broker->id = rkmce->rkmce_mtopic.partitions[j].leader;
+                                                        rd_list_add(additional_brokers, broker);
+                                                }
+                                        } 
+                                }
+                                /* I do not think this should be copied from cache */
+                                // if(mdi->metadata.topics[i].partitions[idx].err == RD_KAFKA_RESP_ERR_NO_ERROR){
+                                //         mdi->metadata.topics[i].partitions[idx].err = rkmce->rkmce_mtopic.partitions[j].err;
+                                // }
+                        }
+
+                }
+
+                /* Allocate a new partitions array which is sorted via partition_id and merge the 2 sorted arrays for the topic
+                 * One array has the updated partition information from the broker metadata
+                 * Other array has the partition information from the cache itself */
+                new_partition_cnt = partition_cnt + mdi->metadata.topics[i].partition_cnt;
+                new_partition_internals = rd_malloc(new_partition_cnt*sizeof(rd_kafka_metadata_partition_internal_t));
+                new_partitions = rd_malloc(new_partition_cnt*sizeof(rd_kafka_metadata_partition_t));
+                cache_partition_index = metadata_partition_index = 0;
+                for(index=0;index<new_partition_cnt;index++){
+                        if((metadata_partition_index == mdi->metadata.topics[i].partition_cnt) || ((cache_partition_index != partition_size) && (partition_internals[cache_partition_index]->id < mdi->topics[i].partitions[metadata_partition_index].id))){
+                                new_partition_internals[index].id = partition_internals[cache_partition_index]->id;
+                                new_partition_internals->leader_epoch = partition_internals[cache_partition_index]->leader_epoch;
+                                new_partition_internals->racks_cnt = partition_internals[cache_partition_index]->racks_cnt;
+                                new_partition_internals->racks     = rd_malloc(
+                                sizeof(char *) * new_partition_internals->racks_cnt);
+                                RD_LIST_FOREACH(rack, partition_internals[cache_partition_index]->racks, k) {
+                                        new_partition_internals->racks[k] = rd_strdup(rack);
+                                }
+                                new_partitions[index].err = partitions[cache_partition_index]->err;
+                                new_partitions[index].replica_cnt = partitions[cache_partition_index]->replica_cnt;
+                                new_partitions[index].replicas = partitions[cache_partition_index]->replicas;
+                                new_partitions[index].id = partitions[cache_partition_index]->id;
+                                new_partitions[index].isr_cnt = partitions[cache_partition_index]->isr_cnt;
+                                new_partitions[index].isrs = partitions[cache_partition_index]->isrs;
+                                new_partitions[index].leader = partitions[cache_partition_index]->leader;
+                                cache_partition_index++;
+                        }else{
+                                new_partition_internals[index].id = mdi->topics[i].partitions[metadata_partition_index].id;
+                                new_partition_internals->leader_epoch = mdi->topics[i].partitions[metadata_partition_index].leader_epoch;
+                                new_partition_internals->racks_cnt = mdi->topics[i].partitions[metadata_partition_index].racks_cnt;
+                                new_partition_internals->racks     = rd_malloc(
+                                sizeof(char *) * new_partition_internals->racks_cnt);
+                                RD_LIST_FOREACH(rack, mdi->topics[i].partitions[metadata_partition_index].racks, k) {
+                                        new_partition_internals->racks[k] = rd_strdup(rack);
+                                }
+                                new_partitions[index].err = mdi->metadata.topics[i].partitions[metadata_partition_index].err;
+                                new_partitions[index].replica_cnt = mdi->metadata.topics[i].partitions[metadata_partition_index].replica_cnt;
+                                new_partitions[index].replicas = mdi->metadata.topics[i].partitions[metadata_partition_index].replicas;
+                                new_partitions[index].id = mdi->metadata.topics[i].partitions[metadata_partition_index].id;
+                                new_partitions[index].isr_cnt = mdi->metadata.topics[i].partitions[metadata_partition_index].isr_cnt;
+                                new_partitions[index].isrs = mdi->metadata.topics[i].partitions[metadata_partition_index].isrs;
+                                new_partitions[index].leader = mdi->metadata.topics[i].partitions[metadata_partition_index].leader;
+                                metadata_partition_index++;
+                        }
+                }
+                for(k=mdi->metadata.topics[i].partition_cnt-1;k>=0;k--){
+                        rd_kafka_metadata_partition_clear(&mdi->metadata.topics[i].partitions[k]);
+                        for(j=mdi->topics[i].partitions[k].racks_cnt-1;j>=0;j--)
+                                rd_free(mdi->topics[i].partitions[k].racks[j]);
+                }
+                
+                mdi->metadata.topics[i].partition_cnt = new_partition_cnt;
+                mdi->metadata.topics[i].partitions = new_partitions;
+                mdi->topics[i].partitions = new_partition_internals;
+                
+                rd_free(partitions);
+                rd_free(partition_internals);
+                rd_free(rkmce);
+        }
+        
+        /* Now we have the complete information about each topic but still the brokers are not correct */
+        /* Merge the 2 brokers list */
+        new_broker_cnt = mdi->metadata.broker_cnt + additional_brokers.rl_cnt;
+        new_brokers = rd_malloc(new_broker_cnt*sizeof(rd_kafka_metadata_broker_t));
+        new_brokers_internal = rd_malloc(new_broker_cnt*sizeof(rd_kafka_metadata_broker_internal_t));
+        for(k=0;k<additional_brokers.rl_cnt;k++){
+                new_brokers[k].id = additional_brokers.rl_elems[k]->id;
+                new_brokers_internal[k].id = additional_brokers.rl_elems[k]->id;
+        }
+        for(k=0;k<mdi->metadata.broker_cnt;k++){
+                new_brokers[k + additional_brokers.rl_cnt].id = mdi->metadata.brokers[k].id;
+                new_brokers[k + additional_brokers.rl_cnt].host = mdi->metadata.brokers[k].host;
+                new_brokers[k + additional_brokers.rl_cnt].port = mdi->metadata.brokers[k].port;
+
+                new_brokers_internal[k + additional_brokers.rl_cnt].id = mdi->brokers[k].id;
+                new_brokers_internal[k + additional_brokers.rl_cnt].id = mdi->brokers[k].rack_id;
+        }
+
+        rd_list_clear(additional_brokers);
+
+        qsort(new_brokers, new_broker_cnt, sizeof(rd_kafka_metadata_broker_t),rd_kafka_metadata_broker_cmp);
+        qsort(new_brokers_internal, new_broker_cnt, sizeof(rd_kafka_metadata_broker_internal_t),rd_kafka_metadata_broker_internal_cmp);
+        mdi->metadata.broker_cnt = new_broker_cnt;
+        mdi->metadata.brokers = new_brokers;
+        mdi->brokers_sorted = new_brokers;
+        mdi->brokers = new_brokers_internal;
+        
+        /* Broker update for each node endpoint */
+        for(i=0; i < mdi->metadata.broker_cnt; i++){
+                rd_kafka_broker_update(rk,rkb->rkb_proto, &mdi->metadata.brokers[i],NULL);
+        }
+        
+
+        for(i=0; i < mdi->metadata.topic_cnt; i++)
+        {
+                /* Metadata Cache Topic Update for the topic */
+                rd_kafka_metadata_cache_topic_update(rk, &mdi->metadata.topics[i], &mdi->topics[i], rd_true, rd_true, mdi->metadata.brokers, mdi->metadata.broker_cnt);
+                /* Metadata Update for the topic */
+                rd_kafka_topic_metadata_update2(rkb, &mdi->metadata.topics[i], &mdi->topics[i]);
+        }
+
+        /* Propagate Metadata Cache changes */
+        rd_kafka_metadata_cache_propagate_changes(rk);
+        /* Start the cache expiry with the Metadata Cache changes propagated */
+        rd_kafka_metadata_cache_expiry_start(rk);
+
+}
 
 rd_kafka_resp_err_t
 rd_kafka_offsets_for_times(rd_kafka_t *rk,
@@ -4076,6 +4320,12 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_PURGE:
                 rd_kafka_purge(rk, rko->rko_u.purge.flags);
+                break;
+
+        case RD_KAFKA_OP_METADATA_951:
+                /* TODO: Callback to merge metadata rko_u.metadata.mdi and
+                 * update cache. Phase 5 */
+                rd_kafka_handle_metadata_update_op(rk, rko->rko_u.metadata.mdi);
                 break;
 
         default:

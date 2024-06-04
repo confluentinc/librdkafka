@@ -466,6 +466,7 @@ static void test_fetch_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
         consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
+        rd_sleep(5);
         rkm = rd_kafka_consumer_poll(consumer, 10 * 1000);
 
         if (rkm)

@@ -90,8 +90,8 @@ static void test_single_partition(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
-        const int topic_suffix_length = 56, client_id_length = 239;
-        char *topic_suffix, *client_id;
+        const int client_id_length = 239;
+        char *client_id;
 
         SUB_TEST_QUICK();
 
@@ -115,14 +115,7 @@ static void test_single_partition(void) {
         TEST_SAY("test_single_partition: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        topic_suffix = (char *)malloc(topic_suffix_length + 1 * sizeof(char));
-        for (i = 0; i < topic_suffix_length; i++) {
-                topic_suffix[i] = 'b';
-        }
-        topic_suffix[topic_suffix_length] = '\0';
-
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name(topic_suffix, 0),
-                                 topic_conf);
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -195,7 +188,6 @@ static void test_single_partition(void) {
         rd_kafka_destroy(rk);
 
         free(client_id);
-        free(topic_suffix);
 
         SUB_TEST_PASS();
 }

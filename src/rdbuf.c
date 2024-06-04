@@ -660,6 +660,7 @@ size_t rd_buf_erase(rd_buf_t *rbuf, size_t absof, size_t size) {
                                 segremains);
 
                 seg->seg_of -= toerase;
+                seg->seg_erased += toerase;
                 rbuf->rbuf_len -= toerase;
 
                 of += toerase;
@@ -712,6 +713,7 @@ int rd_buf_write_seek(rd_buf_t *rbuf, size_t absof) {
                 rd_segment_t *this = next;
                 next = TAILQ_PREV(this, rd_segment_head, seg_link);
                 rd_buf_destroy_segment(rbuf, this);
+                rbuf->rbuf_erased -= seg->seg_erased;
         }
 
         /* Update relative write offset */

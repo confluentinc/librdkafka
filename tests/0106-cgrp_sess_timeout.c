@@ -55,7 +55,11 @@ static void rebalance_cb(rd_kafka_t *rk,
             rd_kafka_err2name(rebalance_exp_event), rd_kafka_err2name(err));
 
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                test_consumer_assign("assign", rk, parts);
+                if(test_consumer_group_protocol_classic()) {
+                        test_consumer_assign("assign", rk, parts);
+                } else {
+                        test_consumer_incremental_assign("assign", rk, parts);
+                }
         } else {
                 rd_kafka_resp_err_t commit_err;
 
@@ -92,8 +96,10 @@ static void rebalance_cb(rd_kafka_t *rk,
                                     rd_kafka_err2name(commit_exp_err),
                                     rd_kafka_err2name(commit_err));
                 }
-
-                test_consumer_unassign("unassign", rk);
+                if(test_consumer_group_protocol_classic())
+                        test_consumer_unassign("unassign", rk);
+                else
+                        test_consumer_incremental_unassign("unassign", rk, parts);
         }
 
         /* Make sure only one rebalance callback is served per poll()

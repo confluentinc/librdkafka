@@ -2,6 +2,7 @@
  * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -389,7 +390,8 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                 if (rd_kafka_buf_ApiVersion(request) >= 5)
                         rd_kafka_buf_read_i64(rkbuf, &hdr.LogStartOffset);
 
-                rd_kafka_buf_read_arraycnt(rkbuf, &AbortedTxnCnt, RD_KAFKAP_ABORTED_TRANSACTIONS_MAX);
+                rd_kafka_buf_read_arraycnt(rkbuf, &AbortedTxnCnt,
+                                           RD_KAFKAP_ABORTED_TRANSACTIONS_MAX);
 
                 if (rkb->rkb_rk->rk_conf.isolation_level ==
                     RD_KAFKA_READ_UNCOMMITTED) {
@@ -637,20 +639,24 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                                                 2 + 8 + 4 /*inner header*/));
 
         for (i = 0; i < TopicArrayCnt; i++) {
-                rd_kafkap_str_t topic;
-                rd_kafka_Uuid_t topic_id;
+                rd_kafkap_str_t topic    = RD_ZERO_INIT;
+                rd_kafka_Uuid_t topic_id = RD_KAFKA_UUID_ZERO;
                 int32_t PartitionArrayCnt;
                 int j;
 
                 if (rd_kafka_buf_ApiVersion(request) > 12) {
                         rd_kafka_buf_read_uuid(rkbuf, &topic_id);
-                        rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk, topic_id);
+                        rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk,
+                                                              topic_id);
+                        if (rkt)
+                                topic = *rkt->rkt_topic;
                 } else {
                         rd_kafka_buf_read_str(rkbuf, &topic);
                         rkt = rd_kafka_topic_find0(rkb->rkb_rk, &topic);
                 }
 
-                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt, RD_KAFKAP_PARTITIONS_MAX);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
 
                 for (j = 0; j < PartitionArrayCnt; j++) {
                         if (rd_kafka_fetch_reply_handle_partition(
@@ -783,7 +789,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_Fetch,
                                                           0, 15, NULL);
-        rkbuf = rd_kafka_buf_new_flexver_request(
+        rkbuf      = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_Fetch, 1,
             /* ReplicaId+MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+
              *   SessionId+Epoch+TopicCnt */
@@ -794,7 +800,8 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                 /* ForgottenTopicsCnt */
                 4 +
                 /* N x ForgottenTopicsData */
-                0, ApiVersion >= 12);
+                0,
+            ApiVersion >= 12);
 
         if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)
                 rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion,
@@ -854,24 +861,31 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                 if (rkt_last != rktp->rktp_rkt) {
                         if (rkt_last != NULL) {
                                 /* Update PartitionArrayCnt */
-                                rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartitionArrayCnt,
-                                        PartitionArrayCnt);
+                                rd_kafka_buf_finalize_arraycnt(
+                                    rkbuf, of_PartitionArrayCnt,
+                                    PartitionArrayCnt);
                                 /* Topic tags */
-                                rd_kafka_buf_write_tags(rkbuf);
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
-                        if (rd_kafka_buf_ApiVersion(rkbuf) > 12)
+                        if (rd_kafka_buf_ApiVersion(rkbuf) > 12) {
+                                /* Topic id must be non-zero here */
+                                rd_dassert(!RD_KAFKA_UUID_IS_ZERO(
+                                    rktp->rktp_rkt->rkt_topic_id));
                                 /* Topic ID */
-                                rd_kafka_buf_write_uuid(rkbuf, &rktp->rktp_rkt->rkt_topic_id);
-                        else
+                                rd_kafka_buf_write_uuid(
+                                    rkbuf, &rktp->rktp_rkt->rkt_topic_id);
+                        } else {
                                 /* Topic name */
-                                rd_kafka_buf_write_kstr(rkbuf,
-                                                        rktp->rktp_rkt->rkt_topic);
-                        
+                                rd_kafka_buf_write_kstr(
+                                    rkbuf, rktp->rktp_rkt->rkt_topic);
+                        }
+
                         TopicArrayCnt++;
                         rkt_last = rktp->rktp_rkt;
                         /* Partition count */
-                        of_PartitionArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-                        PartitionArrayCnt    = 0;
+                        of_PartitionArrayCnt =
+                            rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                        PartitionArrayCnt = 0;
                 }
 
                 PartitionArrayCnt++;
@@ -911,7 +925,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                 rd_kafka_buf_write_i32(rkbuf, rktp->rktp_fetch_msg_max_bytes);
 
                 /* Partition tags */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
 
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                            "Fetch topic %.*s [%" PRId32 "] at offset %" PRId64
@@ -952,9 +966,9 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
         if (rkt_last != NULL) {
                 /* Update last topic's PartitionArrayCnt */
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartitionArrayCnt,
-                                        PartitionArrayCnt);
+                                               PartitionArrayCnt);
                 /* Topic tags */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* Update TopicArrayCnt */

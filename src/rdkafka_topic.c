@@ -202,6 +202,7 @@ rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk,
                         break;
                 }
         }
+
         return rkt;
 }
 

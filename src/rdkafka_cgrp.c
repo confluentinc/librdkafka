@@ -6058,6 +6058,9 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
  */
 static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
 
+        /* Leave group, if desired. */
+        rd_kafka_cgrp_leave_maybe(rkcg);
+
         /* If this action was underway when a terminate was initiated, it will
          * be left to complete. Now that's done, unassign all partitions */
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {

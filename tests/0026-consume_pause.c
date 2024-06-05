@@ -377,7 +377,10 @@ static void rebalance_cb(rd_kafka_t *rk,
                  * while auto.offset.reset is default at `latest`. */
 
                 parts->elems[0].offset = RD_KAFKA_OFFSET_BEGINNING;
-                test_consumer_assign("rebalance", rk, parts);
+                if(test_consumer_group_protocol_classic())
+                        test_consumer_assign("rebalance", rk, parts);
+                else
+                        test_consumer_incremental_assign("rebalance", rk, parts);
                 TEST_SAY("Pausing partitions\n");
                 if ((err2 = rd_kafka_pause_partitions(rk, parts)))
                         TEST_FAIL("Failed to pause: %s",
@@ -388,7 +391,10 @@ static void rebalance_cb(rd_kafka_t *rk,
                                   rd_kafka_err2str(err2));
                 break;
         default:
-                test_consumer_unassign("rebalance", rk);
+                if(test_consumer_group_protocol_classic())
+                        test_consumer_unassign("rebalance", rk);
+                else
+                        test_consumer_incremental_unassign("rebalance", rk, parts);
                 break;
         }
 }

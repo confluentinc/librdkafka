@@ -2512,6 +2512,7 @@ void test_rebalance_cb(rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t *parts,
                        void *opaque) {
 
+        printf("-----------Rebalance Protocol is %s -----------------------\n", rd_kafka_rebalance_protocol(rk));
         if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE")) {
                 test_incremental_rebalance_cb(rk, err, parts, opaque);
                 return;
@@ -2534,6 +2535,28 @@ void test_rebalance_cb(rd_kafka_t *rk,
         }
 }
 
+
+void test_consumer_assign_by_rebalance_protocol(rd_kafka_t *rk,
+                          rd_kafka_topic_partition_list_t *parts) {
+        TEST_SAY("Assign: %d partition(s)\n", parts->cnt);
+        if(!strcmp(rd_kafka_rebalance_protocol(rk), "EAGER"))
+                rd_kafka_assign(rk, parts);
+        else
+                rd_kafka_incremental_assign(rk, parts);
+}
+
+
+void test_consumer_unassign_by_rebalance_protocol(rd_kafka_t *rk,
+                          rd_kafka_topic_partition_list_t *parts) {
+        if(!strcmp(rd_kafka_rebalance_protocol(rk), "EAGER")) {
+                TEST_SAY("Unassign all partition(s)\n");
+                rd_kafka_assign(rk, NULL);
+        }
+        else {
+                TEST_SAY("Unassign: %d partition(s)\n", parts->cnt);
+                rd_kafka_incremental_unassign(rk, parts);
+        }
+}
 
 
 rd_kafka_t *test_create_consumer(

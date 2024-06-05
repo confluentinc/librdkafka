@@ -1106,12 +1106,14 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                                         mtopic = rd_kafka_mock_topic_find(
                                             mcluster, topic_name);
 
-                                if (mtopic)
+                                if (mtopic) {
                                         topic_name = mtopic->name;
-                                else if (!use_topic_id)
+                                        topic_id   = mtopic->id;
+                                } else if (!use_topic_id) {
                                         topic_name = rktpar->topic;
-                                else
+                                } else {
                                         topic_name = NULL;
+                                }
 
                                 if (!mtopic && topic_name &&
                                     AllowAutoTopicCreation) {

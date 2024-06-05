@@ -169,13 +169,25 @@ int main_0040_io_event(int argc, char **argv) {
                                                     "expecting message\n");
                                         if (rd_kafka_event_error(rkev) ==
                                             RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                                                rd_kafka_assign(
-                                                    rk_c,
-                                                    rd_kafka_event_topic_partition_list(
-                                                        rkev));
+                                                if(test_consumer_group_protocol_classic())
+                                                        rd_kafka_assign(
+                                                            rk_c,
+                                                            rd_kafka_event_topic_partition_list(
+                                                                rkev));
+                                                else
+                                                        rd_kafka_incremental_assign(
+                                                            rk_c,
+                                                            rd_kafka_event_topic_partition_list(
+                                                                rkev));
                                                 expecting_io = _NOPE;
                                         } else
-                                                rd_kafka_assign(rk_c, NULL);
+                                                if(test_consumer_group_protocol_classic())
+                                                        rd_kafka_assign(rk_c, NULL);
+                                                else
+                                                        rd_kafka_incremental_unassign(
+                                                            rk_c,
+                                                            rd_kafka_event_topic_partition_list(
+                                                                rkev));
                                         break;
 
                                 case RD_KAFKA_EVENT_FETCH:

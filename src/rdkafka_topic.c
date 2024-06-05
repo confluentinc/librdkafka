@@ -202,6 +202,7 @@ rd_kafka_topic_t *rd_kafka_topic_find_by_topic_id(rd_kafka_t *rk,
                         break;
                 }
         }
+
         return rkt;
 }
 
@@ -1345,6 +1346,12 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                          * causing an out of range and an offset reset,
                          * but the rarer case where they're higher needs
                          * to be checked. */
+                        rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA,
+                                     "METADATA",
+                                     "Topic %s changed id from %s to %s",
+                                     rkt->rkt_topic->str,
+                                     rd_kafka_Uuid_str(&rkt->rkt_topic_id),
+                                     rd_kafka_Uuid_str(&mdit->topic_id));
                         rkt->rkt_topic_id = mdit->topic_id;
                 }
                 /* If the metadata times out for a topic (because all brokers

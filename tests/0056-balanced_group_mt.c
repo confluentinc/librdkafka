@@ -152,7 +152,10 @@ static void rebalance_cb(rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
                 assign_cnt++;
 
-                rd_kafka_assign(rk, partitions);
+                if(test_consumer_group_protocol_classic())
+                        rd_kafka_assign(rk, partitions);
+                else
+                        rd_kafka_incremental_assign(rk, partitions);
                 mtx_lock(&lock);
                 consumers_running = 1;
                 mtx_unlock(&lock);
@@ -177,7 +180,10 @@ static void rebalance_cb(rd_kafka_t *rk,
                 if (assign_cnt == 0)
                         TEST_FAIL("asymetric rebalance_cb");
                 assign_cnt--;
-                rd_kafka_assign(rk, NULL);
+                if(test_consumer_group_protocol_classic())
+                        rd_kafka_assign(rk, NULL);
+                else
+                        rd_kafka_incremental_unassign(rk, partitions);
                 mtx_lock(&lock);
                 consumers_running = 0;
                 mtx_unlock(&lock);

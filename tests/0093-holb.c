@@ -92,9 +92,15 @@ static void rebalance_cb(rd_kafka_t *rk,
                     cons->max_rebalance_cnt);
 
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-                rd_kafka_assign(rk, parts);
+                if(test_consumer_group_protocol_classic())
+                        rd_kafka_assign(rk, parts);
+                else
+                        rd_kafka_incremental_assign(rk, parts);
         else
-                rd_kafka_assign(rk, NULL);
+                if(test_consumer_group_protocol_classic())
+                        rd_kafka_assign(rk, NULL);
+                else
+                        rd_kafka_incremental_unassign(rk, parts);
 }
 
 

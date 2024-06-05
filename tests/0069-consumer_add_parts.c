@@ -58,10 +58,16 @@ static void rebalance_cb(rd_kafka_t *rk,
                  rd_kafka_err2str(err));
         test_print_partition_list(parts);
 
-        if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-                rd_kafka_assign(rk, parts);
-        else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS)
-                rd_kafka_assign(rk, NULL);
+         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
+                if(test_consumer_group_protocol_classic())
+                        rd_kafka_assign(rk, parts);
+                else
+                        rd_kafka_incremental_assign(rk, parts);
+        else
+                if(test_consumer_group_protocol_classic())
+                        rd_kafka_assign(rk, NULL);
+                else
+                        rd_kafka_incremental_unassign(rk, parts);
 
         *statep = err;
 }

@@ -3,6 +3,10 @@
 librdkafka v2.2.1 is a maintenance release backporting:
 
 * Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
+* Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
+      [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
+      bugfixes and performance improvements (#4726).
+
 
 ### Idempotent producer fixes
 
@@ -16,6 +20,33 @@ librdkafka v2.2.1 is a maintenance release backporting:
   and expecting a `DUPLICATE_SEQUENCE_NUMBER` error in case it was or
   `NO_ERROR` in case it wasn't, in both cases the message will be considered
   delivered (#4438).
+
+### Consumer fixes
+
+  * Stored offsets were excluded from the commit if the leader epoch was
+    less than committed epoch, as it's possible if leader epoch is the default -1.
+    This didn't happen in Python, Go and .NET bindings when stored position was
+    taken from the message.
+    Solved by checking only that the stored offset is greater
+    than committed one, if either stored or committed leader epoch is -1 (#4442).
+  * If an OffsetForLeaderEpoch request was being retried, and the leader changed
+    while the retry was in-flight, an infinite loop of requests was triggered,
+    because we weren't updating the leader epoch correctly.
+    Fixed by updating the leader epoch before sending the request (#4433).
+  * During offset validation a permanent error like host resolution failure
+    would cause an offset reset.
+    This isn't what's expected or what the Java implementation does.
+    Solved by retrying even in case of permanent errors (#4447).
+  * If using `rd_kafka_poll_set_consumer`, along with a consume callback, and then
+    calling `rd_kafka_poll` to service the callbacks, would not reset
+    `max.poll.interval.ms.` This was because we were only checking `rk_rep` for
+    consumer messages, while the method to service the queue internally also
+    services the queue forwarded to from `rk_rep`, which is `rkcg_q`.
+    Solved by moving the `max.poll.interval.ms` check into `rd_kafka_q_serve` (#4431).
+  * After a leader change a `rd_kafka_query_watermark_offsets` call would continue
+    trying to call ListOffsets on the old leader, if the topic wasn't included in
+    the subscription set, so it started querying the new leader only after
+    `topic.metadata.refresh.interval.ms` (#4225).
 
 
 
@@ -47,6 +78,7 @@ librdkafka v2.2.0 is a feature release:
  * [KIP-339](https://cwiki.apache.org/confluence/display/KAFKA/KIP-339%3A+Create+a+new+IncrementalAlterConfigs+API):
    IncrementalAlterConfigs API (started by @PrasanthV454, #4110).
  * [KIP-554](https://cwiki.apache.org/confluence/display/KAFKA/KIP-554%3A+Add+Broker-side+SCRAM+Config+API): Add Broker-side SCRAM Config API (#4241).
+
 
 ## Enhancements
 

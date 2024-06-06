@@ -7,7 +7,8 @@ the version used when `./configure` is run with `--disable-lz4-ext`.
    directory (checked out to the appropriate version tag), copy it into the
    librdkafka `src` directory, overwriting the previous files.
 2. Copy `xxhash.h` and `xxhash.c` files, and rename them to `rdxxhash.h` and
-   `rdxxhash.c`, respectively, replacing the previous files.
+   `rdxxhash.c`, respectively, replacing the previous files. Change any
+   `#include`s of `xxhash.h` to `rdxxhash.h`.
 3. Replace the `#else` block of the
    `#if defined(LZ4_STATIC_LINKING_ONLY_DISABLE_MEMORY_ALLOCATION)`
    with the following code, including the comment:
@@ -24,5 +25,6 @@ the version used when `./configure` is run with `--disable-lz4-ext`.
     # define FREEMEM(p)        rd_kafka_mem_free(NULL, p)
     #endif
     ```
+4. Change version mentioned for lz4 in `configure.self`.
 4. Run `./configure` with `--disable-lz4-ext` option, make and run test 0017.
-5. Update CHANGELOG.md.
+5. Update CHANGELOG.md and both the lz4 LICENSE, and the combined LICENSE.

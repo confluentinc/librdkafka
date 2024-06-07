@@ -465,7 +465,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            hdr.ErrorCode, RD_KAFKAP_STR_PR(topic),
                            hdr.Partition);
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                goto no_err;
+                goto done;
         }
 
         rd_kafka_toppar_lock(rktp);
@@ -493,7 +493,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                                    rktp->rktp_partition, hdr.MessageSetSize);
                         rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                 }
-                goto no_err;
+                goto done;
         }
 
         rd_kafka_toppar_lock(rktp);
@@ -508,7 +508,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            "discarding fetch response",
                            RD_KAFKAP_STR_PR(topic), hdr.Partition);
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                goto no_err;
+                goto done;
         }
 
         fetch_version = rktp->rktp_fetch_version;
@@ -532,7 +532,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                            tver->version, fetch_version);
                 rd_atomic64_add(&rktp->rktp_c.rx_ver_drops, 1);
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                goto no_err;
+                goto done;
         }
 
         rd_rkb_dbg(rkb, MSG, "FETCH",
@@ -557,14 +557,14 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
                     rkb, rktp, tver, hdr.ErrorCode, hdr.HighwaterMarkOffset);
 
                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                goto no_err;
+                goto done;
         }
 
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         if (unlikely(hdr.MessageSetSize <= 0))
-                goto no_err;
+                goto done;
 
         /**
          * Parse MessageSet
@@ -585,7 +585,7 @@ rd_kafka_fetch_reply_handle_partition(rd_kafka_broker_t *rkb,
         if (unlikely(err))
                 rd_kafka_toppar_fetch_backoff(rkb, rktp, err);
 
-        goto no_err;
+        goto done;
 
 err_parse:
         if (aborted_txns)
@@ -594,7 +594,7 @@ err_parse:
                 rd_kafka_toppar_destroy(rktp); /*from get()*/
         return rkbuf->rkbuf_err;
 
-no_err:
+done:
         if (aborted_txns)
                 rd_kafka_aborted_txns_destroy(aborted_txns);
         if (likely(rktp != NULL))
@@ -791,12 +791,13 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                                           0, 15, NULL);
         rkbuf      = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_Fetch, 1,
-            /* ReplicaId+MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+
+            /* MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+
              *   SessionId+Epoch+TopicCnt */
-            4 + 4 + 4 + 4 + 1 + 4 + 4 + 4 +
+            4 + 4 + 4 + 1 + 4 + 4 + 4 +
                 /* N x PartCnt+Partition+CurrentLeaderEpoch+FetchOffset+
-                 *       LogStartOffset+MaxBytes+?TopicNameLen?*/
-                (rkb->rkb_active_toppar_cnt * (4 + 4 + 4 + 8 + 8 + 4 + 40)) +
+                 * LastFetchedEpoch+LogStartOffset+MaxBytes+?TopicNameLen?*/
+                (rkb->rkb_active_toppar_cnt *
+                 (4 + 4 + 4 + 8 + 4 + 8 + 4 + 40)) +
                 /* ForgottenTopicsCnt */
                 4 +
                 /* N x ForgottenTopicsData */

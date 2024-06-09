@@ -5059,7 +5059,7 @@ int rd_kafka_path_is_dir(const char *path) {
  * @returns true if directory is empty or can't be accessed, else false.
  */
 rd_bool_t rd_kafka_dir_is_empty(const char *path) {
-#if _WIN32
+#if defined(_WIN32) || defined(__QNXNTO__)
         /* FIXME: Unsupported */
         return rd_true;
 #else

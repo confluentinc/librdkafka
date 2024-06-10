@@ -55,7 +55,7 @@ static void fetch_metadata(rd_kafka_t *rk,
 
                 rd_usleep(100 * 1000, 0);
                 RD_IF_FREE(ids, rd_free);
-                ids = rd_kafka_broker_get_learned_ids(rk, &cnt);
+                ids = rd_kafka_brokers_learned_ids(rk, &cnt);
         } while (test_clock() < abs_timeout_us && cnt != expected_broker_cnt);
 
         TEST_ASSERT(cnt == expected_broker_cnt,
@@ -70,8 +70,7 @@ static void fetch_metadata(rd_kafka_t *rk,
                             i, expected_brokers[i], ids[i]);
         }
 
-        if (ids)
-                free(ids);
+        RD_IF_FREE(ids, rd_free);
 }
 
 /**

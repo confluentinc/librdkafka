@@ -5900,17 +5900,7 @@ void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
         rd_kafka_q_enq(rkb->rkb_ops, rko);
 }
 
-/**
- * @brief Retrieve and return the learned broker ids.
- *
- * @param rk Instance to use.
- * @param cntp Will be updated to the number of brokers returned.
- *
- * @locks_acquired rd_kafka_rdlock()
- *
- * @returns a malloc:ed list of int32_t broker ids.
- */
-int32_t *rd_kafka_broker_get_learned_ids(rd_kafka_t *rk, size_t *cntp) {
+int32_t *rd_kafka_brokers_learned_ids(rd_kafka_t *rk, size_t *cntp) {
         rd_kafka_broker_t *rkb;
 
         size_t all_broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);

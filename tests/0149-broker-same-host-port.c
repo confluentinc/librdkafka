@@ -65,7 +65,7 @@ int main_0149_broker_same_host_port_mock(int argc, char **argv) {
         rd_kafka_metadata_destroy(md);
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-        ids = rd_kafka_broker_get_learned_ids(rk, &cnt);
+        ids = rd_kafka_brokers_learned_ids(rk, &cnt);
 
         TEST_ASSERT(cnt == num_brokers,
                     "expected %" PRIusz " brokers in cache, not %" PRIusz,

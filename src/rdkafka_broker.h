@@ -51,7 +51,6 @@ typedef enum {
         /* Any state >= STATE_UP means the Kafka protocol layer
          * is operational (to some degree). */
         RD_KAFKA_BROKER_STATE_UP,
-        RD_KAFKA_BROKER_STATE_UPDATE,
         RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
         RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE,
         RD_KAFKA_BROKER_STATE_AUTH_REQ,
@@ -82,8 +81,7 @@ typedef struct rd_kafka_broker_monitor_s {
 struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         TAILQ_ENTRY(rd_kafka_broker_s) rkb_link;
 
-        int32_t rkb_nodeid; /**< Broker Node Id.
-                             *   @locks rkb_lock */
+        int32_t rkb_nodeid; /**< Broker Node Id, read only. */
 #define RD_KAFKA_NODEID_UA -1
 
         rd_sockaddr_list_t *rkb_rsal;
@@ -331,6 +329,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 
         rd_kafka_timer_t rkb_sasl_reauth_tmr;
+
+        /** True if this broker thread is terminating. Protected by rkb_lock */
+        rd_bool_t termination_in_progress;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -360,9 +361,7 @@ rd_kafka_broker_get_state(rd_kafka_broker_t *rkb) {
 /**
  * @returns true if the broker state is UP or UPDATE
  */
-#define rd_kafka_broker_state_is_up(state)                                     \
-        ((state) == RD_KAFKA_BROKER_STATE_UP ||                                \
-         (state) == RD_KAFKA_BROKER_STATE_UPDATE)
+#define rd_kafka_broker_state_is_up(state) ((state) == RD_KAFKA_BROKER_STATE_UP)
 
 
 /**
@@ -620,6 +619,10 @@ void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
                                         int64_t connections_max_reauth_ms);
 
 void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *rkb);
+
+void rd_kafka_broker_decommission(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_list_t *wait_thrds);
 
 int unittest_broker(void);
 

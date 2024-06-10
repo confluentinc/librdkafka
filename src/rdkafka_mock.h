@@ -312,6 +312,13 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
                               int32_t broker_id);
 
+RD_EXPORT void
+rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *mcluster,
+                                   int32_t broker_id,
+                                   const char *host,
+                                   int port);
+
+
 /**
  * @brief Makes the broker accept connections again.
  *        This does NOT trigger leader change.
@@ -346,6 +353,29 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
                               int32_t broker_id,
                               const char *rack);
 
+
+
+/**
+ * @brief Remove and delete a mock broker from a cluster.
+ *
+ * @param cluster The mock cluster containing the broker
+ * @param broker_id The broker to delete
+ * @returns 0 on success or -1 on error
+ */
+RD_EXPORT int
+rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *cluster,
+                                  int32_t broker_id);
+
+/**
+ * @brief Add a new broker to the cluster.
+ *
+ * @param mcluster The mock cluster
+ * @param broker_id The id of the broker to add
+ *
+ * @returns Error value or 0 if no error occurred
+ */
+rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
+                                             int32_t broker_id);
 
 
 /**

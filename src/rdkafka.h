@@ -5289,6 +5289,8 @@ void rd_kafka_group_list_destroy(const struct rd_kafka_group_list *grplist);
 RD_EXPORT
 int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist);
 
+RD_EXPORT
+int32_t *rd_kafka_broker_get_learned_ids(rd_kafka_t *rk, size_t *cntp);
 
 
 /**

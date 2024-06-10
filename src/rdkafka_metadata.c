@@ -460,6 +460,38 @@ rd_kafka_populate_metadata_topic_racks(rd_tmpabuf_t *tbuf,
         }
 }
 
+/**
+ * @brief Decommission brokers that are not in the metadata.
+ */
+static void
+rd_kafka_metadata_decommission_unavailable_brokers(rd_kafka_t *rk,
+                                                   rd_kafka_metadata_t *md) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_broker_t *rkb_next;
+        rd_bool_t purge_broker;
+        int i;
+
+        rd_kafka_wrlock(rk);
+        TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_next) {
+                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                        continue;
+
+                purge_broker = rd_true;
+                for (i = 0; i < md->broker_cnt; i++) {
+                        if (md->brokers[i].id == rkb->rkb_nodeid) {
+                                purge_broker = rd_false;
+                                break;
+                        }
+                }
+
+                if (!purge_broker)
+                        continue;
+
+                rd_kafka_broker_decommission(rk, rkb, &rk->wait_thrds);
+        }
+        rd_kafka_wrunlock(rk);
+}
+
 /* Internal implementation for parsing Metadata. */
 static rd_kafka_resp_err_t
 rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
@@ -809,6 +841,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
                                        &md->brokers[i], NULL);
         }
+
+        rd_kafka_metadata_decommission_unavailable_brokers(rk, md);
 
         for (i = 0; i < md->topic_cnt; i++) {
 

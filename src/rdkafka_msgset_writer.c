@@ -1381,9 +1381,9 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
         rd_kafka_msgset_writer_finalize_MessageSet(msetw);
 
         /* Partition tags */
-        rd_kafka_buf_write_tags(rkbuf);
+        rd_kafka_buf_write_tags_empty(rkbuf);
         /* Topics tags */
-        rd_kafka_buf_write_tags(rkbuf);
+        rd_kafka_buf_write_tags_empty(rkbuf);
 
         /* Return final MessageSetSize */
         *MessageSetSizep = msetw->msetw_MessageSetSize;

@@ -837,11 +837,11 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         } while (0)
 
 /**
- * @brief Write tags at the current position in the buffer.
+ * @brief Write empty tags at the current position in the buffer.
  * @remark Currently always writes empty tags.
  * @remark Change to ..write_uvarint() when actual tags are supported.
  */
-#define rd_kafka_buf_write_tags(rkbuf)                                         \
+#define rd_kafka_buf_write_tags_empty(rkbuf)                                         \
         do {                                                                   \
                 if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \
                         break;                                                 \

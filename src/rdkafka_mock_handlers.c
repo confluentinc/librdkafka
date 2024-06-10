@@ -61,10 +61,10 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_buf_read_i16(rkbuf, &Acks);
         rd_kafka_buf_read_i32(rkbuf, &TimeoutMs);
-        rd_kafka_buf_read_i32(rkbuf, &TopicsCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, RD_KAFKAP_TOPICS_MAX);
 
         /* Response: #Topics */
-        rd_kafka_buf_write_i32(resp, TopicsCnt);
+        rd_kafka_buf_write_arraycnt(resp, TopicsCnt);
 
         /* Inject error, if any */
         all_err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -75,14 +75,15 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_mock_topic_t *mtopic;
 
                 rd_kafka_buf_read_str(rkbuf, &Topic);
-                rd_kafka_buf_read_i32(rkbuf, &PartitionCnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
 
                 mtopic = rd_kafka_mock_topic_find_by_kstr(mcluster, &Topic);
 
                 /* Response: Topic */
                 rd_kafka_buf_write_kstr(resp, &Topic);
                 /* Response: #Partitions */
-                rd_kafka_buf_write_i32(resp, PartitionCnt);
+                rd_kafka_buf_write_arraycnt(resp, PartitionCnt);
 
                 while (PartitionCnt-- > 0) {
                         int32_t Partition;
@@ -98,6 +99,9 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                                                                      Partition);
 
                         rd_kafka_buf_read_kbytes(rkbuf, &records);
+
+                        /* Partition Tags */
+                        rd_kafka_buf_skip_tags(rkbuf);
 
                         /* Response: Partition */
                         rd_kafka_buf_write_i32(resp, Partition);
@@ -146,13 +150,29 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                                             resp, mpart->start_offset);
                                 }
                         }
+
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8) {
+                                /* TODO: Add support for injecting RecordErrors
+                                 * 0 record errors for now */
+                                rd_kafka_buf_write_arraycnt(resp, 0);
+
+                                /* error_message */
+                                rd_kafka_buf_write_str(resp, NULL, 0);
+
+                                rd_kafka_buf_write_tags_empty(resp);
+                        }
                 }
+
+                /* Topic Tags */
+                rd_kafka_buf_write_tags_empty(resp);
+
         }
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: ThrottleTime */
                 rd_kafka_buf_write_i32(resp, 0);
         }
+        rd_kafka_buf_write_tags_empty(resp);
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 
@@ -529,7 +549,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                         }
 
                         /* Response: Partition tags */
-                        rd_kafka_buf_write_tags(resp);
+                        rd_kafka_buf_write_tags_empty(resp);
 
                         rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
                                      "Topic %.*s [%" PRId32
@@ -545,7 +565,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                 /* Topic tags */
                 rd_kafka_buf_skip_tags(rkbuf);
                 /* Response: Topic tags */
-                rd_kafka_buf_write_tags(resp);
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
 
@@ -648,7 +668,7 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_i16(resp, err);
 
                         /* Response: Struct tags */
-                        rd_kafka_buf_write_tags(resp);
+                        rd_kafka_buf_write_tags_empty(resp);
 
                         if (coff)
                                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
@@ -674,7 +694,7 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_skip_tags(rkbuf);
 
                 /* Response: Struct tags */
-                rd_kafka_buf_write_tags(resp);
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
@@ -827,10 +847,10 @@ static int rd_kafka_mock_handle_OffsetCommit(rd_kafka_mock_connection_t *mconn,
 
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);
-                        rd_kafka_buf_write_tags(resp);
+                        rd_kafka_buf_write_tags_empty(resp);
                 }
                 rd_kafka_buf_skip_tags(rkbuf);
-                rd_kafka_buf_write_tags(resp);
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -939,7 +959,7 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_mock_cluster_t *mcluster,
                         rd_kafka_buf_write_arraycnt(resp, 0);
                 }
 
-                rd_kafka_buf_write_tags(resp);
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
         if (ApiVersion >= 8) {
@@ -947,7 +967,7 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_mock_cluster_t *mcluster,
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
 
-        rd_kafka_buf_write_tags(resp);
+        rd_kafka_buf_write_tags_empty(resp);
 }
 
 
@@ -985,7 +1005,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                         /* Response: Brokers.Rack (Matt's going to love this) */
                         rd_kafka_buf_write_str(resp, mrkb->rack, -1);
                 }
-                rd_kafka_buf_write_tags(resp);
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
@@ -1076,7 +1096,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         }
 
         rd_kafka_buf_skip_tags(rkbuf);
-        rd_kafka_buf_write_tags(resp);
+        rd_kafka_buf_write_tags_empty(resp);
 
         if (requested_topics)
                 rd_kafka_topic_partition_list_destroy(requested_topics);
@@ -1989,14 +2009,14 @@ rd_kafka_mock_handle_TxnOffsetCommit(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_skip_tags(rkbuf);
 
                         /* Response: Struct tags */
-                        rd_kafka_buf_write_tags(resp);
+                        rd_kafka_buf_write_tags_empty(resp);
                 }
 
                 /* Request: Struct tags */
                 rd_kafka_buf_skip_tags(rkbuf);
 
                 /* Response: Struct tags */
-                rd_kafka_buf_write_tags(resp);
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -2156,7 +2176,7 @@ err_parse:
 const struct rd_kafka_mock_api_handler
     rd_kafka_mock_api_handlers[RD_KAFKAP__NUM] = {
         /* [request-type] = { MinVersion, MaxVersion, FlexVersion, callback } */
-        [RD_KAFKAP_Produce]      = {0, 7, -1, rd_kafka_mock_handle_Produce},
+        [RD_KAFKAP_Produce]      = {0, 9, 9, rd_kafka_mock_handle_Produce},
         [RD_KAFKAP_Fetch]        = {0, 11, -1, rd_kafka_mock_handle_Fetch},
         [RD_KAFKAP_ListOffsets]  = {0, 7, 6, rd_kafka_mock_handle_ListOffsets},
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},

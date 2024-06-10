@@ -395,7 +395,7 @@ int rd_kafka_buf_write_topic_partitions(
                                 rd_kafka_buf_finalize_arraycnt(
                                     rkbuf, of_PartArrayCnt, PartArrayCnt);
                                 /* Tags for previous topic struct */
-                                rd_kafka_buf_write_tags(rkbuf);
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
 
 
@@ -478,7 +478,7 @@ int rd_kafka_buf_write_topic_partitions(
                         /* If there was more than one field written
                          * then this was a struct and thus needs the
                          * struct suffix tags written. */
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
 
                 PartArrayCnt++;
                 cnt++;
@@ -488,7 +488,7 @@ int rd_kafka_buf_write_topic_partitions(
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartArrayCnt,
                                                PartArrayCnt);
                 /* Tags for topic struct */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
@@ -763,7 +763,7 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                 rd_kafka_buf_finalize_arraycnt(
                                     rkbuf, of_PartArrayCnt, part_cnt);
                                 /* Topics tags */
-                                rd_kafka_buf_write_tags(rkbuf);
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
 
                         /* Topic */
@@ -798,14 +798,14 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                 }
 
                 /* Partitions tags */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         if (of_PartArrayCnt > 0) {
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartArrayCnt,
                                                part_cnt);
                 /* Topics tags */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, topic_cnt);
 
@@ -1457,7 +1457,7 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
         if (ApiVersion >= 8) {
                 // Tags for the groups array
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         if (ApiVersion >= 7) {
@@ -2748,7 +2748,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                         }
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
                         /* Tags for previous topic */
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
         }
 
@@ -2765,7 +2765,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_uuid(rkbuf, topic_id);
                         rd_kafka_buf_write_str(rkbuf, NULL, -1);
                         /* Tags for previous topic */
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
         }
 
@@ -4920,10 +4920,10 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                         /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
 
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */
@@ -5004,10 +5004,10 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
                         /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
 
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */

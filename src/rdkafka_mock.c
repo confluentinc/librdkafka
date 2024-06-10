@@ -1106,7 +1106,7 @@ rd_kafka_mock_connection_read_request(rd_kafka_mock_connection_t *mconn,
                                   RD_KAFKAP_REQHDR_SIZE);
 
                 /* For convenience, shave off the ClientId */
-                rd_kafka_buf_skip_str(rkbuf);
+                rd_kafka_buf_skip_str_no_flexver(rkbuf);
 
                 /* And the flexible versions header tags, if any */
                 rd_kafka_buf_skip_tags(rkbuf);

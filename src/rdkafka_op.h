@@ -569,6 +569,8 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
+                               RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
+                               RD_KAFKA_MOCK_CMD_BROKER_ADD,
                                RD_KAFKA_MOCK_CMD_COORD_SET,
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
                         } cmd;
@@ -598,6 +600,8 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_LEADER
                                                   *    BROKER_SET_UPDOWN
                                                   *    BROKER_SET_RACK
+                                                  *    BROKER_DECOMMISSION
+                                                  *    BROKER_ADD
                                                   *    COORD_SET */
                         int64_t lo;              /**< Low offset, for:
                                                   *    TOPIC_CREATE (part cnt)

@@ -366,6 +366,17 @@ RD_EXPORT int
 rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *cluster,
                                   int32_t broker_id);
 
+/**
+ * @brief Add a new broker to the cluster.
+ *
+ * @param mcluster The mock cluster
+ * @param broker_id The id of the broker to add
+ *
+ * @returns Error value or 0 if no error occurred
+ */
+rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
+                                             int32_t broker_id);
+
 
 /**
  * @brief Explicitly sets the coordinator. If this API is not a standard

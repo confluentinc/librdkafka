@@ -258,6 +258,7 @@ struct rd_kafka_s {
         /**< Logical brokers currently without an address.
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
         rd_atomic32_t rk_broker_addrless_cnt;
+        rd_list_t wait_thrds; /**< Decommissioned threads to wait */
 
         mtx_t rk_internal_rkb_lock;
         rd_kafka_broker_t *rk_internal_rkb;

@@ -435,16 +435,22 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
         int replica_cnt = RD_MIN(replication_factor, mcluster->broker_cnt);
         rd_kafka_mock_broker_t *mrkb;
         int i = 0;
-        int first_replica =
-            (mpart->id * replication_factor) % mcluster->broker_cnt;
+        int first_replica;
         int skipped = 0;
 
         if (mpart->replicas)
                 rd_free(mpart->replicas);
 
-        mpart->replicas    = rd_calloc(replica_cnt, sizeof(*mpart->replicas));
+        mpart->replicas = replica_cnt
+                              ? rd_calloc(replica_cnt, sizeof(*mpart->replicas))
+                              : NULL;
         mpart->replica_cnt = replica_cnt;
+        if (replica_cnt == 0) {
+                rd_kafka_mock_partition_set_leader0(mpart, NULL);
+                return;
+        }
 
+        first_replica = (mpart->id * replication_factor) % mcluster->broker_cnt;
 
         /* Use a predictable, determininistic order on a per-topic basis.
          *
@@ -918,6 +924,23 @@ static void rd_kafka_mock_cluster_io_add(rd_kafka_mock_cluster_t *mcluster,
         mcluster->fd_cnt++;
 }
 
+/**
+ * @brief Reassign partition replicas to broker, after deleting or
+ *        adding a new one.
+ */
+static void
+rd_kafka_mock_cluster_reassing_partitions(rd_kafka_mock_cluster_t *mcluster) {
+        rd_kafka_mock_topic_t *mtopic;
+        TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
+                int i;
+                for (i = 0; i < mtopic->partition_cnt; i++) {
+                        rd_kafka_mock_partition_t *mpart =
+                            &mtopic->partitions[i];
+                        rd_kafka_mock_partition_assign_replicas(
+                            mpart, mpart->replica_cnt);
+                }
+        }
+}
 
 static void rd_kafka_mock_connection_close(rd_kafka_mock_connection_t *mconn,
                                            const char *reason) {
@@ -1571,22 +1594,24 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 }
 
 
-/**
- * @brief Decommission a mock broker from a cluster.
- *
- * @param mcluster The mock cluster
- * @param broker_id The id of the broker to remove
- *
- * @returns Error value or 0 if no error occurred
- */
 rd_kafka_resp_err_t
 rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *mcluster,
                                   int32_t broker_id) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
 
         rko->rko_u.mock.broker_id = broker_id;
-        rko->rko_u.mock.lo        = rd_false;
         rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
+                                             int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_ADD;
 
         return rd_kafka_op_err_destroy(
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
@@ -2341,6 +2366,7 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
 
         case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 rd_kafka_mock_broker_destroy(mrkb);
+                rd_kafka_mock_cluster_reassing_partitions(mcluster);
                 break;
 
         default:
@@ -2508,6 +2534,11 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
         case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
+
+        case RD_KAFKA_MOCK_CMD_BROKER_ADD:
+                rd_kafka_mock_broker_new(mcluster, rko->rko_u.mock.broker_id);
+                rd_kafka_mock_cluster_reassing_partitions(mcluster);
+                break;
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:
                 if (!rd_kafka_mock_coord_set(mcluster, rko->rko_u.mock.name,

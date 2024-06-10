@@ -1268,6 +1268,15 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
 
         rd_list_destroy(&wait_thrds);
 
+        /* Join previously decommissioned broker threads */
+        RD_LIST_FOREACH(thrd, &rk->wait_thrds, i) {
+                int res;
+                if (thrd_join(*thrd, &res) != thrd_success)
+                        ;
+                rd_free(thrd);
+        }
+        rd_list_destroy(&rk->wait_thrds);
+
         /* Destroy mock cluster */
         if (rk->rk_mock.cluster)
                 rd_kafka_mock_cluster_destroy(rk->rk_mock.cluster);
@@ -2262,6 +2271,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_coord_cache_init(&rk->rk_coord_cache,
                                   rk->rk_conf.metadata_max_age_ms);
         rd_kafka_coord_reqs_init(rk);
+        rd_list_init(&rk->wait_thrds, 0, NULL);
 
         if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
                 rk->rk_drmode = RD_KAFKA_DR_MODE_CB;
@@ -4709,7 +4719,7 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                         goto err;
                 }
 
-                gi->broker.id   = rkb->rkb_nodeid;
+                gi->broker.id = rkb->rkb_nodeid;
                 rd_kafka_broker_lock(rkb);
                 gi->broker.host = rd_strdup(rkb->rkb_origname);
                 gi->broker.port = rkb->rkb_port;

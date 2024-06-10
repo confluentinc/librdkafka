@@ -2,11 +2,29 @@
 
 librdkafka v2.5.0 is a feature release.
 
+ * Update bundled lz4 (#4726)
+ * Fix for a loop of ListOffset requests, happening in a Fetch From Follower
+   scenario, if such request is made to the follower (#4616, @kphelps).
+
+
 ## Enhancements
 
   * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
     [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
     bugfixes and performance improvements (#4726).
+
+
+## Fixes
+
+### Consumer fixes
+
+  * Issues: #4616 
+    When an out of range on a follower caused an offset reset, the corresponding
+    ListOffsets request is made to the follower, causing a repeated
+    "Not leader for partition" error. Fixed by sending the request always
+    to the leader.
+    Happening since 1.5.0 (tested version) or previous ones (#4616, @kphelps).
+
 
 
 # librdkafka v2.4.0

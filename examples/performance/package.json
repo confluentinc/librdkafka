@@ -1,0 +1,16 @@
+{
+  "name": "performance",
+  "version": "1.0.0",
+  "main": "performance-promisified.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "file:../..",
+    "kafkajs": "^2.2.4"
+  }
+}

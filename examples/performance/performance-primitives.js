@@ -1,6 +1,12 @@
-const { Kafka, CompressionTypes, ErrorCodes } = require('../../').KafkaJS;
+const { Kafka, ErrorCodes } = require('../../').KafkaJS;
 const { randomBytes } = require('crypto');
 const { hrtime } = require('process');
+
+module.exports = {
+    runProducer,
+    runConsumer,
+    runConsumeTransformProduce,
+};
 
 async function runProducer(brokers, topic, batchSize, warmupMessages, totalMessageCnt, msgSize, compression) {
     let totalMessagesSent = 0;
@@ -61,7 +67,6 @@ async function runProducer(brokers, topic, batchSize, warmupMessages, totalMessa
         }
         await Promise.all(promises);
     }
-    console.log({messagesDispatched, totalMessageCnt})
     let elapsed = hrtime(startTime);
     let durationNanos = elapsed[0] * 1e9 + elapsed[1];
     let rate = (totalBytesSent / durationNanos) * 1e9 / (1024 * 1024); /* MB/s */
@@ -81,7 +86,7 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
         'group.id': 'test-group' + Math.random(),
         'enable.auto.commit': false,
         'auto.offset.reset': 'earliest',
-     });
+    });
     await consumer.connect();
     await consumer.subscribe({ topic });
 
@@ -101,8 +106,8 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
                 rate = (totalMessageSize / durationNanos) * 1e9 / (1024 * 1024); /* MB/s */
                 console.log(`Recvd ${messagesReceived} messages, ${totalMessageSize} bytes; rate is ${rate} MB/s`);
                 consumer.pause([{ topic }]);
-            // } else if (messagesReceived % 100 == 0) {
-            //     console.log(`Recvd ${messagesReceived} messages, ${totalMessageSize} bytes`);
+                // } else if (messagesReceived % 100 == 0) {
+                //     console.log(`Recvd ${messagesReceived} messages, ${totalMessageSize} bytes`);
             }
         }
     });
@@ -135,15 +140,77 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
     return rate;
 }
 
-const brokers = process.env.KAFKA_BROKERS || 'localhost:9092';
-const topic = process.env.KAFKA_TOPIC || 'test-topic';
-const messageCount = process.env.MESSAGE_COUNT ? +process.env.MESSAGE_COUNT : 1000000;
-const messageSize = process.env.MESSAGE_SIZE ? +process.env.MESSAGE_SIZE : 256;
-const batchSize = process.env.BATCH_SIZE ? +process.env.BATCH_SIZE : 100;
-const compression = process.env.COMPRESSION || CompressionTypes.NONE;
-const warmupMessages = process.env.WARMUP_MESSAGES ? +process.env.WARMUP_MESSAGES : (batchSize * 10);
+async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, totalMessageCnt) {
+    const kafka = new Kafka({
+        'client.id': 'kafka-test-performance',
+        'metadata.broker.list': brokers,
+    });
 
-runProducer(brokers, topic, batchSize, warmupMessages, messageCount, messageSize, compression).then(async (producerRate) => {
-    const consumerRate = await runConsumer(brokers, topic, messageCount);
-    console.log(producerRate, consumerRate);
-});
+    const producer = kafka.producer({
+        /* We want things to be flushed immediately as we'll be awaiting this. */
+        'linger.ms': 0
+    });
+    await producer.connect();
+
+    const consumer = kafka.consumer({
+        'group.id': 'test-group' + Math.random(),
+        'enable.auto.commit': false,
+        'auto.offset.reset': 'earliest',
+    });
+    await consumer.connect();
+    await consumer.subscribe({ topic: consumeTopic });
+
+    let messagesReceived = 0;
+    let totalMessageSize = 0;
+    let startTime;
+    let rate;
+    consumer.run({
+        eachMessage: async ({ topic, partition, message }) => {
+            await producer.send({
+                topic: produceTopic,
+                messages: [{ value: message.value }],
+            })
+            messagesReceived++;
+            totalMessageSize += message.value.length;
+            if (messagesReceived === 1) {
+                consumer.pause([{ topic }]);
+            } else if (messagesReceived === totalMessageCnt) {
+                let elapsed = hrtime(startTime);
+                let durationNanos = elapsed[0] * 1e9 + elapsed[1];
+                rate = (totalMessageSize / durationNanos) * 1e9 / (1024 * 1024); /* MB/s */
+                console.log(`Recvd, transformed and sent ${messagesReceived} messages, ${totalMessageSize} bytes; rate is ${rate} MB/s`);
+                consumer.pause([{ topic }]);
+                // } else if (messagesReceived % 1 == 0) {
+                //     console.log(`Recvd ${messagesReceived} messages, ${totalMessageSize} bytes`);
+            }
+        }
+    });
+
+    // Wait until the first message is received
+    await new Promise((resolve) => {
+        let interval = setInterval(() => {
+            if (messagesReceived > 0) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 100);
+    });
+
+    console.log("Starting consume-transform-produce.")
+
+    totalMessageSize = 0;
+    startTime = hrtime();
+    consumer.resume([{ topic: consumeTopic }]);
+    await new Promise((resolve) => {
+        let interval = setInterval(() => {
+            if (messagesReceived >= totalMessageCnt) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 1000);
+    });
+
+    await consumer.disconnect();
+    await producer.disconnect();
+    return rate;
+}

@@ -1192,32 +1192,9 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                 rd_kafka_wrlock(rk);
         }
 
-        /* Decommission brokers.
-         * Broker thread holds a refcount and detects when broker refcounts
-         * reaches 1 and then decommissions itself. */
+        /* Decommission brokers. */
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
-                /* Add broker's thread to wait_thrds list for later joining */
-                thrd  = rd_malloc(sizeof(*thrd));
-                *thrd = rkb->rkb_thread;
-                rd_list_add(&wait_thrds, thrd);
-                rd_kafka_wrunlock(rk);
-
-                rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",
-                             rd_kafka_broker_name(rkb));
-                /* Send op to trigger queue/io wake-up.
-                 * The op itself is (likely) ignored by the broker thread. */
-                rd_kafka_q_enq(rkb->rkb_ops,
-                               rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
-
-#ifndef _WIN32
-                /* Interrupt IO threads to speed up termination. */
-                if (rk->rk_conf.term_sig)
-                        pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
-#endif
-
-                rd_kafka_broker_destroy(rkb);
-
-                rd_kafka_wrlock(rk);
+                rd_kafka_broker_decommission(rk, rkb, &wait_thrds);
         }
 
         if (rk->rk_clusterid) {
@@ -1290,6 +1267,15 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         }
 
         rd_list_destroy(&wait_thrds);
+
+        /* Join previously decommissioned broker threads */
+        RD_LIST_FOREACH(thrd, &rk->wait_thrds, i) {
+                int res;
+                if (thrd_join(*thrd, &res) != thrd_success)
+                        ;
+                rd_free(thrd);
+        }
+        rd_list_destroy(&rk->wait_thrds);
 
         /* Destroy mock cluster */
         if (rk->rk_mock.cluster)
@@ -1415,9 +1401,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
         rd_kafka_toppar_lock(rktp);
 
         if (rktp->rktp_broker) {
-                rd_kafka_broker_lock(rktp->rktp_broker);
                 broker_id = rktp->rktp_broker->rkb_nodeid;
-                rd_kafka_broker_unlock(rktp->rktp_broker);
         }
 
         /* Grab a copy of the latest finalized offset stats */
@@ -2287,6 +2271,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_coord_cache_init(&rk->rk_coord_cache,
                                   rk->rk_conf.metadata_max_age_ms);
         rd_kafka_coord_reqs_init(rk);
+        rd_list_init(&rk->wait_thrds, 0, NULL);
 
         if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
                 rk->rk_drmode = RD_KAFKA_DR_MODE_CB;
@@ -4734,8 +4719,8 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                         goto err;
                 }
 
+                gi->broker.id = rkb->rkb_nodeid;
                 rd_kafka_broker_lock(rkb);
-                gi->broker.id   = rkb->rkb_nodeid;
                 gi->broker.host = rd_strdup(rkb->rkb_origname);
                 gi->broker.port = rkb->rkb_port;
                 rd_kafka_broker_unlock(rkb);

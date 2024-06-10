@@ -261,6 +261,8 @@ _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
+_TEST_DECL(0149_broker_same_host_port_mock);
+_TEST_DECL(0150_purge_brokers_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -518,6 +520,8 @@ struct test tests[] = {
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
+    _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
+    _TEST(0150_purge_brokers_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */
@@ -5462,7 +5466,8 @@ void test_headers_dump(const char *what,
 
 
 /**
- * @brief Retrieve and return the list of broker ids in the cluster.
+ * @brief Retrieve and return the list of broker ids in the cluster by
+ *        sending a Metadata request.
  *
  * @param rk Optional instance to use.
  * @param cntp Will be updated to the number of brokers returned.

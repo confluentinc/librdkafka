@@ -5289,6 +5289,16 @@ void rd_kafka_group_list_destroy(const struct rd_kafka_group_list *grplist);
 RD_EXPORT
 int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist);
 
+/**
+ * @brief Retrieve and return the learned broker ids.
+ *
+ * @param rk Instance to use.
+ * @param cntp Will be updated to the number of brokers returned.
+ *
+ * @returns a malloc:ed list of int32_t broker ids.
+ */
+RD_EXPORT
+int32_t *rd_kafka_brokers_learned_ids(rd_kafka_t *rk, size_t *cntp);
 
 
 /**

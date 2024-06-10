@@ -2,11 +2,33 @@
 
 librdkafka v2.5.0 is a feature release.
 
+ * Identify brokers only by broker id (#4557, @mfleming)
+ * Remove unavailable brokers and their thread (#4557, @mfleming)
+
 ## Enhancements
 
   * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
     [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
     bugfixes and performance improvements (#4726).
+
+
+## Fixes
+
+### General fixes
+
+ * Issues: #4212
+   Identify brokers only by broker id, as happens in Java,
+   avoid to find the broker with same hostname and use the same thread
+   and connection.
+   Happens since 1.x (#4557, @mfleming).
+ * Issues: #4557
+   Remove brokers not reported in a metadata call, along with their thread.
+   Avoids that unavailable brokers are selected for a new connection when
+   there's no one available. We cannot tell if a broker was removed
+   temporarily or permanently so we always remove it and it'll be added back when
+   it becomes available again.
+   Happens since 1.x (#4557, @mfleming).
+
 
 
 # librdkafka v2.4.0

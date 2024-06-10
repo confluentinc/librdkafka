@@ -3012,53 +3012,6 @@ void rd_kafka_dr_implicit_ack(rd_kafka_broker_t *rkb,
         rd_kafka_dr_msgq(rktp->rktp_rkt, &acked, RD_KAFKA_RESP_ERR_NO_ERROR);
 }
 
-
-
-/**
- * @brief Map existing partitions to this broker using the
- *        toppar's leader_id. Only undelegated partitions
- *        matching this broker are mapped.
- *
- * @locks none
- * @locality any
- */
-static void rd_kafka_broker_map_partitions(rd_kafka_broker_t *rkb) {
-        rd_kafka_t *rk = rkb->rkb_rk;
-        rd_kafka_topic_t *rkt;
-        int cnt = 0;
-
-        if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                return;
-
-        rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-                int i;
-
-                rd_kafka_topic_wrlock(rkt);
-                for (i = 0; i < rkt->rkt_partition_cnt; i++) {
-                        rd_kafka_toppar_t *rktp = rkt->rkt_p[i];
-
-                        /* Only map undelegated partitions matching this
-                         * broker*/
-                        rd_kafka_toppar_lock(rktp);
-                        if (rktp->rktp_leader_id == rkb->rkb_nodeid &&
-                            !(rktp->rktp_broker && rktp->rktp_next_broker)) {
-                                rd_kafka_toppar_broker_update(
-                                    rktp, rktp->rktp_leader_id, rkb,
-                                    "broker node information updated");
-                                cnt++;
-                        }
-                        rd_kafka_toppar_unlock(rktp);
-                }
-                rd_kafka_topic_wrunlock(rkt);
-        }
-        rd_kafka_rdunlock(rk);
-
-        rd_rkb_dbg(rkb, TOPIC | RD_KAFKA_DBG_BROKER, "LEADER",
-                   "Mapped %d partition(s) to broker", cnt);
-}
-
-
 /**
  * @brief Broker id comparator
  */
@@ -3118,7 +3071,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
         switch (rko->rko_type) {
         case RD_KAFKA_OP_NODE_UPDATE: {
-                enum { _UPD_NAME = 0x1, _UPD_ID = 0x2 } updated = 0;
+                rd_bool_t updated = rd_false;
                 char brokername[RD_KAFKA_NODENAME_SIZE];
 
                 /* Need kafka_wrlock for updating rk_broker_by_id */
@@ -3132,31 +3085,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_strlcpy(rkb->rkb_nodename, rko->rko_u.node.nodename,
                                    sizeof(rkb->rkb_nodename));
                         rkb->rkb_nodename_epoch++;
-                        updated |= _UPD_NAME;
-                }
-
-                if (rko->rko_u.node.nodeid != -1 &&
-                    !RD_KAFKA_BROKER_IS_LOGICAL(rkb) &&
-                    rko->rko_u.node.nodeid != rkb->rkb_nodeid) {
-                        int32_t old_nodeid = rkb->rkb_nodeid;
-                        rd_rkb_dbg(rkb, BROKER, "UPDATE",
-                                   "NodeId changed from %" PRId32
-                                   " to %" PRId32,
-                                   rkb->rkb_nodeid, rko->rko_u.node.nodeid);
-
-                        rkb->rkb_nodeid = rko->rko_u.node.nodeid;
-
-                        /* Update system thread name */
-                        rd_kafka_set_thread_sysname("rdk:broker%" PRId32,
-                                                    rkb->rkb_nodeid);
-
-                        /* Update broker_by_id sorted list */
-                        if (old_nodeid == -1)
-                                rd_list_add(&rkb->rkb_rk->rk_broker_by_id, rkb);
-                        rd_list_sort(&rkb->rkb_rk->rk_broker_by_id,
-                                     rd_kafka_broker_cmp_by_id);
-
-                        updated |= _UPD_ID;
+                        updated = rd_true;
                 }
 
                 rd_kafka_mk_brokername(brokername, sizeof(brokername),
@@ -3175,22 +3104,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_wrunlock(rkb->rkb_rk);
 
-                if (updated & _UPD_NAME)
+                if (updated) {
                         rd_kafka_broker_fail(rkb, LOG_DEBUG,
                                              RD_KAFKA_RESP_ERR__TRANSPORT,
                                              "Broker hostname updated");
-                else if (updated & _UPD_ID) {
-                        /* Map existing partitions to this broker. */
-                        rd_kafka_broker_map_partitions(rkb);
-
-                        /* If broker is currently in state up we need
-                         * to trigger a state change so it exits its
-                         * state&type based .._serve() loop. */
-                        rd_kafka_broker_lock(rkb);
-                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP)
-                                rd_kafka_broker_set_state(
-                                    rkb, RD_KAFKA_BROKER_STATE_UPDATE);
-                        rd_kafka_broker_unlock(rkb);
                 }
 
                 rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
@@ -4615,17 +4532,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
                         rd_kafka_broker_connect_auth(rkb);
                         break;
 
-                case RD_KAFKA_BROKER_STATE_UPDATE:
-                        /* FALLTHRU */
                 case RD_KAFKA_BROKER_STATE_UP:
                         rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
-
-                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UPDATE) {
-                                rd_kafka_broker_lock(rkb);
-                                rd_kafka_broker_set_state(
-                                    rkb, RD_KAFKA_BROKER_STATE_UP);
-                                rd_kafka_broker_unlock(rkb);
-                        }
                         break;
                 }
 
@@ -5062,14 +4970,6 @@ void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
                 rkb->rkb_nodename_epoch++;
                 changed = rd_true;
         }
-
-        if (rkb->rkb_nodeid != nodeid) {
-                rd_rkb_dbg(rkb, BROKER, "NODEID",
-                           "Broker nodeid changed from %" PRId32 " to %" PRId32,
-                           rkb->rkb_nodeid, nodeid);
-                rkb->rkb_nodeid = nodeid;
-        }
-
         rd_kafka_broker_unlock(rkb);
 
         /* Update the log name to include (or exclude) the nodeid.
@@ -5438,12 +5338,6 @@ void rd_kafka_broker_update(rd_kafka_t *rk,
                  * the hostname. */
                 if (strcmp(rkb->rkb_nodename, nodename))
                         needs_update = 1;
-        } else if ((rkb = rd_kafka_broker_find(rk, proto, mdb->host,
-                                               mdb->port))) {
-                /* Broker matched by hostname (but not by nodeid),
-                 * update the nodeid. */
-                needs_update = 1;
-
         } else if ((rkb = rd_kafka_broker_add(rk, RD_KAFKA_LEARNED, proto,
                                               mdb->host, mdb->port, mdb->id))) {
                 rd_kafka_broker_keep(rkb);
@@ -5479,24 +5373,12 @@ void rd_kafka_broker_update(rd_kafka_t *rk,
  * @returns the broker id, or RD_KAFKA_NODEID_UA if \p rkb is NULL.
  *
  * @locality any
- * @locks_required none
- * @locks_acquired rkb_lock
  */
 int32_t rd_kafka_broker_id(rd_kafka_broker_t *rkb) {
-        int32_t broker_id;
-
         if (unlikely(!rkb))
                 return RD_KAFKA_NODEID_UA;
 
-        /* Avoid locking if already on the broker thread */
-        if (thrd_is_current(rkb->rkb_thread))
-                return rkb->rkb_nodeid;
-
-        rd_kafka_broker_lock(rkb);
-        broker_id = rkb->rkb_nodeid;
-        rd_kafka_broker_unlock(rkb);
-
-        return broker_id;
+        return rkb->rkb_nodeid;
 }
 
 
@@ -6016,6 +5898,79 @@ void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
         rd_dassert(rkb);
         rko = rd_kafka_op_new(RD_KAFKA_OP_SASL_REAUTH);
         rd_kafka_q_enq(rkb->rkb_ops, rko);
+}
+
+int32_t *rd_kafka_brokers_learned_ids(rd_kafka_t *rk, size_t *cntp) {
+        rd_kafka_broker_t *rkb;
+
+        size_t all_broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+        /* This over-allocates but simplifies the code. */
+        int32_t *ids = malloc(sizeof(*ids) * all_broker_cnt);
+        int32_t *p   = ids;
+
+        *cntp = 0;
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                        continue;
+
+                *p++ = rkb->rkb_nodeid;
+                (*cntp)++;
+        }
+        rd_kafka_rdunlock(rk);
+
+        return ids;
+}
+
+/**
+ * @brief Decommission a broker.
+ *
+ * @param rk Client instance.
+ * @param rkb Broker to decommission.
+ * @param wait_thrds Add the broker's thread to this list if not NULL.
+ *
+ * @locks rd_kafka_wrlock() is dropped and reacquired.
+ *
+ * Broker threads hold a refcount and detect when it reaches 1 and then
+ * decommissions itself. Callers can wait for this to happen by calling
+ * thrd_join() on elements of \p wait_thrds. Callers are responsible for
+ * managing the creation and destruction of \p wait_thrds which can be NULL.
+ */
+void rd_kafka_broker_decommission(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_list_t *wait_thrds) {
+
+        if (rkb->termination_in_progress)
+                return;
+
+        rkb->termination_in_progress = rd_true;
+
+        /* Add broker's thread to wait_thrds list for later joining */
+        if (wait_thrds) {
+                thrd_t *thrd = rd_malloc(sizeof(*thrd));
+                *thrd        = rkb->rkb_thread;
+
+                rd_list_add(wait_thrds, thrd);
+        }
+
+        rd_kafka_wrunlock(rk);
+
+        rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",
+                     rd_kafka_broker_name(rkb));
+
+        /* Send op to trigger queue/io wake-up.
+         * The op itself is (likely) ignored by the broker thread. */
+        rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
+
+#ifndef _WIN32
+        /* Interrupt IO threads to speed up termination. */
+        if (rk->rk_conf.term_sig)
+                pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+#endif
+
+        rd_kafka_broker_destroy(rkb);
+
+        rd_kafka_wrlock(rk);
 }
 
 /**

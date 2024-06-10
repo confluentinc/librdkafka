@@ -781,7 +781,6 @@ static void rd_kafka_transport_io_event(rd_kafka_transport_t *rktrans,
         case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
         case RD_KAFKA_BROKER_STATE_AUTH_REQ:
         case RD_KAFKA_BROKER_STATE_UP:
-        case RD_KAFKA_BROKER_STATE_UPDATE:
 
                 if (events & POLLIN) {
                         while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&

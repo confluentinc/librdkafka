@@ -375,8 +375,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
         union {
                 struct {
-                        rd_list_t *topics;     /* Requested topics (char *) */
-                        char *reason;          /* Textual reason */
+                        rd_list_t *topics; /* Requested topics (char *) */
+                        rd_list_t *
+                            topic_ids; /* Requested topic ids rd_kafka_Uuid_t */
+                        char *reason;  /* Textual reason */
                         rd_kafka_op_t *rko;    /* Originating rko with replyq
                                                 * (if any) */
                         rd_bool_t all_topics;  /**< Full/All topics requested */

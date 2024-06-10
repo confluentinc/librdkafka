@@ -202,13 +202,16 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         await consumer2.disconnect();
     });
 
-    it('does not hold up polling', async () => {
-        /* This consumer has a low max.poll.interval.ms */
+    it('does not hold up polling for non-message events', async () => {
+        /* Even if the cache is full of messages, we should still be polling for
+         * non-message events like rebalances, etc. Internally, this is to make sure that
+         * we call poll() at least once within max.poll.interval.ms even if the cache is
+         * still full. This depends on us expiring the cache on time. */
         const impatientConsumer = createConsumer({
             groupId,
             maxWaitTimeInMs: 100,
             fromBeginning: true,
-            rebalanceTimeout: 10000,
+            rebalanceTimeout: 10000, /* also changes max.poll.interval.ms */
             sessionTimeout: 10000,
             autoCommitInterval: 1000,
             clientId: "impatientConsumer",
@@ -234,7 +237,8 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
                     ]);
 
                 /* When the second consumer is joining, deliberately slow down message consumption.
-                 * We should still have a rebalance very soon, since we must expire the cache and
+                 * This is so the cache remains full.
+                 * We should still have a rebalance very soon, since we will expire the cache and
                  * trigger a rebalance before max.poll.interval.ms.
                  */
                 if (consumer1TryingToJoin) {

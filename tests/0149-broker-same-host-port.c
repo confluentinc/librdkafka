@@ -56,7 +56,6 @@ int main_0149_broker_same_host_port_mock(int argc, char **argv) {
         test_conf_init(&conf, NULL, 10);
 
         test_conf_set(conf, "bootstrap.servers", bootstraps);
-        test_conf_set(conf, "debug", "mock,broker,metadata");
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 

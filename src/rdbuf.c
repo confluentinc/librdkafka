@@ -667,8 +667,8 @@ size_t rd_buf_erase(rd_buf_t *rbuf, size_t absof, size_t size) {
 
                 /* If segment is now empty, remove it */
                 if (seg->seg_of == 0) {
+                        rbuf->rbuf_erased -= seg->seg_erased;
                         rd_buf_destroy_segment(rbuf, seg);
-                        rbuf->rbuf_erased -= toerase;
                 }
         }
 
@@ -712,8 +712,8 @@ int rd_buf_write_seek(rd_buf_t *rbuf, size_t absof) {
              next != seg;) {
                 rd_segment_t *this = next;
                 next = TAILQ_PREV(this, rd_segment_head, seg_link);
+                rbuf->rbuf_erased -= this->seg_erased;
                 rd_buf_destroy_segment(rbuf, this);
-                rbuf->rbuf_erased -= seg->seg_erased;
         }
 
         /* Update relative write offset */

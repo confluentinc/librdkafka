@@ -1,3 +1,7 @@
+# vNext
+
+* Fix segfault when using long client id because of erased segment when using flexver. (#4689)
+
 # librdkafka v2.4.0
 
 librdkafka v2.4.0 is a feature release:

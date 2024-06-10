@@ -8031,8 +8031,8 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
         nodeid = rkb->rkb_nodeid;
         rd_kafka_broker_lock(rkb);
-        host   = rd_strdup(rkb->rkb_origname);
-        port   = rkb->rkb_port;
+        host = rd_strdup(rkb->rkb_origname);
+        port = rkb->rkb_port;
         rd_kafka_broker_unlock(rkb);
 
         node = rd_kafka_Node_new(nodeid, host, port, NULL);

@@ -99,12 +99,11 @@ typedef struct rd_kafka_mock_cgrp_s {
         char *protocol_name;                     /**< Elected protocol name */
         int32_t generation_id;                   /**< Generation Id */
         int session_timeout_ms;                  /**< Session timeout */
-        enum {
-                RD_KAFKA_MOCK_CGRP_STATE_EMPTY,       /* No members */
-                RD_KAFKA_MOCK_CGRP_STATE_JOINING,     /* Members are joining */
-                RD_KAFKA_MOCK_CGRP_STATE_SYNCING,     /* Syncing assignments */
-                RD_KAFKA_MOCK_CGRP_STATE_REBALANCING, /* Rebalance triggered */
-                RD_KAFKA_MOCK_CGRP_STATE_UP,          /* Group is operational */
+        enum { RD_KAFKA_MOCK_CGRP_STATE_EMPTY,   /* No members */
+               RD_KAFKA_MOCK_CGRP_STATE_JOINING, /* Members are joining */
+               RD_KAFKA_MOCK_CGRP_STATE_SYNCING, /* Syncing assignments */
+               RD_KAFKA_MOCK_CGRP_STATE_REBALANCING, /* Rebalance triggered */
+               RD_KAFKA_MOCK_CGRP_STATE_UP,          /* Group is operational */
         } state;                        /**< Consumer group state */
         rd_kafka_timer_t session_tmr;   /**< Session timeout timer */
         rd_kafka_timer_t rebalance_tmr; /**< Rebalance state timer */
@@ -401,7 +400,7 @@ struct rd_kafka_mock_cluster_s {
         struct {
                 rd_kafka_mock_io_handler_t *cb; /**< Callback */
                 void *opaque;                   /**< Callbacks' opaque */
-        } *handlers;
+        } * handlers;
 
         /**< Per-protocol request error stack. */
         rd_kafka_mock_error_stack_head_t errstacks;

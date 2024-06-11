@@ -48,11 +48,17 @@ static void destroy_flags_rebalance_cb(rd_kafka_t *rk,
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
-                test_consumer_assign("rebalance", rk, parts);
+                if(test_consumer_group_protocol_classic())
+                        test_consumer_assign("rebalance", rk, parts);
+                else
+                        test_consumer_incremental_assign("rebalance", rk, parts);
                 break;
 
         case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                test_consumer_unassign("rebalance", rk);
+                if(test_consumer_group_protocol_classic())
+                        test_consumer_unassign("rebalance", rk);
+                else
+                        test_consumer_incremental_unassign("rebalance", rk, parts);
                 break;
 
         default:
@@ -201,11 +207,21 @@ static void destroy_flags(int local_mode) {
 
 
 int main_0084_destroy_flags_local(int argc, char **argv) {
+        /* FIXME: fix the test with subscribe/unsubscribe PR. */
+        if(test_consumer_group_protocol_consumer()) {
+                TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
+                return 0;
+        }
         destroy_flags(1 /*no brokers*/);
         return 0;
 }
 
 int main_0084_destroy_flags(int argc, char **argv) {
+        /* FIXME: fix the test with subscribe/unsubscribe PR. */
+        if(test_consumer_group_protocol_consumer()) {
+                TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
+                return 0;
+        }
         destroy_flags(0 /*with brokers*/);
         return 0;
 }

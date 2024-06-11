@@ -1,8 +1,24 @@
+# librdkafka v2.5.0
+
+librdkafka v2.5.0 is a feature release.
+
+## Enhancements
+
+  * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
+    [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
+    bugfixes and performance improvements (#4726).
+
+
 # librdkafka v2.4.0
 
 librdkafka v2.4.0 is a feature release:
 
- * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records) Augment ProduceResponse error messaging for specific culprit records (#4583).
+ * [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol): The Next Generation of the Consumer Rebalance Protocol.
+   **Early Access**: This should be used only for evaluation and must not be used in production. Features and contract of this KIP might change in future (#4610).
+ * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records): Augment ProduceResponse error messaging for specific culprit records (#4583).
+ * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+   Continue partial implementation by adding a metadata cache by topic id
+   and updating the topic id corresponding to the partition name (#4676)
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt).
  * Integration tests can be started in KRaft mode and run against any
@@ -12,9 +28,6 @@ librdkafka v2.4.0 is a feature release:
    max period of 1 ms (#4671).
  * Fixed a bug causing duplicate message consumption from a stale
    fetch start offset in some particular cases (#4636)
- * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
-   Continue partial implementation by adding a metadata cache by topic id
-   and updating the topic id corresponding to the partition name (#4676)
  * Fix to metadata cache expiration on full metadata refresh (#4677).
  * Fix for a wrong error returned on full metadata refresh before joining
    a consumer group (#4678).
@@ -37,6 +50,20 @@ librdkafka v2.4.0 is a feature release:
    error. Rest of records in the batch will fail with the new error code
    _INVALID_DIFFERENT_RECORD (Java: KafkaException) and can be retried manually,
    depending on the application logic (#4583).
+
+
+## Early Access
+
+### [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol): The Next Generation of the Consumer Rebalance Protocol
+ * With this new protocol the role of the Group Leader (a member) is removed and
+   the assignment is calculated by the Group Coordinator (a broker) and sent
+   to each member through heartbeats.
+
+   The feature is still _not production-ready_.
+   It's possible to try it in a non-production enviroment.
+
+   A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available
+   with considerations and steps to follow to test it (#4610).
 
 
 ## Fixes

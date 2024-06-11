@@ -25,7 +25,7 @@ librdkafka v2.4.0 is a feature release:
  * Upgrade OpenSSL to v3.0.13 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt)
    (@janjwerner-confluent, #4690).
- * Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.7.1 (@janjwerner-confluent, #4690).
+ * Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.8.0 (@janjwerner-confluent, #4690).
 
 
 

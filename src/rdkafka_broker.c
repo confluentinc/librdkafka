@@ -81,6 +81,7 @@
 #ifdef __QNXNTO__
 /* Override with hostname as a numeric address for QNX Neutrino */
 #define AI_ADDRCONFIG AI_NUMERICHOST
+#warning "Only numeric addresses are supported as broker input for QNX Neutrino."
 #else
 /* for uclibc < 0.9.29 */
 #define AI_ADDRCONFIG 0x0020

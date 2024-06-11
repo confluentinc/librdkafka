@@ -77,9 +77,14 @@
 #include "rdendian.h"
 #include "rdunittest.h"
 
-/* for uclibc < 0.9.29 */
 #ifndef AI_ADDRCONFIG
+#ifdef __QNXNTO__
+/* Override with hostname as a numeric address for QNX Neutrino */
+#define AI_ADDRCONFIG AI_NUMERICHOST
+#else
+/* for uclibc < 0.9.29 */
 #define AI_ADDRCONFIG 0x0020
+#endif
 #endif
 
 static const int rd_kafka_max_block_ms = 1000;

@@ -77,15 +77,16 @@
 #include "rdendian.h"
 #include "rdunittest.h"
 
-#ifndef AI_ADDRCONFIG
-#ifdef __QNXNTO__
-/* Override with hostname as a numeric address for QNX Neutrino */
-#define AI_ADDRCONFIG AI_NUMERICHOST
-#warning "Only numeric addresses are supported as broker input for QNX Neutrino."
-#else
 /* for uclibc < 0.9.29 */
+#ifndef AI_ADDRCONFIG
 #define AI_ADDRCONFIG 0x0020
 #endif
+
+#ifdef __QNXNTO__
+#define AI_FLAG AI_NUMERICHOST
+#warning "Only numeric addresses are supported as broker input for QNX Neutrino."
+#else
+#define AI_FLAG AI_ADDRCONFIG
 #endif
 
 static const int rd_kafka_max_block_ms = 1000;
@@ -1024,7 +1025,7 @@ static int rd_kafka_broker_resolve(rd_kafka_broker_t *rkb,
         if (!rkb->rkb_rsal) {
                 /* Resolve */
                 rkb->rkb_rsal = rd_getaddrinfo(
-                    nodename, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
+                    nodename, RD_KAFKA_PORT_STR, AI_FLAG,
                     rkb->rkb_rk->rk_conf.broker_addr_family, SOCK_STREAM,
                     IPPROTO_TCP, rkb->rkb_rk->rk_conf.resolve_cb,
                     rkb->rkb_rk->rk_conf.opaque, &errstr);
@@ -5359,7 +5360,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk,
                                      "Canonicalizing bootstrap broker %s:%d",
                                      host, port);
                         sockaddr_list = rd_getaddrinfo(
-                            host, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
+                            host, RD_KAFKA_PORT_STR, AI_FLAG,
                             rk->rk_conf.broker_addr_family, SOCK_STREAM,
                             IPPROTO_TCP, rk->rk_conf.resolve_cb,
                             rk->rk_conf.opaque, &err_str);

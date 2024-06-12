@@ -1,3 +1,28 @@
+# librdkafka v2.5.0
+
+librdkafka v2.5.0 is a feature release.
+
+* Fix segfault when using long client id because of erased segment when using flexver. (#4689)
+
+
+## Enhancements
+
+  * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
+    [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
+    bugfixes and performance improvements (#4726).
+
+
+## Fixes
+
+### General fixes
+
+*  Issues: [confluentinc/confluent-kafka-dotnet#2084](https://github.com/confluentinc/confluent-kafka-dotnet/issues/2084)
+   Fix segfault when a segment is erased and more data is written to the buffer.
+   Happens since 1.x when a portion of the buffer (segment) is erased for flexver or compression.
+   More likely to happen since 2.1.0, because of the upgrades to flexver, with certain string sizes like a long client id (#4689).
+
+
+
 # librdkafka v2.4.0
 
 librdkafka v2.4.0 is a feature release:

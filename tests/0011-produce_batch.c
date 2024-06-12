@@ -90,12 +90,20 @@ static void test_single_partition(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
-
+        char client_id[271];
         SUB_TEST_QUICK();
 
         msgid_next = 0;
 
         test_conf_init(&conf, &topic_conf, 20);
+
+        /* A long client id must not cause a segmentation fault
+         * because of an erased segment when using flexver.
+         * See:
+         * https://github.com/confluentinc/confluent-kafka-dotnet/issues/2084 */
+        memset(client_id, 'c', sizeof(client_id) - 1);
+        client_id[sizeof(client_id) - 1] = '\0';
+        rd_kafka_conf_set(conf, "client.id", client_id, NULL, 0);
 
         /* Set delivery report callback */
         rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);

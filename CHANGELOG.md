@@ -3,6 +3,7 @@
 librdkafka v2.5.0 is a feature release.
 
  * Update bundled lz4 (#4726)
+ * Fix segfault when using long client id because of erased segment when using flexver. (#4689)
  * Fix for a loop of ListOffset requests, happening in a Fetch From Follower
    scenario, if such request is made to the follower (#4616, @kphelps).
 
@@ -18,12 +19,19 @@ librdkafka v2.5.0 is a feature release.
 
 ### Consumer fixes
 
-  * Issues: #4616 
+  * Issues: #4616
     When an out of range on a follower caused an offset reset, the corresponding
     ListOffsets request is made to the follower, causing a repeated
     "Not leader for partition" error. Fixed by sending the request always
     to the leader.
     Happening since 1.5.0 (tested version) or previous ones (#4616, @kphelps).
+
+### General fixes
+
+*  Issues: [confluentinc/confluent-kafka-dotnet#2084](https://github.com/confluentinc/confluent-kafka-dotnet/issues/2084)
+   Fix segfault when a segment is erased and more data is written to the buffer.
+   Happens since 1.x when a portion of the buffer (segment) is erased for flexver or compression.
+   More likely to happen since 2.1.0, because of the upgrades to flexver, with certain string sizes like a long client id (#4689).
 
 
 

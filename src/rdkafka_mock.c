@@ -949,11 +949,11 @@ static void rd_kafka_mock_connection_close(rd_kafka_mock_connection_t *mconn,
         rd_free(mconn);
 }
 
+void rd_kafka_mock_connection_send_response0(rd_kafka_mock_connection_t *mconn,
+                                             rd_kafka_buf_t *resp,
+                                             rd_bool_t tags_written) {
 
-void rd_kafka_mock_connection_send_response(rd_kafka_mock_connection_t *mconn,
-                                            rd_kafka_buf_t *resp) {
-
-        if (resp->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
+        if (!tags_written && (resp->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {
                 /* Empty struct tags */
                 rd_kafka_buf_write_i8(resp, 0);
         }

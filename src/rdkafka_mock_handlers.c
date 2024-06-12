@@ -175,7 +175,6 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                 /* Response: ThrottleTime */
                 rd_kafka_buf_write_i32(resp, 0);
         }
-        rd_kafka_buf_write_tags_empty(resp);
 
         /* Response: Top level tags */
         rd_kafka_buf_write_tags_empty(resp);

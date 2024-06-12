@@ -502,7 +502,7 @@ int rd_kafka_buf_write_topic_partitions(
  *
  * @param rkbuf buffer to read from
  * @param CurrentLeader is the CurrentLeader to populate.
- * @returns 1 on success, else -1 on parse error.
+ * @return 1 on success, else -1 on parse error.
  */
 int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
                                     rd_kafkap_CurrentLeader_t *CurrentLeader) {

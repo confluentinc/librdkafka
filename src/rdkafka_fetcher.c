@@ -668,6 +668,7 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                         rd_kafka_topic_destroy0(rkt);
                         rkt = NULL;
                 }
+                /* Topic Tags */
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 

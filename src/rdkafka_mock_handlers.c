@@ -397,6 +397,7 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_write_arraycnt(resp, 0);
                         }
 
+                        /* Response: Partition tags */
                         rd_kafka_buf_write_tags_empty(resp);
                 }
 
@@ -440,6 +441,7 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                 /* Matt might do something sensible with this */
         }
 
+        /* Response: Top level tags */
         rd_kafka_buf_write_tags_empty(resp);
 
         /* If there was no data, delay up to MaxWait.

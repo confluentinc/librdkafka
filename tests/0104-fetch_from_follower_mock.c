@@ -29,7 +29,6 @@
 
 #include "test.h"
 
-
 /**
  * @name Fetch from follower tests using the mock broker.
  */
@@ -110,6 +109,11 @@ static void do_test_offset_reset(const char *auto_offset_reset) {
                 test_consumer_poll_no_msgs(auto_offset_reset, c, 0, 5000);
         else
                 test_consumer_poll(auto_offset_reset, c, 0, 1, 0, msgcnt, NULL);
+
+        /* send another batch of messages to ensure the consumer isn't stuck */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 1000,
+                                 "bootstrap.servers", bootstraps, NULL);
+        test_consumer_poll("ASSIGN", c, 0, 1, 0, msgcnt, NULL);
 
         test_consumer_close(c);
 

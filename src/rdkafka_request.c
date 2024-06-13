@@ -502,6 +502,7 @@ int rd_kafka_buf_write_topic_partitions(
  *
  * @param rkbuf buffer to read from
  * @param CurrentLeader is the CurrentLeader to populate.
+ *
  * @return 1 on success, else -1 on parse error.
  */
 int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
@@ -520,7 +521,8 @@ err_parse:
  *
  * @param rkbuf buffer to read from
  * @param NodeEndpoints is the NodeEndpoints to populate.
- * @returns 1 on success, else -1 on parse error.
+ *
+ * @return 1 on success, else -1 on parse error.
  */
 int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
                                     rd_kafkap_NodeEndpoints_t *NodeEndpoints) {
@@ -528,7 +530,7 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         int32_t i;
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
-        RD_IF_FREE(NodeEndpoints->NodeEndpoints, rd_free);
+        rd_dassert(!NodeEndpoints->NodeEndpoints);
         NodeEndpoints->NodeEndpoints =
             rd_calloc(NodeEndpoints->NodeEndpointCnt,
                       sizeof(*NodeEndpoints->NodeEndpoints));

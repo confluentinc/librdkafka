@@ -840,7 +840,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
  * @brief Read KIP-482 Tags at current position in the buffer using
  *        the `read_tag` function receiving the `opaque' pointer.
  */
-#define rd_kafka_buf_read_tags(rkbuf, read_tag, opaque)                        \
+#define rd_kafka_buf_read_tags(rkbuf, read_tag, ...)                        \
         do {                                                                   \
                 uint64_t _tagcnt;                                              \
                 if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \
@@ -851,13 +851,37 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_kafka_buf_read_uvarint(rkbuf, &_tagtype);           \
                         rd_kafka_buf_read_uvarint(rkbuf, &_taglen);            \
                         int _read_tag_resp =                                   \
-                            read_tag(rkbuf, _tagtype, _taglen, opaque);        \
+                            read_tag(rkbuf, _tagtype, _taglen, __VA_ARGS__);   \
                         if (_read_tag_resp == -1)                              \
                                 goto err_parse;                                \
                         if (!_read_tag_resp && _taglen > 0)                    \
                                 rd_kafka_buf_skip(rkbuf, (size_t)(_taglen));   \
                 }                                                              \
         } while (0)
+
+/**
+ * @brief Write \p tagcnt tags at the current position in the buffer.
+ * Calling \p write_tag to write each one with \p rkbuf , tagtype
+ * argument and the remaining arguments.
+ */
+#define rd_kafka_buf_write_tags(rkbuf, write_tag, tags, tagcnt, ...)           \
+        do {                                                                   \
+                uint64_t i;                                                    \
+                if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \
+                        break;                                                 \
+                rd_kafka_buf_write_uvarint(rkbuf, tagcnt);                     \
+                for (i = 0; i < tagcnt; i++) {                                 \
+                        size_t of_taglen, prev_buf_len;                        \
+                        rd_kafka_buf_write_uvarint(rkbuf, tags[i]);            \
+                        of_taglen    = rd_kafka_buf_write_arraycnt_pos(rkbuf); \
+                        prev_buf_len = (rkbuf)->rkbuf_buf.rbuf_len;            \
+                        write_tag(rkbuf, tags[i], __VA_ARGS__);                \
+                        rd_kafka_buf_finalize_arraycnt(                        \
+                            rkbuf, of_taglen,                                  \
+                            (rkbuf)->rkbuf_buf.rbuf_len - prev_buf_len - 1);   \
+                }                                                              \
+        } while (0)
+
 
 /**
  * @brief Write empty tags at the current position in the buffer.

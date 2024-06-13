@@ -83,6 +83,28 @@ typedef enum {
         RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
 } rd_kafka_topic_partition_field_t;
 
+/**
+ * @name Current Leader and NodeEndpoints for KIP-951
+ *       response triggered metadata updates.
+ */
+
+typedef struct rd_kafkap_CurrentLeader_s {
+        int32_t LeaderId;
+        int32_t LeaderEpoch;
+} rd_kafkap_CurrentLeader_t;
+
+typedef struct rd_kafkap_NodeEndpoint_s {
+        int32_t NodeId;
+        rd_kafkap_str_t Host;
+        int32_t Port;
+        rd_kafkap_str_t Rack;
+} rd_kafkap_NodeEndpoint_t;
+
+typedef struct rd_kafkap_NodeEndpoints_s {
+        int32_t NodeEndpointCnt;
+        rd_kafkap_NodeEndpoint_t *NodeEndpoints;
+} rd_kafkap_NodeEndpoints_t;
+
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     rd_bool_t use_topic_id,

@@ -45,7 +45,7 @@
 
 
 /** @brief The maxium ProduceRequestion ApiVersion supported by librdkafka */
-static const int16_t rd_kafka_ProduceRequest_max_version = 8;
+static const int16_t rd_kafka_ProduceRequest_max_version = 9;
 
 
 typedef struct rd_kafka_msgset_writer_s {
@@ -267,6 +267,7 @@ static void rd_kafka_msgset_writer_alloc_buf(rd_kafka_msgset_writer_t *msetw) {
          * ProduceRequest header sizes
          */
         switch (msetw->msetw_ApiVersion) {
+        case 9:
         case 8:
         case 7:
         case 6:
@@ -353,9 +354,10 @@ static void rd_kafka_msgset_writer_alloc_buf(rd_kafka_msgset_writer_t *msetw) {
          * Allocate iovecs to hold all headers and messages,
          * and allocate auxilliery space for message headers, etc.
          */
-        msetw->msetw_rkbuf =
-            rd_kafka_buf_new_request(msetw->msetw_rkb, RD_KAFKAP_Produce,
-                                     msetw->msetw_msgcntmax / 2 + 10, bufsize);
+        msetw->msetw_rkbuf = rd_kafka_buf_new_flexver_request(
+            msetw->msetw_rkb, RD_KAFKAP_Produce,
+            msetw->msetw_msgcntmax / 2 + 10, bufsize,
+            msetw->msetw_ApiVersion >= 9);
 
         rd_kafka_buf_ApiVersion_set(msetw->msetw_rkbuf, msetw->msetw_ApiVersion,
                                     msetw->msetw_features);
@@ -442,19 +444,19 @@ rd_kafka_msgset_writer_write_Produce_header(rd_kafka_msgset_writer_t *msetw) {
         rd_kafka_buf_write_i32(rkbuf, rkt->rkt_conf.request_timeout_ms);
 
         /* TopicArrayCnt */
-        rd_kafka_buf_write_i32(rkbuf, 1);
+        rd_kafka_buf_write_arraycnt(rkbuf, 1);
 
         /* Insert topic */
         rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
 
         /* PartitionArrayCnt */
-        rd_kafka_buf_write_i32(rkbuf, 1);
+        rd_kafka_buf_write_arraycnt(rkbuf, 1);
 
         /* Partition */
         rd_kafka_buf_write_i32(rkbuf, msetw->msetw_rktp->rktp_partition);
 
         /* MessageSetSize: Will be finalized later*/
-        msetw->msetw_of_MessageSetSize = rd_kafka_buf_write_i32(rkbuf, 0);
+        msetw->msetw_of_MessageSetSize = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
         if (msetw->msetw_MsgVersion == 2) {
                 /* MessageSet v2 header */
@@ -1316,9 +1318,9 @@ rd_kafka_msgset_writer_finalize_MessageSet(rd_kafka_msgset_writer_t *msetw) {
                     RD_KAFKAP_MSGSET_V0_SIZE + msetw->msetw_messages_len;
 
         /* Update MessageSetSize */
-        rd_kafka_buf_update_i32(msetw->msetw_rkbuf,
-                                msetw->msetw_of_MessageSetSize,
-                                (int32_t)msetw->msetw_MessageSetSize);
+        rd_kafka_buf_finalize_arraycnt(msetw->msetw_rkbuf,
+                                       msetw->msetw_of_MessageSetSize,
+                                       (int32_t)msetw->msetw_MessageSetSize);
 }
 
 
@@ -1377,6 +1379,11 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
 
         /* Finalize MessageSet header fields */
         rd_kafka_msgset_writer_finalize_MessageSet(msetw);
+
+        /* Partition tags */
+        rd_kafka_buf_write_tags_empty(rkbuf);
+        /* Topics tags */
+        rd_kafka_buf_write_tags_empty(rkbuf);
 
         /* Return final MessageSetSize */
         *MessageSetSizep = msetw->msetw_MessageSetSize;

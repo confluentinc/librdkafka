@@ -86,6 +86,8 @@ typedef enum {
 /**
  * @name Current Leader and NodeEndpoints for KIP-951
  *       response triggered metadata updates.
+ *
+ * @{
  */
 
 typedef struct rd_kafkap_CurrentLeader_s {
@@ -104,6 +106,8 @@ typedef struct rd_kafkap_NodeEndpoints_s {
         int32_t NodeEndpointCnt;
         rd_kafkap_NodeEndpoint_t *NodeEndpoints;
 } rd_kafkap_NodeEndpoints_t;
+
+/**@}*/
 
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,

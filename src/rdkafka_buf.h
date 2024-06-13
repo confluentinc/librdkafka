@@ -840,7 +840,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
  * @brief Read KIP-482 Tags at current position in the buffer using
  *        the `read_tag` function receiving the `opaque' pointer.
  */
-#define rd_kafka_buf_read_tags(rkbuf, read_tag, ...)                        \
+#define rd_kafka_buf_read_tags(rkbuf, read_tag, ...)                           \
         do {                                                                   \
                 uint64_t _tagcnt;                                              \
                 if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \

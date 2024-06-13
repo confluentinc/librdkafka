@@ -726,4 +726,5 @@ rd_kafka_pid_bump(const rd_kafka_pid_t old) {
 
 /**@}*/
 
+
 #endif /* _RDKAFKA_PROTO_H_ */

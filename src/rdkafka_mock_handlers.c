@@ -160,10 +160,9 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
 
                                 /* Response: ErrorMessage */
                                 rd_kafka_buf_write_str(resp, NULL, 0);
-
-                                /* Response: Partition tags */
-                                rd_kafka_buf_write_tags_empty(resp);
                         }
+                        /* Response: Partition tags */
+                        rd_kafka_buf_write_tags_empty(resp);
                 }
 
                 /* Topic tags */
@@ -176,6 +175,10 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                 /* Response: ThrottleTime */
                 rd_kafka_buf_write_i32(resp, 0);
         }
+
+        /* Response: Top level tags */
+        rd_kafka_buf_write_tags_empty(resp);
+
         rd_kafka_mock_connection_send_response0(mconn, resp, rd_true);
 
         return 0;

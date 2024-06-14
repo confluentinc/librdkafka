@@ -3368,8 +3368,8 @@ static int rd_kafka_produce_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
         rd_kafkap_Produce_reply_tags_t *tags = opaque;
         switch (tagtype) {
         case 0: /* NodeEndpoints */
-                if (rd_kafka_buf_read_NodeEndpoints(rkbuf,
-                                                    &tags->NodeEndpoints) == -1)
+                if (rd_kafka_buf_read_NodeEndpoints(
+                        rkbuf, &tags->node_endpoints) == -1)
                         goto err_parse;
                 return 1;
         default:
@@ -3471,7 +3471,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 rd_kafkap_Produce_reply_tags_Partition_t PartitionTags = {0};
                 rd_kafkap_Produce_reply_tags_Topic_t TopicTags         = {0};
                 rd_kafkap_Produce_reply_tags_t ProduceTags             = {0};
-                int i, j;
+                int i;
                 PartitionTags.Partition = hdr.Partition;
                 uint64_t _tagcnt;
                 uint64_t _tag, _taglen;
@@ -3501,8 +3501,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
                 TopicTags.TopicName =
                     rd_strndup(topic_name.str, topic_name.len);
-                TopicTags.Partition = &PartitionTags;
-                ProduceTags.Topic   = &TopicTags;
+                TopicTags.Partition = PartitionTags;
+                ProduceTags.Topic   = TopicTags;
 
                 /* Throttle_Time */
                 rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
@@ -3546,7 +3546,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                     rd_tmpabuf_write(&tbuf, rkb->rkb_name, rkb_namelen);
                 rd_kafka_broker_unlock(rkb);
 
-                md->broker_cnt = ProduceTags.NodeEndpoints.NodeEndpointCnt;
+                md->broker_cnt = ProduceTags.node_endpoints.NodeEndpointCnt;
 
                 if (!(md->brokers = rd_tmpabuf_alloc(
                           &tbuf, md->broker_cnt * sizeof(*md->brokers))))
@@ -3561,26 +3561,27 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                           md->broker_cnt * sizeof(*mdi->brokers_sorted))))
                         goto err_parse;
 
-                for (i = 0; i < ProduceTags.NodeEndpoints.NodeEndpointCnt;
+                for (i = 0; i < ProduceTags.node_endpoints.NodeEndpointCnt;
                      i++) {
                         md->brokers[i].id =
-                            ProduceTags.NodeEndpoints.NodeEndpoints[i].NodeId;
+                            ProduceTags.node_endpoints.NodeEndpoints[i].NodeId;
                         md->brokers[i].host = rd_strndup(
-                            ProduceTags.NodeEndpoints.NodeEndpoints[i].Host.str,
-                            ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                            ProduceTags.node_endpoints.NodeEndpoints[i]
+                                .Host.str,
+                            ProduceTags.node_endpoints.NodeEndpoints[i]
                                 .Host.len);
                         md->brokers[i].port =
-                            ProduceTags.NodeEndpoints.NodeEndpoints[i].Port;
+                            ProduceTags.node_endpoints.NodeEndpoints[i].Port;
 
-                        if (ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                        if (ProduceTags.node_endpoints.NodeEndpoints[i]
                                 .Rack.len >= 0)
                                 mdi->brokers[i].rack_id = rd_strndup(
-                                    ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                                    ProduceTags.node_endpoints.NodeEndpoints[i]
                                         .Rack.str,
-                                    ProduceTags.NodeEndpoints.NodeEndpoints[i]
+                                    ProduceTags.node_endpoints.NodeEndpoints[i]
                                         .Rack.len);
                         mdi->brokers[i].id =
-                            ProduceTags.NodeEndpoints.NodeEndpoints[i].NodeId;
+                            ProduceTags.node_endpoints.NodeEndpoints[i].NodeId;
                 }
                 qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[0]),
                       rd_kafka_metadata_broker_internal_cmp);
@@ -3598,39 +3599,27 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                           &tbuf, md->topic_cnt * sizeof(*mdi->topics))))
                         goto err_parse;
 
+                md->topics[0].topic =
+                    rd_strndup(ProduceTags.Topic.TopicName,
+                               strlen(ProduceTags.Topic.TopicName));
+                md->topics[0].partition_cnt = 1;
+                if (!(md->topics[0].partitions = rd_tmpabuf_alloc(
+                          &tbuf, md->topics[0].partition_cnt *
+                                     sizeof(*md->topics[0].partitions))))
+                        goto err_parse;
+                if (!(mdi->topics[0].partitions = rd_tmpabuf_alloc(
+                          &tbuf, md->topics[0].partition_cnt *
+                                     sizeof(*mdi->topics[0].partitions))))
+                        goto err_parse;
 
-                for (i = 0; i < md->topic_cnt; i++) {
-                        md->topics[i].topic =
-                            rd_strndup(ProduceTags.Topic[i].TopicName,
-                                       strlen(ProduceTags.Topic[i].TopicName));
-                        md->topics[i].partition_cnt = 1;
-                        if (!(md->topics[i].partitions = rd_tmpabuf_alloc(
-                                  &tbuf,
-                                  md->topics[i].partition_cnt *
-                                      sizeof(*md->topics[i].partitions))))
-                                goto err_parse;
-                        if (!(mdi->topics[i].partitions = rd_tmpabuf_alloc(
-                                  &tbuf,
-                                  md->topics[i].partition_cnt *
-                                      sizeof(*mdi->topics[i].partitions))))
-                                goto err_parse;
-
-                        for (j = 0; j < md->topics[i].partition_cnt; j++) {
-                                md->topics[i].partitions[j].id =
-                                    ProduceTags.Topic[i].Partition[j].Partition;
-                                md->topics[i].partitions[j].leader =
-                                    ProduceTags.Topic[i]
-                                        .Partition[j]
-                                        .CurrentLeader.LeaderId;
-                                mdi->topics[i].partitions[j].id =
-                                    ProduceTags.Topic[i].Partition[j].Partition;
-                                mdi->topics[i].partitions[j].leader_epoch =
-                                    ProduceTags.Topic[i]
-                                        .Partition[j]
-                                        .CurrentLeader.LeaderEpoch;
-                        }
-                }
-
+                md->topics[0].partitions[0].id =
+                    ProduceTags.Topic.Partition.Partition;
+                md->topics[0].partitions[0].leader =
+                    ProduceTags.Topic.Partition.CurrentLeader.LeaderId;
+                mdi->topics[0].partitions[0].id =
+                    ProduceTags.Topic.Partition.Partition;
+                mdi->topics[0].partitions[0].leader_epoch =
+                    ProduceTags.Topic.Partition.CurrentLeader.LeaderEpoch;
 
                 rko->rko_u.metadata.mdi = mdi;
                 rd_kafka_q_enq(rkb->rkb_rk->rk_ops, rko);

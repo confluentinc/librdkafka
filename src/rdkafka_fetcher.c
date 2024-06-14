@@ -346,8 +346,8 @@ static int rd_kafka_fetch_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
                                                           uint64_t tagtype,
                                                           uint64_t taglen,
                                                           void *opaque) {
-        const int log_decode_errors                      = LOG_ERR;
-        rd_kafkap_Fetch_reply_Partition_t *PartitionTags = opaque;
+        const int log_decode_errors                           = LOG_ERR;
+        rd_kafkap_Fetch_reply_tags_Partition_t *PartitionTags = opaque;
         switch (tagtype) {
         case 1:
                 if (rd_kafka_buf_read_CurrentLeader(
@@ -369,8 +369,8 @@ static int rd_kafka_fetch_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
         rd_kafkap_Fetch_reply_tags_t *tags = opaque;
         switch (tagtype) {
         case 0: /* NodeEndpoints */
-                if (rd_kafka_buf_read_NodeEndpoints(rkbuf,
-                                                    &tags->NodeEndpoints) == -1)
+                if (rd_kafka_buf_read_NodeEndpoints(
+                        rkbuf, &tags->node_endpoints) == -1)
                         goto err_parse;
                 return 1;
         default:
@@ -411,7 +411,7 @@ static void enqueue_new_metadata_op(rd_kafka_broker_t *rkb,
             rd_tmpabuf_write(&tbuf, rkb->rkb_name, rkb_namelen);
         rd_kafka_broker_unlock(rkb);
 
-        md->broker_cnt = tags->NodeEndpoints.NodeEndpointCnt;
+        md->broker_cnt = tags->node_endpoints.NodeEndpointCnt;
 
         if (!(md->brokers = rd_tmpabuf_alloc(&tbuf, md->broker_cnt *
                                                         sizeof(*md->brokers))))
@@ -426,18 +426,20 @@ static void enqueue_new_metadata_op(rd_kafka_broker_t *rkb,
                 goto err_parse;
 
         for (i = 0; i < md->broker_cnt; i++) {
-                md->brokers[i].id = tags->NodeEndpoints.NodeEndpoints[i].NodeId;
+                md->brokers[i].id =
+                    tags->node_endpoints.NodeEndpoints[i].NodeId;
                 md->brokers[i].host =
-                    rd_strndup(tags->NodeEndpoints.NodeEndpoints[i].Host.str,
-                               tags->NodeEndpoints.NodeEndpoints[i].Host.len);
-                md->brokers[i].port = tags->NodeEndpoints.NodeEndpoints[i].Port;
+                    rd_strndup(tags->node_endpoints.NodeEndpoints[i].Host.str,
+                               tags->node_endpoints.NodeEndpoints[i].Host.len);
+                md->brokers[i].port =
+                    tags->node_endpoints.NodeEndpoints[i].Port;
 
-                if (tags->NodeEndpoints.NodeEndpoints[i].Rack.len >= 0)
+                if (tags->node_endpoints.NodeEndpoints[i].Rack.len >= 0)
                         mdi->brokers[i].rack_id = rd_strndup(
-                            tags->NodeEndpoints.NodeEndpoints[i].Rack.str,
-                            tags->NodeEndpoints.NodeEndpoints[i].Rack.len);
+                            tags->node_endpoints.NodeEndpoints[i].Rack.str,
+                            tags->node_endpoints.NodeEndpoints[i].Rack.len);
                 mdi->brokers[i].id =
-                    tags->NodeEndpoints.NodeEndpoints[i].NodeId;
+                    tags->node_endpoints.NodeEndpoints[i].NodeId;
         }
 
         qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[0]),
@@ -504,7 +506,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
     rd_kafka_buf_t *rkbuf,
     rd_kafka_buf_t *request,
     int16_t ErrorCode,
-    rd_kafkap_Fetch_reply_Partition_t *partition_tags,
+    rd_kafkap_Fetch_reply_tags_Partition_t *partition_tags,
     rd_bool_t *leader_tags_present) {
         const int log_decode_errors = LOG_ERR;
         struct rd_kafka_toppar_ver *tver, tver_skel;
@@ -822,8 +824,8 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                                                 2 + 8 + 4 /*inner header*/));
 
         fetch_tags.TopicCnt = TopicArrayCnt;
-        fetch_tags.Topics =
-            rd_calloc(TopicArrayCnt, sizeof(rd_kafkap_Fetch_reply_Topic_t));
+        fetch_tags.Topics   = rd_calloc(
+            TopicArrayCnt, sizeof(rd_kafkap_Fetch_reply_tags_Topic_t));
 
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafkap_str_t topic    = RD_ZERO_INIT;
@@ -849,7 +851,7 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 fetch_tags.Topics[i].PartitionCnt = PartitionArrayCnt;
                 fetch_tags.Topics[i].Partitions =
                     rd_calloc(PartitionArrayCnt,
-                              sizeof(rd_kafkap_Fetch_reply_Partition_t));
+                              sizeof(rd_kafkap_Fetch_reply_tags_Partition_t));
 
 
                 for (j = 0; j < PartitionArrayCnt; j++) {

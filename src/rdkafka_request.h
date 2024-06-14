@@ -121,13 +121,13 @@ typedef struct rd_kafkap_Produce_reply_tags_Partition_s {
 
 typedef struct rd_kafkap_Produce_reply_tags_Topic_s {
         char *TopicName;
-        rd_kafkap_Produce_reply_tags_Partition_t *Partition;
+        rd_kafkap_Produce_reply_tags_Partition_t Partition;
 } rd_kafkap_Produce_reply_tags_Topic_t;
 
 typedef struct rd_kafkap_Produce_reply_tags_s {
-        int32_t LeaderChangeCnt;
-        rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        rd_kafkap_Produce_reply_tags_Topic_t *Topic;
+        int32_t leader_change_cnt;
+        rd_kafkap_NodeEndpoints_t node_endpoints;
+        rd_kafkap_Produce_reply_tags_Topic_t Topic;
 } rd_kafkap_Produce_reply_tags_t;
 
 /**@}*/
@@ -137,23 +137,23 @@ typedef struct rd_kafkap_Produce_reply_tags_s {
  *
  */
 
-typedef struct rd_kafkap_Fetch_reply_Partition_s {
+typedef struct rd_kafkap_Fetch_reply_tags_Partition_s {
         int32_t PartitionIndex;
         rd_kafkap_CurrentLeader_t CurrentLeader;
-} rd_kafkap_Fetch_reply_Partition_t;
+} rd_kafkap_Fetch_reply_tags_Partition_t;
 
-typedef struct rd_kafkap_Fetch_reply_Topic_s {
+typedef struct rd_kafkap_Fetch_reply_tags_Topic_s {
         int32_t PartitionCnt;
         rd_kafka_Uuid_t TopicId;
-        rd_kafkap_Fetch_reply_Partition_t *Partitions;
-        int32_t PartitionsWithLeaderChangedCnt;
-} rd_kafkap_Fetch_reply_Topic_t;
+        rd_kafkap_Fetch_reply_tags_Partition_t *Partitions;
+        int32_t partitions_with_leader_change_cnt;
+} rd_kafkap_Fetch_reply_tags_Topic_t;
 
 typedef struct rd_kafkap_Fetch_reply_tags_s {
-        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        rd_kafkap_NodeEndpoints_t node_endpoints;
         int32_t TopicCnt;
-        rd_kafkap_Fetch_reply_Topic_t *Topics;
-        int32_t TopicsWithLeaderChangedCnt;
+        rd_kafkap_Fetch_reply_tags_Topic_t *Topics;
+        int32_t topics_with_leader_change_cnt;
 } rd_kafkap_Fetch_reply_tags_t;
 
 /**@}*/

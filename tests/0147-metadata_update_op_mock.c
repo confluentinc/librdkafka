@@ -148,8 +148,8 @@ static void test_fetch(rd_kafka_mock_cluster_t *mcluster,
         size_t request_cnt                 = 0;
         rd_kafka_t *consumer;
         rd_kafka_message_t *rkm;
-        rd_bool_t request_to_broker1    = rd_false;
-        rd_bool_t request_to_broker2    = rd_false;
+        rd_bool_t request_to_broker1 = rd_false;
+        rd_bool_t request_to_broker2 = rd_false;
         size_t i;
         consumer = test_create_consumer(topic, NULL, conf, NULL);
         test_consumer_subscribe(consumer, topic);

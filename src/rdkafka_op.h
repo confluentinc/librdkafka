@@ -179,8 +179,8 @@ typedef enum {
         RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,    /* < Admin:
                                                      AlterUserScramCredentials
                                                      u.admin_request >*/
-        RD_KAFKA_OP_LISTOFFSETS,  /**< Admin: ListOffsets u.admin_request >*/
-        RD_KAFKA_OP_METADATA_951, /**TODO: Change name **/
+        RD_KAFKA_OP_LISTOFFSETS,     /**< Admin: ListOffsets u.admin_request >*/
+        RD_KAFKA_OP_METADATA_UPDATE, /**Metadata update KIP 951 **/
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

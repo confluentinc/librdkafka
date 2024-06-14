@@ -3347,7 +3347,7 @@ rd_kafka_produce_reply_handle_partition_read_tag(rd_kafka_buf_t *rkbuf,
                                                  uint64_t tagtype,
                                                  uint64_t taglen,
                                                  void *opaque) {
-        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags = opaque;
+        rd_kafkap_Produce_reply_tags_Partition_t *PartitionTags = opaque;
         switch (tagtype) {
         case 0:
                 if (rd_kafka_buf_read_CurrentLeader(
@@ -3365,7 +3365,7 @@ static int rd_kafka_produce_reply_handle_read_tag(rd_kafka_buf_t *rkbuf,
                                                   uint64_t tagtype,
                                                   uint64_t taglen,
                                                   void *opaque) {
-        rd_kafkap_produce_reply_tags_t *tags = opaque;
+        rd_kafkap_Produce_reply_tags_t *tags = opaque;
         switch (tagtype) {
         case 0: /* NodeEndpoints */
                 if (rd_kafka_buf_read_NodeEndpoints(rkbuf,
@@ -3401,7 +3401,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         } hdr;
         const int log_decode_errors = LOG_ERR;
         int64_t log_start_offset    = -1;
-        rd_kafkap_str_t topic_name = {0};
+        rd_kafkap_str_t topic_name  = {0};
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         if (TopicArrayCnt != 1)
@@ -3411,7 +3411,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
          * request we assume that the reply only contains one topic+partition
          * and that it is the same that we requested.
          * If not the broker is buggy. */
-        if (request->rkbuf_reqhdr.ApiVersion >= 9)
+        if (request->rkbuf_reqhdr.ApiVersion >= 10)
                 rd_kafka_buf_read_str(rkbuf, &topic_name);
         else
                 rd_kafka_buf_skip_str(rkbuf);
@@ -3468,9 +3468,9 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
         if (request->rkbuf_reqhdr.ApiVersion >= 10 &&
             hdr.ErrorCode == RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION) {
-                rd_kafkap_produce_reply_tags_Partition_t PartitionTags = {0};
-                rd_kafkap_produce_reply_tags_Topic_t TopicTags         = {0};
-                rd_kafkap_produce_reply_tags_t ProduceTags             = {0};
+                rd_kafkap_Produce_reply_tags_Partition_t PartitionTags = {0};
+                rd_kafkap_Produce_reply_tags_Topic_t TopicTags         = {0};
+                rd_kafkap_Produce_reply_tags_t ProduceTags             = {0};
                 int i, j;
                 PartitionTags.Partition = hdr.Partition;
                 uint64_t _tagcnt;
@@ -3501,10 +3501,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
                 TopicTags.TopicName =
                     rd_strndup(topic_name.str, topic_name.len);
-                TopicTags.PartitionCnt  = 1;
-                TopicTags.PartitionTags = &PartitionTags;
-                ProduceTags.TopicCnt    = 1;
-                ProduceTags.TopicTags   = &TopicTags;
+                TopicTags.Partition = &PartitionTags;
+                ProduceTags.Topic   = &TopicTags;
 
                 /* Throttle_Time */
                 rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
@@ -3527,7 +3525,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                                 goto err_parse;
                 }
 
-                rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_951);
+                rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_UPDATE);
 
                 rd_kafka_broker_lock(rkb);
                 rkb_namelen = strlen(rkb->rkb_name) + 1;
@@ -3592,7 +3590,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                       sizeof(*mdi->brokers_sorted),
                       rd_kafka_metadata_broker_cmp);
 
-                md->topic_cnt = ProduceTags.TopicCnt;
+                md->topic_cnt = 1;
                 if (!(md->topics = rd_tmpabuf_alloc(
                           &tbuf, md->topic_cnt * sizeof(*md->topics))))
                         goto err_parse;
@@ -3602,11 +3600,10 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
 
                 for (i = 0; i < md->topic_cnt; i++) {
-                        md->topics[i].topic = rd_strndup(
-                            ProduceTags.TopicTags[i].TopicName,
-                            strlen(ProduceTags.TopicTags[i].TopicName));
-                        md->topics[i].partition_cnt =
-                            ProduceTags.TopicTags[i].PartitionCnt;
+                        md->topics[i].topic =
+                            rd_strndup(ProduceTags.Topic[i].TopicName,
+                                       strlen(ProduceTags.Topic[i].TopicName));
+                        md->topics[i].partition_cnt = 1;
                         if (!(md->topics[i].partitions = rd_tmpabuf_alloc(
                                   &tbuf,
                                   md->topics[i].partition_cnt *
@@ -3620,20 +3617,16 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
 
                         for (j = 0; j < md->topics[i].partition_cnt; j++) {
                                 md->topics[i].partitions[j].id =
-                                    ProduceTags.TopicTags[i]
-                                        .PartitionTags[j]
-                                        .Partition;
+                                    ProduceTags.Topic[i].Partition[j].Partition;
                                 md->topics[i].partitions[j].leader =
-                                    ProduceTags.TopicTags[i]
-                                        .PartitionTags[j]
+                                    ProduceTags.Topic[i]
+                                        .Partition[j]
                                         .CurrentLeader.LeaderId;
                                 mdi->topics[i].partitions[j].id =
-                                    ProduceTags.TopicTags[i]
-                                        .PartitionTags[j]
-                                        .Partition;
+                                    ProduceTags.Topic[i].Partition[j].Partition;
                                 mdi->topics[i].partitions[j].leader_epoch =
-                                    ProduceTags.TopicTags[i]
-                                        .PartitionTags[j]
+                                    ProduceTags.Topic[i]
+                                        .Partition[j]
                                         .CurrentLeader.LeaderEpoch;
                         }
                 }

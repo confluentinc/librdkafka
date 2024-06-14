@@ -107,40 +107,54 @@ typedef struct rd_kafkap_NodeEndpoints_s {
         rd_kafkap_NodeEndpoint_t *NodeEndpoints;
 } rd_kafkap_NodeEndpoints_t;
 
-typedef struct rd_kafkap_produce_reply_tags_Partition_s {
+/**@}*/
+/**
+ * @name Produce tags
+ * @{
+ *
+ */
+
+typedef struct rd_kafkap_Produce_reply_tags_Partition_s {
         int32_t Partition;
         rd_kafkap_CurrentLeader_t CurrentLeader;
-} rd_kafkap_produce_reply_tags_Partition_t;
+} rd_kafkap_Produce_reply_tags_Partition_t;
 
-typedef struct rd_kafkap_produce_reply_tags_Topic_s {
+typedef struct rd_kafkap_Produce_reply_tags_Topic_s {
         char *TopicName;
-        int32_t PartitionCnt;
-        rd_kafkap_produce_reply_tags_Partition_t *PartitionTags;
-} rd_kafkap_produce_reply_tags_Topic_t;
+        rd_kafkap_Produce_reply_tags_Partition_t *Partition;
+} rd_kafkap_Produce_reply_tags_Topic_t;
 
-typedef struct rd_kafkap_produce_reply_tags_s {
+typedef struct rd_kafkap_Produce_reply_tags_s {
+        int32_t LeaderChangeCnt;
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        int32_t TopicCnt;
-        rd_kafkap_produce_reply_tags_Topic_t *TopicTags;
-} rd_kafkap_produce_reply_tags_t;
+        rd_kafkap_Produce_reply_tags_Topic_t *Topic;
+} rd_kafkap_Produce_reply_tags_t;
 
-typedef struct rd_kafkap_fetch_reply_PartitionTags_s {
-        int32_t PartitionId;
+/**@}*/
+/**
+ * @name Fetch tags
+ * @{
+ *
+ */
+
+typedef struct rd_kafkap_Fetch_reply_Partition_s {
+        int32_t PartitionIndex;
         rd_kafkap_CurrentLeader_t CurrentLeader;
-} rd_kafkap_fetch_reply_PartitionTags_t;
+} rd_kafkap_Fetch_reply_Partition_t;
 
-typedef struct rd_kafkap_fetch_reply_TopicTags_s {
+typedef struct rd_kafkap_Fetch_reply_Topic_s {
         int32_t PartitionCnt;
-        char *TopicName;
         rd_kafka_Uuid_t TopicId;
-        rd_kafkap_fetch_reply_PartitionTags_t *PartitionTags;
-} rd_kafkap_fetch_reply_TopicTags_t;
+        rd_kafkap_Fetch_reply_Partition_t *Partitions;
+        int32_t PartitionsWithLeaderChangedCnt;
+} rd_kafkap_Fetch_reply_Topic_t;
 
-typedef struct rd_kafkap_fetch_reply_tags_s {
+typedef struct rd_kafkap_Fetch_reply_tags_s {
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
         int32_t TopicCnt;
-        rd_kafkap_fetch_reply_TopicTags_t *TopicTags;
-} rd_kafkap_fetch_reply_tags_t;
+        rd_kafkap_Fetch_reply_Topic_t *Topics;
+        int32_t TopicsWithLeaderChangedCnt;
+} rd_kafkap_Fetch_reply_tags_t;
 
 /**@}*/
 

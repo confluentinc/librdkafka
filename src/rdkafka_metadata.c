@@ -1972,11 +1972,16 @@ rd_kafka_metadata_new_topic_with_partition_replicas_mock(int replication_factor,
             topics, topic_cnt, replication_factor, num_brokers);
 }
 
-/*
+/**
  * @brief Handle update of metadata received in the produce or fetch tags.
  *
- * @param rk: used to look up current metadata.
- * @param mdi: metadata parsed from the tags.
+ * @param rk Client instance.
+ * @param rko Metadata update operation.
+ *
+ * @locality main thread
+ * @locks none
+ *
+ * @return always RD_KAFKA_OP_RES_HANDLED
  */
 rd_kafka_op_res_t
 rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {

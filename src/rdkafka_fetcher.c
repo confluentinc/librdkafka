@@ -715,9 +715,6 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
                     (hdr.ErrorCode ==
                          RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION ||
                      hdr.ErrorCode == RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH)) {
-                        // TODO: Remove
-                        fprintf(stderr,
-                                "asdasd in fetch partition reading tags\n");
                         *leader_tags_present = rd_true;
                         rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);
                         for (i = 0; i < (int)_tagcnt; i++) {

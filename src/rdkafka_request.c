@@ -395,7 +395,7 @@ int rd_kafka_buf_write_topic_partitions(
                                 rd_kafka_buf_finalize_arraycnt(
                                     rkbuf, of_PartArrayCnt, PartArrayCnt);
                                 /* Tags for previous topic struct */
-                                rd_kafka_buf_write_tags(rkbuf);
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
 
 
@@ -478,7 +478,7 @@ int rd_kafka_buf_write_topic_partitions(
                         /* If there was more than one field written
                          * then this was a struct and thus needs the
                          * struct suffix tags written. */
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
 
                 PartArrayCnt++;
                 cnt++;
@@ -488,12 +488,67 @@ int rd_kafka_buf_write_topic_partitions(
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartArrayCnt,
                                                PartArrayCnt);
                 /* Tags for topic struct */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
 
         return cnt;
+}
+
+
+/**
+ * @brief Read current leader from \p rkbuf.
+ *
+ * @param rkbuf buffer to read from
+ * @param CurrentLeader is the CurrentLeader to populate.
+ *
+ * @return 1 on success, else -1 on parse error.
+ */
+int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_CurrentLeader_t *CurrentLeader) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderId);
+        rd_kafka_buf_read_i32(rkbuf, &CurrentLeader->LeaderEpoch);
+        rd_kafka_buf_skip_tags(rkbuf);
+        return 1;
+err_parse:
+        return -1;
+}
+
+/**
+ * @brief Read NodeEndpoints from \p rkbuf.
+ *
+ * @param rkbuf buffer to read from
+ * @param NodeEndpoints is the NodeEndpoints to populate.
+ *
+ * @return 1 on success, else -1 on parse error.
+ */
+int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_NodeEndpoints_t *NodeEndpoints) {
+        const int log_decode_errors = LOG_ERR;
+        int32_t i;
+        rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
+                                   RD_KAFKAP_BROKERS_MAX);
+        rd_dassert(!NodeEndpoints->NodeEndpoints);
+        NodeEndpoints->NodeEndpoints =
+            rd_calloc(NodeEndpoints->NodeEndpointCnt,
+                      sizeof(*NodeEndpoints->NodeEndpoints));
+
+        for (i = 0; i < NodeEndpoints->NodeEndpointCnt; i++) {
+                rd_kafka_buf_read_i32(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].NodeId);
+                rd_kafka_buf_read_str(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].Host);
+                rd_kafka_buf_read_i32(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].Port);
+                rd_kafka_buf_read_str(rkbuf,
+                                      &NodeEndpoints->NodeEndpoints[i].Rack);
+                rd_kafka_buf_skip_tags(rkbuf);
+        }
+        return 1;
+err_parse:
+        return -1;
 }
 
 
@@ -763,7 +818,7 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                 rd_kafka_buf_finalize_arraycnt(
                                     rkbuf, of_PartArrayCnt, part_cnt);
                                 /* Topics tags */
-                                rd_kafka_buf_write_tags(rkbuf);
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
 
                         /* Topic */
@@ -798,14 +853,14 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                 }
 
                 /* Partitions tags */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         if (of_PartArrayCnt > 0) {
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartArrayCnt,
                                                part_cnt);
                 /* Topics tags */
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, topic_cnt);
 
@@ -1457,7 +1512,7 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
         if (ApiVersion >= 8) {
                 // Tags for the groups array
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         if (ApiVersion >= 7) {
@@ -2748,7 +2803,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                         }
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
                         /* Tags for previous topic */
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
         }
 
@@ -2765,7 +2820,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_uuid(rkbuf, topic_id);
                         rd_kafka_buf_write_str(rkbuf, NULL, -1);
                         /* Tags for previous topic */
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
         }
 
@@ -3294,7 +3349,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         const int log_decode_errors = LOG_ERR;
         int64_t log_start_offset    = -1;
 
-        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         if (TopicArrayCnt != 1)
                 goto err;
 
@@ -3303,7 +3358,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
          * and that it is the same that we requested.
          * If not the broker is buggy. */
         rd_kafka_buf_skip_str(rkbuf);
-        rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt,
+                                   RD_KAFKAP_PARTITIONS_MAX);
 
         if (PartitionArrayCnt != 1)
                 goto err;
@@ -3325,7 +3381,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int i;
                 int32_t RecordErrorsCnt;
                 rd_kafkap_str_t ErrorMessage;
-                rd_kafka_buf_read_i32(rkbuf, &RecordErrorsCnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &RecordErrorsCnt, -1);
                 if (RecordErrorsCnt) {
                         result->record_errors = rd_calloc(
                             RecordErrorsCnt, sizeof(*result->record_errors));
@@ -3343,6 +3399,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                                         result->record_errors[i].errstr =
                                             RD_KAFKAP_STR_DUP(
                                                 &BatchIndexErrorMessage);
+                                /* RecordError tags */
+                                rd_kafka_buf_skip_tags(rkbuf);
                         }
                 }
 
@@ -3350,6 +3408,11 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 if (!RD_KAFKAP_STR_IS_NULL(&ErrorMessage))
                         result->errstr = RD_KAFKAP_STR_DUP(&ErrorMessage);
         }
+
+        /* Partition tags */
+        rd_kafka_buf_skip_tags(rkbuf);
+        /* Topic tags */
+        rd_kafka_buf_skip_tags(rkbuf);
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1) {
                 int32_t Throttle_Time;
@@ -4912,10 +4975,10 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                         /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
 
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */
@@ -4996,10 +5059,10 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
                         /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        rd_kafka_buf_write_tags(rkbuf);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
                 }
 
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */

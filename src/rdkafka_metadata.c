@@ -1986,8 +1986,7 @@ rd_kafka_metadata_new_topic_with_partition_replicas_mock(int replication_factor,
 rd_kafka_op_res_t
 rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
         int i, j;
-        rd_kafka_metadata_t *md = &mdi->metadata;
-        rd_kafka_broker_t *rkb;
+        rd_kafka_metadata_t *md       = &mdi->metadata;
         rd_bool_t cache_updated       = rd_false;
         rd_kafka_secproto_t rkb_proto = rk->rk_conf.security_protocol;
 
@@ -1998,13 +1997,11 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
 
         for (i = 0; i < md->topic_cnt; i++) {
                 struct rd_kafka_metadata_cache_entry *rkmce;
-                int32_t partition_cache_changes = 0, part, current_leader_epoch;
+                int32_t partition_cache_changes = 0;
                 rd_bool_t by_id =
                     !RD_KAFKA_UUID_IS_ZERO(mdi->topics[i].topic_id);
-                rd_kafka_Uuid_t topic_id;
-                char *topic;
-                rd_kafka_metadata_partition_t *mdp;
-                rd_kafka_metadata_partition_internal_t *mdpi;
+                rd_kafka_Uuid_t topic_id = RD_KAFKA_UUID_ZERO;
+                char *topic              = NULL;
 
                 if (by_id) {
                         rkmce = rd_kafka_metadata_cache_find_by_id(
@@ -2029,52 +2026,39 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                         }
                         continue;
                 }
+                topic    = rkmce->rkmce_mtopic.topic;
+                topic_id = rkmce->rkmce_metadata_internal_topic.topic_id;
 
-                partition_cache_changes = 0;
                 for (j = 0; j < md->topics[i].partition_cnt; j++) {
-                        mdp  = &md->topics[i].partitions[j];
-                        mdpi = &mdi->topics[i].partitions[j];
-
-                        part = mdp->id;
+                        rd_kafka_broker_t *rkb;
+                        rd_kafka_metadata_partition_t *mdp =
+                            &md->topics[i].partitions[j];
+                        ;
+                        rd_kafka_metadata_partition_internal_t *mdpi =
+                            &mdi->topics[i].partitions[j];
+                        int32_t part = mdp->id, current_leader_epoch;
 
                         if (part >= rkmce->rkmce_mtopic.partition_cnt) {
-                                if (by_id) {
-                                        rd_kafka_log(
-                                            rk, LOG_WARNING, "METADATAUPDATE",
-                                            "Partition %s [%" PRId32
-                                            "]: not found "
-                                            "in cache",
-                                            rd_kafka_Uuid_base64str(&topic_id),
-                                            part);
-                                } else {
-                                        rd_kafka_log(rk, LOG_WARNING,
-                                                     "METADATAUPDATE",
-                                                     "Partition %s [%" PRId32
-                                                     "]: not found in "
-                                                     "cache",
-                                                     topic, part);
-                                }
+                                rd_kafka_log(rk, LOG_WARNING, "METADATAUPDATE",
+                                             "Partition %s(%s)[%" PRId32
+                                             "]: not found "
+                                             "in cache",
+                                             topic,
+                                             rd_kafka_Uuid_base64str(&topic_id),
+                                             part);
+
                                 continue;
                         }
 
                         rkb = rd_kafka_broker_find_by_nodeid(rk, mdp->leader);
                         if (!rkb) {
-                                if (by_id) {
-                                        rd_kafka_log(
-                                            rk, LOG_WARNING, "METADATAUPDATE",
-                                            "Partition %s [%" PRId32
-                                            "]: new leader"
-                                            "%" PRId32 " not found in cache",
-                                            rd_kafka_Uuid_base64str(&topic_id),
-                                            part, mdp->leader);
-                                } else {
-                                        rd_kafka_log(
-                                            rk, LOG_WARNING, "METADATAUPDATE",
-                                            "Partition %s [%" PRId32
-                                            "]: new leader "
-                                            "%" PRId32 " not found in cache",
-                                            topic, part, mdp->leader);
-                                }
+                                rd_kafka_log(rk, LOG_WARNING, "METADATAUPDATE",
+                                             "Partition %s(%s)[%" PRId32
+                                             "]: new leader"
+                                             "%" PRId32 " not found in cache",
+                                             topic,
+                                             rd_kafka_Uuid_base64str(&topic_id),
+                                             part, mdp->leader);
                                 continue;
                         }
 
@@ -2085,29 +2069,17 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
 
                         if (current_leader_epoch >= mdpi->leader_epoch) {
                                 rd_kafka_broker_destroy(rkb);
-                                if (by_id) {
-                                        rd_kafka_dbg(
-                                            rk, METADATA, "METADATAUPDATE",
-                                            "Partition %s [%" PRId32
-                                            "]: leader epoch "
-                                            "is "
-                                            "not newer %" PRId32 " >= %" PRId32,
-                                            rd_kafka_Uuid_base64str(&topic_id),
-                                            part, current_leader_epoch,
-                                            mdpi->leader_epoch);
-                                } else {
-                                        rd_kafka_dbg(
-                                            rk, METADATA, "METADATAUPDATE",
-                                            "Partition %s [%" PRId32
-                                            "]: leader epoch "
-                                            "is "
-                                            "not newer %" PRId32 " >= %" PRId32,
-                                            topic, part, current_leader_epoch,
-                                            mdpi->leader_epoch);
-                                }
+                                rd_kafka_dbg(
+                                    rk, METADATA, "METADATAUPDATE",
+                                    "Partition %s(%s)[%" PRId32
+                                    "]: leader epoch "
+                                    "is "
+                                    "not newer %" PRId32 " >= %" PRId32,
+                                    topic, rd_kafka_Uuid_base64str(&topic_id),
+                                    part, current_leader_epoch,
+                                    mdpi->leader_epoch);
                                 continue;
                         }
-                        cache_updated = rd_true;
                         partition_cache_changes++;
 
                         /* Need to acquire the write lock to avoid dirty reads
@@ -2120,30 +2092,21 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                         rd_kafka_wrunlock(rk);
                         rd_kafka_broker_destroy(rkb);
 
-                        if (by_id) {
-                                rd_kafka_dbg(rk, METADATA, "METADATAUPDATE",
-                                             "Partition %s [%" PRId32
-                                             "]: "
-                                             " updated with leader %" PRId32
-                                             " and epoch %" PRId32,
-                                             rd_kafka_Uuid_base64str(&topic_id),
-                                             part, mdp->leader,
-                                             mdpi->leader_epoch);
-                        } else {
-                                rd_kafka_dbg(rk, METADATA, "METADATAUPDATE",
-                                             "Partition %s [%" PRId32
-                                             "]: "
-                                             " updated with leader %" PRId32
-                                             " and epoch %" PRId32,
-                                             topic, part, mdp->leader,
-                                             mdpi->leader_epoch);
-                        }
+                        rd_kafka_dbg(rk, METADATA, "METADATAUPDATE",
+                                     "Partition %s(%s)[%" PRId32
+                                     "]: "
+                                     " updated with leader %" PRId32
+                                     " and epoch %" PRId32,
+                                     topic, rd_kafka_Uuid_base64str(&topic_id),
+                                     part, mdp->leader, mdpi->leader_epoch);
                 }
 
-                if (partition_cache_changes > 0)
+                if (partition_cache_changes > 0) {
+                        cache_updated = rd_true;
                         rd_kafka_topic_metadata_update2(
                             rk->rk_internal_rkb, &rkmce->rkmce_mtopic,
                             &rkmce->rkmce_metadata_internal_topic);
+                }
         }
 
         if (!cache_updated) {

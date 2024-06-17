@@ -108,6 +108,7 @@ typedef struct rd_kafkap_NodeEndpoints_s {
 } rd_kafkap_NodeEndpoints_t;
 
 /**@}*/
+
 /**
  * @name Produce tags
  * @{
@@ -131,6 +132,7 @@ typedef struct rd_kafkap_Produce_reply_tags_s {
 } rd_kafkap_Produce_reply_tags_t;
 
 /**@}*/
+
 /**
  * @name Fetch tags
  * @{
@@ -143,8 +145,8 @@ typedef struct rd_kafkap_Fetch_reply_tags_Partition_s {
 } rd_kafkap_Fetch_reply_tags_Partition_t;
 
 typedef struct rd_kafkap_Fetch_reply_tags_Topic_s {
-        int32_t PartitionCnt;
         rd_kafka_Uuid_t TopicId;
+        int32_t PartitionCnt;
         rd_kafkap_Fetch_reply_tags_Partition_t *Partitions;
         int32_t partitions_with_leader_change_cnt;
 } rd_kafkap_Fetch_reply_tags_Topic_t;

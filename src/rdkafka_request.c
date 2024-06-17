@@ -3355,8 +3355,8 @@ rd_kafkap_Produce_reply_tags_parse(rd_kafka_buf_t *rkbuf,
                                    rd_kafkap_Produce_reply_tags_t *tags) {
         switch (tagtype) {
         case 0: /* NodeEndpoints */
-                if (rd_kafka_buf_read_NodeEndpoints(
-                        rkbuf, &tags->node_endpoints) == -1)
+                if (rd_kafka_buf_read_NodeEndpoints(rkbuf,
+                                                    &tags->NodeEndpoints) == -1)
                         goto err_parse;
                 return 1;
         default:
@@ -3567,7 +3567,7 @@ static void rd_kafka_handle_Produce_metadata_update(
                 rd_tmpabuf_new(&tbuf, 0, rd_true /*assert on fail*/);
                 rd_tmpabuf_add_alloc(&tbuf, sizeof(*mdi));
                 rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
-                    &tbuf, &ProduceTags->node_endpoints);
+                    &tbuf, &ProduceTags->NodeEndpoints);
                 rd_kafkap_leader_discovery_tmpabuf_add_alloc_topics(&tbuf, 1);
                 rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(
                     &tbuf, ProduceTags->Topic.TopicName, 1);
@@ -3579,7 +3579,7 @@ static void rd_kafka_handle_Produce_metadata_update(
                 rd_kafkap_leader_discovery_metadata_init(mdi, nodeid);
 
                 rd_kafkap_leader_discovery_set_brokers(
-                    &tbuf, mdi, &ProduceTags->node_endpoints);
+                    &tbuf, mdi, &ProduceTags->NodeEndpoints);
 
                 rd_kafkap_leader_discovery_set_topic_cnt(&tbuf, mdi, 1);
 
@@ -3599,12 +3599,10 @@ static void rd_kafka_handle_Produce_metadata_update(
         }
 }
 
-static void
-rd_kafkap_Produce_reply_tags_destroy(rd_kafkap_Produce_reply_tags_t *tags) {
-        if (tags->Topic.TopicName)
-                rd_free(tags->Topic.TopicName);
-        if (tags->node_endpoints.NodeEndpoints)
-                rd_free(tags->node_endpoints.NodeEndpoints);
+static void rd_kafkap_Produce_reply_tags_destroy(
+    rd_kafkap_Produce_reply_tags_t *reply_tags) {
+        RD_IF_FREE(reply_tags->Topic.TopicName, rd_free);
+        RD_IF_FREE(reply_tags->NodeEndpoints.NodeEndpoints, rd_free);
 }
 
 
@@ -3628,10 +3626,10 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         } hdr;
         const int log_decode_errors                             = LOG_ERR;
         int64_t log_start_offset                                = -1;
-        rd_kafkap_str_t topic_name                              = {0};
+        rd_kafkap_str_t topic_name                              = RD_ZERO_INIT;
         rd_kafkap_Produce_reply_tags_Partition_t *PartitionTags = NULL;
         rd_kafkap_Produce_reply_tags_Topic_t *TopicTags         = NULL;
-        rd_kafkap_Produce_reply_tags_t ProduceTags              = {0};
+        rd_kafkap_Produce_reply_tags_t ProduceTags              = RD_ZERO_INIT;
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         if (TopicArrayCnt != 1)

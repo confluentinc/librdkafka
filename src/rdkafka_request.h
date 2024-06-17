@@ -126,7 +126,7 @@ typedef struct rd_kafkap_Produce_reply_tags_Topic_s {
 
 typedef struct rd_kafkap_Produce_reply_tags_s {
         int32_t leader_change_cnt;
-        rd_kafkap_NodeEndpoints_t node_endpoints;
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
         rd_kafkap_Produce_reply_tags_Topic_t Topic;
 } rd_kafkap_Produce_reply_tags_t;
 
@@ -150,7 +150,7 @@ typedef struct rd_kafkap_Fetch_reply_tags_Topic_s {
 } rd_kafkap_Fetch_reply_tags_Topic_t;
 
 typedef struct rd_kafkap_Fetch_reply_tags_s {
-        rd_kafkap_NodeEndpoints_t node_endpoints;
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
         int32_t TopicCnt;
         rd_kafkap_Fetch_reply_tags_Topic_t *Topics;
         int32_t topics_with_leader_change_cnt;

@@ -138,7 +138,7 @@ typedef struct rd_kafkap_Produce_reply_tags_s {
  */
 
 typedef struct rd_kafkap_Fetch_reply_tags_Partition_s {
-        int32_t PartitionIndex;
+        int32_t Partition;
         rd_kafkap_CurrentLeader_t CurrentLeader;
 } rd_kafkap_Fetch_reply_tags_Partition_t;
 
@@ -616,5 +616,43 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_replyq_t replyq,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
+    rd_tmpabuf_t *tbuf,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints);
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_topics(rd_tmpabuf_t *tbuf,
+                                                         int topic_cnt);
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(rd_tmpabuf_t *tbuf,
+                                                        char *topic_name,
+                                                        int32_t partition_cnt);
+
+void rd_kafkap_leader_discovery_metadata_init(rd_kafka_metadata_internal_t *mdi,
+                                              int32_t broker_id);
+
+int rd_kafkap_leader_discovery_set_brokers(
+    rd_tmpabuf_t *tbuf,
+    rd_kafka_metadata_internal_t *mdi,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints);
+
+int rd_kafkap_leader_discovery_set_topic_cnt(rd_tmpabuf_t *tbuf,
+                                             rd_kafka_metadata_internal_t *mdi,
+                                             int topic_cnt);
+
+int rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
+                                         rd_kafka_metadata_internal_t *mdi,
+                                         int topic_idx,
+                                         rd_kafka_Uuid_t topic_id,
+                                         char *topic_name,
+                                         int partition_cnt);
+
+void rd_kafkap_leader_discovery_set_CurrentLeader(
+    rd_tmpabuf_t *tbuf,
+    rd_kafka_metadata_internal_t *mdi,
+    int topic_idx,
+    int partition_idx,
+    int32_t partition_id,
+    rd_kafkap_CurrentLeader_t *CurrentLeader);
 
 #endif /* _RDKAFKA_REQUEST_H_ */

@@ -3366,71 +3366,103 @@ err_parse:
         return -1;
 }
 
-static void
-rd_kafka_handle_Produce_metadata_update(rd_kafka_broker_t *rkb,
-                                        rd_kafka_buf_t *rkbuf,
-                                        rd_kafkap_Produce_reply_tags_t *tags) {
-        rd_kafka_op_t *rko;
-        rd_kafka_metadata_internal_t *mdi = NULL;
-        rd_kafka_metadata_t *md           = NULL;
-        rd_tmpabuf_t tbuf;
-        size_t rkb_namelen;
+/**
+ * @{
+ *
+ * @brief Leader discovery (KIP-951)
+ */
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
+    rd_tmpabuf_t *tbuf,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints) {
         int i;
-
-        if (tags->leader_change_cnt == 0)
-                return;
-
-        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_UPDATE);
-
-        rd_kafka_broker_lock(rkb);
-        rkb_namelen = strlen(rkb->rkb_name) + 1;
-
-        rd_tmpabuf_new(&tbuf, 0, rd_false /*dont assert on fail*/);
-        rd_tmpabuf_add_alloc(&tbuf, sizeof(*mdi));
-        rd_tmpabuf_add_alloc(&tbuf, rkb_namelen);
-
-        rd_tmpabuf_add_alloc(&tbuf, rkbuf->rkbuf_totlen * 5);
-        rd_tmpabuf_finalize(&tbuf);
-
-        if (!(mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi))))
-                goto err_parse;
-
-        md                 = &mdi->metadata;
-        md->orig_broker_id = rkb->rkb_nodeid;
-        md->orig_broker_name =
-            rd_tmpabuf_write(&tbuf, rkb->rkb_name, rkb_namelen);
-        rd_kafka_broker_unlock(rkb);
-
-        md->broker_cnt = tags->node_endpoints.NodeEndpointCnt;
-
-        if (!(md->brokers = rd_tmpabuf_alloc(&tbuf, md->broker_cnt *
-                                                        sizeof(*md->brokers))))
-                goto err_parse;
-
-        if (!(mdi->brokers = rd_tmpabuf_alloc(
-                  &tbuf, md->broker_cnt * sizeof(*mdi->brokers))))
-                goto err_parse;
-
-        if (!(mdi->brokers_sorted = rd_tmpabuf_alloc(
-                  &tbuf, md->broker_cnt * sizeof(*mdi->brokers_sorted))))
-                goto err_parse;
-
-        for (i = 0; i < tags->node_endpoints.NodeEndpointCnt; i++) {
-                md->brokers[i].id =
-                    tags->node_endpoints.NodeEndpoints[i].NodeId;
-                md->brokers[i].host =
-                    rd_strndup(tags->node_endpoints.NodeEndpoints[i].Host.str,
-                               tags->node_endpoints.NodeEndpoints[i].Host.len);
-                md->brokers[i].port =
-                    tags->node_endpoints.NodeEndpoints[i].Port;
-
-                if (tags->node_endpoints.NodeEndpoints[i].Rack.len >= 0)
-                        mdi->brokers[i].rack_id = rd_strndup(
-                            tags->node_endpoints.NodeEndpoints[i].Rack.str,
-                            tags->node_endpoints.NodeEndpoints[i].Rack.len);
-                mdi->brokers[i].id =
-                    tags->node_endpoints.NodeEndpoints[i].NodeId;
+        size_t md_brokers_size =
+            NodeEndpoints->NodeEndpointCnt * sizeof(rd_kafka_metadata_broker_t);
+        size_t mdi_brokers_size = NodeEndpoints->NodeEndpointCnt *
+                                  sizeof(rd_kafka_metadata_broker_internal_t);
+        rd_tmpabuf_add_alloc_times(tbuf, md_brokers_size, 2);
+        rd_tmpabuf_add_alloc(tbuf, mdi_brokers_size);
+        for (i = 0; i < NodeEndpoints->NodeEndpointCnt; i++) {
+                size_t HostSize =
+                    RD_KAFKAP_STR_LEN(&NodeEndpoints->NodeEndpoints[i].Host) +
+                    1;
+                rd_tmpabuf_add_alloc(tbuf, HostSize);
         }
+}
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_topics(rd_tmpabuf_t *tbuf,
+                                                         int topic_cnt) {
+        rd_tmpabuf_add_alloc(tbuf,
+                             sizeof(rd_kafka_metadata_topic_t) * topic_cnt);
+        rd_tmpabuf_add_alloc(tbuf, sizeof(rd_kafka_metadata_topic_internal_t) *
+                                       topic_cnt);
+}
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(rd_tmpabuf_t *tbuf,
+                                                        char *topic_name,
+                                                        int32_t partition_cnt) {
+        if (topic_name) {
+                rd_tmpabuf_add_alloc(tbuf, strlen(topic_name) + 1);
+        }
+        rd_tmpabuf_add_alloc(tbuf, sizeof(rd_kafka_metadata_partition_t) *
+                                       partition_cnt);
+        rd_tmpabuf_add_alloc(tbuf,
+                             sizeof(rd_kafka_metadata_partition_internal_t) *
+                                 partition_cnt);
+}
+
+void rd_kafkap_leader_discovery_metadata_init(rd_kafka_metadata_internal_t *mdi,
+                                              int32_t broker_id) {
+        memset(mdi, 0, sizeof(*mdi));
+        mdi->metadata.orig_broker_id       = broker_id;
+        mdi->controller_id                 = -1;
+        mdi->cluster_authorized_operations = -1;
+}
+
+int rd_kafkap_leader_discovery_set_brokers(
+    rd_tmpabuf_t *tbuf,
+    rd_kafka_metadata_internal_t *mdi,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints) {
+        int i;
+        rd_kafka_metadata_t *md = &mdi->metadata;
+
+        size_t md_brokers_size =
+            NodeEndpoints->NodeEndpointCnt * sizeof(rd_kafka_metadata_broker_t);
+        size_t mdi_brokers_size = NodeEndpoints->NodeEndpointCnt *
+                                  sizeof(rd_kafka_metadata_broker_internal_t);
+
+        md->broker_cnt      = NodeEndpoints->NodeEndpointCnt;
+        md->brokers         = rd_tmpabuf_alloc(tbuf, md_brokers_size);
+        mdi->brokers_sorted = rd_tmpabuf_alloc(tbuf, md_brokers_size);
+        mdi->brokers        = rd_tmpabuf_alloc(tbuf, mdi_brokers_size);
+
+        if (!md->brokers || !mdi->brokers_sorted || !mdi->brokers)
+                return -1;
+
+        for (i = 0; i < NodeEndpoints->NodeEndpointCnt; i++) {
+                rd_kafkap_NodeEndpoint_t *NodeEndpoint =
+                    &NodeEndpoints->NodeEndpoints[i];
+                rd_kafka_metadata_broker_t *mdb           = &md->brokers[i];
+                rd_kafka_metadata_broker_internal_t *mdbi = &mdi->brokers[i];
+                mdb->id   = NodeEndpoint->NodeId;
+                mdb->host = NULL;
+                if (!RD_KAFKAP_STR_IS_NULL(&NodeEndpoint->Host)) {
+                        mdb->host = rd_tmpabuf_alloc(
+                            tbuf, RD_KAFKAP_STR_LEN(&NodeEndpoint->Host) + 1);
+                        rd_snprintf(mdb->host,
+                                    RD_KAFKAP_STR_LEN(&NodeEndpoint->Host) + 1,
+                                    "%.*s",
+                                    RD_KAFKAP_STR_PR(&NodeEndpoint->Host));
+                        if (!mdb->host)
+                                return -1;
+                }
+                mdb->port = NodeEndpoints->NodeEndpoints[i].Port;
+
+                /* Metadata internal fields */
+                mdbi->id      = mdb->id;
+                mdbi->rack_id = NULL;
+        }
+
         qsort(mdi->brokers, md->broker_cnt, sizeof(mdi->brokers[0]),
               rd_kafka_metadata_broker_internal_cmp);
         memcpy(mdi->brokers_sorted, md->brokers,
@@ -3438,38 +3470,133 @@ rd_kafka_handle_Produce_metadata_update(rd_kafka_broker_t *rkb,
         qsort(mdi->brokers_sorted, md->broker_cnt, sizeof(*mdi->brokers_sorted),
               rd_kafka_metadata_broker_cmp);
 
-        md->topic_cnt = 1;
-        if (!(md->topics =
-                  rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics))))
-                goto err_parse;
-        if (!(mdi->topics = rd_tmpabuf_alloc(&tbuf, md->topic_cnt *
-                                                        sizeof(*mdi->topics))))
-                goto err_parse;
+        return 0;
+}
 
-        md->topics[0].topic =
-            rd_strndup(tags->Topic.TopicName, strlen(tags->Topic.TopicName));
-        md->topics[0].partition_cnt = 1;
-        if (!(md->topics[0].partitions = rd_tmpabuf_alloc(
-                  &tbuf, md->topics[0].partition_cnt *
-                             sizeof(*md->topics[0].partitions))))
-                goto err_parse;
-        if (!(mdi->topics[0].partitions = rd_tmpabuf_alloc(
-                  &tbuf, md->topics[0].partition_cnt *
-                             sizeof(*mdi->topics[0].partitions))))
-                goto err_parse;
+int rd_kafkap_leader_discovery_set_topic_cnt(rd_tmpabuf_t *tbuf,
+                                             rd_kafka_metadata_internal_t *mdi,
+                                             int topic_cnt) {
 
-        md->topics[0].partitions[0].id = tags->Topic.Partition.Partition;
-        md->topics[0].partitions[0].leader =
-            tags->Topic.Partition.CurrentLeader.LeaderId;
-        mdi->topics[0].partitions[0].id = tags->Topic.Partition.Partition;
-        mdi->topics[0].partitions[0].leader_epoch =
-            tags->Topic.Partition.CurrentLeader.LeaderEpoch;
+        rd_kafka_metadata_t *md = &mdi->metadata;
 
-        rko->rko_u.metadata.mdi = mdi;
-        rd_kafka_q_enq(rkb->rkb_rk->rk_ops, rko);
+        md->topic_cnt = topic_cnt;
+        md->topics    = rd_tmpabuf_alloc(tbuf, sizeof(*md->topics) * topic_cnt);
+        mdi->topics = rd_tmpabuf_alloc(tbuf, sizeof(*mdi->topics) * topic_cnt);
 
-err_parse:
-        return;
+        if (!md->topics || !mdi->topics)
+                return -1;
+
+        return 0;
+}
+
+int rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
+                                         rd_kafka_metadata_internal_t *mdi,
+                                         int topic_idx,
+                                         rd_kafka_Uuid_t topic_id,
+                                         char *topic_name,
+                                         int partition_cnt) {
+
+        rd_kafka_metadata_t *md                  = &mdi->metadata;
+        rd_kafka_metadata_topic_t *mdt           = &md->topics[topic_idx];
+        rd_kafka_metadata_topic_internal_t *mdti = &mdi->topics[topic_idx];
+
+        memset(mdt, 0, sizeof(*mdt));
+        mdt->topic =
+            topic_name ? rd_tmpabuf_alloc(tbuf, strlen(topic_name) + 1) : NULL;
+        mdt->partition_cnt = partition_cnt;
+        mdt->partitions =
+            rd_tmpabuf_alloc(tbuf, sizeof(*mdt->partitions) * partition_cnt);
+
+        if (topic_name)
+                rd_snprintf(mdt->topic, strlen(topic_name) + 1, "%s",
+                            topic_name);
+
+        if ((topic_name && !mdt->topic) || !mdt->partitions)
+                return -1;
+
+        memset(mdti, 0, sizeof(*mdti));
+        mdti->partitions =
+            rd_tmpabuf_alloc(tbuf, sizeof(*mdti->partitions) * partition_cnt);
+        mdti->topic_id                    = topic_id;
+        mdti->topic_authorized_operations = -1;
+
+        if (!mdti->partitions)
+                return -1;
+
+        return 0;
+}
+
+void rd_kafkap_leader_discovery_set_CurrentLeader(
+    rd_tmpabuf_t *tbuf,
+    rd_kafka_metadata_internal_t *mdi,
+    int topic_idx,
+    int partition_idx,
+    int32_t partition_id,
+    rd_kafkap_CurrentLeader_t *CurrentLeader) {
+
+        rd_kafka_metadata_t *md = &mdi->metadata;
+        rd_kafka_metadata_partition_t *mdp =
+            &md->topics[topic_idx].partitions[partition_idx];
+        rd_kafka_metadata_partition_internal_t *mdpi =
+            &mdi->topics[topic_idx].partitions[partition_idx];
+
+        memset(mdp, 0, sizeof(*mdp));
+        mdp->id     = partition_id;
+        mdp->leader = CurrentLeader->LeaderId,
+
+        memset(mdpi, 0, sizeof(*mdpi));
+        mdpi->id           = partition_id;
+        mdpi->leader_epoch = CurrentLeader->LeaderEpoch;
+}
+
+static void rd_kafka_handle_Produce_metadata_update(
+    rd_kafka_broker_t *rkb,
+    rd_kafkap_Produce_reply_tags_t *ProduceTags) {
+        if (ProduceTags->leader_change_cnt) {
+                rd_kafka_metadata_t *md           = NULL;
+                rd_kafka_metadata_internal_t *mdi = NULL;
+                rd_kafkap_Produce_reply_tags_Partition_t *Partition;
+                rd_tmpabuf_t tbuf;
+                int32_t nodeid;
+                rd_kafka_op_t *rko;
+
+                rd_kafka_broker_lock(rkb);
+                nodeid = rkb->rkb_nodeid;
+                rd_kafka_broker_unlock(rkb);
+
+                rd_tmpabuf_new(&tbuf, 0, rd_true /*assert on fail*/);
+                rd_tmpabuf_add_alloc(&tbuf, sizeof(*mdi));
+                rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
+                    &tbuf, &ProduceTags->node_endpoints);
+                rd_kafkap_leader_discovery_tmpabuf_add_alloc_topics(&tbuf, 1);
+                rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(
+                    &tbuf, ProduceTags->Topic.TopicName, 1);
+                rd_tmpabuf_finalize(&tbuf);
+
+                mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi));
+                md  = &mdi->metadata;
+
+                rd_kafkap_leader_discovery_metadata_init(mdi, nodeid);
+
+                rd_kafkap_leader_discovery_set_brokers(
+                    &tbuf, mdi, &ProduceTags->node_endpoints);
+
+                rd_kafkap_leader_discovery_set_topic_cnt(&tbuf, mdi, 1);
+
+                rd_kafkap_leader_discovery_set_topic(
+                    &tbuf, mdi, 0, RD_KAFKA_UUID_ZERO,
+                    ProduceTags->Topic.TopicName, 1);
+
+                Partition = &ProduceTags->Topic.Partition;
+                rd_kafkap_leader_discovery_set_CurrentLeader(
+                    &tbuf, mdi, 0, 0, Partition->Partition,
+                    &Partition->CurrentLeader);
+
+                rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_UPDATE);
+                rko->rko_u.metadata.md  = md;
+                rko->rko_u.metadata.mdi = mdi;
+                rd_kafka_q_enq(rkb->rkb_rk->rk_ops, rko);
+        }
 }
 
 static void
@@ -3597,7 +3724,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_tags(rkbuf, rd_kafkap_Produce_reply_tags_parse,
                                &ProduceTags);
 
-        rd_kafka_handle_Produce_metadata_update(rkb, rkbuf, &ProduceTags);
+        rd_kafka_handle_Produce_metadata_update(rkb, &ProduceTags);
 
         rd_kafkap_Produce_reply_tags_destroy(&ProduceTags);
         return hdr.ErrorCode;

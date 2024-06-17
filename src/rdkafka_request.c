@@ -3419,7 +3419,7 @@ void rd_kafkap_leader_discovery_metadata_init(rd_kafka_metadata_internal_t *mdi,
         mdi->cluster_authorized_operations = -1;
 }
 
-int rd_kafkap_leader_discovery_set_brokers(
+void rd_kafkap_leader_discovery_set_brokers(
     rd_tmpabuf_t *tbuf,
     rd_kafka_metadata_internal_t *mdi,
     rd_kafkap_NodeEndpoints_t *NodeEndpoints) {
@@ -3436,9 +3436,6 @@ int rd_kafkap_leader_discovery_set_brokers(
         mdi->brokers_sorted = rd_tmpabuf_alloc(tbuf, md_brokers_size);
         mdi->brokers        = rd_tmpabuf_alloc(tbuf, mdi_brokers_size);
 
-        if (!md->brokers || !mdi->brokers_sorted || !mdi->brokers)
-                return -1;
-
         for (i = 0; i < NodeEndpoints->NodeEndpointCnt; i++) {
                 rd_kafkap_NodeEndpoint_t *NodeEndpoint =
                     &NodeEndpoints->NodeEndpoints[i];
@@ -3453,8 +3450,6 @@ int rd_kafkap_leader_discovery_set_brokers(
                                     RD_KAFKAP_STR_LEN(&NodeEndpoint->Host) + 1,
                                     "%.*s",
                                     RD_KAFKAP_STR_PR(&NodeEndpoint->Host));
-                        if (!mdb->host)
-                                return -1;
                 }
                 mdb->port = NodeEndpoints->NodeEndpoints[i].Port;
 
@@ -3469,32 +3464,25 @@ int rd_kafkap_leader_discovery_set_brokers(
                sizeof(*mdi->brokers_sorted) * md->broker_cnt);
         qsort(mdi->brokers_sorted, md->broker_cnt, sizeof(*mdi->brokers_sorted),
               rd_kafka_metadata_broker_cmp);
-
-        return 0;
 }
 
-int rd_kafkap_leader_discovery_set_topic_cnt(rd_tmpabuf_t *tbuf,
-                                             rd_kafka_metadata_internal_t *mdi,
-                                             int topic_cnt) {
+void rd_kafkap_leader_discovery_set_topic_cnt(rd_tmpabuf_t *tbuf,
+                                              rd_kafka_metadata_internal_t *mdi,
+                                              int topic_cnt) {
 
         rd_kafka_metadata_t *md = &mdi->metadata;
 
         md->topic_cnt = topic_cnt;
         md->topics    = rd_tmpabuf_alloc(tbuf, sizeof(*md->topics) * topic_cnt);
         mdi->topics = rd_tmpabuf_alloc(tbuf, sizeof(*mdi->topics) * topic_cnt);
-
-        if (!md->topics || !mdi->topics)
-                return -1;
-
-        return 0;
 }
 
-int rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
-                                         rd_kafka_metadata_internal_t *mdi,
-                                         int topic_idx,
-                                         rd_kafka_Uuid_t topic_id,
-                                         char *topic_name,
-                                         int partition_cnt) {
+void rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
+                                          rd_kafka_metadata_internal_t *mdi,
+                                          int topic_idx,
+                                          rd_kafka_Uuid_t topic_id,
+                                          char *topic_name,
+                                          int partition_cnt) {
 
         rd_kafka_metadata_t *md                  = &mdi->metadata;
         rd_kafka_metadata_topic_t *mdt           = &md->topics[topic_idx];
@@ -3511,19 +3499,11 @@ int rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
                 rd_snprintf(mdt->topic, strlen(topic_name) + 1, "%s",
                             topic_name);
 
-        if ((topic_name && !mdt->topic) || !mdt->partitions)
-                return -1;
-
         memset(mdti, 0, sizeof(*mdti));
         mdti->partitions =
             rd_tmpabuf_alloc(tbuf, sizeof(*mdti->partitions) * partition_cnt);
         mdti->topic_id                    = topic_id;
         mdti->topic_authorized_operations = -1;
-
-        if (!mdti->partitions)
-                return -1;
-
-        return 0;
 }
 
 void rd_kafkap_leader_discovery_set_CurrentLeader(

@@ -414,15 +414,14 @@ err_parse:
 static void
 rd_kafka_handle_Fetch_metadata_update(rd_kafka_broker_t *rkb,
                                       rd_kafkap_Fetch_reply_tags_t *FetchTags) {
-
         if (FetchTags->topics_with_leader_change_cnt &&
             FetchTags->NodeEndpoints.NodeEndpoints) {
                 rd_kafka_metadata_t *md           = NULL;
                 rd_kafka_metadata_internal_t *mdi = NULL;
-                rd_kafkap_Fetch_reply_tags_Partition_t *Partition;
                 rd_tmpabuf_t tbuf;
-                int32_t nodeid, i, j;
+                int32_t nodeid;
                 rd_kafka_op_t *rko;
+                int i, changed_topic, changed_partition;
 
                 rd_kafka_broker_lock(rkb);
                 nodeid = rkb->rkb_nodeid;
@@ -433,10 +432,15 @@ rd_kafka_handle_Fetch_metadata_update(rd_kafka_broker_t *rkb,
                 rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
                     &tbuf, &FetchTags->NodeEndpoints);
                 rd_kafkap_leader_discovery_tmpabuf_add_alloc_topics(
-                    &tbuf, FetchTags->TopicCnt);
+                    &tbuf, FetchTags->topics_with_leader_change_cnt);
                 for (i = 0; i < FetchTags->TopicCnt; i++) {
+                        if (!FetchTags->Topics[i]
+                                 .partitions_with_leader_change_cnt)
+                                continue;
                         rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(
-                            &tbuf, NULL, FetchTags->Topics[i].PartitionCnt);
+                            &tbuf, NULL,
+                            FetchTags->Topics[i]
+                                .partitions_with_leader_change_cnt);
                 }
                 rd_tmpabuf_finalize(&tbuf);
 
@@ -448,31 +452,48 @@ rd_kafka_handle_Fetch_metadata_update(rd_kafka_broker_t *rkb,
                 rd_kafkap_leader_discovery_set_brokers(
                     &tbuf, mdi, &FetchTags->NodeEndpoints);
 
-                rd_kafkap_leader_discovery_set_topic_cnt(&tbuf, mdi,
-                                                         FetchTags->TopicCnt);
+                rd_kafkap_leader_discovery_set_topic_cnt(
+                    &tbuf, mdi, FetchTags->topics_with_leader_change_cnt);
 
+                changed_topic = 0;
                 for (i = 0; i < FetchTags->TopicCnt; i++) {
-                        if (FetchTags->Topics[i].PartitionCnt == 0)
+                        int j;
+                        if (!FetchTags->Topics[i]
+                                 .partitions_with_leader_change_cnt)
                                 continue;
-                        rd_kafkap_leader_discovery_set_topic(
-                            &tbuf, mdi, i, FetchTags->Topics[i].TopicId, NULL,
-                            FetchTags->Topics[i].PartitionCnt);
 
+                        rd_kafkap_leader_discovery_set_topic(
+                            &tbuf, mdi, changed_topic,
+                            FetchTags->Topics[i].TopicId, NULL,
+                            FetchTags->Topics[i]
+                                .partitions_with_leader_change_cnt);
+
+                        changed_partition = 0;
                         for (j = 0; j < FetchTags->Topics[i].PartitionCnt;
                              j++) {
-                                Partition = &FetchTags->Topics[i].Partitions[j];
+                                if (FetchTags->Topics[i]
+                                        .Partitions[j]
+                                        .CurrentLeader.LeaderId < 0)
+                                        continue;
+
+                                rd_kafkap_Fetch_reply_tags_Partition_t
+                                    *Partition =
+                                        &FetchTags->Topics[i].Partitions[j];
                                 rd_kafkap_leader_discovery_set_CurrentLeader(
-                                    &tbuf, mdi, i, j, Partition->Partition,
+                                    &tbuf, mdi, changed_topic,
+                                    changed_partition, Partition->Partition,
                                     &Partition->CurrentLeader);
+                                changed_partition++;
                         }
+                        changed_topic++;
                 }
+
                 rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_UPDATE);
                 rko->rko_u.metadata.md  = md;
                 rko->rko_u.metadata.mdi = mdi;
                 rd_kafka_q_enq(rkb->rkb_rk->rk_ops, rko);
         }
 }
-
 
 /**
  * @brief Per-partition FetchResponse parsing and handling.

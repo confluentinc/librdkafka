@@ -631,21 +631,21 @@ void rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(rd_tmpabuf_t *tbuf,
 void rd_kafkap_leader_discovery_metadata_init(rd_kafka_metadata_internal_t *mdi,
                                               int32_t broker_id);
 
-int rd_kafkap_leader_discovery_set_brokers(
+void rd_kafkap_leader_discovery_set_brokers(
     rd_tmpabuf_t *tbuf,
     rd_kafka_metadata_internal_t *mdi,
     rd_kafkap_NodeEndpoints_t *NodeEndpoints);
 
-int rd_kafkap_leader_discovery_set_topic_cnt(rd_tmpabuf_t *tbuf,
-                                             rd_kafka_metadata_internal_t *mdi,
-                                             int topic_cnt);
+void rd_kafkap_leader_discovery_set_topic_cnt(rd_tmpabuf_t *tbuf,
+                                              rd_kafka_metadata_internal_t *mdi,
+                                              int topic_cnt);
 
-int rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
-                                         rd_kafka_metadata_internal_t *mdi,
-                                         int topic_idx,
-                                         rd_kafka_Uuid_t topic_id,
-                                         char *topic_name,
-                                         int partition_cnt);
+void rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
+                                          rd_kafka_metadata_internal_t *mdi,
+                                          int topic_idx,
+                                          rd_kafka_Uuid_t topic_id,
+                                          char *topic_name,
+                                          int partition_cnt);
 
 void rd_kafkap_leader_discovery_set_CurrentLeader(
     rd_tmpabuf_t *tbuf,

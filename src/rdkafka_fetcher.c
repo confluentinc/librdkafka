@@ -709,16 +709,10 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
 
         if (unlikely(hdr.ErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR)) {
                 /* Handle partition-level errors. */
-                rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-
-                if (rd_kafka_buf_ApiVersion(request) >= 16)
-                        rd_kafka_buf_read_tags(
-                            rkbuf, rd_kafkap_Fetch_reply_tags_partition_parse,
-                            TopicTags, PartitionTags);
-
                 rd_kafka_fetch_reply_handle_partition_error(
                     rkb, rktp, tver, hdr.ErrorCode, hdr.HighwaterMarkOffset);
 
+                rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                 goto done;
         }
 

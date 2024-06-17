@@ -3604,12 +3604,10 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int16_t ErrorCode;
                 int64_t Offset;
         } hdr;
-        const int log_decode_errors                             = LOG_ERR;
-        int64_t log_start_offset                                = -1;
-        rd_kafkap_str_t TopicName                               = RD_ZERO_INIT;
-        rd_kafkap_Produce_reply_tags_Partition_t *PartitionTags = NULL;
-        rd_kafkap_Produce_reply_tags_Topic_t *TopicTags         = NULL;
-        rd_kafkap_Produce_reply_tags_t ProduceTags              = RD_ZERO_INIT;
+        const int log_decode_errors                = LOG_ERR;
+        int64_t log_start_offset                   = -1;
+        rd_kafkap_str_t TopicName                  = RD_ZERO_INIT;
+        rd_kafkap_Produce_reply_tags_t ProduceTags = RD_ZERO_INIT;
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
         if (TopicArrayCnt != 1)
@@ -3675,13 +3673,22 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         }
 
         if (request->rkbuf_reqhdr.ApiVersion >= 10) {
-                TopicTags     = &ProduceTags.Topic;
-                PartitionTags = &TopicTags->Partition;
+                rd_kafkap_Produce_reply_tags_Topic_t *TopicTags =
+                    &ProduceTags.Topic;
+                ;
+                rd_kafkap_Produce_reply_tags_Partition_t *PartitionTags =
+                    &TopicTags->Partition;
+                ;
+
                 /* Partition tags count */
                 TopicTags->TopicName     = RD_KAFKAP_STR_DUP(&TopicName);
                 PartitionTags->Partition = hdr.Partition;
         }
 
+        /* Partition tags */
+        rd_kafka_buf_read_tags(rkbuf,
+                               rd_kafkap_Produce_reply_tags_partition_parse,
+                               &ProduceTags, &ProduceTags.Topic.Partition);
 
         /* Topic tags */
         rd_kafka_buf_skip_tags(rkbuf);

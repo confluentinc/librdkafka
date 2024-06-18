@@ -1009,7 +1009,71 @@ void rd_kafka_toppar_insert_msgq(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_unlock(rktp);
 }
 
+/**
+ * @brief Purge internal fetch queue if toppar is stopped
+ * (RD_KAFKA_TOPPAR_FETCH_STOPPED) and removed from the cluster
+ * (RD_KAFKA_TOPPAR_F_REMOVE). Will be called from different places as it's
+ * removed starting from a metadata response and stopped from a rebalance or a
+ * consumer close.
+ *
+ * @remark Avoids circular dependencies in from `rktp_fetchq` ops to the same
+ * toppar that stop destroying a consumer.
+ *
+ * @locks rd_kafka_toppar_lock() MUST be held
+ */
+void rd_kafka_toppar_purge_internal_fetch_queue_maybe(rd_kafka_toppar_t *rktp) {
+        rd_kafka_q_t *rkq;
+        rkq = rktp->rktp_fetchq;
+        mtx_lock(&rkq->rkq_lock);
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE &&
+            !rktp->rktp_fetchq->rkq_fwdq) {
+                rd_kafka_op_t *rko;
+                int cnt = 0, barrier_cnt = 0, message_cnt = 0, other_cnt = 0;
 
+                /* Partition is being removed from the cluster and it's stopped,
+                 * so rktp->rktp_fetchq->rkq_fwdq is NULL.
+                 * Purge remaining operations in rktp->rktp_fetchq->rkq_q,
+                 * while holding lock, to avoid circular references */
+                rko = TAILQ_FIRST(&rkq->rkq_q);
+                while (rko) {
+                        if (rko->rko_type != RD_KAFKA_OP_BARRIER &&
+                            rko->rko_type != RD_KAFKA_OP_FETCH) {
+                                rd_kafka_log(
+                                    rktp->rktp_rkt->rkt_rk, LOG_WARNING,
+                                    "PARTDEL",
+                                    "Purging toppar fetch queue buffer op"
+                                    "with unexpected type: %s",
+                                    rd_kafka_op2str(rko->rko_type));
+                        }
+
+                        if (rko->rko_type == RD_KAFKA_OP_BARRIER)
+                                barrier_cnt++;
+                        else if (rko->rko_type == RD_KAFKA_OP_FETCH)
+                                message_cnt++;
+                        else
+                                other_cnt++;
+
+                        rko = TAILQ_NEXT(rko, rko_link);
+                        cnt++;
+                }
+
+                if (cnt) {
+                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, CGRP, "PARTDEL",
+                                     "Purge toppar fetch queue buffer "
+                                     "containing %d op(s) "
+                                     "(%d barrier(s), %d message(s), %d other)"
+                                     " to avoid "
+                                     "circular references",
+                                     cnt, barrier_cnt, message_cnt, other_cnt);
+                        rd_kafka_q_purge0(rktp->rktp_fetchq, rd_false);
+                } else {
+                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, CGRP, "PARTDEL",
+                                     "Not purging toppar fetch queue buffer."
+                                     " No ops present in the buffer.");
+                }
+        }
+        mtx_unlock(&rkq->rkq_lock);
+}
 
 /**
  * Helper method for purging queues when removing a toppar.

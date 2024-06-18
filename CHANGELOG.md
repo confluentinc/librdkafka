@@ -2,9 +2,11 @@
 
 librdkafka v2.5.0 is a feature release.
 
-* Fix segfault when using long client id because of erased segment when using flexver. (#4689)
-* Fix for an idempotent producer error, with a message batch not reconstructed
-  identically when retried (#4750)
+ * Fix segfault when using long client id because of erased segment when using flexver. (#4689)
+ * Fix for an idempotent producer error, with a message batch not reconstructed
+   identically when retried (#4750)
+ * Fix to remove fetch queue messages that blocked the destroy of rdkafka
+   instances (#4724)
 
 
 ## Enhancements
@@ -31,6 +33,17 @@ librdkafka v2.5.0 is a feature release.
    Happening on large batches. Solved by using the same backoff baseline for all messages
    in the batch.
    Happens since 2.2.0 (#4750).
+
+### Consumer fixes
+
+ * Issues:
+   Fix to remove fetch queue messages that blocked the destroy of rdkafka
+   instances. Circular dependencies from a partition fetch queue message to
+   the same partition blocked the destroy of an instance, that happened
+   in case the partition was removed from the cluster while it was being
+   consumed. Solved by purging internal partition queue, after being stopped
+   and removed, to allow reference count to reach zero and trigger a destroy.
+   Happening since 2.0.2 (#4724).
 
 
 

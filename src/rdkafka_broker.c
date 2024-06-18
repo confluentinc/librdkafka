@@ -3407,6 +3407,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                 : (topic_err
                                        ? topic_err
                                        : RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION));
+
+                        rd_kafka_toppar_purge_internal_fetch_queue_maybe(rktp);
                 }
 
                 rd_kafka_toppar_unlock(rktp);

@@ -3,6 +3,8 @@
 librdkafka v2.5.0 is a feature release.
 
 * Fix segfault when using long client id because of erased segment when using flexver. (#4689)
+* Fix for an idempotent producer error, with a message batch not reconstructed
+  identically when retried (#4750)
 
 
 ## Enhancements
@@ -20,6 +22,15 @@ librdkafka v2.5.0 is a feature release.
    Fix segfault when a segment is erased and more data is written to the buffer.
    Happens since 1.x when a portion of the buffer (segment) is erased for flexver or compression.
    More likely to happen since 2.1.0, because of the upgrades to flexver, with certain string sizes like a long client id (#4689).
+
+### Idempotent producer fixes
+
+ * Issues: #4736
+   Fix for an idempotent producer error, with a message batch not reconstructed
+   identically when retried. Caused the error message "Local: Inconsistent state: Unable to reconstruct MessageSet".
+   Happening on large batches. Solved by using the same backoff baseline for all messages
+   in the batch.
+   Happens since 2.2.0 (#4750).
 
 
 
@@ -49,6 +60,11 @@ librdkafka v2.4.0 is a feature release:
  * Fix for an undesired partition migration with stale leader epoch (#4680).
  * Fix hang in cooperative consumer mode if an assignment is processed
    while closing the consumer (#4528).
+ * Upgrade OpenSSL to v3.0.13 (while building from source) with various security fixes,
+   check the [release notes](https://www.openssl.org/news/cl30.txt)
+   (@janjwerner-confluent, #4690).
+ * Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.8.0 (@janjwerner-confluent, #4690).
+
 
 
 ## Upgrade considerations

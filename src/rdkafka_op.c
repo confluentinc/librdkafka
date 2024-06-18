@@ -116,8 +116,9 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:ALTERUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
-            [RD_KAFKA_OP_LISTOFFSETS] = "REPLY:LISTOFFSETS",
+            [RD_KAFKA_OP_LISTOFFSETS]     = "REPLY:LISTOFFSETS",
             [RD_KAFKA_OP_ELECTLEADER] = "REPLY:ELECTLEADER",
+            [RD_KAFKA_OP_METADATA_UPDATE] = "REPLY:METADATA_UPDATE",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -276,8 +277,9 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_LISTOFFSETS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_LISTOFFSETS]     = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_ELECTLEADER] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_METADATA_UPDATE] = sizeof(rko->rko_u.metadata),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -474,6 +476,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.leaders.leaders, rd_list_destroy);
                 RD_IF_FREE(rko->rko_u.leaders.partitions,
                            rd_kafka_topic_partition_list_destroy);
+                break;
+
+        case RD_KAFKA_OP_METADATA_UPDATE:
+                RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
+                /* It's not needed to free metadata.mdi because they
+                   are the in the same memory allocation. */
                 break;
 
         default:

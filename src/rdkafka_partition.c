@@ -896,6 +896,7 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         int retry_max_ms) {
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
+        rd_ts_t now;
         int64_t jitter = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
                                    100 + RD_KAFKA_RETRY_JITTER_PERCENT);
         /* Scan through messages to see which ones are eligible for retry,
@@ -903,7 +904,14 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
          * set backoff time for first message and optionally
          * increase retry count for each message.
          * Sorted insert is not necessary since the original order
-         * srcq order is maintained. */
+         * srcq order is maintained.
+         *
+         * Start timestamp for calculating backoff is common,
+         * to avoid that messages from the same batch
+         * have different backoff, as they need to be retried
+         * by reconstructing the same batch, when idempotency is
+         * enabled. */
+        now = rd_clock();
         TAILQ_FOREACH_SAFE(rkm, &srcq->rkmq_msgs, rkm_link, tmp) {
                 if (rkm->rkm_u.producer.retries + incr_retry > max_retries)
                         continue;
@@ -927,7 +935,7 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         backoff = jitter * backoff * 10;
                         if (backoff > retry_max_ms * 1000)
                                 backoff = retry_max_ms * 1000;
-                        backoff = rd_clock() + backoff;
+                        backoff = now + backoff;
                 }
                 rkm->rkm_u.producer.ts_backoff = backoff;
 

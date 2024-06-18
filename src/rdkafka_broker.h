@@ -460,6 +460,8 @@ void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
                                   rd_kafka_resp_err_t err,
                                   const char *errstr);
 
+void rd_kafka_broker_process(void* rbk);
+
 void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb);
 
 #define rd_kafka_broker_destroy(rkb)                                    \

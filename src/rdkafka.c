@@ -2004,6 +2004,74 @@ static int rd_kafka_init_wait (rd_kafka_t *rk, int timeout_ms) {
         return ret;
 }
 
+/**
+ * @brief serve to create broker thread once need to
+ * 
+ */
+static void rd_kafka_broker_thread_create_serve(rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb = NULL;
+
+#ifndef _WIN32
+        sigset_t newset, oldset;
+        /* Block all signals in newly created thread.
+         * To avoid race condition we block all signals in the calling
+         * thread, which the new thread will inherit its sigmask from,
+         * and then restore the original sigmask of the calling thread when
+         * we're done creating the thread.
+	 * NOTE: term_sig remains unblocked since we use it on termination
+	 *       to quickly interrupt system calls. */
+        sigemptyset(&oldset);
+        sigfillset(&newset);
+	if (rk->rk_conf.term_sig)
+		sigdelset(&newset, rk->rk_conf.term_sig);
+        pthread_sigmask(SIG_SETMASK, &newset, &oldset);
+
+#endif
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_kafka_broker_lock(rkb);
+
+                /* For linux, type of rkb_thread is unsigned int
+                 * For windows, type of rkb_thread is void */
+#if defined(_WIN32)
+                if (rkb->rkb_thread != NULL) {
+#else
+                if (rkb->rkb_thread != 0) {
+#endif
+                        rd_kafka_broker_unlock(rkb);
+                        continue;
+                }
+                
+                if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_INIT ||
+                    (rkb->rkb_state == RD_KAFKA_BROKER_STATE_INIT &&
+                        !rd_kafka_terminating(rkb->rkb_rk) &&
+                        !rd_kafka_fatal_error_code(rkb->rkb_rk) &&
+                        (!rkb->rkb_rk->rk_conf.sparse_connections ||
+                          rkb->rkb_persistconn.internal ||
+                          rd_atomic32_get(&rkb->rkb_persistconn.coord) ||
+                          rkb->rkb_ops->rkq_qlen > 0))) {
+
+	                if (thrd_create(&rkb->rkb_thread,
+			        rd_kafka_broker_process, rkb) != thrd_success) {
+
+                                rd_kafka_log(rk, LOG_CRIT, "THREAD",
+                                        "Unable to create broker thread");
+
+		                /* Send ERR op back to application for processing. */
+		                rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+				        "Unable to create broker thread");
+
+		                rd_free(rkb);
+	                }
+                }
+                rd_kafka_broker_unlock(rkb);
+        }
+
+#ifndef _WIN32
+	/* Restore sigmask of caller */
+	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#endif
+}
 
 /**
  * Main loop for Kafka handler thread.
@@ -2059,6 +2127,10 @@ static int rd_kafka_thread_main (void *arg) {
                                  RD_KAFKA_Q_CB_CALLBACK, NULL, NULL);
 		if (rk->rk_cgrp) /* FIXME: move to timer-triggered */
 			rd_kafka_cgrp_serve(rk->rk_cgrp);
+                
+                if (rk->rk_conf.broker_thread_lazy_creation)
+                        rd_kafka_broker_thread_create_serve(rk);
+
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}
 

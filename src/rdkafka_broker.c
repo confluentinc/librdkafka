@@ -5660,26 +5660,26 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	 * the broker thread until we've finalized the rkb. */
 	rd_kafka_broker_lock(rkb);
         rd_kafka_broker_keep(rkb); /* broker thread's refcnt */
-	if (thrd_create(&rkb->rkb_thread,
-			rd_kafka_broker_thread_main, rkb) != thrd_success) {
-		rd_kafka_broker_unlock(rkb);
-
-                rd_kafka_log(rk, LOG_CRIT, "THREAD",
-                             "Unable to create broker thread");
-
-		/* Send ERR op back to application for processing. */
-		rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
-				"Unable to create broker thread");
-
-		rd_free(rkb);
-
+        if (!rkb->rkb_rk->rk_conf.broker_thread_lazy_creation || 
+                (rkb->rkb_rk->rk_conf.broker_thread_lazy_creation && 
+                 source != RD_KAFKA_LEARNED)) {
+                if (thrd_create(&rkb->rkb_thread,
+	                rd_kafka_broker_thread_main, rkb) != thrd_success) {
+                        rd_kafka_broker_unlock(rkb);
+                        
+                        rd_kafka_log(rk, LOG_CRIT, "THREAD",
+                                     "Unable to create broker thread");
+	        	/* Send ERR op back to application for processing. */
+	        	rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+	        			"Unable to create broker thread");
+	        	rd_free(rkb);
 #ifndef _WIN32
-		/* Restore sigmask of caller */
-		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+		        /* Restore sigmask of caller */
+		        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
-
-		return NULL;
-	}
+		        return NULL;
+	        }
+        }
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
                 if (rk->rk_conf.security_protocol ==
@@ -5715,8 +5715,10 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 
 #ifndef _WIN32
-	/* Restore sigmask of caller */
-	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+        if (!rkb->rkb_rk->rk_conf.broker_thread_lazy_creation) {
+	        /* Restore sigmask of caller */
+	        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+        }
 #endif
 
 	return rkb;
@@ -6102,6 +6104,10 @@ int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist) {
 
 int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
         return rd_kafka_brokers_add0(rk, brokerlist);
+}
+
+void  rd_kafka_broker_process(void* rbk) {
+        rd_kafka_broker_thread_main(rbk);
 }
 
 

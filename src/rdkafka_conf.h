@@ -216,6 +216,7 @@ struct rd_kafka_conf_s {
         int     reconnect_jitter_ms;
         int     connections_max_idle_ms;
         int     sparse_connections;
+        int     broker_thread_lazy_creation;
         int     sparse_connect_intvl;
 	int     api_version_request;
 	int     api_version_request_timeout_ms;

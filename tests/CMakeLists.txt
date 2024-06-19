@@ -152,6 +152,9 @@ endif()
 
 add_executable(test-runner ${sources})
 target_link_libraries(test-runner PUBLIC rdkafka++)
+if (${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+    target_link_libraries(test-runner PUBLIC socket)
+endif()
 
 add_test(NAME RdKafkaTestInParallel COMMAND test-runner -p5)
 add_test(NAME RdKafkaTestSequentially COMMAND test-runner -p1)

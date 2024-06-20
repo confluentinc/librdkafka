@@ -179,7 +179,8 @@ typedef enum {
         RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,    /* < Admin:
                                                      AlterUserScramCredentials
                                                      u.admin_request >*/
-        RD_KAFKA_OP_LISTOFFSETS, /**< Admin: ListOffsets u.admin_request >*/
+        RD_KAFKA_OP_LISTOFFSETS,     /**< Admin: ListOffsets u.admin_request >*/
+        RD_KAFKA_OP_METADATA_UPDATE, /**< Metadata update (KIP 951) **/
         RD_KAFKA_OP_SET_TELEMETRY_BROKER, /**< Set preferred broker for
                                                telemetry. */
         RD_KAFKA_OP_TERMINATE_TELEMETRY,  /**< Start termination sequence for
@@ -275,6 +276,7 @@ struct rd_kafka_admin_fanout_worker_cbs;
 
 #define RD_KAFKA_OP_TYPE_ASSERT(rko, type)                                     \
         rd_assert(((rko)->rko_type & ~RD_KAFKA_OP_FLAGMASK) == (type))
+
 
 struct rd_kafka_op_s {
         TAILQ_ENTRY(rd_kafka_op_s) rko_link;

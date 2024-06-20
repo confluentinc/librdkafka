@@ -253,8 +253,162 @@ static void do_test_metadata_call_before_join(void) {
         SUB_TEST_PASS();
 }
 
+typedef struct expected_request_s {
+        int16_t api_key;
+        int32_t broker;
+} expected_request_t;
+
+/**
+ * @brief Verify that a request with the expected ApiKey and broker
+ *        was sent to the cluster.
+ */
+rd_bool_t verify_requests_after_metadata_update_operation(
+    rd_kafka_mock_cluster_t *mcluster,
+    expected_request_t *expected_request) {
+        size_t cnt, i;
+        rd_kafka_mock_request_t **requests =
+            rd_kafka_mock_get_requests(mcluster, &cnt);
+        rd_bool_t found = rd_false;
+
+        for (i = 0; i < cnt; i++) {
+                int16_t api_key;
+                int32_t broker;
+                rd_kafka_mock_request_t *request = requests[i];
+                api_key = rd_kafka_mock_request_api_key(request);
+                broker  = rd_kafka_mock_request_id(request);
+                if (api_key == expected_request->api_key &&
+                    broker == expected_request->broker) {
+                        found = rd_true;
+                        break;
+                }
+        }
+
+        rd_kafka_mock_request_destroy_array(requests, cnt);
+
+        return found;
+}
+
+/**
+ * @brief A metadata update request should be triggered when a leader change
+ *        happens while producing or consuming and cause a migration
+ *        to the new leader.
+ *
+ * @param producer If true, the test will be for a producer, otherwise
+ *                 for a consumer.
+ * @param second_leader_change If true, a leader change will be triggered
+ *                             for two partitions, otherwise for one.
+ */
+static void do_test_metadata_update_operation(rd_bool_t producer,
+                                              rd_bool_t second_leader_change) {
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_conf_t *conf;
+        test_timing_t timing;
+        rd_bool_t found;
+        expected_request_t expected_request = {
+            .api_key = producer ? RD_KAFKAP_Produce : RD_KAFKAP_Fetch,
+            .broker  = 3};
+
+        SUB_TEST_QUICK("%s, %s", producer ? "producer" : "consumer",
+                       second_leader_change ? "two leader changes"
+                                            : "single leader change");
+
+        mcluster = test_mock_cluster_new(4, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 4);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 1, 2);
+
+        test_conf_init(&conf, NULL, 20);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+
+        if (producer) {
+                test_conf_set(conf, "batch.num.messages", "1");
+                rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+                rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+                /* Start producing to leader 1 and 2 */
+                test_produce_msgs2(rk, topic, 0, 0, 0, 1, NULL, 0);
+                test_produce_msgs2(rk, topic, 0, 1, 0, 1, NULL, 0);
+                rd_kafka_flush(rk, 1000);
+        } else {
+                rd_kafka_topic_partition_list_t *assignment;
+                test_conf_set(conf, "group.id", topic);
+                rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+
+                assignment = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(assignment, topic, 0);
+                rd_kafka_topic_partition_list_add(assignment, topic, 1);
+                test_consumer_assign("2 partitions", rk, assignment);
+                rd_kafka_topic_partition_list_destroy(assignment);
+
+                /* Start consuming from leader 1 and 2 */
+                test_consumer_poll_no_msgs("no errors", rk, 0, 1000);
+        }
+
+        TIMING_START(&timing, "Metadata update and partition migration");
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 3);
+        if (second_leader_change)
+                rd_kafka_mock_partition_set_leader(mcluster, topic, 1, 4);
+
+
+        if (producer) {
+                /* Produce two new messages to the new leaders */
+                test_produce_msgs2(rk, topic, 0, 0, 1, 1, NULL, 0);
+                test_produce_msgs2(rk, topic, 0, 1, 1, 1, NULL, 0);
+                rd_kafka_flush(rk, 1000);
+        } else {
+                /* Produce two new messages and consume them from
+                 * the new leaders */
+                test_produce_msgs_easy_v(topic, 0, 0, 0, 1, 0,
+                                         "bootstrap.servers", bootstraps, NULL);
+                test_produce_msgs_easy_v(topic, 0, 1, 0, 1, 0,
+                                         "bootstrap.servers", bootstraps, NULL);
+                test_consumer_poll_timeout("partition 0", rk, 0, -1, -1, 2,
+                                           NULL, 5000);
+        }
+        TIMING_ASSERT_LATER(&timing, 0, 2000);
+
+        /* Leader change triggers the metadata update and migration
+         * of partition 0 to brokers 3 and with 'second_leader_change' also
+         * of partition 1 to broker 4. */
+        found = verify_requests_after_metadata_update_operation(
+            mcluster, &expected_request);
+        if (!found)
+                TEST_FAIL(
+                    "Requests with ApiKey %s"
+                    " were not found on broker %" PRId32,
+                    rd_kafka_ApiKey2str(expected_request.api_key),
+                    expected_request.broker);
+
+        if (second_leader_change) {
+                expected_request.broker = 4;
+        } else {
+                expected_request.broker = 2;
+        }
+
+        found = verify_requests_after_metadata_update_operation(
+            mcluster, &expected_request);
+        if (!found)
+                TEST_FAIL(
+                    "Requests with ApiKey %s"
+                    " were not found on broker %" PRId32,
+                    rd_kafka_ApiKey2str(expected_request.api_key),
+                    expected_request.broker);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+}
+
 int main_0146_metadata_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
+        int variation;
 
         /* No need to test the "roundrobin" assignor case,
          * as this is just for checking the two code paths:
@@ -267,6 +421,13 @@ int main_0146_metadata_mock(int argc, char **argv) {
         do_test_fast_metadata_refresh_stops();
 
         do_test_stale_metadata_doesnt_migrate_partition();
+
+        for (variation = 0; variation < 4; variation++) {
+                do_test_metadata_update_operation(
+                        variation / 2, /* 0-1: consumer, 2-3 producer */
+                        variation % 2  /* 1-3: second leader change,
+                                        * 0-2: single leader change */);
+        }
 
         return 0;
 }

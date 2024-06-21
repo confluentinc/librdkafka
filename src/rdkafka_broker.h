@@ -431,7 +431,8 @@ int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,
                                               int16_t minver,
                                               int16_t maxver,
-                                              int *featuresp);
+                                              int *featuresp,
+                                              rd_bool_t do_lock);
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
                                                       int line,

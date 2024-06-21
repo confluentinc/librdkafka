@@ -55,8 +55,8 @@ rd_kafka_filter_broker_by_GetTelemetrySubscription(rd_kafka_broker_t *rkb,
                                                    void *opaque) {
         int features;
         if (rd_kafka_broker_ApiVersion_supported0(
-                rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
-            -1)
+                rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features,
+                rd_false) != -1)
                 return 0;
         return 1;
 }

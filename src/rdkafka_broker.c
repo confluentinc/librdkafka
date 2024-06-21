@@ -237,16 +237,22 @@ static void rd_kafka_broker_features_set(rd_kafka_broker_t *rkb, int features) {
 
 
 /**
- * @brief Implementation for rd_kafka_broker_ApiVersion_supported and
- * rd_kafka_broker_ApiVersion_supported0.
+ * @brief Check and return supported ApiVersion for \p ApiKey.
+ *
+ * @returns the highest supported ApiVersion in the specified range (inclusive)
+ *          or -1 if the ApiKey is not supported or no matching ApiVersion.
+ *          The current feature set is also returned in \p featuresp
+ *
+ * @locks rd_kafka_broker_lock() if do_lock is rd_false
+ * @locks_acquired rd_kafka_broker_lock() if do_lock is rd_true
+ * @locality any
  */
-static int16_t
-rd_kafka_broker_ApiVersion_supported_implementation(rd_kafka_broker_t *rkb,
-                                                    int16_t ApiKey,
-                                                    int16_t minver,
-                                                    int16_t maxver,
-                                                    int *featuresp,
-                                                    rd_bool_t do_lock) {
+int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver,
+                                              int16_t maxver,
+                                              int *featuresp,
+                                              rd_bool_t do_lock) {
         struct rd_kafka_ApiVersion skel = {.ApiKey = ApiKey};
         struct rd_kafka_ApiVersion ret  = RD_ZERO_INIT, *retp;
 
@@ -301,30 +307,8 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
                                              int16_t minver,
                                              int16_t maxver,
                                              int *featuresp) {
-        return rd_kafka_broker_ApiVersion_supported_implementation(
+        return rd_kafka_broker_ApiVersion_supported0(
             rkb, ApiKey, minver, maxver, featuresp, rd_true /* do_lock */);
-}
-
-
-/**
- * @brief Check and return supported ApiVersion for \p ApiKey.
- *
- * @returns the highest supported ApiVersion in the specified range (inclusive)
- *          or -1 if the ApiKey is not supported or no matching ApiVersion.
- *          The current feature set is also returned in \p featuresp
- *
- * @note Same as rd_kafka_broker_ApiVersion_supported except for locking.
- * @locks rd_kafka_broker_lock()
- * @locks_acquired none
- * @locality any
- */
-int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
-                                              int16_t ApiKey,
-                                              int16_t minver,
-                                              int16_t maxver,
-                                              int *featuresp) {
-        return rd_kafka_broker_ApiVersion_supported_implementation(
-            rkb, ApiKey, minver, maxver, featuresp, rd_false /* do_lock */);
 }
 
 /**

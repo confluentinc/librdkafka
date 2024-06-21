@@ -220,11 +220,12 @@ calculate_consumer_assigned_partitions(rd_kafka_t *rk,
 
 static void reset_historical_metrics(rd_kafka_t *rk) {
         rd_kafka_broker_t *rkb;
+        rd_ts_t now_wallclock_micros = rd_uclock();
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_c_historic.assigned_partitions = rkb->rkb_toppar_cnt;
                 rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
-                rkb->rkb_c_historic.ts_last  = rd_uclock() * 1000;
+                rkb->rkb_c_historic.ts_last  = now_wallclock_micros * 1000;
                 rkb->rkb_c_historic.connects = rkb->rkb_c.connects.val;
                 /* Only ra_v is being used to keep track of the metrics */
                 rkb->rkb_c_historic.rkb_avg_rtt.ra_v = rkb->rkb_avg_rtt.ra_v;

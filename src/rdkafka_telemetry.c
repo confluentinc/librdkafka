@@ -74,6 +74,8 @@ rd_kafka_filter_broker_by_GetTelemetrySubscription(rd_kafka_broker_t *rkb,
 void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                               rd_bool_t clear_control_flow_fields) {
         rd_kafka_broker_t *rkb;
+        rd_ts_t now_micros;
+        rd_ts_t now_wallclock_micros;
         if (clear_control_flow_fields) {
                 mtx_lock(&rk->rk_telemetry.lock);
                 if (rk->rk_telemetry.preferred_broker) {
@@ -103,6 +105,9 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.matched_metrics       = NULL;
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
+
+        now_micros           = rd_clock();
+        now_wallclock_micros = rd_uclock();
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_atomic32_set(&rkb->rkb_avg_rtt.ra_v.maxv_reset, 1);
                 rd_atomic32_set(&rkb->rkb_avg_outbuf_latency.ra_v.maxv_reset,
@@ -110,12 +115,12 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rd_atomic32_set(&rkb->rkb_avg_throttle.ra_v.maxv_reset, 1);
                 rkb->rkb_c_historic.rkb_avg_outbuf_latency.ra_v.start =
                     rd_clock();
-                rkb->rkb_c_historic.rkb_avg_rtt.ra_v.start      = rd_clock();
-                rkb->rkb_c_historic.rkb_avg_throttle.ra_v.start = rd_clock();
+                rkb->rkb_c_historic.rkb_avg_rtt.ra_v.start      = now_micros;
+                rkb->rkb_c_historic.rkb_avg_throttle.ra_v.start = now_micros;
                 rkb->rkb_c_historic.assigned_partitions         = 0;
                 rkb->rkb_c_historic.connects                    = 0;
-                rkb->rkb_c_historic.ts_last  = rd_uclock() * 1000;
-                rkb->rkb_c_historic.ts_start = rd_uclock() * 1000;
+                rkb->rkb_c_historic.ts_last  = now_wallclock_micros * 1000;
+                rkb->rkb_c_historic.ts_start = now_wallclock_micros * 1000;
         }
         rk->rk_telemetry.telemetry_max_bytes = 0;
 }

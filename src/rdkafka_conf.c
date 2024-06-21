@@ -1476,9 +1476,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "for connection before the connection is considered failed. This applies "
      "to both bootstrap and advertised servers. If the value is set to "
      "`resolve_canonical_bootstrap_servers_only`, each entry will be resolved "
-     "and expanded into a list of canonical names. NOTE: Default here is "
-     "different from the Java client's default behavior, which connects only "
-     "to the first IP address returned for a hostname. ",
+     "and expanded into a list of canonical names. "
+     "**WARNING**: `resolve_canonical_bootstrap_servers_only` "
+     "must only be used with `GSSAPI` (Kerberos) as `sasl.mechanism`, "
+     "as it's the only purpose of this configuration value. "
+     "**NOTE**: Default here is different from the Java client's default "
+     "behavior, which connects only to the first IP address returned for a "
+     "hostname. ",
      .vdef = RD_KAFKA_USE_ALL_DNS_IPS,
      .s2i  = {{RD_KAFKA_USE_ALL_DNS_IPS, "use_all_dns_ips"},
              {RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,

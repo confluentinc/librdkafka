@@ -443,8 +443,13 @@ struct rd_kafka_mock_cluster_s {
 
 
 rd_kafka_buf_t *rd_kafka_mock_buf_new_response(const rd_kafka_buf_t *request);
-void rd_kafka_mock_connection_send_response(rd_kafka_mock_connection_t *mconn,
-                                            rd_kafka_buf_t *resp);
+
+#define rd_kafka_mock_connection_send_response(mconn, resp)                    \
+        rd_kafka_mock_connection_send_response0(mconn, resp, rd_false)
+
+void rd_kafka_mock_connection_send_response0(rd_kafka_mock_connection_t *mconn,
+                                             rd_kafka_buf_t *resp,
+                                             rd_bool_t tags_written);
 void rd_kafka_mock_connection_set_blocking(rd_kafka_mock_connection_t *mconn,
                                            rd_bool_t blocking);
 

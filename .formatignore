@@ -7,6 +7,8 @@ src/lz4frame.c
 src/lz4frame.h
 src/lz4hc.c
 src/lz4hc.h
+src/rdxxhash.c
+src/rdxxhash.h
 src/queue.h
 src/crc32c.c
 src/crc32c.h

@@ -4097,6 +4097,10 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rd_kafka_telemetry_schedule_termination(rko->rko_rk);
                 break;
 
+        case RD_KAFKA_OP_METADATA_UPDATE:
+                res = rd_kafka_metadata_update_op(rk, rko->rko_u.metadata.mdi);
+                break;
+
         default:
                 /* If op has a callback set (e.g., OAUTHBEARER_REFRESH),
                  * call it. */

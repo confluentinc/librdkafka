@@ -72,8 +72,8 @@ typedef enum {
 } rd_kafka_telemetry_consumer_metric_name_t;
 
 typedef union {
-        int64_t intValue;
-        double doubleValue;
+        int64_t int_value;
+        double double_value;
 } rd_kafka_telemetry_metric_value_t;
 
 typedef rd_kafka_telemetry_metric_value_t (

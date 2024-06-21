@@ -37,7 +37,12 @@ static rd_bool_t is_metadata_request(rd_kafka_mock_request_t *request,
 
 static rd_bool_t is_fetch_request(rd_kafka_mock_request_t *request,
                                   void *opaque) {
-        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Fetch;
+        int32_t *broker_id = (int32_t *)opaque;
+        rd_bool_t ret =
+            rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Fetch;
+        if (broker_id)
+                ret &= rd_kafka_mock_request_id(request) == *broker_id;
+        return ret;
 }
 
 /**
@@ -157,6 +162,7 @@ static void do_test_stale_metadata_doesnt_migrate_partition(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
+        int32_t expected_broker_id;
 
         SUB_TEST_QUICK();
 
@@ -171,6 +177,7 @@ static void do_test_stale_metadata_doesnt_migrate_partition(void) {
         test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "fetch.error.backoff.ms", "10");
         test_conf_set(conf, "fetch.wait.max.ms", "10");
+        test_conf_set(conf, "fetch.queue.backoff.ms", "10");
 
         rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
@@ -184,27 +191,31 @@ static void do_test_stale_metadata_doesnt_migrate_partition(void) {
         /* Change leader to 2, Fetch fails, refreshes metadata. */
         rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
 
-        for (i = 0; i < 5; i++) {
-                /* Validation fails, metadata refreshed again */
-                rd_kafka_mock_broker_push_request_error_rtts(
-                    mcluster, 2, RD_KAFKAP_OffsetForLeaderEpoch, 1,
-                    RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR, 1000);
-        }
+        /* Validation fails, metadata refreshed again */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 2, RD_KAFKAP_OffsetForLeaderEpoch, 1,
+            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR, 1000);
 
         /* Wait partition migrates to broker 2 */
         rd_usleep(100 * 1000, 0);
 
-        /* Return stale metadata */
+        /* Ask to return stale metadata while calling OffsetForLeaderEpoch */
+        rd_kafka_mock_start_request_tracking(mcluster);
         for (i = 0; i < 10; i++) {
                 rd_kafka_mock_partition_push_leader_response(
                     mcluster, topic, 0, 1 /*leader id*/, 0 /*leader epoch*/);
         }
 
-        /* Partition doesn't have to migrate back to broker 1 */
+        /* After the error on OffsetForLeaderEpoch metadata is refreshed
+         * and it returns the stale metadata.
+         * 1s for the OffsetForLeaderEpoch plus at least 500ms for
+         * restarting the fetch requests */
         rd_usleep(2000 * 1000, 0);
-        rd_kafka_mock_start_request_tracking(mcluster);
-        fetch_requests = test_mock_wait_matching_requests(
-            mcluster, 0, 500, is_fetch_request, NULL);
+
+        /* Partition doesn't have to migrate back to broker 1 */
+        expected_broker_id = 1;
+        fetch_requests     = test_mock_wait_matching_requests(
+            mcluster, 0, 500, is_fetch_request, &expected_broker_id);
         TEST_ASSERT(fetch_requests == 0,
                     "No fetch request should be received by broker 1, got %d",
                     fetch_requests);

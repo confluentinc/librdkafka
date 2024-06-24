@@ -6318,9 +6318,10 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         rd_kafka_buf_read_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
         rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.subscription_id);
 
-        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: uuid %s",
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS", "Parsing:: uuid %s",
                      rk->rk_telemetry.client_instance_id.base64str);
-        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: Subscription id %d",
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
+                     "Parsing:: Subscription id %d",
                      rk->rk_telemetry.subscription_id);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
@@ -6347,7 +6348,8 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         rd_kafka_buf_read_bool(rkbuf, &rk->rk_telemetry.delta_temporality);
 
 
-        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE", "Parsing:: Push Interval %d",
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
+                     "Parsing:: Push Interval %d",
                      rk->rk_telemetry.push_interval_ms);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
@@ -6365,7 +6367,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                 }
         }
 
-        rd_kafka_dbg(rk, TELEMETRY, "GETPARSE",
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
                      "Parsing:: metrics size %lu, %d",
                      rk->rk_telemetry.requested_metrics_cnt, arraycnt);
 

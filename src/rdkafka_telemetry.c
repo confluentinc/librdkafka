@@ -158,7 +158,7 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
             !strcmp(rk->rk_telemetry.requested_metrics[0],
                     RD_KAFKA_TELEMETRY_METRICS_ALL_METRICS_SUBSCRIPTION)) {
                 size_t j;
-                rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
+                rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
                              "All metrics subscribed");
 
                 for (j = 0; j < metrics_cnt; j++)
@@ -188,7 +188,7 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                 }
         }
 
-        rd_kafka_dbg(rk, TELEMETRY, "RD_KAFKA_TELEMETRY_METRICS_INFO",
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
                      "Matched metrics: %" PRIdsz,
                      rk->rk_telemetry.matched_metrics_cnt);
 }
@@ -208,7 +208,8 @@ static void rd_kafka_send_get_telemetry_subscriptions(rd_kafka_t *rk,
         /* Enqueue on broker transmit queue.
          * The preferred broker might change in the meanwhile but let it fail.
          */
-        rd_kafka_dbg(rk, TELEMETRY, "GETSENT", "Sending GetTelemetryRequest");
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
+                     "Sending GetTelemetryRequest");
         rd_kafka_GetTelemetrySubscriptionsRequest(
             rkb, NULL, 0, RD_KAFKA_REPLYQ(rk->rk_ops, 0),
             rd_kafka_handle_GetTelemetrySubscriptions, NULL);
@@ -231,10 +232,9 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
             rd_jitter(100 - RD_KAFKA_TELEMETRY_PUSH_JITTER,
                       100 + RD_KAFKA_TELEMETRY_PUSH_JITTER) /
             100.0;
-        rd_kafka_broker_t *rkb;
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
-                rd_kafka_dbg(rk, TELEMETRY, "GETERR",
+                rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
                              "GetTelemetrySubscriptionsRequest failed: %s",
                              rd_kafka_err2str(err));
                 if (rk->rk_telemetry.push_interval_ms == 0) {
@@ -260,9 +260,9 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
         }
 
         rd_kafka_dbg(
-            rk, TELEMETRY, "GETHANDLE",
+            rk, TELEMETRY, "GETSUBSCRIPTIONS",
             "Handled GetTelemetrySubscriptions, scheduling FSM after "
-            "%ld microseconds, state = %s, err = %s, metrics = %" PRIdsz,
+            "%lld microseconds, state = %s, err = %s, metrics = %" PRIdsz,
             next_scheduled,
             rd_kafka_telemetry_state2str(rk->rk_telemetry.state),
             rd_kafka_err2str(err), rk->rk_telemetry.requested_metrics_cnt);
@@ -376,7 +376,8 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
         rd_kafka_compression_t compression_used = RD_KAFKA_COMPRESSION_NONE;
         int i, r = -1;
 
-        for (i = 0; i < rk->rk_telemetry.accepted_compression_types_cnt; i++) {
+        for (i = 0; i < (int)rk->rk_telemetry.accepted_compression_types_cnt;
+             i++) {
                 rd_kafka_compression_t compression_type =
                     rk->rk_telemetry.accepted_compression_types[i];
 
@@ -418,7 +419,7 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
                 }
                 if (compression_used != RD_KAFKA_COMPRESSION_NONE && r == 0) {
                         rd_kafka_dbg(
-                            rk, TELEMETRY, "PUSHCOMP",
+                            rk, TELEMETRY, "PUSH",
                             "Compressed payload of size %" PRIusz " to %" PRIusz
                             " using compression type "
                             "%s",
@@ -429,11 +430,11 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
                 }
         }
         if (compression_used != RD_KAFKA_COMPRESSION_NONE && r == -1) {
-                rd_kafka_dbg(rk, TELEMETRY, "PUSHCOMPERR",
+                rd_kafka_dbg(rk, TELEMETRY, "PUSHERR",
                              "Failed to compress payload with available "
                              "compression types");
         }
-        rd_kafka_dbg(rk, TELEMETRY, "PUSHCOMP", "Sending uncompressed payload");
+        rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Sending uncompressed payload");
 
         *compressed_payload      = payload;
         *compressed_payload_size = payload_len;
@@ -465,7 +466,8 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                 compressed_metrics_payload_size = metrics_payload_size;
         }
 
-        if (metrics_payload_size > rk->rk_telemetry.telemetry_max_bytes) {
+        if ((int32_t)metrics_payload_size >
+            rk->rk_telemetry.telemetry_max_bytes) {
                 rd_kafka_log(rk, LOG_WARNING, "TELEMETRY",
                              "Metrics payload size %" PRIdsz
                              " exceeds telemetry_max_bytes %" PRId32
@@ -658,7 +660,7 @@ void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
 
         mtx_unlock(&rk->rk_telemetry.lock);
 
-        rd_kafka_dbg(rk, TELEMETRY, "TELBRKSET",
+        rd_kafka_dbg(rk, TELEMETRY, "SETBROKER",
                      "Setting telemetry broker to %s\n", rkb->rkb_name);
 
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
@@ -695,7 +697,7 @@ static rd_kafka_broker_t *rd_kafka_get_preferred_broker(rd_kafka_t *rk) {
                  * already. */
                 rk->rk_telemetry.preferred_broker = rkb;
 
-                rd_kafka_dbg(rk, TELEMETRY, "TELBRKSET",
+                rd_kafka_dbg(rk, TELEMETRY, "SETBROKER",
                              "Lost preferred broker, switching to new "
                              "preferred broker %d\n",
                              rkb ? rd_kafka_broker_id(rkb) : -1);

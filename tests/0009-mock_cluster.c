@@ -54,16 +54,10 @@ int main_0009_mock_cluster(int argc, char **argv) {
         test_conf_init(&conf, NULL, 30);
 
         test_conf_set(conf, "bootstrap.servers", bootstraps);
-        test_conf_set(conf, "debug", "mock, telemetry");
-
 
         /* Producer */
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         p = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
-
-        // TODO: Add metrics
-        char *metric = "*";
-        rd_kafka_mock_telemetry_set_requested_metrics(mcluster, &metric, 1);
 
         /* Consumer */
         test_conf_set(conf, "auto.offset.reset", "earliest");

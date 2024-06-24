@@ -424,6 +424,8 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get(rd_refcnt_t *R) {
         } while (0)
 
 
+#define RD_INTERFACE_CALL(i, name, ...) (i->name(i->opaque, __VA_ARGS__))
+
 /**
  * @brief Utility types to hold memory,size tuple.
  */

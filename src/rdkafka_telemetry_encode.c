@@ -205,7 +205,6 @@ calculate_consumer_assigned_partitions(rd_kafka_t *rk,
                                        rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t assigned_partitions;
         rd_kafka_broker_t *rkb;
-        rd_kafka_toppar_t *rktp;
         int32_t total_assigned_partitions = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -220,7 +219,6 @@ calculate_consumer_assigned_partitions(rd_kafka_t *rk,
 
 static void reset_historical_metrics(rd_kafka_t *rk) {
         rd_kafka_broker_t *rkb;
-        rd_kafka_toppar_t *rktp;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_c_historic.assigned_partitions = rkb->rkb_toppar_cnt;
@@ -641,8 +639,8 @@ void *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk, size_t *size) {
         const int *metrics_to_encode = rk->rk_telemetry.matched_metrics;
         const size_t metrics_to_encode_count =
             rk->rk_telemetry.matched_metrics_cnt;
-        size_t metric_name_len, total_metrics_count = metrics_to_encode_count;
-        size_t i, metric_idx                        = 0;
+        size_t total_metrics_count = metrics_to_encode_count;
+        size_t i, metric_idx = 0;
 
         for (i = 0; i < metrics_to_encode_count; i++) {
                 if (is_per_broker_metric(rk, (int)i)) {

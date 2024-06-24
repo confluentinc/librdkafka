@@ -2426,9 +2426,9 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_i8(rkbuf, &compression_type);
         rd_kafka_buf_read_kbytes(rkbuf, &metrics);
 
-        void *uncompressed_payload                = NULL;
-        size_t uncompressed_payload_len           = 0;
-        rd_kafka_telemetry_decode_callbacks_t cbs = {
+        void *uncompressed_payload               = NULL;
+        size_t uncompressed_payload_len          = 0;
+        rd_kafka_telemetry_decode_interface_t it = {
             .error          = rd_kafka_mock_handle_PushTelemetry_decode_error,
             .decoded_string = rd_kafka_mock_handle_PushTelemetry_decoded_string,
             .decoded_number = rd_kafka_mock_handle_PushTelemetry_decoded_number,
@@ -2453,7 +2453,7 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
                 uncompressed_payload_len = metrics.len;
         }
 
-        rd_kafka_telemetry_decode_metrics(&cbs, uncompressed_payload,
+        rd_kafka_telemetry_decode_metrics(&it, uncompressed_payload,
                                           uncompressed_payload_len);
         if (compression_type != RD_KAFKA_COMPRESSION_NONE)
                 rd_free(uncompressed_payload);

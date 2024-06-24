@@ -42,16 +42,16 @@
 #include "rdkafka_zstd.h"
 #include "snappy.h"
 
-typedef struct rd_kafka_telemetry_decode_callbacks_s {
+typedef struct rd_kafka_telemetry_decode_interface_s {
         void (*decoded_string)(void *opaque, const uint8_t *decoded);
-        void (*decoded_number)(void *opaque,
+        void (*decoded_number)(
+            void *opaque,
             const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded);
         void (*decoded_type)(void *opaque,
-            rd_kafka_telemetry_metric_type_t type);
-        void (*error)(void *opaque, const char *error,
-            ...);
+                             rd_kafka_telemetry_metric_type_t type);
+        void (*error)(void *opaque, const char *error, ...);
         void *opaque;
-} rd_kafka_telemetry_decode_callbacks_t;
+} rd_kafka_telemetry_decode_interface_t;
 
 int rd_kafka_telemetry_uncompress_metrics_payload(
     rd_kafka_broker_t *rkb,
@@ -60,7 +60,7 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
     size_t compressed_payload_size,
     void **uncompressed_payload,
     size_t *uncompressed_payload_size);
-int rd_kafka_telemetry_decode_metrics(rd_kafka_telemetry_decode_callbacks_t *cb,
+int rd_kafka_telemetry_decode_metrics(rd_kafka_telemetry_decode_interface_t *cb,
                                       void *buffer,
                                       size_t size);
 

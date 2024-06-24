@@ -97,7 +97,8 @@ calculate_broker_avg_rtt(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                 int64_t cnt_diff = current_cnt - historic_cnt;
                 int64_t sum_diff = current_sum - historic_sum;
 
-                avg_value = sum_diff / (double)(cnt_diff * THREE_ORDERS_MAGNITUDE);
+                avg_value =
+                    sum_diff / (double)(cnt_diff * THREE_ORDERS_MAGNITUDE);
         }
 
         avg_rtt.double_value = avg_value;

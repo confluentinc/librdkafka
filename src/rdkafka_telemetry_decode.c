@@ -27,6 +27,7 @@
  */
 
 #include "rd.h"
+#include <math.h>
 #include "rdkafka_telemetry_decode.h"
 #include "nanopb/pb.h"
 #include "nanopb/pb_encode.h"
@@ -488,7 +489,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                             expected_description) == 0,
                      "Metric description mismatch");
         if (is_double)
-                RD_UT_ASSERT((unit_test_data.metric_value_double - 1.0) <
+                RD_UT_ASSERT(fabs(unit_test_data.metric_value_double - 1.0) <
                                  0.0001,
                              "Metric value mismatch");
         else

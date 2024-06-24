@@ -34,7 +34,7 @@
 #include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
 
-#define RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR 1000000
+#define THREE_ORDERS_MAGNITUDE 1000
 
 typedef struct {
         opentelemetry_proto_metrics_v1_Metric **metrics;
@@ -76,9 +76,9 @@ calculate_connection_creation_rate(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 ts_last = rkb->rkb_c_historic.ts_last;
                 total.double_value += rd_atomic32_get(&rkb->rkb_c.connects) -
-                                     rkb->rkb_c_historic.connects;
+                                      rkb->rkb_c_historic.connects;
         }
-        int seconds = (rd_uclock() * 1000 - ts_last) / 1e9;
+        double seconds = (rd_uclock() * THREE_ORDERS_MAGNITUDE - ts_last) / 1e9;
         if (seconds > 0)
                 total.double_value /= seconds;
         return total;
@@ -87,11 +87,9 @@ calculate_connection_creation_rate(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
 static rd_kafka_telemetry_metric_value_t
 calculate_broker_avg_rtt(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_rtt;
-        double avg_value = 0;
-
+        double avg_value     = 0;
         int64_t current_cnt  = broker->rkb_avg_rtt.ra_v.cnt;
         int64_t historic_cnt = broker->rkb_c_historic.rkb_avg_rtt.ra_v.cnt;
-
         if (current_cnt > historic_cnt) {
                 int64_t current_sum = broker->rkb_avg_rtt.ra_v.sum;
                 int64_t historic_sum =
@@ -99,8 +97,7 @@ calculate_broker_avg_rtt(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                 int64_t cnt_diff = current_cnt - historic_cnt;
                 int64_t sum_diff = current_sum - historic_sum;
 
-                avg_value =
-                    sum_diff / (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
+                avg_value = sum_diff / (double)(cnt_diff * THREE_ORDERS_MAGNITUDE);
         }
 
         avg_rtt.double_value = avg_value;
@@ -111,16 +108,16 @@ static rd_kafka_telemetry_metric_value_t
 calculate_broker_max_rtt(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t max_rtt;
 
-        max_rtt.int_value = broker->rkb_avg_rtt.ra_v.maxv_interval /
-                           RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
+        max_rtt.int_value = (broker->rkb_avg_rtt.ra_v.maxv_interval +
+                             (THREE_ORDERS_MAGNITUDE - 1)) /
+                            THREE_ORDERS_MAGNITUDE;
         return max_rtt;
 }
 
 static rd_kafka_telemetry_metric_value_t
 calculate_throttle_avg(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_throttle;
-        int64_t sum_value    = 0,
-                broker_count = rd_atomic32_get(&rk->rk_broker_cnt);
+        int64_t sum_value = 0, count_value = 0;
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -135,12 +132,14 @@ calculate_throttle_avg(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                         int64_t cnt_diff = current_cnt - historic_cnt;
                         int64_t sum_diff = current_sum - historic_sum;
 
-                        sum_value +=
-                            sum_diff /
-                            (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
+                        sum_value += sum_diff;
+                        count_value += cnt_diff;
                 }
         }
-        avg_throttle.int_value = sum_value / broker_count;
+        if (count_value)
+                avg_throttle.double_value = sum_value / (double)count_value;
+        else
+                avg_throttle.double_value = 0.0;
         return avg_throttle;
 }
 
@@ -156,15 +155,13 @@ calculate_throttle_max(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                     RD_MAX(max_throttle.int_value,
                            rkb->rkb_avg_throttle.ra_v.maxv_interval);
         }
-        max_throttle.int_value /= RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
         return max_throttle;
 }
 
 static rd_kafka_telemetry_metric_value_t
 calculate_queue_time_avg(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
         rd_kafka_telemetry_metric_value_t avg_queue_time;
-        int64_t sum_value    = 0,
-                broker_count = rd_atomic32_get(&rk->rk_broker_cnt);
+        int64_t sum_value = 0, count_value = 0;
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -180,12 +177,15 @@ calculate_queue_time_avg(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                         int64_t cnt_diff = current_cnt - historic_cnt;
                         int64_t sum_diff = current_sum - historic_sum;
 
-                        sum_value +=
-                            sum_diff /
-                            (cnt_diff * RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR);
+                        sum_value += sum_diff;
+                        count_value += cnt_diff;
                 }
         }
-        avg_queue_time.int_value = sum_value / broker_count;
+        if (count_value)
+                avg_queue_time.double_value =
+                    sum_value / (double)(count_value * THREE_ORDERS_MAGNITUDE);
+        else
+                avg_queue_time.double_value = 0.0;
         return avg_queue_time;
 }
 
@@ -200,7 +200,9 @@ calculate_queue_time_max(rd_kafka_t *rk, rd_kafka_broker_t *broker) {
                     RD_MAX(max_queue_time.int_value,
                            rkb->rkb_avg_outbuf_latency.ra_v.maxv_interval);
         }
-        max_queue_time.int_value /= RDKAFKA_TELEMETRY_NS_TO_MS_FACTOR;
+        max_queue_time.int_value =
+            (max_queue_time.int_value + (THREE_ORDERS_MAGNITUDE - 1)) /
+            THREE_ORDERS_MAGNITUDE;
         return max_queue_time;
 }
 

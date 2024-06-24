@@ -130,7 +130,7 @@ describe('Consumer', () => {
                     });
 
                     consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
-                    await waitForConsumerToJoinGroup(consumer);
+                    await waitFor(() => consumer.assignment().length > 0, () => null, 100);
 
                     await producer.connect();
                     await producer.sendBatch({

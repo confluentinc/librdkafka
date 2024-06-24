@@ -10,10 +10,14 @@ const {
     sleep,
 } = require('../testhelpers');
 
-describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
+/* All combinations of autoCommit and partitionsConsumedConcurrently */
+const cases = Array(2 * 3).fill().map((_, i) => [i % 2 === 0, (i % 3) + 1]);
+
+describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumedConcurrently) => {
     let topicName, groupId, producer, consumer;
 
     beforeEach(async () => {
+        console.log("Starting:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
         topicName = `test-topic-${secureRandom()}`
         groupId = `consumer-group-id-${secureRandom()}`
 
@@ -33,6 +37,7 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
     afterEach(async () => {
         consumer && (await consumer.disconnect())
         producer && (await producer.disconnect())
+        console.log("Ending:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
     });
 
     it('is cleared on pause', async () => {
@@ -40,19 +45,21 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         await producer.connect();
         await consumer.subscribe({ topic: topicName })
 
+        const msgs = 1024;
         const messagesConsumed = [];
         consumer.run({
+            partitionsConsumedConcurrently,
             eachMessage: async event => {
                 messagesConsumed.push(event);
-                if (event.partition === 0 && (+event.message.offset) === 1023) {
+                if (event.partition === 0 && (+event.message.offset) === (msgs - 1)) {
                     consumer.pause([{ topic: topicName, partitions: [0] }]);
                 }
             }
         });
 
-        /* Evenly distribute 1024*9 messages across 3 partitions */
+        /* Evenly distribute msgs*9 messages across 3 partitions */
         let i = 0;
-        const messages = Array(1024 * 9)
+        const messages = Array(msgs * 9)
             .fill()
             .map(() => {
                 const value = secureRandom()
@@ -62,20 +69,20 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         await producer.send({ topic: topicName, messages })
 
         // Wait for the messages.
-        // We consume 1024 messages from partition 0, and 1024*3 from partition 1 and 2.
-        await waitForMessages(messagesConsumed, { number: 1024 * 7 });
+        // We consume msgs*1 messages from partition 0, and msgs*3 from partition 1 and 2.
+        await waitForMessages(messagesConsumed, { number: msgs * 7 });
 
         // We should not consume even one more message than that.
         await sleep(1000);
-        expect(messagesConsumed.length).toEqual(1024 * 7);
+        expect(messagesConsumed.length).toEqual(msgs * 7);
 
         // check if all offsets are present
         // partition 0
-        expect(messagesConsumed.filter(m => m.partition === 0).map(m => m.message.offset)).toEqual(Array(1024).fill().map((_, i) => `${i}`));
+        expect(messagesConsumed.filter(m => m.partition === 0).map(m => m.message.offset)).toEqual(Array(msgs).fill().map((_, i) => `${i}`));
         // partition 1
-        expect(messagesConsumed.filter(m => m.partition === 1).map(m => m.message.offset)).toEqual(Array(1024 * 3).fill().map((_, i) => `${i}`));
+        expect(messagesConsumed.filter(m => m.partition === 1).map(m => m.message.offset)).toEqual(Array(msgs * 3).fill().map((_, i) => `${i}`));
         // partition 2
-        expect(messagesConsumed.filter(m => m.partition === 2).map(m => m.message.offset)).toEqual(Array(1024 * 3).fill().map((_, i) => `${i}`));
+        expect(messagesConsumed.filter(m => m.partition === 2).map(m => m.message.offset)).toEqual(Array(msgs * 3).fill().map((_, i) => `${i}`));
     });
 
     it('is cleared on seek', async () => {
@@ -86,6 +93,7 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         const messagesConsumed = [];
         let hasBeenSeeked = false;
         consumer.run({
+            partitionsConsumedConcurrently,
             eachMessage: async event => {
                 messagesConsumed.push(event);
                 if (event.partition === 0 && (+event.message.offset) === 1023 && !hasBeenSeeked) {
@@ -130,6 +138,7 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
             maxWaitTimeInMs: 100,
             fromBeginning: true,
             autoCommit: isAutoCommit,
+            clientId: "consumer2",
         });
 
         await consumer.connect();
@@ -142,6 +151,7 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         let consumer2ConsumeRunning = false;
 
         consumer.run({
+            partitionsConsumedConcurrently,
             eachMessage: async event => {
                 messagesConsumed.push(event);
                 messagesConsumedConsumer1.push(event);
@@ -160,7 +170,8 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
 
         /* Evenly distribute 1024*9 messages across 3 partitions */
         let i = 0;
-        const messages = Array(1024 * 10)
+        const multiplier = 9;
+        const messages = Array(1024 * multiplier)
             .fill()
             .map(() => {
                 const value = secureRandom()
@@ -186,21 +197,21 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         consumer2ConsumeRunning = true;
 
         /* Now that both consumers have joined, wait for all msgs to be consumed */
-        await waitForMessages(messagesConsumed, { number: 1024 * 10 });
+        await waitForMessages(messagesConsumed, { number: 1024 * multiplier });
 
         /* No extra messages should be consumed. */
         await sleep(1000);
-        expect(messagesConsumed.length).toEqual(1024 * 10);
+        expect(messagesConsumed.length).toEqual(1024 * multiplier);
 
         /* Check if all messages were consumed. */
         expect(messagesConsumed.map(event => (+event.message.offset)).sort((a, b) => a - b))
-            .toEqual(Array(1024 * 10).fill().map((_, i) => Math.floor(i / 3)));
+            .toEqual(Array(1024 * multiplier).fill().map((_, i) => Math.floor(i / 3)));
 
         /* Consumer2 should have consumed at least one message. */
         expect(messagesConsumedConsumer2.length).toBeGreaterThan(0);
 
         await consumer2.disconnect();
-    });
+    }, 60000);
 
     it('does not hold up polling for non-message events', async () => {
         /* Even if the cache is full of messages, we should still be polling for
@@ -228,6 +239,7 @@ describe.each([[false], [true]])('Consumer message cache', (isAutoCommit) => {
         let consumer1TryingToJoin = false;
 
         impatientConsumer.run({
+            partitionsConsumedConcurrently,
             eachMessage: async event => {
                 messagesConsumed.push(event);
                 impatientConsumerMessages.push(event);

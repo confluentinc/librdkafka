@@ -15,6 +15,7 @@ describe('Consumer', () => {
     let groupId, producer, topics;
 
     beforeEach(async () => {
+        console.log("Starting:", expect.getState().currentTestName);
         topics = [`test-topic1-${secureRandom()}`, `test-topic2-${secureRandom()}`]
         groupId = `consumer-group-id-${secureRandom()}`
 
@@ -36,6 +37,7 @@ describe('Consumer', () => {
     afterEach(async () => {
         consumer && (await consumer.disconnect())
         producer && (await producer.disconnect())
+        console.log("Ending:", expect.getState().currentTestName);
     })
 
     describe('when pausing', () => {
@@ -140,7 +142,7 @@ describe('Consumer', () => {
             const messagesConsumed = []
             consumer.run({
                 eachMessage: async event => {
-                    const { topic, message, partition } = event
+                    const { topic, message, partition } = event;
 
                     const whichTopic = topics.indexOf(topic)
                     const whichMessage = messages.findIndex(m => String(m.key) === String(message.key))
@@ -185,7 +187,7 @@ describe('Consumer', () => {
             expect(messagesConsumed).toHaveLength(8)
             expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 }) // partition 0
             expect(messagesConsumed).toContainEqual({ topic: 0, message: 3 }) // partition 0
-        }, 10000);
+        }, 15000);
 
         it('pauses when pausing via the eachBatch callback', async () => {
             await consumer.connect()

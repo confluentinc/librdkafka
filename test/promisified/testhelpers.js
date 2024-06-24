@@ -81,17 +81,21 @@ async function sleep(ms) {
 }
 
 const generateMessages = options => {
-    const { prefix, number = 100 } = options || {}
+    const { prefix, number = 100, partition } = options || {}
     const prefixOrEmpty = prefix ? `-${prefix}` : ''
 
     return Array(number)
         .fill()
         .map((v, i) => {
             const value = secureRandom()
-            return {
+            const message = {
                 key: `key${prefixOrEmpty}-${i}-${value}`,
                 value: `value${prefixOrEmpty}-${i}-${value}`,
+            };
+            if (partition !== undefined) {
+                message.partition = partition;
             }
+            return message;
         })
 }
 

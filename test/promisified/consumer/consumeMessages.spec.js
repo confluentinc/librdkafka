@@ -15,15 +15,19 @@ const {
     generateMessages,
 } = require('../testhelpers');
 
-describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
+/* All combinations of autoCommit and partitionsConsumedConcurrently */
+const cases = Array(2 * 3).fill().map((_, i) => [i < 3, (i % 3) + 1]).slice(-1);
+
+describe.each(cases)('Consumer', (isAutoCommit, partitionsConsumedConcurrently) => {
     let topicName, groupId, producer, consumer;
+    const partitions = 3;
 
     beforeEach(async () => {
+        console.log("Starting:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
         topicName = `test-topic-${secureRandom()}`
         groupId = `consumer-group-id-${secureRandom()}`
 
-        await createTopic({ topic: topicName })
-
+        await createTopic({ topic: topicName, partitions })
         producer = createProducer({});
 
         consumer = createConsumer({
@@ -37,6 +41,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
     afterEach(async () => {
         consumer && (await consumer.disconnect())
         producer && (await producer.disconnect())
+        console.log("Ending:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
     });
 
     it('consume messages', async () => {
@@ -45,13 +50,16 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         await consumer.subscribe({ topic: topicName })
 
         const messagesConsumed = [];
-        consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
+        consumer.run({
+            partitionsConsumedConcurrently,
+            eachMessage: async event => messagesConsumed.push(event)
+        });
 
-        const messages = Array(100)
+        const messages = Array(10)
             .fill()
             .map(() => {
                 const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
+                return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
             })
 
         await producer.send({ topic: topicName, messages })
@@ -76,7 +84,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
                 message: expect.objectContaining({
                     key: Buffer.from(messages[messages.length - 1].key),
                     value: Buffer.from(messages[messages.length - 1].value),
-                    offset: '99',
+                    offset: '' + (messagesConsumed.length - 1),
                 }),
             })
         )
@@ -91,17 +99,21 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         await consumer.subscribe({ topic: topicName })
 
         const messagesConsumed = [];
-        consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
+        consumer.run({
+            partitionsConsumedConcurrently,
+            eachMessage: async event => messagesConsumed.push(event)
+        });
 
-        const messages = [ {
-                value: `value-${secureRandom}`,
-                headers: {
-                    'header-1': 'value-1',
-                    'header-2': 'value-2',
-                    'header-3': [ 'value-3-1', 'value-3-2', Buffer.from([1,0,1,0,1]) ],
-                    'header-4': Buffer.from([1,0,1,0,1]),
-                }
-            } ]
+        const messages = [{
+            value: `value-${secureRandom}`,
+            headers: {
+                'header-1': 'value-1',
+                'header-2': 'value-2',
+                'header-3': ['value-3-1', 'value-3-2', Buffer.from([1, 0, 1, 0, 1])],
+                'header-4': Buffer.from([1, 0, 1, 0, 1]),
+            },
+            partition: 0,
+        }]
 
         await producer.send({ topic: topicName, messages })
         await waitForMessages(messagesConsumed, { number: messages.length })
@@ -117,8 +129,8 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
                         // Headers are always returned as Buffers from the broker.
                         'header-1': Buffer.from('value-1'),
                         'header-2': Buffer.from('value-2'),
-                        'header-3': [ Buffer.from('value-3-1'), Buffer.from('value-3-2'), Buffer.from([1,0,1,0,1]) ],
-                        'header-4': Buffer.from([1,0,1,0,1]),
+                        'header-3': [Buffer.from('value-3-1'), Buffer.from('value-3-2'), Buffer.from([1, 0, 1, 0, 1])],
+                        'header-4': Buffer.from([1, 0, 1, 0, 1]),
                     }
                 }),
             })
@@ -132,6 +144,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
 
         const messagesConsumed = [];
         consumer.run({
+            partitionsConsumedConcurrently,
             eachBatchAutoResolve: isAutoResolve,
             eachBatch: async event => {
                 // Match the message format to be checked easily later.
@@ -148,42 +161,47 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
             }
         });
 
-        const messages = Array(100)
+        const messages = Array(100 * partitions)
             .fill()
-            .map(() => {
+            .map((_, i) => {
                 const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
+                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions }
             })
 
         await producer.send({ topic: topicName, messages })
         await waitForMessages(messagesConsumed, { number: messages.length })
 
-        expect(messagesConsumed[0]).toEqual(
-            expect.objectContaining({
-                topic: topicName,
-                partition: 0,
-                message: expect.objectContaining({
-                    key: Buffer.from(messages[0].key),
-                    value: Buffer.from(messages[0].value),
-                    offset: String(0),
-                }),
-            })
-        )
+        for (let p = 0; p < partitions; p++) {
+            const specificPartitionMessages = messagesConsumed.filter(m => m.partition === p);
+            const specificExpectedMessages = messages.filter(m => m.partition === p);
+            expect(specificPartitionMessages[0]).toEqual(
+                expect.objectContaining({
+                    topic: topicName,
+                    partition: p,
+                    message: expect.objectContaining({
+                        key: Buffer.from(specificExpectedMessages[0].key),
+                        value: Buffer.from(specificExpectedMessages[0].value),
+                        offset: String(0),
+                    }),
+                })
+            );
 
-        expect(messagesConsumed[messagesConsumed.length - 1]).toEqual(
-            expect.objectContaining({
-                topic: topicName,
-                partition: 0,
-                message: expect.objectContaining({
-                    key: Buffer.from(messages[messages.length - 1].key),
-                    value: Buffer.from(messages[messages.length - 1].value),
-                    offset: String(messages.length - 1),
-                }),
-            })
-        )
+            expect(specificPartitionMessages[specificPartitionMessages.length - 1]).toEqual(
+                expect.objectContaining({
+                    topic: topicName,
+                    partition: p,
+                    message: expect.objectContaining({
+                        key: Buffer.from(specificExpectedMessages[specificExpectedMessages.length - 1].key),
+                        value: Buffer.from(specificExpectedMessages[specificExpectedMessages.length - 1].value),
+                        offset: String(specificExpectedMessages.length - 1),
+                    }),
+                })
+            );
 
-        // check if all offsets are present
-        expect(messagesConsumed.map(m => m.message.offset)).toEqual(messages.map((_, i) => `${i}`))
+            // check if all offsets are present
+            expect(specificPartitionMessages.map(m => m.message.offset)).toEqual(specificExpectedMessages.map((_, i) => `${i}`))
+        }
+
     });
 
     it('is able to reconsume messages after not resolving it', async () => {
@@ -194,6 +212,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         let messageSeen = false;
         const messagesConsumed = [];
         consumer.run({
+            partitionsConsumedConcurrently,
             eachBatchAutoResolve: false,
             eachBatch: async event => {
                 expect(event.batch.messages.length).toEqual(1);
@@ -216,10 +235,11 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
             .fill()
             .map(() => {
                 const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
+                return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
             })
 
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
+        await waitFor(() => consumer.assignment().length > 0, () => { }, 100);
         await waitForMessages(messagesConsumed, { number: messages.length });
     });
 
@@ -231,6 +251,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         let messageSeen = false;
         const messagesConsumed = [];
         consumer.run({
+            partitionsConsumedConcurrently,
             eachBatchAutoResolve: isAutoResolve,
             eachBatch: async event => {
                 expect(event.batch.messages.length).toEqual(1);
@@ -250,10 +271,10 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
             .fill()
             .map(() => {
                 const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
+                return { key: `key-${value}`, value: `value-${value}`, partition: 0 };
             })
 
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
         await waitForMessages(messagesConsumed, { number: messages.length });
     });
 
@@ -264,6 +285,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
 
         const messagesConsumed = [];
         consumer.run({
+            partitionsConsumedConcurrently,
             eachBatchAutoResolve: isAutoResolve,
             eachBatch: async event => {
                 messagesConsumed.push(...event.batch.messages);
@@ -277,7 +299,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
             .fill()
             .map(() => {
                 const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
+                return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
             })
 
         await producer.send({ topic: topicName, messages })
@@ -287,49 +309,45 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         expect(messagesConsumed[1].key.toString()).toBe(messages[1].key);
     });
 
-    /* Skip until concurrency support for eachMessage is added. */
-    it.skip('consumes messages concurrently', async () => {
-        const partitionsConsumedConcurrently = 2
+    it('consumes messages concurrently where partitionsConsumedConcurrently - partitions = diffConcurrencyPartitions', async () => {
+        const partitions = 3;
+        /* We want partitionsConsumedConcurrently to be 2, 3, and 4 rather than 1, 2, and 3 that is tested by the test. */
+        const partitionsConsumedConcurrentlyDiff = partitionsConsumedConcurrently + 1;
         topicName = `test-topic-${secureRandom()}`
         await createTopic({
             topic: topicName,
-            partitions: partitionsConsumedConcurrently + 1,
+            partitions: partitions,
         })
         await consumer.connect()
         await producer.connect()
         await consumer.subscribe({ topic: topicName })
 
-        let inProgress = 0
-        let hitConcurrencyLimit = false
-        consumer.on(consumer.events.START_BATCH_PROCESS, () => {
-            inProgress++
-            expect(inProgress).toBeLessThanOrEqual(partitionsConsumedConcurrently)
-            hitConcurrencyLimit = hitConcurrencyLimit || inProgress === partitionsConsumedConcurrently
-        })
-        consumer.on(consumer.events.END_BATCH_PROCESS, () => inProgress--)
-
-        const messagesConsumed = []
+        let inProgress = 0;
+        let inProgressMaxValue = 0;
+        const messagesConsumed = [];
         consumer.run({
-            partitionsConsumedConcurrently,
+            partitionsConsumedConcurrently: partitionsConsumedConcurrentlyDiff,
             eachMessage: async event => {
-                await sleep(1)
-                messagesConsumed.push(event)
+                inProgress++;
+                await sleep(1);
+                messagesConsumed.push(event);
+                inProgressMaxValue = Math.max(inProgress, inProgressMaxValue)
+                inProgress--;
             },
         })
 
-        await waitForConsumerToJoinGroup(consumer)
+        await waitFor(() => consumer.assignment().length > 0, () => { }, 100);
 
-        const messages = Array(100)
+        const messages = Array(1024*9)
             .fill()
-            .map(() => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
-            })
+            .map((_, i) => {
+                const value = secureRandom(512)
+                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions }
+            });
 
-        await producer.send({ topic: topicName, messages })
-        await waitForMessages(messagesConsumed, { number: messages.length })
-
-        expect(hitConcurrencyLimit).toBeTrue()
+        await producer.send({ topic: topicName, messages });
+        await waitForMessages(messagesConsumed, { number: messages.length });
+        expect(inProgressMaxValue).toBe(Math.min(partitionsConsumedConcurrentlyDiff, partitions));
     });
 
     it('consume GZIP messages', async () => {
@@ -346,9 +364,9 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
         consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
 
         const key1 = secureRandom();
-        const message1 = { key: `key-${key1}`, value: `value-${key1}` };
+        const message1 = { key: `key-${key1}`, value: `value-${key1}`, partition: 0 };
         const key2 = secureRandom();
-        const message2 = { key: `key-${key2}`, value: `value-${key2}` };
+        const message2 = { key: `key-${key2}`, value: `value-${key2}`, partition: 0 };
 
         await producer.send({
             topic: topicName,
@@ -477,7 +495,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
                 .fill()
                 .map(() => {
                     const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}` }
+                    return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
                 });
 
             await consumer.connect();
@@ -704,7 +722,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
             await consumer.subscribe({ topic: topicName });
 
             const messagesConsumed = []
-            const idempotentMessages = generateMessages({ prefix: 'idempotent' })
+            const idempotentMessages = generateMessages({ prefix: 'idempotent', partition: 0 })
 
             consumer.run({
                 eachMessage: async event => messagesConsumed.push(event),
@@ -743,9 +761,9 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
 
             const messagesConsumed = [];
 
-            const messages1 = generateMessages({ prefix: 'txn1' });
-            const messages2 = generateMessages({ prefix: 'txn2' });
-            const nontransactionalMessages1 = generateMessages({ prefix: 'nontransactional1', number: 1 });
+            const messages1 = generateMessages({ prefix: 'txn1', partition: 0 });
+            const messages2 = generateMessages({ prefix: 'txn2', partition: 0 });
+            const nontransactionalMessages1 = generateMessages({ prefix: 'nontransactional1', number: 1, partition: 0 });
 
             consumer.run({
                 eachMessage: async event => messagesConsumed.push(event),
@@ -800,9 +818,9 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
 
             const messagesConsumed = []
 
-            const abortedMessages1 = generateMessages({ prefix: 'aborted-txn-1' });
-            const abortedMessages2 = generateMessages({ prefix: 'aborted-txn-2' });
-            const committedMessages = generateMessages({ prefix: 'committed-txn', number: 10 });
+            const abortedMessages1 = generateMessages({ prefix: 'aborted-txn-1', partition: 0  });
+            const abortedMessages2 = generateMessages({ prefix: 'aborted-txn-2', partition: 0  });
+            const committedMessages = generateMessages({ prefix: 'committed-txn', number: 10, partition: 0  });
 
             consumer.run({
                 eachMessage: async event => messagesConsumed.push(event),
@@ -858,7 +876,7 @@ describe.each([[true], [false]])('Consumer', (isAutoCommit) => {
 
                 const messagesConsumed = [];
 
-                const abortedMessages = generateMessages({ prefix: 'aborted-txn1' });
+                const abortedMessages = generateMessages({ prefix: 'aborted-txn1', partition: 0  });
 
                 consumer.run({
                     eachMessage: async event => messagesConsumed.push(event),

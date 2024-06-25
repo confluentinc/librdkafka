@@ -259,13 +259,14 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                     RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED;
         }
 
-        rd_kafka_dbg(
-            rk, TELEMETRY, "GETSUBSCRIPTIONS",
-            "Handled GetTelemetrySubscriptions, scheduling FSM after "
-            "%lld microseconds, state = %s, err = %s, metrics = %" PRIdsz,
-            next_scheduled,
-            rd_kafka_telemetry_state2str(rk->rk_telemetry.state),
-            rd_kafka_err2str(err), rk->rk_telemetry.requested_metrics_cnt);
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
+                     "Handled GetTelemetrySubscriptions, scheduling FSM after "
+                     "%" PRId64
+                     " microseconds, state = %s, err = %s, metrics = %" PRIdsz,
+                     next_scheduled,
+                     rd_kafka_telemetry_state2str(rk->rk_telemetry.state),
+                     rd_kafka_err2str(err),
+                     rk->rk_telemetry.requested_metrics_cnt);
 
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,

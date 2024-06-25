@@ -540,7 +540,7 @@ static void serializeMetricData(
     char **metric_name,
     bool is_per_broker,
     rd_ts_t now_ns) {
-        rd_ts_t ts_last, ts_start;
+        rd_ts_t ts_last = 0, ts_start = 0;
         size_t metric_name_len;
         if (info->is_int) {
                 (*data_point)->which_value =

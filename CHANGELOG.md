@@ -2,6 +2,8 @@
 
 librdkafka v2.5.0 is a feature release.
 
+* [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+  Leader discovery optimisations for the client (#4756, #4767).
 * Fix segfault when using long client id because of erased segment when using flexver. (#4689)
 * Fix for an idempotent producer error, with a message batch not reconstructed
   identically when retried (#4750)
@@ -12,6 +14,10 @@ librdkafka v2.5.0 is a feature release.
   * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
     [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
     bugfixes and performance improvements (#4726).
+  * [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+    With this KIP leader updates are received through Produce and Fetch responses
+    in case of errors corresponding to leader changes and a partition migration
+    happens before refreshing the metadata cache (#4756, #4767).
 
 
 ## Fixes

@@ -2094,7 +2094,7 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
 
                         rd_kafka_dbg(rk, METADATA, "METADATAUPDATE",
                                      "Partition %s(%s)[%" PRId32
-                                     "]: "
+                                     "]:"
                                      " updated with leader %" PRId32
                                      " and epoch %" PRId32,
                                      topic, rd_kafka_Uuid_base64str(&topic_id),

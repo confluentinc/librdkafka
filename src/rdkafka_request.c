@@ -3676,10 +3676,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         if (request->rkbuf_reqhdr.ApiVersion >= 10) {
                 rd_kafkap_Produce_reply_tags_Topic_t *TopicTags =
                     &ProduceTags.Topic;
-                ;
                 rd_kafkap_Produce_reply_tags_Partition_t *PartitionTags =
                     &TopicTags->Partition;
-                ;
 
                 /* Partition tags count */
                 TopicTags->TopicName     = RD_KAFKAP_STR_DUP(&TopicName);

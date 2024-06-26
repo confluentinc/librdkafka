@@ -48,6 +48,8 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
     cluster.start(timeout=30)
 
     if conf.get('test_mode', '') == 'bash':
+        rdkafka.finalize_env()
+
         if inherit_env:
             env = dict(os.environ, **rdkafka.env)
         else:

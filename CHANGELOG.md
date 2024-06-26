@@ -1,9 +1,11 @@
 # librdkafka v2.3.1
 
-librdkafka v2.3.1 is a feature release:
+librdkafka v2.3.1 is a maintenance release:
 
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt).
+ * Integration tests can be started in KRaft mode and run against any
+   GitHub Kafka branch other than the released versions.
 
 
 # librdkafka v2.3.0

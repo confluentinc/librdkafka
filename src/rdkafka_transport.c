@@ -1014,8 +1014,16 @@ int rd_kafka_transport_io_serve(rd_kafka_transport_t *rktrans,
 #endif
             (rkb->rkb_state > RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE &&
              rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
-             rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0))
-                rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
+             rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)) {
+                int64_t throttle_ms = rd_kafka_broker_throttled(rkb);
+                if (throttle_ms){
+                        rd_rkb_dbg(rkb, BROKER , "THROTTLE",
+                                   "broker throttled for %" PRIu64 ", skip futher requests", throttle_ms);
+                } else {
+                        rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
+                }
+
+        }
 
 #ifdef _WIN32
         /* BSD sockets use POLLIN and a following recv() returning 0 to

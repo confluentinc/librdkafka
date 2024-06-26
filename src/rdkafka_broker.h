@@ -623,6 +623,8 @@ void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
 
 void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *rkb);
 
+int64_t rd_kafka_broker_throttled(rd_kafka_broker_t *rkb);
+
 int unittest_broker(void);
 
 #endif /* _RDKAFKA_BROKER_H_ */

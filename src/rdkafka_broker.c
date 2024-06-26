@@ -2656,23 +2656,6 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
         unsigned int cnt = 0;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
-        rd_bool_t need_throttle = 0;
-        mtx_lock(&rkb->rkb_ts_throttled.lock);
-        rd_ts_t current_ts = rd_clock();
-        rd_ts_t throttled_ts = rkb->rkb_ts_throttled.throttle_ts;
-        if (current_ts < throttled_ts) {
-                need_throttle = 1;
-        } else {
-                rkb->rkb_ts_throttled.throttle_ts = 0;
-        }
-        mtx_unlock(&rkb->rkb_ts_throttled.lock);
-        if (need_throttle) {
-                rd_rkb_dbg(
-                    rkb, BROKER ,
-                    "THROTTLE",
-                    "broker throttled for %" PRIu64 ", skip futher requests", throttled_ts - current_ts);
-                return cnt;
-        }
 
         while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
                rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
@@ -6027,6 +6010,29 @@ void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
         rko = rd_kafka_op_new(RD_KAFKA_OP_SASL_REAUTH);
         rd_kafka_q_enq(rkb->rkb_ops, rko);
 }
+/**
+ * @brief Return remaining throttle ms for rkb.
+ *
+ * @locks none
+ * @locality broker thread
+ */
+int64_t rd_kafka_broker_throttled(rd_kafka_broker_t *rkb) {
+        rd_bool_t need_throttle = 0;
+        mtx_lock(&rkb->rkb_ts_throttled.lock);
+        rd_ts_t current_ts = rd_clock();
+        rd_ts_t throttled_ts = rkb->rkb_ts_throttled.throttle_ts;
+        if (current_ts < throttled_ts) {
+                need_throttle = 1;
+        } else {
+                rkb->rkb_ts_throttled.throttle_ts = 0;
+        }
+        mtx_unlock(&rkb->rkb_ts_throttled.lock);
+        if (need_throttle) {
+                return throttled_ts - current_ts;
+        }
+        return 0;
+}
+
 
 /**
  * @name Unit tests

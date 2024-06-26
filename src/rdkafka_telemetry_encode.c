@@ -325,15 +325,15 @@ count_attributes(rd_kafka_t *rk,
 }
 
 static void set_attributes(rd_kafka_t *rk,
-                           rd_kafka_telemetry_resource_attribute_t **attributes,
+                           rd_kafka_telemetry_resource_attribute_t *attributes,
                            const rd_kafka_telemetry_attribute_config_t *configs,
                            int config_count) {
         int attr_idx = 0, i;
         for (i = 0; i < config_count; ++i) {
                 const char *value = configs[i].getValue(rk);
                 if (value) {
-                        attributes[attr_idx]->name  = configs[i].name;
-                        attributes[attr_idx]->value = value;
+                        attributes[attr_idx].name  = configs[i].name;
+                        attributes[attr_idx].value = value;
                         attr_idx++;
                 }
         }
@@ -348,12 +348,10 @@ resource_attributes(rd_kafka_t *rk,
 
         if (rk->rk_type == RD_KAFKA_PRODUCER) {
                 configs      = producer_attributes;
-                config_count = sizeof(producer_attributes) /
-                               sizeof(producer_attributes[0]);
+                config_count = RD_ARRAY_SIZE(producer_attributes);
         } else if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 configs      = consumer_attributes;
-                config_count = sizeof(consumer_attributes) /
-                               sizeof(consumer_attributes[0]);
+                config_count = RD_ARRAY_SIZE(consumer_attributes);
         } else {
                 *attributes = NULL;
                 return 0;
@@ -369,7 +367,7 @@ resource_attributes(rd_kafka_t *rk,
         *attributes =
             rd_malloc(sizeof(rd_kafka_telemetry_resource_attribute_t) * count);
 
-        set_attributes(rk, attributes, configs, config_count);
+        set_attributes(rk, *attributes, configs, config_count);
 
         return count;
 }

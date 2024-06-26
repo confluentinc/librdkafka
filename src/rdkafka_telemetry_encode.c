@@ -538,7 +538,9 @@ static void serialize_metric_data(
         ts_start = rk->rk_telemetry.rk_historic_c.ts_start;
 
         (*data_point)->time_unix_nano = now_ns;
-        if (info->type == RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE)
+        if (info->type == RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE ||
+            (info->type == RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM &&
+             rk->rk_telemetry.delta_temporality))
                 (*data_point)->start_time_unix_nano = ts_last;
         else
                 (*data_point)->start_time_unix_nano = ts_start;

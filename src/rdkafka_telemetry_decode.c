@@ -467,10 +467,23 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 
         TAILQ_INIT(&rk->rk_brokers);
 
-        rd_kafka_broker_t *rkb      = rd_calloc(1, sizeof(*rkb));
-        rkb->rkb_c.connects.val     = 1;
-        rkb->rkb_c_historic.ts_last = rd_uclock() * 1000;
-        TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
+        rk->rk_broker_cnt.val = 1;
+        rk->rk_telemetry.rk_historic_c.ts_start =
+            rd_uclock() * 1000 - 1000 * 1000 * 1000;
+        rk->rk_telemetry.rk_historic_c.ts_last =
+            rd_uclock() * 1000 - 1000 * 1000 * 1000;
+        rd_kafka_broker_t rkb;
+        rd_kafka_broker_keep(&rkb);
+        rkb.rkb_nodeid                            = 0;
+        rkb.rkb_c.connects.val                    = 1;
+        rkb.rkb_telemetry.rkb_historic_c.connects = 0;
+        rd_avg_init(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_rtt, RD_AVG_GAUGE,
+                    0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_throttle,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        TAILQ_INSERT_HEAD(&rk->rk_brokers, &rkb, rkb_link);
 
         clear_unit_test_data();
 
@@ -492,16 +505,19 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                      "Metric description mismatch");
         if (is_double)
                 RD_UT_ASSERT(fabs(unit_test_data.metric_value_double - 1.0) <
-                                 0.0001,
+                                 0.01,
                              "Metric value mismatch");
         else
                 RD_UT_ASSERT(unit_test_data.metric_value_int == 1,
                              "Metric value mismatch");
         RD_UT_ASSERT(unit_test_data.metric_time != 0, "Metric time mismatch");
 
+        rd_avg_destroy(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_rtt);
+        rd_avg_destroy(
+            &rkb.rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
+        rd_avg_destroy(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_throttle);
         rd_free(rk->rk_telemetry.matched_metrics);
         rd_buf_destroy_free(metrics_payload);
-        rd_free(rkb);
         rd_free(rk);
         RD_UT_PASS();
 }

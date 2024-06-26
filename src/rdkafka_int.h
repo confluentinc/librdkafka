@@ -680,6 +680,12 @@ struct rd_kafka_s {
                 /* TODO: Use rd_list_t to store the metrics */
                 int *matched_metrics;
                 size_t matched_metrics_cnt;
+
+                struct {
+                        rd_ts_t ts_last;  /**< Timestamp of last push */
+                        rd_ts_t ts_start; /**< Timestamp from when collection
+                                             started */
+                } rk_historic_c;
         } rk_telemetry;
 
         /* Test mocks */

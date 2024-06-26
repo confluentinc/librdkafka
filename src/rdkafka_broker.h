@@ -194,20 +194,32 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         } rkb_c;
 
         struct {
-                rd_ts_t ts_last;  /**< Timestamp of last push */
-                rd_ts_t ts_start; /**< Timestamp from when collection started */
-                int32_t assigned_partitions;     /**< Current number of assigned
-                                                   partitions. */
-                int32_t connects;                /**< Connection attempts,
-                                                  *   successful or not. */
-                rd_avg_t rkb_avg_rtt;            /* Current RTT period */
-                rd_avg_t rkb_avg_throttle;       /* Current throttle period */
-                rd_avg_t rkb_avg_outbuf_latency; /**< Current latency
-                                                  *   between buf_enq0
-                                                  *   and writing to socket
-                                                  */
+                struct {
+                        int32_t connects; /**< Connection attempts,
+                                           *   successful or not. */
+                } rkb_historic_c;
 
-        } rkb_c_historic;
+                struct {
+                        rd_avg_t rkb_avg_rtt;      /* Current RTT period */
+                        rd_avg_t rkb_avg_throttle; /* Current throttle period */
+                        rd_avg_t
+                            rkb_avg_outbuf_latency; /**< Current latency
+                                                     *   between buf_enq0
+                                                     *   and writing to socket
+                                                     */
+                } rd_avg_current;
+
+                struct {
+                        rd_avg_t rkb_avg_rtt;      /* Current RTT period */
+                        rd_avg_t rkb_avg_throttle; /* Current throttle period */
+                        rd_avg_t
+                            rkb_avg_outbuf_latency; /**< Current latency
+                                                     *   between buf_enq0
+                                                     *   and writing to socket
+                                                     */
+                } rd_avg_rollover;
+
+        } rkb_telemetry;
 
         int rkb_req_timeouts; /* Current value */
 

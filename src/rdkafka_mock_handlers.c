@@ -2400,9 +2400,16 @@ static void rd_kafka_mock_handle_PushTelemetry_decoded_number(
     void *opaque,
     const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded) {
         rd_kafka_broker_t *rkb = opaque;
-        rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY",
-                   "NumberDataPoint value: %ld time: %lu",
-                   decoded->value.as_int, decoded->time_unix_nano);
+        if (decoded->which_value ==
+            opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag)
+                rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY",
+                           "NumberDataPoint int value: %ld time: %lu",
+                           decoded->value.as_int, decoded->time_unix_nano);
+        else if (decoded->which_value ==
+                 opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag)
+                rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY",
+                           "NumberDataPoint double value: %f time: %lu",
+                           decoded->value.as_double, decoded->time_unix_nano);
 }
 
 /**

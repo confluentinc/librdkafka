@@ -433,4 +433,6 @@ typedef struct rd_chariov_s {
         size_t size;
 } rd_chariov_t;
 
+#define RD_CEIL_INTEGER_DIVISION(X, DEN) (((X) + ((DEN)-1)) / (DEN))
+
 #endif /* _RD_H_ */

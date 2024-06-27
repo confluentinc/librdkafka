@@ -78,7 +78,7 @@ typedef union {
 
 typedef rd_kafka_telemetry_metric_value_t (
     *rd_kafka_telemetry_metric_value_calculator_t)(
-    rd_kafka_t *rkb,
+    rd_kafka_t *rk,
     rd_kafka_broker_t *rkb_selected,
     rd_ts_t now_nanos);
 

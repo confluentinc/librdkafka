@@ -115,9 +115,8 @@ calculate_broker_max_rtt(rd_kafka_t *rk,
         rd_avg_t *rkb_avg_rtt_rollover =
             &rkb_selected->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt;
 
-        max_rtt.int_value =
-            (rkb_avg_rtt_rollover->ra_v.maxv + (THREE_ORDERS_MAGNITUDE - 1)) /
-            THREE_ORDERS_MAGNITUDE;
+        max_rtt.int_value = RD_CEIL_INTEGER_DIVISION(
+            rkb_avg_rtt_rollover->ra_v.maxv, THREE_ORDERS_MAGNITUDE);
         return max_rtt;
 }
 
@@ -126,20 +125,23 @@ calculate_throttle_avg(rd_kafka_t *rk,
                        rd_kafka_broker_t *rkb_selected,
                        rd_ts_t now_nanos) {
         rd_kafka_telemetry_metric_value_t avg_throttle;
-        int64_t sum_value = 0, count_value = 0;
+        double avg     = 0.0;
+        uint64_t count = 0;
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_avg_t *rkb_avg_throttle_rollover =
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle;
-                sum_value += rkb_avg_throttle_rollover->ra_v.sum;
-                count_value += rkb_avg_throttle_rollover->ra_v.cnt;
+                if (rkb_avg_throttle_rollover->ra_v.cnt) {
+                        avg = (avg * count +
+                               rkb_avg_throttle_rollover->ra_v.sum) /
+                              (double)(count +
+                                       rkb_avg_throttle_rollover->ra_v.cnt);
+                        count += rkb_avg_throttle_rollover->ra_v.cnt;
+                }
         }
 
-        if (count_value)
-                avg_throttle.double_value = sum_value / (double)count_value;
-        else
-                avg_throttle.double_value = 0.0;
+        avg_throttle.double_value = avg;
         return avg_throttle;
 }
 
@@ -167,20 +169,21 @@ calculate_queue_time_avg(rd_kafka_t *rk,
                          rd_kafka_broker_t *rkb_selected,
                          rd_ts_t now_nanos) {
         rd_kafka_telemetry_metric_value_t avg_queue_time;
-        int64_t sum_value = 0, count_value = 0;
+        double avg     = 0.0;
+        uint64_t count = 0;
         rd_kafka_broker_t *rkb;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_avg_t *rkb_avg_outbuf_latency_rollover =
+                rd_avg_t *rkb_avg_outbuf_latency =
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency;
-                sum_value += rkb_avg_outbuf_latency_rollover->ra_v.sum;
-                count_value += rkb_avg_outbuf_latency_rollover->ra_v.cnt;
+                if (rkb_avg_outbuf_latency->ra_v.cnt) {
+                        avg =
+                            (avg * count + rkb_avg_outbuf_latency->ra_v.sum) /
+                            (double)(count + rkb_avg_outbuf_latency->ra_v.cnt);
+                        count += rkb_avg_outbuf_latency->ra_v.cnt;
+                }
         }
-        if (count_value)
-                avg_queue_time.double_value =
-                    sum_value / (double)(count_value * THREE_ORDERS_MAGNITUDE);
-        else
-                avg_queue_time.double_value = 0.0;
+        avg_queue_time.double_value = avg / THREE_ORDERS_MAGNITUDE;
         return avg_queue_time;
 }
 
@@ -199,9 +202,8 @@ calculate_queue_time_max(rd_kafka_t *rk,
                     RD_MAX(max_queue_time.int_value,
                            rkb_avg_outbuf_latency_rollover->ra_v.maxv);
         }
-        max_queue_time.int_value =
-            (max_queue_time.int_value + (THREE_ORDERS_MAGNITUDE - 1)) /
-            THREE_ORDERS_MAGNITUDE;
+        max_queue_time.int_value = RD_CEIL_INTEGER_DIVISION(
+            max_queue_time.int_value, THREE_ORDERS_MAGNITUDE);
         return max_queue_time;
 }
 
@@ -210,15 +212,8 @@ calculate_consumer_assigned_partitions(rd_kafka_t *rk,
                                        rd_kafka_broker_t *rkb_selected,
                                        rd_ts_t now_nanos) {
         rd_kafka_telemetry_metric_value_t assigned_partitions;
-        rd_kafka_broker_t *rkb;
-        int32_t total_assigned_partitions = 0;
-
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_kafka_broker_lock(rkb);
-                total_assigned_partitions += rkb->rkb_toppar_cnt;
-                rd_kafka_broker_unlock(rkb);
-        }
-        assigned_partitions.int_value = total_assigned_partitions;
+        assigned_partitions.int_value =
+            rk->rk_cgrp ? rk->rk_cgrp->rkcg_c.assignment_size : 0;
         return assigned_partitions;
 }
 
@@ -641,11 +636,8 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
             RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
         rd_ts_t now_ns       = rd_uclock() * 1000;
         rd_bool_t first_push = rd_false;
-        size_t broker_cnt;
 
         rd_kafka_rdlock(rk);
-        broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
-
         if (rk->rk_telemetry.rk_historic_c.ts_start == 0) {
                 first_push                              = rd_true;
                 rk->rk_telemetry.rk_historic_c.ts_start = now_ns;
@@ -672,7 +664,8 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
 
         for (i = 0; i < metrics_to_encode_count; i++) {
                 if (is_per_broker_metric(info, metrics_to_encode[i])) {
-                        total_metrics_count += broker_cnt - 1;
+                        total_metrics_count +=
+                            rd_atomic32_get(&rk->rk_broker_cnt) - 1;
                 }
         }
 

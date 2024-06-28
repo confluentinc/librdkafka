@@ -57,10 +57,6 @@ struct metric_unit_test_data {
 
 static struct metric_unit_test_data unit_test_data;
 
-bool (*decode_metric_ptr)(pb_istream_t *stream,
-                          const pb_field_t *field,
-                          void **arg) = NULL;
-
 static bool
 decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg) {
         rd_kafka_telemetry_decode_interface_t *it             = *arg;
@@ -96,6 +92,12 @@ decode_key_value(pb_istream_t *stream, const pb_field_t *field, void **arg) {
                 return false;
         }
 
+        if (key_value.value.which_value ==
+            opentelemetry_proto_common_v1_AnyValue_int_value_tag) {
+                RD_INTERFACE_CALL(it, decoded_int64,
+                                  key_value.value.value.int_value);
+        }
+
         return true;
 }
 
@@ -124,7 +126,7 @@ static bool decode_number_data_point(pb_istream_t *stream,
                 test_data->metric_time         = data_point.time_unix_nano;
         }
 
-        RD_INTERFACE_CALL(it, decoded_number, &data_point);
+        RD_INTERFACE_CALL(it, decoded_NumberDataPoint, &data_point);
         return true;
 }
 
@@ -164,8 +166,6 @@ decode_metric(pb_istream_t *stream, const pb_field_t *field, void **arg) {
         metric.name.arg                 = it;
         metric.description.funcs.decode = &decode_string;
         metric.description.arg          = it;
-        metric.unit.funcs.decode        = &decode_string;
-        metric.unit.arg                 = it;
         metric.cb_data.funcs.decode     = &data_msg_callback;
         metric.cb_data.arg              = it;
 
@@ -189,7 +189,7 @@ static bool decode_scope_metrics(pb_istream_t *stream,
         scope_metrics.scope.name.arg             = it;
         scope_metrics.scope.version.funcs.decode = &decode_string;
         scope_metrics.scope.version.arg          = it;
-        scope_metrics.metrics.funcs.decode       = decode_metric_ptr;
+        scope_metrics.metrics.funcs.decode       = &decode_metric;
         scope_metrics.metrics.arg                = it;
         if (!pb_decode(stream,
                        opentelemetry_proto_metrics_v1_ScopeMetrics_fields,
@@ -379,7 +379,6 @@ int rd_kafka_telemetry_decode_metrics(rd_kafka_telemetry_decode_interface_t *it,
         pb_istream_t stream              = pb_istream_from_buffer(buffer, size);
         metricsData.resource_metrics.arg = it;
         metricsData.resource_metrics.funcs.decode = &decode_resource_metrics;
-        decode_metric_ptr                         = &decode_metric;
 
         bool status = pb_decode(
             &stream, opentelemetry_proto_metrics_v1_MetricsData_fields,
@@ -419,7 +418,7 @@ static void unit_test_telemetry_decoded_string(void *opaque,
         unit_test_data.current_field++;
 }
 
-static void unit_test_telemetry_decoded_number(
+static void unit_test_telemetry_decoded_NumberDataPoint(
     void *opaque,
     const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded) {
         unit_test_data.metric_value_int    = decoded->value.as_int;
@@ -458,12 +457,13 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         rk->rk_telemetry.matched_metrics[0] = metric_name;
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
 
-        rd_kafka_telemetry_decode_interface_t cbs = {
+        rd_kafka_telemetry_decode_interface_t it = {
             .error          = unit_test_telemetry_decode_error,
             .decoded_string = unit_test_telemetry_decoded_string,
-            .decoded_number = unit_test_telemetry_decoded_number,
-            .decoded_type   = unit_test_telemetry_decoded_type,
-            .opaque         = &unit_test_data};
+            .decoded_NumberDataPoint =
+                unit_test_telemetry_decoded_NumberDataPoint,
+            .decoded_type = unit_test_telemetry_decoded_type,
+            .opaque       = &unit_test_data};
 
         TAILQ_INIT(&rk->rk_brokers);
 
@@ -493,7 +493,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         RD_UT_ASSERT(metrics_payload->rbuf_len != 0, "Metrics payload zero");
 
         bool decode_status = rd_kafka_telemetry_decode_metrics(
-            &cbs, metrics_payload->rbuf_wpos->seg_p, metrics_payload->rbuf_len);
+            &it, metrics_payload->rbuf_wpos->seg_p, metrics_payload->rbuf_len);
 
         RD_UT_ASSERT(decode_status == 1, "Decoding failed");
         RD_UT_ASSERT(unit_test_data.type == expected_type,

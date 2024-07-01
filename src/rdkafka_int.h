@@ -234,15 +234,26 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
         return names[state];
 }
 
+/**
+ * @enum Telemetry States
+ */
 typedef enum {
-        /* TODO: add documentation */
+        /** Initial state, awaiting telemetry broker to be assigned */
         RD_KAFKA_TELEMETRY_AWAIT_BROKER,
+        /** Telemetry broker assigned and GetSubscriptions scheduled */
         RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED,
+        /** GetSubscriptions request sent to the assigned broker */
         RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,
+        /** PushTelemetry scheduled to send */
         RD_KAFKA_TELEMETRY_PUSH_SCHEDULED,
+        /** PushTelemetry sent to the assigned broker */
         RD_KAFKA_TELEMETRY_PUSH_SENT,
+        /** Client is being terminated and last PushTelemetry is scheduled to
+         *  send */
         RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED,
+        /** Client is being terminated and last PushTelemetry is sent */
         RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT,
+        /** Telemetry is terminated */
         RD_KAFKA_TELEMETRY_TERMINATED,
 } rd_kafka_telemetry_state_t;
 

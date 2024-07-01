@@ -155,7 +155,7 @@ calculate_throttle_max(rd_kafka_t *rk,
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 max_throttle.int_value =
                     RD_MAX(max_throttle.int_value,
-                           rkb_selected->rkb_telemetry.rd_avg_current
+                           rkb->rkb_telemetry.rd_avg_current
                                .rkb_avg_throttle.ra_v.maxv_interval);
         }
         return max_throttle;
@@ -199,7 +199,7 @@ calculate_queue_time_max(rd_kafka_t *rk,
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 max_queue_time.int_value =
                     RD_MAX(max_queue_time.int_value,
-                           rkb_selected->rkb_telemetry.rd_avg_current
+                           rkb->rkb_telemetry.rd_avg_current
                                .rkb_avg_outbuf_latency.ra_v.maxv_interval);
         }
         max_queue_time.int_value = RD_CEIL_INTEGER_DIVISION(

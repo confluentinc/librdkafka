@@ -656,10 +656,11 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 rd_avg_rollover(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);
-                if (first_push) {
-                        rkb->rkb_telemetry.rkb_historic_c.connects =
-                            rd_atomic32_get(&rkb->rkb_c.connects);
-                }
+                //                if (first_push) {
+                //                        rkb->rkb_telemetry.rkb_historic_c.connects
+                //                        =
+                //                            rd_atomic32_get(&rkb->rkb_c.connects);
+                //                }
         }
 
         int resource_attributes_count =

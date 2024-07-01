@@ -493,14 +493,14 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                          const char *expected_description,
                          rd_kafka_telemetry_metric_type_t expected_type,
                          rd_bool_t is_double) {
-        rd_kafka_t *rk                       = rd_calloc(1, sizeof(*rk));
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
+        rwlock_init(&rk->rk_lock);
         rk->rk_type                          = RD_KAFKA_PRODUCER;
         rk->rk_telemetry.matched_metrics_cnt = 1;
         rk->rk_telemetry.matched_metrics =
             rd_malloc(sizeof(rd_kafka_telemetry_producer_metric_name_t) *
                       rk->rk_telemetry.matched_metrics_cnt);
-        rk->rk_telemetry.matched_metrics[0]    = metric_name;
-        rk->rk_telemetry.rk_historic_c.ts_last = rd_uclock() * 1000;
+        rk->rk_telemetry.matched_metrics[0] = metric_name;
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         clear_unit_test_data();
 
@@ -544,7 +544,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         RD_UT_ASSERT(unit_test_data.metric_time != 0, "Metric time mismatch");
 
         rd_free(rk->rk_telemetry.matched_metrics);
-        rd_free(metrics_payload);
+        rd_buf_destroy_free(rbuf);
         rd_free(rkb);
         rd_free(rk);
         RD_UT_PASS();

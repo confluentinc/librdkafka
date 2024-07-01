@@ -408,18 +408,14 @@ struct rd_kafka_mock_cluster_s {
         /**< Request handlers */
         struct rd_kafka_mock_api_handler api_handlers[RD_KAFKAP__NUM];
 
-        /**< Requested metrics. */
+        /** Requested metrics. */
         char **metrics;
 
-        /** < Requested metric count. */
+        /** Requested metric count. */
         size_t metrics_cnt;
 
-        /**< Telemetry push interval ms. Default is 5 min */
+        /** Telemetry push interval ms. Default is 5 min */
         int64_t telemetry_push_interval_ms;
-
-        rd_kafka_resp_err_t
-            push_telemetry_error_code; /**< Error code to return on
-                                        *   telemetry push requests. */
 
         /**< Appends the requests received to mock cluster if set to true,
          *   defaulted to false for less memory usage. */

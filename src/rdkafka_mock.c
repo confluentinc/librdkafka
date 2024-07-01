@@ -2270,30 +2270,6 @@ rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
-rd_kafka_resp_err_t
-rd_kafka_mock_telemetry_set_push_error_code(rd_kafka_mock_cluster_t *mcluster,
-                                            rd_kafka_resp_err_t error_code) {
-        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
-
-        rko->rko_u.mock.hi  = error_code;
-        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_ERROR_SET;
-
-        return rd_kafka_op_err_destroy(
-            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
-}
-
-rd_kafka_resp_err_t rd_kafka_mock_telemetry_unset_push_error_code(
-    rd_kafka_mock_cluster_t *mcluster) {
-        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
-
-        rko->rko_u.mock.hi  = RD_KAFKA_RESP_ERR_NO_ERROR;
-        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_ERROR_SET;
-
-        return rd_kafka_op_err_destroy(
-            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
-}
-
-
 
 /**
  * @brief Apply command to specific broker.
@@ -2548,10 +2524,6 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
 
         case RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET:
                 mcluster->telemetry_push_interval_ms = rko->rko_u.mock.hi;
-                break;
-
-        case RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_ERROR_SET:
-                mcluster->push_telemetry_error_code = rko->rko_u.mock.hi;
                 break;
 
         default:
@@ -2855,7 +2827,6 @@ void rd_kafka_mock_start_request_tracking(rd_kafka_mock_cluster_t *mcluster) {
         mtx_lock(&mcluster->lock);
         mcluster->track_requests = rd_true;
         rd_list_clear(&mcluster->request_list);
-        rd_list_init(&mcluster->request_list, 32, rd_kafka_mock_request_free);
         mtx_unlock(&mcluster->lock);
 }
 

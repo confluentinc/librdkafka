@@ -9,9 +9,8 @@
 # Requires docker.
 # Supported docker images:
 #   alpine:3.16
-#   quay.io/pypa/manylinux2014_aarch64 (centos7)
-#   quay.io/pypa/manylinux2014_x86_64  (centos7)
-#   quay.io/pypa/manylinux2010_x86_64  (centos6)
+#   quay.io/pypa/manylinux_2_28_aarch64 (centos8)
+#   quay.io/pypa/manylinux_2_28_x86_64  (centos8)
 #
 # Usage:
 # packaging/tools/build-release-artifacts.sh [--disable-gssapi] <docker-image> <relative-output-tarball-path.tgz>

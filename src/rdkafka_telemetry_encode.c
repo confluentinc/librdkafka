@@ -155,8 +155,8 @@ calculate_throttle_max(rd_kafka_t *rk,
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 max_throttle.int_value =
                     RD_MAX(max_throttle.int_value,
-                           rkb->rkb_telemetry.rd_avg_current
-                               .rkb_avg_throttle.ra_v.maxv_interval);
+                           rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle
+                               .ra_v.maxv_interval);
         }
         return max_throttle;
 }
@@ -827,6 +827,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                      "Push Telemetry metrics encoded, size: %ld",
                      stream.bytes_written);
+        rd_buf_write(rbuf, NULL, stream.bytes_written);
 
         reset_historical_metrics(rk, now_ns);
         rd_kafka_rdunlock(rk);

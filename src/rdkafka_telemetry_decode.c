@@ -499,7 +499,8 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         rk->rk_telemetry.matched_metrics =
             rd_malloc(sizeof(rd_kafka_telemetry_producer_metric_name_t) *
                       rk->rk_telemetry.matched_metrics_cnt);
-        rk->rk_telemetry.matched_metrics[0] = metric_name;
+        rk->rk_telemetry.matched_metrics[0]    = metric_name;
+        rk->rk_telemetry.rk_historic_c.ts_last = rd_uclock() * 1000;
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         clear_unit_test_data();
 
@@ -513,15 +514,12 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 
         TAILQ_INIT(&rk->rk_brokers);
 
-        rd_kafka_broker_t *rkb      = rd_calloc(1, sizeof(*rkb));
-        rkb->rkb_c.connects.val     = 1;
-        rkb->rkb_c_historic.ts_last = rd_uclock() * 1000;
+        rd_kafka_broker_t *rkb  = rd_calloc(1, sizeof(*rkb));
+        rkb->rkb_c.connects.val = 1;
         TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
-
-        size_t metrics_payload_size = 0;
-
-        void *metrics_payload =
-            rd_kafka_telemetry_encode_metrics(rk, &metrics_payload_size);
+        rd_buf_t *rbuf              = rd_kafka_telemetry_encode_metrics(rk);
+        void *metrics_payload       = rbuf->rbuf_wpos->seg_p;
+        size_t metrics_payload_size = rbuf->rbuf_wpos->seg_of;
         RD_UT_SAY("metrics_payload_size: %zu", metrics_payload_size);
 
         RD_UT_ASSERT(metrics_payload_size != 0, "Metrics payload zero");

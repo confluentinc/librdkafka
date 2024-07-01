@@ -77,6 +77,17 @@ rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
                       rd_kafka_aborted_txns_t *aborted_txns,
                       const struct rd_kafka_toppar_ver *tver);
 
+rd_kafka_resp_err_t rd_kafka_gzip_compress(rd_kafka_broker_t *rkb,
+                                           int comp_level,
+                                           rd_slice_t *slice,
+                                           void **outbuf,
+                                           size_t *outlenp);
+
+rd_kafka_resp_err_t rd_kafka_snappy_compress_slice(rd_kafka_broker_t *rkb,
+                                                   rd_slice_t *slice,
+                                                   void **outbuf,
+                                                   size_t *outlenp);
+
 int unittest_aborted_txns(void);
 
 #endif /* _RDKAFKA_MSGSET_H_ */

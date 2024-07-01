@@ -426,6 +426,8 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get(rd_refcnt_t *R) {
 
 #define RD_INTERFACE_CALL(i, name, ...) (i->name(i->opaque, __VA_ARGS__))
 
+#define RD_CEIL_INTEGER_DIVISION(X, DEN) (((X) + ((DEN)-1)) / (DEN))
+
 /**
  * @brief Utility types to hold memory,size tuple.
  */

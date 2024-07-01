@@ -194,20 +194,27 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         } rkb_c;
 
         struct {
-                rd_ts_t ts_last;  /**< Timestamp of last push */
-                rd_ts_t ts_start; /**< Timestamp from when collection started */
-                int32_t assigned_partitions;     /**< Current number of assigned
-                                                   partitions. */
-                int32_t connects;                /**< Connection attempts,
-                                                  *   successful or not. */
-                rd_avg_t rkb_avg_rtt;            /* Current RTT period */
-                rd_avg_t rkb_avg_throttle;       /* Current throttle period */
-                rd_avg_t rkb_avg_outbuf_latency; /**< Current latency
-                                                  *   between buf_enq0
-                                                  *   and writing to socket
-                                                  */
-
-        } rkb_c_historic;
+                struct {
+                        int32_t connects; /**< Connection attempts,
+                                           *   successful or not. */
+                } rkb_historic_c;
+                struct {
+                        rd_avg_t rkb_avg_rtt;      /* Current RTT avg */
+                        rd_avg_t rkb_avg_throttle; /* Current throttle avg */
+                        rd_avg_t
+                            rkb_avg_outbuf_latency; /**< Current latency
+                                                     *   between buf_enq0
+                                                     *   and writing to socket
+                                                     */
+                } rd_avg_current;
+                struct {
+                        rd_avg_t rkb_avg_rtt; /**< Rolled over RTT avg */
+                        rd_avg_t
+                            rkb_avg_throttle; /**< Rolled over throttle avg */
+                        rd_avg_t rkb_avg_outbuf_latency; /**< Rolled over outbuf
+                                                          *   latency avg */
+                } rd_avg_rollover;
+        } rkb_telemetry;
 
         int rkb_req_timeouts; /* Current value */
 
@@ -431,7 +438,8 @@ int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,
                                               int16_t minver,
                                               int16_t maxver,
-                                              int *featuresp);
+                                              int *featuresp,
+                                              rd_bool_t do_lock);
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
                                                       int line,

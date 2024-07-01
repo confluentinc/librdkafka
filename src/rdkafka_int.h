@@ -238,22 +238,22 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
  * @enum Telemetry States
  */
 typedef enum {
-        /**< Initial state, awaiting telemetry broker to be assigned */
+        /** Initial state, awaiting telemetry broker to be assigned */
         RD_KAFKA_TELEMETRY_AWAIT_BROKER,
-        /**< Telemetry broker assigned and GetSubscriptions scheduled */
+        /** Telemetry broker assigned and GetSubscriptions scheduled */
         RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED,
-        /**< GetSubscriptions request sent to the assigned broker */
+        /** GetSubscriptions request sent to the assigned broker */
         RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,
-        /**< PushTelemetry scheduled to send */
+        /** PushTelemetry scheduled to send */
         RD_KAFKA_TELEMETRY_PUSH_SCHEDULED,
-        /**< PushTelemetry sent to the assigned broker */
+        /** PushTelemetry sent to the assigned broker */
         RD_KAFKA_TELEMETRY_PUSH_SENT,
-        /**< Client is being terminated and last PushTelemetry is scheduled to
-           send */
+        /** Client is being terminated and last PushTelemetry is scheduled to
+         *  send */
         RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED,
-        /**< Client is being terminated and last PushTelemetry is sent */
+        /** Client is being terminated and last PushTelemetry is sent */
         RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT,
-        /**< Telemetry is terminated */
+        /** Telemetry is terminated */
         RD_KAFKA_TELEMETRY_TERMINATED,
 } rd_kafka_telemetry_state_t;
 
@@ -691,6 +691,13 @@ struct rd_kafka_s {
                 /* TODO: Use rd_list_t to store the metrics */
                 int *matched_metrics;
                 size_t matched_metrics_cnt;
+
+                struct {
+                        rd_ts_t ts_last;  /**< Timestamp of last push */
+                        rd_ts_t ts_start; /**< Timestamp from when collection
+                                           *      started */
+                } rk_historic_c;
+
         } rk_telemetry;
 
         /* Test mocks */

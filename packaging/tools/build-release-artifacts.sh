@@ -82,6 +82,8 @@ fi
 
 # Clone the repo so other builds are unaffected of what we're doing
 # and we get a pristine build tree.
+git config --system --add safe.directory '/v/.git'
+git config --system --add safe.directory '/librdkafka/.git'
 git clone /v /librdkafka
 
 cd /librdkafka

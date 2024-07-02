@@ -29,6 +29,7 @@
 #include "rd.h"
 #include "rdrand.h"
 #include "rdkafka_int.h"
+#include "rdkafka_msgset.h"
 #include "rdkafka_telemetry.h"
 #include "rdkafka_telemetry_encode.h"
 #include "rdkafka_request.h"
@@ -302,9 +303,9 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
 #endif
 #if WITH_SNAPPY
                 case RD_KAFKA_COMPRESSION_SNAPPY:
-                        r = rd_kafka_snappy_compress(rkb, &payload_slice,
-                                                     compressed_payload,
-                                                     compressed_payload_size);
+                        r = rd_kafka_snappy_compress_slice(
+                            rkb, &payload_slice, compressed_payload,
+                            compressed_payload_size);
                         compression_used = RD_KAFKA_COMPRESSION_SNAPPY;
                         break;
 #endif

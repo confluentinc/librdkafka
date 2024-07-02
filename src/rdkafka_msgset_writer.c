@@ -1048,10 +1048,10 @@ static int rd_kafka_msgset_writer_compress_gzip(rd_kafka_msgset_writer_t *msetw,
 /**
  * @brief Compress slice using Snappy
  */
-rd_kafka_resp_err_t rd_kafka_snappy_compress(rd_kafka_broker_t *rkb,
-                                             rd_slice_t *slice,
-                                             void **outbuf,
-                                             size_t *outlenp) {
+rd_kafka_resp_err_t rd_kafka_snappy_compress_slice(rd_kafka_broker_t *rkb,
+                                                   rd_slice_t *slice,
+                                                   void **outbuf,
+                                                   size_t *outlenp) {
         struct iovec *iov;
         size_t iov_max, iov_cnt;
         struct snappy_env senv;
@@ -1102,8 +1102,8 @@ rd_kafka_msgset_writer_compress_snappy(rd_kafka_msgset_writer_t *msetw,
                                        rd_slice_t *slice,
                                        struct iovec *ciov) {
         rd_kafka_resp_err_t err;
-        err = rd_kafka_snappy_compress(msetw->msetw_rkb, slice, &ciov->iov_base,
-                                       &ciov->iov_len);
+        err = rd_kafka_snappy_compress_slice(msetw->msetw_rkb, slice,
+                                             &ciov->iov_base, &ciov->iov_len);
         return (err ? -1 : 0);
 }
 #endif

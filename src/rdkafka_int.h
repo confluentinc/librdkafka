@@ -1159,18 +1159,4 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       size_t errstr_size);
 
 
-#if WITH_ZLIB
-rd_kafka_resp_err_t rd_kafka_gzip_compress(rd_kafka_broker_t *rkb,
-                                           int comp_level,
-                                           rd_slice_t *slice,
-                                           void **outbuf,
-                                           size_t *outlenp);
-#endif
-#if WITH_SNAPPY
-rd_kafka_resp_err_t rd_kafka_snappy_compress(rd_kafka_broker_t *rkb,
-                                             rd_slice_t *slice,
-                                             void **outbuf,
-                                             size_t *outlenp);
-#endif
-
 #endif /* _RDKAFKA_INT_H_ */

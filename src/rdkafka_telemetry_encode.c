@@ -226,6 +226,15 @@ static void reset_historical_metrics(rd_kafka_t *rk, rd_ts_t now_ns) {
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_telemetry.rkb_historic_c.connects =
                     rd_atomic32_get(&rkb->rkb_c.connects);
+                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt
+                                     .ra_v.maxv_reset,
+                                1);
+                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current
+                                     .rkb_avg_throttle.ra_v.maxv_reset,
+                                1);
+                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current
+                                     .rkb_avg_outbuf_latency.ra_v.maxv_reset,
+                                1);
         }
 }
 

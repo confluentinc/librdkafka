@@ -94,7 +94,8 @@ static RD_UNUSED void rd_avg_add(rd_avg_t *ra, int64_t v) {
         ra->ra_v.sum += v;
         ra->ra_v.cnt++;
 #if WITH_HDRHISTOGRAM
-        rd_hdr_histogram_record(ra->ra_hdr, v);
+        if (ra->ra_hdr)
+                rd_hdr_histogram_record(ra->ra_hdr, v);
 #endif
         mtx_unlock(&ra->ra_lock);
 }
@@ -157,21 +158,23 @@ static RD_UNUSED void rd_avg_rollover(rd_avg_t *dst, rd_avg_t *src) {
         mtx_init(&dst->ra_lock, mtx_plain);
         dst->ra_type = src->ra_type;
         dst->ra_v    = src->ra_v;
-#if WITH_HDRHISTOGRAM
-        dst->ra_hdr = NULL;
-
-        dst->ra_hist.stddev  = rd_hdr_histogram_stddev(src->ra_hdr);
-        dst->ra_hist.mean    = rd_hdr_histogram_mean(src->ra_hdr);
-        dst->ra_hist.oor     = src->ra_hdr->outOfRangeCount;
-        dst->ra_hist.hdrsize = src->ra_hdr->allocatedSize;
-        dst->ra_hist.p50     = rd_hdr_histogram_quantile(src->ra_hdr, 50.0);
-        dst->ra_hist.p75     = rd_hdr_histogram_quantile(src->ra_hdr, 75.0);
-        dst->ra_hist.p90     = rd_hdr_histogram_quantile(src->ra_hdr, 90.0);
-        dst->ra_hist.p95     = rd_hdr_histogram_quantile(src->ra_hdr, 95.0);
-        dst->ra_hist.p99     = rd_hdr_histogram_quantile(src->ra_hdr, 99.0);
-        dst->ra_hist.p99_99  = rd_hdr_histogram_quantile(src->ra_hdr, 99.99);
-#else
         memset(&dst->ra_hist, 0, sizeof(dst->ra_hist));
+#if WITH_HDRHISTOGRAM
+        if (src->ra_hdr) {
+                dst->ra_hdr = NULL;
+
+                dst->ra_hist.stddev  = rd_hdr_histogram_stddev(src->ra_hdr);
+                dst->ra_hist.mean    = rd_hdr_histogram_mean(src->ra_hdr);
+                dst->ra_hist.oor     = src->ra_hdr->outOfRangeCount;
+                dst->ra_hist.hdrsize = src->ra_hdr->allocatedSize;
+                dst->ra_hist.p50 = rd_hdr_histogram_quantile(src->ra_hdr, 50.0);
+                dst->ra_hist.p75 = rd_hdr_histogram_quantile(src->ra_hdr, 75.0);
+                dst->ra_hist.p90 = rd_hdr_histogram_quantile(src->ra_hdr, 90.0);
+                dst->ra_hist.p95 = rd_hdr_histogram_quantile(src->ra_hdr, 95.0);
+                dst->ra_hist.p99 = rd_hdr_histogram_quantile(src->ra_hdr, 99.0);
+                dst->ra_hist.p99_99 =
+                    rd_hdr_histogram_quantile(src->ra_hdr, 99.99);
+        }
 #endif
         memset(&src->ra_v, 0, sizeof(src->ra_v));
 
@@ -181,7 +184,7 @@ static RD_UNUSED void rd_avg_rollover(rd_avg_t *dst, rd_avg_t *src) {
 #if WITH_HDRHISTOGRAM
         /* Adapt histogram span to fit future out of range entries
          * from this period. */
-        if (src->ra_hdr->totalCount > 0) {
+        if (src->ra_hdr && src->ra_hdr->totalCount > 0) {
                 int64_t vmin = src->ra_hdr->lowestTrackableValue;
                 int64_t vmax = src->ra_hdr->highestTrackableValue;
                 int64_t mindiff, maxdiff;

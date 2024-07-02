@@ -235,7 +235,6 @@ static void rd_kafka_broker_features_set(rd_kafka_broker_t *rkb, int features) {
                    rd_kafka_features2str(rkb->rkb_features));
 }
 
-
 /**
  * @brief Check and return supported ApiVersion for \p ApiKey.
  *
@@ -290,7 +289,6 @@ int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
         else
                 return maxver;
 }
-
 
 /**
  * @brief Check and return supported ApiVersion for \p ApiKey.
@@ -981,6 +979,9 @@ static void rd_kafka_broker_timeout_scan(rd_kafka_broker_t *rkb, rd_ts_t now) {
                         char rttinfo[32];
                         /* Print average RTT (if avail) to help diagnose. */
                         rd_avg_calc(&rkb->rkb_avg_rtt, now);
+                        rd_avg_calc(
+                            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
+                            now);
                         if (rkb->rkb_avg_rtt.ra_v.avg)
                                 rd_snprintf(rttinfo, sizeof(rttinfo),
                                             " (average rtt %.3fms)",
@@ -2859,6 +2860,7 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
                 rd_avg_add(
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
                     rkbuf->rkbuf_ts_sent - rkbuf->rkbuf_ts_enq);
+
 
                 if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
                     rd_atomic32_add(&rkb->rkb_blocking_request_cnt, 1) == 1)

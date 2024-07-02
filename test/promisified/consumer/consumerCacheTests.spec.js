@@ -10,8 +10,13 @@ const {
     sleep,
 } = require('../testhelpers');
 
-/* All combinations of autoCommit and partitionsConsumedConcurrently */
-const cases = Array(2 * 3).fill().map((_, i) => [i % 2 === 0, (i % 3) + 1]);
+/* All required combinations of [autoCommit, partitionsConsumedConcurrently] */
+const cases = [
+    [true, 1],
+    [true, 3],
+    [false, 1],
+    [false, 3],
+];
 
 describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumedConcurrently) => {
     let topicName, groupId, producer, consumer;
@@ -25,7 +30,6 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
 
         producer = createProducer({});
 
-        const common = {};
         consumer = createConsumer({
             groupId,
             maxWaitTimeInMs: 100,
@@ -133,6 +137,18 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
     });
 
     it('is cleared before rebalance', async () => {
+        /* If another test times out, jest chooses to run this test in parallel with
+         * the other test. I think this causes an issue with shared groupIds. So to ensure
+         * the consumers are created with the same groupId, we create them here.
+         * TODO: verify correctness of theory. It's conjecture... which solves flakiness. */
+        let groupId = `consumer-group-id-${secureRandom()}`;
+        consumer = createConsumer({
+            groupId,
+            maxWaitTimeInMs: 100,
+            fromBeginning: true,
+            autoCommit: isAutoCommit,
+        });
+
         const consumer2 = createConsumer({
             groupId,
             maxWaitTimeInMs: 100,

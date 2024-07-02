@@ -149,4 +149,79 @@ describe('Consumer commit', () => {
             { topic: topicName, partition: 2, offset: '10', metadata,leaderEpoch: expect.any(Number) }
         ]);
     });
+
+    it.each([[true], [false]])('should commit only resolved offsets while using eachBatch', async (isAutoCommit) => {
+        /* Evenly distribute 3*30 messages across 3 partitions */
+        const numMsgs = 30;
+        let i = 0;
+        const messages = Array(3 * numMsgs)
+            .fill()
+            .map(() => {
+                const value = secureRandom()
+                return { value: `value-${value}`, partition: (i++) % 3 }
+            })
+
+        await producer.connect();
+        await producer.send({ topic: topicName, messages })
+        await producer.flush();
+
+        consumer = createConsumer({
+            groupId,
+            maxWaitTimeInMs: 100,
+            fromBeginning: true,
+            autoCommit: isAutoCommit,
+            autoCommitInterval: 500,
+        });
+
+        let msgCount = 0;
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName })
+        await consumer.run({
+            eachBatchAutoResolve: false,
+            eachBatch: async ({ batch, resolveOffset, commitOffsetsIfNecessary }) => {
+                for (const message of batch.messages) {
+                    msgCount++;
+                    if ((+message.offset) < numMsgs/2) {
+                        resolveOffset(message.offset);
+                    }
+                }
+                if (!isAutoCommit)
+                    await commitOffsetsIfNecessary();
+            }
+        });
+        await waitFor(() => msgCount >= (3 * numMsgs), () => null, { delay: 100 });
+
+        /* Disconnect should commit any uncommitted offsets */
+        await consumer.disconnect();
+
+        consumer = createConsumer({
+            groupId,
+            maxWaitTimeInMs: 100,
+            fromBeginning: true,
+        });
+
+        await consumer.connect();
+        const toppars = Array(3).fill().map((_, i) => ({ topic: topicName, partition: i }));
+        const committed = await consumer.committed(toppars);
+        const halfOffset = Math.floor(numMsgs/2).toString();
+        expect(committed).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    topic: topicName,
+                    partition: 0,
+                    offset: halfOffset,
+                }),
+                expect.objectContaining({
+                    topic: topicName,
+                    partition: 1,
+                    offset: halfOffset,
+                }),
+                expect.objectContaining({
+                    topic: topicName,
+                    partition: 2,
+                    offset: halfOffset,
+                })
+            ])
+        )
+    });
 });

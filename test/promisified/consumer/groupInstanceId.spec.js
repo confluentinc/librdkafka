@@ -11,13 +11,14 @@ describe('Consumer with static membership', () => {
     let consumer;
     let groupId, topicName;
 
-    const consumerConfig = {
-        groupId,
-    };
+    let consumerConfig;
 
     beforeEach(async () => {
         topicName = `test-topic1-${secureRandom()}`;
         groupId = `consumer-group-id-${secureRandom()}`
+        consumerConfig = {
+            groupId,
+        };
         consumer = null;
         await createTopic({ topic: topicName, partitions: 2 });
     });

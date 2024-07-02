@@ -282,7 +282,7 @@ static const char *get_group_instance_id(const rd_kafka_t *rk) {
 }
 
 static const char *get_member_id(const rd_kafka_t *rk) {
-        return rk->rk_cgrp->rkcg_member_id &&
+        return rk->rk_cgrp && rk->rk_cgrp->rkcg_member_id &&
                        rk->rk_cgrp->rkcg_member_id->len > 0
                    ? (const char *)rk->rk_cgrp->rkcg_member_id->str
                    : NULL;

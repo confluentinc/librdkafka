@@ -6320,16 +6320,6 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         rd_kafka_buf_read_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
         rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.subscription_id);
 
-        if (rd_kafka_Uuid_cmp(prev_client_instance_id,
-                              rk->rk_telemetry.client_instance_id)) {
-                rd_kafka_log(
-                    rk, LOG_INFO, "GETSUBSCRIPTIONS",
-                    "Telemetry Client Instance Id changed from %s to %s",
-                    rd_kafka_Uuid_base64str(&prev_client_instance_id),
-                    rd_kafka_Uuid_base64str(
-                        &rk->rk_telemetry.client_instance_id));
-        }
-
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
                      "Parsing: subscription id %d",
                      rk->rk_telemetry.subscription_id);
@@ -6375,6 +6365,17 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                         rk->rk_telemetry.requested_metrics[i] =
                             rd_strdup(Metric.str);
                 }
+        }
+
+        if (rk->rk_telemetry.subscription_id &&
+            rd_kafka_Uuid_cmp(prev_client_instance_id,
+                              rk->rk_telemetry.client_instance_id)) {
+                rd_kafka_log(
+                    rk, LOG_INFO, "GETSUBSCRIPTIONS",
+                    "Telemetry Client Instance Id changed from %s to %s",
+                    rd_kafka_Uuid_base64str(&prev_client_instance_id),
+                    rd_kafka_Uuid_base64str(
+                        &rk->rk_telemetry.client_instance_id));
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",

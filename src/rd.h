@@ -237,7 +237,7 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 
 #define RD_STRINGIFY(X) #X
 
-#define RD_INTERFACE_CALL(it, name, ...) (it->name(it->opaque, __VA_ARGS__))
+
 
 #define RD_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define RD_MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -424,6 +424,10 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get(rd_refcnt_t *R) {
         } while (0)
 
 
+#define RD_INTERFACE_CALL(i, name, ...) (i->name(i->opaque, __VA_ARGS__))
+
+#define RD_CEIL_INTEGER_DIVISION(X, DEN) (((X) + ((DEN)-1)) / (DEN))
+
 /**
  * @brief Utility types to hold memory,size tuple.
  */
@@ -432,7 +436,5 @@ typedef struct rd_chariov_s {
         char *ptr;
         size_t size;
 } rd_chariov_t;
-
-#define RD_CEIL_INTEGER_DIVISION(X, DEN) (((X) + ((DEN)-1)) / (DEN))
 
 #endif /* _RD_H_ */

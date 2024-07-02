@@ -986,6 +986,14 @@ static void rd_kafka_broker_timeout_scan(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                             " (average rtt %.3fms)",
                                             (float)(rkb->rkb_avg_rtt.ra_v.avg /
                                                     1000.0f));
+                        else if (rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt
+                                     .ra_v.avg)
+                                rd_snprintf(
+                                    rttinfo, sizeof(rttinfo),
+                                    " (average rtt %.3fms)",
+                                    (float)(rkb->rkb_telemetry.rd_avg_current
+                                                .rkb_avg_rtt.ra_v.avg /
+                                            1000.0f));
                         else
                                 rttinfo[0] = 0;
                         rd_kafka_broker_fail(rkb, LOG_ERR,
@@ -4789,14 +4797,14 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_avg_destroy(&rkb->rkb_avg_outbuf_latency);
         rd_avg_destroy(&rkb->rkb_avg_rtt);
         rd_avg_destroy(&rkb->rkb_avg_throttle);
-        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);
-        rd_avg_destroy(
-            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
+        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt);
         rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt);
         rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle);
+        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);
         rd_avg_destroy(
             &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
-        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
 
         mtx_lock(&rkb->rkb_logname_lock);
         rd_free(rkb->rkb_logname);
@@ -4898,6 +4906,15 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
 

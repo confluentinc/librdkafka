@@ -198,7 +198,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                         int32_t connects; /**< Connection attempts,
                                            *   successful or not. */
                 } rkb_historic_c;
-
                 struct {
                         rd_avg_t rkb_avg_rtt;      /* Current RTT avg */
                         rd_avg_t rkb_avg_throttle; /* Current throttle avg */
@@ -208,7 +207,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                      *   and writing to socket
                                                      */
                 } rd_avg_current;
-
                 struct {
                         rd_avg_t rkb_avg_rtt; /**< Rolled over RTT avg */
                         rd_avg_t
@@ -216,7 +214,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                         rd_avg_t rkb_avg_outbuf_latency; /**< Rolled over outbuf
                                                           *   latency avg */
                 } rd_avg_rollover;
-
         } rkb_telemetry;
 
         int rkb_req_timeouts; /* Current value */

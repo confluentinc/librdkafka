@@ -2570,6 +2570,52 @@ err_parse:
 /**
  * @brief Handle PushTelemetry
  */
+
+static void rd_kafka_mock_handle_PushTelemetry_decoded_number(
+    void *opaque,
+    const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded) {
+        rd_kafka_broker_t *rkb = opaque;
+        rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY",
+                   "NumberDataPoint value: %" PRId64 " time: %" PRIu64,
+                   decoded->value.as_int, decoded->time_unix_nano);
+}
+
+static void
+rd_kafka_mock_handle_PushTelemetry_decoded_string(void *opaque,
+                                                  const uint8_t *decoded) {
+        rd_kafka_broker_t *rkb = opaque;
+        rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY", "String value: %s", decoded);
+}
+
+static void rd_kafka_mock_handle_PushTelemetry_decoded_type(
+    void *opaque,
+    rd_kafka_telemetry_metric_type_t type) {
+        rd_kafka_broker_t *rkb = opaque;
+        rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY", "Metric type: %d", type);
+}
+
+static void
+rd_kafka_mock_handle_PushTelemetry_error(void *opaque, const char *error, ...) {
+        rd_kafka_broker_t *rkb = opaque;
+        va_list ap;
+        va_start(ap, error);
+        rd_rkb_log(rkb, LOG_ERR, "MOCKTELEMETRY", error, ap);
+        va_end(ap);
+}
+
+void rd_kafka_mock_handle_PushTelemetry_payload(rd_kafka_broker_t *rkb,
+                                                void *payload,
+                                                size_t size) {
+        rd_kafka_telemetry_decode_interface_t interface = {
+            .decoded_string = rd_kafka_mock_handle_PushTelemetry_decoded_string,
+            .decoded_number = rd_kafka_mock_handle_PushTelemetry_decoded_number,
+            .decoded_type   = rd_kafka_mock_handle_PushTelemetry_decoded_type,
+            .error          = rd_kafka_mock_handle_PushTelemetry_error,
+            .opaque         = rkb,
+        };
+        rd_kafka_telemetry_decode_metrics(&interface, payload, size);
+}
+
 static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
                                               rd_kafka_buf_t *rkbuf) {
         rd_kafka_broker_t *rkb            = mconn->broker->cluster->dummy_rkb;

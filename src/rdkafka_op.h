@@ -693,7 +693,7 @@ struct rd_kafka_op_s {
 
                 struct {
                         /** Preferred broker for telemetry. */
-                        struct rd_kafka_broker_s *rkb;
+                        rd_kafka_broker_t *rkb;
                 } telemetry_broker;
 
         } rko_u;

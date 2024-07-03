@@ -60,8 +60,9 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
     size_t compressed_payload_size,
     void **uncompressed_payload,
     size_t *uncompressed_payload_size);
-void rd_kafka_mock_handle_PushTelemetry_payload(rd_kafka_broker_t *rkb,
-                                                void *payload,
-                                                size_t size);
+int rd_kafka_telemetry_decode_metrics(
+    rd_kafka_telemetry_decode_interface_t *interface,
+    void *buffer,
+    size_t size);
 
 #endif /* _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H */

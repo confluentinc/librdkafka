@@ -526,7 +526,9 @@ static void serializeMetricData(
 
 
         (*data_point)->time_unix_nano = now_ns;
-        if (info->type == RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE)
+        if (info->type == RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE ||
+            (info->type == RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM &&
+             rk->rk_telemetry.delta_temporality))
                 (*data_point)->start_time_unix_nano = ts_last;
         else
                 (*data_point)->start_time_unix_nano = ts_start;
@@ -539,9 +541,12 @@ static void serializeMetricData(
                 data_point_attribute->value.which_value =
                     opentelemetry_proto_common_v1_AnyValue_int_value_tag;
 
+                rd_kafka_broker_lock(rkb);
                 data_point_attribute->value.value.int_value = rkb->rkb_nodeid;
-                (*data_point)->attributes.funcs.encode      = &encode_key_value;
-                (*data_point)->attributes.arg = data_point_attribute;
+                rd_kafka_broker_unlock(rkb);
+
+                (*data_point)->attributes.funcs.encode = &encode_key_value;
+                (*data_point)->attributes.arg          = data_point_attribute;
         }
 
 
@@ -587,8 +592,6 @@ static void serializeMetricData(
         (*metric)->name.arg          = *metric_name;
 
         /* Skipping unit as Java client does the same */
-        // (*metric)->unit.funcs.encode = &encode_string;
-        // (*metric)->unit.arg          = (void *)info->unit;
 }
 
 /**
@@ -803,19 +806,18 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 rd_buf_destroy_free(rbuf);
                 goto fail;
         }
-        free_metrics(metrics, metric_names, data_points,
-                     datapoint_attributes_key_values, total_metrics_count);
-        free_resource_attributes(resource_attributes_key_values,
-                                 resource_attributes_struct,
-                                 resource_attributes_count);
-
-
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                      "Push Telemetry metrics encoded, size: %ld",
                      stream.bytes_written);
         rd_buf_write(rbuf, NULL, stream.bytes_written);
 
         reset_historical_metrics(rk, now_ns);
+
+        free_metrics(metrics, metric_names, data_points,
+                     datapoint_attributes_key_values, total_metrics_count);
+        free_resource_attributes(resource_attributes_key_values,
+                                 resource_attributes_struct,
+                                 resource_attributes_count);
         rd_kafka_rdunlock(rk);
 
         return rbuf;

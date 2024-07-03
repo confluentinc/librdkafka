@@ -83,7 +83,7 @@ calculate_connection_creation_rate(rd_kafka_t *rk,
                     rkb->rkb_telemetry.rkb_historic_c.connects;
         }
         double seconds = (now_ns - ts_last) / 1e9;
-        if (seconds > 0)
+        if (seconds > 1)
                 total.double_value /= seconds;
         return total;
 }
@@ -541,6 +541,7 @@ static void serialize_metric_data(
                 rd_kafka_broker_lock(rkb);
                 data_point_attribute->value.value.int_value = rkb->rkb_nodeid;
                 rd_kafka_broker_unlock(rkb);
+
                 (*data_point)->attributes.funcs.encode = &encode_key_value;
                 (*data_point)->attributes.arg          = data_point_attribute;
         }
@@ -802,8 +803,6 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 rd_buf_destroy_free(rbuf);
                 goto fail;
         }
-
-
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                      "Push Telemetry metrics encoded, size: %ld",
                      stream.bytes_written);

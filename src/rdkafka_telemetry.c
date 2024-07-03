@@ -103,7 +103,6 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.matched_metrics       = NULL;
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
-
         rk->rk_telemetry.telemetry_max_bytes = 0;
 }
 
@@ -286,11 +285,9 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
         size_t i;
         rd_kafka_resp_err_t r = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_slice_init_full(&payload_slice, payload);
-
         for (i = 0; i < rk->rk_telemetry.accepted_compression_types_cnt; i++) {
                 rd_kafka_compression_t compression_type =
                     rk->rk_telemetry.accepted_compression_types[i];
-
                 switch (compression_type) {
 #if WITH_ZLIB
                 case RD_KAFKA_COMPRESSION_GZIP:
@@ -347,7 +344,6 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
                              "compression types");
         }
         rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Sending uncompressed payload");
-
         *compressed_payload      = payload->rbuf_wpos->seg_p;
         *compressed_payload_size = payload->rbuf_wpos->seg_of;
         return RD_KAFKA_COMPRESSION_NONE;

@@ -27,10 +27,8 @@
  */
 
 #include "rd.h"
-#include <math.h>
 #include "rdkafka_telemetry_decode.h"
 #include "nanopb/pb.h"
-#include "nanopb/pb_encode.h"
 #include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
 #include "rdkafka_int.h"
@@ -40,6 +38,7 @@
 #include "rdgz.h"
 #include "rdkafka_zstd.h"
 #include "snappy.h"
+#include "rdfloat.h"
 
 
 #define _NANOPB_STRING_DECODE_MAX_BUFFER_SIZE 1024
@@ -71,17 +70,18 @@ decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg) {
         uint8_t buffer[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE] = {0};
 
         if (stream->bytes_left > sizeof(buffer) - 1) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(interface, decode_error,
                                   "String too long for buffer");
                 return false;
         }
 
         if (!pb_read(stream, buffer, stream->bytes_left)) {
-                RD_INTERFACE_CALL(interface, error, "Failed to read string");
+                RD_INTERFACE_CALL(interface, decode_error,
+                                  "Failed to read string");
                 return false;
         }
-        RD_INTERFACE_CALL(interface, decoded_string, buffer);
 
+        RD_INTERFACE_CALL(interface, decoded_string, buffer);
         return true;
 }
 
@@ -96,7 +96,7 @@ decode_key_value(pb_istream_t *stream, const pb_field_t *field, void **arg) {
         key_value.value.value.string_value.arg          = interface;
         if (!pb_decode(stream, opentelemetry_proto_common_v1_KeyValue_fields,
                        &key_value)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(interface, decode_error,
                                   "Failed to decode KeyValue: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -104,7 +104,7 @@ decode_key_value(pb_istream_t *stream, const pb_field_t *field, void **arg) {
 
         if (key_value.value.which_value ==
             opentelemetry_proto_common_v1_AnyValue_int_value_tag) {
-                RD_INTERFACE_CALL(it, decoded_int64,
+                RD_INTERFACE_CALL(interface, decoded_int64,
                                   key_value.value.value.int_value);
         }
 
@@ -119,11 +119,10 @@ static bool decode_number_data_point(pb_istream_t *stream,
             opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
         data_point.attributes.funcs.decode = &decode_key_value;
         data_point.attributes.arg          = interface;
-
         if (!pb_decode(stream,
                        opentelemetry_proto_metrics_v1_NumberDataPoint_fields,
                        &data_point)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(interface, decode_error,
                                   "Failed to decode NumberDataPoint: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -135,7 +134,6 @@ static bool decode_number_data_point(pb_istream_t *stream,
                 test_data->metric_value_double = data_point.value.as_double;
                 test_data->metric_time         = data_point.time_unix_nano;
         }
-
         RD_INTERFACE_CALL(interface, decoded_NumberDataPoint, &data_point);
         return true;
 }
@@ -180,7 +178,7 @@ decode_metric(pb_istream_t *stream, const pb_field_t *field, void **arg) {
 
         if (!pb_decode(stream, opentelemetry_proto_metrics_v1_Metric_fields,
                        &metric)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(interface, decode_error,
                                   "Failed to decode Metric: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -205,7 +203,7 @@ static bool decode_scope_metrics(pb_istream_t *stream,
         if (!pb_decode(stream,
                        opentelemetry_proto_metrics_v1_ScopeMetrics_fields,
                        &scope_metrics)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(interface, decode_error,
                                   "Failed to decode ScopeMetrics: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -226,7 +224,7 @@ static bool decode_resource_metrics(pb_istream_t *stream,
         if (!pb_decode(stream,
                        opentelemetry_proto_metrics_v1_ResourceMetrics_fields,
                        &resource_metrics)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(interface, decode_error,
                                   "Failed to decode ResourceMetrics: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -381,27 +379,33 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
  * Decode a metric from a buffer encoded with
  * opentelemetry_proto_metrics_v1_MetricsData datatype. Used for testing and
  * debugging.
+ *
+ * @param decode_interface Interface to pass as arg when decoding the
+ * buffer.
+ * @param buffer Buffer to decode.
+ * @param size Size of the buffer.
  */
-int rd_kafka_telemetry_decode_metrics(rd_kafka_telemetry_decode_interface_t *it,
-                                      void *buffer,
-                                      size_t size) {
+int rd_kafka_telemetry_decode_metrics(
+    rd_kafka_telemetry_decode_interface_t *interface,
+    void *buffer,
+    size_t size) {
         opentelemetry_proto_metrics_v1_MetricsData metricsData =
             opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 
         pb_istream_t stream              = pb_istream_from_buffer(buffer, size);
-        metricsData.resource_metrics.arg = it;
+        metricsData.resource_metrics.arg = interface;
         metricsData.resource_metrics.funcs.decode = &decode_resource_metrics;
 
         bool status = pb_decode(
             &stream, opentelemetry_proto_metrics_v1_MetricsData_fields,
             &metricsData);
         if (!status) {
-                RD_INTERFACE_CALL(it, error, "Failed to decode MetricsData: %s",
+                RD_INTERFACE_CALL(interface, decode_error,
+                                  "Failed to decode MetricsData: %s",
                                   PB_GET_ERROR(&stream));
         }
         return status;
 }
-
 
 static void unit_test_telemetry_decoded_string(void *opaque,
                                                const uint8_t *decoded) {
@@ -465,7 +469,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
             .decoded_NumberDataPoint =
                 unit_test_telemetry_decoded_NumberDataPoint,
             .decoded_type = unit_test_telemetry_decoded_type,
-            .error        = unit_test_telemetry_decode_error,
+            .decode_error = unit_test_telemetry_decode_error,
             .opaque       = &unit_test_data};
 
         TAILQ_INIT(&rk->rk_brokers);
@@ -507,9 +511,9 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                             expected_description) == 0,
                      "Metric description mismatch");
         if (is_double)
-                RD_UT_ASSERT(fabs(unit_test_data.metric_value_double - 1.0) <
-                                 0.01,
-                             "Metric value mismatch");
+                RD_UT_ASSERT(
+                    rd_dbl_eq0(unit_test_data.metric_value_double, 1.0, 0.01),
+                    "Metric value mismatch");
         else
                 RD_UT_ASSERT(unit_test_data.metric_value_int == 1,
                              "Metric value mismatch");

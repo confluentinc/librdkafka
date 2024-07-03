@@ -107,6 +107,7 @@ typedef struct rd_kafka_fetch_pos_s {
 
 
 
+#include "rdkafka_uuid.h"
 #include "rdkafka_op.h"
 #include "rdkafka_queue.h"
 #include "rdkafka_msg.h"

@@ -378,26 +378,27 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
  * opentelemetry_proto_metrics_v1_MetricsData datatype. Used for testing and
  * debugging.
  *
- * @param interface The interface to pass as arg when decoding the buffer.
+ * @param decode_interface The decode_interface to pass as arg when decoding the
+ * buffer.
  * @param buffer The buffer to decode.
  * @param size The size of the buffer.
  */
 int rd_kafka_telemetry_decode_metrics(
-    rd_kafka_telemetry_decode_interface_t *interface,
+    rd_kafka_telemetry_decode_interface_t *decode_interface,
     void *buffer,
     size_t size) {
         opentelemetry_proto_metrics_v1_MetricsData metricsData =
             opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 
         pb_istream_t stream              = pb_istream_from_buffer(buffer, size);
-        metricsData.resource_metrics.arg = interface;
+        metricsData.resource_metrics.arg = decode_interface;
         metricsData.resource_metrics.funcs.decode = &decode_resource_metrics;
 
         bool status = pb_decode(
             &stream, opentelemetry_proto_metrics_v1_MetricsData_fields,
             &metricsData);
         if (!status) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(decode_interface, error,
                                   "Failed to decode MetricsData: %s",
                                   PB_GET_ERROR(&stream));
         }
@@ -463,7 +464,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         clear_unit_test_data();
 
-        rd_kafka_telemetry_decode_interface_t interface = {
+        rd_kafka_telemetry_decode_interface_t decode_interface = {
             .decoded_string = unit_test_telemetry_decoded_string,
             .decoded_number = unit_test_telemetry_decoded_number,
             .decoded_type   = unit_test_telemetry_decoded_type,
@@ -484,7 +485,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         RD_UT_ASSERT(metrics_payload_size != 0, "Metrics payload zero");
 
         bool decode_status = rd_kafka_telemetry_decode_metrics(
-            &interface, metrics_payload, metrics_payload_size);
+            &decode_interface, metrics_payload, metrics_payload_size);
 
         RD_UT_ASSERT(decode_status == 1, "Decoding failed");
         RD_UT_ASSERT(unit_test_data.type == expected_type,

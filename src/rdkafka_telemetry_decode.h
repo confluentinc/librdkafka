@@ -61,7 +61,7 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
     void **uncompressed_payload,
     size_t *uncompressed_payload_size);
 int rd_kafka_telemetry_decode_metrics(
-    rd_kafka_telemetry_decode_interface_t *interface,
+    rd_kafka_telemetry_decode_interface_t *decode_interface,
     void *buffer,
     size_t size);
 

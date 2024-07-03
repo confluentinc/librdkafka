@@ -2606,14 +2606,14 @@ rd_kafka_mock_handle_PushTelemetry_error(void *opaque, const char *error, ...) {
 void rd_kafka_mock_handle_PushTelemetry_payload(rd_kafka_broker_t *rkb,
                                                 void *payload,
                                                 size_t size) {
-        rd_kafka_telemetry_decode_interface_t interface = {
+        rd_kafka_telemetry_decode_interface_t decode_interface = {
             .decoded_string = rd_kafka_mock_handle_PushTelemetry_decoded_string,
             .decoded_number = rd_kafka_mock_handle_PushTelemetry_decoded_number,
             .decoded_type   = rd_kafka_mock_handle_PushTelemetry_decoded_type,
             .error          = rd_kafka_mock_handle_PushTelemetry_error,
             .opaque         = rkb,
         };
-        rd_kafka_telemetry_decode_metrics(&interface, payload, size);
+        rd_kafka_telemetry_decode_metrics(&decode_interface, payload, size);
 }
 
 static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,

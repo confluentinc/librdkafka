@@ -638,6 +638,12 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Serializing metrics");
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt);
+                rd_avg_destroy(
+                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
+                rd_avg_destroy(
+                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle);
+
                 rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                                 &rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt);
                 rd_avg_rollover(

@@ -490,6 +490,12 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_throttle,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb.rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb.rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb.rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         TAILQ_INSERT_HEAD(&rk->rk_brokers, &rkb, rkb_link);
 
         clear_unit_test_data();

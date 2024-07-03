@@ -219,6 +219,8 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
             rd_jitter(100 - RD_KAFKA_TELEMETRY_PUSH_JITTER,
                       100 + RD_KAFKA_TELEMETRY_PUSH_JITTER) /
             100.0;
+        rd_ts_t now_ns         = rd_uclock() * 1000;
+        rd_kafka_broker_t *rkb = NULL;
 
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
@@ -239,6 +241,17 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                                        rk->rk_telemetry.push_interval_ms);
 
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
+
+                /* Set for the first push */
+                if (rk->rk_telemetry.rk_historic_c.ts_start == 0) {
+                        rk->rk_telemetry.rk_historic_c.ts_start = now_ns;
+                        rk->rk_telemetry.rk_historic_c.ts_last  = now_ns;
+                        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                                rkb->rkb_telemetry.rkb_historic_c.connects =
+                                    rd_atomic32_get(&rkb->rkb_c.connects);
+                        }
+                }
+
         } else {
                 /* No metrics requested, or we're in error. */
                 next_scheduled = rk->rk_telemetry.push_interval_ms * 1000;

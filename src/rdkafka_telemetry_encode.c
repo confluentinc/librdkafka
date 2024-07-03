@@ -627,8 +627,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         rd_kafka_telemetry_key_values_repeated_t resource_attributes_repeated;
         rd_kafka_telemetry_resource_attribute_t *resource_attributes_struct =
             NULL;
-        rd_ts_t now_ns       = rd_uclock() * 1000;
-        rd_bool_t first_push = rd_false;
+        rd_ts_t now_ns = rd_uclock() * 1000;
         rd_kafka_rdlock(rk);
 
         for (i = 0; i < metrics_to_encode_count; i++) {
@@ -638,13 +637,6 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Serializing metrics");
-
-        if (rk->rk_telemetry.rk_historic_c.ts_start == 0) {
-                first_push                              = rd_true;
-                rk->rk_telemetry.rk_historic_c.ts_start = now_ns;
-                rk->rk_telemetry.rk_historic_c.ts_last  = now_ns;
-        }
-
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                                 &rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt);
@@ -654,11 +646,6 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 rd_avg_rollover(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);
-                //                if (first_push) {
-                //                        rkb->rkb_telemetry.rkb_historic_c.connects
-                //                        =
-                //                            rd_atomic32_get(&rkb->rkb_c.connects);
-                //                }
         }
 
         int resource_attributes_count =

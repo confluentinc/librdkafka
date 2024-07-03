@@ -118,7 +118,7 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
 static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
         rd_dassert(thrd_is_current(rk->rk_thread));
 
-        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
+        rd_kafka_dbg(rk, TELEMETRY, "TERM",
                      "Setting state to TERMINATED and signalling");
 
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATED;
@@ -472,7 +472,7 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
         rd_kafka_q_enq(rk->rk_ops, rko);
 
         /* Await termination sequence completion. */
-        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
+        rd_kafka_dbg(rk, TELEMETRY, "TERM",
                      "Awaiting termination of telemetry.");
         mtx_lock(&rk->rk_telemetry.lock);
         cnd_timedwait_ms(&rk->rk_telemetry.termination_cnd,
@@ -482,7 +482,7 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
                             we include serialization? */
                          1000 /* timeout for waiting */);
         mtx_unlock(&rk->rk_telemetry.lock);
-        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
+        rd_kafka_dbg(rk, TELEMETRY, "TERM",
                      "Ended waiting for termination of telemetry.");
 }
 
@@ -496,7 +496,7 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
  */
 void rd_kafka_telemetry_schedule_termination(rd_kafka_t *rk) {
         rd_kafka_dbg(
-            rk, TELEMETRY, "TELTERM",
+            rk, TELEMETRY, "TERM",
             "Starting rd_kafka_telemetry_schedule_termination in state %s",
             rd_kafka_telemetry_state2str(rk->rk_telemetry.state));
 
@@ -507,8 +507,7 @@ void rd_kafka_telemetry_schedule_termination(rd_kafka_t *rk) {
 
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED;
 
-        rd_kafka_dbg(rk, TELEMETRY, "TELTERM",
-                     "Sending final request for Push");
+        rd_kafka_dbg(rk, TELEMETRY, "TERM", "Sending final request for Push");
         rd_kafka_timer_override_once(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, 0 /* immediate */);
 }

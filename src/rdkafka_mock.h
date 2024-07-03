@@ -474,7 +474,6 @@ rd_kafka_mock_telemetry_set_requested_metrics(rd_kafka_mock_cluster_t *mcluster,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
                                           int64_t push_interval_ms);
-
 /**@}*/
 
 #ifdef __cplusplus

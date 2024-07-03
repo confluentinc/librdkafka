@@ -242,6 +242,8 @@ static void rd_kafka_broker_features_set(rd_kafka_broker_t *rkb, int features) {
  *          or -1 if the ApiKey is not supported or no matching ApiVersion.
  *          The current feature set is also returned in \p featuresp
  *
+ * @remark Same as rd_kafka_broker_ApiVersion_supported except for locking.
+ *
  * @locks rd_kafka_broker_lock() if do_lock is rd_false
  * @locks_acquired rd_kafka_broker_lock() if do_lock is rd_true
  * @locality any
@@ -4901,23 +4903,23 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                     rk->rk_conf.stats_interval_ms);
         rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE, 0, 5000 * 1000, 2,
                     rk->rk_conf.stats_interval_ms);
-        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
-        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    RD_AVG_GAUGE, 0, 5000 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle,
+                    RD_AVG_GAUGE, 0, 5000 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 100 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 100 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
 
         rd_refcnt_init(&rkb->rkb_refcnt, 0);

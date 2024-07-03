@@ -50,18 +50,18 @@ typedef struct {
 static rd_kafka_telemetry_metric_value_t
 calculate_connection_creation_total(rd_kafka_t *rk,
                                     rd_kafka_broker_t *rkb_selected,
-                                    rd_ts_t now_nanos) {
+                                    rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
 
         total.int_value = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                const int32_t connects = rd_atomic32_get(&rkb->rkb_c.connects);
                 if (!rk->rk_telemetry.delta_temporality)
-                        total.int_value +=
-                            rd_atomic32_get(&rkb->rkb_c.connects);
+                        total.int_value += connects;
                 else
                         total.int_value +=
-                            rd_atomic32_get(&rkb->rkb_c.connects) -
+                            connects -
                             rkb->rkb_telemetry.rkb_historic_c.connects;
         }
 
@@ -71,20 +71,18 @@ calculate_connection_creation_total(rd_kafka_t *rk,
 static rd_kafka_telemetry_metric_value_t
 calculate_connection_creation_rate(rd_kafka_t *rk,
                                    rd_kafka_broker_t *rkb_selected,
-                                   rd_ts_t now_nanos) {
+                                   rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t total;
         rd_kafka_broker_t *rkb;
-        rd_ts_t ts_last;
+        rd_ts_t ts_last = rk->rk_telemetry.rk_historic_c.ts_last;
 
         total.double_value = 0;
-        ts_last            = rk->rk_telemetry.rk_historic_c.ts_last;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 total.double_value +=
                     rd_atomic32_get(&rkb->rkb_c.connects) -
                     rkb->rkb_telemetry.rkb_historic_c.connects;
         }
-
-        double seconds = (now_nanos - ts_last) / 1e9;
+        double seconds = (now_ns - ts_last) / 1e9;
         if (seconds > 0)
                 total.double_value /= seconds;
         return total;
@@ -93,9 +91,9 @@ calculate_connection_creation_rate(rd_kafka_t *rk,
 static rd_kafka_telemetry_metric_value_t
 calculate_broker_avg_rtt(rd_kafka_t *rk,
                          rd_kafka_broker_t *rkb_selected,
-                         rd_ts_t now_nanos) {
-        rd_kafka_telemetry_metric_value_t avg_rtt;
-        avg_rtt.double_value = 0.0;
+                         rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t avg_rtt = RD_ZERO_INIT;
+
         rd_avg_t *rkb_avg_rtt_rollover =
             &rkb_selected->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt;
 
@@ -104,30 +102,30 @@ calculate_broker_avg_rtt(rd_kafka_t *rk,
                                        (double)(rkb_avg_rtt_rollover->ra_v.cnt *
                                                 THREE_ORDERS_MAGNITUDE);
         }
+
         return avg_rtt;
 }
 
 static rd_kafka_telemetry_metric_value_t
 calculate_broker_max_rtt(rd_kafka_t *rk,
                          rd_kafka_broker_t *rkb_selected,
-                         rd_ts_t now_nanos) {
+                         rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t max_rtt;
-        rd_avg_t *rkb_avg_rtt_rollover =
-            &rkb_selected->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt;
 
         max_rtt.int_value = RD_CEIL_INTEGER_DIVISION(
-            rkb_avg_rtt_rollover->ra_v.maxv, THREE_ORDERS_MAGNITUDE);
+            rkb_selected->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt.ra_v.maxv,
+            THREE_ORDERS_MAGNITUDE);
         return max_rtt;
 }
 
 static rd_kafka_telemetry_metric_value_t
 calculate_throttle_avg(rd_kafka_t *rk,
                        rd_kafka_broker_t *rkb_selected,
-                       rd_ts_t now_nanos) {
+                       rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t avg_throttle;
-        double avg     = 0.0;
-        uint64_t count = 0;
         rd_kafka_broker_t *rkb;
+        double avg = 0;
+        int count  = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_avg_t *rkb_avg_throttle_rollover =
@@ -140,7 +138,6 @@ calculate_throttle_avg(rd_kafka_t *rk,
                         count += rkb_avg_throttle_rollover->ra_v.cnt;
                 }
         }
-
         avg_throttle.double_value = avg;
         return avg_throttle;
 }
@@ -149,17 +146,15 @@ calculate_throttle_avg(rd_kafka_t *rk,
 static rd_kafka_telemetry_metric_value_t
 calculate_throttle_max(rd_kafka_t *rk,
                        rd_kafka_broker_t *rkb_selected,
-                       rd_ts_t now_nanos) {
+                       rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t max_throttle;
         rd_kafka_broker_t *rkb;
 
         max_throttle.int_value = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_avg_t *rkb_avg_throttle_rollover =
-                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle;
-                max_throttle.int_value =
-                    RD_MAX(max_throttle.int_value,
-                           rkb_avg_throttle_rollover->ra_v.maxv);
+                max_throttle.int_value = RD_MAX(
+                    max_throttle.int_value, rkb->rkb_telemetry.rd_avg_rollover
+                                                .rkb_avg_throttle.ra_v.maxv);
         }
         return max_throttle;
 }
@@ -167,20 +162,22 @@ calculate_throttle_max(rd_kafka_t *rk,
 static rd_kafka_telemetry_metric_value_t
 calculate_queue_time_avg(rd_kafka_t *rk,
                          rd_kafka_broker_t *rkb_selected,
-                         rd_ts_t now_nanos) {
+                         rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t avg_queue_time;
-        double avg     = 0.0;
-        uint64_t count = 0;
         rd_kafka_broker_t *rkb;
+        double avg = 0;
+        int count  = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_avg_t *rkb_avg_outbuf_latency =
+                rd_avg_t *rkb_avg_outbuf_latency_rollover =
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency;
-                if (rkb_avg_outbuf_latency->ra_v.cnt) {
+                if (rkb_avg_outbuf_latency_rollover->ra_v.cnt) {
                         avg =
-                            (avg * count + rkb_avg_outbuf_latency->ra_v.sum) /
-                            (double)(count + rkb_avg_outbuf_latency->ra_v.cnt);
-                        count += rkb_avg_outbuf_latency->ra_v.cnt;
+                            (avg * count +
+                             rkb_avg_outbuf_latency_rollover->ra_v.sum) /
+                            (double)(count +
+                                     rkb_avg_outbuf_latency_rollover->ra_v.cnt);
+                        count += rkb_avg_outbuf_latency_rollover->ra_v.cnt;
                 }
         }
         avg_queue_time.double_value = avg / THREE_ORDERS_MAGNITUDE;
@@ -190,17 +187,16 @@ calculate_queue_time_avg(rd_kafka_t *rk,
 static rd_kafka_telemetry_metric_value_t
 calculate_queue_time_max(rd_kafka_t *rk,
                          rd_kafka_broker_t *rkb_selected,
-                         rd_ts_t now_nanos) {
+                         rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t max_queue_time;
         rd_kafka_broker_t *rkb;
 
         max_queue_time.int_value = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_avg_t *rkb_avg_outbuf_latency_rollover =
-                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency;
                 max_queue_time.int_value =
                     RD_MAX(max_queue_time.int_value,
-                           rkb_avg_outbuf_latency_rollover->ra_v.maxv);
+                           rkb->rkb_telemetry.rd_avg_rollover
+                               .rkb_avg_outbuf_latency.ra_v.maxv);
         }
         max_queue_time.int_value = RD_CEIL_INTEGER_DIVISION(
             max_queue_time.int_value, THREE_ORDERS_MAGNITUDE);
@@ -210,8 +206,9 @@ calculate_queue_time_max(rd_kafka_t *rk,
 static rd_kafka_telemetry_metric_value_t
 calculate_consumer_assigned_partitions(rd_kafka_t *rk,
                                        rd_kafka_broker_t *rkb_selected,
-                                       rd_ts_t now_nanos) {
+                                       rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t assigned_partitions;
+
         assigned_partitions.int_value =
             rk->rk_cgrp ? rk->rk_cgrp->rkcg_c.assignment_size : 0;
         return assigned_partitions;
@@ -468,11 +465,6 @@ static bool encode_key_values(pb_ostream_t *stream,
         return true;
 }
 
-static bool is_per_broker_metric(const rd_kafka_telemetry_metric_info_t *info,
-                                 int metric_idx) {
-        return info[metric_idx].is_per_broker;
-}
-
 static void free_metrics(
     opentelemetry_proto_metrics_v1_Metric **metrics,
     char **metric_names,
@@ -515,7 +507,8 @@ static void serialize_metric_data(
     char **metric_name,
     bool is_per_broker,
     rd_ts_t now_ns) {
-        rd_ts_t ts_last = 0, ts_start = 0;
+        rd_ts_t ts_last  = rk->rk_telemetry.rk_historic_c.ts_last,
+                ts_start = rk->rk_telemetry.rk_historic_c.ts_start;
         size_t metric_name_len;
         if (info->is_int) {
                 (*data_point)->which_value =
@@ -528,9 +521,6 @@ static void serialize_metric_data(
                 (*data_point)->value.as_double =
                     metric_value_calculator(rk, rkb, now_ns).double_value;
         }
-
-        ts_last  = rk->rk_telemetry.rk_historic_c.ts_last;
-        ts_start = rk->rk_telemetry.rk_historic_c.ts_start;
 
         (*data_point)->time_unix_nano = now_ns;
         if (info->type == RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE ||
@@ -606,22 +596,26 @@ static void serialize_metric_data(
  * creation total by default
  */
 rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
+        rd_buf_t *rbuf = NULL;
+        rd_kafka_broker_t *rkb;
         size_t message_size;
-        void *buffer;
+        void *buffer = NULL;
         pb_ostream_t stream;
         bool status;
         char **metric_names;
         const int *metrics_to_encode = rk->rk_telemetry.matched_metrics;
         const size_t metrics_to_encode_count =
             rk->rk_telemetry.matched_metrics_cnt;
+        const rd_kafka_telemetry_metric_info_t *info =
+            RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
         size_t total_metrics_count = metrics_to_encode_count;
         size_t i, metric_idx = 0;
-        rd_buf_t *rbuf;
-        rd_kafka_broker_t *rkb;
         opentelemetry_proto_metrics_v1_MetricsData metrics_data =
             opentelemetry_proto_metrics_v1_MetricsData_init_zero;
+
         opentelemetry_proto_metrics_v1_ResourceMetrics resource_metrics =
             opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
+
         opentelemetry_proto_metrics_v1_Metric **metrics;
         opentelemetry_proto_common_v1_KeyValue *
             *resource_attributes_key_values = NULL;
@@ -632,19 +626,16 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         rd_kafka_telemetry_key_values_repeated_t resource_attributes_repeated;
         rd_kafka_telemetry_resource_attribute_t *resource_attributes_struct =
             NULL;
-        const rd_kafka_telemetry_metric_info_t *info =
-            RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
-        rd_ts_t now_ns       = rd_uclock() * 1000;
-        rd_bool_t first_push = rd_false;
-
+        rd_ts_t now_ns = rd_uclock() * 1000;
         rd_kafka_rdlock(rk);
-        if (rk->rk_telemetry.rk_historic_c.ts_start == 0) {
-                first_push                              = rd_true;
-                rk->rk_telemetry.rk_historic_c.ts_start = now_ns;
-                rk->rk_telemetry.rk_historic_c.ts_last  = now_ns;
+
+        for (i = 0; i < metrics_to_encode_count; i++) {
+                if (info[metrics_to_encode[i]].is_per_broker) {
+                        total_metrics_count += rk->rk_broker_cnt.val - 1;
+                }
         }
 
-        i = 0;
+        rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Serializing metrics");
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                                 &rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt);
@@ -654,22 +645,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 rd_avg_rollover(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);
-
-                if (first_push) {
-                        rkb->rkb_telemetry.rkb_historic_c.connects =
-                            rd_atomic32_get(&rkb->rkb_c.connects);
-                }
-                i++;
         }
-
-        for (i = 0; i < metrics_to_encode_count; i++) {
-                if (is_per_broker_metric(info, metrics_to_encode[i])) {
-                        total_metrics_count +=
-                            rd_atomic32_get(&rk->rk_broker_cnt) - 1;
-                }
-        }
-
-        rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Serializing metrics");
 
         int resource_attributes_count =
             resource_attributes(rk, &resource_attributes_struct);
@@ -735,6 +711,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                      "Total metrics to be encoded count: %ld",
                      total_metrics_count);
 
+
         for (i = 0; i < metrics_to_encode_count; i++) {
 
                 rd_kafka_telemetry_metric_value_calculator_t
@@ -744,8 +721,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                                   [metrics_to_encode[i]]
                             : CONSUMER_METRIC_VALUE_CALCULATORS
                                   [metrics_to_encode[i]];
-
-                if (is_per_broker_metric(info, (int)metrics_to_encode[i])) {
+                if (info[metrics_to_encode[i]].is_per_broker) {
                         rd_kafka_broker_t *rkb;
 
                         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -843,13 +819,14 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         rd_kafka_rdunlock(rk);
 
         return rbuf;
+
 fail:
         free_metrics(metrics, metric_names, data_points,
                      datapoint_attributes_key_values, total_metrics_count);
         free_resource_attributes(resource_attributes_key_values,
                                  resource_attributes_struct,
                                  resource_attributes_count);
-
         rd_kafka_rdunlock(rk);
+
         return NULL;
 }

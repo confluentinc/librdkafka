@@ -122,6 +122,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:RD_KAFKA_OP_SET_TELEMETRY_BROKER",
             [RD_KAFKA_OP_TERMINATE_TELEMETRY] =
                 "REPLY:RD_KAFKA_OP_TERMINATE_TELEMETRY",
+
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -488,15 +489,15 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                            rd_kafka_topic_partition_list_destroy);
                 break;
 
-        case RD_KAFKA_OP_SET_TELEMETRY_BROKER:
-                RD_IF_FREE(rko->rko_u.telemetry_broker.rkb,
-                           rd_kafka_broker_destroy);
-                break;
-
         case RD_KAFKA_OP_METADATA_UPDATE:
                 RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
                 /* It's not needed to free metadata.mdi because they
                    are the in the same memory allocation. */
+                break;
+
+        case RD_KAFKA_OP_SET_TELEMETRY_BROKER:
+                RD_IF_FREE(rko->rko_u.telemetry_broker.rkb,
+                           rd_kafka_broker_destroy);
                 break;
 
         default:

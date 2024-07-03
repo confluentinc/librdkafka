@@ -697,6 +697,7 @@ struct rd_kafka_s {
                         rd_ts_t ts_start; /**< Timestamp from when collection
                                            *   started */
                 } rk_historic_c;
+
         } rk_telemetry;
 
         /* Test mocks */

@@ -105,23 +105,6 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 rk->rk_telemetry.matched_metrics_cnt   = 0;
         }
         rk->rk_telemetry.telemetry_max_bytes = 0;
-        /* TODO: Do we need to clear these? */
-        //        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-        //                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt.ra_v.maxv_reset,
-        //                1);
-        //                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle.ra_v.maxv_reset,
-        //                1);
-        //                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency.ra_v.maxv_reset,
-        //                1); rkb->rkb_telemetry.rkb_historic_c.connects = 0;
-        //                rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt.ra_v.start
-        //                = rd_clock();
-        //                rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle.ra_v.start
-        //                = rd_clock();
-        //                rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency.ra_v.start
-        //                = rd_clock();
-        //        }
-        //        rk->rk_telemetry.rk_historic_c.ts_last = rd_uclock() * 1000;
-        //        rk->rk_telemetry.rk_historic_c.ts_start = rd_uclock() * 1000;
 }
 
 /**

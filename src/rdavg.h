@@ -36,8 +36,6 @@
 
 typedef struct rd_avg_s {
         struct {
-                rd_atomic32_t maxv_reset;
-                int64_t maxv_interval;
                 int64_t maxv;
                 int64_t minv;
                 int64_t avg;
@@ -81,14 +79,8 @@ static RD_UNUSED void rd_avg_add(rd_avg_t *ra, int64_t v) {
                 mtx_unlock(&ra->ra_lock);
                 return;
         }
-        if (rd_atomic32_get(&ra->ra_v.maxv_reset)) {
-                rd_atomic32_set(&ra->ra_v.maxv_reset, 0);
-                ra->ra_v.maxv_interval = 0;
-        }
         if (v > ra->ra_v.maxv)
                 ra->ra_v.maxv = v;
-        if (v > ra->ra_v.maxv_interval)
-                ra->ra_v.maxv_interval = v;
         if (ra->ra_v.minv == 0 || v < ra->ra_v.minv)
                 ra->ra_v.minv = v;
         ra->ra_v.sum += v;

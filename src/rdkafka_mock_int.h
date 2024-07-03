@@ -417,10 +417,6 @@ struct rd_kafka_mock_cluster_s {
         /**< Telemetry push interval ms. Default is 5 min */
         int64_t telemetry_push_interval_ms;
 
-        rd_kafka_resp_err_t
-            push_telemetry_error_code; /**< Error code to return on
-                                        *   telemetry push requests. */
-
         /**< Appends the requests received to mock cluster if set to true,
          *   defaulted to false for less memory usage. */
         rd_bool_t track_requests;

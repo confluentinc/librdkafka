@@ -2581,6 +2581,7 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_bool_t terminating;
         rd_kafka_compression_t compression_type = RD_KAFKA_COMPRESSION_NONE;
         rd_kafkap_bytes_t metrics;
+        rd_kafka_resp_err_t err;
 
         rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
         rd_kafka_buf_read_i32(rkbuf, &SubscriptionId);
@@ -2619,10 +2620,10 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
 
         // ThrottleTime
         rd_kafka_buf_write_i32(resp, 0);
+
         // ErrorCode
-        rd_kafka_buf_write_i16(resp, mcluster->push_telemetry_error_code
-                                         ? mcluster->push_telemetry_error_code
-                                         : RD_KAFKA_RESP_ERR_NO_ERROR);
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+        rd_kafka_buf_write_i16(resp, err);
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 

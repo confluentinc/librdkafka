@@ -242,10 +242,10 @@ static void rd_kafka_broker_features_set(rd_kafka_broker_t *rkb, int features) {
  *          or -1 if the ApiKey is not supported or no matching ApiVersion.
  *          The current feature set is also returned in \p featuresp
  *
- * @note Same as rd_kafka_broker_ApiVersion_supported except for locking.
- * @locks rd_kafka_broker_lock()
- * @locks_acquired none
- * @locality any
+ * @remark Same as rd_kafka_broker_ApiVersion_supported except for locking.
+ *
+ * @locks rd_kafka_broker_lock() if do_lock is rd_false
+ * @locks_acquired rd_kafka_broker_lock() if do_lock is rd_true
  */
 int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,
@@ -988,6 +988,14 @@ static void rd_kafka_broker_timeout_scan(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                             " (average rtt %.3fms)",
                                             (float)(rkb->rkb_avg_rtt.ra_v.avg /
                                                     1000.0f));
+                        else if (rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt
+                                     .ra_v.avg)
+                                rd_snprintf(
+                                    rttinfo, sizeof(rttinfo),
+                                    " (average rtt %.3fms)",
+                                    (float)(rkb->rkb_telemetry.rd_avg_current
+                                                .rkb_avg_rtt.ra_v.avg /
+                                            1000.0f));
                         else
                                 rttinfo[0] = 0;
                         rd_kafka_broker_fail(rkb, LOG_ERR,

@@ -6295,6 +6295,8 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         const int log_decode_errors = LOG_ERR;
         int32_t arraycnt;
         size_t i;
+        rd_kafka_Uuid_t prev_client_instance_id =
+            rk->rk_telemetry.client_instance_id;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* Termination */
@@ -6345,6 +6347,17 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.telemetry_max_bytes);
         rd_kafka_buf_read_bool(rkbuf, &rk->rk_telemetry.delta_temporality);
 
+
+        if (rk->rk_telemetry.subscription_id &&
+            rd_kafka_Uuid_cmp(prev_client_instance_id,
+                              rk->rk_telemetry.client_instance_id)) {
+                rd_kafka_log(
+                    rk, LOG_INFO, "GETSUBSCRIPTIONS",
+                    "Telemetry Client Instance Id changed from %s to %s",
+                    rd_kafka_Uuid_base64str(&prev_client_instance_id),
+                    rd_kafka_Uuid_base64str(
+                        &rk->rk_telemetry.client_instance_id));
+        }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
                      "Parsing:: Push Interval %d",

@@ -112,10 +112,9 @@ calculate_broker_max_rtt(rd_kafka_t *rk,
                          rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t max_rtt;
 
-        max_rtt.int_value =
-            RD_CEIL_INTEGER_DIVISION(rkb_selected->rkb_telemetry.rd_avg_rollover
-                                         .rkb_avg_rtt.ra_v.maxv_interval,
-                                     THREE_ORDERS_MAGNITUDE);
+        max_rtt.int_value = RD_CEIL_INTEGER_DIVISION(
+            rkb_selected->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt.ra_v.maxv,
+            THREE_ORDERS_MAGNITUDE);
         return max_rtt;
 }
 
@@ -153,10 +152,9 @@ calculate_throttle_max(rd_kafka_t *rk,
 
         max_throttle.int_value = 0;
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                max_throttle.int_value =
-                    RD_MAX(max_throttle.int_value,
-                           rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle
-                               .ra_v.maxv_interval);
+                max_throttle.int_value = RD_MAX(
+                    max_throttle.int_value, rkb->rkb_telemetry.rd_avg_rollover
+                                                .rkb_avg_throttle.ra_v.maxv);
         }
         return max_throttle;
 }
@@ -200,7 +198,7 @@ calculate_queue_time_max(rd_kafka_t *rk,
                 max_queue_time.int_value =
                     RD_MAX(max_queue_time.int_value,
                            rkb->rkb_telemetry.rd_avg_rollover
-                               .rkb_avg_outbuf_latency.ra_v.maxv_interval);
+                               .rkb_avg_outbuf_latency.ra_v.maxv);
         }
         max_queue_time.int_value = RD_CEIL_INTEGER_DIVISION(
             max_queue_time.int_value, THREE_ORDERS_MAGNITUDE);
@@ -226,15 +224,6 @@ static void reset_historical_metrics(rd_kafka_t *rk, rd_ts_t now_ns) {
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_telemetry.rkb_historic_c.connects =
                     rd_atomic32_get(&rkb->rkb_c.connects);
-                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt
-                                     .ra_v.maxv_reset,
-                                1);
-                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current
-                                     .rkb_avg_throttle.ra_v.maxv_reset,
-                                1);
-                rd_atomic32_set(&rkb->rkb_telemetry.rd_avg_current
-                                     .rkb_avg_outbuf_latency.ra_v.maxv_reset,
-                                1);
         }
 }
 
@@ -292,7 +281,7 @@ static const char *get_group_instance_id(const rd_kafka_t *rk) {
 }
 
 static const char *get_member_id(const rd_kafka_t *rk) {
-        return rk->rk_cgrp->rkcg_member_id &&
+        return rk->rk_cgrp && rk->rk_cgrp->rkcg_member_id &&
                        rk->rk_cgrp->rkcg_member_id->len > 0
                    ? (const char *)rk->rk_cgrp->rkcg_member_id->str
                    : NULL;

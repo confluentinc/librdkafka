@@ -62,7 +62,6 @@ int main_0009_mock_cluster(int argc, char **argv) {
         /* Consumer */
         test_conf_set(conf, "auto.offset.reset", "earliest");
         c = test_create_consumer(topic, NULL, conf, NULL);
-        rd_kafka_poll(p, 10000);
 
         rkt = test_create_producer_topic(p, topic, NULL);
 

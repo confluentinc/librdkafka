@@ -246,6 +246,7 @@ static void rd_kafka_broker_features_set(rd_kafka_broker_t *rkb, int features) {
  *
  * @locks rd_kafka_broker_lock() if do_lock is rd_false
  * @locks_acquired rd_kafka_broker_lock() if do_lock is rd_true
+ * @locality any
  */
 int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,

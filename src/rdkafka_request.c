@@ -6318,10 +6318,11 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         rd_kafka_buf_read_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
         rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.subscription_id);
 
-        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS", "Parsing:: uuid %s",
-                     rk->rk_telemetry.client_instance_id.base64str);
+        rd_kafka_dbg(
+            rk, TELEMETRY, "GETSUBSCRIPTIONS", "Parsing: client instance id %s",
+            rd_kafka_Uuid_base64str(&rk->rk_telemetry.client_instance_id));
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
-                     "Parsing:: Subscription id %d",
+                     "Parsing: subscription id %" PRId32,
                      rk->rk_telemetry.subscription_id);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
@@ -6353,14 +6354,14 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                               rk->rk_telemetry.client_instance_id)) {
                 rd_kafka_log(
                     rk, LOG_INFO, "GETSUBSCRIPTIONS",
-                    "Telemetry Client Instance Id changed from %s to %s",
+                    "Telemetry client instance id changed from %s to %s",
                     rd_kafka_Uuid_base64str(&prev_client_instance_id),
                     rd_kafka_Uuid_base64str(
                         &rk->rk_telemetry.client_instance_id));
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
-                     "Parsing:: Push Interval %d",
+                     "Parsing: push interval %" PRId32,
                      rk->rk_telemetry.push_interval_ms);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
@@ -6379,8 +6380,8 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
-                     "Parsing:: metrics size %lu, %d",
-                     rk->rk_telemetry.requested_metrics_cnt, arraycnt);
+                     "Parsing: requested metrics count %" PRIusz,
+                     rk->rk_telemetry.requested_metrics_cnt);
 
         rd_kafka_handle_get_telemetry_subscriptions(rk, err);
         return;

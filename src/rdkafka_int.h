@@ -695,7 +695,7 @@ struct rd_kafka_s {
                 struct {
                         rd_ts_t ts_last;  /**< Timestamp of last push */
                         rd_ts_t ts_start; /**< Timestamp from when collection
-                                           *      started */
+                                           *   started */
                 } rk_historic_c;
 
         } rk_telemetry;

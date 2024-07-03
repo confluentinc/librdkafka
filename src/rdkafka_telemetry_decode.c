@@ -66,55 +66,63 @@ static void clear_unit_test_data(void) {
 
 static bool
 decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-        rd_kafka_telemetry_decode_interface_t *interface      = *arg;
-        uint8_t buffer[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE] = {0};
+        rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
+        uint8_t buffer[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE]   = {0};
 
         if (stream->bytes_left > sizeof(buffer) - 1) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(decode_interface, decode_error,
                                   "String too long for buffer");
                 return false;
         }
 
         if (!pb_read(stream, buffer, stream->bytes_left)) {
-                RD_INTERFACE_CALL(interface, error, "Failed to read string");
+                RD_INTERFACE_CALL(decode_interface, decode_error,
+                                  "Failed to read string");
                 return false;
         }
 
-        RD_INTERFACE_CALL(interface, decoded_string, buffer);
+        RD_INTERFACE_CALL(decode_interface, decoded_string, buffer);
         return true;
 }
 
 static bool
 decode_key_value(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-        rd_kafka_telemetry_decode_interface_t *interface = *arg;
+        rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_common_v1_KeyValue key_value =
             opentelemetry_proto_common_v1_KeyValue_init_zero;
         key_value.key.funcs.decode                      = &decode_string;
-        key_value.key.arg                               = interface;
+        key_value.key.arg                               = decode_interface;
         key_value.value.value.string_value.funcs.decode = &decode_string;
-        key_value.value.value.string_value.arg          = interface;
+        key_value.value.value.string_value.arg          = decode_interface;
         if (!pb_decode(stream, opentelemetry_proto_common_v1_KeyValue_fields,
                        &key_value)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(decode_interface, decode_error,
                                   "Failed to decode KeyValue: %s",
                                   PB_GET_ERROR(stream));
                 return false;
         }
+
+        if (key_value.value.which_value ==
+            opentelemetry_proto_common_v1_AnyValue_int_value_tag) {
+                RD_INTERFACE_CALL(decode_interface, decoded_int64,
+                                  key_value.value.value.int_value);
+        }
+
         return true;
 }
 
 static bool decode_number_data_point(pb_istream_t *stream,
                                      const pb_field_t *field,
                                      void **arg) {
-        rd_kafka_telemetry_decode_interface_t *interface = *arg;
+        rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_NumberDataPoint data_point =
             opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
         data_point.attributes.funcs.decode = &decode_key_value;
-        data_point.attributes.arg          = interface;
+        data_point.attributes.arg          = decode_interface;
         if (!pb_decode(stream,
                        opentelemetry_proto_metrics_v1_NumberDataPoint_fields,
                        &data_point)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(decode_interface, decode_error,
                                   "Failed to decode NumberDataPoint: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -126,29 +134,30 @@ static bool decode_number_data_point(pb_istream_t *stream,
                 test_data->metric_value_double = data_point.value.as_double;
                 test_data->metric_time         = data_point.time_unix_nano;
         }
-        RD_INTERFACE_CALL(interface, decoded_number, &data_point);
+        RD_INTERFACE_CALL(decode_interface, decoded_NumberDataPoint,
+                          &data_point);
         return true;
 }
 
 // TODO: add support for other data types
 static bool
 data_msg_callback(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-        rd_kafka_telemetry_decode_interface_t *interface = *arg;
+        rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         if (field->tag == opentelemetry_proto_metrics_v1_Metric_sum_tag) {
                 opentelemetry_proto_metrics_v1_Sum *sum = field->pData;
                 sum->data_points.funcs.decode = &decode_number_data_point;
-                sum->data_points.arg          = interface;
-                if (interface->decoded_type) {
-                        RD_INTERFACE_CALL(interface, decoded_type,
+                sum->data_points.arg          = decode_interface;
+                if (decode_interface->decoded_type) {
+                        RD_INTERFACE_CALL(decode_interface, decoded_type,
                                           RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM);
                 }
         } else if (field->tag ==
                    opentelemetry_proto_metrics_v1_Metric_gauge_tag) {
                 opentelemetry_proto_metrics_v1_Gauge *gauge = field->pData;
                 gauge->data_points.funcs.decode = &decode_number_data_point;
-                gauge->data_points.arg          = interface;
-                if (interface->decoded_type) {
-                        RD_INTERFACE_CALL(interface, decoded_type,
+                gauge->data_points.arg          = decode_interface;
+                if (decode_interface->decoded_type) {
+                        RD_INTERFACE_CALL(decode_interface, decoded_type,
                                           RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE);
                 }
         }
@@ -158,21 +167,19 @@ data_msg_callback(pb_istream_t *stream, const pb_field_t *field, void **arg) {
 
 static bool
 decode_metric(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-        rd_kafka_telemetry_decode_interface_t *interface = *arg;
+        rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_Metric metric =
             opentelemetry_proto_metrics_v1_Metric_init_zero;
         metric.name.funcs.decode        = &decode_string;
-        metric.name.arg                 = interface;
+        metric.name.arg                 = decode_interface;
         metric.description.funcs.decode = &decode_string;
-        metric.description.arg          = interface;
-        metric.unit.funcs.decode        = &decode_string;
-        metric.unit.arg                 = interface;
+        metric.description.arg          = decode_interface;
         metric.cb_data.funcs.decode     = &data_msg_callback;
-        metric.cb_data.arg              = interface;
+        metric.cb_data.arg              = decode_interface;
 
         if (!pb_decode(stream, opentelemetry_proto_metrics_v1_Metric_fields,
                        &metric)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(decode_interface, decode_error,
                                   "Failed to decode Metric: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -184,20 +191,20 @@ decode_metric(pb_istream_t *stream, const pb_field_t *field, void **arg) {
 static bool decode_scope_metrics(pb_istream_t *stream,
                                  const pb_field_t *field,
                                  void **arg) {
-        rd_kafka_telemetry_decode_interface_t *interface = *arg;
+        rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_ScopeMetrics scope_metrics =
             opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
         scope_metrics.scope.name.funcs.decode    = &decode_string;
-        scope_metrics.scope.name.arg             = interface;
+        scope_metrics.scope.name.arg             = decode_interface;
         scope_metrics.scope.version.funcs.decode = &decode_string;
-        scope_metrics.scope.version.arg          = interface;
+        scope_metrics.scope.version.arg          = decode_interface;
         scope_metrics.metrics.funcs.decode       = &decode_metric;
-        scope_metrics.metrics.arg                = interface;
+        scope_metrics.metrics.arg                = decode_interface;
 
         if (!pb_decode(stream,
                        opentelemetry_proto_metrics_v1_ScopeMetrics_fields,
                        &scope_metrics)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(decode_interface, decode_error,
                                   "Failed to decode ScopeMetrics: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -208,17 +215,17 @@ static bool decode_scope_metrics(pb_istream_t *stream,
 static bool decode_resource_metrics(pb_istream_t *stream,
                                     const pb_field_t *field,
                                     void **arg) {
-        rd_kafka_telemetry_decode_interface_t *interface = *arg;
+        rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_ResourceMetrics resource_metrics =
             opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
         resource_metrics.resource.attributes.funcs.decode = &decode_key_value;
-        resource_metrics.resource.attributes.arg          = interface;
+        resource_metrics.resource.attributes.arg          = decode_interface;
         resource_metrics.scope_metrics.funcs.decode = &decode_scope_metrics;
-        resource_metrics.scope_metrics.arg          = interface;
+        resource_metrics.scope_metrics.arg          = decode_interface;
         if (!pb_decode(stream,
                        opentelemetry_proto_metrics_v1_ResourceMetrics_fields,
                        &resource_metrics)) {
-                RD_INTERFACE_CALL(interface, error,
+                RD_INTERFACE_CALL(decode_interface, decode_error,
                                   "Failed to decode ResourceMetrics: %s",
                                   PB_GET_ERROR(stream));
                 return false;
@@ -301,8 +308,6 @@ static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
                 /* Uncompress to outbuf */
                 if (unlikely((r = rd_kafka_snappy_uncompress(inbuf, inlen,
                                                              iov.iov_base)))) {
-                        fprintf(stderr, "r: %d err %s\n", r,
-                                rd_strerror(errno));
                         rd_rkb_dbg(
                             rkb, MSG, "SNAPPY",
                             "Failed to decompress Snappy payload for message "
@@ -366,8 +371,8 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
                 break;
 #endif
         default:
-                fprintf(stderr, "Unknown compression type: %d\n",
-                        compression_type);
+                rd_kafka_log(rkb->rkb_rk, LOG_WARNING, "TELEMETRY",
+                             "Unknown compression type: %d", compression_type);
                 break;
         }
         return r;
@@ -398,7 +403,7 @@ int rd_kafka_telemetry_decode_metrics(
             &stream, opentelemetry_proto_metrics_v1_MetricsData_fields,
             &metricsData);
         if (!status) {
-                RD_INTERFACE_CALL(decode_interface, error,
+                RD_INTERFACE_CALL(decode_interface, decode_error,
                                   "Failed to decode MetricsData: %s",
                                   PB_GET_ERROR(&stream));
         }
@@ -423,7 +428,7 @@ static void unit_test_telemetry_decoded_string(void *opaque,
         unit_test_data.current_field++;
 }
 
-static void unit_test_telemetry_decoded_number(
+static void unit_test_telemetry_decoded_NumberDataPoint(
     void *opaque,
     const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded) {
         unit_test_data.metric_value_int    = decoded->value.as_int;
@@ -466,10 +471,12 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 
         rd_kafka_telemetry_decode_interface_t decode_interface = {
             .decoded_string = unit_test_telemetry_decoded_string,
-            .decoded_number = unit_test_telemetry_decoded_number,
-            .decoded_type   = unit_test_telemetry_decoded_type,
-            .error          = unit_test_telemetry_error,
-            .opaque         = &unit_test_data,
+            .decoded_NumberDataPoint =
+                unit_test_telemetry_decoded_NumberDataPoint,
+            .decoded_int64 = NULL,
+            .decoded_type  = unit_test_telemetry_decoded_type,
+            .decode_error  = unit_test_telemetry_error,
+            .opaque        = &unit_test_data,
         };
 
         TAILQ_INIT(&rk->rk_brokers);

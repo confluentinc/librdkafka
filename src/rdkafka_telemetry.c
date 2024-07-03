@@ -74,7 +74,6 @@ rd_kafka_filter_broker_by_GetTelemetrySubscription(rd_kafka_broker_t *rkb,
  */
 void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                               rd_bool_t clear_control_flow_fields) {
-        rd_kafka_broker_t *rkb;
         if (clear_control_flow_fields) {
                 mtx_lock(&rk->rk_telemetry.lock);
                 if (rk->rk_telemetry.preferred_broker) {
@@ -122,6 +121,8 @@ static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
                      "Setting state to TERMINATED and signalling");
 
         rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATED;
+        rd_kafka_timer_stop(&rk->rk_timers, &rk->rk_telemetry.request_timer,
+                            1 /*lock*/);
         mtx_lock(&rk->rk_telemetry.lock);
         cnd_signal(&rk->rk_telemetry.termination_cnd);
         mtx_unlock(&rk->rk_telemetry.lock);
@@ -370,7 +371,7 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                              rk->rk_telemetry.telemetry_max_bytes);
         }
 
-        rd_kafka_dbg(rk, TELEMETRY, "PUSHSENT",
+        rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                      "Sending PushTelemetryRequest with terminating = %d",
                      terminating);
         rd_kafka_PushTelemetryRequest(
@@ -408,7 +409,7 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                 return;
 
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
-                rd_kafka_dbg(rk, TELEMETRY, "PUSHOK",
+                rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                              "PushTelemetryRequest succeeded");
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_PUSH_SCHEDULED;
                 rd_kafka_timer_start_oneshot(
@@ -416,10 +417,10 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                     rk->rk_telemetry.push_interval_ms * 1000,
                     rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
         } else { /* error */
-                rd_kafka_dbg(rk, TELEMETRY, "PUSHERR",
+                rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                              "PushTelemetryRequest failed: %s",
                              rd_kafka_err2str(err));
-                // Non-retriable errors
+                /* Non-retriable errors */
                 if (err == RD_KAFKA_RESP_ERR_INVALID_REQUEST ||
                     err == RD_KAFKA_RESP_ERR_INVALID_RECORD) {
                         rd_kafka_log(
@@ -477,6 +478,7 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
             !rk->rk_conf.enable_metrics_push) {
                 /* We can change state since we're on the main thread. */
                 rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATED;
+                rd_kafka_telemetry_set_terminated(rk);
                 return;
         }
 

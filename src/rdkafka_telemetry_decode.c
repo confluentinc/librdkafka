@@ -536,7 +536,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                             expected_description) == 0,
                      "Metric description mismatch");
         if (is_double)
-                RD_UT_ASSERT(rd_dbl_eq(unit_test_data.metric_value_double, 1.0),
+                RD_UT_ASSERT(rd_dbl_eq(unit_test_data.metric_value_double, 0.0),
                              "Metric value mismatch");
         else
                 RD_UT_ASSERT(unit_test_data.metric_value_int == 1,

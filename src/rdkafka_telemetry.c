@@ -476,8 +476,6 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
          * send any telemetry. */
         if (thrd_is_current(rk->rk_thread) ||
             !rk->rk_conf.enable_metrics_push) {
-                /* We can change state since we're on the main thread. */
-                rk->rk_telemetry.state = RD_KAFKA_TELEMETRY_TERMINATED;
                 rd_kafka_telemetry_set_terminated(rk);
                 return;
         }

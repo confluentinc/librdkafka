@@ -497,7 +497,7 @@ static void free_resource_attributes(
         rd_free(resource_attributes_key_values);
 }
 
-static void serializeMetricData(
+static void serialize_Metric(
     rd_kafka_t *rk,
     rd_kafka_broker_t *rkb,
     const rd_kafka_telemetry_metric_info_t *info,
@@ -741,7 +741,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                                     1,
                                     sizeof(
                                         opentelemetry_proto_metrics_v1_NumberDataPoint));
-                                serializeMetricData(
+                                serialize_Metric(
                                     rk, rkb, &info[metrics_to_encode[i]],
                                     &metrics[metric_idx],
                                     &data_points[metric_idx],
@@ -759,12 +759,11 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 data_points[metric_idx] = rd_calloc(
                     1, sizeof(opentelemetry_proto_metrics_v1_NumberDataPoint));
 
-                serializeMetricData(
-                    rk, NULL, &info[metrics_to_encode[i]], &metrics[metric_idx],
-                    &data_points[metric_idx],
-                    &datapoint_attributes_key_values[metric_idx],
-                    metric_value_calculator, &metric_names[metric_idx], false,
-                    now_ns);
+                serialize_Metric(rk, NULL, &info[metrics_to_encode[i]],
+                                 &metrics[metric_idx], &data_points[metric_idx],
+                                 &datapoint_attributes_key_values[metric_idx],
+                                 metric_value_calculator,
+                                 &metric_names[metric_idx], false, now_ns);
                 metric_idx++;
         }
 

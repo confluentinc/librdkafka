@@ -468,6 +468,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                       rk->rk_telemetry.matched_metrics_cnt);
         rk->rk_telemetry.matched_metrics[0] = metric_name;
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
+        clear_unit_test_data();
 
         rd_kafka_telemetry_decode_interface_t decode_interface = {
             .decoded_string = unit_test_telemetry_decoded_string,
@@ -481,38 +482,22 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 
         rk->rk_broker_cnt.val = 1;
         rk->rk_telemetry.rk_historic_c.ts_start =
-            rd_uclock() * 1000 - 1000 * 1000 * 1000;
+            (rd_uclock() - 1000 * 1000) * 1000;
         rk->rk_telemetry.rk_historic_c.ts_last =
-            rd_uclock() * 1000 - 1000 * 1000 * 1000;
-        rd_kafka_broker_t rkb;
-        rd_kafka_broker_keep(&rkb);
-        rkb.rkb_nodeid                            = 0;
-        rkb.rkb_c.connects.val                    = 1;
-        rkb.rkb_telemetry.rkb_historic_c.connects = 0;
-        rd_avg_init(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_rtt, RD_AVG_GAUGE,
-                    0, 500 * 1000, 2, rd_true);
-        rd_avg_init(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
-        rd_avg_init(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_throttle,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
-        rd_avg_init(&rkb.rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
-        rd_avg_init(&rkb.rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
-        rd_avg_init(&rkb.rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
-        TAILQ_INSERT_HEAD(&rk->rk_brokers, &rkb, rkb_link);
+            (rd_uclock() - 1000 * 1000) * 1000;
+        rd_kafka_broker_t *rkb = rd_calloc(1, sizeof(*rkb));
+        // rd_kafka_broker_keep(rkb);
+        rkb->rkb_c.connects.val = 1;
+        TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
+        rd_buf_t *rbuf              = rd_kafka_telemetry_encode_metrics(rk);
+        void *metrics_payload       = rbuf->rbuf_wpos->seg_p;
+        size_t metrics_payload_size = rbuf->rbuf_wpos->seg_of;
+        RD_UT_SAY("metrics_payload_size: %zu", metrics_payload_size);
 
-        clear_unit_test_data();
-
-        rd_buf_t *metrics_payload = rd_kafka_telemetry_encode_metrics(rk);
-        RD_UT_SAY("metrics_payload_size: %zu", metrics_payload->rbuf_len);
-
-        RD_UT_ASSERT(metrics_payload->rbuf_len != 0, "Metrics payload zero");
+        RD_UT_ASSERT(metrics_payload_size != 0, "Metrics payload zero");
 
         bool decode_status = rd_kafka_telemetry_decode_metrics(
-            &decode_interface, metrics_payload->rbuf_wpos->seg_p,
-            metrics_payload->rbuf_len);
+            &decode_interface, metrics_payload, metrics_payload_size);
 
         RD_UT_ASSERT(decode_status == 1, "Decoding failed");
         RD_UT_ASSERT(unit_test_data.type == expected_type,
@@ -531,12 +516,9 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                              "Metric value mismatch");
         RD_UT_ASSERT(unit_test_data.metric_time != 0, "Metric time mismatch");
 
-        rd_avg_destroy(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_rtt);
-        rd_avg_destroy(
-            &rkb.rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
-        rd_avg_destroy(&rkb.rkb_telemetry.rd_avg_current.rkb_avg_throttle);
         rd_free(rk->rk_telemetry.matched_metrics);
-        rd_buf_destroy_free(metrics_payload);
+        rd_buf_destroy_free(rbuf);
+        rd_free(rkb);
         rd_free(rk);
         RD_UT_PASS();
 }

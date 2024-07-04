@@ -444,7 +444,8 @@ unit_test_telemetry_decoded_type(void *opaque,
         unit_test_data.current_field++;
 }
 
-static void unit_test_telemetry_error(void *opaque, const char *error, ...) {
+static void
+unit_test_telemetry_decode_error(void *opaque, const char *error, ...) {
         char buffer[1024];
         va_list ap;
         va_start(ap, error);
@@ -466,6 +467,10 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
             rd_malloc(sizeof(rd_kafka_telemetry_producer_metric_name_t) *
                       rk->rk_telemetry.matched_metrics_cnt);
         rk->rk_telemetry.matched_metrics[0] = metric_name;
+        rk->rk_telemetry.rk_historic_c.ts_start =
+            (rd_uclock() - 1000 * 1000) * 1000;
+        rk->rk_telemetry.rk_historic_c.ts_last =
+            (rd_uclock() - 1000 * 1000) * 1000;
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         clear_unit_test_data();
 
@@ -473,16 +478,27 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
             .decoded_string = unit_test_telemetry_decoded_string,
             .decoded_NumberDataPoint =
                 unit_test_telemetry_decoded_NumberDataPoint,
-            .decoded_int64 = NULL,
-            .decoded_type  = unit_test_telemetry_decoded_type,
-            .decode_error  = unit_test_telemetry_error,
-            .opaque        = &unit_test_data,
+            .decoded_type = unit_test_telemetry_decoded_type,
+            .decode_error = unit_test_telemetry_decode_error,
+            .opaque       = &unit_test_data,
         };
 
         TAILQ_INIT(&rk->rk_brokers);
 
         rd_kafka_broker_t *rkb  = rd_calloc(1, sizeof(*rkb));
         rkb->rkb_c.connects.val = 1;
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
         rd_buf_t *rbuf              = rd_kafka_telemetry_encode_metrics(rk);
         void *metrics_payload       = rbuf->rbuf_wpos->seg_p;
@@ -503,8 +519,9 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                             expected_description) == 0,
                      "Metric description mismatch");
         if (is_double)
-                RD_UT_ASSERT(rd_dbl_eq(unit_test_data.metric_value_double, 0.0),
-                             "Metric value mismatch");
+                RD_UT_ASSERT(
+                    rd_dbl_eq0(unit_test_data.metric_value_double, 1.0, 0.01),
+                    "Metric value mismatch");
         else
                 RD_UT_ASSERT(unit_test_data.metric_value_int == 1,
                              "Metric value mismatch");
@@ -512,7 +529,16 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 
         rd_free(rk->rk_telemetry.matched_metrics);
         rd_buf_destroy_free(rbuf);
+        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
+        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);
+        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
+        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle);
         rd_free(rkb);
+        rwlock_destroy(&rk->rk_lock);
         rd_free(rk);
         RD_UT_PASS();
 }

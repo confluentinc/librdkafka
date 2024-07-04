@@ -263,7 +263,7 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
                      "Handled GetTelemetrySubscriptions, scheduling FSM after "
                      "%" PRId64
-                     " microseconds, state = %s, err = %s, metrics = %" PRIdsz,
+                     " microseconds, state = %s, err = %s, metrics = %" PRIusz,
                      next_scheduled,
                      rd_kafka_telemetry_state2str(rk->rk_telemetry.state),
                      rd_kafka_err2str(err),

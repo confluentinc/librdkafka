@@ -504,7 +504,7 @@ static void serialize_Metric(
     opentelemetry_proto_metrics_v1_Metric **metric,
     opentelemetry_proto_metrics_v1_NumberDataPoint **data_point,
     opentelemetry_proto_common_v1_KeyValue *data_point_attribute,
-    rd_kafka_telemetry_metric_value_calculator_t metricValueCalculator,
+    rd_kafka_telemetry_metric_value_calculator_t metric_value_calculator,
     char **metric_name,
     bool is_per_broker,
     rd_ts_t now_ns) {
@@ -515,12 +515,12 @@ static void serialize_Metric(
                 (*data_point)->which_value =
                     opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag;
                 (*data_point)->value.as_int =
-                    metricValueCalculator(rk, rkb, now_ns).int_value;
+                    metric_value_calculator(rk, rkb, now_ns).int_value;
         } else {
                 (*data_point)->which_value =
                     opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag;
                 (*data_point)->value.as_double =
-                    metricValueCalculator(rk, rkb, now_ns).double_value;
+                    metric_value_calculator(rk, rkb, now_ns).double_value;
         }
 
 
@@ -692,19 +692,19 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                     &resource_attributes_repeated;
         }
 
-        opentelemetry_proto_metrics_v1_ScopeMetrics scopeMetrics =
+        opentelemetry_proto_metrics_v1_ScopeMetrics scope_metrics =
             opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
 
         opentelemetry_proto_common_v1_InstrumentationScope
-            instrumentationScope =
+            instrumentation_scope =
                 opentelemetry_proto_common_v1_InstrumentationScope_init_zero;
-        instrumentationScope.name.funcs.encode    = &encode_string;
-        instrumentationScope.name.arg             = (void *)rd_kafka_name(rk);
-        instrumentationScope.version.funcs.encode = &encode_string;
-        instrumentationScope.version.arg = (void *)rd_kafka_version_str();
+        instrumentation_scope.name.funcs.encode    = &encode_string;
+        instrumentation_scope.name.arg             = (void *)rd_kafka_name(rk);
+        instrumentation_scope.version.funcs.encode = &encode_string;
+        instrumentation_scope.version.arg = (void *)rd_kafka_version_str();
 
-        scopeMetrics.has_scope = true;
-        scopeMetrics.scope     = instrumentationScope;
+        scope_metrics.has_scope = true;
+        scope_metrics.scope     = instrumentation_scope;
 
         metrics = rd_malloc(sizeof(opentelemetry_proto_metrics_v1_Metric *) *
                             total_metrics_count);
@@ -772,13 +772,13 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 metrics_repeated.metrics = metrics;
                 metrics_repeated.count   = total_metrics_count;
 
-                scopeMetrics.metrics.funcs.encode = &encode_metric;
-                scopeMetrics.metrics.arg          = &metrics_repeated;
+                scope_metrics.metrics.funcs.encode = &encode_metric;
+                scope_metrics.metrics.arg          = &metrics_repeated;
 
 
                 resource_metrics.scope_metrics.funcs.encode =
                     &encode_scope_metrics;
-                resource_metrics.scope_metrics.arg = &scopeMetrics;
+                resource_metrics.scope_metrics.arg = &scope_metrics;
 
                 metrics_data.resource_metrics.funcs.encode =
                     &encode_resource_metrics;

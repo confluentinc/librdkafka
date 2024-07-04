@@ -6322,7 +6322,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
             rk, TELEMETRY, "GETSUBSCRIPTIONS", "Parsing: client instance id %s",
             rd_kafka_Uuid_base64str(&rk->rk_telemetry.client_instance_id));
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
-                     "Parsing: subscription id %d",
+                     "Parsing: subscription id %" PRId32,
                      rk->rk_telemetry.subscription_id);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);

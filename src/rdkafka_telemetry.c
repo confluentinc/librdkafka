@@ -420,7 +420,7 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
                 rd_kafka_dbg(rk, TELEMETRY, "PUSH",
                              "PushTelemetryRequest failed: %s",
                              rd_kafka_err2str(err));
-                // Non-retriable errors
+                /* Non-retriable errors */
                 if (err == RD_KAFKA_RESP_ERR_INVALID_REQUEST ||
                     err == RD_KAFKA_RESP_ERR_INVALID_RECORD) {
                         rd_kafka_log(

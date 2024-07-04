@@ -2707,7 +2707,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         memcpy(mcluster->api_handlers, rd_kafka_mock_api_handlers,
                sizeof(mcluster->api_handlers));
 
-        rd_list_init(&mcluster->request_list, 10, rd_kafka_mock_request_free);
+        rd_list_init(&mcluster->request_list, 0, rd_kafka_mock_request_free);
 
         /* Use an op queue for controlling the cluster in
          * a thread-safe manner without locking. */

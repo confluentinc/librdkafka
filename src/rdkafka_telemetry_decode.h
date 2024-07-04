@@ -44,10 +44,10 @@
 
 typedef struct rd_kafka_telemetry_decode_interface_s {
         void (*decoded_string)(void *opaque, const uint8_t *decoded);
-        void (*decoded_int64)(void *opaque, const int64_t decoded);
         void (*decoded_NumberDataPoint)(
             void *opaque,
             const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded);
+        void (*decoded_int64)(void *opaque, int64_t decoded);
         void (*decoded_type)(void *opaque,
                              rd_kafka_telemetry_metric_type_t type);
         void (*decode_error)(void *opaque, const char *error, ...);
@@ -62,7 +62,7 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
     void **uncompressed_payload,
     size_t *uncompressed_payload_size);
 int rd_kafka_telemetry_decode_metrics(
-    rd_kafka_telemetry_decode_interface_t *interface,
+    rd_kafka_telemetry_decode_interface_t *decode_interface,
     void *buffer,
     size_t size);
 

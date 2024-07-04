@@ -83,7 +83,7 @@ calculate_connection_creation_rate(rd_kafka_t *rk,
                     rkb->rkb_telemetry.rkb_historic_c.connects;
         }
         double seconds = (now_ns - ts_last) / 1e9;
-        if (seconds > 1)
+        if (seconds > 1.0)
                 total.double_value /= seconds;
         return total;
 }
@@ -180,6 +180,7 @@ calculate_queue_time_avg(rd_kafka_t *rk,
                         count += rkb_avg_outbuf_latency_rollover->ra_v.cnt;
                 }
         }
+
         avg_queue_time.double_value = avg / THREE_ORDERS_MAGNITUDE;
         return avg_queue_time;
 }
@@ -639,16 +640,15 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         rd_kafka_dbg(rk, TELEMETRY, "PUSH", "Serializing metrics");
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt);
-                rd_avg_destroy(
-                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
-                rd_avg_destroy(
-                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle);
-
                 rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                                 &rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt);
+                rd_avg_destroy(
+                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
                 rd_avg_rollover(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
+                rd_avg_destroy(
+                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle);
                 rd_avg_rollover(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);

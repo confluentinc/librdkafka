@@ -278,6 +278,11 @@ struct rd_kafka_conf_s {
                                       char *errstr,
                                       size_t errstr_size,
                                       void *opaque);
+                int (*ctx_init_cb)(rd_kafka_t *rk,
+                                   void *ssl_ctx,
+                                   char *errstr,
+                                   size_t errstr_size,
+                                   void *opaque);
         } ssl;
 
         struct {

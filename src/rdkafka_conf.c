@@ -893,6 +893,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
      _RK(ssl.cert_verify_cb),
      "Callback to verify the broker certificate chain.", _UNSUPPORTED_SSL},
+    {_RK_GLOBAL, "ssl.context.init_cb", _RK_C_PTR,
+     _RK(ssl.ctx_init_cb),
+     "Callback to initialize the SSL context. Supersedes all other SSL properties "
+     "that would normally be used to initialize the SSL context.", _UNSUPPORTED_SSL},
 
     /* Point user in the right direction if they try to apply
      * Java client SSL / JAAS properties. */
@@ -2877,6 +2881,23 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(
 #else
         rd_kafka_anyconf_set_internal(
             _RK_GLOBAL, conf, "ssl.certificate.verify_cb", ssl_cert_verify_cb);
+        return RD_KAFKA_CONF_OK;
+#endif
+}
+
+
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_ctx_init_cb(
+    rd_kafka_conf_t *conf,
+    int (*ssl_ctx_init_cb)(rd_kafka_t *rk,
+                           void *ssl_ctx,
+                           char *errstr, size_t errstr_size,
+                           void *opaque)) {
+#if !WITH_SSL
+        return RD_KAFKA_CONF_INVALID;
+#else
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                                      "ssl.context.init_cb",
+                                      ssl_ctx_init_cb);
         return RD_KAFKA_CONF_OK;
 #endif
 }

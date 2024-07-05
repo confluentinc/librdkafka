@@ -1120,6 +1120,31 @@ class RD_EXPORT SslCertificateVerifyCb {
 
 
 /**
+ * @brief SSL context initialization class.
+ *
+ * @remark Class instance must outlive the RdKafka client instance.
+ */
+class RD_EXPORT SslContextInitializationCb {
+public:
+  /**
+   * @brief SSL context initialization callback.
+   *
+   * The initialization callback is triggered from internal librdkafka threads
+   * when connecting to a broker. It can be used to initialize the SSL context
+   * with greater control than what the configuration parameters allow.
+   *
+   * The callback must return true if initialization succeeds, or false fails
+   * and write a human-readable error message to \p errstr.
+   *
+   * @warning This callback will be called from internal librdkafka threads.
+   */
+  virtual bool ssl_ctx_init_cb(void *ssl_ctx, std::string &errstr) = 0;
+
+  virtual ~SslContextInitializationCb() {}
+};
+
+
+/**
  * @brief \b Portability: SocketCb callback class
  *
  */
@@ -1298,6 +1323,14 @@ class RD_EXPORT Conf {
                                SslCertificateVerifyCb *ssl_cert_verify_cb,
                                std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"ssl_ctx_init_cb\".
+   *  @returns CONF_OK on success or CONF_INVALID if SSL is
+   *           not supported in this build.
+   */
+  virtual Conf::ConfResult set(const std::string &name,
+                               SslContextInitializationCb *ssl_ctx_init_cb,
+                               std::string &errstr) = 0;
+
   /**
    * @brief Set certificate/key \p cert_type from the \p cert_enc encoded
    *        memory at \p buffer of \p size bytes.
@@ -1409,6 +1442,10 @@ class RD_EXPORT Conf {
   /** @brief Use with \p name = \c \"ssl_cert_verify_cb\" */
   virtual Conf::ConfResult get(
       SslCertificateVerifyCb *&ssl_cert_verify_cb) const = 0;
+
+  /** @brief Use with \p name = \c \"ssl_ctx_init_cb\" */
+  virtual Conf::ConfResult get(
+      SslContextInitializationCb *&ssl_ctx_init_cb) const = 0;
 
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */

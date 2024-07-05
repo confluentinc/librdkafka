@@ -127,12 +127,6 @@ static bool decode_number_data_point(pb_istream_t *stream,
                 return false;
         }
 
-        if (arg != NULL && *arg != NULL) {
-                struct metric_unit_test_data *test_data = *arg;
-                test_data->metric_value_int    = data_point.value.as_int;
-                test_data->metric_value_double = data_point.value.as_double;
-                test_data->metric_time         = data_point.time_unix_nano;
-        }
         RD_INTERFACE_CALL(decode_interface, decoded_NumberDataPoint,
                           &data_point);
         RD_UT_SAY("Decoding NumberDataPoint done");

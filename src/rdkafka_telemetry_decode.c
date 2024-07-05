@@ -61,6 +61,7 @@ static void clear_unit_test_data(void) {
 
 static bool
 decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+        RD_UT_SAY("Decoding string");
         rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         uint8_t buffer[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE]   = {0};
 
@@ -77,11 +78,13 @@ decode_string(pb_istream_t *stream, const pb_field_t *field, void **arg) {
         }
 
         RD_INTERFACE_CALL(decode_interface, decoded_string, buffer);
+        RD_UT_SAY("Decoding string done");
         return true;
 }
 
 static bool
 decode_key_value(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+        RD_UT_SAY("Decoding resource metrics");
         rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_common_v1_KeyValue key_value =
             opentelemetry_proto_common_v1_KeyValue_init_zero;
@@ -102,13 +105,14 @@ decode_key_value(pb_istream_t *stream, const pb_field_t *field, void **arg) {
                 RD_INTERFACE_CALL(decode_interface, decoded_int64,
                                   key_value.value.value.int_value);
         }
-
+        RD_UT_SAY("Decoding key value done");
         return true;
 }
 
 static bool decode_number_data_point(pb_istream_t *stream,
                                      const pb_field_t *field,
                                      void **arg) {
+        RD_UT_SAY("Decoding NumberDataPoint");
         rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_NumberDataPoint data_point =
             opentelemetry_proto_metrics_v1_NumberDataPoint_init_zero;
@@ -131,12 +135,14 @@ static bool decode_number_data_point(pb_istream_t *stream,
         }
         RD_INTERFACE_CALL(decode_interface, decoded_NumberDataPoint,
                           &data_point);
+        RD_UT_SAY("Decoding NumberDataPoint done");
         return true;
 }
 
 // TODO: add support for other data types
 static bool
 data_msg_callback(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+        RD_UT_SAY("Decoding data msg");
         rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         if (field->tag == opentelemetry_proto_metrics_v1_Metric_sum_tag) {
                 opentelemetry_proto_metrics_v1_Sum *sum = field->pData;
@@ -156,12 +162,14 @@ data_msg_callback(pb_istream_t *stream, const pb_field_t *field, void **arg) {
                                           RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE);
                 }
         }
+        RD_UT_SAY("Decoding data msg done");
         return true;
 }
 
 
 static bool
 decode_metric(pb_istream_t *stream, const pb_field_t *field, void **arg) {
+        RD_UT_SAY("Decoding metric");
         rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_Metric metric =
             opentelemetry_proto_metrics_v1_Metric_init_zero;
@@ -179,13 +187,14 @@ decode_metric(pb_istream_t *stream, const pb_field_t *field, void **arg) {
                                   PB_GET_ERROR(stream));
                 return false;
         }
-
+        RD_UT_SAY("Decoding metric done");
         return true;
 }
 
 static bool decode_scope_metrics(pb_istream_t *stream,
                                  const pb_field_t *field,
                                  void **arg) {
+        RD_UT_SAY("Decoding scope metrics");
         rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_ScopeMetrics scope_metrics =
             opentelemetry_proto_metrics_v1_ScopeMetrics_init_zero;
@@ -204,12 +213,15 @@ static bool decode_scope_metrics(pb_istream_t *stream,
                                   PB_GET_ERROR(stream));
                 return false;
         }
+        RD_UT_SAY("Decoding scope metrics done");
         return true;
 }
 
 static bool decode_resource_metrics(pb_istream_t *stream,
                                     const pb_field_t *field,
                                     void **arg) {
+        RD_UT_SAY("Decoding resource metrics");
+
         rd_kafka_telemetry_decode_interface_t *decode_interface = *arg;
         opentelemetry_proto_metrics_v1_ResourceMetrics resource_metrics =
             opentelemetry_proto_metrics_v1_ResourceMetrics_init_zero;
@@ -225,6 +237,7 @@ static bool decode_resource_metrics(pb_istream_t *stream,
                                   PB_GET_ERROR(stream));
                 return false;
         }
+        RD_UT_SAY("Decoding resource metrics done");
         return true;
 }
 
@@ -387,6 +400,7 @@ int rd_kafka_telemetry_decode_metrics(
     rd_kafka_telemetry_decode_interface_t *decode_interface,
     void *buffer,
     size_t size) {
+        RD_UT_SAY("Decoding metrics");
         opentelemetry_proto_metrics_v1_MetricsData metricsData =
             opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 
@@ -402,11 +416,13 @@ int rd_kafka_telemetry_decode_metrics(
                                   "Failed to decode MetricsData: %s",
                                   PB_GET_ERROR(&stream));
         }
+        RD_UT_SAY("Decoding metrics done");
         return status;
 }
 
 static void unit_test_telemetry_decoded_string(void *opaque,
                                                const uint8_t *decoded) {
+        RD_UT_SAY("Decoded string: %s", decoded);
         switch (unit_test_data.current_field) {
         case 2:
                 rd_snprintf(unit_test_data.metric_name,
@@ -426,15 +442,23 @@ static void unit_test_telemetry_decoded_string(void *opaque,
 static void unit_test_telemetry_decoded_NumberDataPoint(
     void *opaque,
     const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded) {
+        RD_UT_SAY("Decoded NumberDataPoint");
         unit_test_data.metric_value_int    = decoded->value.as_int;
         unit_test_data.metric_value_double = decoded->value.as_double;
         unit_test_data.metric_time         = decoded->time_unix_nano;
         unit_test_data.current_field++;
 }
 
+static void unit_test_telemetry_decoded_int64(
+    void *opaque,
+    const int64_t decoded) {
+        RD_UT_SAY("Decoded int64: %lld", decoded);
+}
+
 static void
 unit_test_telemetry_decoded_type(void *opaque,
                                  rd_kafka_telemetry_metric_type_t type) {
+        RD_UT_SAY("Decoded type: %d", type);
         unit_test_data.type = type;
         unit_test_data.current_field++;
 }
@@ -474,6 +498,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
             .decoded_string = unit_test_telemetry_decoded_string,
             .decoded_NumberDataPoint =
                 unit_test_telemetry_decoded_NumberDataPoint,
+                .decoded_int64 = unit_test_telemetry_decoded_int64,
             .decoded_type = unit_test_telemetry_decoded_type,
             .decode_error = unit_test_telemetry_decode_error,
             .opaque       = &unit_test_data,
@@ -505,6 +530,8 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
 
         bool decode_status = rd_kafka_telemetry_decode_metrics(
             &decode_interface, metrics_payload, metrics_payload_size);
+
+        RD_UT_SAY("done decoding");
 
         RD_UT_ASSERT(decode_status == 1, "Decoding failed");
         RD_UT_ASSERT(unit_test_data.type == expected_type,

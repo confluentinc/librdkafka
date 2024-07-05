@@ -26,12 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rd.h"
-#include "rdkafka_int.h"
 #include "rdkafka_telemetry_encode.h"
-#include "nanopb/pb.h"
 #include "nanopb/pb_encode.h"
-#include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
 
 #define THREE_ORDERS_MAGNITUDE 1000

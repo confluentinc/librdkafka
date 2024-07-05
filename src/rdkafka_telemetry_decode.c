@@ -26,13 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rd.h"
 #include "rdkafka_telemetry_decode.h"
-#include "nanopb/pb.h"
 #include "nanopb/pb_decode.h"
-#include "opentelemetry/metrics.pb.h"
-#include "rdkafka_int.h"
-#include "rdkafka_telemetry_encode.h"
 #include "rdunittest.h"
 #include "rdkafka_lz4.h"
 #include "rdgz.h"
@@ -233,7 +228,7 @@ static bool decode_resource_metrics(pb_istream_t *stream,
         return true;
 }
 
-#ifdef WITH_SNAPPY
+#if WITH_SNAPPY
 
 static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
                                       const char *compressed,

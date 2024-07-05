@@ -29,18 +29,8 @@
 #ifndef _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H
 #define _RDKAFKA_RDKAFKA_TELEMETRY_DECODE_H
 #include "rd.h"
-#include "rdkafka_telemetry_decode.h"
-#include "nanopb/pb.h"
-#include "nanopb/pb_encode.h"
-#include "nanopb/pb_decode.h"
 #include "opentelemetry/metrics.pb.h"
-#include "rdkafka_int.h"
 #include "rdkafka_telemetry_encode.h"
-#include "rdunittest.h"
-#include "rdkafka_lz4.h"
-#include "rdgz.h"
-#include "rdkafka_zstd.h"
-#include "snappy.h"
 
 typedef struct rd_kafka_telemetry_decode_interface_s {
         void (*decoded_string)(void *opaque, const uint8_t *decoded);

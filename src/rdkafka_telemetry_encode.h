@@ -29,6 +29,7 @@
 #ifndef _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H
 #define _RDKAFKA_RDKAFKA_TELEMETRY_ENCODE_H
 
+#include "rdkafka_int.h"
 #include "rdtypes.h"
 
 #define RD_KAFKA_TELEMETRY_METRIC_PREFIX            "org.apache.kafka."

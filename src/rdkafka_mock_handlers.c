@@ -2618,6 +2618,7 @@ static void rd_kafka_mock_handle_PushTelemetry_decode_error(void *opaque,
         va_start(ap, error);
         rd_rkb_log(rkb, LOG_ERR, "MOCKTELEMETRY", error, ap);
         va_end(ap);
+        rd_assert(!*"Failure while decoding telemetry data");
 }
 
 void rd_kafka_mock_handle_PushTelemetry_payload(rd_kafka_broker_t *rkb,

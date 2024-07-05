@@ -442,7 +442,9 @@ static void unit_test_telemetry_decoded_string(void *opaque,
 static void unit_test_telemetry_decoded_NumberDataPoint(
     void *opaque,
     const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded) {
-        RD_UT_SAY("Decoded NumberDataPoint");
+        RD_UT_SAY("Decoded NumberDataPoint with value: %lld", decoded->value.as_int);
+        RD_UT_SAY("Decoded NumberDataPoint with value: %f", decoded->value.as_double);
+        RD_UT_SAY("Decoded NumberDataPoint with time: %lld", decoded->time_unix_nano);
         unit_test_data.metric_value_int    = decoded->value.as_int;
         unit_test_data.metric_value_double = decoded->value.as_double;
         unit_test_data.metric_time         = decoded->time_unix_nano;

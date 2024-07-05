@@ -6,6 +6,7 @@
 # Requires clang-format version 10  (apt install clang-format-10).
 #
 
+export CLANG_FORMAT=/usr/local/bin/clang-format-10
 
 CLANG_FORMAT=${CLANG_FORMAT:-clang-format}
 

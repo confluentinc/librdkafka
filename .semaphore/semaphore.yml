@@ -54,6 +54,7 @@ blocks:
         - name: 'Build'
           commands:
             - ./configure --install-deps --source-deps-only --enable-static --disable-lz4-ext --enable-strip
+            - TESTS=0000 RD_UT_TEST=telemetry TEST_DEBUG=all make -C tests run_local_quick
             - make -j all examples check
             - examples/rdkafka_example -X builtin.features
             - otool -L src/librdkafka.dylib

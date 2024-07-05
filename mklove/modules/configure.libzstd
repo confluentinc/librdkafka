@@ -53,11 +53,6 @@ function install_source {
             $checksum || return 1
     fi
 
-    local ldlibs=""
-    if [[ $MKL_DISTRO == centos ]]; then
-        ldlibs="-lrt"
-    fi
-
-    time LDLIBS="$ldlibs" make -j DESTDIR="${destdir}" prefix=/usr install
+    time make -j DESTDIR="${destdir}" prefix=/usr install
     return $?
 }

@@ -12,17 +12,18 @@ if [[ -z $base_url ]]; then
 fi
 
 cat >/etc/yum.repos.d/Confluent.repo <<EOF
-[Confluent.dist]
-name=Confluent repository (dist)
-baseurl=$base_url/rpm/${cpver}/7
-gpgcheck=0
-gpgkey=$base_url/rpm/${cpver}/archive.key
-enabled=1
 [Confluent]
 name=Confluent repository
 baseurl=$base_url/rpm/${cpver}
 gpgcheck=1
 gpgkey=$base_url/rpm/${cpver}/archive.key
+enabled=1
+
+[Confluent-Clients]
+name=Confluent Clients repository
+baseurl=$base_url/clients/rpm/centos/\$releasever/\$basearch
+gpgcheck=1
+gpgkey=$base_url/clients/rpm/archive.key
 enabled=1
 EOF
 

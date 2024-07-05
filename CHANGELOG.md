@@ -7,7 +7,15 @@ librdkafka v2.5.0 is a feature release.
 * Fix segfault when using long client id because of erased segment when using flexver. (#4689)
 * Fix for an idempotent producer error, with a message batch not reconstructed
   identically when retried (#4750)
+* Removed support for CentOS 6 and CentOS 7 (#4775).
 
+## Upgrade considerations
+
+ * CentOS 6 and CentOS 7 support was removed as they reached EOL
+   and security patches aren't publicly available anymore.
+   ABI compatibility from CentOS 8 on is maintained through pypa/manylinux,
+   AlmaLinux based.
+   See also [Confluent supported OSs page](https://docs.confluent.io/platform/current/installation/versions-interoperability.html#operating-systems) (#4775).
 
 ## Enhancements
 

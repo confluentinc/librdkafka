@@ -17,11 +17,16 @@ fi
 thisdir="$( cd "$(dirname "$0")" ; pwd -P )"
 
 echo "#### Verifying RPM packages ####"
-docker run -v $thisdir:/v centos:7 /v/verify-rpm.sh $cpver $base_url
+docker run -v $thisdir:/v rockylinux:8 /v/verify-rpm.sh $cpver $base_url
+docker run -v $thisdir:/v rockylinux:9 /v/verify-rpm.sh $cpver $base_url
 rpm_status=$?
 
 echo "#### Verifying Debian packages ####"
-docker run -v $thisdir:/v ubuntu:16.04 /v/verify-deb.sh $cpver $base_url
+docker run -v $thisdir:/v debian:10 /v/verify-deb.sh $cpver $base_url
+docker run -v $thisdir:/v debian:11 /v/verify-deb.sh $cpver $base_url
+docker run -v $thisdir:/v debian:12 /v/verify-deb.sh $cpver $base_url
+docker run -v $thisdir:/v ubuntu:20.04 /v/verify-deb.sh $cpver $base_url
+docker run -v $thisdir:/v ubuntu:22.04 /v/verify-deb.sh $cpver $base_url
 deb_status=$?
 
 

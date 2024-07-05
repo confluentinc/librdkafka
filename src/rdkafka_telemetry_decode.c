@@ -452,7 +452,7 @@ unit_test_telemetry_decode_error(void *opaque, const char *error, ...) {
         rd_vsnprintf(buffer, sizeof(buffer), error, ap);
         va_end(ap);
         RD_UT_SAY("%s", buffer);
-        rd_assert(false);
+        rd_assert(!*"Failure while decoding telemetry data");
 }
 
 bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,

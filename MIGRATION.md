@@ -298,11 +298,15 @@ producerRun().then(consumerRun).catch(console.error);
         eachMessage: someFunc,
       });
     ```
-  - The `heartbeat()` no longer needs to be called by the user in the `eachMessage/eachBatch` callback. Heartbeats are automatically managed by librdkafka.
-  - The `partitionsConsumedConcurrently` property is not supported at the moment.
-  - An API compatible version of `eachBatch` is available, but the batch size never exceeds 1.
-    The property `eachBatchAutoResolve` is supported. Within the `eachBatch` callback, use of `uncommittedOffsets` is unsupported,
-    and within the returned batch, `offsetLag` and `offsetLagLow` are unsupported, and `commitOffsetsIfNecessary` is a no-op.
+  - The `heartbeat()` no longer needs to be called by the user in the `eachMessage/eachBatch` callback.
+    Heartbeats are automatically managed by librdkafka.
+  - The `partitionsConsumedConcurrently` is supported by both `eachMessage` and `eachBatch`.
+  - An API compatible version of `eachBatch` is available, but the batch size calculation is not
+    as per configured parameters, rather, a constant maximum size is configured internally. This is subject
+    to change.
+    The property `eachBatchAutoResolve` is supported.
+    Within the `eachBatch` callback, use of `uncommittedOffsets` is unsupported,
+    and within the returned batch, `offsetLag` and `offsetLagLow` are unsupported.
 * `commitOffsets`:
   - Does not yet support sending metadata for topic partitions being committed.
   - If called with no arguments, it commits all offsets passed to the user (or the stored offsets, if manually handling offset storage using `consumer.storeOffsets`).

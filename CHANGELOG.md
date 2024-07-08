@@ -1,3 +1,14 @@
+# confluent-kafka-javascript v0.1.16-devel
+
+v0.1.16-devel is a pre-production, early-access release.
+
+## Features
+
+1. Add per-partition concurrency to consumer.
+2. Add true `eachBatch` support to consumer.
+3. Add a `leaderEpoch` field to the topic partitions where required (listing, committing, etc.).
+
+
 # confluent-kafka-javascript v0.1.15-devel
 
 v0.1.15-devel is a pre-production, early-access release.

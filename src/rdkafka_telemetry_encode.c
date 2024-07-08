@@ -712,7 +712,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                       total_metrics_count);
         metric_names = rd_malloc(sizeof(char *) * total_metrics_count);
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
-                     "Total metrics to be encoded count: %ld",
+                     "Total metrics to be encoded count: %" PRIusz,
                      total_metrics_count);
 
 
@@ -806,7 +806,7 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 goto fail;
         }
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
-                     "Push Telemetry metrics encoded, size: %ld",
+                     "Push Telemetry metrics encoded, size: %" PRIusz,
                      stream.bytes_written);
         rd_buf_write(rbuf, NULL, stream.bytes_written);
 

@@ -88,7 +88,7 @@ static rd_kafka_broker_t *rd_kafka_get_preferred_broker(rd_kafka_t *rk) {
 
                 rd_kafka_dbg(rk, TELEMETRY, "SETBROKER",
                              "Lost preferred broker, switching to new "
-                             "preferred broker %d\n",
+                             "preferred broker %" PRId32 "\n",
                              rkb ? rd_kafka_broker_id(rkb) : -1);
         }
         mtx_unlock(&rk->rk_telemetry.lock);
@@ -211,7 +211,7 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
-                     "Matched metrics: %" PRIdsz,
+                     "Matched metrics: %" PRIusz,
                      rk->rk_telemetry.matched_metrics_cnt);
 }
 
@@ -352,7 +352,7 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         if (compressed_metrics_payload_size >
             (size_t)rk->rk_telemetry.telemetry_max_bytes) {
                 rd_kafka_log(rk, LOG_WARNING, "TELEMETRY",
-                             "Metrics payload size %" PRIdsz
+                             "Metrics payload size %" PRIusz
                              " exceeds telemetry_max_bytes %" PRId32
                              "specified by the broker.",
                              compressed_metrics_payload_size,
@@ -360,8 +360,8 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
-                     "Sending PushTelemetryRequest with terminating = %d",
-                     terminating);
+                     "Sending PushTelemetryRequest with terminating = %s",
+                     RD_STR_ToF(terminating));
         rd_kafka_PushTelemetryRequest(
             rkb, &rk->rk_telemetry.client_instance_id,
             rk->rk_telemetry.subscription_id, terminating, compression_used,

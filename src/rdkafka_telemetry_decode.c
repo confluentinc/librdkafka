@@ -493,7 +493,7 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         rd_buf_t *rbuf              = rd_kafka_telemetry_encode_metrics(rk);
         void *metrics_payload       = rbuf->rbuf_wpos->seg_p;
         size_t metrics_payload_size = rbuf->rbuf_wpos->seg_of;
-        RD_UT_SAY("metrics_payload_size: %zu", metrics_payload_size);
+        RD_UT_SAY("metrics_payload_size: %" PRIusz, metrics_payload_size);
 
         RD_UT_ASSERT(metrics_payload_size != 0, "Metrics payload zero");
 

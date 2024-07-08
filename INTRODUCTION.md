@@ -2107,6 +2107,8 @@ release of librdkafka.
 | 50      | DescribeUserScramCredentials  | 0          | 0              |
 | 51      | AlterUserScramCredentials     | 0          | 0              |
 | 68      | ConsumerGroupHeartbeat        | 0          | 0              |
+| 71      | GetTelemetrySubscriptions     | 0          | 0              |
+| 72      | PushTelemetry                 | 0          | 0              |
 
 # Recommendations for language binding developers
 

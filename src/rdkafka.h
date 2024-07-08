@@ -646,6 +646,12 @@ typedef enum {
         RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR = 112,
         /** The member epoch is stale */
         RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH = 113,
+        /** Client sent a push telemetry request with an invalid or outdated
+         *  subscription ID. */
+        RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID = 117,
+        /** Client sent a push telemetry request larger than the maximum size
+         *  the broker will accept. */
+        RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE = 118,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 

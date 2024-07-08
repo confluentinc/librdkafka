@@ -39,6 +39,7 @@
 #include "rdkafka_mock_int.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_telemetry_decode.h"
 
 
 
@@ -2488,6 +2489,215 @@ err_parse:
         return -1;
 }
 
+/**
+ * @brief Handle GetTelemetrySubscriptions
+ */
+static int rd_kafka_mock_handle_GetTelemetrySubscriptions(
+    rd_kafka_mock_connection_t *mconn,
+    rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_resp_err_t err;
+        size_t i;
+        rd_kafka_Uuid_t ClientInstanceId;
+        rd_kafka_Uuid_t zero_uuid = RD_KAFKA_UUID_ZERO;
+
+        /* Request: ClientInstanceId */
+        rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
+        if (ClientInstanceId.least_significant_bits ==
+                zero_uuid.least_significant_bits &&
+            ClientInstanceId.most_significant_bits ==
+                zero_uuid.most_significant_bits) {
+                /* Some random numbers */
+                ClientInstanceId.least_significant_bits = 129;
+                ClientInstanceId.most_significant_bits  = 298;
+        }
+
+        /* Response: ThrottleTimeMs */
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        /* Response: ErrorCode */
+        rd_kafka_buf_write_i16(resp, err);
+
+        /* Response: ClientInstanceId*/
+        rd_kafka_buf_write_uuid(resp, &ClientInstanceId);
+
+        /* Response: SubscriptionId */
+        // TODO: Calculate subscription ID.
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* Response: #AcceptedCompressionTypes */
+        rd_kafka_buf_write_arraycnt(resp, 4);
+
+        /* Response: AcceptedCompressionTypes */
+        rd_kafka_buf_write_i8(resp, RD_KAFKA_COMPRESSION_ZSTD);
+        rd_kafka_buf_write_i8(resp, RD_KAFKA_COMPRESSION_LZ4);
+        rd_kafka_buf_write_i8(resp, RD_KAFKA_COMPRESSION_GZIP);
+        rd_kafka_buf_write_i8(resp, RD_KAFKA_COMPRESSION_SNAPPY);
+
+        /* Response: PushIntervalMs */
+        /* We use the value in telemetry_push_interval_ms, and if not set, the
+         * default of 5 minutes. */
+        rd_kafka_buf_write_i32(resp, mcluster->telemetry_push_interval_ms > 0
+                                         ? mcluster->telemetry_push_interval_ms
+                                         : (5 * 60 * 1000));
+
+        /* Response: TelemetryMaxBytes */
+        rd_kafka_buf_write_i32(resp, 10000);
+
+        /* Response: DeltaTemporality */
+        rd_kafka_buf_write_bool(resp, rd_true);
+
+        /* Response: #RequestedMetrics */
+        rd_kafka_buf_write_arraycnt(resp, mcluster->metrics_cnt);
+
+        for (i = 0; i < mcluster->metrics_cnt; i++)
+                rd_kafka_buf_write_str(resp, mcluster->metrics[i], -1);
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
+
+/**
+ * @brief Handle PushTelemetry
+ */
+
+static void rd_kafka_mock_handle_PushTelemetry_decoded_NumberDataPoint(
+    void *opaque,
+    const opentelemetry_proto_metrics_v1_NumberDataPoint *decoded) {
+        rd_kafka_broker_t *rkb = opaque;
+        if (decoded->which_value ==
+            opentelemetry_proto_metrics_v1_NumberDataPoint_as_int_tag)
+                rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY",
+                           "NumberDataPoint int value: %" PRId64
+                           " time: %" PRIu64,
+                           decoded->value.as_int, decoded->time_unix_nano);
+        else if (decoded->which_value ==
+                 opentelemetry_proto_metrics_v1_NumberDataPoint_as_double_tag)
+                rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY",
+                           "NumberDataPoint double value: %f time: %" PRIu64,
+                           decoded->value.as_double, decoded->time_unix_nano);
+}
+
+static void
+rd_kafka_mock_handle_PushTelemetry_decoded_int64(void *opaque,
+                                                 int64_t int64_value) {
+        rd_kafka_broker_t *rkb = opaque;
+        rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY", "int64 value: %" PRId64,
+                   int64_value);
+}
+
+static void
+rd_kafka_mock_handle_PushTelemetry_decoded_string(void *opaque,
+                                                  const uint8_t *decoded) {
+        rd_kafka_broker_t *rkb = opaque;
+        rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY", "string value: %s", decoded);
+}
+
+static void rd_kafka_mock_handle_PushTelemetry_decoded_type(
+    void *opaque,
+    rd_kafka_telemetry_metric_type_t type) {
+        rd_kafka_broker_t *rkb = opaque;
+        rd_rkb_log(rkb, LOG_INFO, "MOCKTELEMETRY", "Metric type: %d", type);
+}
+
+static void rd_kafka_mock_handle_PushTelemetry_decode_error(void *opaque,
+                                                            const char *error,
+                                                            ...) {
+        rd_kafka_broker_t *rkb = opaque;
+        va_list ap;
+        va_start(ap, error);
+        rd_rkb_log(rkb, LOG_ERR, "MOCKTELEMETRY", error, ap);
+        va_end(ap);
+        rd_assert(!*"Failure while decoding telemetry data");
+}
+
+void rd_kafka_mock_handle_PushTelemetry_payload(rd_kafka_broker_t *rkb,
+                                                void *payload,
+                                                size_t size) {
+        rd_kafka_telemetry_decode_interface_t decode_interface = {
+            .decoded_string = rd_kafka_mock_handle_PushTelemetry_decoded_string,
+            .decoded_NumberDataPoint =
+                rd_kafka_mock_handle_PushTelemetry_decoded_NumberDataPoint,
+            .decoded_int64 = rd_kafka_mock_handle_PushTelemetry_decoded_int64,
+            .decoded_type  = rd_kafka_mock_handle_PushTelemetry_decoded_type,
+            .decode_error  = rd_kafka_mock_handle_PushTelemetry_decode_error,
+            .opaque        = rkb,
+        };
+        rd_kafka_telemetry_decode_metrics(&decode_interface, payload, size);
+}
+
+static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
+                                              rd_kafka_buf_t *rkbuf) {
+        rd_kafka_broker_t *rkb            = mconn->broker->cluster->dummy_rkb;
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_Uuid_t ClientInstanceId;
+        int32_t SubscriptionId;
+        rd_bool_t terminating;
+        rd_kafka_compression_t compression_type = RD_KAFKA_COMPRESSION_NONE;
+        rd_kafkap_bytes_t metrics;
+        rd_kafka_resp_err_t err;
+
+        rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
+        rd_kafka_buf_read_i32(rkbuf, &SubscriptionId);
+        rd_kafka_buf_read_bool(rkbuf, &terminating);
+        rd_kafka_buf_read_i8(rkbuf, &compression_type);
+        rd_kafka_buf_read_kbytes(rkbuf, &metrics);
+
+        void *uncompressed_payload      = NULL;
+        size_t uncompressed_payload_len = 0;
+
+        if (compression_type != RD_KAFKA_COMPRESSION_NONE) {
+                rd_rkb_log(rkb, LOG_DEBUG, "MOCKTELEMETRY",
+                           "Compression type %s",
+                           rd_kafka_compression2str(compression_type));
+                int err_uncompress =
+                    rd_kafka_telemetry_uncompress_metrics_payload(
+                        rkb, compression_type, (void *)metrics.data,
+                        metrics.len, &uncompressed_payload,
+                        &uncompressed_payload_len);
+                if (err_uncompress) {
+                        rd_kafka_dbg(mcluster->rk, MOCK, "MOCKTELEMETRY",
+                                     "Failed to uncompress "
+                                     "telemetry payload.");
+                        goto err_parse;
+                }
+        } else {
+                uncompressed_payload     = (void *)metrics.data;
+                uncompressed_payload_len = metrics.len;
+        }
+
+        rd_kafka_mock_handle_PushTelemetry_payload(rkb, uncompressed_payload,
+                                                   uncompressed_payload_len);
+        if (compression_type != RD_KAFKA_COMPRESSION_NONE)
+                rd_free(uncompressed_payload);
+
+        /* ThrottleTime */
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* ErrorCode */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+        rd_kafka_buf_write_i16(resp, err);
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
 
 /**
  * @brief Default request handlers
@@ -2519,6 +2729,10 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
+        [RD_KAFKAP_GetTelemetrySubscriptions] =
+            {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
+        [RD_KAFKAP_PushTelemetry] = {0, 0, 0,
+                                     rd_kafka_mock_handle_PushTelemetry},
 };
 
 

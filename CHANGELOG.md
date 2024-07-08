@@ -8,6 +8,8 @@ librdkafka v2.5.0 is a feature release.
 * Fix for an idempotent producer error, with a message batch not reconstructed
   identically when retried (#4750)
 * Removed support for CentOS 6 and CentOS 7 (#4775).
+* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client 
+  metrics and observability (#4721).
 
 ## Upgrade considerations
 

@@ -2105,8 +2105,9 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
  * Send LeaveGroupRequest
  */
 void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
-                                const char *group_id,
-                                const char *member_id,
+                                const rd_kafkap_str_t *group_id,
+                                char *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque) {
@@ -2115,12 +2116,22 @@ void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_LeaveGroup, 0, 1, &features);
+            rkb, RD_KAFKAP_LeaveGroup, 0, 3, &features);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup, 1, 300);
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup, 1,
+                RD_KAFKAP_STR_SIZE(group_id) +
+                4 /* array count members */ +
+                strlen(member_id) + 2 +
+                RD_KAFKAP_STR_SIZE(group_instance_id));
 
-        rd_kafka_buf_write_str(rkbuf, group_id, -1);
-        rd_kafka_buf_write_str(rkbuf, member_id, -1);
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        if (ApiVersion <= 2) {
+            rd_kafka_buf_write_str(rkbuf, member_id, -1);
+        } else {
+            rd_kafka_buf_write_arraycnt(rkbuf, 1);
+            rd_kafka_buf_write_str(rkbuf, member_id, -1);
+            rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
+        }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -2155,7 +2166,15 @@ void rd_kafka_handle_LeaveGroup(rd_kafka_t *rk,
                 goto err;
         }
 
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        /* for ApiVersion >= 3 a list of members who left the group is
+         * present in the rest of rkbuf, but isn't used here.
+         */
 
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, request,

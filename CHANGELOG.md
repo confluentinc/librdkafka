@@ -464,6 +464,7 @@ librdkafka v2.1.0 is a feature release:
 librdkafka v2.0.2 is a maintenance release:
 
 * Fix OpenSSL version in Win32 nuget package (#4152).
+* Support versions of OpenSSL without the ENGINE component (Chris Novakovic, #3535).
 
 
 

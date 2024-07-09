@@ -727,6 +727,16 @@ rd_kafka_pid_bump(const rd_kafka_pid_t old) {
         return new_pid;
 }
 
+
+/**
+ * @brief Checks whether the PID epoch has been exhausted
+ */
+static RD_UNUSED RD_INLINE rd_bool_t
+rd_kafka_pid_epoch_exhausted(const rd_kafka_pid_t pid) {
+        return pid.epoch == INT16_MAX;
+}
+
+
 /**@}*/
 
 

@@ -397,6 +397,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 } Metadata;
                 struct {
                         rd_kafka_msgbatch_t batch; /**< MessageSet/batch */
+                        rd_list_t batch_list; /**< MessageSet/batch list*/
+                        size_t first_pos_record_batch;
                 } Produce;
                 struct {
                         rd_bool_t commit; /**< true = txn commit,

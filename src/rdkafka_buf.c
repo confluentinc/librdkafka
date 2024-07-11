@@ -55,6 +55,13 @@ void rd_kafka_buf_destroy_final(rd_kafka_buf_t *rkbuf) {
 
         case RD_KAFKAP_Produce:
                 rd_kafka_msgbatch_destroy(&rkbuf->rkbuf_batch);
+                int i;
+                rd_kafka_msgbatch_t *msgbatch;
+                RD_LIST_FOREACH(msgbatch, &rkbuf->rkbuf_u.Produce.batch_list, i) {
+                        rd_kafka_msgbatch_destroy(msgbatch);
+                        rd_free(msgbatch);
+                }
+                rd_list_destroy(&rkbuf->rkbuf_u.Produce.batch_list);
                 break;
         }
 

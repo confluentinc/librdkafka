@@ -3009,6 +3009,7 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
 struct rd_kafka_Produce_result {
         int64_t offset;    /**< Assigned offset of first message */
         int64_t timestamp; /**< (Possibly assigned) offset of first message */
+        rd_kafka_resp_err_t errorcode; /**< error code  */
 };
 
 /**
@@ -3076,6 +3077,98 @@ err:
         return RD_KAFKA_RESP_ERR__BAD_MSG;
 }
 
+static int rd_kafka_find_msgbatch(rd_list_t *msgbatch_list,
+                                  rd_kafkap_str_t *topic_in_response,
+                                  int32_t partition_id) {
+
+        rd_kafka_msgbatch_t * msgbatch;
+        int i;
+        RD_LIST_FOREACH(msgbatch, msgbatch_list, i) {
+                rd_kafkap_str_t *topic_in_request = msgbatch->rktp->rktp_rkt->rkt_topic;
+
+                if ((topic_in_request->len == topic_in_response->len) &&
+                    !strncmp(topic_in_request->str, topic_in_response->str, topic_in_request->len) &&
+                    msgbatch->rktp->rktp_partition == partition_id) {
+                        return i;
+                }
+        }
+        return -1;
+}
+
+static rd_kafka_resp_err_t
+rd_kafka_handle_MultiBatchProduce_parse(rd_kafka_broker_t *rkb,
+                              rd_kafka_buf_t *rkbuf,
+                              rd_kafka_buf_t *request,
+                              struct rd_kafka_Produce_result *results) {
+        int32_t TopicArrayCnt;
+        int32_t PartitionArrayCnt;
+        struct {
+                int32_t Partition;
+                int16_t ErrorCode;
+                int64_t Offset;
+        } hdr;
+        const int log_decode_errors = LOG_ERR;
+        int64_t log_start_offset    = -1;
+        int i, j, decoded_batch_cnt=0, pos;
+        rd_kafkap_str_t rkt_topic = RD_KAFKAP_STR_INITIALIZER;
+
+        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        for (i = 0; i < TopicArrayCnt; i++) {
+
+                rd_kafka_buf_read_str(rkbuf, &rkt_topic);
+
+                rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
+                for (j = 0; j < PartitionArrayCnt; j++) {
+                        rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
+                        rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
+                        rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
+
+                        if ((pos=rd_kafka_find_msgbatch(&request->rkbuf_u.Produce.batch_list,
+                                                        &rkt_topic, hdr.Partition)) == -1) {
+                                /* Got a msgbatch in response that does not exist in the
+                                   request's msgbatch list */
+                                rd_rkb_dbg(rkb, BROKER, "REQERR",
+                                        "Response does not match the request");
+                                goto err;
+                        }
+
+                        results[pos].errorcode = hdr.ErrorCode;
+                        results[pos].offset = hdr.Offset;
+
+                        results[pos].timestamp = -1;
+                        if (request->rkbuf_reqhdr.ApiVersion >= 2)
+                                rd_kafka_buf_read_i64(rkbuf, &results[pos].timestamp);
+
+                        if (request->rkbuf_reqhdr.ApiVersion >= 5)
+                                rd_kafka_buf_read_i64(rkbuf, &log_start_offset);
+
+                        decoded_batch_cnt++;
+                }
+        }
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 1) {
+                int32_t Throttle_Time;
+                rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
+
+                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
+                                          Throttle_Time);
+        }
+
+        if (decoded_batch_cnt != rd_list_cnt(&request->rkbuf_u.Produce.batch_list)) {
+                /* Number of decoded msgbatch in response does not match
+                   the number request's msgbatch list */
+                rd_rkb_dbg(rkb, BROKER, "REQERR",
+                        "Response does not match the request");
+                goto err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        return rkbuf->rkbuf_err;
+err:
+        return RD_KAFKA_RESP_ERR__BAD_MSG;
+}
 
 /**
  * @struct Hold temporary Produce error state
@@ -4017,6 +4110,46 @@ static void rd_kafka_handle_Produce(rd_kafka_t *rk,
                                                 request);
 }
 
+/**
+ * @brief Handle MultiBatch ProduceResponse
+ *
+ * @param reply is NULL when `acks=0` and on various local errors.
+ *
+ * @remark Most logic follows the ProduceResponse above. Only added
+ *         the capability to parse and handle the multi-batch response
+ *
+ * @warning May be called on the old leader thread. Lock rktp appropriately!
+ *
+ * @locality broker thread (but not necessarily the leader broker thread)
+ */
+static void rd_kafka_handle_MultiBatchProduce(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *reply,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque) {
+
+        struct rd_kafka_Produce_result *results;
+        rd_kafka_msgbatch_t *batch;
+        rd_list_t *msgbatches = &request->rkbuf_u.Produce.batch_list;
+        int i;
+
+        size_t num_batches = rd_list_cnt(msgbatches);
+        results = rd_calloc(num_batches, sizeof(struct rd_kafka_Produce_result));
+
+        /* Parse Produce reply (unless the request errored) */
+        if (!err && reply)
+                err = rd_kafka_handle_MultiBatchProduce_parse(rkb, reply,
+                                                        request, results);
+
+        RD_LIST_FOREACH(batch, msgbatches, i) {
+                rd_kafka_resp_err_t final_err = err == RD_KAFKA_RESP_ERR_NO_ERROR ?
+                                results[i].errorcode : err;
+                rd_kafka_msgbatch_handle_Produce_result(rkb, batch, final_err,
+                                                        &results[i], request);
+        }
+        rd_free(results);
+}
 
 /**
  * @brief Send ProduceRequest for messages in toppar queue.
@@ -4028,7 +4161,9 @@ static void rd_kafka_handle_Produce(rd_kafka_t *rk,
 int rd_kafka_ProduceRequest(rd_kafka_broker_t *rkb,
                             rd_kafka_toppar_t *rktp,
                             const rd_kafka_pid_t pid,
-                            uint64_t epoch_base_msgid) {
+                            uint64_t epoch_base_msgid,
+                            rd_bool_t skip_sending,
+                            rd_list_t *batch_bufq) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_topic_t *rkt = rktp->rktp_rkt;
         size_t MessageSetSize = 0;
@@ -4076,12 +4211,242 @@ int rd_kafka_ProduceRequest(rd_kafka_broker_t *rkb,
          * capped by socket.timeout.ms */
         rd_kafka_buf_set_abs_timeout(rkbuf, tmout, now);
 
-        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, RD_KAFKA_NO_REPLYQ,
-                                       rd_kafka_handle_Produce, NULL);
+        if (skip_sending) {
+                rd_list_add(batch_bufq, rkbuf);
+        } else {
+                rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, RD_KAFKA_NO_REPLYQ,
+                                               rd_kafka_handle_Produce, NULL);
+        }
 
         return cnt;
 }
 
+static void rd_kafka_fill_MultiBatch_header(rd_kafka_broker_t *rkb,
+                                            rd_kafka_buf_t *batch_rkbuf,
+                                            rd_kafka_buf_t *request_rkbuf) {
+
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_toppar_t *rktp = batch_rkbuf->rkbuf_batch.rktp;;
+        rd_kafka_topic_t *rkt = rktp->rktp_rkt;
+
+        rd_kafka_buf_ApiVersion_set(request_rkbuf,
+                                    batch_rkbuf->rkbuf_reqhdr.ApiVersion,
+                                    batch_rkbuf->rkbuf_features);
+
+        if (rd_kafka_buf_ApiVersion(request_rkbuf) >= 3)
+                rd_kafka_buf_write_kstr(request_rkbuf, rk->rk_eos.transactional_id);
+
+        /* RequiredAcks */
+        rd_kafka_buf_write_i16(request_rkbuf, rkt->rkt_conf.required_acks);
+
+        /* Timeout */
+        rd_kafka_buf_write_i32(request_rkbuf, rkt->rkt_conf.request_timeout_ms);
+
+        if (!rkt->rkt_conf.required_acks)
+                request_rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_NO_RESPONSE;
+}
+
+static int rd_kafka_buf_cmp_by_topic(const void *_a, const void *_b) {
+        const rd_kafka_buf_t *a = _a, *b = _b;
+        return RD_CMP(a->rkbuf_batch.rktp->rktp_rkt,
+                      b->rkbuf_batch.rktp->rktp_rkt);
+}
+
+static void rd_kafka_copy_batch_buf(rd_kafka_buf_t *batch_rkbuf,
+                                    rd_kafka_buf_t *request_rkbuf) {
+        rd_slice_t *rkbuf_reader = &batch_rkbuf->rkbuf_reader;
+        rd_buf_t *rkbuf_buf = &batch_rkbuf->rkbuf_buf;
+
+        size_t first_pos = batch_rkbuf->rkbuf_u.Produce.first_pos_record_batch;
+        size_t last_pos = rd_buf_write_pos(rkbuf_buf);
+        size_t length =  last_pos - first_pos;
+        rd_slice_init_full(rkbuf_reader, rkbuf_buf);
+        rd_slice_seek(rkbuf_reader, first_pos);
+        rd_slice_read_into_buf(rkbuf_reader, &request_rkbuf->rkbuf_buf, length);
+
+}
+
+static void select_batches_to_include(rd_kafka_t *rk, rd_list_t *batch_bufq,
+                                     int start_ind, int *next_ind,
+                                     size_t *estimated_size) {
+
+        rd_kafka_buf_t *batch_rkbuf;
+        int i;
+        size_t total = 0;
+
+        // TODO should probably inject unittest to test max_msg_size
+        // otherwise it can't be tested
+
+        for (i = start_ind; i < rd_list_cnt(batch_bufq); i++) {
+                batch_rkbuf = rd_list_elem(batch_bufq, i);
+                size_t batch_size = rd_buf_len(&batch_rkbuf->rkbuf_buf);
+
+                /* We would assume at least 1 batch can go into the request,
+                   even if it might be slightly large than the max.message.size
+                   due to header estimation inaccuracy etc. This is inline with
+                   the assumption in librdkafka (other Kafka client in general)*/
+                if (i != start_ind) {
+                        if ((total + batch_size) > (size_t)rk->rk_conf.max_msg_size)
+                                break;
+                }
+                total += batch_size;
+        }
+
+        *estimated_size = total;
+        *next_ind = i;
+}
+
+static int64_t get_first_msg_timeout (rd_list_t* msg_batch_list) {
+
+        rd_kafka_msgbatch_t *msgbatch;
+        int64_t timeout, result = INT64_MAX;
+        rd_ts_t now = rd_clock();
+        int i;
+
+        RD_LIST_FOREACH(msgbatch, msg_batch_list, i) {
+                timeout = (rd_kafka_msgq_first(&msgbatch->msgq)->rkm_ts_timeout
+                                               - now) / 1000;
+                result = timeout < result ? timeout : result;
+        }
+
+        return result;
+}
+
+int rd_kafka_MultiBatchProduceRequest(rd_kafka_broker_t *rkb,
+                                      const rd_kafka_pid_t pid,
+                                      rd_list_t *batch_bufq) {
+        rd_kafka_buf_t *batch_rkbuf;
+        rd_kafka_buf_t *request_rkbuf;
+        rd_kafka_topic_t *prev_topic, *cur_topic;
+        int cur_ind, next_ind, i;
+        size_t estimated_size;
+        size_t of_topic_cnt = 0, of_part_cnt = 0;
+        int topic_cnt = 0, part_cnt = 0, req_cnt = 0;
+        rd_ts_t now;
+        int64_t first_msg_timeout;
+        int tmout;
+
+        /* sort list of batch_buf by topic, the encoding loop below
+           depends on the fact that we iterate though a list
+           sorted by topics */
+        rd_list_sort(batch_bufq, rd_kafka_buf_cmp_by_topic);
+
+        cur_ind = 0;
+        while (cur_ind  < rd_list_cnt(batch_bufq)) {
+
+                /* Here we decide which batches can be included in
+                   the next ProduceRequest:
+                   - list of batches must fit in the message.max.bytes
+                   - batches with different topic level setting shouldn't
+                     be in the same request */
+                select_batches_to_include(rkb->rkb_rk, batch_bufq, cur_ind,
+                                          &next_ind, &estimated_size);
+
+                /* Allocate request buffer based on included batch count
+                   and estimated size. For the size, we simplify the math
+                   by adding all buf size. It leads to a bit over estimation
+                   i.e. we counted request headers and topic name multiple
+                   times, but it's not a big issue */
+                request_rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Produce,
+                                        next_ind - cur_ind, estimated_size);
+
+                rd_list_init(&request_rkbuf->rkbuf_u.Produce.batch_list, next_ind-cur_ind, NULL);
+
+                batch_rkbuf = rd_list_elem(batch_bufq, cur_ind);
+                prev_topic = batch_rkbuf->rkbuf_batch.rktp->rktp_rkt;
+
+                /* Start to encode the request */
+                /* Fill ProducerRequest header */
+                rd_kafka_fill_MultiBatch_header(rkb, batch_rkbuf, request_rkbuf);
+
+                /* Topic count: updated later */
+                of_topic_cnt = rd_kafka_buf_write_arraycnt_pos(request_rkbuf);
+                topic_cnt = 0;
+
+                /* Encodes batches[cur_ind, next_ind) in the request*/
+                for (i = cur_ind; i < next_ind; i++) {
+
+                        batch_rkbuf = rd_list_elem(batch_bufq, i);
+                        cur_topic = batch_rkbuf->rkbuf_batch.rktp->rktp_rkt;
+
+                        /* starting a new topic, write name and finalize the prev one if needed*/
+                        if (i == cur_ind || (cur_topic != prev_topic)) {
+                                if (i != cur_ind) {
+                                        /* Final previous topic's Partition Count */
+                                        rd_kafka_buf_finalize_arraycnt(request_rkbuf,
+                                                                of_part_cnt, part_cnt);
+                                }
+                                /* Topic name */
+                                rd_kafka_buf_write_kstr(request_rkbuf, cur_topic->rkt_topic);
+                                /* Partition Count: updated later */
+                                of_part_cnt = rd_kafka_buf_write_arraycnt_pos(request_rkbuf);
+                                part_cnt = 0;
+                                topic_cnt++;
+                        }
+
+                        rd_kafka_toppar_t *rktp = batch_rkbuf->rkbuf_batch.rktp;
+
+                        /* Partition */
+                        rd_kafka_buf_write_i32(request_rkbuf, rktp->rktp_partition);
+
+                        /* Copy the already encoded/compressed RecordBatch from buf */
+                        rd_kafka_copy_batch_buf(batch_rkbuf, request_rkbuf);
+
+                        /* Move the msgbatch from the batch_rkbuf into the new request's
+                           batch_list. A new rd_kafka_msgbatch_t is created and we move
+                           the each msgs in the msgq over. This is so that we can reused
+                           as much as possible the existing memory accounting/cleanup.
+                           The actual message is not copied.
+                           This list of msgbatch will be cleaned up when the buf of this
+                           MultiBatch request is destroyed */
+                        rd_kafka_msgbatch_t *src = &batch_rkbuf->rkbuf_batch;
+                        rd_kafka_msgbatch_t *dst = rd_malloc(sizeof(rd_kafka_msgbatch_t));
+                        rd_kafka_msgbatch_init(dst, src->rktp, src->pid, src->epoch_base_msgid);
+                        rd_kafka_msgq_move(&dst->msgq, &src->msgq);
+                        rd_list_add(&request_rkbuf->rkbuf_u.Produce.batch_list, dst);
+
+                        /* Done with the request from batch buf, cleanup */
+                        rd_kafka_buf_destroy(batch_rkbuf);
+
+                        part_cnt++;
+                        prev_topic = cur_topic;
+                }
+
+                /* Partition count of the last topic */
+                rd_kafka_buf_finalize_arraycnt(request_rkbuf, of_part_cnt, part_cnt);
+
+                /* Topic count */
+                rd_kafka_buf_finalize_arraycnt(request_rkbuf, of_topic_cnt, topic_cnt);
+
+
+                /* The timeout setting is copy/pasted from rd_kafka_ProduceRequest
+                   Instead of taking the first msg from a batch, we took the first
+                   msg from each batch, and choose the closest one. */
+                now = rd_clock();
+                first_msg_timeout =
+                        get_first_msg_timeout(&request_rkbuf->rkbuf_u.Produce.batch_list);
+                if (unlikely(first_msg_timeout <= 0)) {
+                        /* Message has already timed out, allow 100 ms
+                        * to produce anyway */
+                        tmout = 100;
+                } else {
+                        tmout = (int)RD_MIN(INT_MAX, first_msg_timeout);
+                }
+                rd_kafka_buf_set_abs_timeout(request_rkbuf, tmout, now);
+                /* END timeout copy/paste */
+
+                /* Send the multi-batch request to outbuf */
+                rd_kafka_broker_buf_enq_replyq(rkb, request_rkbuf, RD_KAFKA_NO_REPLYQ,
+                                                rd_kafka_handle_MultiBatchProduce, NULL);
+
+                req_cnt++;
+
+                /* prepare for next round in case there is more batches */
+                cur_ind = next_ind;
+        }
+
+        return req_cnt;
+}
 
 /**
  * @brief Construct and send CreateTopicsRequest to \p rkb

@@ -455,6 +455,9 @@ rd_kafka_msgset_writer_write_Produce_header(rd_kafka_msgset_writer_t *msetw) {
         /* MessageSetSize: Will be finalized later*/
         msetw->msetw_of_MessageSetSize = rd_kafka_buf_write_i32(rkbuf, 0);
 
+        // For multi-batch requests, here where we start copying the batch
+        rkbuf->rkbuf_u.Produce.first_pos_record_batch = msetw->msetw_of_MessageSetSize;
+
         if (msetw->msetw_MsgVersion == 2) {
                 /* MessageSet v2 header */
                 rd_kafka_msgset_writer_write_MessageSet_v2_header(msetw);

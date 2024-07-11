@@ -934,6 +934,31 @@ size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size) {
         return size;
 }
 
+size_t rd_slice_read_into_buf(rd_slice_t *slice, rd_buf_t *rbuf, size_t size) {
+        size_t remains = size;
+        size_t rlen;
+        const void *p;
+        size_t orig_end = slice->end;
+
+        if (unlikely(rd_slice_remains(slice) < size))
+                return 0;
+
+        /* Temporarily shrink slice to offset + \p size */
+        slice->end = rd_slice_abs_offset(slice) + size;
+
+        while ((rlen = rd_slice_reader(slice, &p))) {
+                rd_dassert(remains >= rlen);
+                rd_buf_write(rbuf, p, rlen);
+                remains -= rlen;
+        }
+
+        rd_dassert(remains == 0);
+
+        /* Restore original size */
+        slice->end = orig_end;
+
+        return size;
+}
 
 /**
  * @brief Read \p size bytes from absolute slice offset \p offset

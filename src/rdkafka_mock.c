@@ -2674,8 +2674,8 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         mcluster->dummy_rkb =
             rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL, RD_KAFKA_PROTO_PLAINTEXT,
                                 "mock", 0, RD_KAFKA_NODEID_UA);
-        rd_snprintf(mcluster->id, sizeof(mcluster->id), "mockCluster%lx",
-                    (intptr_t)mcluster >> 2);
+        rd_snprintf(mcluster->id, sizeof(mcluster->id), "mockCluster%"PRIxPTR,
+                    (uintptr_t)mcluster >> 2);
 
         TAILQ_INIT(&mcluster->brokers);
 

@@ -38,8 +38,10 @@
 
 #ifdef _WIN32
 #include "../win32/wingetopt.h"
+#define PRIusz "Iu"
 #else
 #include <getopt.h>
+#define PRIusz "zu"
 #endif
 
 
@@ -219,7 +221,7 @@ static void print_topic_info(const rd_kafka_TopicDescription_t *topic) {
             topic, &authorized_operations_cnt);
 
         printf(
-            "Topic: %s (Topic Id: %s) succeeded, has %ld authorized operations "
+            "Topic: %s (Topic Id: %s) succeeded, has %"PRIusz" authorized operations "
             "allowed, they are:\n",
             topic_name, topic_id_str, authorized_operations_cnt);
 

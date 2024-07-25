@@ -1,3 +1,25 @@
+# librdkafka v2.5.1 (can vary)
+
+librdkafka v2.5.1 is a maintenance release.
+
+* Fix for retrieving offset commit metadata when it contains
+  zeros and configured with `strndup` (#)
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4649.
+  When retrieving offset metadata, if the binary value contained zeros
+  and librdkafka was configured with `strndup`, part of
+  the buffer after first zero contained uninitialized data
+  instead of rest of metadata. Solved by avoiding to use
+  `strndup` for copying metadata.
+  Happens since: 0.9.0 (#).
+
+
+
 # librdkafka v2.5.0
 
 librdkafka v2.5.0 is a feature release.
@@ -8,7 +30,7 @@ librdkafka v2.5.0 is a feature release.
 * Fix for an idempotent producer error, with a message batch not reconstructed
   identically when retried (#4750)
 * Removed support for CentOS 6 and CentOS 7 (#4775).
-* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client 
+* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client
   metrics and observability (#4721).
 
 ## Upgrade considerations

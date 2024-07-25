@@ -1289,9 +1289,15 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                                 rktpar->metadata      = NULL;
                                 rktpar->metadata_size = 0;
                         } else {
-                                rktpar->metadata = RD_KAFKAP_STR_DUP(&metadata);
-                                rktpar->metadata_size =
-                                    RD_KAFKAP_STR_LEN(&metadata);
+                                /* It cannot use strndup because
+                                 * it stops at first 0 occurrence. */
+                                size_t len = RD_KAFKAP_STR_LEN(&metadata);
+                                rktpar->metadata_size = len;
+                                unsigned char *metadata_bytes =
+                                    rd_malloc(len + 1);
+                                rktpar->metadata = metadata_bytes;
+                                memcpy(rktpar->metadata, metadata.str, len);
+                                metadata_bytes[len] = '\0';
                         }
 
                         /* Loose ref from get_toppar() */

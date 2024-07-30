@@ -938,6 +938,44 @@ size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size) {
         return size;
 }
 
+/**
+ * @brief This is mostly a copy/paste function of rd_slice_read. Both
+ *        functions read \p size bytes from current read position,
+ *        advancing the read offset by the number of bytes copied. The
+ *        difference is that instead of copying into a buffer, this function
+ *        writes into a \p rd_buf_t.
+ *        If there are less than \p size remaining in the buffer
+ *        then 0 is returned and no bytes are copied.
+ *
+ * @returns \p size, or 0 if \p size bytes are not available in buffer.
+ *
+ * @remark This performs a complete read, no partitial reads.
+ */
+size_t rd_slice_read_into_buf(rd_slice_t *slice, rd_buf_t *rbuf, size_t size) {
+        size_t remains = size;
+        size_t rlen;
+        const void *p;
+        size_t orig_end = slice->end;
+
+        if (unlikely(rd_slice_remains(slice) < size))
+                return 0;
+
+        /* Temporarily shrink slice to offset + \p size */
+        slice->end = rd_slice_abs_offset(slice) + size;
+
+        while ((rlen = rd_slice_reader(slice, &p))) {
+                rd_dassert(remains >= rlen);
+                rd_buf_write(rbuf, p, rlen);
+                remains -= rlen;
+        }
+
+        rd_dassert(remains == 0);
+
+        /* Restore original size */
+        slice->end = orig_end;
+
+        return size;
+}
 
 /**
  * @brief Read \p size bytes from absolute slice offset \p offset

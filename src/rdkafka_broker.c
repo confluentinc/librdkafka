@@ -768,6 +768,21 @@ void rd_kafka_broker_conn_closed(rd_kafka_broker_t *rkb,
         rd_kafka_broker_fail(rkb, log_level, err, "%s", errstr);
 }
 
+rd_bool_t buf_contains_toppar(rd_kafka_buf_t *rkbuf, rd_kafka_toppar_t *rktp) {
+
+        if (rd_list_cnt(&rkbuf->rkbuf_u.Produce.batch_list) > 0) {
+                /* this is multi-batch request, loop through all batches */
+                rd_kafka_msgbatch_t *msgbatch;
+                int i;
+                RD_LIST_FOREACH(msgbatch, &rkbuf->rkbuf_u.Produce.batch_list, i) {
+                        if (msgbatch->rktp == rktp)
+                                return rd_true;
+                }
+                return rd_false;
+
+        } else
+                return rkbuf->rkbuf_u.Produce.batch.rktp == rktp;
+}
 
 /**
  * @brief Purge requests in \p rkbq matching request \p ApiKey
@@ -792,7 +807,7 @@ static int rd_kafka_broker_bufq_purge_by_toppar(rd_kafka_broker_t *rkb,
         TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
 
                 if (rkbuf->rkbuf_reqhdr.ApiKey != ApiKey ||
-                    rkbuf->rkbuf_u.Produce.batch.rktp != rktp ||
+                    !buf_contains_toppar(rkbuf, rktp) ||
                     /* Skip partially sent buffers and let them transmit.
                      * The alternative would be to kill the connection here,
                      * which is more drastic and costly. */
@@ -3890,7 +3905,9 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                                           rd_ts_t *next_wakeup,
                                           rd_bool_t do_timeout_scan,
                                           rd_bool_t may_send,
-                                          rd_bool_t flushing) {
+                                          rd_bool_t flushing,
+                                          rd_bool_t multi_batch_request,
+                                          rd_list_t *batch_bufq) {
         int cnt = 0;
         int r;
         rd_kafka_msg_t *rkm;
@@ -4139,9 +4156,16 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         /* Send Produce requests for this toppar, honouring the
          * queue backpressure threshold. */
         for (reqcnt = 0; reqcnt < max_requests; reqcnt++) {
-                r = rd_kafka_ProduceRequest(rkb, rktp, pid, epoch_base_msgid);
-                if (likely(r > 0))
+                r = rd_kafka_ProduceRequest(rkb, rktp, pid, epoch_base_msgid, multi_batch_request, batch_bufq);
+                if (likely(r > 0)) {
                         cnt += r;
+                        if (multi_batch_request)
+                                /* In case of multi-batch request, we can't have multiple
+                                   batches from the same toppar in a single Request, so
+                                   we break out the loop, essentially means we called
+                                   rd_kafka_ProduceRequest only once in this function */
+                                break;
+                }
                 else
                         break;
         }
@@ -4183,6 +4207,11 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
         rd_kafka_pid_t pid      = RD_KAFKA_PID_INITIALIZER;
         rd_bool_t may_send      = rd_true;
         rd_bool_t flushing      = rd_false;
+        rd_list_t batch_bufq;
+        /* TODO implement a proper feature flag, and make sure the mult-batch
+           feature is disabled when enable.idempotence is set */
+        rd_bool_t multi_batch_request = rd_kafka_is_idempotent(rkb->rkb_rk) ?
+                                        rd_false : rd_true;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;
@@ -4210,19 +4239,25 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
 
         flushing = may_send && rd_atomic32_get(&rkb->rkb_rk->rk_flushing) > 0;
 
+        rd_list_init(&batch_bufq, 0, NULL);
         do {
                 rd_ts_t this_next_wakeup = ret_next_wakeup;
 
                 /* Try producing toppar */
                 cnt += rd_kafka_toppar_producer_serve(
                     rkb, rktp, pid, now, &this_next_wakeup, do_timeout_scan,
-                    may_send, flushing);
+                    may_send, flushing, multi_batch_request, &batch_bufq);
 
                 rd_kafka_set_next_wakeup(&ret_next_wakeup, this_next_wakeup);
 
         } while ((rktp = CIRCLEQ_LOOP_NEXT(&rkb->rkb_active_toppars, rktp,
                                            rktp_activelink)) !=
                  rkb->rkb_active_toppar_next);
+
+        if (multi_batch_request && !rd_list_empty(&batch_bufq)) {
+                rd_kafka_MultiBatchProduceRequest(rkb, pid, &batch_bufq);
+        }
+        rd_list_destroy(&batch_bufq);
 
         /* Update next starting toppar to produce in round-robin list. */
         rd_kafka_broker_active_toppar_next(

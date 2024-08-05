@@ -187,6 +187,7 @@ static void do_test_low_socket_timeout(const char *topic) {
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         TEST_SAY("Waiting for sockem connect..\n");
         mtx_lock(&ctrl.lock);

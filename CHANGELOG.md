@@ -1,3 +1,25 @@
+# librdkafka v2.5.1 (can vary)
+
+librdkafka v2.5.1 is a maintenance release.
+
+* Fix for retrieving offset commit metadata when it contains
+  zeros and configured with `strndup` (#4795)
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4649.
+  When retrieving offset metadata, if the binary value contained zeros
+  and librdkafka was configured with `strndup`, part of
+  the buffer after first zero contained uninitialized data
+  instead of rest of metadata. Solved by avoiding to use
+  `strndup` for copying metadata.
+  Happens since: 0.9.0 (#4795).
+
+
+
 # librdkafka v2.5.0
 
 librdkafka v2.5.0 is a feature release.

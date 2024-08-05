@@ -128,4 +128,20 @@ void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
 
 void rd_kafka_Node_free(void *node);
 
+/**
+ * @brief Topic + partition + ErrorCode + ErrorString
+ * 
+ * @remark Public Type
+*/
+struct rd_kafka_topic_partition_result_s {
+        char *topic;
+        int32_t partition;
+        rd_kafka_resp_err_t err;
+        char *errstr;
+};
+
+void rd_kafka_topic_partition_result_destroy(rd_kafka_topic_partition_result_t *desc);
+ 
+void rd_kafka_topic_partition_result_free(void *ptr);
+
 #endif /* _RDKAFKA_AUX_H_ */

@@ -5870,6 +5870,75 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *elect_leaders /*(rd_kafka_EleactLeader_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        const rd_kafka_ElectLeader_t *elect_leader;
+        int op_timeout;
+        int i;
+
+        if (rd_list_cnt(elect_leaders) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No partitions specified for leader election");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        elect_leader = rd_list_elem(elect_leaders, 0);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ElectLeaders, 0, 2, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "ElectLeaders Admin API (KIP-460) not supported "
+                            "by broker");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ElectLeaders, 1,
+            1 + (50 + 4)*elect_leader->partitions->cnt, ApiVersion >= 2);
+
+        if(ApiVersion >= 1) {
+                /* Election type */
+                rd_kafka_buf_write_i8(rkbuf, elect_leader->electionType);
+        }
+
+        /* Write partition list */
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        rd_kafka_buf_write_topic_partitions(
+                        rkbuf, elect_leader->partitions, rd_false /*don't skip invalid offsets*/, 
+                        rd_false /* any offset */,
+                        rd_false /* don't use topic_id */,
+                        rd_true/* use topic_names */ ,
+                        fields);
+        
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 /**
  * @brief Parses and handles an InitProducerId reply.
  *

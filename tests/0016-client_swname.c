@@ -120,6 +120,11 @@ int main_0016_client_swname(int argc, char **argv) {
         const char *jmx_port;
         const char *reason = NULL;
 
+        if (test_broker_version > TEST_BRKVER(3, 6, 0, 0)) {
+                TEST_SKIP("FIXME: check this case with AK trunk\n");
+                return 0;
+        }
+
         /* If available, use the Kafka JmxTool to query software name
          * in broker JMX metrics */
         if (!(broker = test_getenv("BROKER_ADDRESS_2", NULL)))

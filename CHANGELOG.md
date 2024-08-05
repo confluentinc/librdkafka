@@ -1,3 +1,29 @@
+# librdkafka v2.5.2
+
+librdkafka v2.5.2 is a maintenance release.
+
+* Fix for an infinite loop happening with cooperative-sticky assignor
+  under some particular conditions (#4800).
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4783.
+  A consumer configured with the `cooperative-sticky` partition assignment
+  strategy could get stuck in an infinite loop, with corresponding spike of
+  main thread CPU usage.
+  That happened with some particular orders of members and potential 
+  assignable partitions.
+  Solved by removing the infinite loop cause.
+  Happening since: 1.6.0 (#4800).
+
+
+
+*Note: there was no v2.5.1 librdkafka release,
+ it was only for `confluent-kafka-dotnet`*
+
+
 # librdkafka v2.5.0
 
 librdkafka v2.5.0 is a feature release.

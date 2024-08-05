@@ -170,9 +170,15 @@ int main_0120_asymmetric_subscription(int argc, char **argv) {
         rd_kafka_mock_topic_create(mcluster, "t4", _PART_CNT, 1);
 
 
-        do_test_asymmetric("roundrobin", bootstraps);
         do_test_asymmetric("range", bootstraps);
-        do_test_asymmetric("cooperative-sticky", bootstraps);
+
+        /* These tests would be duplicate with KIP 848 protocol,
+         * given we're not testing the assignment here,
+         * as it's mocked. */
+        if (test_consumer_group_protocol_classic()) {
+                do_test_asymmetric("roundrobin", bootstraps);
+                do_test_asymmetric("cooperative-sticky", bootstraps);
+        }
 
         test_mock_cluster_destroy(mcluster);
 

@@ -6754,10 +6754,26 @@ rd_kafka_consumer_group_metadata(rd_kafka_t *rk) {
         return cgmetadata;
 }
 
+const char *rd_kafka_consumer_group_metadata_group_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->group_id;
+}
+
 const char *rd_kafka_consumer_group_metadata_member_id(
     const rd_kafka_consumer_group_metadata_t *group_metadata) {
         return group_metadata->member_id;
 }
+
+const char *rd_kafka_consumer_group_metadata_group_instance_id(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->group_instance_id;
+}
+
+int32_t rd_kafka_consumer_group_metadata_member_epoch(
+    const rd_kafka_consumer_group_metadata_t *group_metadata) {
+        return group_metadata->generation_id;
+}
+
 
 void rd_kafka_consumer_group_metadata_destroy(
     rd_kafka_consumer_group_metadata_t *cgmetadata) {

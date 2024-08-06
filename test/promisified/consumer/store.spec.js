@@ -1,4 +1,4 @@
-jest.setTimeout(30000)
+jest.setTimeout(30000);
 
 const {
     secureRandom,
@@ -14,10 +14,10 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
     let topicName, groupId, producer, consumer;
 
     beforeEach(async () => {
-        topicName = `test-topic-${secureRandom()}`
-        groupId = `consumer-group-id-${secureRandom()}`
+        topicName = `test-topic-${secureRandom()}`;
+        groupId = `consumer-group-id-${secureRandom()}`;
 
-        await createTopic({ topic: topicName, partitions: 3 })
+        await createTopic({ topic: topicName, partitions: 3 });
 
         producer = createProducer({});
 
@@ -33,8 +33,8 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
     });
 
     afterEach(async () => {
-        consumer && (await consumer.disconnect())
-        producer && (await producer.disconnect())
+        consumer && (await consumer.disconnect());
+        producer && (await producer.disconnect());
     });
 
     it('should not work if enable.auto.offset.store = true', async () => {
@@ -54,7 +54,7 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         });
 
         await consumer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
         await consumer.run({
             eachMessage: async () => {
             }
@@ -81,7 +81,7 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         });
 
         await consumer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
         await consumer.run({
             eachMessage: async () => {
             }
@@ -98,17 +98,17 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         const messages = Array(3 * 10)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { value: `value-${value}`, partition: (i++) % 3 }
-            })
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: (i++) % 3 };
+            });
 
         await producer.connect();
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
         await producer.flush();
 
         let msgCount = 0;
         await consumer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
         await consumer.run({
             eachMessage: async ({ topic, partition, message }) => {
                 msgCount++;
@@ -127,7 +127,7 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         await consumer.disconnect();
 
         /* Send 30 more messages */
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
         await producer.flush();
 
 
@@ -139,12 +139,12 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
 
         msgCount = 0;
         await consumer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
         await consumer.run({
-            eachMessage: async ({ message }) => {
+            eachMessage: async () => {
                 msgCount++;
             }
-        })
+        });
         /* Only the extra 30 messages should come to us */
         await waitFor(() => msgCount >= 30, () => null, { delay: 100 });
         await sleep(1000);
@@ -157,18 +157,18 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
         const messages = Array(3 * 10)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { value: `value-${value}`, partition: (i++) % 3 }
-            })
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: (i++) % 3 };
+            });
 
         await producer.connect();
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
         await producer.flush();
 
         let msgCount = 0;
         const metadata = 'unicode-metadata-😊';
         await consumer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
         await consumer.run({
             eachMessage: async ({ topic, partition, message }) => {
                 msgCount++;
@@ -202,7 +202,7 @@ describe.each([[false], [true]])('Consumer store', (isAutoCommit) => {
 
         msgCount = 0;
         await consumer.connect();
-        await consumer.subscribe({ topic: 'not-a-real-topic-name' })
+        await consumer.subscribe({ topic: 'not-a-real-topic-name' });
 
         /* At this point, we're not actually assigned anything, but we should be able to fetch
          * the stored offsets and metadata anyway since we're of the same consumer group. */

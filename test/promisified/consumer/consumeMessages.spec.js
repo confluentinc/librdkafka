@@ -1,4 +1,4 @@
-jest.setTimeout(30000)
+jest.setTimeout(30000);
 
 const { CompressionTypes } = require('../../../lib').KafkaJS;
 const {
@@ -8,9 +8,9 @@ const {
     createProducer,
     createConsumer,
     waitForMessages,
-    waitForConsumerToJoinGroup,
     sleep,
 } = require('../testhelpers');
+const { Buffer } = require('buffer');
 
 /* All variations of partitionsConsumedConcurrently */
 const cases = Array(3).fill().map((_, i) => [(i % 3) + 1]);
@@ -21,10 +21,10 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
 
     beforeEach(async () => {
         console.log("Starting:", expect.getState().currentTestName, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
-        topicName = `test-topic-${secureRandom()}`
-        groupId = `consumer-group-id-${secureRandom()}`
+        topicName = `test-topic-${secureRandom()}`;
+        groupId = `consumer-group-id-${secureRandom()}`;
 
-        await createTopic({ topic: topicName, partitions })
+        await createTopic({ topic: topicName, partitions });
         producer = createProducer({});
 
         consumer = createConsumer({
@@ -36,15 +36,15 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
     });
 
     afterEach(async () => {
-        consumer && (await consumer.disconnect())
-        producer && (await producer.disconnect())
+        consumer && (await consumer.disconnect());
+        producer && (await producer.disconnect());
         console.log("Ending:", expect.getState().currentTestName, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
     });
 
     it('consume messages', async () => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         const messagesConsumed = [];
         consumer.run({
@@ -55,12 +55,12 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         const messages = Array(10)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
-            })
+                const value = secureRandom();
+                return { key: `key-${value}`, value: `value-${value}`, partition: 0 };
+            });
 
-        await producer.send({ topic: topicName, messages })
-        await waitForMessages(messagesConsumed, { number: messages.length })
+        await producer.send({ topic: topicName, messages });
+        await waitForMessages(messagesConsumed, { number: messages.length });
 
         expect(messagesConsumed[0]).toEqual(
             expect.objectContaining({
@@ -72,7 +72,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
                     offset: '0',
                 }),
             })
-        )
+        );
 
         expect(messagesConsumed[messagesConsumed.length - 1]).toEqual(
             expect.objectContaining({
@@ -84,16 +84,16 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
                     offset: '' + (messagesConsumed.length - 1),
                 }),
             })
-        )
+        );
 
         // check if all offsets are present
-        expect(messagesConsumed.map(m => m.message.offset)).toEqual(messages.map((_, i) => `${i}`))
+        expect(messagesConsumed.map(m => m.message.offset)).toEqual(messages.map((_, i) => `${i}`));
     });
 
     it('consume messages with headers', async () => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         const messagesConsumed = [];
         consumer.run({
@@ -110,10 +110,10 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
                 'header-4': Buffer.from([1, 0, 1, 0, 1]),
             },
             partition: 0,
-        }]
+        }];
 
-        await producer.send({ topic: topicName, messages })
-        await waitForMessages(messagesConsumed, { number: messages.length })
+        await producer.send({ topic: topicName, messages });
+        await waitForMessages(messagesConsumed, { number: messages.length });
 
         expect(messagesConsumed[0]).toEqual(
             expect.objectContaining({
@@ -131,13 +131,13 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
                     }
                 }),
             })
-        )
+        );
     });
 
     it.each([[true], [false]])('consumes messages using eachBatch', async (isAutoResolve) => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         const messagesConsumed = [];
         consumer.run({
@@ -161,12 +161,12 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         const messages = Array(100 * partitions)
             .fill()
             .map((_, i) => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions }
-            })
+                const value = secureRandom();
+                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions };
+            });
 
-        await producer.send({ topic: topicName, messages })
-        await waitForMessages(messagesConsumed, { number: messages.length })
+        await producer.send({ topic: topicName, messages });
+        await waitForMessages(messagesConsumed, { number: messages.length });
 
         for (let p = 0; p < partitions; p++) {
             const specificPartitionMessages = messagesConsumed.filter(m => m.partition === p);
@@ -196,7 +196,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
             );
 
             // check if all offsets are present
-            expect(specificPartitionMessages.map(m => m.message.offset)).toEqual(specificExpectedMessages.map((_, i) => `${i}`))
+            expect(specificPartitionMessages.map(m => m.message.offset)).toEqual(specificExpectedMessages.map((_, i) => `${i}`));
         }
 
     });
@@ -235,9 +235,9 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         const messages = Array(messagesPerPartition * partitions)
             .fill()
             .map((_, i) => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions }
-            })
+                const value = secureRandom();
+                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions };
+            });
 
         await producer.send({ topic: topicName, messages });
 
@@ -245,12 +245,13 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
          * cache growth characteristics, which may change in the future. So just check if there
          * is at least 1 message more than we sent. */
         await waitForMessages(messagesConsumed, { number: messages.length + 1 });
+        expect(messagesConsumed.length).toBeGreaterThan(messages.length);
     });
 
     it('is able to reconsume messages after not resolving it', async () => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         let messageSeen = false;
         const messagesConsumed = [];
@@ -277,9 +278,9 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         const messages = Array(1)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
-            })
+                const value = secureRandom();
+                return { key: `key-${value}`, value: `value-${value}`, partition: 0 };
+            });
 
         await producer.send({ topic: topicName, messages });
         await waitFor(() => consumer.assignment().length > 0, () => { }, 100);
@@ -289,7 +290,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
     it.each([[true], [false]])('is able to reconsume messages when an error is thrown', async (isAutoResolve) => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         let messageSeen = false;
         const messagesConsumed = [];
@@ -313,9 +314,9 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         const messages = Array(1)
             .fill()
             .map(() => {
-                const value = secureRandom()
+                const value = secureRandom();
                 return { key: `key-${value}`, value: `value-${value}`, partition: 0 };
-            })
+            });
 
         await producer.send({ topic: topicName, messages });
         await waitForMessages(messagesConsumed, { number: messages.length });
@@ -324,7 +325,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
     it.each([[true], [false]])('does not reconsume resolved messages even on error', async (isAutoResolve) => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         const messagesConsumed = [];
         consumer.run({
@@ -341,11 +342,11 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         const messages = Array(2)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
-            })
+                const value = secureRandom();
+                return { key: `key-${value}`, value: `value-${value}`, partition: 0 };
+            });
 
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
         await waitForMessages(messagesConsumed, { number: messages.length });
 
         expect(messagesConsumed[0].key.toString()).toBe(messages[0].key);
@@ -356,14 +357,14 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         const partitions = 3;
         /* We want partitionsConsumedConcurrently to be 2, 3, and 4 rather than 1, 2, and 3 that is tested by the test. */
         const partitionsConsumedConcurrentlyDiff = partitionsConsumedConcurrently + 1;
-        topicName = `test-topic-${secureRandom()}`
+        topicName = `test-topic-${secureRandom()}`;
         await createTopic({
             topic: topicName,
             partitions: partitions,
-        })
-        await consumer.connect()
-        await producer.connect()
-        await consumer.subscribe({ topic: topicName })
+        });
+        await consumer.connect();
+        await producer.connect();
+        await consumer.subscribe({ topic: topicName });
 
         let inProgress = 0;
         let inProgressMaxValue = 0;
@@ -374,18 +375,18 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
                 inProgress++;
                 await sleep(1);
                 messagesConsumed.push(event);
-                inProgressMaxValue = Math.max(inProgress, inProgressMaxValue)
+                inProgressMaxValue = Math.max(inProgress, inProgressMaxValue);
                 inProgress--;
             },
-        })
+        });
 
         await waitFor(() => consumer.assignment().length > 0, () => { }, 100);
 
         const messages = Array(1024*9)
             .fill()
             .map((_, i) => {
-                const value = secureRandom(512)
-                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions }
+                const value = secureRandom(512);
+                return { key: `key-${value}`, value: `value-${value}`, partition: i % partitions };
             });
 
         await producer.send({ topic: topicName, messages });
@@ -435,68 +436,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
                     offset: '1',
                 }),
             }),
-        ])
-    });
-
-    /* Skip as it uses consumer events. */
-    it.skip('commits the last offsets processed before stopping', async () => {
-        jest.spyOn(cluster, 'refreshMetadataIfNecessary')
-
-        await Promise.all([admin.connect(), consumer.connect(), producer.connect()])
-        await consumer.subscribe({ topic: topicName })
-
-        const messagesConsumed = []
-        consumer.run({ eachMessage: async event => messagesConsumed.push(event) })
-        await waitForConsumerToJoinGroup(consumer)
-
-        // stop the consumer right after processing the batch, the offsets should be
-        // committed in the end
-        consumer.on(consumer.events.END_BATCH_PROCESS, async () => {
-            await consumer.stop()
-        })
-
-        const messages = Array(100)
-            .fill()
-            .map(() => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
-            })
-
-        await producer.send({ topic: topicName, messages })
-        await waitForMessages(messagesConsumed, { number: messages.length })
-
-        expect(cluster.refreshMetadataIfNecessary).toHaveBeenCalled()
-
-        expect(messagesConsumed[0]).toEqual(
-            expect.objectContaining({
-                topic: topicName,
-                partition: 0,
-                message: expect.objectContaining({
-                    key: Buffer.from(messages[0].key),
-                    value: Buffer.from(messages[0].value),
-                    offset: '0',
-                }),
-            })
-        )
-
-        expect(messagesConsumed[messagesConsumed.length - 1]).toEqual(
-            expect.objectContaining({
-                topic: topicName,
-                partition: 0,
-                message: expect.objectContaining({
-                    key: Buffer.from(messages[messages.length - 1].key),
-                    value: Buffer.from(messages[messages.length - 1].value),
-                    offset: '99',
-                }),
-            })
-        )
-
-        // check if all offsets are present
-        expect(messagesConsumed.map(m => m.message.offset)).toEqual(messages.map((_, i) => `${i}`))
-        const response = await admin.fetchOffsets({ groupId, topics: [topicName] })
-        const { partitions } = response.find(({ topic }) => topic === topicName)
-        const partition = partitions.find(({ partition }) => partition === 0)
-        expect(partition.offset).toEqual('100') // check if offsets were committed
+        ]);
     });
 
     it('stops consuming messages when running = false', async () => {
@@ -507,7 +447,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         let calls = 0;
 
         consumer.run({
-            eachMessage: async event => {
+            eachMessage: async () => {
                 calls++;
                 await sleep(100);
             },
@@ -525,54 +465,6 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         expect(calls).toEqual(1);
     });
 
-    /* Skip as it uses consumer events */
-    it.skip('discards messages received when pausing while fetch is in-flight', async () => {
-        consumer = createConsumer({
-            cluster: createCluster(),
-            groupId,
-            maxWaitTimeInMs: 200,
-            logger: newLogger(),
-        })
-
-        const messages = Array(10)
-            .fill()
-            .map(() => {
-                const value = secureRandom()
-                return { key: `key-${value}`, value: `value-${value}` }
-            })
-        await producer.connect()
-        await producer.send({ topic: topicName, messages })
-
-        await consumer.connect()
-
-        await consumer.subscribe({ topic: topicName })
-
-        const offsetsConsumed = []
-
-        const eachBatch = async ({ batch, heartbeat }) => {
-            for (const message of batch.messages) {
-                offsetsConsumed.push(message.offset)
-            }
-
-            await heartbeat()
-        }
-
-        consumer.run({
-            eachBatch,
-        })
-
-        await waitForConsumerToJoinGroup(consumer)
-        await waitFor(() => offsetsConsumed.length === messages.length, { delay: 50 })
-        await waitForNextEvent(consumer, consumer.events.FETCH_START)
-
-        consumer.pause([{ topic: topicName }])
-        await producer.send({ topic: topicName, messages }) // trigger completion of fetch
-
-        await waitForNextEvent(consumer, consumer.events.FETCH)
-
-        expect(offsetsConsumed.length).toEqual(messages.length)
-    });
-
     it('does not disconnect in the middle of message processing', async () => {
         await producer.connect();
         await consumer.connect();
@@ -586,7 +478,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
                 await sleep(7000);
                 try {
                     consumer.seek({ topic: topicName, partition: 0, offset: message.offset });
-                } catch (e) {
+                } catch {
                     failedSeek = true;
                 }
                 calls++;

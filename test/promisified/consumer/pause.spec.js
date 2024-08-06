@@ -16,11 +16,11 @@ describe('Consumer', () => {
 
     beforeEach(async () => {
         console.log("Starting:", expect.getState().currentTestName);
-        topics = [`test-topic1-${secureRandom()}`, `test-topic2-${secureRandom()}`]
-        groupId = `consumer-group-id-${secureRandom()}`
+        topics = [`test-topic1-${secureRandom()}`, `test-topic2-${secureRandom()}`];
+        groupId = `consumer-group-id-${secureRandom()}`;
 
         for (const topic of topics) {
-            await createTopic({ topic, partitions: 2 })
+            await createTopic({ topic, partitions: 2 });
         }
 
         producer = createProducer({
@@ -32,13 +32,13 @@ describe('Consumer', () => {
             maxBytesPerPartition: 180,
             fromBeginning: true,
         });
-    })
+    });
 
     afterEach(async () => {
-        consumer && (await consumer.disconnect())
-        producer && (await producer.disconnect())
+        consumer && (await consumer.disconnect());
+        producer && (await producer.disconnect());
         console.log("Ending:", expect.getState().currentTestName);
-    })
+    });
 
     describe('when pausing', () => {
         it('throws an error if the topic is invalid', async () => {
@@ -56,9 +56,9 @@ describe('Consumer', () => {
 
             /* Send 4 of the same messages to each topic, in order to partition 0, 0, 1, 0 of that topic. */
             const messages = [0, 0, 1, 0].map(partition => {
-                const key = secureRandom()
-                return { key: `key-${key}`, value: `value-${key}`, partition }
-            })
+                const key = secureRandom();
+                return { key: `key-${key}`, value: `value-${key}`, partition };
+            });
 
             /* Send the first 2 messages to each topic. */
             for (const topic of topics) {
@@ -74,8 +74,8 @@ describe('Consumer', () => {
                 eachMessage: async event => {
                     const { topic, message, pause } = event;
 
-                    const whichTopic = topics.indexOf(topic)
-                    const whichMessage = messages.findIndex(m => String(m.key) === String(message.key))
+                    const whichTopic = topics.indexOf(topic);
+                    const whichMessage = messages.findIndex(m => String(m.key) === String(message.key));
 
                     /* In case we're at the 2nd message (idx = 1) for the first topic, pause the partition.
                      * It should be the 0th partition which gets paused. */
@@ -98,113 +98,113 @@ describe('Consumer', () => {
              * Encountering 3 messages is no guarantee of that we did manage to pause. */
             await waitFor(() => pauseMessageRecvd, () => { }, { delay: 100 });
             const [pausedTopic] = topics;
-            expect(consumer.paused()).toEqual([{ topic: pausedTopic, partitions: [0] }])
+            expect(consumer.paused()).toEqual([{ topic: pausedTopic, partitions: [0] }]);
 
             for (const topic of topics) {
-                await producer.send({ topic, messages: messages.slice(2) })
+                await producer.send({ topic, messages: messages.slice(2) });
             }
-            await waitForMessages(messagesConsumed, { number: 6, delay: 10 })
+            await waitForMessages(messagesConsumed, { number: 6, delay: 10 });
 
-            expect(messagesConsumed).toHaveLength(6)
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 0 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 2 }) // partition 1
+            expect(messagesConsumed).toHaveLength(6);
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 0 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 2 }); // partition 1
 
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 0 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 1 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 2 }) // partition 1
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 }) // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 0 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 1 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 2 }); // partition 1
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 }); // partition 0
 
             shouldPause = false;
             resumeCallbacks.forEach(resume => resume());
 
-            await waitForMessages(messagesConsumed, { number: 8 })
+            await waitForMessages(messagesConsumed, { number: 8 });
 
             // these messages have to wait until the consumer has resumed
-            expect(messagesConsumed).toHaveLength(8)
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 3 }) // partition 0
+            expect(messagesConsumed).toHaveLength(8);
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 3 }); // partition 0
         }, 10000);
 
         it('avoids calling eachMessage again for paused topics/partitions when paused via consumer.pause', async () => {
-            await consumer.connect()
-            await producer.connect()
+            await consumer.connect();
+            await producer.connect();
             const messages = [0, 0, 1, 0].map(partition => {
-                const key = secureRandom()
-                return { key: `key-${key}`, value: `value-${key}`, partition }
-            })
+                const key = secureRandom();
+                return { key: `key-${key}`, value: `value-${key}`, partition };
+            });
 
             for (const topic of topics) {
-                await producer.send({ topic, messages: messages.slice(0, 2) })
+                await producer.send({ topic, messages: messages.slice(0, 2) });
             }
             await consumer.subscribe({ topics, replace: true });
 
-            let shouldPause = true
-            const messagesConsumed = []
+            let shouldPause = true;
+            const messagesConsumed = [];
             consumer.run({
                 eachMessage: async event => {
                     const { topic, message, partition } = event;
 
-                    const whichTopic = topics.indexOf(topic)
-                    const whichMessage = messages.findIndex(m => String(m.key) === String(message.key))
+                    const whichTopic = topics.indexOf(topic);
+                    const whichMessage = messages.findIndex(m => String(m.key) === String(message.key));
 
                     messagesConsumed.push({
                         topic: whichTopic,
                         message: whichMessage,
-                    })
+                    });
 
                     // here, we pause after the first message (0) on the first topic (0)
                     if (shouldPause && whichTopic === 0 && whichMessage === 0) {
-                        consumer.pause([{ topic, partitions: [partition] }])
+                        consumer.pause([{ topic, partitions: [partition] }]);
                         // we don't throw an exception here to ensure the loop calling us breaks on its own and doesn't call us again
                     }
                 },
-            })
+            });
 
-            await waitForMessages(messagesConsumed, { number: 3 })
-            const [pausedTopic] = topics
-            expect(consumer.paused()).toEqual([{ topic: pausedTopic, partitions: [0] }])
+            await waitForMessages(messagesConsumed, { number: 3 });
+            const [pausedTopic] = topics;
+            expect(consumer.paused()).toEqual([{ topic: pausedTopic, partitions: [0] }]);
 
             for (const topic of topics) {
-                await producer.send({ topic, messages: messages.slice(2) })
+                await producer.send({ topic, messages: messages.slice(2) });
             }
-            await waitForMessages(messagesConsumed, { number: 6, delay: 10 })
+            await waitForMessages(messagesConsumed, { number: 6, delay: 10 });
 
-            expect(messagesConsumed).toHaveLength(6)
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 0 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 2 }) // partition 1
+            expect(messagesConsumed).toHaveLength(6);
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 0 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 2 }); // partition 1
 
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 0 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 1 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 2 }) // partition 1
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 }) // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 0 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 1 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 2 }); // partition 1
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 }); // partition 0
 
-            shouldPause = false
-            consumer.resume(consumer.paused())
+            shouldPause = false;
+            consumer.resume(consumer.paused());
 
-            await waitForMessages(messagesConsumed, { number: 8 })
+            await waitForMessages(messagesConsumed, { number: 8 });
 
             // these messages have to wait until the consumer has resumed
-            expect(messagesConsumed).toHaveLength(8)
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 }) // partition 0
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 3 }) // partition 0
+            expect(messagesConsumed).toHaveLength(8);
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 }); // partition 0
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 3 }); // partition 0
         }, 15000);
 
         it('pauses when pausing via the eachBatch callback', async () => {
-            await consumer.connect()
-            await producer.connect()
+            await consumer.connect();
+            await producer.connect();
             const originalMessages = [0, 0, 0, 1].map(partition => {
-                const key = secureRandom()
-                return { key: `key-${key}`, value: `value-${key}`, partition }
-            })
+                const key = secureRandom();
+                return { key: `key-${key}`, value: `value-${key}`, partition };
+            });
 
             for (const topic of topics) {
-                await producer.send({ topic, messages: originalMessages })
-                await consumer.subscribe({ topic })
+                await producer.send({ topic, messages: originalMessages });
+                await consumer.subscribe({ topic });
             }
 
-            let shouldPause = true
-            const messagesConsumed = []
-            const resumeCallbacks = []
+            let shouldPause = true;
+            const messagesConsumed = [];
+            const resumeCallbacks = [];
             consumer.run({
                 eachBatch: async event => {
                     const {
@@ -212,42 +212,42 @@ describe('Consumer', () => {
                         pause,
                         resolveOffset,
                         commitOffsetsIfNecessary,
-                    } = event
+                    } = event;
                     messages.every(message => {
-                        const whichTopic = topics.indexOf(topic)
+                        const whichTopic = topics.indexOf(topic);
                         const whichMessage = originalMessages.findIndex(
                             m => String(m.key) === String(message.key)
-                        )
+                        );
 
                         if (shouldPause && whichTopic === 0 && whichMessage === 1) {
-                            resumeCallbacks.push(pause())
-                            return false
+                            resumeCallbacks.push(pause());
+                            return false;
                         } else if (shouldPause && whichTopic === 1 && whichMessage === 3) {
-                            resumeCallbacks.push(pause())
-                            return false
+                            resumeCallbacks.push(pause());
+                            return false;
                         }
                         messagesConsumed.push({
                             topic: whichTopic,
                             message: whichMessage,
-                        })
-                        resolveOffset(message.offset)
-                        return true
-                    })
-                    await commitOffsetsIfNecessary()
+                        });
+                        resolveOffset(message.offset);
+                        return true;
+                    });
+                    await commitOffsetsIfNecessary();
                 },
                 eachBatchAutoResolve: false,
-            })
-            await waitForConsumerToJoinGroup(consumer)
-            await waitForMessages(messagesConsumed, { number: 5 })
+            });
+            await waitForConsumerToJoinGroup(consumer);
+            await waitForMessages(messagesConsumed, { number: 5 });
             expect(messagesConsumed.length).toEqual(5);
-            expect(consumer.paused()).toContainEqual({ topic: topics[0], partitions: [0] })
-            expect(consumer.paused()).toContainEqual({ topic: topics[1], partitions: [1] })
-            shouldPause = false
-            resumeCallbacks.forEach(resume => resume())
-            await waitForMessages(messagesConsumed, { number: 8 })
-            expect(consumer.paused()).toEqual([])
-            expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 })
-            expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 })
+            expect(consumer.paused()).toContainEqual({ topic: topics[0], partitions: [0] });
+            expect(consumer.paused()).toContainEqual({ topic: topics[1], partitions: [1] });
+            shouldPause = false;
+            resumeCallbacks.forEach(resume => resume());
+            await waitForMessages(messagesConsumed, { number: 8 });
+            expect(consumer.paused()).toEqual([]);
+            expect(messagesConsumed).toContainEqual({ topic: 0, message: 1 });
+            expect(messagesConsumed).toContainEqual({ topic: 1, message: 3 });
         }, 10000);
 
         it('does not fetch messages for the paused topic', async () => {
@@ -286,7 +286,7 @@ describe('Consumer', () => {
                 }),
             ]);
 
-            const byPartition = (a, b) => a.partition - b.partition
+            const byPartition = (a, b) => a.partition - b.partition;
             expect(
                 consumedMessages.filter(({ topic }) => topic === activeTopic).sort(byPartition)
             ).toEqual([
@@ -320,8 +320,8 @@ describe('Consumer', () => {
             const messages = Array(1)
                 .fill()
                 .map(() => {
-                    const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}` }
+                    const value = secureRandom();
+                    return { key: `key-${value}`, value: `value-${value}` };
                 });
             const forPartition = partition => message => ({ ...message, partition });
 
@@ -330,7 +330,7 @@ describe('Consumer', () => {
             }
             await consumer.subscribe({ topic });
 
-            const messagesConsumed = []
+            const messagesConsumed = [];
             consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
 
             await waitForMessages(messagesConsumed, { number: messages.length * partitions.length });
@@ -392,10 +392,10 @@ describe('Consumer', () => {
 
             consumer.run({
                 eachMessage: async event => {
-                    messagesConsumed.push(event)
+                    messagesConsumed.push(event);
                     if (shouldThrow) {
-                        consumer.pause([{ topic }])
-                        throw new Error('Should fail')
+                        consumer.pause([{ topic }]);
+                        throw new Error('Should fail');
                     }
                 },
             });
@@ -407,17 +407,17 @@ describe('Consumer', () => {
             shouldThrow = false;
             consumer.resume([{ topic }]);
 
-            const consumedMessages = await waitForMessages(messagesConsumed, { number: 2 })
+            const consumedMessages = await waitForMessages(messagesConsumed, { number: 2 });
 
-            expect(consumedMessagesTillError).toHaveLength(1)
+            expect(consumedMessagesTillError).toHaveLength(1);
             expect(consumedMessagesTillError).toEqual([
                 expect.objectContaining({
                     topic,
                     partition: expect.any(Number),
                     message: expect.objectContaining({ offset: '0' }),
                 }),
-            ])
-            expect(consumedMessages).toHaveLength(2)
+            ]);
+            expect(consumedMessages).toHaveLength(2);
             expect(consumedMessages).toEqual([
                 expect.objectContaining({
                     topic,
@@ -429,7 +429,7 @@ describe('Consumer', () => {
                     partition: expect.any(Number),
                     message: expect.objectContaining({ offset: '0' }),
                 }),
-            ])
+            ]);
         }, 10000);
 
         it('does not process messages when consumption from topic-partition is paused', async () => {
@@ -445,15 +445,15 @@ describe('Consumer', () => {
             await consumer.connect();
             await producer.connect();
 
-            await producer.send({ topic, messages: [message1, message2] })
-            await consumer.subscribe({ topic })
+            await producer.send({ topic, messages: [message1, message2] });
+            await consumer.subscribe({ topic });
 
             consumer.run({
                 eachMessage: async event => {
-                    messagesConsumed.push(event)
+                    messagesConsumed.push(event);
                     if (shouldThrow && event.partition === pausedPartition) {
-                        consumer.pause([{ topic, partitions: [pausedPartition] }])
-                        throw new Error('Should fail')
+                        consumer.pause([{ topic, partitions: [pausedPartition] }]);
+                        throw new Error('Should fail');
                     }
                 },
             });
@@ -532,7 +532,7 @@ describe('Consumer', () => {
             await producer.send({ topic: topic2, messages: [message1] });
 
             expect(eachMessage).not.toHaveBeenCalled();
-        })
+        });
     });
 
     describe('when resuming', () => {
@@ -600,8 +600,8 @@ describe('Consumer', () => {
             const messages = Array(1)
                 .fill()
                 .map(() => {
-                    const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}` }
+                    const value = secureRandom();
+                    return { key: `key-${value}`, value: `value-${value}` };
                 });
             const forPartition = partition => message => ({ ...message, partition });
 
@@ -640,7 +640,7 @@ describe('Consumer', () => {
                         message: expect.objectContaining({ offset: `${i}` }),
                     })
                 )
-            )
+            );
 
             expect(consumedMessages.filter(({ partition }) => partition !== pausedPartition)).toEqual(
                 messages.concat(messages).map((message, i) =>
@@ -650,9 +650,9 @@ describe('Consumer', () => {
                         message: expect.objectContaining({ offset: `${i}` }),
                     })
                 )
-            )
+            );
 
-            expect(consumer.paused()).toEqual([])
+            expect(consumer.paused()).toEqual([]);
         }, 10000);
     });
-})
+});

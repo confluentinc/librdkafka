@@ -3,10 +3,9 @@ jest.setTimeout(30000);
 const {
     secureRandom,
     createTopic,
-    waitFor,
     createAdmin,
 } = require('../testhelpers');
-const { ConsumerGroupStates, ErrorCodes } = require('../../../lib').KafkaJS;
+const { ErrorCodes } = require('../../../lib').KafkaJS;
 
 describe('Admin > listTopics', () => {
     let topicNames, admin;

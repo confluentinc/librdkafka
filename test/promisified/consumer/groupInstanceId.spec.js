@@ -15,7 +15,7 @@ describe('Consumer with static membership', () => {
 
     beforeEach(async () => {
         topicName = `test-topic1-${secureRandom()}`;
-        groupId = `consumer-group-id-${secureRandom()}`
+        groupId = `consumer-group-id-${secureRandom()}`;
         consumerConfig = {
             groupId,
         };
@@ -24,13 +24,13 @@ describe('Consumer with static membership', () => {
     });
 
     afterEach(async () => {
-        consumer && (await consumer.disconnect())
+        consumer && (await consumer.disconnect());
     });
 
     it('does not rebalance after disconnect', async () => {
         let assigns = 0;
         let revokes = 0;
-        const rebalanceCallback = function (err, assignment) {
+        const rebalanceCallback = function (err) {
             if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
                 assigns++;
             } else if (err.code === ErrorCodes.ERR__REVOKE_PARTITIONS) {
@@ -39,7 +39,7 @@ describe('Consumer with static membership', () => {
                 // It's either assign or revoke and nothing else.
                 jest.fail('Unexpected error code');
             }
-        }
+        };
 
         // Create and start two consumers.
         consumer = createConsumer(consumerConfig, {
@@ -84,7 +84,7 @@ describe('Consumer with static membership', () => {
     it('does rebalance after session timeout', async () => {
         let assigns = 0;
         let revokes = 0;
-        const rebalanceCallback = function (err, assignment) {
+        const rebalanceCallback = function (err) {
             if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
                 assigns++;
             } else if (err.code === ErrorCodes.ERR__REVOKE_PARTITIONS) {
@@ -93,7 +93,7 @@ describe('Consumer with static membership', () => {
                 // It's either assign or revoke and nothing else.
                 jest.fail('Unexpected error code');
             }
-        }
+        };
 
         // Create and start two consumers.
         consumer = createConsumer(consumerConfig, {

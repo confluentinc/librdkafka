@@ -1,6 +1,6 @@
 jest.setTimeout(30000);
 
-const { Kafka, ErrorCodes } = require('../../../lib').KafkaJS;
+const { ErrorCodes } = require('../../../lib').KafkaJS;
 const { secureRandom,
     createTopic,
     waitFor,
@@ -22,12 +22,12 @@ describe('Consumer', () => {
         });
 
         producer = createProducer({});
-    })
+    });
 
     afterEach(async () => {
         consumer && (await consumer.disconnect());
         producer && (await producer.disconnect());
-    })
+    });
 
     describe('when subscribing to multiple topics', () => {
         it('throws an error if one of the topics is invalid', async () => {
@@ -68,7 +68,7 @@ describe('Consumer', () => {
                 expect.arrayContaining(['drink', 'your', 'tea'])
             );
         });
-    })
+    });
 
     describe('Deprecated "topic" interface', () => {
         describe('when subscribing', () => {
@@ -90,7 +90,7 @@ describe('Consumer', () => {
 
             describe('with a string', () => {
                 it('subscribes to the topic', async () => {
-                    const topic = `topic-${secureRandom()}`
+                    const topic = `topic-${secureRandom()}`;
 
                     await createTopic({ topic });
 

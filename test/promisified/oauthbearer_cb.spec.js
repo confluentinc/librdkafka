@@ -19,7 +19,7 @@ describe('Client > oauthbearer callback', () => {
 
     beforeEach(async () => {
         oauthbearer_cb_called = 0;
-    })
+    });
 
     it('works for producer',
         async () => {
@@ -77,4 +77,4 @@ describe('Client > oauthbearer callback', () => {
         }
     );
 
-})
+});

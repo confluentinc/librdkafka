@@ -7,7 +7,7 @@ const {
     waitFor,
     createAdmin,
 } = require('../testhelpers');
-const { ConsumerGroupStates, ErrorCodes } = require('../../../lib').KafkaJS;
+const { ErrorCodes } = require('../../../lib').KafkaJS;
 
 describe('Admin > deleteGroups', () => {
     let topicName, groupId, consumer, admin;

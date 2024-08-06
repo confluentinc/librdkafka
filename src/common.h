@@ -13,11 +13,12 @@
 
 #include <nan.h>
 
+#include <list>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 #include "rdkafka.h"  // NOLINT
 
 #include "src/errors.h"

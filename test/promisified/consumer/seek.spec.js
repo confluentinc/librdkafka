@@ -8,7 +8,7 @@ const {
     waitForMessages,
     waitFor,
     sleep,
-} = require('../testhelpers')
+} = require('../testhelpers');
 
 describe('Consumer seek >', () => {
     let topicName, groupId, producer, consumer;
@@ -35,7 +35,7 @@ describe('Consumer seek >', () => {
     describe('when seek offset', () => {
         describe('with one partition', () => {
             beforeEach(async () => {
-                await createTopic({ topic: topicName, partitions: 1 })
+                await createTopic({ topic: topicName, partitions: 1 });
             });
 
             it('throws an error if the topic is invalid', async () => {
@@ -105,8 +105,8 @@ describe('Consumer seek >', () => {
                     });
                     await consumer.subscribe({ topic: topicName });
 
-                    let messagesConsumed = []
-                    consumer.seek({ topic: topicName, partition: 0, offset: 2 })
+                    let messagesConsumed = [];
+                    consumer.seek({ topic: topicName, partition: 0, offset: 2 });
                     consumer.run({
                         eachMessage: async event => messagesConsumed.push(event),
                     });
@@ -159,7 +159,7 @@ describe('Consumer seek >', () => {
 
         describe('with two partitions', () => {
             beforeEach(async () => {
-                await createTopic({ topic: topicName, partitions: 2 })
+                await createTopic({ topic: topicName, partitions: 2 });
             });
 
             it('updates the partition offset to the given offset', async () => {
@@ -182,7 +182,7 @@ describe('Consumer seek >', () => {
 
                 await consumer.subscribe({ topic: topicName });
 
-                const messagesConsumed = []
+                const messagesConsumed = [];
                 consumer.seek({ topic: topicName, partition: 1, offset: 1 });
                 consumer.run({
                     eachMessage: async event => {
@@ -190,9 +190,9 @@ describe('Consumer seek >', () => {
                     }
                 });
 
-                let check = await expect(waitForMessages(messagesConsumed, { number: 3 })).resolves;
+                let check = await waitForMessages(messagesConsumed, { number: 3 });
 
-                await check.toEqual(
+                expect(check).toEqual(
                     expect.arrayContaining([
                         expect.objectContaining({
                             topic: topicName,
@@ -212,7 +212,7 @@ describe('Consumer seek >', () => {
                     ])
                 );
 
-                await check.toEqual(
+                expect(check).toEqual(
                     expect.not.arrayContaining([
                         expect.objectContaining({
                             topic: topicName,
@@ -243,7 +243,7 @@ describe('Consumer seek >', () => {
                     topic: topicName,
                     messages: [message1, message2, message3, message4, message5],
                 });
-                await consumer.subscribe({ topic: topicName })
+                await consumer.subscribe({ topic: topicName });
 
                 const messagesConsumed = [];
                 consumer.seek({ topic: topicName, partition: 0, offset: 2 });
@@ -254,9 +254,9 @@ describe('Consumer seek >', () => {
                     }
                 });
 
-                let check = await expect(waitForMessages(messagesConsumed, { number: 2 })).resolves;
+                let check = await waitForMessages(messagesConsumed, { number: 2 });
 
-                await check.toEqual(
+                expect(check).toEqual(
                     expect.arrayContaining([
                         expect.objectContaining({
                             topic: topicName,
@@ -271,7 +271,7 @@ describe('Consumer seek >', () => {
                     ])
                 );
 
-                await check.toEqual(
+                expect(check).toEqual(
                     expect.not.arrayContaining([
                         expect.objectContaining({
                             topic: topicName,
@@ -294,20 +294,20 @@ describe('Consumer seek >', () => {
             });
 
             it('uses the last seek for a given topic/partition', async () => {
-                await consumer.connect()
-                await producer.connect()
+                await consumer.connect();
+                await producer.connect();
 
-                const value1 = secureRandom()
-                const message1 = { key: `key-0`, value: `value-${value1}`, partition: 0 }
-                const value2 = secureRandom()
-                const message2 = { key: `key-0`, value: `value-${value2}`, partition: 0 }
-                const value3 = secureRandom()
-                const message3 = { key: `key-0`, value: `value-${value3}`, partition: 0 }
+                const value1 = secureRandom();
+                const message1 = { key: `key-0`, value: `value-${value1}`, partition: 0 };
+                const value2 = secureRandom();
+                const message2 = { key: `key-0`, value: `value-${value2}`, partition: 0 };
+                const value3 = secureRandom();
+                const message3 = { key: `key-0`, value: `value-${value3}`, partition: 0 };
 
-                await producer.send({ topic: topicName, messages: [message1, message2, message3] })
-                await consumer.subscribe({ topic: topicName, })
+                await producer.send({ topic: topicName, messages: [message1, message2, message3] });
+                await consumer.subscribe({ topic: topicName, });
 
-                const messagesConsumed = []
+                const messagesConsumed = [];
                 consumer.seek({ topic: topicName, partition: 0, offset: 0 });
                 consumer.seek({ topic: topicName, partition: 0, offset: 1 });
                 consumer.seek({ topic: topicName, partition: 0, offset: 2 });
@@ -317,9 +317,9 @@ describe('Consumer seek >', () => {
                     }
                 });
 
-                let check = await expect(waitForMessages(messagesConsumed, { number: 1 })).resolves;
+                let check = await waitForMessages(messagesConsumed, { number: 1 });
 
-                await check.toEqual(
+                expect(check).toEqual(
                     expect.arrayContaining([
                         expect.objectContaining({
                             topic: topicName,
@@ -329,7 +329,7 @@ describe('Consumer seek >', () => {
                     ])
                 );
 
-                await check.toEqual(
+                expect(check).toEqual(
                     expect.not.arrayContaining([
                         expect.objectContaining({
                             topic: topicName,
@@ -358,8 +358,8 @@ describe('Consumer seek >', () => {
             const messages = Array(10)
                 .fill()
                 .map(() => {
-                    const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
+                    const value = secureRandom();
+                    return { key: `key-${value}`, value: `value-${value}`, partition: 0 };
                 });
 
             await consumer.connect();
@@ -371,17 +371,17 @@ describe('Consumer seek >', () => {
 
             consumer.run({
                 eachMessage: async ({ message }) => {
-                    offsetsConsumed.push(message.offset)
+                    offsetsConsumed.push(message.offset);
 
                     if (offsetsConsumed.length === 1) {
                         consumer.seek({ topic: topicName, partition: 0, offset: message.offset });
                     }
                 },
-            })
+            });
 
-            await waitFor(() => offsetsConsumed.length >= 2, () => { }, { delay: 50 })
+            await waitFor(() => offsetsConsumed.length >= 2, () => { }, { delay: 50 });
 
-            expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1])
+            expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1]);
         });
 
         it('resolves a batch as stale when seek was called while processing it', async () => {
@@ -392,13 +392,13 @@ describe('Consumer seek >', () => {
                 maxWaitTimeInMs: 500,
                 fromBeginning: true,
                 autoCommit: true,
-            })
+            });
 
             const messages = Array(10)
                 .fill()
                 .map(() => {
-                    const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}` }
+                    const value = secureRandom();
+                    return { key: `key-${value}`, value: `value-${value}` };
                 });
 
             await consumer.connect();
@@ -413,20 +413,20 @@ describe('Consumer seek >', () => {
                     for (const message of batch.messages) {
                         if (isStale()) break;
 
-                        offsetsConsumed.push(message.offset)
+                        offsetsConsumed.push(message.offset);
 
                         if (offsetsConsumed.length === 1) {
-                            consumer.seek({ topic: topicName, partition: 0, offset: +message.offset })
+                            consumer.seek({ topic: topicName, partition: 0, offset: +message.offset });
                         }
 
-                        resolveOffset(message.offset)
+                        resolveOffset(message.offset);
                     }
                 },
-            })
+            });
 
-            await waitFor(() => offsetsConsumed.length >= 2, () => null, { delay: 50 })
+            await waitFor(() => offsetsConsumed.length >= 2, () => null, { delay: 50 });
 
-            expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1])
+            expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1]);
         });
 
         it('resolves a batch as stale when seek is called from outside eachBatch', async () => {
@@ -435,13 +435,13 @@ describe('Consumer seek >', () => {
                 maxWaitTimeInMs: 500,
                 fromBeginning: true,
                 autoCommit: true,
-            })
+            });
 
             const messages = Array(10)
                 .fill()
                 .map(() => {
-                    const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}`, partition: 0 }
+                    const value = secureRandom();
+                    return { key: `key-${value}`, value: `value-${value}`, partition: 0 };
                 });
 
             await consumer.connect();
@@ -456,22 +456,22 @@ describe('Consumer seek >', () => {
                     for (const message of batch.messages) {
                         if (isStale()) break;
 
-                        offsetsConsumed.push(message.offset)
+                        offsetsConsumed.push(message.offset);
 
                         /* Slow things down so we can call seek predictably. */
                         await sleep(1000);
 
-                        resolveOffset(message.offset)
+                        resolveOffset(message.offset);
                     }
                 },
-            })
+            });
 
-            await waitFor(() => offsetsConsumed.length === 1, () => null, { delay: 50 })
+            await waitFor(() => offsetsConsumed.length === 1, () => null, { delay: 50 });
             consumer.seek({ topic: topicName, partition: 0, offset: offsetsConsumed[0] });
 
-            await waitFor(() => offsetsConsumed.length >= 2, () => null, { delay: 50 })
+            await waitFor(() => offsetsConsumed.length >= 2, () => null, { delay: 50 });
 
-            expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1])
+            expect(offsetsConsumed[0]).toEqual(offsetsConsumed[1]);
         });
 
         it('resolves a batch as stale when pause was called while processing it', async () => {
@@ -480,14 +480,14 @@ describe('Consumer seek >', () => {
                 maxWaitTimeInMs: 500,
                 fromBeginning: true,
                 autoCommit: true,
-            })
+            });
 
             const numMessages = 100;
             const messages = Array(numMessages)
                 .fill()
                 .map(() => {
-                    const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}` }
+                    const value = secureRandom();
+                    return { key: `key-${value}`, value: `value-${value}` };
                 });
 
             await consumer.connect();
@@ -504,7 +504,7 @@ describe('Consumer seek >', () => {
                     for (const message of batch.messages) {
                         if (isStale()) break;
 
-                        offsetsConsumed.push(message.offset)
+                        offsetsConsumed.push(message.offset);
 
                         if (offsetsConsumed.length === Math.floor(numMessages/2)) {
                             resume = pause();
@@ -513,7 +513,7 @@ describe('Consumer seek >', () => {
                         resolveOffset(message.offset);
                     }
                 },
-            })
+            });
 
             /* Despite eachBatchAutoResolve being true, it shouldn't resolve offsets on its own.
              * However, manual resolution of offsets should still count. */
@@ -523,60 +523,10 @@ describe('Consumer seek >', () => {
 
             /* Since we've properly resolved all offsets before pause, including the offset that we paused at,
              * there is no repeat. */
-            await waitFor(() => offsetsConsumed.length >= numMessages, () => null, { delay: 50 })
+            await waitFor(() => offsetsConsumed.length >= numMessages, () => null, { delay: 50 });
             expect(offsetsConsumed.length).toBe(numMessages);
 
-            expect(+offsetsConsumed[Math.floor(numMessages/2)]).toEqual(+offsetsConsumed[Math.floor(numMessages/2) + 1] - 1)
-        });
-
-        /* Skip as it uses consumer events */
-        it.skip('skips messages fetched while seek was called', async () => {
-            consumer = createConsumer({
-                cluster: createCluster(),
-                groupId,
-                maxWaitTimeInMs: 1000,
-                logger: newLogger(),
-            })
-
-            const messages = Array(10)
-                .fill()
-                .map(() => {
-                    const value = secureRandom()
-                    return { key: `key-${value}`, value: `value-${value}` }
-                })
-            await producer.connect()
-            await producer.send({ topic: topicName, messages })
-
-            await consumer.connect()
-
-            await consumer.subscribe({ topic: topicName })
-
-            const offsetsConsumed = []
-
-            const eachBatch = async ({ batch, heartbeat }) => {
-                for (const message of batch.messages) {
-                    offsetsConsumed.push(message.offset)
-                }
-
-                await heartbeat()
-            }
-
-            consumer.run({
-                eachBatch,
-            })
-
-            await waitForConsumerToJoinGroup(consumer)
-
-            await waitFor(() => offsetsConsumed.length === messages.length, { delay: 50 })
-            await waitForNextEvent(consumer, consumer.events.FETCH_START)
-
-            const seekedOffset = offsetsConsumed[Math.floor(messages.length / 2)]
-            consumer.seek({ topic: topicName, partition: 0, offset: seekedOffset })
-            await producer.send({ topic: topicName, messages }) // trigger completion of fetch
-
-            await waitFor(() => offsetsConsumed.length > messages.length, { delay: 50 })
-
-            expect(offsetsConsumed[messages.length]).toEqual(seekedOffset)
+            expect(+offsetsConsumed[Math.floor(numMessages/2)]).toEqual(+offsetsConsumed[Math.floor(numMessages/2) + 1] - 1);
         });
     });
-})
+});

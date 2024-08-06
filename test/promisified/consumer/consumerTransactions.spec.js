@@ -14,10 +14,10 @@ describe('Consumer transactions', () => {
     let topicName, groupId, producer, consumer;
 
     beforeEach(async () => {
-        topicName = `test-topic-${secureRandom()}`
-        groupId = `consumer-group-id-${secureRandom()}`
+        topicName = `test-topic-${secureRandom()}`;
+        groupId = `consumer-group-id-${secureRandom()}`;
 
-        await createTopic({ topic: topicName })
+        await createTopic({ topic: topicName });
         producer = createProducer({
             idempotent: true,
             maxInFlightRequests: 1,
@@ -32,8 +32,8 @@ describe('Consumer transactions', () => {
     });
 
     afterEach(async () => {
-        consumer && (await consumer.disconnect())
-        producer && (await producer.disconnect())
+        consumer && (await consumer.disconnect());
+        producer && (await producer.disconnect());
     });
 
     it('accepts messages from an idempotent producer', async () => {
@@ -41,25 +41,25 @@ describe('Consumer transactions', () => {
         await producer.connect();
         await consumer.subscribe({ topic: topicName });
 
-        const messagesConsumed = []
-        const idempotentMessages = generateMessages({ prefix: 'idempotent', partition: 0 })
+        const messagesConsumed = [];
+        const idempotentMessages = generateMessages({ prefix: 'idempotent', partition: 0 });
 
         consumer.run({
             eachMessage: async event => messagesConsumed.push(event),
-        })
+        });
 
         await producer.sendBatch({
             topicMessages: [{ topic: topicName, messages: idempotentMessages }],
-        })
+        });
 
         const number = idempotentMessages.length;
         await waitForMessages(messagesConsumed, {
             number,
         });
 
-        expect(messagesConsumed).toHaveLength(idempotentMessages.length)
-        expect(messagesConsumed[0].message.value.toString()).toMatch(/value-idempotent-0/)
-        expect(messagesConsumed[99].message.value.toString()).toMatch(/value-idempotent-99/)
+        expect(messagesConsumed).toHaveLength(idempotentMessages.length);
+        expect(messagesConsumed[0].message.value.toString()).toMatch(/value-idempotent-0/);
+        expect(messagesConsumed[99].message.value.toString()).toMatch(/value-idempotent-99/);
     });
 
     it('accepts messages from committed transactions', async () => {
@@ -106,10 +106,10 @@ describe('Consumer transactions', () => {
 
         await waitForMessages(messagesConsumed, {
             number: numMessages,
-        })
+        });
 
-        expect(messagesConsumed[0].message.value.toString()).toMatch(/value-txn1-0/)
-        expect(messagesConsumed[numMessages - 1].message.value.toString()).toMatch(/value-txn2-99/)
+        expect(messagesConsumed[0].message.value.toString()).toMatch(/value-txn1-0/);
+        expect(messagesConsumed[numMessages - 1].message.value.toString()).toMatch(/value-txn2-99/);
     });
 
     it('does not receive aborted messages', async () => {
@@ -122,7 +122,7 @@ describe('Consumer transactions', () => {
         await producer.connect();
         await consumer.subscribe({ topic: topicName });
 
-        const messagesConsumed = []
+        const messagesConsumed = [];
 
         const abortedMessages1 = generateMessages({ prefix: 'aborted-txn-1', partition: 0 });
         const abortedMessages2 = generateMessages({ prefix: 'aborted-txn-2', partition: 0 });
@@ -150,7 +150,7 @@ describe('Consumer transactions', () => {
         });
         await committedTxn.commit();
 
-        const number = committedMessages.length
+        const number = committedMessages.length;
         await waitForMessages(messagesConsumed, {
             number,
         });
@@ -166,7 +166,7 @@ describe('Consumer transactions', () => {
             producer = createProducer({
                 transactionalId: `transactional-id-${secureRandom()}`,
                 maxInFlightRequests: 1,
-            })
+            });
 
             consumer = createConsumer({
                 groupId,
@@ -174,7 +174,7 @@ describe('Consumer transactions', () => {
                 readUncommitted: true,
                 fromBeginning: true,
                 autoCommit: true,
-            })
+            });
 
             await consumer.connect();
             await producer.connect();
@@ -221,14 +221,14 @@ describe('Consumer transactions', () => {
             await producer.send({
                 topic: topicName,
                 messages,
-            })
+            });
 
             await producer.disconnect();
 
             producer = createProducer({
                 transactionalId: `transactional-id-${secureRandom()}`,
                 maxInFlightRequests: 1,
-            })
+            });
 
             consumer = createConsumer({
                 groupId,
@@ -248,8 +248,8 @@ describe('Consumer transactions', () => {
             let uncommittedOffsetsPerMessage = [];
             let latestOffsetsPerPartition = {};
 
-            const eachMessage = async ({ topic, partition, message }) => {
-                messagesConsumed.push(message)
+            const eachMessage = async ({ partition, message }) => {
+                messagesConsumed.push(message);
                 /* The message.offset indicates current offset, so we need to add 1 to it, since committed offset denotes
                  * the next offset to consume. */
                 latestOffsetsPerPartition[partition] = Number(message.offset) + 1;
@@ -258,18 +258,18 @@ describe('Consumer transactions', () => {
 
             consumer.run({
                 eachMessage,
-            })
+            });
 
             // 2. Consume pre-produced messages.
 
             const number = messages.length;
             await waitForMessages(messagesConsumed, {
                 number,
-            })
+            });
 
-            expect(messagesConsumed[0].value.toString()).toMatch(/value-0/)
-            expect(messagesConsumed[99].value.toString()).toMatch(/value-99/)
-            expect(uncommittedOffsetsPerMessage).toHaveLength(messagesConsumed.length)
+            expect(messagesConsumed[0].value.toString()).toMatch(/value-0/);
+            expect(messagesConsumed[99].value.toString()).toMatch(/value-99/);
+            expect(uncommittedOffsetsPerMessage).toHaveLength(messagesConsumed.length);
 
             // 3. Send offsets in a transaction and commit
             const txnToCommit = await producer.transaction();
@@ -301,12 +301,12 @@ describe('Consumer transactions', () => {
             messagesConsumed = [];
             uncommittedOffsetsPerMessage = [];
 
-            consumer.run({ eachMessage })
+            consumer.run({ eachMessage });
 
             // Assert we only consume the messages that were after the sent offset
             await waitForMessages(messagesConsumed, {
                 number: 2,
-            })
+            });
 
             expect(messagesConsumed).toHaveLength(2);
             expect(messagesConsumed[0].value.toString()).toMatch(/value-98/);
@@ -329,14 +329,14 @@ describe('Consumer transactions', () => {
             await producer.send({
                 topic: topicName,
                 messages,
-            })
+            });
 
             await producer.disconnect();
 
             producer = createProducer({
                 transactionalId: `transactional-id-${secureRandom()}`,
                 maxInFlightRequests: 1,
-            })
+            });
 
             consumer = createConsumer({
                 groupId,
@@ -356,8 +356,8 @@ describe('Consumer transactions', () => {
             let uncommittedOffsetsPerMessage = [];
             let latestOffsetsPerPartition = {};
 
-            const eachMessage = async ({ topic, partition, message }) => {
-                messagesConsumed.push(message)
+            const eachMessage = async ({ partition, message }) => {
+                messagesConsumed.push(message);
                 /* The message.offset indicates current offset, so we need to add 1 to it, since committed offset denotes
                  * the next offset to consume. */
                 latestOffsetsPerPartition[partition] = Number(message.offset) + 1;
@@ -366,7 +366,7 @@ describe('Consumer transactions', () => {
 
             consumer.run({
                 eachMessage,
-            })
+            });
 
             // Consume produced messages.
             await waitForMessages(messagesConsumed, { number: messages.length });
@@ -387,11 +387,11 @@ describe('Consumer transactions', () => {
                 consumer,
                 topics: [topicPartitionOffsets],
             });
-            await txnToAbort.abort()
+            await txnToAbort.abort();
 
             /* Restart consumer - we cannot stop it, so we recreate it. */
-            messagesConsumed = []
-            uncommittedOffsetsPerMessage = []
+            messagesConsumed = [];
+            uncommittedOffsetsPerMessage = [];
 
             await consumer.disconnect();
 
@@ -410,9 +410,9 @@ describe('Consumer transactions', () => {
             });
 
             await waitForMessages(messagesConsumed, { number: 1 });
-            expect(messagesConsumed[0].value.toString()).toMatch(/value-0/)
+            expect(messagesConsumed[0].value.toString()).toMatch(/value-0/);
             await waitForMessages(messagesConsumed, { number: messages.length });
-            expect(messagesConsumed[messagesConsumed.length - 1].value.toString()).toMatch(/value-99/)
+            expect(messagesConsumed[messagesConsumed.length - 1].value.toString()).toMatch(/value-99/);
         }
     );
 });

@@ -3,7 +3,6 @@ jest.setTimeout(30000);
 const { waitFor,
     secureRandom,
     createTopic,
-    createProducer,
     createConsumer, } = require("../testhelpers");
 const { PartitionAssigners, ErrorCodes } = require('../../../lib').KafkaJS;
 
@@ -18,13 +17,13 @@ describe('Consumer > incremental rebalance', () => {
 
     beforeEach(async () => {
         topicName = `test-topic1-${secureRandom()}`;
-        groupId = `consumer-group-id-${secureRandom()}`
+        groupId = `consumer-group-id-${secureRandom()}`;
         consumer = null;
         await createTopic({ topic: topicName, partitions: 2 });
     });
 
     afterEach(async () => {
-        consumer && (await consumer.disconnect())
+        consumer && (await consumer.disconnect());
     });
 
     it('returns protocol name', async () => {
@@ -52,7 +51,7 @@ describe('Consumer > incremental rebalance', () => {
                 // It's either assign or revoke and nothing else.
                 jest.fail('Unexpected error code');
             }
-        }
+        };
 
 
         consumer = createConsumer(consumerConfig, {
@@ -84,7 +83,7 @@ describe('Consumer > incremental rebalance', () => {
                 // It's either assign or revoke and nothing else.
                 expect(err.code).toBe(ErrorCodes.ERR__REVOKE_PARTITIONS);
             }
-        }
+        };
 
 
         consumer = createConsumer(consumerConfig, {
@@ -113,7 +112,7 @@ describe('Consumer > incremental rebalance', () => {
                 // It's either assign or revoke and nothing else.
                 jest.fail('Unexpected error code');
             }
-        }
+        };
 
         /* First consumer joins and gets all partitions. */
         expectedAssignmentCount = 2;

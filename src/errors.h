@@ -15,7 +15,7 @@
 #include <iostream>
 #include <string>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 
 #include "src/common.h"
 

@@ -22,11 +22,11 @@ describe('Producer > Flush', () => {
         message = { key: `key-${secureRandom()}`, value: `value-${secureRandom()}` };
 
         await createTopic({ topic: topicName });
-    })
+    });
 
     afterEach(async () => {
         producer && (await producer.disconnect());
-    })
+    });
 
 
     it('does not wait for linger.ms',
@@ -85,4 +85,4 @@ describe('Producer > Flush', () => {
         }
     );
 
-})
+});

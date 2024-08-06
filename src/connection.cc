@@ -7,11 +7,12 @@
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
  */
+#include "src/connection.h"
 
+#include <list>
 #include <string>
 #include <vector>
 
-#include "src/connection.h"
 #include "src/workers.h"
 
 using RdKafka::Conf;
@@ -69,10 +70,9 @@ Connection::~Connection() {
 }
 
 Baton Connection::rdkafkaErrorToBaton(RdKafka::Error* error) {
-  if ( NULL == error) {
+  if (NULL == error) {
     return Baton(RdKafka::ERR_NO_ERROR);
-  }
-  else {
+  } else {
     Baton result(error->code(), error->str(), error->is_fatal(),
                  error->is_retriable(), error->txn_requires_abort());
     delete error;
@@ -258,7 +258,7 @@ Baton Connection::GetMetadata(
     return Baton(metadata);
   } else {
     // metadata is not set here
-    // @see https://github.com/confluentinc/librdkafka/blob/master/src-cpp/rdkafkacpp.h#L860
+    // @see https://github.com/confluentinc/librdkafka/blob/master/src-cpp/rdkafkacpp.h#L860 // NOLINT
     return Baton(err);
   }
 }
@@ -325,7 +325,8 @@ Baton Connection::SetOAuthBearerTokenFailure(const std::string& errstr) {
   return Baton(error_code);
 }
 
-void Connection::ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add) {
+void Connection::ConfigureCallback(
+  const std::string &string_key, const v8::Local<v8::Function> &cb, bool add) {
   if (string_key.compare("event_cb") == 0) {
     if (add) {
       this->m_event_cb.dispatcher.AddCallback(cb);
@@ -494,14 +495,18 @@ NAN_METHOD(Connection::NodeConfigureCallbacks) {
   Connection* obj = ObjectWrap::Unwrap<Connection>(info.This());
 
   const bool add = Nan::To<bool>(info[0]).ToChecked();
-  v8::Local<v8::Object> configs_object = info[1]->ToObject(context).ToLocalChecked();
-  v8::Local<v8::Array> configs_property_names = configs_object->GetOwnPropertyNames(context).ToLocalChecked();
+  v8::Local<v8::Object> configs_object =
+    info[1]->ToObject(context).ToLocalChecked();
+  v8::Local<v8::Array> configs_property_names =
+    configs_object->GetOwnPropertyNames(context).ToLocalChecked();
 
   for (unsigned int j = 0; j < configs_property_names->Length(); ++j) {
     std::string configs_string_key;
 
-    v8::Local<v8::Value> configs_key = Nan::Get(configs_property_names, j).ToLocalChecked();
-    v8::Local<v8::Value> configs_value = Nan::Get(configs_object, configs_key).ToLocalChecked();
+    v8::Local<v8::Value> configs_key =
+      Nan::Get(configs_property_names, j).ToLocalChecked();
+    v8::Local<v8::Value> configs_value =
+      Nan::Get(configs_object, configs_key).ToLocalChecked();
 
     int config_type = 0;
     if (configs_value->IsObject() && configs_key->IsString()) {
@@ -520,8 +525,10 @@ NAN_METHOD(Connection::NodeConfigureCallbacks) {
       continue;
     }
 
-    v8::Local<v8::Object> object = configs_value->ToObject(context).ToLocalChecked();
-    v8::Local<v8::Array> property_names = object->GetOwnPropertyNames(context).ToLocalChecked();
+    v8::Local<v8::Object> object =
+      configs_value->ToObject(context).ToLocalChecked();
+    v8::Local<v8::Array> property_names =
+      object->GetOwnPropertyNames(context).ToLocalChecked();
 
     for (unsigned int i = 0; i < property_names->Length(); ++i) {
       std::string errstr;

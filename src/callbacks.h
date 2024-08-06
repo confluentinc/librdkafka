@@ -16,7 +16,7 @@
 #include <vector>
 #include <deque>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 #include "src/common.h"
 
 typedef Nan::Persistent<v8::Function,
@@ -250,8 +250,8 @@ class OffsetCommit : public RdKafka::OffsetCommitCb {
 
 class OAuthBearerTokenRefreshDispatcher : public Dispatcher {
  public:
-  OAuthBearerTokenRefreshDispatcher(){};
-  ~OAuthBearerTokenRefreshDispatcher(){};
+  OAuthBearerTokenRefreshDispatcher() {}
+  ~OAuthBearerTokenRefreshDispatcher() {}
   void Add(const std::string &oauthbearer_config);
   void Flush();
 

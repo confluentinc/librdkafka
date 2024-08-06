@@ -1,4 +1,4 @@
-jest.setTimeout(30000)
+jest.setTimeout(30000);
 
 const {
     secureRandom,
@@ -23,10 +23,10 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
 
     beforeEach(async () => {
         console.log("Starting:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
-        topicName = `test-topic-${secureRandom()}`
-        groupId = `consumer-group-id-${secureRandom()}`
+        topicName = `test-topic-${secureRandom()}`;
+        groupId = `consumer-group-id-${secureRandom()}`;
 
-        await createTopic({ topic: topicName, partitions: 3 })
+        await createTopic({ topic: topicName, partitions: 3 });
 
         producer = createProducer({});
 
@@ -39,15 +39,15 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
     });
 
     afterEach(async () => {
-        consumer && (await consumer.disconnect())
-        producer && (await producer.disconnect())
+        consumer && (await consumer.disconnect());
+        producer && (await producer.disconnect());
         console.log("Ending:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
     });
 
     it('is cleared on pause', async () => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         const msgs = 1024;
         const messagesConsumed = [];
@@ -66,11 +66,11 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
         const messages = Array(msgs * 9)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { value: `value-${value}`, partition: ((i++) % 3) }
-            })
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: ((i++) % 3) };
+            });
 
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
 
         // Wait for the messages.
         // We consume msgs*1 messages from partition 0, and msgs*3 from partition 1 and 2.
@@ -92,7 +92,7 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
     it('is cleared on seek', async () => {
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         const messagesConsumed = [];
         let hasBeenSeeked = false;
@@ -112,11 +112,11 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
         const messages = Array(1024 * 9)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { value: `value-${value}`, partition: ((i++) % 3) }
-            })
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: ((i++) % 3) };
+            });
 
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
 
         // Wait for the messages.
         // We consume 1024*4 messages from partition 0, and 1024*3 from partition 1 and 2.
@@ -159,7 +159,7 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
 
         await consumer.connect();
         await producer.connect();
-        await consumer.subscribe({ topic: topicName })
+        await consumer.subscribe({ topic: topicName });
 
         const messagesConsumed = [];
         const messagesConsumedConsumer1 = [];
@@ -190,11 +190,11 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
         const messages = Array(1024 * multiplier)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { value: `value-${value}`, partition: (i++) % 3 }
-            })
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: (i++) % 3 };
+            });
 
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
 
         // Wait for the messages - some of them, before starting the
         // second consumer.
@@ -247,7 +247,7 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
 
         await producer.connect();
         await impatientConsumer.connect();
-        await impatientConsumer.subscribe({ topic: topicName })
+        await impatientConsumer.subscribe({ topic: topicName });
 
         const messagesConsumed = [];
         let impatientConsumerMessages = [];
@@ -280,11 +280,11 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
         const messages = Array(1024 * 10)
             .fill()
             .map(() => {
-                const value = secureRandom()
-                return { value: `value-${value}`, partition: (i++) % 3 }
-            })
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: (i++) % 3 };
+            });
 
-        await producer.send({ topic: topicName, messages })
+        await producer.send({ topic: topicName, messages });
 
         /* Wait for the messages - some of them, before starting the
          * second consumer.

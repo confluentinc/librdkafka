@@ -255,7 +255,7 @@ describe('MessageCache', () => {
 
             const receivedMessages = [];
             let nextIdx = -1;
-            const slowMsg = cache.next(nextIdx);
+            cache.next(nextIdx);
             for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
                 const next = cache.next(nextIdx);
                 expect(next).not.toBeNull();
@@ -280,7 +280,7 @@ describe('MessageCache', () => {
 
             const receivedMessages = [];
             let nextIdx = -1;
-            const slowMsg = cache.nextN(nextIdx, 11);
+            cache.nextN(nextIdx, 11);
             for (let i = 0; i < 60/11; i++) { /* 60 - for non-partition 0 msgs */
                 const next = cache.nextN(nextIdx, 11);
                 expect(next).not.toBeNull();
@@ -305,7 +305,7 @@ describe('MessageCache', () => {
 
             const receivedMessages = [];
             let nextIdx = -1;
-            const slowMsg = cache.next(nextIdx);
+            cache.next(nextIdx);
             for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
                 const next = cache.next(nextIdx);
                 expect(next).not.toBeNull();
@@ -329,7 +329,7 @@ describe('MessageCache', () => {
 
             const receivedMessages = [];
             let nextIdx = -1;
-            const slowMsg = cache.next(nextIdx);
+            cache.next(nextIdx);
             for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
                 const next = cache.next(nextIdx);
                 expect(next).not.toBeNull();

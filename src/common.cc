@@ -7,11 +7,12 @@
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
  */
+#include "src/common.h"
 
+#include <iostream>
+#include <list>
 #include <string>
 #include <vector>
-
-#include "src/common.h"
 
 namespace NodeKafka {
 
@@ -164,7 +165,9 @@ std::list<std::string> v8ArrayToStringList(v8::Local<v8::Array> parameter) {
 }
 
 template<> v8::Local<v8::Array> GetParameter<v8::Local<v8::Array> >(
-  v8::Local<v8::Object> object, std::string field_name, v8::Local<v8::Array> def) {
+  v8::Local<v8::Object> object,
+  std::string field_name,
+  v8::Local<v8::Array> def) {
   v8::Local<v8::String> field = Nan::New(field_name.c_str()).ToLocalChecked();
 
   if (Nan::Has(object, field).FromMaybe(false)) {
@@ -301,7 +304,8 @@ namespace TopicPartition {
  * @note This method returns a v8 array of a mix of topic partition
  *       objects and errors. For a more uniform return type of
  *       topic partitions (which have an internal error property),
- *       use `ToTopicPartitionV8Array(const rd_kafka_topic_partition_list_t*, bool)`.
+ *       use `ToTopicPartitionV8Array(const rd_kafka_topic_partition_list_t*,
+ *       bool)`.
  */
 v8::Local<v8::Array> ToV8Array(
   std::vector<RdKafka::TopicPartition*> & topic_partition_list) {  // NOLINT
@@ -326,12 +330,14 @@ v8::Local<v8::Array> ToV8Array(
           Nan::New<v8::Number>(topic_partition->offset()));
       }
 
-      // If present, size >= 1, since it will include at least the null terminator.
+      // If present, size >= 1, since it will include at least the
+      // null terminator.
       if (topic_partition->get_metadata().size() > 0) {
         Nan::Set(obj, Nan::New("metadata").ToLocalChecked(),
           Nan::New<v8::String>(
-            reinterpret_cast<const char*>(topic_partition->get_metadata().data()),
-            topic_partition->get_metadata().size() - 1) // null terminator is not required by the constructor.
+            reinterpret_cast<const char*>(topic_partition->get_metadata().data()), // NOLINT
+            // null terminator is not required by the constructor.
+            topic_partition->get_metadata().size() - 1)
           .ToLocalChecked());
       }
 
@@ -444,14 +450,15 @@ RdKafka::TopicPartition * FromV8Object(v8::Local<v8::Object> topic_partition) {
   int64_t offset = GetParameter<int64_t>(topic_partition, "offset", 0);
 
   if (partition == -1) {
-    return NULL;
+return NULL;
   }
 
   if (topic.empty()) {
     return NULL;
   }
 
-  RdKafka::TopicPartition *toppar = RdKafka::TopicPartition::create(topic, partition, offset);
+  RdKafka::TopicPartition *toppar =
+    RdKafka::TopicPartition::create(topic, partition, offset);
 
   v8::Local<v8::String> metadataKey = Nan::New("metadata").ToLocalChecked();
   if (Nan::Has(topic_partition, metadataKey).FromMaybe(false)) {

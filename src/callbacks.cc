@@ -8,7 +8,11 @@
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
+#include "src/callbacks.h"
+
+#include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "src/kafka-consumer.h"

@@ -19,11 +19,11 @@ describe('Producer', () => {
         topicName = `test-topic-${secureRandom()}`;
 
         await createTopic({ topic: topicName, partitions: 3 });
-    })
+    });
 
     afterEach(async () => {
         producer && (await producer.disconnect());
-    })
+    });
 
 
     it('can send messages concurrently',
@@ -42,4 +42,4 @@ describe('Producer', () => {
             }
         }
     );
-})
+});

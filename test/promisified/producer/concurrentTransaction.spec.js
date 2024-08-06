@@ -2,7 +2,7 @@ const {
     secureRandom,
     createProducer,
     createTopic,
-} = require('../testhelpers')
+} = require('../testhelpers');
 
 describe('Producer > Transactional producer', () => {
     let producer1, producer2, topicName, transactionalId, message;
@@ -20,12 +20,12 @@ describe('Producer > Transactional producer', () => {
         message = { key: `key-${secureRandom()}`, value: `value-${secureRandom()}` };
 
         await createTopic({ topic: topicName });
-    })
+    });
 
     afterEach(async () => {
         producer1 && (await producer1.disconnect());
         producer2 && (await producer2.disconnect());
-    })
+    });
 
     describe('when there is an ongoing transaction on connect', () => {
         it('retries initProducerId to cancel the ongoing transaction',
@@ -45,6 +45,6 @@ describe('Producer > Transactional producer', () => {
                 await transaction2.send({ topic: topicName, messages: [message] });
                 await transaction2.commit();
             }
-        )
-    })
-})
+        );
+    });
+});

@@ -13,10 +13,11 @@
 
 #include <nan.h>
 #include <iostream>
+#include <list>
 #include <string>
 #include <vector>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 
 #include "src/common.h"
 #include "src/errors.h"
@@ -71,7 +72,8 @@ class Connection : public Nan::ObjectWrap {
   virtual void ActivateDispatchers() = 0;
   virtual void DeactivateDispatchers() = 0;
 
-  virtual void ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add);
+  virtual void ConfigureCallback(
+    const std::string &string_key, const v8::Local<v8::Function> &cb, bool add);
 
   std::string Name() const;
 

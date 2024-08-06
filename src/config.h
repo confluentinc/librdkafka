@@ -16,7 +16,7 @@
 #include <list>
 #include <string>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 #include "src/common.h"
 #include "src/callbacks.h"
 
@@ -32,7 +32,10 @@ class Conf : public RdKafka::Conf {
   void listen();
   void stop();
 
-  void ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add, std::string &errstr);
+  void ConfigureCallback(
+    const std::string &string_key,
+    const v8::Local<v8::Function> &cb,
+    bool add, std::string &errstr);
 
   bool is_sasl_oauthbearer() const;
 

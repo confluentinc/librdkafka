@@ -7,11 +7,10 @@
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
  */
+#include "src/workers.h"
 
 #include <string>
 #include <vector>
-
-#include "src/workers.h"
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -361,9 +360,9 @@ void ProducerInitTransactions::HandleErrorCallback() {
  * @sa NodeKafka::Producer::BeginTransaction
  */
 
-ProducerBeginTransaction::ProducerBeginTransaction(Nan::Callback *callback, Producer* producer):
-  ErrorAwareWorker(callback),
-  producer(producer) {}
+ProducerBeginTransaction::ProducerBeginTransaction(Nan::Callback* callback,
+                                                   Producer* producer)
+    : ErrorAwareWorker(callback), producer(producer) {}
 
 ProducerBeginTransaction::~ProducerBeginTransaction() {}
 
@@ -513,11 +512,8 @@ ProducerSendOffsetsToTransaction::ProducerSendOffsetsToTransaction(
 ProducerSendOffsetsToTransaction::~ProducerSendOffsetsToTransaction() {}
 
 void ProducerSendOffsetsToTransaction::Execute() {
-  Baton b = producer->SendOffsetsToTransaction(
-    m_topic_partitions,
-    consumer,
-    m_timeout_ms
-  );
+  Baton b = producer->SendOffsetsToTransaction(m_topic_partitions, consumer,
+                                               m_timeout_ms);
 
   if (b.err() != RdKafka::ERR_NO_ERROR) {
     SetErrorBaton(b);
@@ -659,9 +655,9 @@ void KafkaConsumerDisconnect::HandleErrorCallback() {
  * consumer is flagged as disconnected or as unsubscribed.
  *
  * @todo thread-safe isConnected checking
- * @note Chances are, when the connection is broken with the way librdkafka works,
- * we are shutting down. But we want it to shut down properly so we probably
- * need the consumer to have a thread lock that can be used when
+ * @note Chances are, when the connection is broken with the way librdkafka
+ * works, we are shutting down. But we want it to shut down properly so we
+ * probably need the consumer to have a thread lock that can be used when
  * we are dealing with manipulating the `client`
  *
  * @sa RdKafka::KafkaConsumer::Consume
@@ -677,7 +673,8 @@ KafkaConsumerConsumeLoop::KafkaConsumerConsumeLoop(Nan::Callback *callback,
   m_looping(true),
   m_timeout_ms(timeout_ms),
   m_timeout_sleep_delay_ms(timeout_sleep_delay_ms) {
-  uv_thread_create(&thread_event_loop, KafkaConsumerConsumeLoop::ConsumeLoop, (void*)this);
+  uv_thread_create(&thread_event_loop, KafkaConsumerConsumeLoop::ConsumeLoop,
+                   reinterpret_cast<void*>(this));
 }
 
 KafkaConsumerConsumeLoop::~KafkaConsumerConsumeLoop() {}
@@ -691,8 +688,9 @@ void KafkaConsumerConsumeLoop::Execute(const ExecutionMessageBus& bus) {
   // ConsumeLoop is used instead
 }
 
-void KafkaConsumerConsumeLoop::ConsumeLoop(void *arg) {
-  KafkaConsumerConsumeLoop* consumerLoop = (KafkaConsumerConsumeLoop*)arg;
+void KafkaConsumerConsumeLoop::ConsumeLoop(void* arg) {
+  KafkaConsumerConsumeLoop* consumerLoop =
+      reinterpret_cast<KafkaConsumerConsumeLoop*>(arg);
   ExecutionMessageBus bus(consumerLoop);
   KafkaConsumer* consumer = consumerLoop->consumer;
 
@@ -730,7 +728,8 @@ void KafkaConsumerConsumeLoop::ConsumeLoop(void *arg) {
           consumerLoop->m_looping = false;
           break;
         }
-    } else if (ec == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART || ec == RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED) {
+    } else if (ec == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART ||
+               ec == RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED) {
       bus.SendWarning(ec);
     } else {
       // Unknown error. We need to break out of this
@@ -740,7 +739,8 @@ void KafkaConsumerConsumeLoop::ConsumeLoop(void *arg) {
   }
 }
 
-void KafkaConsumerConsumeLoop::HandleMessageCallback(RdKafka::Message* msg, RdKafka::ErrorCode ec) {
+void KafkaConsumerConsumeLoop::HandleMessageCallback(RdKafka::Message* msg,
+                                                     RdKafka::ErrorCode ec) {
   Nan::HandleScope scope;
 
   const unsigned int argc = 4;
@@ -838,8 +838,9 @@ void KafkaConsumerConsumeNum::Execute() {
             timeout_ms = 1;
           }
 
-          // We will only go into this code path when `enable.partition.eof` is set to true
-          // In this case, consumer is also interested in EOF messages, so we return an EOF message
+          // We will only go into this code path when `enable.partition.eof`
+          // is set to true. In this case, consumer is also interested in EOF
+          // messages, so we return an EOF message
           m_messages.push_back(message);
           eof_event_count += 1;
           break;
@@ -854,7 +855,8 @@ void KafkaConsumerConsumeNum::Execute() {
 
           // This allows getting ready messages, while not waiting for new ones.
           // This is useful when we want to get the as many messages as possible
-          // within the timeout but not wait if we already have one or more messages.
+          // within the timeout but not wait if we already have one or more
+          // messages.
           if (m_timeout_only_for_first_message) {
             timeout_ms = 1;
           }
@@ -897,7 +899,8 @@ void KafkaConsumerConsumeNum::HandleOKCallback() {
       switch (message->err()) {
         case RdKafka::ERR_NO_ERROR:
           ++returnArrayIndex;
-          Nan::Set(returnArray, returnArrayIndex, Conversion::Message::ToV8Object(message));
+          Nan::Set(returnArray, returnArrayIndex,
+                   Conversion::Message::ToV8Object(message));
           break;
         case RdKafka::ERR__PARTITION_EOF:
           ++eofEventsArrayIndex;
@@ -912,10 +915,12 @@ void KafkaConsumerConsumeNum::HandleOKCallback() {
           Nan::Set(eofEvent, Nan::New<v8::String>("partition").ToLocalChecked(),
             Nan::New<v8::Number>(message->partition()));
 
-          // also store index at which position in the message array this event was emitted
-          // this way, we can later emit it at the right point in time
-          Nan::Set(eofEvent, Nan::New<v8::String>("messageIndex").ToLocalChecked(),
-            Nan::New<v8::Number>(returnArrayIndex));
+          // also store index at which position in the message array this event
+          // was emitted this way, we can later emit it at the right point in
+          // time
+          Nan::Set(eofEvent,
+                   Nan::New<v8::String>("messageIndex").ToLocalChecked(),
+                   Nan::New<v8::Number>(returnArrayIndex));
 
           Nan::Set(eofEventsArray, eofEventsArrayIndex, eofEvent);
       }
@@ -1397,7 +1402,8 @@ AdminClientDeleteGroups::~AdminClientDeleteGroups() {
 }
 
 void AdminClientDeleteGroups::Execute() {
-  Baton b = m_client->DeleteGroups(m_group_list, m_group_cnt, m_timeout_ms, &m_event_response);
+  Baton b = m_client->DeleteGroups(m_group_list, m_group_cnt, m_timeout_ms,
+                                   &m_event_response);
   if (b.err() != RdKafka::ERR_NO_ERROR) {
     SetErrorBaton(b);
   }
@@ -1410,7 +1416,8 @@ void AdminClientDeleteGroups::HandleOKCallback() {
   v8::Local<v8::Value> argv[argc];
 
   argv[0] = Nan::Null();
-  argv[1] = Conversion::Admin::FromDeleteGroupsResult(rd_kafka_event_DeleteGroups_result(m_event_response));
+  argv[1] = Conversion::Admin::FromDeleteGroupsResult(
+      rd_kafka_event_DeleteGroups_result(m_event_response));
 
   callback->Call(argc, argv);
 }

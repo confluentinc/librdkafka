@@ -8,12 +8,13 @@
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
+#include "src/admin.h"
+
+#include <math.h>
 #include <string>
 #include <vector>
-#include <math.h>
 
 #include "src/workers.h"
-#include "src/admin.h"
 
 using Nan::FunctionCallbackInfo;
 

@@ -2707,7 +2707,6 @@ fail:
         /* If on_new() interceptors have been called we also need
          * to allow interceptor clean-up by calling on_destroy() */
         rd_kafka_interceptors_on_destroy(rk);
-
         /* If rk_conf is a struct-copy of the application configuration
          * we need to avoid rk_conf fields from being freed from
          * rd_kafka_destroy_internal() since they belong to app_conf.
@@ -2720,9 +2719,9 @@ fail:
                 rd_kafka_assignors_term(rk);
                 rd_kafka_interceptors_destroy(&rk->rk_conf);
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
+        } else {
+                rd_kafka_destroy_internal(rk);
         }
-
-        rd_kafka_destroy_internal(rk);
         rd_kafka_destroy_final(rk);
 
         rd_kafka_set_last_error(ret_err, ret_errno);

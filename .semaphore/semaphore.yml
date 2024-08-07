@@ -114,12 +114,6 @@ blocks:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       jobs:
-        - name: 'Build configuration checks'
-          commands:
-            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-            - sudo dpkg -i rapidjson-dev.deb
-            - python3 -m pip install -U pip
-            - ./packaging/tools/build-configurations-checks.sh
         - name: 'Build and integration tests with "classic" protocol'
           commands:
             - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb

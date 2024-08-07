@@ -110,6 +110,12 @@ struct rd_kafka_AdminOptions_s {
                                           */
 
         rd_kafka_confval_t
+            match_consumer_group_types; /**< PTR: list of consumer group types
+                                         *   to query for.
+                                         *   Valid for: ListConsumerGroups.
+                                         */
+
+        rd_kafka_confval_t
             isolation_level; /**< INT:Isolation Level needed for list Offset
                               *   to query for.
                               *   Default Set to
@@ -444,7 +450,8 @@ struct rd_kafka_ConsumerGroupListing_s {
         char *group_id; /**< Group id */
         /** Is it a simple consumer group? That means empty protocol_type. */
         rd_bool_t is_simple_consumer_group;
-        rd_kafka_consumer_group_state_t state; /**< Consumer group state. */
+        rd_kafka_consumer_group_state_t state;     /**< Consumer group state. */
+        rd_kafka_consumer_group_type_t group_type; /**< Consumer group type. */
 };
 
 

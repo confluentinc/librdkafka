@@ -264,6 +264,7 @@ _TEST_DECL(0146_metadata_mock);
 _TEST_DECL(0147_consumer_group_consumer_mock);
 _TEST_DECL(0150_telemetry_mock);
 
+
 /* Manual tests */
 _TEST_DECL(8000_idle);
 _TEST_DECL(8001_fetch_from_follower_mock_manual);
@@ -2793,6 +2794,7 @@ void test_consume_msgs_easy_mv0(const char *group_id,
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
         if (exp_eofcnt != -1)
                 test_conf_set(conf, "enable.partition.eof", "true");
+
         rk = test_create_consumer(group_id, NULL, conf, tconf);
 
         rd_kafka_poll_set_consumer(rk);

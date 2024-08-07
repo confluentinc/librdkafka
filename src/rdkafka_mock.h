@@ -475,6 +475,7 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
                                           int64_t push_interval_ms);
 
+
 typedef struct rd_kafka_mock_cgrp_consumer_target_assignment_s
     rd_kafka_mock_cgrp_consumer_target_assignment_t;
 

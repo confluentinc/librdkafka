@@ -4703,6 +4703,26 @@ rd_kafka_consumer_group_state_code(const char *name) {
         return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
 }
 
+static const char *rd_kafka_consumer_group_type_names[] = {
+    "Unknown", "Consumer", "Classic"};
+
+const char *
+rd_kafka_consumer_group_type_name(rd_kafka_consumer_group_type_t type) {
+        if (type < 0 || type >= RD_KAFKA_CONSUMER_GROUP_TYPE__CNT)
+                return NULL;
+        return rd_kafka_consumer_group_type_names[type];
+}
+
+rd_kafka_consumer_group_type_t
+rd_kafka_consumer_group_type_code(const char *name) {
+        size_t i;
+        for (i = 0; i < RD_KAFKA_CONSUMER_GROUP_TYPE__CNT; i++) {
+                if (!rd_strcasecmp(rd_kafka_consumer_group_type_names[i], name))
+                        return i;
+        }
+        return RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN;
+}
+
 static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                                             rd_kafka_broker_t *rkb,
                                             rd_kafka_resp_err_t err,
@@ -4831,8 +4851,10 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
         struct list_groups_state *state;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode;
+        int32_t ThrottleTimeMs;
         char **grps = NULL;
         int cnt, grpcnt, i = 0;
+        int16_t ApiVersion = request->rkbuf_reqhdr.ApiVersion;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* 'state' is no longer in scope because
@@ -4847,6 +4869,10 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
         if (err)
                 goto err;
+
+        if (ApiVersion >= 1) {
+                rd_kafka_buf_read_i32(reply, &ThrottleTimeMs);
+        }
 
         rd_kafka_buf_read_i16(reply, &ErrorCode);
         if (ErrorCode) {
@@ -4867,10 +4893,18 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
         grps = rd_malloc(sizeof(*grps) * grpcnt);
 
         while (cnt-- > 0) {
-                rd_kafkap_str_t grp, proto;
+                rd_kafkap_str_t grp, proto, grp_state, grp_type;
 
                 rd_kafka_buf_read_str(reply, &grp);
                 rd_kafka_buf_read_str(reply, &proto);
+
+                if (ApiVersion >= 4) {
+                        rd_kafka_buf_read_str(reply, &grp_state);
+                }
+
+                if (ApiVersion >= 5) {
+                        rd_kafka_buf_read_str(reply, &grp_type);
+                }
 
                 if (state->desired_group &&
                     rd_kafkap_str_cmp_str(&grp, state->desired_group))
@@ -4968,7 +5002,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
                 state.wait_cnt++;
                 rkb_cnt++;
                 error = rd_kafka_ListGroupsRequest(
-                    rkb, 0, NULL, 0, RD_KAFKA_REPLYQ(state.q, 0),
+                    rkb, 0, NULL, 0, NULL, 0, RD_KAFKA_REPLYQ(state.q, 0),
                     rd_kafka_ListGroups_resp_cb, &state);
                 if (error) {
                         rd_kafka_ListGroups_resp_cb(rk, rkb,

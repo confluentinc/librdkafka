@@ -347,6 +347,8 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              int16_t max_ApiVersion,
                                              const char **states,
                                              size_t states_cnt,
+                                             const char **types,
+                                             size_t types_cnt,
                                              rd_kafka_replyq_t replyq,
                                              rd_kafka_resp_cb_t *resp_cb,
                                              void *opaque);

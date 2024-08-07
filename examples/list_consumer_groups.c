@@ -145,12 +145,15 @@ static int print_groups_info(const rd_kafka_ListConsumerGroups_result_t *list) {
                 int is_simple_consumer_group =
                     rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
                         group);
+                rd_kafka_consumer_group_type_t group_type =
+                    rd_kafka_ConsumerGroupListing_type(group);
 
                 printf("Group \"%s\", is simple %" PRId32
                        ", "
-                       "state %s",
+                       "state %s, type %s",
                        group_id, is_simple_consumer_group,
-                       rd_kafka_consumer_group_state_name(state));
+                       rd_kafka_consumer_group_state_name(state),
+                       rd_kafka_consumer_group_type_name(group_type));
                 printf("\n");
         }
         for (i = 0; i < result_error_cnt; i++) {
@@ -184,24 +187,29 @@ int64_t parse_int(const char *what, const char *str) {
 static void
 cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
-        const char **states_str = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *event = NULL;
         rd_kafka_error_t *error = NULL;
         int i;
-        int retval     = 0;
-        int states_cnt = 0;
+        int retval          = 0;
+        int states_cnt      = 0;
+        int group_types_cnt = 0;
         rd_kafka_consumer_group_state_t *states;
+        rd_kafka_consumer_group_type_t *group_types;
 
-
-        if (argc >= 1) {
-                states_str = (const char **)&argv[0];
-                states_cnt = argc;
-        }
+        states_cnt = parse_int("state count", argv[0]);
         states = calloc(states_cnt, sizeof(rd_kafka_consumer_group_state_t));
         for (i = 0; i < states_cnt; i++) {
-                states[i] = parse_int("state code", states_str[i]);
+                states[i] = parse_int("state code", argv[i + 1]);
+        }
+        group_types_cnt = parse_int("group type count", argv[states_cnt + 1]);
+
+        group_types =
+            calloc(group_types_cnt, sizeof(rd_kafka_consumer_group_type_t));
+        for (i = 0; i < group_types_cnt; i++) {
+                group_types[i] =
+                    parse_int("group type code", argv[i + states_cnt + 2]);
         }
 
         /*
@@ -239,6 +247,15 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                 goto exit;
         }
         free(states);
+        if ((error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                 options, group_types, group_types_cnt))) {
+                fprintf(stderr, "%% Failed to set group types: %s\n",
+                        rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+                goto exit;
+        }
+        free(group_types);
+
 
         rd_kafka_ListConsumerGroups(rk, options, queue);
         rd_kafka_AdminOptions_destroy(options);
@@ -296,7 +313,7 @@ int main(int argc, char **argv) {
         /*
          * Parse common options
          */
-        while ((opt = getopt(argc, argv, "b:X:d:")) != -1) {
+        while ((opt = getopt(argc, argv, "b:X:d")) != -1) {
                 switch (opt) {
                 case 'b':
                         conf_set(conf, "bootstrap.servers", optarg);

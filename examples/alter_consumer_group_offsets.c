@@ -218,7 +218,6 @@ cmd_alter_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 exit(1);
         }
-
         /* Read passed partition-offsets */
         rd_kafka_topic_partition_list_t *partitions =
             rd_kafka_topic_partition_list_new(num_partitions);

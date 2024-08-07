@@ -608,8 +608,7 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
  * @locality Any thread.
  */
 static size_t
-rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
-                                 int32_t version,
+rd_kafka_purge_outdated_messages(int32_t version,
                                  rd_kafka_message_t **rkmessages,
                                  size_t cnt,
                                  struct rd_kafka_op_tailq *ctrl_msg_q) {
@@ -619,8 +618,7 @@ rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
 
         for (i = 0; i < cnt; i++) {
                 rko = rkmessages[i]->_private;
-                if (rko->rko_rktp == rktp &&
-                    rd_kafka_op_version_outdated(rko, version)) {
+                if (rd_kafka_op_version_outdated(rko, version)) {
                         /* This also destroys the corresponding rkmessage. */
                         rd_kafka_op_destroy(rko);
                 } else if (i > valid_count) {
@@ -635,8 +633,7 @@ rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
         while (next) {
                 rko  = next;
                 next = TAILQ_NEXT(rko, rko_link);
-                if (rko->rko_rktp == rktp &&
-                    rd_kafka_op_version_outdated(rko, version)) {
+                if (rd_kafka_op_version_outdated(rko, version)) {
                         TAILQ_REMOVE(ctrl_msg_q, rko, rko_link);
                         rd_kafka_op_destroy(rko);
                 }
@@ -709,17 +706,17 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
                 mtx_unlock(&rkq->rkq_lock);
 
-                if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
-                        cnt = (unsigned int)rd_kafka_purge_outdated_messages(
-                            rko->rko_rktp, rko->rko_version, rkmessages, cnt,
-                            &ctrl_msg_q);
-                        rd_kafka_op_destroy(rko);
-                        continue;
-                }
-
                 if (rd_kafka_op_version_outdated(rko, 0)) {
                         /* Outdated op, put on discard queue */
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                        continue;
+                }
+
+                if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
+                        cnt = (unsigned int)rd_kafka_purge_outdated_messages(
+                            rko->rko_version, rkmessages, cnt,
+                            &ctrl_msg_q);
+                        rd_kafka_op_destroy(rko);
                         continue;
                 }
 

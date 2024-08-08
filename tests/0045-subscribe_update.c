@@ -492,9 +492,9 @@ static void do_test_replica_rack_change_mock(const char *assignment_strategy,
         const char *subscription = use_regex ? "^top" : "topic";
         const char *topic        = "topic";
         const char *test_name    = tsprintf(
-            "Replica rack changes (%s, subscription = \"%s\", %s client.rack, "
-            "%s replica.rack)",
-            assignment_strategy, subscription,
+               "Replica rack changes (%s, subscription = \"%s\", %s client.rack, "
+                  "%s replica.rack)",
+               assignment_strategy, subscription,
             use_client_rack ? "with" : "without",
             use_replica_rack ? "with" : "without");
         rd_kafka_t *rk;

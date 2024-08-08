@@ -4770,7 +4770,7 @@ void test_admin_create_topic(rd_kafka_t *use_rk,
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
         err     = rd_kafka_AdminOptions_set_operation_timeout(
-            options, timeout_ms, errstr, sizeof(errstr));
+                options, timeout_ms, errstr, sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);
 
         TEST_SAY(
@@ -4887,7 +4887,7 @@ static void test_admin_delete_topic(rd_kafka_t *use_rk, const char *topicname) {
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
         err     = rd_kafka_AdminOptions_set_operation_timeout(
-            options, timeout_ms, errstr, sizeof(errstr));
+                options, timeout_ms, errstr, sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);
 
         TEST_SAY(

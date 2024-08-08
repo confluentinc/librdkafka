@@ -1700,7 +1700,7 @@ int main(int argc, char **argv) {
                                 /* Batch fetch mode */
                                 ssize_t i = 0;
                                 r         = rd_kafka_consume_batch_queue(
-                                    rkqu, 1000, rkmessages, batch_size);
+                                            rkqu, 1000, rkmessages, batch_size);
                                 if (r != -1) {
                                         for (i = 0; i < r; i++) {
                                                 msg_consume(rkmessages[i],

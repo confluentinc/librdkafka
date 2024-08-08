@@ -161,8 +161,8 @@ class ExampleStoreRetriever {
   std::string GetErrorMsg(unsigned long error) {
     char *message = NULL;
     size_t ret    = FormatMessageA(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr,
-        error, 0, (char *)&message, 0, nullptr);
+           FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr,
+           error, 0, (char *)&message, 0, nullptr);
     if (ret == 0) {
       std::stringstream ss;
 

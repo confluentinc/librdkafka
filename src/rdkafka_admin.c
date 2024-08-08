@@ -231,11 +231,12 @@ static const char *rd_kafka_admin_state_desc[] = {
  * @enum Admin request target broker. Must be negative values since the field
  *       used is broker_id.
  */
-enum { RD_KAFKA_ADMIN_TARGET_CONTROLLER  = -1, /**< Cluster controller */
-       RD_KAFKA_ADMIN_TARGET_COORDINATOR = -2, /**< (Group) Coordinator */
-       RD_KAFKA_ADMIN_TARGET_FANOUT      = -3, /**< This rko is a fanout and
-                                                *   and has no target broker */
-       RD_KAFKA_ADMIN_TARGET_ALL = -4,         /**< All available brokers */
+enum {
+        RD_KAFKA_ADMIN_TARGET_CONTROLLER  = -1, /**< Cluster controller */
+        RD_KAFKA_ADMIN_TARGET_COORDINATOR = -2, /**< (Group) Coordinator */
+        RD_KAFKA_ADMIN_TARGET_FANOUT      = -3, /**< This rko is a fanout and
+                                                 *   and has no target broker */
+        RD_KAFKA_ADMIN_TARGET_ALL = -4,         /**< All available brokers */
 };
 
 /**
@@ -2075,7 +2076,7 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
                  * does not maintain ordering unfortunately. */
                 skel.topic = terr->topic;
                 orig_pos   = rd_list_index(&rko_result->rko_u.admin_result.args,
-                                         &skel, rd_kafka_NewTopic_cmp);
+                                           &skel, rd_kafka_NewTopic_cmp);
                 if (orig_pos == -1) {
                         rd_kafka_topic_result_destroy(terr);
                         rd_kafka_buf_parse_fail(
@@ -2284,7 +2285,7 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
                  * does not maintain ordering unfortunately. */
                 skel.topic = terr->topic;
                 orig_pos   = rd_list_index(&rko_result->rko_u.admin_result.args,
-                                         &skel, rd_kafka_DeleteTopic_cmp);
+                                           &skel, rd_kafka_DeleteTopic_cmp);
                 if (orig_pos == -1) {
                         rd_kafka_topic_result_destroy(terr);
                         rd_kafka_buf_parse_fail(
@@ -2569,7 +2570,7 @@ rd_kafka_CreatePartitionsResponse_parse(rd_kafka_op_t *rko_req,
                  * does not maintain ordering unfortunately. */
                 skel.topic = terr->topic;
                 orig_pos   = rd_list_index(&rko_result->rko_u.admin_result.args,
-                                         &skel, rd_kafka_NewPartitions_cmp);
+                                           &skel, rd_kafka_NewPartitions_cmp);
                 if (orig_pos == -1) {
                         rd_kafka_topic_result_destroy(terr);
                         rd_kafka_buf_parse_fail(
@@ -7382,11 +7383,11 @@ err_parse:
         if (reply->rkbuf_err) {
                 error_code = reply->rkbuf_err;
                 error      = rd_kafka_error_new(
-                    error_code,
-                    "Broker [%d"
-                    "] "
-                    "ListConsumerGroups response protocol parse failure: %s",
-                    rd_kafka_broker_id(rkb), rd_kafka_err2str(error_code));
+                         error_code,
+                         "Broker [%d"
+                              "] "
+                              "ListConsumerGroups response protocol parse failure: %s",
+                         rd_kafka_broker_id(rkb), rd_kafka_err2str(error_code));
                 rd_list_add(&errors, error);
         }
 
@@ -7766,7 +7767,7 @@ rd_kafka_ConsumerGroupDescription_new(
 
         grpdesc->authorized_operations_cnt = authorized_operations_cnt;
         grpdesc->authorized_operations     = rd_kafka_AuthorizedOperations_copy(
-            authorized_operations, authorized_operations_cnt);
+                authorized_operations, authorized_operations_cnt);
 
         grpdesc->state = state;
         if (coordinator != NULL)

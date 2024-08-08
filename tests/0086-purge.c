@@ -269,10 +269,9 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
                             rd_kafka_err2str(err));
 
                 waitmsgs.exp_err[i] =
-                    (remote && i < 10
-                         ? RD_KAFKA_RESP_ERR_NO_ERROR
-                         : remote && i < 20 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
-                                            : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
+                    (remote && i < 10   ? RD_KAFKA_RESP_ERR_NO_ERROR
+                     : remote && i < 20 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
+                                        : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
 
                 waitmsgs.cnt++;
         }

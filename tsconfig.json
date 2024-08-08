@@ -6,13 +6,16 @@
     "noImplicitThis": true,
     "strictNullChecks": true,
     "baseUrl": ".",
-    "types": ["node_modules/@types/node"],
+    "types": ["node_modules/@types/node", "jest"],
     "typeRoots": ["."],
     "noEmit": true,
+    "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strictFunctionTypes": true
   },
   "files": [
-    "index.d.ts"
+    "index.d.ts",
+    "schemaregistry/**/*",
+    "test/**/*"
   ]
 }

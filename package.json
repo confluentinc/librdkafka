@@ -12,7 +12,8 @@
     "test": "make test",
     "install": "node-pre-gyp install --fallback-to-build",
     "prepack": "node ./ci/prepublish.js",
-    "test:types": "tsc -p ."
+    "test:types": "tsc -p .",
+    "test:schemaregistry": "make -f Makefile.schemaregistry test"
   },
   "binary": {
     "module_name": "confluent-kafka-javascript",

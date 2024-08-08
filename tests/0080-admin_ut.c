@@ -1317,7 +1317,7 @@ static void do_test_AclBindingFilter() {
         rd_kafka_AclBindingFilter_t *new_acl_filter;
 
         rd_bool_t valid_resource_types[]         = {rd_false, rd_true, rd_true,
-                                            rd_true,  rd_true, rd_false};
+                rd_true,  rd_true, rd_true, rd_false};
         rd_bool_t valid_resource_pattern_types[] = {
             rd_false, rd_true, rd_true, rd_true, rd_true, rd_false};
         rd_bool_t valid_acl_operation[] = {

@@ -2029,7 +2029,7 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
         rd_kafka_topic_partition_list_sort_by_topic(valid_offsets);
 
         rko                    = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_TXN,
-                                 rd_kafka_txn_op_send_offsets_to_transaction);
+                                                    rd_kafka_txn_op_send_offsets_to_transaction);
         rko->rko_u.txn.offsets = valid_offsets;
         rko->rko_u.txn.cgmetadata =
             rd_kafka_consumer_group_metadata_dup(cgmetadata);

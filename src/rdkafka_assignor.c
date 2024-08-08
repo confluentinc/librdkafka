@@ -864,7 +864,7 @@ void ut_populate_internal_topic_metadata(rd_kafka_metadata_internal_t *mdi) {
 
                         partition_internal->racks_cnt = rd_list_cnt(curr_list);
                         partition_internal->racks     = rd_malloc(
-                            sizeof(char *) * partition_internal->racks_cnt);
+                                sizeof(char *) * partition_internal->racks_cnt);
                         RD_LIST_FOREACH(rack, curr_list, j) {
                                 partition_internal->racks[j] =
                                     rack; /* no duplication */
@@ -1666,10 +1666,10 @@ static int ut_assignors(void) {
                         /* Run assignor */
                         metadata_internal.metadata = metadata;
                         err                        = rd_kafka_assignor_run(
-                            rk->rk_cgrp, rkas,
-                            (rd_kafka_metadata_t *)(&metadata_internal),
-                            members, tests[i].member_cnt, errstr,
-                            sizeof(errstr));
+                                                   rk->rk_cgrp, rkas,
+                                                   (rd_kafka_metadata_t *)(&metadata_internal),
+                                                   members, tests[i].member_cnt, errstr,
+                                                   sizeof(errstr));
 
                         RD_UT_ASSERT(!err, "Assignor case %s for %s failed: %s",
                                      tests[i].name,

@@ -124,9 +124,10 @@ struct rd_kafka_sasl_oauthbearer_token {
  * @brief Per-connection state
  */
 struct rd_kafka_sasl_oauthbearer_state {
-        enum { RD_KAFKA_SASL_OAUTHB_STATE_SEND_CLIENT_FIRST_MESSAGE,
-               RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_FIRST_MSG,
-               RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL,
+        enum {
+                RD_KAFKA_SASL_OAUTHB_STATE_SEND_CLIENT_FIRST_MESSAGE,
+                RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_FIRST_MSG,
+                RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL,
         } state;
         char *server_error_msg;
 
@@ -1091,8 +1092,8 @@ static void rd_kafka_sasl_oauthbearer_build_client_first_message(
         buf          = out->ptr;
         size_written = 0;
         r            = rd_snprintf(buf, out->size + 1 - size_written,
-                        "%s%sauth=Bearer %s%s", gs2_header, kvsep,
-                        state->token_value, kvsep);
+                                   "%s%sauth=Bearer %s%s", gs2_header, kvsep,
+                                   state->token_value, kvsep);
         rd_assert(r < out->size + 1 - size_written);
         size_written += r;
         buf = out->ptr + size_written;

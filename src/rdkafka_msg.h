@@ -535,9 +535,9 @@ rd_kafka_msgq_overlap(const rd_kafka_msgq_t *a, const rd_kafka_msgq_t *b) {
         la = rd_kafka_msgq_last(a);
         lb = rd_kafka_msgq_last(b);
 
-        return (rd_bool_t)(
-            fa->rkm_u.producer.msgid <= lb->rkm_u.producer.msgid &&
-            fb->rkm_u.producer.msgid <= la->rkm_u.producer.msgid);
+        return (
+            rd_bool_t)(fa->rkm_u.producer.msgid <= lb->rkm_u.producer.msgid &&
+                       fb->rkm_u.producer.msgid <= la->rkm_u.producer.msgid);
 }
 
 /**

@@ -3,7 +3,7 @@
 # Check or apply/fix the project coding style to all files passed as arguments.
 # Uses clang-format for C/C++ and flake8 for Python.
 #
-# Requires clang-format version 10  (apt install clang-format-10).
+# Requires clang-format version 14  (apt install clang-format-14).
 #
 
 
@@ -27,8 +27,8 @@ else
 fi
 
 clang_format_version=$(${CLANG_FORMAT} --version | sed -Ee 's/.*version ([[:digit:]]+)\.[[:digit:]]+\.[[:digit:]]+.*/\1/')
-if [[ $clang_format_version != "10" ]] ; then
-    echo "$0: clang-format version 10, '$clang_format_version' detected"
+if [[ $clang_format_version != "14" ]] ; then
+    echo "$0: clang-format version 14, '$clang_format_version' detected"
     exit 1
 fi
 

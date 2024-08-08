@@ -206,7 +206,7 @@ static void do_test_CreateTopics(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 my_opaque = (void *)123;
@@ -313,7 +313,7 @@ static void do_test_DeleteTopics(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 if (useq) {
@@ -416,7 +416,7 @@ static void do_test_DeleteGroups(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 if (useq) {
@@ -657,7 +657,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 if ((error =
                          rd_kafka_AdminOptions_set_include_authorized_operations(
@@ -809,7 +809,7 @@ static void do_test_DescribeTopics(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 if ((error =
                          rd_kafka_AdminOptions_set_include_authorized_operations(
@@ -915,7 +915,7 @@ static void do_test_DescribeCluster(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 if ((error =
                          rd_kafka_AdminOptions_set_include_authorized_operations(
@@ -1185,7 +1185,7 @@ static void do_test_AclBinding() {
         rd_kafka_AclBinding_t *new_acl;
 
         rd_bool_t valid_resource_types[]         = {rd_false, rd_false, rd_true,
-                                            rd_true,  rd_true,  rd_false};
+                                                    rd_true,  rd_true,  rd_false};
         rd_bool_t valid_resource_pattern_types[] = {
             rd_false, rd_false, rd_false, rd_true, rd_true, rd_false};
         rd_bool_t valid_acl_operation[] = {
@@ -1317,7 +1317,7 @@ static void do_test_AclBindingFilter() {
         rd_kafka_AclBindingFilter_t *new_acl_filter;
 
         rd_bool_t valid_resource_types[]         = {rd_false, rd_true, rd_true,
-                                            rd_true,  rd_true, rd_false};
+                                                    rd_true,  rd_true, rd_false};
         rd_bool_t valid_resource_pattern_types[] = {
             rd_false, rd_true, rd_true, rd_true, rd_true, rd_false};
         rd_bool_t valid_acl_operation[] = {
@@ -1480,10 +1480,10 @@ static void do_test_CreateAcls(const char *what,
         for (i = 0; i < MY_NEW_ACLS_CNT; i++) {
                 const char *topic = test_mk_topic_name(__FUNCTION__, 1);
                 new_acls[i]       = rd_kafka_AclBinding_new(
-                    RD_KAFKA_RESOURCE_TOPIC, topic,
-                    RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
-                    RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                          RD_KAFKA_RESOURCE_TOPIC, topic,
+                          RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
+                          RD_KAFKA_ACL_OPERATION_ALL,
+                          RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         }
 
         if (with_options) {
@@ -1491,7 +1491,7 @@ static void do_test_CreateAcls(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 my_opaque = (void *)123;
@@ -1594,16 +1594,16 @@ static void do_test_DescribeAcls(const char *what,
          */
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         describe_acls     = rd_kafka_AclBindingFilter_new(
-            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_PREFIXED,
-            principal, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_PREFIXED,
+                principal, host, RD_KAFKA_ACL_OPERATION_ALL,
+                RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
 
         if (with_options) {
                 options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 my_opaque = (void *)123;
@@ -1708,10 +1708,10 @@ static void do_test_DeleteAcls(const char *what,
         for (i = 0; i < DELETE_ACLS_FILTERS_CNT; i++) {
                 const char *topic = test_mk_topic_name(__FUNCTION__, 1);
                 delete_acls[i]    = rd_kafka_AclBindingFilter_new(
-                    RD_KAFKA_RESOURCE_TOPIC, topic,
-                    RD_KAFKA_RESOURCE_PATTERN_PREFIXED, principal, host,
-                    RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                       RD_KAFKA_RESOURCE_TOPIC, topic,
+                       RD_KAFKA_RESOURCE_PATTERN_PREFIXED, principal, host,
+                       RD_KAFKA_ACL_OPERATION_ALL,
+                       RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         }
 
         if (with_options) {
@@ -1719,7 +1719,7 @@ static void do_test_DeleteAcls(const char *what,
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
+                            options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 my_opaque = (void *)123;

@@ -745,7 +745,7 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         }
         wstore_name = rd_alloca(sizeof(*wstore_name) * wsize);
         werr        = mbstowcs_s(NULL, wstore_name, wsize, store_name,
-                          strlen(store_name));
+                                 strlen(store_name));
         rd_assert(!werr);
 
         w_store = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
@@ -1383,8 +1383,8 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
                 x509 = NULL;
                 r    = ENGINE_load_ssl_client_cert(
-                    rk->rk_conf.ssl.engine, NULL, cert_names, &x509, &pkey,
-                    NULL, NULL, rk->rk_conf.ssl.engine_callback_data);
+                       rk->rk_conf.ssl.engine, NULL, cert_names, &x509, &pkey,
+                       NULL, NULL, rk->rk_conf.ssl.engine_callback_data);
 
                 sk_X509_NAME_free(cert_names);
                 if (r == -1 || !x509 || !pkey) {
@@ -1570,8 +1570,8 @@ static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
                 OSSL_PROVIDER *prov;
                 const char *buildinfo = NULL;
                 OSSL_PARAM request[]  = {{"buildinfo", OSSL_PARAM_UTF8_PTR,
-                                         (void *)&buildinfo, 0, 0},
-                                        {NULL, 0, NULL, 0, 0}};
+                                          (void *)&buildinfo, 0, 0},
+                                         {NULL, 0, NULL, 0, 0}};
 
                 prov = OSSL_PROVIDER_load(NULL, provider);
                 if (!prov) {
@@ -1821,7 +1821,7 @@ void rd_kafka_ssl_init(void) {
         if (!CRYPTO_get_locking_callback()) {
                 rd_kafka_ssl_locks_cnt = CRYPTO_num_locks();
                 rd_kafka_ssl_locks     = rd_malloc(rd_kafka_ssl_locks_cnt *
-                                               sizeof(*rd_kafka_ssl_locks));
+                                                   sizeof(*rd_kafka_ssl_locks));
                 for (i = 0; i < rd_kafka_ssl_locks_cnt; i++)
                         mtx_init(&rd_kafka_ssl_locks[i], mtx_plain);
 

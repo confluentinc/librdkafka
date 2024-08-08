@@ -1403,8 +1403,8 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
                        OffsetCommitCb *offset_commit_cb) {
     rd_kafka_topic_partition_list_t *c_parts = partitions_to_c_parts(offsets);
     rd_kafka_resp_err_t err                  = rd_kafka_commit_queue(
-        rk_, c_parts, NULL, RdKafka::offset_commit_cb_trampoline0,
-        offset_commit_cb);
+                         rk_, c_parts, NULL, RdKafka::offset_commit_cb_trampoline0,
+                         offset_commit_cb);
     rd_kafka_topic_partition_list_destroy(c_parts);
     return static_cast<ErrorCode>(err);
   }

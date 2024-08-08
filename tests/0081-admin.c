@@ -1567,7 +1567,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
                 acl_binding_results_cntp = 0;
                 acl_binding_results      = rd_kafka_DescribeAcls_result_acls(
-                    acl_describe_result, &acl_binding_results_cntp);
+                         acl_describe_result, &acl_binding_results_cntp);
 
                 TEST_ASSERT(acl_binding_results_cntp == 2,
                             "acl_binding_results_cntp should be 2, not %zu",
@@ -1735,7 +1735,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         acl_binding_results_cntp = 0;
         acl_binding_results      = rd_kafka_DescribeAcls_result_acls(
-            acl_describe_result, &acl_binding_results_cntp);
+                 acl_describe_result, &acl_binding_results_cntp);
 
         TEST_ASSERT(acl_binding_results_cntp == 1,
                     "acl_binding_results_cntp should be 1, not %zu",
@@ -1958,7 +1958,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         DeleteAcls_result_responses_cntp = 0;
         DeleteAcls_result_responses      = rd_kafka_DeleteAcls_result_responses(
-            acl_delete_result, &DeleteAcls_result_responses_cntp);
+                 acl_delete_result, &DeleteAcls_result_responses_cntp);
 
         TEST_ASSERT(DeleteAcls_result_responses_cntp == 1,
                     "DeleteAcls_result_responses_cntp should be 1, not %zu\n",
@@ -2074,7 +2074,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         DeleteAcls_result_responses_cntp = 0;
         DeleteAcls_result_responses      = rd_kafka_DeleteAcls_result_responses(
-            acl_delete_result, &DeleteAcls_result_responses_cntp);
+                 acl_delete_result, &DeleteAcls_result_responses_cntp);
 
         TEST_ASSERT(DeleteAcls_result_responses_cntp == 1,
                     "DeleteAcls_result_responses_cntp should be 1, not %zu\n",
@@ -3987,8 +3987,8 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
                             orig_offsets->elems[i].partition);
                         rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                         rktpar         = rd_kafka_topic_partition_list_add(
-                            offsets, orig_offsets->elems[i].topic,
-                            orig_offsets->elems[i].partition);
+                                    offsets, orig_offsets->elems[i].topic,
+                                    orig_offsets->elems[i].partition);
                         rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                 }
         }
@@ -4985,9 +4985,9 @@ static void do_test_ListOffsets(const char *what,
         const rd_kafka_ListOffsetsResultInfo_t **result_infos;
         int64_t basetimestamp = 10000000;
         int64_t timestamps[]  = {
-            basetimestamp + 100,
-            basetimestamp + 400,
-            basetimestamp + 250,
+             basetimestamp + 100,
+             basetimestamp + 400,
+             basetimestamp + 250,
         };
         struct test_fixture_s {
                 int64_t query;

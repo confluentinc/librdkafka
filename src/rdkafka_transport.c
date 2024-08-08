@@ -916,9 +916,9 @@ static int rd_kafka_transport_io_serve_win32(rd_kafka_transport_t *rktrans,
                                              int timeout_ms) {
         const DWORD wsaevent_cnt = 3;
         WSAEVENT wsaevents[3]    = {
-            rkq->rkq_cond.mEvents[0],  /* rkq: cnd_signal */
-            rkq->rkq_cond.mEvents[1],  /* rkq: cnd_broadcast */
-            rktrans->rktrans_wsaevent, /* socket */
+               rkq->rkq_cond.mEvents[0],  /* rkq: cnd_signal */
+               rkq->rkq_cond.mEvents[1],  /* rkq: cnd_broadcast */
+               rktrans->rktrans_wsaevent, /* socket */
         };
         DWORD r;
         int events               = 0;

@@ -153,16 +153,16 @@ static const rd_kafka_telemetry_metric_info_t
                 {.name        = "producer.record.queue.time.avg",
                  .description = "The average time in ms a record spends in the "
                                 "producer queue.",
-                 .unit          = "ms",
-                 .is_int        = rd_false,
+                 .unit        = "ms",
+                 .is_int      = rd_false,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
             [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_MAX] =
                 {.name        = "producer.record.queue.time.max",
                  .description = "The maximum time in ms a record spends in the "
                                 "producer queue.",
-                 .unit          = "ms",
-                 .is_int        = rd_true,
+                 .unit        = "ms",
+                 .is_int      = rd_true,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };
@@ -200,9 +200,9 @@ static const rd_kafka_telemetry_metric_info_t
                  .is_per_broker = rd_true,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
             [RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS] =
-                {.name        = "consumer.coordinator.assigned.partitions",
-                 .description = "The number of partitions currently assigned "
-                                "to this consumer.",
+                {.name          = "consumer.coordinator.assigned.partitions",
+                 .description   = "The number of partitions currently assigned "
+                                  "to this consumer.",
                  .unit          = "1",
                  .is_int        = rd_true,
                  .is_per_broker = rd_false,

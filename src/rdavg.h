@@ -96,6 +96,7 @@ static RD_UNUSED void rd_avg_add(rd_avg_t *ra, int64_t v) {
  * @brief Calculate the average
  */
 static RD_UNUSED void rd_avg_calc(rd_avg_t *ra, rd_ts_t now) {
+        mtx_lock(&ra->ra_lock);
         if (ra->ra_type == RD_AVG_GAUGE) {
                 if (ra->ra_v.cnt)
                         ra->ra_v.avg = ra->ra_v.sum / ra->ra_v.cnt;
@@ -111,6 +112,7 @@ static RD_UNUSED void rd_avg_calc(rd_avg_t *ra, rd_ts_t now) {
 
                 ra->ra_v.start = elapsed;
         }
+        mtx_unlock(&ra->ra_lock);
 }
 
 

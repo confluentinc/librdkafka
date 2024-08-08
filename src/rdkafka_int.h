@@ -692,11 +692,22 @@ struct rd_kafka_s {
                 int *matched_metrics;
                 size_t matched_metrics_cnt;
 
+                rd_ts_t ts_fetch_last;
+                rd_ts_t ts_fetch_cb_last;
+
                 struct {
                         rd_ts_t ts_last;  /**< Timestamp of last push */
                         rd_ts_t ts_start; /**< Timestamp from when collection
                                            *   started */
                 } rk_historic_c;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                } rk_avg_current;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                } rk_avg_rollover;
 
         } rk_telemetry;
 

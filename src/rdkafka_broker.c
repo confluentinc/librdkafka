@@ -1873,7 +1873,16 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find(rd_kafka_broker_t *rkb,
                 rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
                 rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
                            rkbuf->rkbuf_ts_sent);
-
+                if (rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Fetch) {
+                        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current
+                                        .rkb_avg_fetch_latency,
+                                   rkbuf->rkbuf_ts_sent);
+                } else if (rkbuf->rkbuf_reqhdr.ApiKey ==
+                           RD_KAFKAP_OffsetCommit) {
+                        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current
+                                        .rkb_avg_commit_latency,
+                                   rkbuf->rkbuf_ts_sent);
+                }
                 if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
                     rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1) == 1)
                         rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);

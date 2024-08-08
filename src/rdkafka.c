@@ -3122,7 +3122,8 @@ static rd_kafka_op_res_t rd_kafka_consume_cb(rd_kafka_t *rk,
         }
 
         rkmessage = rd_kafka_message_get(rko);
-
+        /* stop the active ts */
+        /* t2 */
         rd_kafka_fetch_op_app_prepare(rk, rko);
 
         ctx->consume_cb(rkmessage, ctx->opaque);
@@ -3218,10 +3219,21 @@ rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
                 rd_kafka_app_poll_blocking(rk);
 
         rd_kafka_yield_thread = 0;
+        rd_ts_t now           = rd_clock();
+        if (rk->rk_telemetry.ts_fetch_last != -1) {
+                rd_ts_t poll_interval = now - rk->rk_telemetry.ts_fetch_last;
+                rd_ts_t idle_interval = rk->rk_telemetry.ts_fetch_last -
+                                        rk->rk_telemetry.ts_fetch_cb_last;
+                int64_t poll_idle_ratio =
+                    ((double)idle_interval * 1e7) / poll_interval;
+                rd_avg_add(
+                    &rk->rk_telemetry.rk_avg_current.rk_avg_poll_idle_ratio,
+                    poll_idle_ratio);
+        }
+        rk->rk_telemetry.ts_fetch_last = now;
         while ((
             rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(abs_timeout), 0))) {
                 rd_kafka_op_res_t res;
-
                 res =
                     rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN, NULL);
 
@@ -3889,6 +3901,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         switch ((int)rko->rko_type) {
         case RD_KAFKA_OP_FETCH:
+                rk->rk_telemetry.ts_fetch_cb_last = rd_clock();
                 if (!rk->rk_conf.consume_cb ||
                     cb_type == RD_KAFKA_Q_CB_RETURN ||
                     cb_type == RD_KAFKA_Q_CB_FORCE_RETURN)
@@ -3897,7 +3910,6 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                         struct consume_ctx ctx = {.consume_cb =
                                                       rk->rk_conf.consume_cb,
                                                   .opaque = rk->rk_conf.opaque};
-
                         return rd_kafka_consume_cb(rk, rkq, rko, cb_type, &ctx);
                 }
                 break;

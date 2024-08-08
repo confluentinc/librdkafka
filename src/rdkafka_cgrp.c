@@ -359,7 +359,19 @@ static int rd_kafka_cgrp_set_state(rd_kafka_cgrp_t *rkcg, int state) {
 void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
         if ((int)rkcg->rkcg_join_state == join_state)
                 return;
-
+        switch (join_state) {
+        case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
+        case RD_KAFKA_CGRP_JOIN_STATE_INIT:
+                rd_avg_add(&rkcg->rkcg_curr_coord->rkb_telemetry.rd_avg_current
+                                .rkb_avg_rebalance_latency,
+                           rd_clock() - rkcg->rkcg_ts_rebalance_start);
+                break;
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN:
+                rkcg->rkcg_ts_rebalance_start = rd_clock();
+                break;
+        default:
+                break;
+        }
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPJOINSTATE",
                      "Group \"%.*s\" changed join state %s -> %s "
                      "(state %s)",
@@ -2712,6 +2724,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_consumer_handle_next_assignment(
                                           ? "cleared"
                                           : "not cleared"));
                 }
+                rkcg->rkcg_ts_rebalance_start = rd_clock();
                 rd_kafka_cgrp_handle_assignment(rkcg,
                                                 rkcg->rkcg_target_assignment);
         }

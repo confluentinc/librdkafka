@@ -29,7 +29,6 @@
 #ifndef _RDKAFKA_OP_H_
 #define _RDKAFKA_OP_H_
 
-
 #include "rdkafka_msg.h"
 #include "rdkafka_timer.h"
 #include "rdkafka_admin.h"

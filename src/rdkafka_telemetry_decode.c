@@ -461,6 +461,12 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
             (rd_uclock() - 1000 * 1000) * 1000;
         rk->rk_telemetry.rk_historic_c.ts_last =
             (rd_uclock() - 1000 * 1000) * 1000;
+
+        rd_avg_init(&rk->rk_telemetry.rk_avg_current.rk_avg_poll_idle_ratio,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rk->rk_telemetry.rk_avg_rollover.rk_avg_poll_idle_ratio,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         clear_unit_test_data();
 
@@ -483,12 +489,30 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_rebalance_latency,
+            RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_fetch_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_commit_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rebalance_latency,
+            RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_commit_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+
         TAILQ_INSERT_HEAD(&rk->rk_brokers, rkb, rkb_link);
         rd_buf_t *rbuf              = rd_kafka_telemetry_encode_metrics(rk);
         void *metrics_payload       = rbuf->rbuf_wpos->seg_p;
@@ -527,6 +551,22 @@ bool unit_test_telemetry(rd_kafka_telemetry_producer_metric_name_t metric_name,
         rd_avg_destroy(
             &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
         rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle);
+
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_rebalance_latency);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rebalance_latency);
+
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_fetch_latency);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency);
+
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_commit_latency);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_commit_latency);
+
         rd_free(rkb);
         rwlock_destroy(&rk->rk_lock);
         rd_free(rk);

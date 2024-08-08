@@ -7826,7 +7826,7 @@ typedef enum rd_kafka_ResourceType_t {
         RD_KAFKA_RESOURCE_GROUP            = 3, /**< Group */
         RD_KAFKA_RESOURCE_BROKER           = 4, /**< Broker */
         RD_KAFKA_RESOURCE_TRANSACTIONAL_ID = 5, /**< Transactional ID */
-        RD_KAFKA_RESOURCE__CNT,        /**< Number of resource types defined */
+        RD_KAFKA_RESOURCE__CNT, /**< Number of resource types defined */
 } rd_kafka_ResourceType_t;
 
 /**

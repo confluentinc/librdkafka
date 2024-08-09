@@ -2800,7 +2800,7 @@ static void do_test_ListConsumerGroups(const char *what,
                         is_simple_consumer_group =
                             rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
                                 group);
-                        state      = rd_kafka_ConsumerGroupListing_state(group);
+                        state = rd_kafka_ConsumerGroupListing_state(group);
                         group_type = rd_kafka_ConsumerGroupListing_type(group);
                         if (!strcmp(group_name, group_id)) {
                                 found++;

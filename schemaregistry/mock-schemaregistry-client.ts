@@ -286,7 +286,6 @@ class MockClient implements Client {
         subjects.push(parsedKey.subject);
       }
     }
-    console.log(subjects.sort());
     return subjects.sort();
   }
 

@@ -5479,7 +5479,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
         do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
-        goto quickexit;
 
         /* Create topics */
         /* FIXME: KRaft async CreateTopics is working differently than

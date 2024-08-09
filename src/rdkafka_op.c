@@ -418,6 +418,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_ADMIN_FANOUT:
                 rd_assert(rko->rko_u.admin_request.fanout.outstanding == 0);
                 rd_list_destroy(&rko->rko_u.admin_request.fanout.results);
+
         case RD_KAFKA_OP_CREATETOPICS:
         case RD_KAFKA_OP_DELETETOPICS:
         case RD_KAFKA_OP_CREATEPARTITIONS:
@@ -427,6 +428,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_DELETERECORDS:
         case RD_KAFKA_OP_DESCRIBECONSUMERGROUPS:
         case RD_KAFKA_OP_DELETEGROUPS:
+        case RD_KAFKA_OP_LISTCONSUMERGROUPS:
         case RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS:
         case RD_KAFKA_OP_CREATEACLS:
         case RD_KAFKA_OP_DESCRIBEACLS:
@@ -444,6 +446,11 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                         .u.PTR) {
                         rd_list_destroy(rko->rko_u.admin_request.options
                                             .match_consumer_group_states.u.PTR);
+                }
+                if (rko->rko_u.admin_request.options.match_consumer_group_types
+                        .u.PTR) {
+                        rd_list_destroy(rko->rko_u.admin_request.options
+                                            .match_consumer_group_types.u.PTR);
                 }
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);
                 RD_IF_FREE(rko->rko_u.admin_request.coordkey, rd_free);

@@ -1656,14 +1656,14 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
         rd_kafka_resp_err_t err;
         rd_list_t *types_list = rd_list_new(0, NULL);
         rd_list_init_int32(types_list, consumer_group_types_cnt);
-        uint64_t states_bitmask = 0;
+        uint64_t types_bitmask = 0;
 
         if (RD_KAFKA_CONSUMER_GROUP_TYPE__CNT >= 64) {
                 rd_assert("BUG: cannot handle types with a bitmask anymore");
         }
 
         for (i = 0; i < consumer_group_types_cnt; i++) {
-                uint64_t state_bit;
+                uint64_t type_bit;
                 rd_kafka_consumer_group_type_t group_type =
                     consumer_group_types[i];
 
@@ -1672,18 +1672,17 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
                         rd_list_destroy(types_list);
                         return rd_kafka_error_new(
                             RD_KAFKA_RESP_ERR__INVALID_ARG,
-                            "Only a valid group type should be provided except "
-                            "Unknwon Group Type");
+                            "Only a valid an known group type is allowed");
                 }
 
-                state_bit = 1 << group_type;
-                if (states_bitmask & state_bit) {
+                type_bit = 1 << group_type;
+                if (types_bitmask & type_bit) {
                         rd_list_destroy(types_list);
                         return rd_kafka_error_new(
                             RD_KAFKA_RESP_ERR__INVALID_ARG,
                             "Duplicate group types not allowed");
                 } else {
-                        states_bitmask = states_bitmask | state_bit;
+                        types_bitmask = types_bitmask | type_bit;
                         rd_list_set_int32(types_list, (int32_t)i, group_type);
                 }
         }
@@ -7430,7 +7429,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                      rd_kafka_ListConsumerGroupsResult_free);
 
         for (i = 0; i < cnt; i++) {
-                rd_kafkap_str_t GroupId, ProtocolType, GroupState,
+                rd_kafkap_str_t GroupId, ProtocolType, GroupState = RD_ZERO_INIT,
                     GroupType = RD_ZERO_INIT;
                 rd_kafka_ConsumerGroupListing_t *group_listing;
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;

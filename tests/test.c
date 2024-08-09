@@ -2794,8 +2794,8 @@ void test_consume_msgs_easy_mv0(const char *group_id,
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
         if (exp_eofcnt != -1)
                 test_conf_set(conf, "enable.partition.eof", "true");
-
         rk = test_create_consumer(group_id, NULL, conf, tconf);
+
         rd_kafka_poll_set_consumer(rk);
 
         if (partition == -1) {

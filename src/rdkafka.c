@@ -4851,10 +4851,8 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
         struct list_groups_state *state;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode;
-        int32_t ThrottleTimeMs;
         char **grps = NULL;
         int cnt, grpcnt, i = 0;
-        int16_t ApiVersion = request->rkbuf_reqhdr.ApiVersion;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* 'state' is no longer in scope because
@@ -4869,10 +4867,6 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
         if (err)
                 goto err;
-
-        if (ApiVersion >= 1) {
-                rd_kafka_buf_read_i32(reply, &ThrottleTimeMs);
-        }
 
         rd_kafka_buf_read_i16(reply, &ErrorCode);
         if (ErrorCode) {
@@ -4893,18 +4887,10 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
         grps = rd_malloc(sizeof(*grps) * grpcnt);
 
         while (cnt-- > 0) {
-                rd_kafkap_str_t grp, proto, grp_state, grp_type;
+                rd_kafkap_str_t grp, proto;
 
                 rd_kafka_buf_read_str(reply, &grp);
                 rd_kafka_buf_read_str(reply, &proto);
-
-                if (ApiVersion >= 4) {
-                        rd_kafka_buf_read_str(reply, &grp_state);
-                }
-
-                if (ApiVersion >= 5) {
-                        rd_kafka_buf_read_str(reply, &grp_type);
-                }
 
                 if (state->desired_group &&
                     rd_kafkap_str_cmp_str(&grp, state->desired_group))

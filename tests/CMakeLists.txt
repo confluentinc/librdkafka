@@ -139,8 +139,6 @@ set(
     0146-metadata_mock.c
     0147-consumer_group_consumer_mock.c
     0150-telemetry_mock.c
-    0147-consumer_group_consumer_mock.c
-    0150-telemetry_mock.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

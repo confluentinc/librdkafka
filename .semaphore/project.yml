@@ -23,10 +23,10 @@ spec:
         level: pipeline
     whitelist:
       branches:
-      - master
-      - /semaphore.*/
-      - /dev_.*/
-      - /feature\/.*/
+      - 'master'
+      - '/semaphore.*/'
+      - '/dev_.*/'
+      - '/feature\/.*/'
   custom_permissions: true
   debug_permissions:
   - empty

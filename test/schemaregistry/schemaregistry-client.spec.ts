@@ -47,6 +47,15 @@ const metadata2: Metadata = {
     email: 'Alice@bob2.com',
   }
 };
+const metadataKeyValue = {
+  'owner': 'Alice Bob',
+  'email': 'Alice@bob.com',
+}
+
+const metadataKeyValue2 = {
+  'owner': 'Alice Bob2',
+  'email': 'Alice@bob2.com'
+};
 const schemaInfo = {
   schema: schemaString,
   schemaType: 'AVRO',
@@ -276,7 +285,7 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
 
     restService.sendHttpRequest.mockResolvedValue({ data: expectedResponse } as AxiosResponse);
 
-    const response: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadata);
+    const response: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadataKeyValue);
 
     expect(response).toMatchObject(expectedResponse);
     expect(restService.sendHttpRequest).toHaveBeenCalledTimes(1);
@@ -298,21 +307,21 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
 
     restService.sendHttpRequest.mockResolvedValue({ data: expectedResponse } as AxiosResponse);
 
-    const response: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadata);
+    const response: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadataKeyValue);
     expect(response).toMatchObject(expectedResponse);
     expect(restService.sendHttpRequest).toHaveBeenCalledTimes(1);
 
     restService.sendHttpRequest.mockResolvedValue({ data: expectedResponse2 } as AxiosResponse);
 
-    const response2: SchemaMetadata = await client.getLatestWithMetadata(mockSubject2, metadata2);
+    const response2: SchemaMetadata = await client.getLatestWithMetadata(mockSubject2, metadataKeyValue2);
     expect(response2).toMatchObject(expectedResponse2);
     expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
 
-    const cachedResponse: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadata);
+    const cachedResponse: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadataKeyValue);
     expect(cachedResponse).toMatchObject(expectedResponse);
     expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
 
-    const cachedResponse2: SchemaMetadata = await client.getLatestWithMetadata(mockSubject2, metadata2);
+    const cachedResponse2: SchemaMetadata = await client.getLatestWithMetadata(mockSubject2, metadataKeyValue2);
     expect(cachedResponse2).toMatchObject(expectedResponse2);
     expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
   });
@@ -364,57 +373,6 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
     expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
 
     const cachedResponse2: SchemaMetadata = await client.getSchemaMetadata(mockSubject2, 2, false);
-    expect(cachedResponse2).toMatchObject(expectedResponse2);
-    expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
-  });
-
-  it('Should get latest schema with metadata when GetLatestWithMetadata is called', async () => {
-    const expectedResponse = {
-      id: 1,
-      version: 1,
-      schema: schemaString,
-      metadata: metadata,
-    };
-
-    restService.sendHttpRequest.mockResolvedValue({ data: expectedResponse } as AxiosResponse);
-
-    const response: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadata);
-
-    expect(response).toMatchObject(expectedResponse);
-    expect(restService.sendHttpRequest).toHaveBeenCalledTimes(1);
-  });
-
-  it('Should get latest schema with metadata from cache when GetLatestWithMetadata is called twice', async () => {
-    const expectedResponse = {
-      id: 1,
-      version: 1,
-      schema: schemaString,
-      metadata: metadata,
-    };
-    const expectedResponse2 = {
-      id: 2,
-      version: 1,
-      schema: schemaString2,
-      metadata: metadata2,
-    };
-
-    restService.sendHttpRequest.mockResolvedValue({ data: expectedResponse } as AxiosResponse);
-
-    const response: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadata);
-    expect(response).toMatchObject(expectedResponse);
-    expect(restService.sendHttpRequest).toHaveBeenCalledTimes(1);
-
-    restService.sendHttpRequest.mockResolvedValue({ data: expectedResponse2 } as AxiosResponse);
-
-    const response2: SchemaMetadata = await client.getLatestWithMetadata(mockSubject2, metadata2);
-    expect(response2).toMatchObject(expectedResponse2);
-    expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
-
-    const cachedResponse: SchemaMetadata = await client.getLatestWithMetadata(mockSubject, metadata);
-    expect(cachedResponse).toMatchObject(expectedResponse);
-    expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
-
-    const cachedResponse2: SchemaMetadata = await client.getLatestWithMetadata(mockSubject2, metadata2);
     expect(cachedResponse2).toMatchObject(expectedResponse2);
     expect(restService.sendHttpRequest).toHaveBeenCalledTimes(2);
   });

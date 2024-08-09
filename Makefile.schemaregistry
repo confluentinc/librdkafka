@@ -20,7 +20,7 @@ lint:
 	$(ESLINT) $(SRC_DIR) $(TEST_DIR) $(INTEG_DIR)
 
 test:
-	$(JEST) $(TEST_DIR)
+	$(JEST) $(TEST_DIR) --verbose
 
 integtest:
 	$(JEST) $(INTEG_DIR)

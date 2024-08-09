@@ -9,12 +9,17 @@ metadata:
   name: librdkafka
   description: ""
 spec:
-  visibility: private
+  visibility: public
   repository:
     url: git@github.com:confluentinc/librdkafka.git
+    run_on:
+    - forked_pull_requests
     pipeline_file: .semaphore/semaphore.yml
     integration_type: github_app
     status:
       pipeline_files:
       - path: .semaphore/semaphore.yml
         level: pipeline
+    forked_pull_requests:
+      allowed_contributors:
+        - "ConfluentSemaphore"

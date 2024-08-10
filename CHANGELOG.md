@@ -101,7 +101,7 @@ librdkafka v2.4.0 is a feature release:
    to each member through heartbeats.
 
    The feature is still _not production-ready_.
-   It's possible to try it in a non-production enviroment.
+   It's possible to try it in a non-production environment.
 
    A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available
    with considerations and steps to follow to test it (#4610).

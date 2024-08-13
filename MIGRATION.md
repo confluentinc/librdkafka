@@ -236,7 +236,7 @@ producerRun().then(consumerRun).catch(console.error);
 
 
 * `subscribe`:
-  - Regex flags are ignored while passing a topic subscription (like 'i' or 'g').
+  - Regex flags are ignored while passing a topic subscription (like 'i' or 'g'). Regexes must start with '^', otherwise, an error is thrown.
   - Subscribe must be called only after `connect`.
   - An optional parameter, `replace` is provided.
     If set to true, the current subscription is replaced with the new one. If set to false, the new subscription is added to the current one, for example,

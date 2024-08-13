@@ -7,7 +7,8 @@ const { secureRandom,
     waitForMessages,
     waitForConsumerToJoinGroup,
     createProducer,
-    createConsumer } = require('../testhelpers');
+    createConsumer,
+    sleep } = require('../testhelpers');
 
 describe('Consumer', () => {
     let groupId, consumer, producer;
@@ -44,6 +45,9 @@ describe('Consumer', () => {
             const topics = [`topic-${secureRandom()}`, `topic-${secureRandom()}`, regexMatchingTopic];
 
             await Promise.all(topics.map(topic => createTopic({ topic })));
+            /* It takes some time for the topics to be propagated in the metadata. We could check
+             * by listing topics in a loop, but this serves as well to get rid of flakiness. */
+            await sleep(1000);
 
             const messagesConsumed = [];
             await consumer.connect();
@@ -123,10 +127,14 @@ describe('Consumer', () => {
                         [topicUS, topicSE, topicUK, topicBR].map(topic => createTopic({ topic }))
                     );
 
+                    /* It takes some time for the topics to be propagated in the metadata. We could check
+                     * by listing topics in a loop, but this serves as well to get rid of flakiness. */
+                    await sleep(1000);
+
                     const messagesConsumed = [];
                     await consumer.connect();
                     await consumer.subscribe({
-                        topic: new RegExp(`pattern-${testScope}-(se|br)-.*`),
+                        topic: new RegExp(`^pattern-${testScope}-(se|br)-.*`),
                     });
 
                     consumer.run({ eachMessage: async event => messagesConsumed.push(event) });
@@ -149,6 +157,24 @@ describe('Consumer', () => {
                     ]);
                 });
             });
+        });
+    });
+
+    describe('throws if subscribing with a RegExp incorrectly', () => {
+        it('when RegExp contains a flag', async () => {
+            await consumer.connect();
+            await expect(consumer.subscribe({ topics: [new RegExp('^test', 'g')] })).rejects.toHaveProperty(
+                'code',
+                ErrorCodes.ERR__INVALID_ARG
+            );
+        });
+
+        it('when RegExp does not start with a ^', async () => {
+            await consumer.connect();
+            await expect(consumer.subscribe({ topics: [new RegExp('test')] })).rejects.toHaveProperty(
+                'code',
+                ErrorCodes.ERR__INVALID_ARG
+            );
         });
     });
 });

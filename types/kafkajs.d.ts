@@ -321,7 +321,7 @@ export type Consumer = Client & {
   pause(topics: Array<{ topic: string; partitions?: number[] }>): void
   paused(): TopicPartitions[]
   resume(topics: Array<{ topic: string; partitions?: number[] }>): void
-  assignment(): TopicPartitions[]
+  assignment(): TopicPartition[]
 }
 
 export interface AdminConfig {

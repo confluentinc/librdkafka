@@ -2695,6 +2695,7 @@ static void do_test_ListConsumerGroups(const char *what,
         if (request_timeout != -1) {
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
+
                 if (match_states) {
                         rd_kafka_consumer_group_state_t empty =
                             RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY;
@@ -3032,6 +3033,8 @@ static void do_test_ListConsumerGroups(const char *what,
                     " got %" PRIusz,
                     TEST_LIST_CONSUMER_GROUPS_CNT, found);
 
+        rd_kafka_event_destroy(rkev);
+
         if (has_match_types) {
                 /* With the options of the consumer protocol we should get 0
                  * valid cnt */
@@ -3088,7 +3091,7 @@ static void do_test_ListConsumerGroups(const char *what,
                             error_cnt);
 
                 TEST_ASSERT(valid_cnt == 0,
-                            "expected ListConsumerGroups to return at least 0"
+                            "expected ListConsumerGroups to return 0"
                             " valid groups,"
                             " got %zu",
                             valid_cnt);
@@ -5476,9 +5479,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         rk = test_create_handle(cltype, conf);
 
         mainq = rd_kafka_queue_get_main(rk);
-
-        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
-        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
 
         /* Create topics */
         /* FIXME: KRaft async CreateTopics is working differently than

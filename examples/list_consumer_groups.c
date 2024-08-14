@@ -73,7 +73,7 @@ static void usage(const char *reason, ...) {
         fprintf(stderr,
                 "List groups usage examples\n"
                 "\n"
-                "Usage: %s <options> <state1> <state2> ...\n"
+                "Usage: %s <options> state_cnt group_type_cnt [<state1> <state2>] [<group_type1> <group_type2>] ...\n"
                 "\n"
                 "Options:\n"
                 "   -b <brokers>    Bootstrap server list to connect to.\n"
@@ -199,11 +199,12 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_consumer_group_type_t *group_types;
 
         states_cnt = parse_int("state count", argv[0]);
+        group_types_cnt = parse_int("group type count", argv[1]);
+
         states = calloc(states_cnt, sizeof(rd_kafka_consumer_group_state_t));
         for (i = 0; i < states_cnt; i++) {
-                states[i] = parse_int("state code", argv[i + 1]);
+                states[i] = parse_int("state code", argv[2+i]);
         }
-        group_types_cnt = parse_int("group type count", argv[states_cnt + 1]);
 
         group_types =
             calloc(group_types_cnt, sizeof(rd_kafka_consumer_group_type_t));
@@ -313,7 +314,7 @@ int main(int argc, char **argv) {
         /*
          * Parse common options
          */
-        while ((opt = getopt(argc, argv, "b:X:d")) != -1) {
+        while ((opt = getopt(argc, argv, "b:X:d:")) != -1) {
                 switch (opt) {
                 case 'b':
                         conf_set(conf, "bootstrap.servers", optarg);

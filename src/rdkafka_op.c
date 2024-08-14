@@ -418,7 +418,6 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_ADMIN_FANOUT:
                 rd_assert(rko->rko_u.admin_request.fanout.outstanding == 0);
                 rd_list_destroy(&rko->rko_u.admin_request.fanout.results);
-
         case RD_KAFKA_OP_CREATETOPICS:
         case RD_KAFKA_OP_DELETETOPICS:
         case RD_KAFKA_OP_CREATEPARTITIONS:

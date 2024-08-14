@@ -264,7 +264,6 @@ _TEST_DECL(0146_metadata_mock);
 _TEST_DECL(0147_consumer_group_consumer_mock);
 _TEST_DECL(0150_telemetry_mock);
 
-
 /* Manual tests */
 _TEST_DECL(8000_idle);
 _TEST_DECL(8001_fetch_from_follower_mock_manual);

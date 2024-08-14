@@ -654,5 +654,32 @@ describe('Consumer', () => {
 
             expect(consumer.paused()).toEqual([]);
         }, 10000);
+
+        it('resumes via the function returned by pause', async () => {
+            await consumer.connect();
+            consumer.subscribe({ topic: topics[0] });
+            consumer.run({
+                eachMessage: async () => {}
+            });
+
+            await waitFor(() => consumer.assignment().length > 0, () => { }, { delay: 10 });
+
+            const tp0 = { topic: topics[0], partitions: [0] };
+            const tp1 = { topic: topics[0], partitions: [1] };
+
+            const resumeTopic0Partition0 = consumer.pause([ tp0 ]);
+            const resumeTopic0Partition1 = consumer.pause([ tp1 ]);
+
+            let paused = consumer.paused();
+            expect(paused).toEqual([{ topic: topics[0], partitions: [0, 1] }]);
+
+            resumeTopic0Partition0();
+            paused = consumer.paused();
+            expect(paused).toEqual([{ topic: topics[0], partitions: [1] }]);
+
+            resumeTopic0Partition1();
+            paused = consumer.paused();
+            expect(paused).toEqual([]);
+        });
     });
 });

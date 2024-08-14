@@ -234,7 +234,50 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
         return names[state];
 }
 
+/**
+ * @enum Telemetry States
+ */
+typedef enum {
+        /** Initial state, awaiting telemetry broker to be assigned */
+        RD_KAFKA_TELEMETRY_AWAIT_BROKER,
+        /** Telemetry broker assigned and GetSubscriptions scheduled */
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED,
+        /** GetSubscriptions request sent to the assigned broker */
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,
+        /** PushTelemetry scheduled to send */
+        RD_KAFKA_TELEMETRY_PUSH_SCHEDULED,
+        /** PushTelemetry sent to the assigned broker */
+        RD_KAFKA_TELEMETRY_PUSH_SENT,
+        /** Client is being terminated and last PushTelemetry is scheduled to
+         *  send */
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED,
+        /** Client is being terminated and last PushTelemetry is sent */
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT,
+        /** Telemetry is terminated */
+        RD_KAFKA_TELEMETRY_TERMINATED,
+} rd_kafka_telemetry_state_t;
 
+
+static RD_UNUSED const char *
+rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
+        static const char *names[] = {"AwaitBroker",
+                                      "GetSubscriptionsScheduled",
+                                      "GetSubscriptionsSent",
+                                      "PushScheduled",
+                                      "PushSent",
+                                      "TerminatingPushScheduled",
+                                      "TerminatingPushSent",
+                                      "Terminated"};
+        return names[state];
+}
+
+static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
+        static const char *types[] = {
+            [RD_KAFKA_PRODUCER] = "producer",
+            [RD_KAFKA_CONSUMER] = "consumer",
+        };
+        return types[type];
+}
 
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
@@ -619,6 +662,44 @@ struct rd_kafka_s {
                 rd_kafka_q_t *callback_q; /**< SASL callback queue, if any. */
         } rk_sasl;
 
+        struct {
+                /* Fields for the control flow - unless guarded by lock, only
+                 * accessed from main thread. */
+                /**< Current state of the telemetry state machine. */
+                rd_kafka_telemetry_state_t state;
+                /**< Preferred broker for sending telemetry (Lock protected). */
+                rd_kafka_broker_t *preferred_broker;
+                /**< Timer for all the requests we schedule. */
+                rd_kafka_timer_t request_timer;
+                /**< Lock for preferred telemetry broker and state. */
+                mtx_t lock;
+                /**< Used to wait for termination (Lock protected). */
+                cnd_t termination_cnd;
+
+                /* Fields obtained from broker as a result of GetSubscriptions -
+                 * only accessed from main thread.
+                 */
+                rd_kafka_Uuid_t client_instance_id;
+                int32_t subscription_id;
+                rd_kafka_compression_t *accepted_compression_types;
+                size_t accepted_compression_types_cnt;
+                int32_t push_interval_ms;
+                int32_t telemetry_max_bytes;
+                rd_bool_t delta_temporality;
+                char **requested_metrics;
+                size_t requested_metrics_cnt;
+                /* TODO: Use rd_list_t to store the metrics */
+                int *matched_metrics;
+                size_t matched_metrics_cnt;
+
+                struct {
+                        rd_ts_t ts_last;  /**< Timestamp of last push */
+                        rd_ts_t ts_start; /**< Timestamp from when collection
+                                           *   started */
+                } rk_historic_c;
+
+        } rk_telemetry;
+
         /* Test mocks */
         struct {
                 rd_kafka_mock_cluster_t *cluster; /**< Mock cluster, created
@@ -860,6 +941,7 @@ const char *rd_kafka_purge_flags2str(int flags);
 #define RD_KAFKA_DBG_MOCK        0x10000
 #define RD_KAFKA_DBG_ASSIGNOR    0x20000
 #define RD_KAFKA_DBG_CONF        0x40000
+#define RD_KAFKA_DBG_TELEMETRY   0x80000
 #define RD_KAFKA_DBG_ALL         0xfffff
 #define RD_KAFKA_DBG_NONE        0x0
 

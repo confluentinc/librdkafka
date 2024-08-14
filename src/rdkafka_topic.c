@@ -1375,7 +1375,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                     rd_kafka_toppar_get(rkt, mdt->partitions[j].id, 0);
 
                 rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
-                             "  Topic %s partition %i Leader %" PRId32
+                             "Topic %s [%" PRId32 "] Leader %" PRId32
                              " Epoch %" PRId32,
                              rkt->rkt_topic->str, mdt->partitions[j].id,
                              mdt->partitions[j].leader, leader_epoch);

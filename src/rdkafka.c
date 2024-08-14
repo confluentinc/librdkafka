@@ -46,6 +46,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_telemetry.h"
 #include "rdkafka_transport.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_assignor.h"
@@ -395,14 +396,6 @@ void rd_kafka_set_log_level(rd_kafka_t *rk, int level) {
 
 
 
-static const char *rd_kafka_type2str(rd_kafka_type_t type) {
-        static const char *types[] = {
-            [RD_KAFKA_PRODUCER] = "producer",
-            [RD_KAFKA_CONSUMER] = "consumer",
-        };
-        return types[type];
-}
-
 #define _ERR_DESC(ENUM, DESC)                                                  \
         [ENUM - RD_KAFKA_RESP_ERR__BEGIN] = {ENUM, &(#ENUM)[18] /*pfx*/, DESC}
 
@@ -715,6 +708,12 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "the consumer group"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
               "Broker: The member epoch is stale"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID,
+              "Broker: Client sent a push telemetry request with an invalid or "
+              "outdated subscription ID"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE,
+              "Broker: Client sent a push telemetry request larger than the "
+              "maximum size the broker will accept"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -941,6 +940,8 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         rd_kafka_wrlock(rk);
         rd_kafka_wrunlock(rk);
 
+        rd_kafka_telemetry_clear(rk, rd_true /*clear_control_flow_fields*/);
+
         /* Terminate SASL provider */
         if (rk->rk_conf.sasl.provider)
                 rd_kafka_sasl_term(rk);
@@ -1091,7 +1092,13 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
                 rd_kafka_consumer_close(rk);
         }
 
-        /* With the consumer closed, terminate the rest of librdkafka. */
+        /* Await telemetry termination. This method blocks until the last
+         * PushTelemetry request is sent (if possible). */
+        if (!(flags & RD_KAFKA_DESTROY_F_IMMEDIATE))
+                rd_kafka_telemetry_await_termination(rk);
+
+        /* With the consumer and telemetry closed, terminate the rest of
+         * librdkafka. */
         rd_atomic32_set(&rk->rk_terminate,
                         flags | RD_KAFKA_DESTROY_F_TERMINATE);
 
@@ -2265,6 +2272,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_interval_init(&rk->rk_suppress.broker_metadata_refresh);
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
+
+        mtx_init(&rk->rk_telemetry.lock, mtx_plain);
+        cnd_init(&rk->rk_telemetry.termination_cnd);
 
         rd_atomic64_init(&rk->rk_ts_last_poll, rk->rk_ts_created);
         rd_atomic32_init(&rk->rk_flushing, 0);
@@ -4076,6 +4086,15 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_PURGE:
                 rd_kafka_purge(rk, rko->rko_u.purge.flags);
+                break;
+
+        case RD_KAFKA_OP_SET_TELEMETRY_BROKER:
+                rd_kafka_set_telemetry_broker_maybe(
+                    rk, rko->rko_u.telemetry_broker.rkb);
+                break;
+
+        case RD_KAFKA_OP_TERMINATE_TELEMETRY:
+                rd_kafka_telemetry_schedule_termination(rko->rko_rk);
                 break;
 
         case RD_KAFKA_OP_METADATA_UPDATE:

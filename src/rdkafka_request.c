@@ -36,6 +36,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_metadata.h"
+#include "rdkafka_telemetry.h"
 #include "rdkafka_msgset.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_txnmgr.h"
@@ -3675,10 +3676,8 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         if (request->rkbuf_reqhdr.ApiVersion >= 10) {
                 rd_kafkap_Produce_reply_tags_Topic_t *TopicTags =
                     &ProduceTags.Topic;
-                ;
                 rd_kafkap_Produce_reply_tags_Partition_t *PartitionTags =
                     &TopicTags->Partition;
-                ;
 
                 /* Partition tags count */
                 TopicTags->TopicName     = RD_KAFKAP_STR_DUP(&TopicName);
@@ -6204,6 +6203,237 @@ rd_kafka_resp_err_t rd_kafka_EndTxnRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+rd_kafka_resp_err_t
+rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
+                                          char *errstr,
+                                          size_t errstr_size,
+                                          rd_kafka_replyq_t replyq,
+                                          rd_kafka_resp_cb_t *resp_cb,
+                                          void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "GetTelemetrySubscriptions (KIP-714) not supported "
+                            "by broker, requires broker version >= 3.X.Y");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_GetTelemetrySubscriptions, 1,
+            16 /* client_instance_id */, rd_true);
+
+        rd_kafka_buf_write_uuid(rkbuf,
+                                &rkb->rkb_rk->rk_telemetry.client_instance_id);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
+                              rd_kafka_Uuid_t *client_instance_id,
+                              int32_t subscription_id,
+                              rd_bool_t terminating,
+                              const rd_kafka_compression_t compression_type,
+                              const void *metrics,
+                              size_t metrics_size,
+                              char *errstr,
+                              size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_PushTelemetry, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "PushTelemetryRequest (KIP-714) not supported ");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        size_t len = sizeof(rd_kafka_Uuid_t) + sizeof(int32_t) +
+                     sizeof(rd_bool_t) + sizeof(compression_type) +
+                     metrics_size;
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_PushTelemetry,
+                                                 1, len, rd_true);
+
+        rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
+        rd_kafka_buf_write_i32(rkbuf, subscription_id);
+        rd_kafka_buf_write_bool(rkbuf, terminating);
+        rd_kafka_buf_write_i8(rkbuf, compression_type);
+
+        rd_kafkap_bytes_t *metric_bytes =
+            rd_kafkap_bytes_new(metrics, metrics_size);
+        rd_kafka_buf_write_kbytes(rkbuf, metric_bytes);
+        rd_free(metric_bytes);
+
+        rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
+
+
+        /* Processing... */
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
+                                               rd_kafka_broker_t *rkb,
+                                               rd_kafka_resp_err_t err,
+                                               rd_kafka_buf_t *rkbuf,
+                                               rd_kafka_buf_t *request,
+                                               void *opaque) {
+        int16_t ErrorCode           = 0;
+        const int log_decode_errors = LOG_ERR;
+        int32_t arraycnt;
+        size_t i;
+        rd_kafka_Uuid_t prev_client_instance_id =
+            rk->rk_telemetry.client_instance_id;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Termination */
+                return;
+        }
+
+        if (err)
+                goto err;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (ErrorCode) {
+                err = ErrorCode;
+                goto err;
+        }
+
+        rd_kafka_buf_read_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
+        rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.subscription_id);
+
+        rd_kafka_dbg(
+            rk, TELEMETRY, "GETSUBSCRIPTIONS", "Parsing: client instance id %s",
+            rd_kafka_Uuid_base64str(&rk->rk_telemetry.client_instance_id));
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
+                     "Parsing: subscription id %" PRId32,
+                     rk->rk_telemetry.subscription_id);
+
+        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
+
+        if (arraycnt) {
+                rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
+                rk->rk_telemetry.accepted_compression_types =
+                    rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
+
+                for (i = 0; i < (size_t)arraycnt; i++)
+                        rd_kafka_buf_read_i8(
+                            rkbuf,
+                            &rk->rk_telemetry.accepted_compression_types[i]);
+        } else {
+                rk->rk_telemetry.accepted_compression_types_cnt = 1;
+                rk->rk_telemetry.accepted_compression_types =
+                    rd_calloc(1, sizeof(rd_kafka_compression_t));
+                rk->rk_telemetry.accepted_compression_types[0] =
+                    RD_KAFKA_COMPRESSION_NONE;
+        }
+
+        rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.push_interval_ms);
+        rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.telemetry_max_bytes);
+        rd_kafka_buf_read_bool(rkbuf, &rk->rk_telemetry.delta_temporality);
+
+
+        if (rk->rk_telemetry.subscription_id &&
+            rd_kafka_Uuid_cmp(prev_client_instance_id,
+                              rk->rk_telemetry.client_instance_id)) {
+                rd_kafka_log(
+                    rk, LOG_INFO, "GETSUBSCRIPTIONS",
+                    "Telemetry client instance id changed from %s to %s",
+                    rd_kafka_Uuid_base64str(&prev_client_instance_id),
+                    rd_kafka_Uuid_base64str(
+                        &rk->rk_telemetry.client_instance_id));
+        }
+
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
+                     "Parsing: push interval %" PRId32,
+                     rk->rk_telemetry.push_interval_ms);
+
+        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
+
+        if (arraycnt) {
+                rk->rk_telemetry.requested_metrics_cnt = arraycnt;
+                rk->rk_telemetry.requested_metrics =
+                    rd_calloc(arraycnt, sizeof(char *));
+
+                for (i = 0; i < (size_t)arraycnt; i++) {
+                        rd_kafkap_str_t Metric;
+                        rd_kafka_buf_read_str(rkbuf, &Metric);
+                        rk->rk_telemetry.requested_metrics[i] =
+                            rd_strdup(Metric.str);
+                }
+        }
+
+        rd_kafka_dbg(rk, TELEMETRY, "GETSUBSCRIPTIONS",
+                     "Parsing: requested metrics count %" PRIusz,
+                     rk->rk_telemetry.requested_metrics_cnt);
+
+        rd_kafka_handle_get_telemetry_subscriptions(rk, err);
+        return;
+
+err_parse:
+        err = rkbuf->rkbuf_err;
+        goto err;
+
+err:
+        /* TODO: Add error handling actions, possibly call
+         * rd_kafka_handle_get_telemetry_subscriptions with error. */
+        rd_kafka_handle_get_telemetry_subscriptions(rk, err);
+}
+
+void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,
+                                   rd_kafka_broker_t *rkb,
+                                   rd_kafka_resp_err_t err,
+                                   rd_kafka_buf_t *rkbuf,
+                                   rd_kafka_buf_t *request,
+                                   void *opaque) {
+        const int log_decode_errors = LOG_ERR;
+        int16_t ErrorCode;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Termination */
+                return;
+        }
+
+        if (err)
+                goto err;
+
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (ErrorCode) {
+                err = ErrorCode;
+                goto err;
+        }
+        rd_kafka_handle_push_telemetry(rk, err);
+        return;
+err_parse:
+        err = rkbuf->rkbuf_err;
+        goto err;
+
+err:
+        /* TODO: Add error handling actions, possibly call
+         * rd_kafka_handle_push_telemetry with error. */
+        rd_kafka_handle_push_telemetry(rk, err);
+}
+
 
 
 /**
@@ -6397,7 +6627,8 @@ static int unittest_idempotent_producer(void) {
                      "Expected %d messages in retry queue, not %d",
                      retry_msg_cnt, rd_kafka_msgq_len(&rkmq));
 
-        /* Sleep a short while to make sure the retry backoff expires. */
+        /* Sleep a short while to make sure the retry backoff expires.
+         */
         rd_usleep(5 * 1000, NULL); /* 5ms */
 
         /*
@@ -6455,7 +6686,8 @@ static int unittest_idempotent_producer(void) {
         r = rd_kafka_outq_len(rk);
         RD_UT_ASSERT(r == 0, "expected outq to return 0, not %d", r);
 
-        /* Verify the expected number of good delivery reports were seen */
+        /* Verify the expected number of good delivery reports were seen
+         */
         RD_UT_ASSERT(drcnt == msgcnt, "expected %d DRs, not %d", msgcnt, drcnt);
 
         rd_kafka_Produce_result_destroy(result);

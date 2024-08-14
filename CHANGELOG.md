@@ -2,18 +2,33 @@
 
 librdkafka v2.5.0 is a feature release.
 
+* [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+  Leader discovery optimisations for the client (#4756, #4767).
 * Fix segfault when using long client id because of erased segment when using flexver. (#4689)
 * Fix for an idempotent producer error, with a message batch not reconstructed
   identically when retried (#4750)
+* Removed support for CentOS 6 and CentOS 7 (#4775).
+* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client 
+  metrics and observability (#4721).
 
+## Upgrade considerations
+
+ * CentOS 6 and CentOS 7 support was removed as they reached EOL
+   and security patches aren't publicly available anymore.
+   ABI compatibility from CentOS 8 on is maintained through pypa/manylinux,
+   AlmaLinux based.
+   See also [Confluent supported OSs page](https://docs.confluent.io/platform/current/installation/versions-interoperability.html#operating-systems) (#4775).
 
 ## Enhancements
 
   * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
     [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
     bugfixes and performance improvements (#4726).
+  * [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+    With this KIP leader updates are received through Produce and Fetch responses
+    in case of errors corresponding to leader changes and a partition migration
+    happens before refreshing the metadata cache (#4756, #4767).
   * Add support for QNX Neutrino [#4751](https://github.com/confluentinc/librdkafka/issues/4751).
-
 
 ## Fixes
 

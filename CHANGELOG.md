@@ -28,7 +28,7 @@ librdkafka v2.5.0 is a feature release.
     With this KIP leader updates are received through Produce and Fetch responses
     in case of errors corresponding to leader changes and a partition migration
     happens before refreshing the metadata cache (#4756, #4767).
-  * Add support for QNX Neutrino [#4751](https://github.com/confluentinc/librdkafka/issues/4751).
+  * [#4751](https://github.com/confluentinc/librdkafka/issues/4751): Add support for QNX Neutrino.
 
 ## Fixes
 

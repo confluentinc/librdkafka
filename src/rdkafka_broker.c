@@ -4884,7 +4884,11 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rkb->rkb_proto    = proto;
         rkb->rkb_port     = port;
         rkb->rkb_origname = rd_strdup(name);
-
+        if (rk->rk_conf.sasl.krb5_path) {
+                rkb->krb5_path  = rd_strdup(rk->rk_conf.sasl.krb5_path);
+        } else {
+                rkb->krb5_path  = NULL;
+        }
         mtx_init(&rkb->rkb_lock, mtx_plain);
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);
         rkb->rkb_logname = rd_strdup(rkb->rkb_name);

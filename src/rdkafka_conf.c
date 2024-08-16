@@ -944,6 +944,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "`sasl.kerberos.kinit.cmd` as "
      "` ... -t \"%{sasl.kerberos.keytab}\"`.",
      _UNSUPPORTED_WIN32_GSSAPI},
+    {_RK_GLOBAL, "sasl.kerberos.krb5path", _RK_C_STR, _RK(sasl.krb5_path),
+     "Path of krb5 conf file. ",
+     _UNSUPPORTED_WIN32_GSSAPI},
     {_RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
      _RK(sasl.relogin_min_time),
      "Minimum time in milliseconds between key refresh attempts. "

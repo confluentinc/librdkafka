@@ -52,6 +52,7 @@
  *        kinit cache corruption.
  */
 static mtx_t rd_kafka_sasl_cyrus_kinit_lock;
+static mtx_t rd_kafka_sasl_cyrus_ccache_env_lock;
 
 /**
  * @struct Per-client-instance handle
@@ -71,6 +72,9 @@ typedef struct rd_kafka_sasl_cyrus_state_s {
 } rd_kafka_sasl_cyrus_state_t;
 
 
+static inline void rd_kafka_sasl_cyrus_set_new_ccache_env(const char *new_value) {
+        setenv("KRB5_CONFIG", new_value, 1);
+}
 
 /**
  * Handle received frame from broker.
@@ -93,8 +97,15 @@ static int rd_kafka_sasl_cyrus_recv(struct rd_kafka_transport_s *rktrans,
                 unsigned int outlen;
 
                 mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                if (rktrans->rktrans_rkb->krb5_path) {
+                        mtx_lock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                        set_new_ccache_env(rktrans->rktrans_rkb->krb5_path);
+                }
                 r = sasl_client_step(state->conn, size > 0 ? buf : NULL, size,
                                      &interact, &out, &outlen);
+                if (rktrans->rktrans_rkb->krb5_path) {
+                        mtx_unlock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                }
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (r >= 0) {
@@ -152,9 +163,16 @@ auth_successful:
                 const char *user, *mech, *authsrc;
 
                 mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                if (rktrans->rktrans_rkb->krb5_path) {
+                        mtx_lock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                        set_new_ccache_env(rktrans->rktrans_rkb->krb5_path);
+                }
                 if (sasl_getprop(state->conn, SASL_USERNAME,
                                  (const void **)&user) != SASL_OK)
                         user = "(unknown)";
+                if (rktrans->rktrans_rkb->krb5_path) {
+                        mtx_unlock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                }
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (sasl_getprop(state->conn, SASL_MECHNAME,
@@ -228,7 +246,14 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
         /* Prevent multiple simultaneous refreshes by the same process to
          * avoid Kerberos credential cache corruption. */
         mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
+        if (rk->rk_conf.sasl.krb5_path) {
+                mtx_lock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                set_new_ccache_env(rk->rk_conf.sasl.krb5_path);
+        }
         r = system(cmd);
+        if (rk->rk_conf.sasl.krb5_path) {
+                mtx_unlock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+        }
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
 
         duration = (int)((rd_clock() - ts_start) / 1000);
@@ -545,9 +570,16 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
         mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+        if (rktrans->rktrans_rkb->krb5_path) {
+                mtx_lock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                set_new_ccache_env(rktrans->rktrans_rkb->krb5_path);
+        }
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname, NULL,
                             NULL, /* no local & remote IP checks */
                             state->callbacks, 0, &state->conn);
+        if (rktrans->rktrans_rkb->krb5_path) {
+                mtx_unlock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+        }
         mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
         if (r != SASL_OK) {
                 rd_snprintf(errstr, errstr_size, "%s",
@@ -569,8 +601,15 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
                 const char *mech = NULL;
 
                 mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                if (rktrans->rktrans_rkb->krb5_path) {
+                        mtx_lock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                        set_new_ccache_env(rktrans->rktrans_rkb->krb5_path);
+                }
                 r = sasl_client_start(state->conn, rk->rk_conf.sasl.mechanisms,
                                       NULL, &out, &outlen, &mech);
+                if (rktrans->rktrans_rkb->krb5_path) {
+                        mtx_unlock(&rd_kafka_sasl_cyrus_ccache_env_lock);
+                }
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (r >= 0)
@@ -689,6 +728,7 @@ void rd_kafka_sasl_cyrus_global_term(void) {
          * too*/
         /* sasl_done(); */
         mtx_destroy(&rd_kafka_sasl_cyrus_kinit_lock);
+        mtx_destroy(&rd_kafka_sasl_cyrus_ccache_env_lock);
 }
 
 
@@ -699,6 +739,7 @@ int rd_kafka_sasl_cyrus_global_init(void) {
         int r;
 
         mtx_init(&rd_kafka_sasl_cyrus_kinit_lock, mtx_plain);
+        mtx_init(&rd_kafka_sasl_cyrus_ccache_env_lock, mtx_plain);
 
         r = sasl_client_init(NULL);
         if (r != SASL_OK) {

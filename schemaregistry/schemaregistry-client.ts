@@ -86,7 +86,33 @@ interface isCompatibleResponse {
   is_compatible: boolean;
 }
 
-class SchemaRegistryClient {
+interface Client {
+  register(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
+  registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean): Promise<SchemaMetadata>;
+  getBySubjectAndId(subject: string, id: number): Promise<SchemaInfo>;
+  getId(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
+  getLatestSchemaMetadata(subject: string): Promise<SchemaMetadata>;
+  getSchemaMetadata(subject: string, version: number, deleted: boolean): Promise<SchemaMetadata>;
+  getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean): Promise<SchemaMetadata>;
+  getAllVersions(subject: string): Promise<number[]>;
+  getVersion(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
+  getAllSubjects(): Promise<string[]>;
+  deleteSubject(subject: string, permanent: boolean): Promise<number[]>;
+  deleteSubjectVersion(subject: string, version: number, permanent: boolean): Promise<number>;
+  testSubjectCompatibility(subject: string, schema: SchemaInfo): Promise<boolean>;
+  testCompatibility(subject: string, version: number, schema: SchemaInfo): Promise<boolean>;
+  getCompatibility(subject: string): Promise<Compatibility>;
+  updateCompatibility(subject: string, update: Compatibility): Promise<Compatibility>;
+  getDefaultCompatibility(): Promise<Compatibility>;
+  updateDefaultCompatibility(update: Compatibility): Promise<Compatibility>;
+  getConfig(subject: string): Promise<ServerConfig>;
+  updateConfig(subject: string, update: ServerConfig): Promise<ServerConfig>;
+  getDefaultConfig(): Promise<ServerConfig>;
+  updateDefaultConfig(update: ServerConfig): Promise<ServerConfig>;
+  close(): void;
+}
+
+class SchemaRegistryClient implements Client {
   private restService: RestService;
 
   private schemaToIdCache: LRUCache<string, number>;
@@ -223,46 +249,25 @@ class SchemaRegistryClient {
     });
   }
 
-  private convertToQueryParams(metadata: Metadata): string {
-    const params = new URLSearchParams();
-
-    if (metadata.tags) {
-      for (const [key, values] of Object.entries(metadata.tags)) {
-        values.forEach((value, index) => {
-          params.append(`tags.${key}[${index}]`, value);
-        });
-      }
-    }
-
-    if (metadata.properties) {
-      for (const [key, value] of Object.entries(metadata.properties)) {
-        params.append(`properties.${key}`, value);
-      }
-    }
-
-    if (metadata.sensitive) {
-      metadata.sensitive.forEach((value, index) => {
-        params.append(`sensitive[${index}]`, value);
-      });
-    }
-
-    return params.toString();
-  }
-
-  //TODO: Get clarification with getLatestWithMetadata
-  public async getLatestWithMetadata(subject: string, metadata: Metadata, deleted: boolean = false): Promise<SchemaMetadata> {
+  public async getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, metadata, deleted });
-
+    
     return await this.metadataToSchemaMutex.runExclusive(async () => {
       const cachedSchemaMetadata: SchemaMetadata | undefined = this.metadataToSchemaCache.get(cacheKey);
       if (cachedSchemaMetadata) {
         return cachedSchemaMetadata;
       }
 
-      const queryParams = this.convertToQueryParams(metadata);
+      let metadataStr = '';
+
+      for (const key in metadata) {
+        const encodedKey = encodeURIComponent(key);
+        const encodedValue = encodeURIComponent(metadata[key]);
+        metadataStr += `&key=${encodedKey}&value=${encodedValue}`;
+      }
 
       const response: AxiosResponse<SchemaMetadata> = await this.restService.sendHttpRequest(
-        `/subjects/${subject}/metadata?deleted=${deleted}&${queryParams}`,
+        `/subjects/${subject}/metadata?deleted=${deleted}&${metadataStr}`,
         'GET'
       );
       this.metadataToSchemaCache.set(cacheKey, response.data);
@@ -538,6 +543,6 @@ class SchemaRegistryClient {
 }
 
 export {
-  SchemaRegistryClient, SchemaInfo, Metadata, Compatibility,
+  Client, SchemaRegistryClient, SchemaInfo, Metadata, Compatibility,
   CompatibilityLevel, ServerConfig, RuleSet, Rule, Reference, SchemaMetadata, Result
 };

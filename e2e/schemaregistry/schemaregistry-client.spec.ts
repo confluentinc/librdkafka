@@ -153,6 +153,14 @@ describe('SchemaRegistryClient Integration Test', () => {
 
     const getMetadataResponse:  SchemaMetadata = await schemaRegistryClient.getSchemaMetadata(testSubject, schemaVersion);
     expect(schemaMetadata).toEqual(getMetadataResponse);
+
+    const keyValueMetadata: { [key: string]: string } = { 
+      'owner': 'Bob Jones',
+      'email': 'bob@acme.com'
+    }
+
+    const getLatestWithMetadataResponse:  SchemaMetadata = await schemaRegistryClient.getLatestWithMetadata(testSubject, keyValueMetadata);
+    expect(schemaMetadata).toEqual(getLatestWithMetadataResponse);
   });
 
   it('Should test compatibility for a version and subject, getting and updating', async () => {

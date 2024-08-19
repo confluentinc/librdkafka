@@ -8,7 +8,8 @@ TS_NODE ?= ./node_modules/.bin/ts-node
 
 # Paths
 SRC_DIR = schemaregistry
-TEST_DIR = test/schemaregistry
+SR_TEST_DIR = test/schemaregistry
+DEK_TEST_DIR = test/dekregistry
 INTEG_DIR = e2e/schemaregistry
 
 # Tasks
@@ -17,10 +18,10 @@ INTEG_DIR = e2e/schemaregistry
 all: lint test
 
 lint:
-	$(ESLINT) $(SRC_DIR) $(TEST_DIR) $(INTEG_DIR)
+	$(ESLINT) $(SRC_DIR) $(TEST_DIR) $(INTEG_DIR) $(DEK_TEST_DIR)
 
 test:
-	$(JEST) $(TEST_DIR)
+	$(JEST) $(SR_TEST_DIR) $(DEK_TEST_DIR)
 
 integtest:
 	$(JEST) $(INTEG_DIR)

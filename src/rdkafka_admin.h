@@ -451,7 +451,7 @@ struct rd_kafka_ConsumerGroupListing_s {
         /** Is it a simple consumer group? That means empty protocol_type. */
         rd_bool_t is_simple_consumer_group;
         rd_kafka_consumer_group_state_t state; /**< Consumer group state. */
-        rd_kafka_consumer_group_type_t group_type; /**< Consumer group type. */
+        rd_kafka_consumer_group_type_t type; /**< Consumer group type. */
 };
 
 

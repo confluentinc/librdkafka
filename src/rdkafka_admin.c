@@ -1649,33 +1649,33 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
 
 rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
     rd_kafka_AdminOptions_t *options,
-    const rd_kafka_consumer_group_type_t *consumer_group_types,
-    size_t consumer_group_types_cnt) {
+    const rd_kafka_consumer_group_type_t *types,
+    size_t types_cnt) {
         size_t i;
         char errstr[512];
         rd_kafka_resp_err_t err;
         rd_list_t *types_list = rd_list_new(0, NULL);
-        rd_list_init_int32(types_list, consumer_group_types_cnt);
+        rd_list_init_int32(types_list, types_cnt);
         uint64_t types_bitmask = 0;
 
         if (RD_KAFKA_CONSUMER_GROUP_TYPE__CNT >= 64) {
                 rd_assert("BUG: cannot handle types with a bitmask anymore");
         }
 
-        for (i = 0; i < consumer_group_types_cnt; i++) {
+        for (i = 0; i < types_cnt; i++) {
                 uint64_t type_bit;
-                rd_kafka_consumer_group_type_t group_type =
-                    consumer_group_types[i];
+                rd_kafka_consumer_group_type_t type =
+                    types[i];
 
-                if (group_type <= RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN ||
-                    group_type >= RD_KAFKA_CONSUMER_GROUP_TYPE__CNT) {
+                if (type <= RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN ||
+                    type >= RD_KAFKA_CONSUMER_GROUP_TYPE__CNT) {
                         rd_list_destroy(types_list);
                         return rd_kafka_error_new(
                             RD_KAFKA_RESP_ERR__INVALID_ARG,
-                            "Only a valid an known group type is allowed");
+                            "Only a valid group type is allowed");
                 }
 
-                type_bit = 1 << group_type;
+                type_bit = 1 << type;
                 if (types_bitmask & type_bit) {
                         rd_list_destroy(types_list);
                         return rd_kafka_error_new(
@@ -1683,7 +1683,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
                             "Duplicate group types not allowed");
                 } else {
                         types_bitmask = types_bitmask | type_bit;
-                        rd_list_set_int32(types_list, (int32_t)i, group_type);
+                        rd_list_set_int32(types_list, (int32_t)i, type);
                 }
         }
 
@@ -1806,12 +1806,12 @@ static void rd_kafka_AdminOptions_copy_to(rd_kafka_AdminOptions_t *dst,
         }
         if (src->match_consumer_group_types.u.PTR) {
                 char errstr[512];
-                rd_list_t *group_types_list_copy = rd_list_copy_preallocated(
+                rd_list_t *types_list_copy = rd_list_copy_preallocated(
                     src->match_consumer_group_types.u.PTR, NULL);
 
                 rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
                     &dst->match_consumer_group_types, RD_KAFKA_CONFVAL_PTR,
-                    group_types_list_copy, errstr, sizeof(errstr));
+                    types_list_copy, errstr, sizeof(errstr));
                 rd_assert(!err);
         }
 }
@@ -7202,14 +7202,14 @@ static rd_kafka_ConsumerGroupListing_t *
 rd_kafka_ConsumerGroupListing_new(const char *group_id,
                                   rd_bool_t is_simple_consumer_group,
                                   rd_kafka_consumer_group_state_t state,
-                                  rd_kafka_consumer_group_type_t group_type) {
-        rd_kafka_ConsumerGroupListing_t *grplist;
-        grplist                           = rd_calloc(1, sizeof(*grplist));
-        grplist->group_id                 = rd_strdup(group_id);
-        grplist->is_simple_consumer_group = is_simple_consumer_group;
-        grplist->state                    = state;
-        grplist->group_type               = group_type;
-        return grplist;
+                                  rd_kafka_consumer_group_type_t type) {
+        rd_kafka_ConsumerGroupListing_t *consumer_group_listing;
+        consumer_group_listing                           = rd_calloc(1, sizeof(*consumer_group_listing));
+        consumer_group_listing->group_id                 = rd_strdup(group_id);
+        consumer_group_listing->is_simple_consumer_group = is_simple_consumer_group;
+        consumer_group_listing->state                    = state;
+        consumer_group_listing->type                     = type;
+        return consumer_group_listing;
 }
 
 /**
@@ -7219,10 +7219,10 @@ rd_kafka_ConsumerGroupListing_new(const char *group_id,
  * @return A new allocated copy of the passed ConsumerGroupListing.
  */
 static rd_kafka_ConsumerGroupListing_t *rd_kafka_ConsumerGroupListing_copy(
-    const rd_kafka_ConsumerGroupListing_t *grplist) {
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing) {
         return rd_kafka_ConsumerGroupListing_new(
-            grplist->group_id, grplist->is_simple_consumer_group,
-            grplist->state, grplist->group_type);
+            consumer_group_listing->group_id, consumer_group_listing->is_simple_consumer_group,
+            consumer_group_listing->state, consumer_group_listing->type);
 }
 
 /**
@@ -7245,23 +7245,23 @@ static void rd_kafka_ConsumerGroupListing_free(void *ptr) {
 }
 
 const char *rd_kafka_ConsumerGroupListing_group_id(
-    const rd_kafka_ConsumerGroupListing_t *grplist) {
-        return grplist->group_id;
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing) {
+        return consumer_group_listing->group_id;
 }
 
 int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
-    const rd_kafka_ConsumerGroupListing_t *grplist) {
-        return grplist->is_simple_consumer_group;
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing) {
+        return consumer_group_listing->is_simple_consumer_group;
 }
 
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
-    const rd_kafka_ConsumerGroupListing_t *grplist) {
-        return grplist->state;
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing) {
+        return consumer_group_listing->state;
 }
 
 rd_kafka_consumer_group_type_t rd_kafka_ConsumerGroupListing_type(
-    const rd_kafka_ConsumerGroupListing_t *grplist) {
-        return grplist->group_type;
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing) {
+        return consumer_group_listing->type;
 }
 
 /**
@@ -7402,7 +7402,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_t valid, errors;
         rd_kafka_ListConsumerGroupsResult_t *list_result;
         char *group_id = NULL, *group_state = NULL, *proto_type = NULL,
-             *group_type_name = NULL;
+             *group_type = NULL;
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         if (api_version >= 1) {
@@ -7435,7 +7435,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
                 rd_kafka_consumer_group_state_t state =
                     RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
-                rd_kafka_consumer_group_type_t group_type =
+                rd_kafka_consumer_group_type_t type =
                     RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN;
 
                 rd_kafka_buf_read_str(reply, &GroupId);
@@ -7456,9 +7456,9 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 }
 
                 if (api_version >= 5) {
-                        group_type_name = RD_KAFKAP_STR_DUP(&GroupType);
-                        group_type =
-                            rd_kafka_consumer_group_type_code(group_type_name);
+                        group_type = RD_KAFKAP_STR_DUP(&GroupType);
+                        type =
+                            rd_kafka_consumer_group_type_code(group_type);
                 }
 
                 is_simple_consumer_group = *proto_type == '\0';
@@ -7467,18 +7467,18 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 if (is_simple_consumer_group || is_consumer_protocol_type) {
                         group_listing = rd_kafka_ConsumerGroupListing_new(
                             group_id, is_simple_consumer_group, state,
-                            group_type);
+                            type);
                         rd_list_add(&valid, group_listing);
                 }
 
                 rd_free(group_id);
                 rd_free(group_state);
                 rd_free(proto_type);
-                rd_free(group_type_name);
+                rd_free(group_type);
                 group_id        = NULL;
                 group_state     = NULL;
                 proto_type      = NULL;
-                group_type_name = NULL;
+                group_type      = NULL;
         }
         rd_kafka_buf_skip_tags(reply);
 
@@ -7489,8 +7489,8 @@ err_parse:
                 rd_free(group_state);
         if (proto_type)
                 rd_free(proto_type);
-        if (group_type_name)
-                rd_free(group_type_name);
+        if (group_type)
+                rd_free(group_type);
 
         if (reply->rkbuf_err) {
                 error_code = reply->rkbuf_err;

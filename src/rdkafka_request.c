@@ -2435,12 +2435,10 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         }
 
         if (ApiVersion >= 5) {
-                size_t of_GroupsArrayCnt =
-                    rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_write_arraycnt(rkbuf,types_cnt);
                 for (i = 0; i < types_cnt; i++) {
                         rd_kafka_buf_write_str(rkbuf, types[i], -1);
                 }
-                rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

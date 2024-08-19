@@ -2666,7 +2666,7 @@ static void do_test_ListConsumerGroups(const char *what,
         size_t valid_cnt, error_cnt;
         rd_bool_t is_simple_consumer_group;
         rd_kafka_consumer_group_state_t state;
-        rd_kafka_consumer_group_type_t group_type;
+        rd_kafka_consumer_group_type_t type;
         char errstr[512];
         const char *errstr2, *group_id;
         char *list_consumer_groups[TEST_LIST_CONSUMER_GROUPS_CNT];
@@ -2802,7 +2802,7 @@ static void do_test_ListConsumerGroups(const char *what,
                             rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
                                 group);
                         state = rd_kafka_ConsumerGroupListing_state(group);
-                        group_type = rd_kafka_ConsumerGroupListing_type(group);
+                        type = rd_kafka_ConsumerGroupListing_type(group);
                         if (!strcmp(group_name, group_id)) {
                                 found++;
                                 TEST_ASSERT(!is_simple_consumer_group,
@@ -2886,8 +2886,8 @@ static void do_test_ListConsumerGroups(const char *what,
                             rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
                                 group);
                         state      = rd_kafka_ConsumerGroupListing_state(group);
-                        group_type = rd_kafka_ConsumerGroupListing_type(group);
-                        TEST_ASSERT(group_type ==
+                        type = rd_kafka_ConsumerGroupListing_type(group);
+                        TEST_ASSERT(type ==
                                         RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC,
                                     "The consumer group type should be Classic "
                                     "as we sent the Classic Option.");
@@ -2998,7 +2998,7 @@ static void do_test_ListConsumerGroups(const char *what,
                     rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
                         group);
                 state      = rd_kafka_ConsumerGroupListing_state(group);
-                group_type = rd_kafka_ConsumerGroupListing_type(group);
+                type = rd_kafka_ConsumerGroupListing_type(group);
                 for (j = 0; j < TEST_LIST_CONSUMER_GROUPS_CNT; j++) {
                         if (!strcmp(list_consumer_groups[j], group_id)) {
                                 found++;
@@ -3008,7 +3008,7 @@ static void do_test_ListConsumerGroups(const char *what,
 
                                 if (has_match_types)
                                         TEST_ASSERT(
-                                            group_type ==
+                                            type ==
                                                 RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER,
                                             "Expected the Consumer Group Type "
                                             "to be set by the Broker.");

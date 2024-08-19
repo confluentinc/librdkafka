@@ -8596,7 +8596,7 @@ void rd_kafka_ListConsumerGroups(rd_kafka_t *rk,
  */
 RD_EXPORT
 const char *rd_kafka_ConsumerGroupListing_group_id(
-    const rd_kafka_ConsumerGroupListing_t *grplist);
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing);
 
 /**
  * @brief Is the \p grplist group a simple consumer group.
@@ -8608,7 +8608,7 @@ const char *rd_kafka_ConsumerGroupListing_group_id(
  */
 RD_EXPORT
 int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
-    const rd_kafka_ConsumerGroupListing_t *grplist);
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing);
 
 /**
  * @brief Gets state for the \p grplist group.
@@ -8619,10 +8619,10 @@ int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
  */
 RD_EXPORT
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
-    const rd_kafka_ConsumerGroupListing_t *grplist);
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing);
 
 /**
- * @brief Gets group_type for the \p grplist group.
+ * @brief Gets type for the \p grplist group.
  *
  * @param grplist The group listing.
  *
@@ -8630,7 +8630,7 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
  */
 RD_EXPORT
 rd_kafka_consumer_group_type_t rd_kafka_ConsumerGroupListing_type(
-    const rd_kafka_ConsumerGroupListing_t *grplist);
+    const rd_kafka_ConsumerGroupListing_t *consumer_group_listing);
 
 /**
  * @brief Get an array of valid list groups from a ListConsumerGroups result.

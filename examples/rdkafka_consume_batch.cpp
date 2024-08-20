@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018, Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 /**
  * Apache Kafka consumer & producer example programs
  * using the Kafka driver from librdkafka
- * (https://github.com/edenhill/librdkafka)
+ * (https://github.com/confluentinc/librdkafka)
  *
  * This example shows how to read batches of messages.
  * Note that messages are fetched from the broker in batches regardless

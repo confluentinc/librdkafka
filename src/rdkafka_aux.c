@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2018 Magnus Edenhill
+ * Copyright (c) 2018-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -237,14 +238,55 @@ void rd_kafka_acl_result_free(void *ptr) {
 rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
                                    const char *host,
                                    uint16_t port,
-                                   const char *rack_id) {
+                                   const char *rack) {
         rd_kafka_Node_t *ret = rd_calloc(1, sizeof(*ret));
         ret->id              = id;
         ret->port            = port;
         ret->host            = rd_strdup(host);
-        if (rack_id != NULL)
-                ret->rack_id = rd_strdup(rack_id);
+        if (rack != NULL)
+                ret->rack = rd_strdup(rack);
         return ret;
+}
+
+/**
+ * @brief Create a new Node object given a node id, and use broker information
+ * to populate other fields.
+ *
+ * @return A new allocated Node object.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ * @remark The \p brokers_sorted and \p brokers_internal arrays are asumed to be
+ * sorted by id.
+ */
+rd_kafka_Node_t *rd_kafka_Node_new_from_brokers(
+    int32_t id,
+    const struct rd_kafka_metadata_broker *brokers_sorted,
+    const rd_kafka_metadata_broker_internal_t *brokers_internal,
+    int broker_cnt) {
+        rd_kafka_Node_t *node = rd_calloc(1, sizeof(*node));
+        struct rd_kafka_metadata_broker key_sorted       = {.id = id};
+        rd_kafka_metadata_broker_internal_t key_internal = {.id = id};
+
+        struct rd_kafka_metadata_broker *broker =
+            bsearch(&key_sorted, brokers_sorted, broker_cnt,
+                    sizeof(struct rd_kafka_metadata_broker),
+                    rd_kafka_metadata_broker_cmp);
+
+        rd_kafka_metadata_broker_internal_t *broker_internal =
+            bsearch(&key_internal, brokers_internal, broker_cnt,
+                    sizeof(rd_kafka_metadata_broker_internal_t),
+                    rd_kafka_metadata_broker_internal_cmp);
+
+        node->id = id;
+
+        if (!broker)
+                return node;
+
+        node->host = rd_strdup(broker->host);
+        node->port = broker->port;
+        if (broker_internal && broker_internal->rack_id)
+                node->rack = rd_strdup(broker_internal->rack_id);
+
+        return node;
 }
 
 /**
@@ -255,14 +297,24 @@ rd_kafka_Node_t *rd_kafka_Node_new(int32_t id,
  *         Use rd_kafka_Node_destroy() to free when done.
  */
 rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
-        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack_id);
+        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack);
 }
 
 void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
         rd_free(node->host);
-        if (node->rack_id)
-                rd_free(node->rack_id);
+        if (node->rack)
+                rd_free(node->rack);
         rd_free(node);
+}
+
+/**
+ * @brief Same as rd_kafka_Node_destroy, but for use as callback which accepts
+ *        (void *) arguments.
+ *
+ * @param node
+ */
+void rd_kafka_Node_free(void *node) {
+        rd_kafka_Node_destroy((rd_kafka_Node_t *)node);
 }
 
 int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
@@ -275,4 +327,8 @@ const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
 
 uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node) {
         return node->port;
+}
+
+const char *rd_kafka_Node_rack(const rd_kafka_Node_t *node) {
+        return node->rack;
 }

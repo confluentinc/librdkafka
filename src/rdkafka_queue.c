@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2016 Magnus Edenhill
+ * Copyright (c) 2016-2022, Magnus Edenhill,
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -398,9 +399,15 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
 
         rd_kafka_yield_thread = 0;
         if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                const rd_bool_t can_q_contain_fetched_msgs =
+                    rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
+
                 struct timespec timeout_tspec;
 
                 rd_timeout_init_timespec_us(&timeout_tspec, timeout_us);
+
+                if (timeout_us && can_q_contain_fetched_msgs)
+                        rd_kafka_app_poll_blocking(rkq->rkq_rk);
 
                 while (1) {
                         rd_kafka_op_res_t res;
@@ -439,15 +446,24 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                                         goto retry; /* Next op */
                                 } else if (unlikely(res ==
                                                     RD_KAFKA_OP_RES_YIELD)) {
+                                        if (can_q_contain_fetched_msgs)
+                                                rd_kafka_app_polled(
+                                                    rkq->rkq_rk);
                                         /* Callback yielded, unroll */
                                         return NULL;
-                                } else
+                                } else {
+                                        if (can_q_contain_fetched_msgs)
+                                                rd_kafka_app_polled(
+                                                    rkq->rkq_rk);
                                         break; /* Proper op, handle below. */
+                                }
                         }
 
                         if (unlikely(rd_kafka_q_check_yield(rkq))) {
                                 if (is_locked)
                                         mtx_unlock(&rkq->rkq_lock);
+                                if (can_q_contain_fetched_msgs)
+                                        rd_kafka_app_polled(rkq->rkq_rk);
                                 return NULL;
                         }
 
@@ -457,6 +473,8 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                         if (cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
                                               &timeout_tspec) != thrd_success) {
                                 mtx_unlock(&rkq->rkq_lock);
+                                if (can_q_contain_fetched_msgs)
+                                        rd_kafka_app_polled(rkq->rkq_rk);
                                 return NULL;
                         }
                 }
@@ -502,6 +520,8 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         rd_kafka_q_t *fwdq;
         int cnt = 0;
         struct timespec timeout_tspec;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
 
         rd_dassert(cb_type);
 
@@ -519,7 +539,11 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
                 return ret;
         }
 
+
         rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
+                rd_kafka_app_poll_blocking(rk);
 
         /* Wait for op */
         while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
@@ -532,6 +556,8 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
 
         if (!rko) {
                 mtx_unlock(&rkq->rkq_lock);
+                if (can_q_contain_fetched_msgs)
+                        rd_kafka_app_polled(rk);
                 return 0;
         }
 
@@ -565,6 +591,9 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
                         break;
                 }
         }
+
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rk);
 
         rd_kafka_q_destroy_owner(&localq);
 

@@ -8,6 +8,7 @@ set(
     rdbuf.c
     rdcrc32.c
     rdfnv1a.c
+    rdbase64.c
     rdkafka.c
     rdkafka_assignor.c
     rdkafka_broker.c
@@ -52,6 +53,15 @@ set(
     rdkafka_mock_cgrp.c
     rdkafka_error.c
     rdkafka_fetcher.c
+    rdkafka_telemetry.c
+    rdkafka_telemetry_decode.c
+    rdkafka_telemetry_encode.c
+    nanopb/pb_encode.c
+    nanopb/pb_decode.c
+    nanopb/pb_common.c
+    opentelemetry/metrics.pb.c
+    opentelemetry/common.pb.c
+    opentelemetry/resource.pb.c
     rdlist.c
     rdlog.c
     rdmurmur2.c
@@ -200,7 +210,7 @@ target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
 if(WITH_CURL)
   find_package(CURL REQUIRED)
   target_include_directories(rdkafka PRIVATE ${CURL_INCLUDE_DIRS})
-  target_link_libraries(rdkafka PUBLIC ${CURL_LIBRARIES})
+  target_link_libraries(rdkafka PUBLIC CURL::libcurl)
 endif()
 
 if(WITH_HDRHISTOGRAM)

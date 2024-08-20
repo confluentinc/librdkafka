@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C/C++ library
  *
- * Copyright (c) 2014-2022 Magnus Edenhill
+ * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -111,7 +112,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION 0x020101ff
+#define RD_KAFKA_VERSION 0x020500ff
 
 /**
  * @brief Returns the librdkafka version as integer.

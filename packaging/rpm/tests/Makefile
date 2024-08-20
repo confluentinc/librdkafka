@@ -7,7 +7,7 @@ test: test.c
 	$(CC) -O2 -Werror -Wall $^ -o $@ $$(pkg-config --libs rdkafka)
 
 test-static: test.c
-	$(CC) -O2 -Werror -Wall $^ -o $@ $$(pkg-config --libs --static rdkafka-static)
+	$(CC) -O2 -Werror -Wall $^ -o $@ $$(pkg-config --libs rdkafka-static)
 
 testcpp: test.cpp
 	$(CXX) -O2 -Werror -Wall $^ -o $@ $$(pkg-config --libs rdkafka++)

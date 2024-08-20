@@ -1,6 +1,6 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: librdkafka
-Source: https://github.com/edenhill/librdkafka
+Source: https://github.com/confluentinc/librdkafka
 
 License: BSD-2-clause
   Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,7 @@ License: BSD-2-clause
   POSSIBILITY OF SUCH DAMAGE.
 
 Files: *
-Copyright: 2012-2015, Magnus Edenhill
+Copyright: 2012-2022, Magnus Edenhill; 2023, Confluent Inc.
 License: BSD-2-clause
 
 Files: src/rdcrc32.c src/rdcrc32.h
@@ -40,7 +40,7 @@ License: MIT
   .
   The above copyright notice and this permission notice shall be included in
   all copies or substantial portions of the Software.
-  . 
+  .
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE

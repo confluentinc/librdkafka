@@ -2,7 +2,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,13 +33,120 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h" /* for Kafka driver */
+#include "../src/rdkafka_proto.h"
 
+
+/**
+ * @brief Verify that rd_kafka_query_watermark_offsets times out in case we're
+ * unable to fetch offsets within the timeout (Issue #2588).
+ */
+void test_query_watermark_offsets_timeout(void) {
+        int64_t qry_low, qry_high;
+        rd_kafka_resp_err_t err;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const char *bootstraps;
+        const int timeout_ms = 1000;
+
+        TEST_SKIP_MOCK_CLUSTER();
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ListOffsets, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            (int)(timeout_ms * 1.2));
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+
+        err = rd_kafka_query_watermark_offsets(rk, topic, 0, &qry_low,
+                                               &qry_high, timeout_ms);
+
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Querying watermark offsets should fail with %s when RTT > "
+                    "timeout, instead got %s",
+                    rd_kafka_err2name(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2name(err));
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Query watermark offsets should be able to query the correct
+ *        leader immediately after a leader change.
+ */
+void test_query_watermark_offsets_leader_change(void) {
+        int64_t qry_low, qry_high;
+        rd_kafka_resp_err_t err;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const char *bootstraps;
+        const int timeout_ms = 1000;
+
+        TEST_SKIP_MOCK_CLUSTER();
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+
+        /* Leader is broker 1 */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        err = rd_kafka_query_watermark_offsets(rk, topic, 0, &qry_low,
+                                               &qry_high, timeout_ms);
+
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Querying watermark offsets succeed on the first broker"
+                    "and cache the leader, got %s",
+                    rd_kafka_err2name(err));
+
+        /* Leader is broker 2 */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        /* First call returns NOT_LEADER_FOR_PARTITION, second one should go to
+         * the second broker and return NO_ERROR instead of
+         * NOT_LEADER_FOR_PARTITION. */
+        err = rd_kafka_query_watermark_offsets(rk, topic, 0, &qry_low,
+                                               &qry_high, timeout_ms);
+
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+                    "Querying watermark offsets should fail with "
+                    "NOT_LEADER_FOR_PARTITION, got %s",
+                    rd_kafka_err2name(err));
+
+        err = rd_kafka_query_watermark_offsets(rk, topic, 0, &qry_low,
+                                               &qry_high, timeout_ms);
+
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Querying watermark offsets should succeed by "
+                    "querying the second broker, got %s",
+                    rd_kafka_err2name(err));
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
 
 /**
  * Verify that rd_kafka_(query|get)_watermark_offsets() works.
  */
-
-
 int main_0031_get_offsets(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         const int msgcnt  = test_quick ? 10 : 100;
@@ -114,6 +222,14 @@ int main_0031_get_offsets(int argc, char **argv) {
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
+        return 0;
+}
+
+int main_0031_get_offsets_mock(int argc, char **argv) {
+
+        test_query_watermark_offsets_timeout();
+
+        test_query_watermark_offsets_leader_change();
 
         return 0;
 }

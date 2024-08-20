@@ -15,5 +15,10 @@ rdkafka_performance
 transactions
 list_consumer_groups
 describe_consumer_groups
+describe_topics
+describe_cluster
 list_consumer_group_offsets
 alter_consumer_group_offsets
+incremental_alter_configs
+user_scram
+list_offsets

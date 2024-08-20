@@ -186,6 +186,10 @@ be it `make`, `run-test.sh`, `until-fail.sh`, etc.
                           with `TESTS=0000`.
                           See [../src/rdunittest.c](../src/rdunittest.c) for
                           unit test names.
+ * `TESTS_SKIP_BEFORE=0nnn` - skip tests before this test. Tests are skipped
+                              even if they are part of `TESTS` variable.
+                              Usage: `TESTS_SKIP_BEFORE=0030`. All the tests
+                              until test 0030 are skipped.
 
 
 Let's say that you run the full test suite and get a failure in test 0061,

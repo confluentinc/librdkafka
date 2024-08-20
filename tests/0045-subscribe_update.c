@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,6 +37,7 @@
  *  - topic additions
  *  - topic deletions
  *  - partition count changes
+ *  - replica rack changes (using mock broker)
  */
 
 
@@ -140,6 +142,61 @@ static void await_no_rebalance(const char *pfx,
         TEST_ASSERT(rkev, "did not expect %s: %s", rd_kafka_event_name(rkev),
                     rd_kafka_err2str(rd_kafka_event_error(rkev)));
         rd_kafka_event_destroy(rkev);
+}
+
+
+/**
+ * Wait for REBALANCE event and perform assignment/unassignment.
+ * For the first time and after each event, wait till for \p timeout before
+ * stopping. Terminates earlier if \p min_events were seen.
+ * Asserts that \p min_events were processed.
+ * \p min_events set to 0 means it tries to drain all rebalance events and
+ * asserts only the fact that at least 1 event was processed.
+ */
+static void await_rebalance(const char *pfx,
+                            rd_kafka_t *rk,
+                            rd_kafka_queue_t *queue,
+                            int timeout_ms,
+                            int min_events) {
+        rd_kafka_event_t *rkev;
+        int processed = 0;
+
+        while (1) {
+                TEST_SAY("%s: waiting for %d ms for rebalance event\n", pfx,
+                         timeout_ms);
+
+                rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE,
+                                       timeout_ms);
+                if (!rkev)
+                        break;
+                TEST_ASSERT(rd_kafka_event_type(rkev) ==
+                                RD_KAFKA_EVENT_REBALANCE,
+                            "either expected a timeout or a "
+                            "RD_KAFKA_EVENT_REBALANCE, got %s : %s",
+                            rd_kafka_event_name(rkev),
+                            rd_kafka_err2str(rd_kafka_event_error(rkev)));
+
+                TEST_SAY("Calling test_rebalance_cb, assignment type is %s\n",
+                         rd_kafka_rebalance_protocol(rk));
+                test_rebalance_cb(rk, rd_kafka_event_error(rkev),
+                                  rd_kafka_event_topic_partition_list(rkev),
+                                  NULL);
+
+                processed++;
+
+                rd_kafka_event_destroy(rkev);
+
+                if (min_events && processed >= min_events)
+                        break;
+        }
+
+        if (min_events)
+                min_events = 1;
+
+        TEST_ASSERT(
+            processed >= min_events,
+            "Expected to process at least %d rebalance event, processed %d",
+            min_events, processed);
 }
 
 static void do_test_non_exist_and_partchange(void) {
@@ -421,6 +478,204 @@ static void do_test_regex_many_mock(const char *assignment_strategy,
 }
 
 
+/**
+ * @brief Changing the broker racks should trigger a rejoin, if the client rack
+ * is set, and the set of partition racks changes due to the broker rack change.
+ *
+ * This is using the mock cluster.
+ *
+ */
+static void do_test_replica_rack_change_mock(const char *assignment_strategy,
+                                             rd_bool_t use_regex,
+                                             rd_bool_t use_client_rack,
+                                             rd_bool_t use_replica_rack) {
+        const char *subscription = use_regex ? "^top" : "topic";
+        const char *topic        = "topic";
+        const char *test_name    = tsprintf(
+            "Replica rack changes (%s, subscription = \"%s\", %s client.rack, "
+            "%s replica.rack)",
+            assignment_strategy, subscription,
+            use_client_rack ? "with" : "without",
+            use_replica_rack ? "with" : "without");
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_queue_t *queue;
+
+        SUB_TEST("Testing %s", test_name);
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        test_conf_init(&conf, NULL, 60 * 4);
+
+        if (use_replica_rack) {
+                rd_kafka_mock_broker_set_rack(mcluster, 1, "rack0");
+                rd_kafka_mock_broker_set_rack(mcluster, 2, "rack1");
+                rd_kafka_mock_broker_set_rack(mcluster, 3, "rack2");
+        }
+
+        TEST_SAY("Creating topic %s\n", topic);
+        TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic,
+                                                   2 /* partition_cnt */,
+                                                   1 /* replication_factor */));
+
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "partition.assignment.strategy",
+                      assignment_strategy);
+        /* Decrease metadata interval to speed up topic change discovery. */
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "3000");
+
+        if (use_client_rack)
+                test_conf_set(conf, "client.rack", "client_rack");
+
+        rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
+        rk = test_create_consumer(test_str_id_generate_tmp(), NULL, conf, NULL);
+        queue = rd_kafka_queue_get_consumer(rk);
+
+        TEST_SAY("%s: Subscribing via %s\n", test_name, subscription);
+        test_consumer_subscribe(rk, subscription);
+
+        await_rebalance(tsprintf("%s: initial assignment", test_name), rk,
+                        queue, 10000, 1);
+
+        /* Avoid issues if the replica assignment algorithm for mock broker
+         * changes, and change all the racks. */
+        if (use_replica_rack) {
+                TEST_SAY("%s: changing rack for all brokers\n", test_name);
+                rd_kafka_mock_broker_set_rack(mcluster, 1, "rack2");
+                rd_kafka_mock_broker_set_rack(mcluster, 2, "rack0");
+                rd_kafka_mock_broker_set_rack(mcluster, 3, "rack1");
+        }
+
+        if (use_client_rack && use_replica_rack)
+                await_rebalance(tsprintf("%s: rebalance", test_name), rk, queue,
+                                10000, 1);
+        else
+                await_no_rebalance(
+                    tsprintf("%s: no rebalance without racks", test_name), rk,
+                    queue, 10000);
+
+        test_consumer_close(rk);
+        rd_kafka_queue_destroy(queue);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
+/* Even if the leader has no rack, it should do rack-aware assignment in case
+ * one of the group members has a rack configured. */
+static void do_test_replica_rack_change_leader_no_rack_mock(
+    const char *assignment_strategy) {
+        const char *topic     = "topic";
+        const char *test_name = "Replica rack changes with leader rack absent.";
+        rd_kafka_t *c1, *c2;
+        rd_kafka_conf_t *conf1, *conf2;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_queue_t *queue;
+        rd_kafka_topic_partition_list_t *asg1, *asg2;
+
+        SUB_TEST("Testing %s", test_name);
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        test_conf_init(&conf1, NULL, 60 * 4);
+
+        rd_kafka_mock_broker_set_rack(mcluster, 1, "rack0");
+        rd_kafka_mock_broker_set_rack(mcluster, 2, "rack1");
+
+        TEST_SAY("Creating topic %s\n", topic);
+        TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic,
+                                                   2 /* partition_cnt */,
+                                                   1 /* replication_factor */));
+
+        test_conf_set(conf1, "bootstrap.servers", bootstraps);
+        test_conf_set(conf1, "partition.assignment.strategy",
+                      assignment_strategy);
+        /* Decrease metadata interval to speed up topic change discovery. */
+        test_conf_set(conf1, "topic.metadata.refresh.interval.ms", "3000");
+
+        conf2 = rd_kafka_conf_dup(conf1);
+
+        /* Setting the group.instance.id ensures that the leader is always c1.
+         */
+        test_conf_set(conf1, "client.id", "client1Leader");
+        test_conf_set(conf1, "group.instance.id", "client1Leader");
+
+        test_conf_set(conf2, "client.id", "client2Follower");
+        test_conf_set(conf2, "group.instance.id", "client2Follower");
+        test_conf_set(conf2, "client.rack", "rack0");
+
+        rd_kafka_conf_set_events(conf1, RD_KAFKA_EVENT_REBALANCE);
+        c1    = test_create_consumer("mygroup", NULL, conf1, NULL);
+        queue = rd_kafka_queue_get_consumer(c1);
+
+        c2 = test_create_consumer("mygroup", NULL, conf2, NULL);
+
+        TEST_SAY("%s: Subscribing via %s\n", test_name, topic);
+        test_consumer_subscribe(c1, topic);
+        test_consumer_subscribe(c2, topic);
+
+        /* Poll to cause joining. */
+        rd_kafka_poll(c1, 1);
+        rd_kafka_poll(c2, 1);
+
+        /* Drain all events, as we want to process the assignment. */
+        await_rebalance(tsprintf("%s: initial assignment", test_name), c1,
+                        queue, 10000, 0);
+
+        rd_kafka_assignment(c1, &asg1);
+        rd_kafka_assignment(c2, &asg2);
+
+        /* Because of the deterministic nature of replica assignment in the mock
+         * broker, we can always be certain that topic:0 has its only replica on
+         * broker 1, and topic:1 has its only replica on broker 2. */
+        TEST_ASSERT(asg1->cnt == 1 && asg1->elems[0].partition == 1,
+                    "Expected c1 to be assigned topic1:1");
+        TEST_ASSERT(asg2->cnt == 1 && asg2->elems[0].partition == 0,
+                    "Expected c2 to be assigned topic1:0");
+
+        rd_kafka_topic_partition_list_destroy(asg1);
+        rd_kafka_topic_partition_list_destroy(asg2);
+
+        /* Avoid issues if the replica assignment algorithm for mock broker
+         * changes, and change all the racks. */
+        TEST_SAY("%s: changing rack for all brokers\n", test_name);
+        rd_kafka_mock_broker_set_rack(mcluster, 2, "rack0");
+        rd_kafka_mock_broker_set_rack(mcluster, 1, "rack1");
+
+        /* Poll to cause rejoining. */
+        rd_kafka_poll(c1, 1);
+        rd_kafka_poll(c2, 1);
+
+        /* Drain all events, as we want to process the assignment. */
+        await_rebalance(tsprintf("%s: rebalance", test_name), c1, queue, 10000,
+                        0);
+
+        rd_kafka_assignment(c1, &asg1);
+        rd_kafka_assignment(c2, &asg2);
+
+        /* Because of the deterministic nature of replica assignment in the mock
+         * broker, we can always be certain that topic:0 has its only replica on
+         * broker 1, and topic:1 has its only replica on broker 2. */
+        TEST_ASSERT(asg1->cnt == 1 && asg1->elems[0].partition == 0,
+                    "Expected c1 to be assigned topic1:0");
+        TEST_ASSERT(asg2->cnt == 1 && asg2->elems[0].partition == 1,
+                    "Expected c2 to be assigned topic1:1");
+
+        rd_kafka_topic_partition_list_destroy(asg1);
+        rd_kafka_topic_partition_list_destroy(asg2);
+
+        test_consumer_close(c1);
+        test_consumer_close(c2);
+        rd_kafka_queue_destroy(queue);
+        rd_kafka_destroy(c1);
+        rd_kafka_destroy(c2);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
 
 int main_0045_subscribe_update(int argc, char **argv) {
 
@@ -454,6 +709,38 @@ int main_0045_subscribe_update_mock(int argc, char **argv) {
         do_test_regex_many_mock("range", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_true);
+
+        return 0;
+}
+
+
+int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
+        int use_replica_rack = 0;
+        int use_client_rack  = 0;
+
+        TEST_SKIP_MOCK_CLUSTER(0);
+
+        for (use_replica_rack = 0; use_replica_rack < 2; use_replica_rack++) {
+                for (use_client_rack = 0; use_client_rack < 2;
+                     use_client_rack++) {
+                        do_test_replica_rack_change_mock(
+                            "range", rd_true /* use_regex */, use_client_rack,
+                            use_replica_rack);
+                        do_test_replica_rack_change_mock(
+                            "range", rd_true /* use_regex */, use_client_rack,
+                            use_replica_rack);
+                        do_test_replica_rack_change_mock(
+                            "cooperative-sticky", rd_true /* use_regex */,
+                            use_client_rack, use_replica_rack);
+                        do_test_replica_rack_change_mock(
+                            "cooperative-sticky", rd_true /* use_regex */,
+                            use_client_rack, use_replica_rack);
+                }
+        }
+
+        /* Do not test with range assignor (yet) since it does not do rack aware
+         * assignment properly with the NULL rack, even for the Java client. */
+        do_test_replica_rack_change_leader_no_rack_mock("cooperative-sticky");
 
         return 0;
 }

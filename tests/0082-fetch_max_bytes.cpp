@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2016, Magnus Edenhill
+ * Copyright (c) 2016-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -71,7 +71,7 @@ static void do_test_fetch_max_bytes(void) {
    * but due to batching overhead it would result in situations where
    * the consumer asked for 1000000 bytes and got 1000096 bytes batch, which
    * was higher than the 1000000 limit.
-   * See https://github.com/edenhill/librdkafka/issues/1616
+   * See https://github.com/confluentinc/librdkafka/issues/1616
    *
    * With the added configuration strictness checks, a user-supplied
    * value is no longer over-written:

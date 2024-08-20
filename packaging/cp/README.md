@@ -7,8 +7,7 @@ The base_url is the http S3 bucket path to the a PR job, or similar.
 
 ## How to use
 
-    $ ./verify-packages.sh 5.3 https://thes3bucketpath/X/Y
-
+    $ ./verify-packages.sh 7.6 https://packages.confluent.io
 
 Requires docker and patience.
 

@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019, Magnus Edenhill
+ * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -590,10 +591,9 @@ static void do_test_seek_to_offset_with_previous_epoch(void) {
 
 int main_0104_fetch_from_follower_mock(int argc, char **argv) {
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
+
+        test_timeout_set(50);
 
         do_test_offset_reset("earliest");
         do_test_offset_reset("latest");

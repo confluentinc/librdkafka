@@ -24,8 +24,8 @@ if __name__ == '__main__':
     print("Release asset checksums:")
 
     for ftype in ["zip", "tar.gz"]:
-        url = "https://github.com/edenhill/librdkafka/archive/{}.{}".format(
-            tag, ftype)
+        url = "https://github.com/confluentinc/" + \
+            "librdkafka/archive/{}.{}".format(tag, ftype)
 
         h = hashlib.sha256()
 

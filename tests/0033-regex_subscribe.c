@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2016, Magnus Edenhill
+ * Copyright (c) 2016-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -433,8 +434,11 @@ static int do_test(const char *assignor) {
 
 
 int main_0033_regex_subscribe(int argc, char **argv) {
-        do_test("range");
-        do_test("roundrobin");
+        if (test_consumer_group_protocol_generic()) {
+                /* FIXME: when regexes will be supported by KIP-848 */
+                do_test("range");
+                do_test("roundrobin");
+        }
         return 0;
 }
 

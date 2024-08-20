@@ -1,6 +1,6 @@
-Read the FAQ first: https://github.com/edenhill/librdkafka/wiki/FAQ
+Read the FAQ first: https://github.com/confluentinc/librdkafka/wiki/FAQ
 
-Do NOT create issues for questions, use the discussion forum: https://github.com/edenhill/librdkafka/discussions
+Do NOT create issues for questions, use the discussion forum: https://github.com/confluentinc/librdkafka/discussions
 
 
 
@@ -14,7 +14,7 @@ How to reproduce
 <your steps how to reproduce goes here, or remove section if not relevant>
 
 
-**IMPORTANT**: Always try to reproduce the issue on the latest released version (see https://github.com/edenhill/librdkafka/releases), if it can't be reproduced on the latest version the issue has been fixed.
+**IMPORTANT**: Always try to reproduce the issue on the latest released version (see https://github.com/confluentinc/librdkafka/releases), if it can't be reproduced on the latest version the issue has been fixed.
 
 
 Checklist

@@ -23,7 +23,8 @@ import json
 
 
 def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
-            interact=False, debug=False, scenario="default"):
+            interact=False, debug=False, scenario="default", kraft=False,
+            inherit_env=False):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \\p version
     Then run librdkafka's regression tests.
@@ -31,7 +32,8 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
 
     cluster = LibrdkafkaTestCluster(version, conf,
                                     num_brokers=int(conf.get('broker_cnt', 3)),
-                                    debug=debug, scenario=scenario)
+                                    debug=debug, scenario=scenario,
+                                    kraft=kraft)
 
     # librdkafka's regression tests, as an App.
     _rdkconf = conf.copy()  # Base rdkconf on cluster conf + rdkconf
@@ -46,11 +48,20 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
     cluster.start(timeout=30)
 
     if conf.get('test_mode', '') == 'bash':
-        cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\\w$ "\')' % (  # noqa: E501
-            cluster.name, version)
+        rdkafka.finalize_env()
+
+        if inherit_env:
+            env = dict(os.environ, **rdkafka.env)
+        else:
+            env = dict(rdkafka.env)
+        trivup = f'[TRIVUP:{cluster.name}@{version}] '
+        PS1 = ((trivup + env['PS1']) if 'PS1' in env
+               else trivup + '\\u@\\h:\\w$ ')\
+            .translate(str.maketrans({'\'': '\\\''}))
+        cmd = f'bash --rcfile <(cat ~/.bashrc; echo \'PS1="{PS1}"\')'
         subprocess.call(
             cmd,
-            env=rdkafka.env,
+            env=env,
             shell=True,
             executable='/bin/bash')
         report = None
@@ -175,6 +186,12 @@ if __name__ == '__main__':
         type=str,
         default=None,
         help='SASL mechanism (PLAIN, GSSAPI)')
+    parser.add_argument(
+        '--kraft',
+        dest='kraft',
+        action='store_true',
+        default=False,
+        help='Run in KRaft mode')
 
     args = parser.parse_args()
 
@@ -239,7 +256,8 @@ if __name__ == '__main__':
             report = test_it(version, tests=tests, conf=_conf,
                              rdkconf=_rdkconf,
                              interact=args.interact, debug=args.debug,
-                             scenario=args.scenario)
+                             scenario=args.scenario,
+                             kraft=args.kraft)
 
             if not report:
                 continue

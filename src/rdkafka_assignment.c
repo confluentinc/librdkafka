@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2020 Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2023 Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -152,8 +153,30 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                         continue;
                 }
 
-                if (err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT ||
-                    rktpar->err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT) {
+                if (err == RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH ||
+                    rktpar->err == RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH) {
+                        rd_kafka_topic_partition_t *rktpar_copy;
+
+                        rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
+                                     "Adding %s [%" PRId32
+                                     "] back to pending "
+                                     "list because of stale member epoch",
+                                     rktpar->topic, rktpar->partition);
+
+                        rktpar_copy = rd_kafka_topic_partition_list_add_copy(
+                            rk->rk_consumer.assignment.pending, rktpar);
+                        /* Need to reset offset to STORED to query for
+                         * the committed offset again. If the offset is
+                         * kept INVALID then auto.offset.reset will be
+                         * triggered.
+                         *
+                         * Not necessary if err is UNSTABLE_OFFSET_COMMIT
+                         * because the buffer is retried there. */
+                        rktpar_copy->offset = RD_KAFKA_OFFSET_STORED;
+
+                } else if (err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT ||
+                           rktpar->err ==
+                               RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT) {
                         /* Ongoing transactions are blocking offset retrieval.
                          * This is typically retried from the OffsetFetch
                          * handler but we can come here if the assignment
@@ -209,7 +232,9 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                 /* Do nothing for request-level errors (err is set). */
         }
 
-        if (offsets->cnt > 0)
+        /* In case of stale member epoch we retry to serve the
+         * assignment only after a successful ConsumerGroupHeartbeat. */
+        if (offsets->cnt > 0 && err != RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH)
                 rd_kafka_assignment_serve(rk);
 }
 
@@ -273,18 +298,32 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
                 return;
         }
 
-
-
         if (err) {
-                rd_kafka_dbg(rk, CGRP, "OFFSET",
-                             "Offset fetch error for %d partition(s): %s",
-                             offsets->cnt, rd_kafka_err2str(err));
-                rd_kafka_consumer_err(
-                    rk->rk_consumer.q, rd_kafka_broker_id(rkb), err, 0, NULL,
-                    NULL, RD_KAFKA_OFFSET_INVALID,
-                    "Failed to fetch committed offsets for "
-                    "%d partition(s) in group \"%s\": %s",
-                    offsets->cnt, rk->rk_group_id->str, rd_kafka_err2str(err));
+                switch (err) {
+                case RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH:
+                        rk->rk_cgrp->rkcg_consumer_flags |=
+                            RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING;
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp,
+                            "OffsetFetch error: Stale member epoch");
+                        break;
+                case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp, "OffsetFetch error: Unknown member");
+                        break;
+                default:
+                        rd_kafka_dbg(
+                            rk, CGRP, "OFFSET",
+                            "Offset fetch error for %d partition(s): %s",
+                            offsets->cnt, rd_kafka_err2str(err));
+                        rd_kafka_consumer_err(
+                            rk->rk_consumer.q, rd_kafka_broker_id(rkb), err, 0,
+                            NULL, NULL, RD_KAFKA_OFFSET_INVALID,
+                            "Failed to fetch committed offsets for "
+                            "%d partition(s) in group \"%s\": %s",
+                            offsets->cnt, rk->rk_group_id->str,
+                            rd_kafka_err2str(err));
+                }
         }
 
         /* Apply the fetched offsets to the assignment */
@@ -542,7 +581,8 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                              partitions_to_query->cnt);
 
                 rd_kafka_OffsetFetchRequest(
-                    coord, rk->rk_group_id->str, partitions_to_query,
+                    coord, rk->rk_group_id->str, partitions_to_query, rd_false,
+                    -1, NULL,
                     rk->rk_conf.isolation_level ==
                         RD_KAFKA_READ_COMMITTED /*require_stable_offsets*/,
                     0, /* Timeout */

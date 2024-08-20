@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2021, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +34,7 @@
  * Verify that flush() overrides the linger.ms time.
  *
  */
-int main_0125_immediate_flush(int argc, char **argv) {
+void do_test_flush_overrides_linger_ms_time() {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         const char *topic = test_mk_topic_name("0125_immediate_flush", 1);
@@ -73,6 +74,71 @@ int main_0125_immediate_flush(int argc, char **argv) {
 
         /* Verify messages were actually produced by consuming them back. */
         test_consume_msgs_easy(topic, topic, 0, 1, msgcnt, NULL);
+}
+
+/**
+ * @brief Tests if the first metadata call is able to update leader for the
+ * topic or not. If it is not able to update the leader for some partitions,
+ * flush call waits for 1s to refresh the leader and then flush is completed.
+ * Ideally, it should update in the first call itself.
+ *
+ * Number of brokers in the cluster should be more than the number of
+ * brokers in the bootstrap.servers list for this test case to work correctly
+ *
+ */
+void do_test_first_flush_immediate() {
+        rd_kafka_mock_cluster_t *mock_cluster;
+        rd_kafka_t *produce_rk;
+        const char *brokers;
+        char *bootstrap_server;
+        test_timing_t t_time;
+        size_t i;
+        rd_kafka_conf_t *conf = NULL;
+        const char *topic     = test_mk_topic_name("0125_immediate_flush", 1);
+        size_t partition_cnt  = 9;
+        int remains           = 0;
+
+        mock_cluster = test_mock_cluster_new(3, &brokers);
+
+        for (i = 0; brokers[i]; i++)
+                if (brokers[i] == ',' || brokers[i] == ' ')
+                        break;
+        bootstrap_server = rd_strndup(brokers, i);
+
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        test_conf_set(conf, "bootstrap.servers", bootstrap_server);
+        free(bootstrap_server);
+
+        rd_kafka_mock_topic_create(mock_cluster, topic, partition_cnt, 1);
+
+        produce_rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        for (i = 0; i < partition_cnt; i++) {
+                test_produce_msgs2_nowait(produce_rk, topic, 0, i, 0, 1, NULL,
+                                          0, &remains);
+        }
+
+        TIMING_START(&t_time, "FLUSH");
+        TEST_CALL_ERR__(rd_kafka_flush(produce_rk, 5000));
+        TIMING_ASSERT(&t_time, 0, 999);
+
+        rd_kafka_destroy(produce_rk);
+        test_mock_cluster_destroy(mock_cluster);
+}
+
+int main_0125_immediate_flush(int argc, char **argv) {
+
+        do_test_flush_overrides_linger_ms_time();
+
+        return 0;
+}
+
+int main_0125_immediate_flush_mock(int argc, char **argv) {
+
+        TEST_SKIP_MOCK_CLUSTER(0);
+
+        do_test_first_flush_immediate();
 
         return 0;
 }

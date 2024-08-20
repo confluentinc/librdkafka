@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2020, Magnus Edenhill
+ * Copyright (c) 2020-2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -141,7 +141,7 @@ int main_0016_client_swname(int argc, char **argv) {
                             "%s/bin/kafka-run-class.sh kafka.tools.JmxTool "
                             "--jmx-url "
                             "service:jmx:rmi:///jndi/rmi://:%s/jmxrmi "
-                            "--attributes connections --one-time true | "
+                            " --one-time true | "
                             "grep clientSoftware",
                             kafka_path, jmx_port);
 

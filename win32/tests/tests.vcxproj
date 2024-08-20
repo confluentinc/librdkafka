@@ -208,6 +208,7 @@
     <ClCompile Include="..\..\tests\0124-openssl_invalid_engine.c" />
     <ClCompile Include="..\..\tests\0125-immediate_flush.c" />
     <ClCompile Include="..\..\tests\0126-oauthbearer_oidc.c" />
+    <ClCompile Include="..\..\tests\0127-fetch_queue_backoff.cpp" />
     <ClCompile Include="..\..\tests\0128-sasl_callback_queue.cpp" />
     <ClCompile Include="..\..\tests\0129-fetch_aborted_msgs.c" />
     <ClCompile Include="..\..\tests\0130-store_offsets.c" />
@@ -221,6 +222,12 @@
     <ClCompile Include="..\..\tests\0138-admin_mock.c" />
     <ClCompile Include="..\..\tests\0139-offset_validation_mock.c" />
     <ClCompile Include="..\..\tests\0140-commit_metadata.cpp" />
+    <ClCompile Include="..\..\tests\0142-reauthentication.c" />
+    <ClCompile Include="..\..\tests\0143-exponential_backoff_mock.c" />
+    <ClCompile Include="..\..\tests\0144-idempotence_mock.c" />
+    <ClCompile Include="..\..\tests\0145-pause_resume_mock.c" />
+    <ClCompile Include="..\..\tests\0146-metadata_mock.c" />
+    <ClCompile Include="..\..\tests\0150-telemetry_mock.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

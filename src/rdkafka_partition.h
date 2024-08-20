@@ -1,7 +1,8 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2015 Magnus Edenhill
+ * Copyright (c) 2015-2022, Magnus Edenhill,
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -67,24 +68,30 @@ struct rd_kafka_toppar_err {
                                   *   last msg sequence */
 };
 
-
+/**
+ * @brief Fetchpos comparator, only offset is compared.
+ */
+static RD_UNUSED RD_INLINE int
+rd_kafka_fetch_pos_cmp_offset(const rd_kafka_fetch_pos_t *a,
+                              const rd_kafka_fetch_pos_t *b) {
+        return (RD_CMP(a->offset, b->offset));
+}
 
 /**
- * @brief Fetchpos comparator, leader epoch has precedence.
+ * @brief Fetchpos comparator, leader epoch has precedence
+ *        iff both values are not null.
  */
 static RD_UNUSED RD_INLINE int
 rd_kafka_fetch_pos_cmp(const rd_kafka_fetch_pos_t *a,
                        const rd_kafka_fetch_pos_t *b) {
+        if (a->leader_epoch == -1 || b->leader_epoch == -1)
+                return rd_kafka_fetch_pos_cmp_offset(a, b);
         if (a->leader_epoch < b->leader_epoch)
                 return -1;
         else if (a->leader_epoch > b->leader_epoch)
                 return 1;
-        else if (a->offset < b->offset)
-                return -1;
-        else if (a->offset > b->offset)
-                return 1;
         else
-                return 0;
+                return rd_kafka_fetch_pos_cmp_offset(a, b);
 }
 
 
@@ -488,6 +495,8 @@ typedef struct rd_kafka_topic_partition_private_s {
         int32_t current_leader_epoch;
         /** Leader epoch if known, else -1. */
         int32_t leader_epoch;
+        /** Topic id. */
+        rd_kafka_Uuid_t topic_id;
 } rd_kafka_topic_partition_private_t;
 
 
@@ -559,7 +568,10 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         int max_retries,
                         rd_ts_t backoff,
                         rd_kafka_msg_status_t status,
-                        int (*cmp)(const void *a, const void *b));
+                        int (*cmp)(const void *a, const void *b),
+                        rd_bool_t exponential_backoff,
+                        int retry_ms,
+                        int retry_max_ms);
 void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
                                rd_kafka_msgq_t *srcq,
                                int (*cmp)(const void *a, const void *b));
@@ -670,6 +682,13 @@ void *rd_kafka_topic_partition_copy_void(const void *src);
 void rd_kafka_topic_partition_destroy_free(void *ptr);
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_new_from_rktp(rd_kafka_toppar_t *rktp);
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_with_topic_id(rd_kafka_Uuid_t topic_id,
+                                           int32_t partition);
+void rd_kafka_topic_partition_set_topic_id(rd_kafka_topic_partition_t *rktpar,
+                                           rd_kafka_Uuid_t topic_id);
+rd_kafka_Uuid_t
+rd_kafka_topic_partition_get_topic_id(const rd_kafka_topic_partition_t *rktpar);
 
 void rd_kafka_topic_partition_list_init(
     rd_kafka_topic_partition_list_t *rktparlist,
@@ -688,12 +707,24 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
     rd_kafka_toppar_t *rktp,
     const rd_kafka_topic_partition_private_t *parpriv);
 
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_with_topic_id(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_Uuid_t topic_id,
+    int32_t partition);
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+    rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_Uuid_t topic_id,
+    const char *topic,
+    int32_t partition);
+
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     rd_kafka_topic_partition_list_t *rktparlist,
     const char *topic,
     int32_t partition);
 
-void rd_kafka_topic_partition_list_add_copy(
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add_copy(
     rd_kafka_topic_partition_list_t *rktparlist,
     const rd_kafka_topic_partition_t *rktpar);
 
@@ -729,17 +760,36 @@ int rd_kafka_topic_partition_match(rd_kafka_t *rk,
 
 
 int rd_kafka_topic_partition_cmp(const void *_a, const void *_b);
+int rd_kafka_topic_partition_by_id_cmp(const void *_a, const void *_b);
 unsigned int rd_kafka_topic_partition_hash(const void *a);
 
 int rd_kafka_topic_partition_list_find_idx(
     const rd_kafka_topic_partition_list_t *rktparlist,
     const char *topic,
     int32_t partition);
-rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic(
+
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_by_id(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_Uuid_t topic_id,
+    int32_t partition);
+
+int rd_kafka_topic_partition_list_find_idx_by_id(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_Uuid_t topic_id,
+    int32_t partition);
+
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_name(
     const rd_kafka_topic_partition_list_t *rktparlist,
     const char *topic);
 
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_id(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    rd_kafka_Uuid_t topic_id);
+
 void rd_kafka_topic_partition_list_sort_by_topic(
+    rd_kafka_topic_partition_list_t *rktparlist);
+
+void rd_kafka_topic_partition_list_sort_by_topic_id(
     rd_kafka_topic_partition_list_t *rktparlist);
 
 void rd_kafka_topic_partition_list_reset_offsets(
@@ -761,6 +811,20 @@ int rd_kafka_topic_partition_list_cmp(const void *_a,
                                       int (*cmp)(const void *, const void *));
 
 /**
+ * Creates a new empty topic partition private.
+ *
+ * @remark This struct is dynamically allocated and hence should be freed.
+ */
+static RD_UNUSED RD_INLINE rd_kafka_topic_partition_private_t *
+rd_kafka_topic_partition_private_new() {
+        rd_kafka_topic_partition_private_t *parpriv;
+        parpriv                       = rd_calloc(1, sizeof(*parpriv));
+        parpriv->leader_epoch         = -1;
+        parpriv->current_leader_epoch = -1;
+        return parpriv;
+}
+
+/**
  * @returns (and creates if necessary) the ._private glue object.
  */
 static RD_UNUSED RD_INLINE rd_kafka_topic_partition_private_t *
@@ -768,9 +832,8 @@ rd_kafka_topic_partition_get_private(rd_kafka_topic_partition_t *rktpar) {
         rd_kafka_topic_partition_private_t *parpriv;
 
         if (!(parpriv = rktpar->_private)) {
-                parpriv               = rd_calloc(1, sizeof(*parpriv));
-                parpriv->leader_epoch = -1;
-                rktpar->_private      = parpriv;
+                parpriv          = rd_kafka_topic_partition_private_new();
+                rktpar->_private = parpriv;
         }
 
         return parpriv;
@@ -800,7 +863,6 @@ int32_t rd_kafka_topic_partition_get_current_leader_epoch(
 void rd_kafka_topic_partition_set_current_leader_epoch(
     rd_kafka_topic_partition_t *rktpar,
     int32_t leader_epoch);
-
 
 /**
  * @returns the partition's rktp if set (no refcnt increase), else NULL.
@@ -1078,5 +1140,32 @@ static RD_UNUSED RD_INLINE void rd_kafka_toppar_set_offset_validation_position(
     rd_kafka_fetch_pos_t offset_validation_pos) {
         rktp->rktp_offset_validation_pos = offset_validation_pos;
 }
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_intersection_by_name(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_difference_by_name(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_union_by_name(rd_kafka_topic_partition_list_t *a,
+                                            rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_intersection_by_id(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_difference_by_id(
+    rd_kafka_topic_partition_list_t *a,
+    rd_kafka_topic_partition_list_t *b);
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_union_by_id(rd_kafka_topic_partition_list_t *a,
+                                          rd_kafka_topic_partition_list_t *b);
 
 #endif /* _RDKAFKA_PARTITION_H_ */

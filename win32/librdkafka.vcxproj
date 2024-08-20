@@ -12,11 +12,11 @@
   <Import Project="$(SolutionDir)common.vcxproj" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Platform)'=='Win32'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);../src</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='x64'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);../src</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
@@ -102,6 +102,7 @@
     <ClInclude Include="..\src\rdatomic.h" />
     <ClInclude Include="..\src\rdavg.h" />
     <ClInclude Include="..\src\rdbuf.h" />
+    <ClInclude Include="..\src\rdbase64.h" />
     <ClInclude Include="..\src\rdendian.h" />
     <ClInclude Include="..\src\rdfloat.h" />
     <ClInclude Include="..\src\rdgz.h" />
@@ -168,12 +169,20 @@
     <ClInclude Include="..\src\rdavl.h" />
     <ClInclude Include="..\src\rdports.h" />
     <ClInclude Include="..\src\rddl.h" />
+    <ClCompile Include="..\src\nanopb\pb.h" />
+    <ClCompile Include="..\src\nanopb\pb_common.h" />
+    <ClCompile Include="..\src\nanopb\pb_decode.h" />
+    <ClCompile Include="..\src\nanopb\pb_encode.h" />
+    <ClCompile Include="..\src\opentelemetry\common.pb.h" />
+    <ClCompile Include="..\src\opentelemetry\metrics.pb.h" />
+    <ClCompile Include="..\src\opentelemetry\resource.pb.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\cJSON.c" />
     <ClCompile Include="..\src\crc32c.c" />
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
+    <ClCompile Include="..\src\rdbase64.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
     <ClCompile Include="..\src\rdfnv1a.c" />
     <ClCompile Include="..\src\rdgz.c" />
@@ -230,6 +239,9 @@
     <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_error.c" />
     <ClCompile Include="..\src\rdkafka_fetcher.c" />
+    <ClCompile Include="..\src\rdkafka_telemetry.c" />
+    <ClCompile Include="..\src\rdkafka_telemetry_decode.c" />
+    <ClCompile Include="..\src\rdkafka_telemetry_encode.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />
@@ -250,6 +262,12 @@
     <ClCompile Include="..\src\lz4frame.c" />
     <ClCompile Include="..\src\lz4hc.c" />
     <ClCompile Include="..\src\rddl.c" />
+    <ClCompile Include="..\src\nanopb\pb_encode.c" />
+    <ClCompile Include="..\src\nanopb\pb_decode.c" />
+    <ClCompile Include="..\src\nanopb\pb_common.c" />
+    <ClCompile Include="..\src\opentelemetry\metrics.pb.c" />
+    <ClCompile Include="..\src\opentelemetry\common.pb.c" />
+    <ClCompile Include="..\src\opentelemetry\resource.pb.c" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.win32" />

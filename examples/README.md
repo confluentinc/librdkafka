@@ -34,5 +34,9 @@ For more complex uses, see:
  * [delete_records.c](delete_records.c) - Delete records.
  * [list_consumer_groups.c](list_consumer_groups.c) - List consumer groups.
  * [describe_consumer_groups.c](describe_consumer_groups.c) - Describe consumer groups.
+ * [describe_topics.c](describe_topics.c) - Describe topics.
+ * [describe_cluster.c](describe_cluster.c) - Describe cluster.
  * [list_consumer_group_offsets.c](list_consumer_group_offsets.c) - List offsets of a consumer group.
  * [alter_consumer_group_offsets.c](alter_consumer_group_offsets.c) - Alter offsets of a consumer group.
+ * [incremental_alter_configs.c](incremental_alter_configs.c) - Incrementally alter resource configurations.
+ * [user_scram.c](user_scram.c) - Describe or alter user SCRAM credentials.

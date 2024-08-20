@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -238,6 +239,20 @@ static RD_INLINE RD_UNUSED void rtrim(char *str) {
                 }                                                              \
                 TEST_UNLOCK();                                                 \
         } while (0)
+
+#define TEST_SKIP_MOCK_CLUSTER(RET)                                            \
+        if (test_needs_auth()) {                                               \
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");         \
+                return RET;                                                    \
+        }                                                                      \
+        if (test_consumer_group_protocol() &&                                  \
+            strcmp(test_consumer_group_protocol(), "classic")) {               \
+                TEST_SKIP(                                                     \
+                    "Mock cluster cannot be used "                             \
+                    "with group.protocol=%s\n",                                \
+                    test_consumer_group_protocol());                           \
+                return RET;                                                    \
+        }
 
 
 void test_conf_init(rd_kafka_conf_t **conf,
@@ -756,6 +771,10 @@ void test_headers_dump(const char *what,
 
 int32_t *test_get_broker_ids(rd_kafka_t *use_rk, size_t *cntp);
 
+char *test_get_broker_config_entry(rd_kafka_t *use_rk,
+                                   int32_t broker_id,
+                                   const char *key);
+
 void test_wait_metadata_update(rd_kafka_t *rk,
                                rd_kafka_metadata_topic_t *topics,
                                size_t topic_cnt,
@@ -796,6 +815,13 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
                                              const char **configs,
                                              size_t config_cnt);
 
+rd_kafka_resp_err_t
+test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
+                                    rd_kafka_ResourceType_t restype,
+                                    const char *resname,
+                                    const char **configs,
+                                    size_t config_cnt);
+
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,
                                              char **groups,
@@ -821,18 +847,35 @@ rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
                                            size_t acl_cnt,
                                            void *opaque);
 
+rd_kafka_resp_err_t
+test_DeleteAcls_simple(rd_kafka_t *rk,
+                       rd_kafka_queue_t *useq,
+                       rd_kafka_AclBindingFilter_t **acl_filters,
+                       size_t acl_filters_cnt,
+                       void *opaque);
+
 rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
                                                const char **bootstraps);
-
-
+size_t test_mock_wait_matching_requests(
+    rd_kafka_mock_cluster_t *mcluster,
+    size_t num,
+    int confidence_interval_ms,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque);
 
 int test_error_is_not_fatal_cb(rd_kafka_t *rk,
                                rd_kafka_resp_err_t err,
                                const char *reason);
 
+
+const char *test_consumer_group_protocol();
+
+int test_consumer_group_protocol_generic();
+
+int test_consumer_group_protocol_consumer();
 
 /**
  * @brief Calls rdkafka function (with arguments)

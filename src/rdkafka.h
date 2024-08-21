@@ -5515,6 +5515,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT 0x200000
 /** ListOffsets_result_t */
 #define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x400000
+/** ConsumerGroupDescribe_result_t */
+#define RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT 0x800000
 
 /**
  * @returns the event type for the given event.
@@ -5673,6 +5675,7 @@ int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT
  *  - RD_KAFKA_EVENT_LISTOFFSETS_RESULT
+ *  - RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT
  */
 RD_EXPORT
 void *rd_kafka_event_opaque(rd_kafka_event_t *rkev);
@@ -5796,6 +5799,8 @@ typedef rd_kafka_event_t rd_kafka_DescribeUserScramCredentials_result_t;
 typedef rd_kafka_event_t rd_kafka_AlterUserScramCredentials_result_t;
 /*! ListOffsets result type */
 typedef rd_kafka_event_t rd_kafka_ListOffsets_result_t;
+/*! ConsumerGroupDescribe result type */
+typedef rd_kafka_event_t rd_kafka_ConsumerGroupDescribe_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -6067,6 +6072,21 @@ rd_kafka_event_DescribeUserScramCredentials_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_AlterUserScramCredentials_result_t *
 rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ConsumerGroupDescribe result.
+ *
+ * @returns the result of a ConsumerGroupDescribe request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT
+ */
+RD_EXPORT const rd_kafka_ConsumerGroupDescribe_result_t *
+rd_kafka_event_ConsumerGroupDescribe_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -6980,6 +7000,7 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
         RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
         RD_KAFKA_ADMIN_OP_LISTOFFSETS,     /**< ListOffsets */
+        RD_KAFKA_ADMIN_OP_CONSUMERGROUPDESCRIBE, /**< ConsumerGroupDescribe */
         RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
@@ -8841,6 +8862,348 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
 RD_EXPORT
 const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
     const rd_kafka_MemberAssignment_t *assignment);
+
+/**@}*/
+
+/**
+ * @name Admin API - ConsumerGroupDescribe
+ * @{
+ */
+
+typedef struct rd_kafka_ConsumerGroupDescribeResponseData_s
+    rd_kafka_ConsumerGroupDescribeResponseData_t;
+
+/**
+ * @brief Descripton for a member included in ConsumerGroupDescribeResponseData.
+ *
+ */
+typedef struct rd_kafka_Member_s rd_kafka_Member_t;
+
+/**
+ * @brief Describes the consumer groups as specified by the \p group_ids
+ *       array of size \p group_ids_cnt elements.
+ *
+ * @param rk Client instance.
+ * @param group_ids Array of group ids to describe.
+ * @param group_ids_cnt Number of elements in \p group_ids array.
+ * @param options Optional admin options, or NULL for defaults.
+ *               Valid options:
+ *               - include_authorized_operations
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *        \c RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT
+ */
+
+void rd_kafka_ConsumerGroupDescribe(rd_kafka_t *rk,
+                                    const char **group_ids,
+                                    size_t group_ids_cnt,
+                                    const rd_kafka_AdminOptions_t *options,
+                                    rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Gets member_id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The member id or NULL, if not available.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+const char *rd_kafka_Member_member_id(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets instance_id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The instance id or NULL if not available.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+
+const char *rd_kafka_Member_instance_id(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets rack id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The rack id or NULL if not available.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ *
+ */
+
+const char *rd_kafka_Member_rack_id(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets member_epoch of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The member epoch.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+
+int32_t rd_kafka_Member_member_epoch(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets client id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The client id or NULL if not available.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+
+const char *rd_kafka_Member_client_id(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets host of \p member
+ *
+ * @param member The group member.
+ *
+ * @returns The host.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *        as the lifetime of the \p member object.
+ */
+
+const char *rd_kafka_Member_client_host(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets subscribed topic names of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The subscribed topic names.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *       as the lifetime of the \p member object.
+ */
+
+const char *rd_kafka_Member_subscribed_topic_names(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets subscribed topic regex of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The subscribed topic regex.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *       as the lifetime of the \p member object.
+ */
+
+const char *rd_kafka_Member_subscribed_topic_regex(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets assignment of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The member assignment.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *       as the lifetime of the \p member object.
+ */
+
+const rd_kafka_MemberAssignment_t *
+rd_kafka_Member_assignment(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets assigned partitions of a member \p assignment.
+ *
+ * @param assignment The group member assignment.
+ *
+ * @returns The assigned partitions.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *       as the lifetime of the \p assignment object.
+ */
+
+const rd_kafka_topic_partition_list_t *
+rd_kafka_Member_assignment_partitions(const rd_kafka_MemberAssignment_t *assignment);
+
+/**
+ * @brief Gets target assignment of \p member.
+ *
+ * @param member The group member.
+ *
+ * @returns The target assignment.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *       as the lifetime of the \p member object.
+ */
+
+const rd_kafka_MemberAssignment_t *
+rd_kafka_Member_target_assignment(const rd_kafka_Member_t *member);
+
+/**
+ * @brief Gets target assigned partitions of a member \p target_assignment.
+ *
+ * @param target_assignment The group member target assignment.
+ *
+ * @returns The target assigned partitions.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *       as the lifetime of the \p target_assignment object.
+ */
+
+const rd_kafka_topic_partition_list_t *rd_kafka_Member_target_assignment_partitions(
+    const rd_kafka_MemberAssignment_t *target_assignment);
+
+/**
+ * @brief Gets group id of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The group id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *      as the lifetime of the \p grpdesc object.
+ */
+
+const char *rd_kafka_ConsumerGroupDescribeResponseData_group_id(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets state of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The group state.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *     as the lifetime of the \p grpdesc object.
+ */
+
+rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescribeResponseData_state(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets group epoch of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The group epoch.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *    as the lifetime of the \p grpdesc object.
+ */
+
+int32_t rd_kafka_ConsumerGroupDescribeResponseData_group_epoch(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets assignment epoch of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The assignment epoch.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *   as the lifetime of the \p grpdesc object.
+ */
+
+int32_t rd_kafka_ConsumerGroupDescribeResponseData_assignment_epoch(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets partition assignor of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The partition assignor.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *      as the lifetime of the \p grpdesc object.
+ */
+
+const char *rd_kafka_ConsumerGroupDescribeResponseData_partition_assignor(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets member count of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The member count.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *      as the lifetime of the \p grpdesc object.
+ */
+
+size_t rd_kafka_ConsumerGroupDescribeResponseData_member_count(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets a member of \p grpdesc group at a particular index.
+ *
+ * @param grpdesc The group description.
+ * @param idx The member index.
+ *
+ * @returns The member at index \p idx, or NULL if
+ *    \p idx is out of range.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *      as the lifetime of the \p grpdesc object.
+ */
+
+const rd_kafka_Member_t *rd_kafka_ConsumerGroupDescribeResponseData_member(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc,
+    size_t idx);
+
+/**
+ * @brief Gets authorized ACL operations count of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The authorized ACL operations count.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *     as the lifetime of the \p grpdesc object.
+ */
+
+int rd_kafka_ConsumerGroupDescribeResponseData_authorized_operations_count(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets authorized ACL operations of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The authorized ACL operations.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *    as the lifetime of the \p grpdesc object.
+ */
+
+const rd_kafka_AclOperation_t *
+rd_kafka_ConsumerGroupDescribeResponseData_authorized_operations(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+/**
+ * @brief Gets error of \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @returns The error.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *   as the lifetime of the \p grpdesc object.
+ */
+
+rd_kafka_error_t *rd_kafka_ConsumerGroupDescribeResponseData_error(
+    const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
 
 /**@}*/
 

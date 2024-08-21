@@ -517,6 +517,60 @@ struct rd_kafka_ConsumerGroupDescription_s {
 /**@}*/
 
 /**
+ * @name ConsumerGroupDescribe
+ * @{
+ */
+
+/**@}*/
+
+/**
+ * @name Description of a ConsumerGroupDescribe result member
+ */
+
+struct rd_kafka_Member_s {
+        char *member_id;                               /**< Member id */
+        char *instance_id;                             /**< Instance id */
+        char *rack_id;                                 /**< Rack id */
+        int32_t member_epoch;                          /**< Member epoch */
+        char *client_id;                               /**< Client id */
+        char *client_host;                             /**< Client host */
+        char *subscribed_topic_names;                  /**< Subscribed topic names */
+        char *subscribed_topic_regex;                  /**< Subscribed topic regex */
+        rd_kafka_MemberAssignment_t assignment;        /**< Member assignment */
+        rd_kafka_MemberAssignment_t target_assignment; /**< Target assignment */
+};
+
+/**
+ * @name ConsumerGroupDescribe result
+ */
+
+struct rd_kafka_ConsumerGroupDescribeResponseData_s{
+        /** Contains Group specific error code and error message */
+        rd_kafka_error_t *error;
+        /** Group id */
+        char *group_id;
+        /** Consumer group state. */
+        rd_kafka_consumer_group_state_t state;
+        /** Group Epoch */
+        int32_t group_epoch;
+        /** Assignment Epoch */
+        int32_t assignment_epoch;
+        /** Partition assignor identifier. */
+        char *partition_assignor;
+        /** List of members.
+         *  Type (rd_kafka_Member_t *): members list */
+        rd_list_t members;
+        /** Count of operations allowed for topic. -1 indicates operations not
+         * requested.*/
+        int authorized_operations_cnt;
+        /** Operations allowed for topic. May be NULL if operations were not
+         * requested */
+        rd_kafka_AclOperation_t *authorized_operations;
+}
+
+/**@}*/
+
+/**
  * @name DescribeTopics
  * @{
  */

@@ -97,6 +97,8 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "AlterUserScramCredentials";
         case RD_KAFKA_EVENT_LISTOFFSETS_RESULT:
                 return "ListOffsetsResult";
+        case RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT:
+                return "ConsumerGroupDescribeResult";
         default:
                 return "?unknown?";
         }
@@ -489,4 +491,13 @@ rd_kafka_event_ListConsumerGroupOffsets_result(rd_kafka_event_t *rkev) {
                 return NULL;
         else
                 return (const rd_kafka_ListConsumerGroupOffsets_result_t *)rkev;
+}
+
+const rd_kafka_ConsumerGroupDescribe_result_t *
+rd_kafka_event_ConsumerGroupDescribe_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_ConsumerGroupDescribe_result_t *)rkev;
 }

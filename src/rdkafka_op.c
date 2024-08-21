@@ -117,6 +117,8 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_LISTOFFSETS]     = "REPLY:LISTOFFSETS",
+            [RD_KAFKA_OP_CONSUMERGROUPDESCRIBE] =
+                "REPLY:CONSUMERGROUP_DESCRIBE",
             [RD_KAFKA_OP_METADATA_UPDATE] = "REPLY:METADATA_UPDATE",
             [RD_KAFKA_OP_SET_TELEMETRY_BROKER] =
                 "REPLY:RD_KAFKA_OP_SET_TELEMETRY_BROKER",
@@ -282,6 +284,8 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS] =
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_LISTOFFSETS]     = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_CONSUMERGROUPDESCRIBE] =
+                sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_METADATA_UPDATE] = sizeof(rko->rko_u.metadata),
             [RD_KAFKA_OP_SET_TELEMETRY_BROKER] =
                 sizeof(rko->rko_u.telemetry_broker),
@@ -439,6 +443,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_LISTOFFSETS:
+        case RD_KAFKA_OP_CONSUMERGROUPDESCRIBE:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 if (rko->rko_u.admin_request.options.match_consumer_group_states

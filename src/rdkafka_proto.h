@@ -143,6 +143,7 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
             [RD_KAFKAP_DescribeDelegationToken] = "DescribeDelegationToken",
             [RD_KAFKAP_DeleteGroups]            = "DeleteGroups",
             [RD_KAFKAP_ElectLeaders]            = "ElectLeadersRequest",
+            [RD_KAFKAP_ConsumerGroupDescribe]   = "ConsumerGroupDescribeRequest",
             [RD_KAFKAP_IncrementalAlterConfigs] =
                 "IncrementalAlterConfigsRequest",
             [RD_KAFKAP_AlterPartitionReassignments] =

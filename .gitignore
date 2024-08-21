@@ -13,4 +13,5 @@ deps/*
 
 .DS_Store
 
+.idea
 .vscode

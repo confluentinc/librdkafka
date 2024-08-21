@@ -1,4 +1,3 @@
-import { RestService } from '../../schemaregistry/rest-service';
 import {
   Compatibility,
   SchemaRegistryClient,
@@ -8,18 +7,9 @@ import {
   Metadata
 } from '../../schemaregistry/schemaregistry-client';
 import { beforeEach, describe, expect, it } from '@jest/globals';
+import { clientConfig } from '../../test/schemaregistry/test-constants';
 
 /* eslint-disable @typescript-eslint/no-non-null-asserted-optional-chain */
-
-const baseUrls = ['http://localhost:8081'];
-const headers = { 'Content-Type': 'application/vnd.schemaregistry.v1+json' };
-const restService = new RestService(baseUrls, false);
-restService.setHeaders(headers);
-
-const basicAuth = Buffer.from('RBACAllowedUser-lsrc1:nohash').toString('base64');
-restService.setAuth(basicAuth);
-
-restService.setTimeout(10000);
 
 let schemaRegistryClient: SchemaRegistryClient;
 const testSubject = 'integ-test-subject';
@@ -72,7 +62,7 @@ const backwardCompatibleSchemaInfo: SchemaInfo = {
 describe('SchemaRegistryClient Integration Test', () => {
 
   beforeEach(async () => {
-    schemaRegistryClient = new SchemaRegistryClient(restService);
+    schemaRegistryClient = new SchemaRegistryClient(clientConfig);
     const subjects: string[] = await schemaRegistryClient.getAllSubjects();
 
     if (subjects && subjects.includes(testSubject)) {
@@ -86,7 +76,11 @@ describe('SchemaRegistryClient Integration Test', () => {
     }
   });
 
-  it('should register, retrieve, and delete a schema', async () => {
+  it("Should return RestError when retrieving non-existent schema", async () => {
+    await expect(schemaRegistryClient.getBySubjectAndId(testSubject, 1)).rejects.toThrow();
+  });
+
+  it('Should register, retrieve, and delete a schema', async () => {
     // Register a schema
     const registerResponse:  SchemaMetadata = await schemaRegistryClient.registerFullResponse(testSubject, schemaInfo);
     expect(registerResponse).toBeDefined();

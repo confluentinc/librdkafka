@@ -1,4 +1,4 @@
-import { RestService } from './rest-service';
+import { RestService, ClientConfig } from './rest-service';
 import { AxiosResponse } from 'axios';
 import stringify from "json-stringify-deterministic";
 import { LRUCache } from 'lru-cache';
@@ -26,11 +26,6 @@ enum Compatibility {
 interface CompatibilityLevel {
   compatibility?: Compatibility;
   compatibilityLevel?: Compatibility;
-}
-
-interface Result<T> {
-  data?: T;
-  error?: Error;
 }
 
 interface Rule {
@@ -131,13 +126,14 @@ class SchemaRegistryClient implements Client {
   private versionToSchemaMutex: Mutex;
   private metadataToSchemaMutex: Mutex;
 
-  constructor(restService: RestService, cacheSize: number = 512, cacheTTL?: number) {
+  constructor(config: ClientConfig) {
     const cacheOptions = {
-      max: cacheSize,
-      ...(cacheTTL !== undefined && { maxAge: cacheTTL })
+      max: config.cacheCapacity,
+      ...(config.cacheLatestTtlSecs !== undefined && { maxAge: config.cacheLatestTtlSecs * 1000 })
     };
 
-    this.restService = restService;
+    this.restService = new RestService(config.createAxiosDefaults, config.baseURLs, config.isForward);  
+
     this.schemaToIdCache = new LRUCache(cacheOptions);
     this.idToSchemaInfoCache = new LRUCache(cacheOptions);
     this.infoToSchemaCache = new LRUCache(cacheOptions);
@@ -169,7 +165,9 @@ class SchemaRegistryClient implements Client {
         return cachedSchemaMetadata;
       }
 
-      const response: AxiosResponse<SchemaMetadata> = await this.restService.sendHttpRequest(
+      subject = encodeURIComponent(subject);
+
+      const response: AxiosResponse<SchemaMetadata> = await this.restService.handleRequest(
         `/subjects/${subject}/versions?normalize=${normalize}`,
         'POST',
         schema
@@ -187,7 +185,9 @@ class SchemaRegistryClient implements Client {
         return cachedSchema;
       }
 
-      const response: AxiosResponse<SchemaInfo> = await this.restService.sendHttpRequest(
+      subject = encodeURIComponent(subject);
+
+      const response: AxiosResponse<SchemaInfo> = await this.restService.handleRequest(
         `/schemas/ids/${id}?subject=${subject}`,
         'GET'
       );
@@ -205,7 +205,9 @@ class SchemaRegistryClient implements Client {
         return cachedId;
       }
 
-      const response: AxiosResponse<SchemaMetadata> = await this.restService.sendHttpRequest(
+      subject = encodeURIComponent(subject);
+
+      const response: AxiosResponse<SchemaMetadata> = await this.restService.handleRequest(
         `/subjects/${subject}?normalize=${normalize}`,
         'POST',
         schema
@@ -222,7 +224,9 @@ class SchemaRegistryClient implements Client {
         return cachedSchema;
       }
 
-      const response: AxiosResponse<SchemaMetadata> = await this.restService.sendHttpRequest(
+      subject = encodeURIComponent(subject);
+
+      const response: AxiosResponse<SchemaMetadata> = await this.restService.handleRequest(
         `/subjects/${subject}/versions/latest`,
         'GET'
       );
@@ -240,7 +244,9 @@ class SchemaRegistryClient implements Client {
         return cachedSchemaMetadata;
       }
 
-      const response: AxiosResponse<SchemaMetadata> = await this.restService.sendHttpRequest(
+      subject = encodeURIComponent(subject);
+
+      const response: AxiosResponse<SchemaMetadata> = await this.restService.handleRequest(
         `/subjects/${subject}/versions/${version}?deleted=${deleted}`,
         'GET'
       );
@@ -251,12 +257,14 @@ class SchemaRegistryClient implements Client {
 
   public async getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, metadata, deleted });
-    
+
     return await this.metadataToSchemaMutex.runExclusive(async () => {
       const cachedSchemaMetadata: SchemaMetadata | undefined = this.metadataToSchemaCache.get(cacheKey);
       if (cachedSchemaMetadata) {
         return cachedSchemaMetadata;
       }
+
+      subject = encodeURIComponent(subject);
 
       let metadataStr = '';
 
@@ -266,7 +274,7 @@ class SchemaRegistryClient implements Client {
         metadataStr += `&key=${encodedKey}&value=${encodedValue}`;
       }
 
-      const response: AxiosResponse<SchemaMetadata> = await this.restService.sendHttpRequest(
+      const response: AxiosResponse<SchemaMetadata> = await this.restService.handleRequest(
         `/subjects/${subject}/metadata?deleted=${deleted}&${metadataStr}`,
         'GET'
       );
@@ -277,7 +285,7 @@ class SchemaRegistryClient implements Client {
 
 
   public async getAllVersions(subject: string): Promise<number[]> {
-    const response: AxiosResponse<number[]> = await this.restService.sendHttpRequest(
+    const response: AxiosResponse<number[]> = await this.restService.handleRequest(
       `/subjects/${subject}/versions`,
       'GET'
     );
@@ -293,7 +301,9 @@ class SchemaRegistryClient implements Client {
         return cachedVersion;
       }
 
-      const response: AxiosResponse<SchemaMetadata> = await this.restService.sendHttpRequest(
+      subject = encodeURIComponent(subject);
+
+      const response: AxiosResponse<SchemaMetadata> = await this.restService.handleRequest(
         `/subjects/${subject}?normalize=${normalize}`,
         'POST',
         schema
@@ -304,7 +314,7 @@ class SchemaRegistryClient implements Client {
   }
 
   public async getAllSubjects(): Promise<string[]> {
-    const response: AxiosResponse<string[]> = await this.restService.sendHttpRequest(
+    const response: AxiosResponse<string[]> = await this.restService.handleRequest(
       `/subjects`,
       'GET'
     );
@@ -348,7 +358,9 @@ class SchemaRegistryClient implements Client {
       });
     });
 
-    const response: AxiosResponse<number[]> = await this.restService.sendHttpRequest(
+    subject = encodeURIComponent(subject);
+
+    const response: AxiosResponse<number[]> = await this.restService.handleRequest(
       `/subjects/${subject}?permanent=${permanent}`,
       'DELETE'
     );
@@ -384,7 +396,9 @@ class SchemaRegistryClient implements Client {
         this.versionToSchemaCache.delete(cacheKey);
       });
 
-      const response: AxiosResponse<number> = await this.restService.sendHttpRequest(
+      subject = encodeURIComponent(subject);
+
+      const response: AxiosResponse<number> = await this.restService.handleRequest(
         `/subjects/${subject}/versions/${version}?permanent=${permanent}`,
         'DELETE'
       );
@@ -393,7 +407,9 @@ class SchemaRegistryClient implements Client {
   }
 
   public async testSubjectCompatibility(subject: string, schema: SchemaInfo): Promise<boolean> {
-    const response: AxiosResponse<isCompatibleResponse> = await this.restService.sendHttpRequest(
+    subject = encodeURIComponent(subject);
+
+    const response: AxiosResponse<isCompatibleResponse> = await this.restService.handleRequest(
       `/compatibility/subjects/${subject}/versions/latest`,
       'POST',
       schema
@@ -402,7 +418,9 @@ class SchemaRegistryClient implements Client {
   }
 
   public async testCompatibility(subject: string, version: number, schema: SchemaInfo): Promise<boolean> {
-    const response: AxiosResponse<isCompatibleResponse> = await this.restService.sendHttpRequest(
+    subject = encodeURIComponent(subject);
+
+    const response: AxiosResponse<isCompatibleResponse> = await this.restService.handleRequest(
       `/compatibility/subjects/${subject}/versions/${version}`,
       'POST',
       schema
@@ -411,7 +429,9 @@ class SchemaRegistryClient implements Client {
   }
 
   public async getCompatibility(subject: string): Promise<Compatibility> {
-    const response: AxiosResponse<CompatibilityLevel> = await this.restService.sendHttpRequest(
+    subject = encodeURIComponent(subject);
+
+    const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
       `/config/${subject}`,
       'GET'
     );
@@ -419,7 +439,9 @@ class SchemaRegistryClient implements Client {
   }
 
   public async updateCompatibility(subject: string, update: Compatibility): Promise<Compatibility> {
-    const response: AxiosResponse<CompatibilityLevel> = await this.restService.sendHttpRequest(
+    subject = encodeURIComponent(subject);
+
+    const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
       `/config/${subject}`,
       'PUT',
       { compatibility: update }
@@ -428,54 +450,56 @@ class SchemaRegistryClient implements Client {
   }
 
   public async getDefaultCompatibility(): Promise<Compatibility> {
-      const response: AxiosResponse<CompatibilityLevel> = await this.restService.sendHttpRequest(
-        `/config`,
-        'GET'
-      );
-      return response.data.compatibilityLevel!;
+    const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
+      `/config`,
+      'GET'
+    );
+    return response.data.compatibilityLevel!;
   }
 
   public async updateDefaultCompatibility(update: Compatibility): Promise<Compatibility> {
-      const response: AxiosResponse<CompatibilityLevel> = await this.restService.sendHttpRequest(
-        `/config`,
-        'PUT',
-        { compatibility: update }
-      );
-      return response.data.compatibility!;
+    const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
+      `/config`,
+      'PUT',
+      { compatibility: update }
+    );
+    return response.data.compatibility!;
   }
 
   public async getConfig(subject: string): Promise<ServerConfig> {
-      const response: AxiosResponse<ServerConfig> = await this.restService.sendHttpRequest(
-        `/config/${subject}`,
-        'GET'
-      );
-      return response.data;
+    subject = encodeURIComponent(subject);
+
+    const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
+      `/config/${subject}`,
+      'GET'
+    );
+    return response.data;
   }
 
   public async updateConfig(subject: string, update: ServerConfig): Promise<ServerConfig> {
-      const response: AxiosResponse<ServerConfig> = await this.restService.sendHttpRequest(
-        `/config/${subject}`,
-        'PUT',
-        update
-      );
-      return response.data;
+    const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
+      `/config/${subject}`,
+      'PUT',
+      update
+    );
+    return response.data;
   }
 
   public async getDefaultConfig(): Promise<ServerConfig> {
-      const response: AxiosResponse<ServerConfig> = await this.restService.sendHttpRequest(
-        `/config`,
-        'GET'
-      );
-      return response.data;
+    const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
+      `/config`,
+      'GET'
+    );
+    return response.data;
   }
 
   public async updateDefaultConfig(update: ServerConfig): Promise<ServerConfig> {
-      const response: AxiosResponse<ServerConfig> = await this.restService.sendHttpRequest(
-        `/config`,
-        'PUT',
-        update
-      );
-      return response.data;
+    const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
+      `/config`,
+      'PUT',
+      update
+    );
+    return response.data;
   }
 
   public close(): void {
@@ -544,5 +568,5 @@ class SchemaRegistryClient implements Client {
 
 export {
   Client, SchemaRegistryClient, SchemaInfo, Metadata, Compatibility,
-  CompatibilityLevel, ServerConfig, RuleSet, Rule, Reference, SchemaMetadata, Result
+  CompatibilityLevel, ServerConfig, RuleSet, Rule, Reference, SchemaMetadata
 };

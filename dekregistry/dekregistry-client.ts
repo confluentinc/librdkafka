@@ -1,7 +1,16 @@
 import { LRUCache } from 'lru-cache';
 import { Mutex } from 'async-mutex';
-import { RestService } from '../schemaregistry/rest-service';
+import { ClientConfig, RestService } from '../schemaregistry/rest-service';
 import stringify from 'json-stringify-deterministic';
+
+/*
+ * Confluent-Schema-Registry-TypeScript - Node.js wrapper for Confluent Schema Registry
+ *
+ * Copyright (c) 2024 Confluent, Inc.
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license.  See the LICENSE.txt file for details.
+ */
 
 interface Kek {
   name?: string;
@@ -51,13 +60,14 @@ class DekRegistryClient implements Client {
   private kekMutex: Mutex;
   private dekMutex: Mutex;
 
-  constructor(restService: RestService, cacheSize: number = 512, cacheTTL?: number) {
+  constructor(config: ClientConfig) {
     const cacheOptions = {
-      max: cacheSize,
-      ...(cacheTTL !== undefined && { maxAge: cacheTTL })
+      max: config.cacheCapacity,
+      ...(config.cacheLatestTtlSecs !== undefined && { maxAge: config.cacheLatestTtlSecs * 1000 }),
     };
 
-    this.restService = restService;
+
+    this.restService = new RestService(config.createAxiosDefaults, config.baseURLs, config.isForward);
     this.kekCache = new LRUCache<string, Kek>(cacheOptions);
     this.dekCache = new LRUCache<string, Dek>(cacheOptions);
     this.kekMutex = new Mutex();
@@ -124,7 +134,7 @@ class DekRegistryClient implements Client {
         shared,
       };
 
-      const response = await this.restService.sendHttpRequest<Kek>(
+      const response = await this.restService.handleRequest<Kek>(
         '/dek-registry/v1/keks',
         'POST',
         request);
@@ -143,7 +153,7 @@ class DekRegistryClient implements Client {
       }
       name = encodeURIComponent(name);
 
-      const response = await this.restService.sendHttpRequest<Kek>(
+      const response = await this.restService.handleRequest<Kek>(
         `/dek-registry/v1/keks/${name}?deleted=${deleted}`,
         'GET');
       this.kekCache.set(cacheKey, response.data);
@@ -169,7 +179,7 @@ class DekRegistryClient implements Client {
       };
       kekName = encodeURIComponent(kekName);
 
-      const response = await this.restService.sendHttpRequest<Dek>(
+      const response = await this.restService.handleRequest<Dek>(
         `/dek-registry/v1/keks/${kekName}/deks`,
         'POST',
         request);
@@ -194,7 +204,7 @@ class DekRegistryClient implements Client {
       kekName = encodeURIComponent(kekName);
       subject = encodeURIComponent(subject);
 
-      const response = await this.restService.sendHttpRequest<Dek>(
+      const response = await this.restService.handleRequest<Dek>(
         `/dek-registry/v1/keks/${kekName}/deks/${subject}/versions/${version}?deleted=${deleted}`,
         'GET');
       this.dekCache.set(cacheKey, response.data);

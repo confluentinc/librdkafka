@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, CreateAxiosDefaults } from 'axios';
+import { RestError } from './rest-error';
 
 /*
  * Confluent-Schema-Registry-TypeScript - Node.js wrapper for Confluent Schema Registry
@@ -9,43 +10,60 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
-export class RestService {
-  private client: AxiosInstance
+export type ClientConfig = {
+  createAxiosDefaults: CreateAxiosDefaults,
+  baseURLs: string[],
+  cacheCapacity: number,
+  cacheLatestTtlSecs?: number,
+  isForward?: boolean
+}
 
-  constructor(baseUrls: string[], isForward = false) {
-    this.client = axios.create({
-      baseURL: baseUrls[0], // Use the first base URL as the default
-      timeout: 5000, // Default timeout
-      headers: { 'Content-Type': 'application/vnd.schemaregistry.v1+json' },
-    })
+export class RestService {
+  private client: AxiosInstance;
+  private baseURLs: string[];
+
+  constructor(axiosDefaults: CreateAxiosDefaults, baseURLs: string[], isForward?: boolean) {
+    this.client = axios.create(axiosDefaults);
+    this.baseURLs = baseURLs;
 
     if (isForward) {
       this.client.defaults.headers.common['X-Forward'] = 'true'
     }
   }
 
-  public async sendHttpRequest<T>(
+  public async handleRequest<T>(
     url: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     data?: any, // eslint-disable-line @typescript-eslint/no-explicit-any
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    try {
-      const response = await this.client.request<T>({
-        url,
-        method,
-        data,
-        ...config,
-      })
-      return response
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(`HTTP error: ${error.response.status} - ${error.response.data}`)
-      } else {
-        const err = error as Error;
-        throw new Error(`Unknown error: ${err.message}`)
+
+    for (let i = 0; i < this.baseURLs.length; i++) {
+      try {
+        this.setBaseURL(this.baseURLs[i]);
+        const response = await this.client.request<T>({
+          url,
+          method,
+          data,
+          ...config,
+        })
+        return response;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response && (error.response.status < 200 || error.response.status > 299)) {
+          const data = error.response.data;
+          if (data.error_code && data.message) {
+            error = new RestError(data.message, error.response.status, data.error_code);
+          } else {
+            error = new Error(`Unknown error: ${error.message}`)
+          }
+        }
+        if (i === this.baseURLs.length - 1) {
+          throw error;
+        }
       }
     }
+
+    throw new Error('Internal HTTP retry error'); // Should never reach here
   }
 
   public setHeaders(headers: Record<string, string>): void {

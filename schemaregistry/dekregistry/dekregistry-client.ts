@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import { Mutex } from 'async-mutex';
-import { ClientConfig, RestService } from '../schemaregistry/rest-service';
+import { ClientConfig, RestService } from '../rest-service';
 import stringify from 'json-stringify-deterministic';
 
 /*
@@ -84,7 +84,10 @@ class DekRegistryClient implements Client {
         const bytes = Buffer.from(dek.encryptedKeyMaterial, 'base64');
         dek.encryptedKeyMaterialBytes = bytes;
       } catch (err) {
-        throw new Error(`Failed to decode base64 string: ${err.message}`);
+        if (err instanceof Error) {
+          throw new Error(`Failed to decode base64 string: ${err.message}`);
+        }
+        throw new Error(`Unknown error: ${err}`);
       }
     }
 
@@ -101,7 +104,10 @@ class DekRegistryClient implements Client {
         const bytes = Buffer.from(dek.keyMaterial, 'base64');
         dek.keyMaterialBytes = bytes;
       } catch (err) {
-        throw new Error(`Failed to decode base64 string: ${err.message}`);
+        if (err instanceof Error) {
+          throw new Error(`Failed to decode base64 string: ${err.message}`);
+        }
+        throw new Error(`Unknown error: ${err}`);
       }
     }
 

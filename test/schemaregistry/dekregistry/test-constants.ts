@@ -1,5 +1,5 @@
-import { MOCK_TS } from "../../dekregistry/constants";
-import { Kek, Dek } from "../../dekregistry/dekregistry-client";
+import { MOCK_TS } from "../../../schemaregistry/dekregistry/constants";
+import { Kek, Dek } from "../../../schemaregistry/dekregistry/dekregistry-client";
 
 const TEST_KEK_NAME: string = 'test-kek-name';
 const TEST_KEK_NAME_2: string = 'test-kek-name2';

@@ -1,6 +1,5 @@
 import { MockClient } from '../../schemaregistry/mock-schemaregistry-client';
 import { Compatibility, Metadata, SchemaInfo, SchemaMetadata } from '../../schemaregistry/schemaregistry-client';
-import { RestService } from '../../schemaregistry/rest-service';
 import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 
 const schemaString: string = JSON.stringify({
@@ -62,7 +61,6 @@ const testSubject2 = 'test-subject2';
 
 describe('MockClient-tests', () => {
   let mockClient: MockClient;
-  let restService: RestService;
 
   beforeEach(() => {
     mockClient = new MockClient();

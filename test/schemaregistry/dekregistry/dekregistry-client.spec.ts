@@ -1,14 +1,14 @@
-import { DekRegistryClient, Dek, Kek } from "../../dekregistry/dekregistry-client";
-import { RestService } from "../../schemaregistry/rest-service";
+import { DekRegistryClient, Dek, Kek } from "../../../schemaregistry/dekregistry/dekregistry-client";
+import { RestService } from "../../../schemaregistry/rest-service";
 import { AxiosResponse } from 'axios';
 import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 import { TEST_KEK, TEST_KEK_2, TEST_KEK_NAME, TEST_KEK_NAME_2, TEST_KMS_TYPE, TEST_KMS_KEY_ID, 
   TEST_KMS_PROPS, TEST_DOC, TEST_DEK, TEST_DEK_2, TEST_ALGORITHM, 
   TEST_ENCRYPTED_KEY_MATERIAL, TEST_SUBJECT, TEST_VERSION, 
   TEST_DEK_LATEST} from "./test-constants";
-import { mockClientConfig } from "../schemaregistry/test-constants";
+import { mockClientConfig } from "../test-constants";
 
-jest.mock('../../schemaregistry/rest-service');
+jest.mock('../../../schemaregistry/rest-service');
 
 
 let client: DekRegistryClient;

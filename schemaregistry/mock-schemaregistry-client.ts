@@ -1,5 +1,5 @@
 
-import { Client, Compatibility, Metadata, SchemaInfo, SchemaMetadata, ServerConfig } from './schemaregistry-client';
+import { Client, Compatibility, SchemaInfo, SchemaMetadata, ServerConfig } from './schemaregistry-client';
 import stringify from "json-stringify-deterministic";
 
 interface VersionCacheEntry {

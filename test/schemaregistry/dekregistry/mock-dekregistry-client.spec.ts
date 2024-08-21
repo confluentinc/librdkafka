@@ -1,8 +1,8 @@
-import { Dek, Kek } from "../../dekregistry/dekregistry-client";
-import { MockDekRegistryClient } from "../../dekregistry/mock-dekregistry-client";
+import { Dek, Kek } from "../../../schemaregistry/dekregistry/dekregistry-client";
+import { MockDekRegistryClient } from "../../../schemaregistry/dekregistry/mock-dekregistry-client";
 import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 import { TEST_KEK, TEST_KEK_NAME, TEST_KMS_TYPE, TEST_KMS_KEY_ID, 
-  TEST_KMS_PROPS, TEST_DOC, TEST_DEK, TEST_DEK_V2, TEST_DEK_LATEST, TEST_ALGORITHM, 
+  TEST_KMS_PROPS, TEST_DOC, TEST_DEK, TEST_DEK_V2, TEST_ALGORITHM, 
   TEST_ENCRYPTED_KEY_MATERIAL, TEST_SUBJECT, TEST_VERSION } from "./test-constants";
 
 describe('MockClient-tests', () => {

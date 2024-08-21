@@ -9062,6 +9062,20 @@ const rd_kafka_topic_partition_list_t *rd_kafka_Member_target_assignment_partiti
     const rd_kafka_MemberAssignment_t *target_assignment);
 
 /**
+ * @brief Gets topic_id of \p partition.
+ *
+ * @param partition The topic partition.
+ *
+ * @returns The topic id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *      as the lifetime of the \p partition object.
+ */
+
+rd_kafka_Uuid_t *rd_kafka_Member_partition_topic_id(
+    const rd_kafka_topic_partition_t *partition);
+
+/**
  * @brief Gets group id of \p grpdesc group.
  *
  * @param grpdesc The group description.

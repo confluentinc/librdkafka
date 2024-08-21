@@ -8504,6 +8504,11 @@ const rd_kafka_topic_partition_list_t *rd_kafka_Member_target_assignment_partiti
         return target_assignment->partitions;
 }
 
+rd_kafka_Uuid_t *rd_kafka_Member_partition_topic_id(
+    const rd_kafka_topic_partition_t *partition) {
+        return rd_kafka_topic_partition_get_topic_id(partition);
+}
+
 /**
  * @brief Create a new ConsumerGroupDescribeResponseData object.
  *
@@ -9014,6 +9019,20 @@ void rd_kafka_ConsumerGroupDescribe(rd_kafka_t *rk,
 
                 rd_kafka_q_enq(rk->rk_ops, rko);
         }
+}
+
+const rd_kafka_ConsumerGroupDescribeResponseData_t **
+rd_kafka_ConsumerGroupDescribe_result_groups(
+    const rd_kafka_ConsumerGroupDescribe_result_t *result,
+    size_t *cntp) {
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_CONSUMERGROUPDESCRIBE);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_ConsumerGroupDescribeResponseData_t **)
+            rko->rko_u.admin_result.results.rl_elems;
 }
 
 

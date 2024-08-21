@@ -361,15 +361,25 @@ rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
                                rd_kafka_resp_cb_t *resp_cb,
                                void *opaque);
 
+rd_kafka_resp_err_t
+rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                      const rd_list_t *groups /*(char*)*/,
+                                      rd_kafka_AdminOptions_t *options,
+                                      char *errstr,
+                                      size_t errstr_size,
+                                      rd_kafka_replyq_t replyq,
+                                      rd_kafka_resp_cb_t *resp_cb,
+                                      void *opaque);
 
-void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
-                               const rd_kafkap_str_t *group_id,
-                               int32_t generation_id,
-                               const rd_kafkap_str_t *member_id,
-                               const rd_kafkap_str_t *group_instance_id,
-                               rd_kafka_replyq_t replyq,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque);
+
+    void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
+                                   const rd_kafkap_str_t *group_id,
+                                   int32_t generation_id,
+                                   const rd_kafkap_str_t *member_id,
+                                   const rd_kafkap_str_t *group_instance_id,
+                                   rd_kafka_replyq_t replyq,
+                                   rd_kafka_resp_cb_t *resp_cb,
+                                   void *opaque);
 
 void rd_kafka_ConsumerGroupHeartbeatRequest(
     rd_kafka_broker_t *rkb,

@@ -566,7 +566,7 @@ struct rd_kafka_ConsumerGroupDescribeResponseData_s{
         /** Operations allowed for topic. May be NULL if operations were not
          * requested */
         rd_kafka_AclOperation_t *authorized_operations;
-}
+};
 
 /**@}*/
 

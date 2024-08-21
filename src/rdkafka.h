@@ -9072,7 +9072,7 @@ const rd_kafka_topic_partition_list_t *rd_kafka_Member_target_assignment_partiti
  *      as the lifetime of the \p partition object.
  */
 
-rd_kafka_Uuid_t *rd_kafka_Member_partition_topic_id(
+rd_kafka_Uuid_t rd_kafka_Member_partition_topic_id(
     const rd_kafka_topic_partition_t *partition);
 
 /**

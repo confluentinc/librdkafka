@@ -1,5 +1,6 @@
 const js = require("@eslint/js");
 const jest = require('eslint-plugin-jest');
+const ts = require('typescript-eslint');
 
 const ckjsSpecificSettings = {
     languageOptions: {
@@ -32,7 +33,7 @@ const ckjsSpecificJestSettings = {
     }
 };
 
-module.exports = [
+module.exports = ts.config(
     {
         ...js.configs.recommended,
         files: ["lib/**/*.js", "test/promisified/**/*.js"],
@@ -50,5 +51,9 @@ module.exports = [
     {
         ...ckjsSpecificJestSettings,
         files: ["test/promisified/**/*.js"]
-    }
-];
+    },
+    ...ts.configs.recommended.map((config) => ({
+        ...config,
+        ignores: ["**/*.js"],
+    })),
+);

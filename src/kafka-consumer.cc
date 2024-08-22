@@ -556,6 +556,7 @@ void KafkaConsumer::Init(v8::Local<v8::Object> exports) {
 
   Nan::SetPrototypeMethod(tpl, "commit", NodeCommit);
   Nan::SetPrototypeMethod(tpl, "commitSync", NodeCommitSync);
+  Nan::SetPrototypeMethod(tpl, "commitCb", NodeCommitCb);
   Nan::SetPrototypeMethod(tpl, "offsetsStore", NodeOffsetsStore);
   Nan::SetPrototypeMethod(tpl, "offsetsStoreSingle", NodeOffsetsStoreSingle);
 
@@ -1023,6 +1024,45 @@ NAN_METHOD(KafkaConsumer::NodeCommitSync) {
   }
 
   info.GetReturnValue().Set(Nan::New<v8::Number>(error_code));
+}
+
+NAN_METHOD(KafkaConsumer::NodeCommitCb) {
+  Nan::HandleScope scope;
+  int error_code;
+  std::optional<std::vector<RdKafka::TopicPartition *>> toppars = std::nullopt;
+  Nan::Callback *callback;
+
+  KafkaConsumer* consumer = ObjectWrap::Unwrap<KafkaConsumer>(info.This());
+
+  if (!consumer->IsConnected()) {
+    Nan::ThrowError("KafkaConsumer is disconnected");
+    return;
+  }
+
+  if (info.Length() != 2) {
+    Nan::ThrowError("Two arguments are required");
+    return;
+  }
+
+  if (!(
+      (info[0]->IsArray() || info[0]->IsNull()) &&
+      info[1]->IsFunction())) {
+    Nan::ThrowError(
+      "First argument should be an array or null and second one a callback");
+    return;
+  }
+
+  if (info[0]->IsArray()) {
+    toppars =
+      Conversion::TopicPartition::FromV8Array(info[0].As<v8::Array>());
+  }
+  callback = new Nan::Callback(info[1].As<v8::Function>());
+
+  Nan::AsyncQueueWorker(
+    new Workers::KafkaConsumerCommitCb(callback, consumer,
+      toppars));
+
+  info.GetReturnValue().Set(Nan::Null());
 }
 
 NAN_METHOD(KafkaConsumer::NodeSubscribe) {

@@ -14,6 +14,7 @@
 #include <uv.h>
 #include <nan.h>
 #include <string>
+#include <optional>
 #include <vector>
 
 #include "src/common.h"
@@ -421,6 +422,21 @@ class KafkaConsumerCommitted : public ErrorAwareWorker {
   NodeKafka::KafkaConsumer * m_consumer;
   std::vector<RdKafka::TopicPartition*> m_topic_partitions;
   const int m_timeout_ms;
+};
+
+class KafkaConsumerCommitCb : public ErrorAwareWorker {
+ public:
+  KafkaConsumerCommitCb(Nan::Callback*,
+    NodeKafka::KafkaConsumer*,
+    std::optional<std::vector<RdKafka::TopicPartition*>> &);
+  ~KafkaConsumerCommitCb();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+ private:
+  NodeKafka::KafkaConsumer * m_consumer;
+  std::optional<std::vector<RdKafka::TopicPartition*>> m_topic_partitions;
 };
 
 class KafkaConsumerSeek : public ErrorAwareWorker {

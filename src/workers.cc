@@ -1063,6 +1063,58 @@ void KafkaConsumerCommitted::HandleErrorCallback() {
 }
 
 /**
+ * @brief KafkaConsumer commit offsets with a callback function.
+ * 
+ * The first callback argument is the commit error, or null on success.
+ *
+ * @see RdKafka::KafkaConsumer::commitSync
+ */
+KafkaConsumerCommitCb::KafkaConsumerCommitCb(Nan::Callback *callback,
+    KafkaConsumer* consumer,
+    std::optional<std::vector<RdKafka::TopicPartition*>> & t) :
+  ErrorAwareWorker(callback),
+  m_consumer(consumer),
+  m_topic_partitions(t) {}
+
+KafkaConsumerCommitCb::~KafkaConsumerCommitCb() {
+  // Delete the underlying topic partitions as they are ephemeral or cloned
+  if (m_topic_partitions.has_value())
+    RdKafka::TopicPartition::destroy(m_topic_partitions.value());
+}
+
+void KafkaConsumerCommitCb::Execute() {
+  Baton b = Baton(NULL);
+  if (m_topic_partitions.has_value()) {
+    b = m_consumer->Commit(m_topic_partitions.value());
+  } else {
+    b = m_consumer->Commit();
+  }
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void KafkaConsumerCommitCb::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+
+  callback->Call(argc, argv);
+}
+
+void KafkaConsumerCommitCb::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = { GetErrorObject() };
+
+  callback->Call(argc, argv);
+}
+
+/**
  * @brief KafkaConsumer seek
  *
  * This callback will take a topic partition list with offsets and

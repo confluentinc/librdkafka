@@ -9,7 +9,7 @@ TS_NODE ?= ./node_modules/.bin/ts-node
 # Paths
 SRC_DIR = schemaregistry
 SR_TEST_DIR = test/schemaregistry
-DEK_TEST_DIR = test/dekregistry
+DEK_TEST_DIR = test/schemaregistry/dekregistry
 INTEG_DIR = e2e/schemaregistry
 
 # Tasks

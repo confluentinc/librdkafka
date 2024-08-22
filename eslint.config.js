@@ -55,5 +55,11 @@ module.exports = ts.config(
     ...ts.configs.recommended.map((config) => ({
         ...config,
         ignores: ["**/*.js"],
+        rules: {
+            ...config.rules,
+            "prefer-const": 0,
+            "@typescript-eslint/no-explicit-any": "warn",
+            "@typescript-eslint/no-unused-vars": "warn",
+        }
     })),
 );

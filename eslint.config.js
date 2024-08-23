@@ -57,7 +57,7 @@ module.exports = ts.config(
         ignores: ["**/*.js"],
         rules: {
             ...config.rules,
-            "prefer-const": 0,
+            "prefer-const": "warn",
             "@typescript-eslint/no-explicit-any": "warn",
             "@typescript-eslint/no-unused-vars": "warn",
         }

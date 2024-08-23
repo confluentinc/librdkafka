@@ -148,7 +148,7 @@ describe('SchemaRegistryClient Integration Test', () => {
     const getMetadataResponse:  SchemaMetadata = await schemaRegistryClient.getSchemaMetadata(testSubject, schemaVersion);
     expect(schemaMetadata).toEqual(getMetadataResponse);
 
-    const keyValueMetadata: { [key: string]: string } = { 
+    const keyValueMetadata: { [key: string]: string } = {
       'owner': 'Bob Jones',
       'email': 'bob@acme.com'
     }
@@ -163,11 +163,11 @@ describe('SchemaRegistryClient Integration Test', () => {
 
     const version = registerResponse?.version!;
 
-    const updateCompatibilityResponse: Compatibility = await schemaRegistryClient.updateCompatibility(testSubject, Compatibility.BackwardTransitive);
-    expect(updateCompatibilityResponse).toEqual(Compatibility.BackwardTransitive);
+    const updateCompatibilityResponse: Compatibility = await schemaRegistryClient.updateCompatibility(testSubject, Compatibility.BACKWARD_TRANSITIVE);
+    expect(updateCompatibilityResponse).toEqual(Compatibility.BACKWARD_TRANSITIVE);
 
     const getCompatibilityResponse: Compatibility = await schemaRegistryClient.getCompatibility(testSubject);
-    expect(getCompatibilityResponse).toEqual(Compatibility.BackwardTransitive);
+    expect(getCompatibilityResponse).toEqual(Compatibility.BACKWARD_TRANSITIVE);
 
     const testSubjectCompatibilityResponse: boolean = await schemaRegistryClient.testSubjectCompatibility(testSubject, backwardCompatibleSchemaInfo);
     expect(testSubjectCompatibilityResponse).toEqual(true);
@@ -177,21 +177,21 @@ describe('SchemaRegistryClient Integration Test', () => {
   });
 
   it('Should update and get default compatibility', async () => {
-    const updateDefaultCompatibilityResponse: Compatibility = await schemaRegistryClient.updateDefaultCompatibility(Compatibility.Full);
-    expect(updateDefaultCompatibilityResponse).toEqual(Compatibility.Full);
+    const updateDefaultCompatibilityResponse: Compatibility = await schemaRegistryClient.updateDefaultCompatibility(Compatibility.FULL);
+    expect(updateDefaultCompatibilityResponse).toEqual(Compatibility.FULL);
 
     const getDefaultCompatibilityResponse: Compatibility = await schemaRegistryClient.getDefaultCompatibility();
-    expect(getDefaultCompatibilityResponse).toEqual(Compatibility.Full);
+    expect(getDefaultCompatibilityResponse).toEqual(Compatibility.FULL);
   });
 
   it('Should update and get subject Config', async () => {
     const subjectConfigRequest: ServerConfig = {
-      compatibility: Compatibility.Full,
+      compatibility: Compatibility.FULL,
       normalize: true
     };
 
     const subjectConfigResponse: ServerConfig = {
-      compatibilityLevel: Compatibility.Full,
+      compatibilityLevel: Compatibility.FULL,
       normalize: true
     };
 
@@ -207,12 +207,12 @@ describe('SchemaRegistryClient Integration Test', () => {
 
   it('Should get and set default Config', async () => {
     const serverConfigRequest: ServerConfig = {
-      compatibility: Compatibility.Full,
+      compatibility: Compatibility.FULL,
       normalize: false
     };
 
     const serverConfigResponse: ServerConfig = {
-      compatibilityLevel: Compatibility.Full,
+      compatibilityLevel: Compatibility.FULL,
       normalize: false
     };
 

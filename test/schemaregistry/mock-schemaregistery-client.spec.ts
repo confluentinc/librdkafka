@@ -1,6 +1,6 @@
+import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 import { MockClient } from '../../schemaregistry/mock-schemaregistry-client';
 import { Compatibility, Metadata, SchemaInfo, SchemaMetadata } from '../../schemaregistry/schemaregistry-client';
-import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 
 const schemaString: string = JSON.stringify({
   type: 'record',
@@ -150,14 +150,14 @@ describe('MockClient-tests', () => {
   });
 
   it('Should update compatibility when calling updateCompatibility', async () => {
-    const response: Compatibility = await mockClient.updateCompatibility(testSubject, Compatibility.BackwardTransitive);
-    expect(response).toBe(Compatibility.BackwardTransitive);
+    const response: Compatibility = await mockClient.updateCompatibility(testSubject, Compatibility.BACKWARD_TRANSITIVE);
+    expect(response).toBe(Compatibility.BACKWARD_TRANSITIVE);
   });
 
   it('Should return compatibility when calling getCompatibility', async () => {
-    await mockClient.updateCompatibility(testSubject, Compatibility.BackwardTransitive);
+    await mockClient.updateCompatibility(testSubject, Compatibility.BACKWARD_TRANSITIVE);
     const response: Compatibility = await mockClient.getCompatibility(testSubject);
-    expect(response).toBe(Compatibility.BackwardTransitive);
+    expect(response).toBe(Compatibility.BACKWARD_TRANSITIVE);
   });
 
   it('Should throw error when getCompatibility is called with non-existing subject', async () => {
@@ -165,14 +165,14 @@ describe('MockClient-tests', () => {
   });
 
   it('Should update default compatibility when calling updateDefaultCompatibility', async () => {
-    const response: Compatibility = await mockClient.updateDefaultCompatibility(Compatibility.BackwardTransitive);
-    expect(response).toBe(Compatibility.BackwardTransitive);
+    const response: Compatibility = await mockClient.updateDefaultCompatibility(Compatibility.BACKWARD_TRANSITIVE);
+    expect(response).toBe(Compatibility.BACKWARD_TRANSITIVE);
   });
 
   it('Should return default compatibility when calling getDefaultCompatibility', async () => {
-    await mockClient.updateDefaultCompatibility(Compatibility.BackwardTransitive);
+    await mockClient.updateDefaultCompatibility(Compatibility.BACKWARD_TRANSITIVE);
     const response: Compatibility = await mockClient.getDefaultCompatibility();
-    expect(response).toBe(Compatibility.BackwardTransitive);
+    expect(response).toBe(Compatibility.BACKWARD_TRANSITIVE);
   });
 
   it('Should throw error when getDefaultCompatibility is called with non-existing default compatibility', async () => {

@@ -1,6 +1,7 @@
 
 import { Client, Compatibility, SchemaInfo, SchemaMetadata, ServerConfig } from './schemaregistry-client';
 import stringify from "json-stringify-deterministic";
+import {ClientConfig} from "./rest-service";
 
 interface VersionCacheEntry {
   version: number;
@@ -33,13 +34,15 @@ class Counter {
 const noSubject = "";
 
 class MockClient implements Client {
+  private clientConfig?: ClientConfig;
   private infoToSchemaCache: Map<string, MetadataCacheEntry>;
   private idToSchemaCache: Map<string, InfoCacheEntry>;
   private schemaToVersionCache: Map<string, VersionCacheEntry>;
   private configCache: Map<string, ServerConfig>;
   private counter: Counter;
 
-  constructor() {
+  constructor(config?: ClientConfig) {
+    this.clientConfig = config
     this.infoToSchemaCache = new Map();
     this.idToSchemaCache = new Map();
     this.schemaToVersionCache = new Map();
@@ -47,7 +50,11 @@ class MockClient implements Client {
     this.counter = new Counter();
   }
 
-  public async register(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
+  config(): ClientConfig {
+    return this.clientConfig!
+  }
+
+  async register(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const metadata = await this.registerFullResponse(subject, schema, normalize);
     if (!metadata) {
       throw new Error("Failed to register schema");
@@ -55,7 +62,7 @@ class MockClient implements Client {
     return metadata.id;
   }
 
-  public async registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
+  async registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, schema });
 
     const cacheEntry = this.infoToSchemaCache.get(cacheKey);
@@ -109,7 +116,7 @@ class MockClient implements Client {
     this.schemaToVersionCache.set(cacheKey, { version: newVersion, softDeleted: false });
   }
 
-  public async getBySubjectAndId(subject: string, id: number): Promise<SchemaInfo> {
+  async getBySubjectAndId(subject: string, id: number): Promise<SchemaInfo> {
     const cacheKey = stringify({ subject, id });
     const cacheEntry = this.idToSchemaCache.get(cacheKey);
 
@@ -119,7 +126,7 @@ class MockClient implements Client {
     return cacheEntry.info;
   }
 
-  public async getId(subject: string, schema: SchemaInfo): Promise<number> {
+  async getId(subject: string, schema: SchemaInfo): Promise<number> {
     const cacheKey = stringify({ subject, schema });
     const cacheEntry = this.infoToSchemaCache.get(cacheKey);
     if (!cacheEntry || cacheEntry.softDeleted) {
@@ -128,7 +135,7 @@ class MockClient implements Client {
     return cacheEntry.metadata.id;
   }
 
-  public async getLatestSchemaMetadata(subject: string): Promise<SchemaMetadata> {
+  async getLatestSchemaMetadata(subject: string): Promise<SchemaMetadata> {
     const version = await this.latestVersion(subject);
     if (version === -1) {
       throw new Error("No versions found for subject");
@@ -137,7 +144,7 @@ class MockClient implements Client {
     return this.getSchemaMetadata(subject, version);
   }
 
-  public async getSchemaMetadata(subject: string, version: number, deleted: boolean = false): Promise<SchemaMetadata> {
+  async getSchemaMetadata(subject: string, version: number, deleted: boolean = false): Promise<SchemaMetadata> {
     let json;
     for (const [key, value] of this.schemaToVersionCache.entries()) {
       const parsedKey = JSON.parse(key);
@@ -170,7 +177,7 @@ class MockClient implements Client {
     };
   }
 
-  public async getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean = false): Promise<SchemaMetadata> {
+  async getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean = false): Promise<SchemaMetadata> {
     let metadataStr = '';
 
     for (const key in metadata) {
@@ -214,7 +221,7 @@ class MockClient implements Client {
     return true;
   }
 
-  public async getAllVersions(subject: string): Promise<number[]> {
+  async getAllVersions(subject: string): Promise<number[]> {
     const results = await this.allVersions(subject);
 
     if (results.length === 0) {
@@ -267,7 +274,7 @@ class MockClient implements Client {
     }
   }
 
-  public async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
+  async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const cacheKey = stringify({ subject, schema });
     const cacheEntry = this.schemaToVersionCache.get(cacheKey);
 
@@ -278,7 +285,7 @@ class MockClient implements Client {
     return cacheEntry.version;
   }
 
-  public async getAllSubjects(): Promise<string[]> {
+  async getAllSubjects(): Promise<string[]> {
     const subjects: string[] = [];
     for (const [key, value] of this.schemaToVersionCache.entries()) {
       const parsedKey = JSON.parse(key);
@@ -289,7 +296,7 @@ class MockClient implements Client {
     return subjects.sort();
   }
 
-  public async deleteSubject(subject: string, permanent: boolean = false): Promise<number[]> {
+  async deleteSubject(subject: string, permanent: boolean = false): Promise<number[]> {
     const deletedVersions: number[] = [];
     for (const [key, value] of this.infoToSchemaCache.entries()) {
       const parsedKey = JSON.parse(key);
@@ -320,12 +327,12 @@ class MockClient implements Client {
     return deletedVersions;
   }
 
-  public async deleteSubjectVersion(subject: string, version: number, permanent: boolean = false): Promise<number> {
+  async deleteSubjectVersion(subject: string, version: number, permanent: boolean = false): Promise<number> {
     for (const [key, value] of this.schemaToVersionCache.entries()) {
       const parsedKey = JSON.parse(key);
       if (parsedKey.subject === subject && value.version === version) {
         await this.deleteVersion(key, version, permanent);
-        
+
         const cacheKeySchema = stringify({ subject, schema: parsedKey.schema });
         const cacheEntry = this.infoToSchemaCache.get(cacheKeySchema);
         if (cacheEntry) {
@@ -345,15 +352,15 @@ class MockClient implements Client {
     return version;
   }
 
-  public async testSubjectCompatibility(subject: string, schema: SchemaInfo): Promise<boolean> {
+  async testSubjectCompatibility(subject: string, schema: SchemaInfo): Promise<boolean> {
     throw new Error("Unsupported operation");
   }
 
-  public async testCompatibility(subject: string, version: number, schema: SchemaInfo): Promise<boolean> {
+  async testCompatibility(subject: string, version: number, schema: SchemaInfo): Promise<boolean> {
     throw new Error("Unsupported operation");
   }
 
-  public async getCompatibility(subject: string): Promise<Compatibility> {
+  async getCompatibility(subject: string): Promise<Compatibility> {
     const cacheEntry = this.configCache.get(subject);
     if (!cacheEntry) {
       throw new Error("Subject not found");
@@ -361,12 +368,12 @@ class MockClient implements Client {
     return cacheEntry.compatibilityLevel as Compatibility;
   }
 
-  public async updateCompatibility(subject: string, compatibility: Compatibility): Promise<Compatibility> {
+  async updateCompatibility(subject: string, compatibility: Compatibility): Promise<Compatibility> {
     this.configCache.set(subject, { compatibilityLevel: compatibility });
     return compatibility;
   }
 
-  public async getDefaultCompatibility(): Promise<Compatibility> {
+  async getDefaultCompatibility(): Promise<Compatibility> {
     const cacheEntry = this.configCache.get(noSubject);
     if (!cacheEntry) {
       throw new Error("Default compatibility not found");
@@ -374,12 +381,12 @@ class MockClient implements Client {
     return cacheEntry.compatibilityLevel as Compatibility;
   }
 
-  public async updateDefaultCompatibility(compatibility: Compatibility): Promise<Compatibility> {
+  async updateDefaultCompatibility(compatibility: Compatibility): Promise<Compatibility> {
     this.configCache.set(noSubject, { compatibilityLevel: compatibility });
     return compatibility;
   }
 
-  public async getConfig(subject: string): Promise<ServerConfig> {
+  async getConfig(subject: string): Promise<ServerConfig> {
     const cacheEntry = this.configCache.get(subject);
     if (!cacheEntry) {
       throw new Error("Subject not found");
@@ -387,12 +394,12 @@ class MockClient implements Client {
     return cacheEntry;
   }
 
-  public async updateConfig(subject: string, config: ServerConfig): Promise<ServerConfig> {
+  async updateConfig(subject: string, config: ServerConfig): Promise<ServerConfig> {
     this.configCache.set(subject, config);
     return config;
   }
 
-  public async getDefaultConfig(): Promise<ServerConfig> {
+  async getDefaultConfig(): Promise<ServerConfig> {
     const cacheEntry = this.configCache.get(noSubject);
     if (!cacheEntry) {
       throw new Error("Default config not found");
@@ -400,12 +407,12 @@ class MockClient implements Client {
     return cacheEntry;
   }
 
-  public async updateDefaultConfig(config: ServerConfig): Promise<ServerConfig> {
+  async updateDefaultConfig(config: ServerConfig): Promise<ServerConfig> {
     this.configCache.set(noSubject, config);
     return config;
   }
 
-  public async close(): Promise<void> {
+  async close(): Promise<void> {
     return;
   }
 

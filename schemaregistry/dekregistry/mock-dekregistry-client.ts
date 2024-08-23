@@ -11,8 +11,8 @@ class MockDekRegistryClient implements Client {
     this.dekCache = new Map<string, Dek>();
   }
 
-  public async registerKek(name: string, kmsType: string, kmsKeyId: string,
-    kmsProps: { [key: string]: string }, doc: string, shared: boolean): Promise<Kek> {
+  async registerKek(name: string, kmsType: string, kmsKeyId: string, shared: boolean,
+    kmsProps?: { [key: string]: string }, doc?: string): Promise<Kek> {
     const cacheKey = stringify({ name, deleted: false });
     const cachedKek = this.kekCache.get(cacheKey);
     if (cachedKek) {
@@ -23,8 +23,8 @@ class MockDekRegistryClient implements Client {
       name,
       kmsType,
       kmsKeyId,
-      kmsProps,
-      doc,
+      ...kmsProps && { kmsProps },
+      ...doc && { doc },
       shared
     };
 
@@ -32,7 +32,7 @@ class MockDekRegistryClient implements Client {
     return kek;
   }
 
-  public async getKek(name: string, deleted: boolean = false): Promise<Kek> {
+  async getKek(name: string, deleted: boolean = false): Promise<Kek> {
     const cacheKey = stringify({ name, deleted });
     const cachedKek = this.kekCache.get(cacheKey);
     if (cachedKek && (!cachedKek.deleted || deleted)) {
@@ -42,8 +42,8 @@ class MockDekRegistryClient implements Client {
     throw new Error(`Kek not found: ${name}`);
   }
 
-  public async registerDek(kekName: string, subject: string,
-    algorithm: string, encryptedKeyMaterial: string, version: number): Promise<Dek> {
+  async registerDek(kekName: string, subject: string, algorithm: string,
+    version: number = 1, encryptedKeyMaterial?: string): Promise<Dek> {
     const cacheKey = stringify({ kekName, subject, version, algorithm, deleted: false });
     const cachedDek = this.dekCache.get(cacheKey);
     if (cachedDek) {
@@ -54,7 +54,7 @@ class MockDekRegistryClient implements Client {
       kekName,
       subject,
       algorithm,
-      encryptedKeyMaterial,
+      ...encryptedKeyMaterial && { encryptedKeyMaterial },
       version,
       ts: MOCK_TS
     };
@@ -63,13 +63,13 @@ class MockDekRegistryClient implements Client {
     return dek;
   }
 
-  public async getDek(kekName: string, subject: string,
+  async getDek(kekName: string, subject: string,
     algorithm: string, version: number = 1, deleted: boolean = false): Promise<Dek> {
     if (version === -1) {
       let latestVersion = 0;
       for (let key of this.dekCache.keys()) {
         const parsedKey = JSON.parse(key);
-        if (parsedKey.kekName === kekName && parsedKey.subject === subject 
+        if (parsedKey.kekName === kekName && parsedKey.subject === subject
           && parsedKey.algorithm === algorithm && parsedKey.deleted === deleted) {
           latestVersion = Math.max(latestVersion, parsedKey.version);
         }
@@ -89,7 +89,7 @@ class MockDekRegistryClient implements Client {
     throw new Error(`Dek not found: ${subject}`);
   }
 
-  public async close() {
+  async close() {
     return;
   }
 }

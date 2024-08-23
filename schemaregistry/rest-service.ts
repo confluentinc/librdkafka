@@ -10,19 +10,19 @@ import { RestError } from './rest-error';
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
-export type ClientConfig = {
-  createAxiosDefaults: CreateAxiosDefaults,
+export interface ClientConfig {
   baseURLs: string[],
   cacheCapacity: number,
   cacheLatestTtlSecs?: number,
   isForward?: boolean
+  createAxiosDefaults?: CreateAxiosDefaults,
 }
 
 export class RestService {
   private client: AxiosInstance;
   private baseURLs: string[];
 
-  constructor(axiosDefaults: CreateAxiosDefaults, baseURLs: string[], isForward?: boolean) {
+  constructor(baseURLs: string[], isForward?: boolean, axiosDefaults?: CreateAxiosDefaults) {
     this.client = axios.create(axiosDefaults);
     this.baseURLs = baseURLs;
 
@@ -31,7 +31,7 @@ export class RestService {
     }
   }
 
-  public async handleRequest<T>(
+  async handleRequest<T>(
     url: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     data?: any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -66,11 +66,11 @@ export class RestService {
     throw new Error('Internal HTTP retry error'); // Should never reach here
   }
 
-  public setHeaders(headers: Record<string, string>): void {
+  setHeaders(headers: Record<string, string>): void {
     this.client.defaults.headers.common = { ...this.client.defaults.headers.common, ...headers }
   }
 
-  public setAuth(basicAuth?: string, bearerToken?: string): void {
+  setAuth(basicAuth?: string, bearerToken?: string): void {
     if (basicAuth) {
       this.client.defaults.headers.common['Authorization'] = `Basic ${basicAuth}`
     }
@@ -80,11 +80,11 @@ export class RestService {
     }
   }
 
-  public setTimeout(timeout: number): void {
+  setTimeout(timeout: number): void {
     this.client.defaults.timeout = timeout
   }
 
-  public setBaseURL(baseUrl: string): void {
+  setBaseURL(baseUrl: string): void {
     this.client.defaults.baseURL = baseUrl
   }
 }

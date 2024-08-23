@@ -2,7 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "lib": [
-      "es2021"
+      "es2021", "dom"
     ],
     "module": "commonjs",
     "target": "es2021",

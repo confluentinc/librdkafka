@@ -13,59 +13,76 @@ import { Mutex } from 'async-mutex';
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
-enum Compatibility {
-  None = "NONE",
-  Backward = "BACKWARD",
-  Forward = "FORWARD",
-  Full = "FULL",
-  BackwardTransitive = "BACKWARD_TRANSITIVE",
-  ForwardTransitive = "FORWARD_TRANSITIVE",
-  FullTransitive = "FULL_TRANSITIVE"
+export enum Compatibility {
+  NONE = "NONE",
+  BACKWARD = "BACKWARD",
+  FORWARD = "FORWARD",
+  FULL = "FULL",
+  BACKWARD_TRANSITIVE = "BACKWARD_TRANSITIVE",
+  FORWARD_TRANSITIVE = "FORWARD_TRANSITIVE",
+  FULL_TRANSITIVE = "FULL_TRANSITIVE"
 }
 
-interface CompatibilityLevel {
+export interface CompatibilityLevel {
   compatibility?: Compatibility;
   compatibilityLevel?: Compatibility;
 }
 
-interface Rule {
-  name: string;
-  subject: string;
-  version: number;
+export interface Rule {
+  name: string
+  doc?: string
+  kind?: string
+  mode?: RuleMode
+  type: string
+  tags?: Set<string>
+  params?: { [key: string]: string }
+  expr?: string
+  onSuccess?: string
+  onFailure?: string
+  disabled?: boolean
 }
 
-interface SchemaInfo {
-  schema?: string;
+export enum RuleMode {
+  UPGRADE = 'UPGRADE',
+  DOWNGRADE = 'DOWNGRADE',
+  UPDOWN = 'UPDOWN',
+  WRITE = 'WRITE',
+  READ = 'READ',
+  WRITEREAD = 'WRITEREAD',
+}
+
+export interface SchemaInfo {
+  schema: string;
   schemaType?: string;
   references?: Reference[];
   metadata?: Metadata;
   ruleSet?: RuleSet;
 }
 
-interface SchemaMetadata extends SchemaInfo {
+export interface SchemaMetadata extends SchemaInfo {
   id: number;
   subject?: string;
   version?: number;
 }
 
-interface Reference {
-  Name: string;
-  Subject: string;
-  Version: number;
+export interface Reference {
+  name: string;
+  subject: string;
+  version: number;
 }
 
-interface Metadata {
-  tags?: { [key: string]: string[] };
+export interface Metadata {
+  tags?: { [key: string]: Set<string> };
   properties?: { [key: string]: string };
-  sensitive?: string[];
+  sensitive?: Set<string>;
 }
 
-interface RuleSet {
-  migrationRules: Rule[];
-  compatibilityRules: Rule[];
+export interface RuleSet {
+  migrationRules?: Rule[];
+  domainRules?: Rule[];
 }
 
-interface ServerConfig {
+export interface ServerConfig {
   alias?: string;
   normalize?: boolean;
   compatibility?: Compatibility;
@@ -77,11 +94,12 @@ interface ServerConfig {
   overrideRuleSet?: RuleSet;
 }
 
-interface isCompatibleResponse {
+export interface isCompatibleResponse {
   is_compatible: boolean;
 }
 
-interface Client {
+export interface Client {
+  config(): ClientConfig;
   register(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
   registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean): Promise<SchemaMetadata>;
   getBySubjectAndId(subject: string, id: number): Promise<SchemaInfo>;
@@ -107,7 +125,8 @@ interface Client {
   close(): void;
 }
 
-class SchemaRegistryClient implements Client {
+export class SchemaRegistryClient implements Client {
+  private clientConfig: ClientConfig;
   private restService: RestService;
 
   private schemaToIdCache: LRUCache<string, number>;
@@ -127,12 +146,13 @@ class SchemaRegistryClient implements Client {
   private metadataToSchemaMutex: Mutex;
 
   constructor(config: ClientConfig) {
+    this.clientConfig = config
     const cacheOptions = {
       max: config.cacheCapacity,
       ...(config.cacheLatestTtlSecs !== undefined && { maxAge: config.cacheLatestTtlSecs * 1000 })
     };
 
-    this.restService = new RestService(config.createAxiosDefaults, config.baseURLs, config.isForward);  
+    this.restService = new RestService(config.baseURLs, config.isForward, config.createAxiosDefaults);
 
     this.schemaToIdCache = new LRUCache(cacheOptions);
     this.idToSchemaInfoCache = new LRUCache(cacheOptions);
@@ -150,13 +170,17 @@ class SchemaRegistryClient implements Client {
     this.metadataToSchemaMutex = new Mutex();
   }
 
-  public async register(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
+  config(): ClientConfig {
+    return this.clientConfig
+  }
+
+  async register(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const metadataResult = await this.registerFullResponse(subject, schema, normalize);
 
     return metadataResult.id;
   }
 
-  public async registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
+  async registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, schema });
 
     return await this.infoToSchemaMutex.runExclusive(async () => {
@@ -177,7 +201,7 @@ class SchemaRegistryClient implements Client {
     });
   }
 
-  public async getBySubjectAndId(subject: string, id: number): Promise<SchemaInfo> {
+  async getBySubjectAndId(subject: string, id: number): Promise<SchemaInfo> {
     const cacheKey = stringify({ subject, id });
     return await this.idToSchemaInfoMutex.runExclusive(async () => {
       const cachedSchema: SchemaInfo | undefined = this.idToSchemaInfoCache.get(cacheKey);
@@ -196,7 +220,7 @@ class SchemaRegistryClient implements Client {
     });
   }
 
-  public async getId(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
+  async getId(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const cacheKey = stringify({ subject, schema });
 
     return await this.schemaToIdMutex.runExclusive(async () => {
@@ -217,7 +241,7 @@ class SchemaRegistryClient implements Client {
     });
   }
 
-  public async getLatestSchemaMetadata(subject: string): Promise<SchemaMetadata> {
+  async getLatestSchemaMetadata(subject: string): Promise<SchemaMetadata> {
     return await this.latestToSchemaMutex.runExclusive(async () => {
       const cachedSchema: SchemaMetadata | undefined = this.latestToSchemaCache.get(subject);
       if (cachedSchema) {
@@ -235,7 +259,7 @@ class SchemaRegistryClient implements Client {
     });
   }
 
-  public async getSchemaMetadata(subject: string, version: number, deleted: boolean = false): Promise<SchemaMetadata> {
+  async getSchemaMetadata(subject: string, version: number, deleted: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, version, deleted });
 
     return await this.versionToSchemaMutex.runExclusive(async () => {
@@ -255,7 +279,7 @@ class SchemaRegistryClient implements Client {
     });
   }
 
-  public async getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean = false): Promise<SchemaMetadata> {
+  async getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, metadata, deleted });
 
     return await this.metadataToSchemaMutex.runExclusive(async () => {
@@ -284,7 +308,7 @@ class SchemaRegistryClient implements Client {
   }
 
 
-  public async getAllVersions(subject: string): Promise<number[]> {
+  async getAllVersions(subject: string): Promise<number[]> {
     const response: AxiosResponse<number[]> = await this.restService.handleRequest(
       `/subjects/${subject}/versions`,
       'GET'
@@ -292,7 +316,7 @@ class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  public async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
+  async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const cacheKey = stringify({ subject, schema });
 
     return await this.schemaToVersionMutex.runExclusive(async () => {
@@ -313,7 +337,7 @@ class SchemaRegistryClient implements Client {
     });
   }
 
-  public async getAllSubjects(): Promise<string[]> {
+  async getAllSubjects(): Promise<string[]> {
     const response: AxiosResponse<string[]> = await this.restService.handleRequest(
       `/subjects`,
       'GET'
@@ -321,7 +345,7 @@ class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  public async deleteSubject(subject: string, permanent: boolean = false): Promise<number[]> {
+  async deleteSubject(subject: string, permanent: boolean = false): Promise<number[]> {
     await this.infoToSchemaMutex.runExclusive(async () => {
       this.infoToSchemaCache.forEach((_, key) => {
         const parsedKey = JSON.parse(key);
@@ -367,7 +391,7 @@ class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  public async deleteSubjectVersion(subject: string, version: number, permanent: boolean = false): Promise<number> {
+  async deleteSubjectVersion(subject: string, version: number, permanent: boolean = false): Promise<number> {
     return await this.schemaToVersionMutex.runExclusive(async () => {
       let metadataValue: SchemaMetadata | undefined;
 
@@ -406,7 +430,7 @@ class SchemaRegistryClient implements Client {
     });
   }
 
-  public async testSubjectCompatibility(subject: string, schema: SchemaInfo): Promise<boolean> {
+  async testSubjectCompatibility(subject: string, schema: SchemaInfo): Promise<boolean> {
     subject = encodeURIComponent(subject);
 
     const response: AxiosResponse<isCompatibleResponse> = await this.restService.handleRequest(
@@ -417,7 +441,7 @@ class SchemaRegistryClient implements Client {
     return response.data.is_compatible;
   }
 
-  public async testCompatibility(subject: string, version: number, schema: SchemaInfo): Promise<boolean> {
+  async testCompatibility(subject: string, version: number, schema: SchemaInfo): Promise<boolean> {
     subject = encodeURIComponent(subject);
 
     const response: AxiosResponse<isCompatibleResponse> = await this.restService.handleRequest(
@@ -428,7 +452,7 @@ class SchemaRegistryClient implements Client {
     return response.data.is_compatible;
   }
 
-  public async getCompatibility(subject: string): Promise<Compatibility> {
+  async getCompatibility(subject: string): Promise<Compatibility> {
     subject = encodeURIComponent(subject);
 
     const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
@@ -438,7 +462,7 @@ class SchemaRegistryClient implements Client {
     return response.data.compatibilityLevel!;
   }
 
-  public async updateCompatibility(subject: string, update: Compatibility): Promise<Compatibility> {
+  async updateCompatibility(subject: string, update: Compatibility): Promise<Compatibility> {
     subject = encodeURIComponent(subject);
 
     const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
@@ -449,7 +473,7 @@ class SchemaRegistryClient implements Client {
     return response.data.compatibility!;
   }
 
-  public async getDefaultCompatibility(): Promise<Compatibility> {
+  async getDefaultCompatibility(): Promise<Compatibility> {
     const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
       `/config`,
       'GET'
@@ -457,7 +481,7 @@ class SchemaRegistryClient implements Client {
     return response.data.compatibilityLevel!;
   }
 
-  public async updateDefaultCompatibility(update: Compatibility): Promise<Compatibility> {
+  async updateDefaultCompatibility(update: Compatibility): Promise<Compatibility> {
     const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
       `/config`,
       'PUT',
@@ -466,7 +490,7 @@ class SchemaRegistryClient implements Client {
     return response.data.compatibility!;
   }
 
-  public async getConfig(subject: string): Promise<ServerConfig> {
+  async getConfig(subject: string): Promise<ServerConfig> {
     subject = encodeURIComponent(subject);
 
     const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
@@ -476,7 +500,7 @@ class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  public async updateConfig(subject: string, update: ServerConfig): Promise<ServerConfig> {
+  async updateConfig(subject: string, update: ServerConfig): Promise<ServerConfig> {
     const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
       `/config/${subject}`,
       'PUT',
@@ -485,7 +509,7 @@ class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  public async getDefaultConfig(): Promise<ServerConfig> {
+  async getDefaultConfig(): Promise<ServerConfig> {
     const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
       `/config`,
       'GET'
@@ -493,7 +517,7 @@ class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  public async updateDefaultConfig(update: ServerConfig): Promise<ServerConfig> {
+  async updateDefaultConfig(update: ServerConfig): Promise<ServerConfig> {
     const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
       `/config`,
       'PUT',
@@ -502,7 +526,7 @@ class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  public close(): void {
+  close(): void {
     this.infoToSchemaCache.clear();
     this.schemaToVersionCache.clear();
     this.versionToSchemaCache.clear();
@@ -512,61 +536,55 @@ class SchemaRegistryClient implements Client {
   }
 
   // Cache methods for testing
-  public async addToInfoToSchemaCache(subject: string, schema: SchemaInfo, metadata: SchemaMetadata): Promise<void> {
+  async addToInfoToSchemaCache(subject: string, schema: SchemaInfo, metadata: SchemaMetadata): Promise<void> {
     const cacheKey = stringify({ subject, schema });
     await this.infoToSchemaMutex.runExclusive(async () => {
       this.infoToSchemaCache.set(cacheKey, metadata);
     });
   }
 
-  public async addToSchemaToVersionCache(subject: string, schema: SchemaInfo, version: number): Promise<void> {
+  async addToSchemaToVersionCache(subject: string, schema: SchemaInfo, version: number): Promise<void> {
     const cacheKey = stringify({ subject, schema });
     await this.schemaToVersionMutex.runExclusive(async () => {
       this.schemaToVersionCache.set(cacheKey, version);
     });
   }
 
-  public async addToVersionToSchemaCache(subject: string, version: number, metadata: SchemaMetadata): Promise<void> {
+  async addToVersionToSchemaCache(subject: string, version: number, metadata: SchemaMetadata): Promise<void> {
     const cacheKey = stringify({ subject, version });
     await this.versionToSchemaMutex.runExclusive(async () => {
       this.versionToSchemaCache.set(cacheKey, metadata);
     });
   }
 
-  public async addToIdToSchemaInfoCache(subject: string, id: number, schema: SchemaInfo): Promise<void> {
+  async addToIdToSchemaInfoCache(subject: string, id: number, schema: SchemaInfo): Promise<void> {
     const cacheKey = stringify({ subject, id });
     await this.idToSchemaInfoMutex.runExclusive(async () => {
       this.idToSchemaInfoCache.set(cacheKey, schema);
     });
   }
 
-  public async getInfoToSchemaCacheSize(): Promise<number> {
+  async getInfoToSchemaCacheSize(): Promise<number> {
     return await this.infoToSchemaMutex.runExclusive(async () => {
       return this.infoToSchemaCache.size;
     });
   }
 
-  public async getSchemaToVersionCacheSize(): Promise<number> {
+  async getSchemaToVersionCacheSize(): Promise<number> {
     return await this.schemaToVersionMutex.runExclusive(async () => {
       return this.schemaToVersionCache.size;
     });
   }
 
-  public async getVersionToSchemaCacheSize(): Promise<number> {
+  async getVersionToSchemaCacheSize(): Promise<number> {
     return await this.versionToSchemaMutex.runExclusive(async () => {
       return this.versionToSchemaCache.size;
     });
   }
 
-  public async getIdToSchemaInfoCacheSize(): Promise<number> {
+  async getIdToSchemaInfoCacheSize(): Promise<number> {
     return await this.idToSchemaInfoMutex.runExclusive(async () => {
       return this.idToSchemaInfoCache.size;
     });
   }
-
 }
-
-export {
-  Client, SchemaRegistryClient, SchemaInfo, Metadata, Compatibility,
-  CompatibilityLevel, ServerConfig, RuleSet, Rule, Reference, SchemaMetadata
-};

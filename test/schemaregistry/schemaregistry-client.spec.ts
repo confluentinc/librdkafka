@@ -79,7 +79,7 @@ const versions: number[] = [1, 2, 3];
 describe('SchemaRegistryClient-Register', () => {
 
   beforeEach(() => {
-    restService = new RestService(mockClientConfig.createAxiosDefaults, mockClientConfig.baseURLs) as jest.Mocked<RestService>;
+    restService = new RestService(mockClientConfig.baseURLs) as jest.Mocked<RestService>;
     client = new SchemaRegistryClient(mockClientConfig);
     (client as any).restService = restService;
   });
@@ -176,7 +176,7 @@ describe('SchemaRegistryClient-Register', () => {
 
 describe('SchemaRegistryClient-Get-ID', () => {
   beforeEach(() => {
-    restService = new RestService(mockClientConfig.createAxiosDefaults, mockClientConfig.baseURLs) as jest.Mocked<RestService>;
+    restService = new RestService(mockClientConfig.baseURLs) as jest.Mocked<RestService>;
     client = new SchemaRegistryClient(mockClientConfig);
     (client as any).restService = restService;
   });
@@ -269,7 +269,7 @@ describe('SchemaRegistryClient-Get-ID', () => {
 
 describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
   beforeEach(() => {
-    restService = new RestService(mockClientConfig.createAxiosDefaults, mockClientConfig.baseURLs) as jest.Mocked<RestService>;
+    restService = new RestService(mockClientConfig.baseURLs) as jest.Mocked<RestService>;
     client = new SchemaRegistryClient(mockClientConfig);
     (client as any).restService = restService;
   });
@@ -382,7 +382,7 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
 
 describe('SchemaRegistryClient-Subjects', () => {
   beforeEach(() => {
-    restService = new RestService(mockClientConfig.createAxiosDefaults, mockClientConfig.baseURLs) as jest.Mocked<RestService>;
+    restService = new RestService(mockClientConfig.baseURLs) as jest.Mocked<RestService>;
     client = new SchemaRegistryClient(mockClientConfig);
     (client as any).restService = restService;
   });
@@ -505,7 +505,7 @@ describe('SchemaRegistryClient-Subjects', () => {
 
 describe('SchemaRegistryClient-Compatibility', () => {
   beforeEach(() => {
-    restService = new RestService(mockClientConfig.createAxiosDefaults, mockClientConfig.baseURLs) as jest.Mocked<RestService>;
+    restService = new RestService(mockClientConfig.baseURLs) as jest.Mocked<RestService>;
     client = new SchemaRegistryClient(mockClientConfig);
     (client as any).restService = restService;
   });
@@ -525,9 +525,9 @@ describe('SchemaRegistryClient-Compatibility', () => {
   it('Should update compatibility level when updateCompatibility is called', async () => {
     restService.handleRequest.mockResolvedValue({ data: { compatibility: 'BACKWARD' } } as AxiosResponse);
 
-    const response: Compatibility = await client.updateCompatibility(mockSubject, Compatibility.Backward);
+    const response: Compatibility = await client.updateCompatibility(mockSubject, Compatibility.BACKWARD);
 
-    expect(response).toEqual(Compatibility.Backward);
+    expect(response).toEqual(Compatibility.BACKWARD);
     expect(restService.handleRequest).toHaveBeenCalledTimes(1);
   });
 
@@ -536,23 +536,23 @@ describe('SchemaRegistryClient-Compatibility', () => {
 
     const response: Compatibility = await client.getDefaultCompatibility();
 
-    expect(response).toEqual(Compatibility.Backward);
+    expect(response).toEqual(Compatibility.BACKWARD);
     expect(restService.handleRequest).toHaveBeenCalledTimes(1);
   });
 
   it('Should update default compatibility level when updateDefaultCompatibility is called', async () => {
     restService.handleRequest.mockResolvedValue({ data: { compatibility: 'BACKWARD' } } as AxiosResponse);
 
-    const response: Compatibility = await client.updateDefaultCompatibility(Compatibility.Backward);
+    const response: Compatibility = await client.updateDefaultCompatibility(Compatibility.BACKWARD);
 
-    expect(response).toEqual(Compatibility.Backward);
+    expect(response).toEqual(Compatibility.BACKWARD);
     expect(restService.handleRequest).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('SchemaRegistryClient-Config', () => {
   beforeEach(() => {
-    restService = new RestService(mockClientConfig.createAxiosDefaults, mockClientConfig.baseURLs) as jest.Mocked<RestService>;
+    restService = new RestService(mockClientConfig.baseURLs) as jest.Mocked<RestService>;
     client = new SchemaRegistryClient(mockClientConfig);
     (client as any).restService = restService;
   });
@@ -577,7 +577,7 @@ describe('SchemaRegistryClient-Config', () => {
 
   it('Should update config when updateConfig is called', async () => {
     const request = {
-      compatibility: Compatibility.Backward,
+      compatibility: Compatibility.BACKWARD,
       alias: 'test-config',
       normalize: true,
     };
@@ -612,7 +612,7 @@ describe('SchemaRegistryClient-Config', () => {
 
   it('Should update default config when updateDefaultConfig is called', async () => {
     const request = {
-      compatibility: Compatibility.Backward,
+      compatibility: Compatibility.BACKWARD,
       alias: 'test-config',
       normalize: true,
     };

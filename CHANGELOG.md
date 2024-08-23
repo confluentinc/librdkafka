@@ -1,3 +1,10 @@
+# librdkafka v2.5.1
+
+librdkafka v2.5.1 is a feature release.
+
+* Fix an assert being triggered when no metrics matched on the client side during send push telemetry call.
+
+
 # librdkafka v2.5.0
 
 librdkafka v2.5.0 is a feature release.

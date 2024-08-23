@@ -343,20 +343,25 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                          rd_bool_t terminating) {
 
         rd_buf_t *metrics_payload = rd_kafka_telemetry_encode_metrics(rk);
-        size_t compressed_metrics_payload_size = 0;
-        void *compressed_metrics_payload       = NULL;
-        rd_kafka_compression_t compression_used =
-            rd_kafka_push_telemetry_payload_compress(
-                rk, rkb, metrics_payload, &compressed_metrics_payload,
-                &compressed_metrics_payload_size);
-        if (compressed_metrics_payload_size >
-            (size_t)rk->rk_telemetry.telemetry_max_bytes) {
-                rd_kafka_log(rk, LOG_WARNING, "TELEMETRY",
-                             "Metrics payload size %" PRIusz
-                             " exceeds telemetry_max_bytes %" PRId32
-                             "specified by the broker.",
-                             compressed_metrics_payload_size,
-                             rk->rk_telemetry.telemetry_max_bytes);
+        size_t compressed_metrics_payload_size  = 0;
+        void *compressed_metrics_payload        = NULL;
+        rd_kafka_compression_t compression_used = RD_KAFKA_COMPRESSION_NONE;
+        if (metrics_payload) {
+                compression_used = rd_kafka_push_telemetry_payload_compress(
+                    rk, rkb, metrics_payload, &compressed_metrics_payload,
+                    &compressed_metrics_payload_size);
+                if (compressed_metrics_payload_size >
+                    (size_t)rk->rk_telemetry.telemetry_max_bytes) {
+                        rd_kafka_log(rk, LOG_WARNING, "TELEMETRY",
+                                     "Metrics payload size %" PRIusz
+                                     " exceeds telemetry_max_bytes %" PRId32
+                                     "specified by the broker.",
+                                     compressed_metrics_payload_size,
+                                     rk->rk_telemetry.telemetry_max_bytes);
+                }
+        } else {
+                rd_kafka_dbg(rk, TELEMETRY, "PUSH",
+                             "No metrics to push. Sending empty payload.");
         }
 
         rd_kafka_dbg(rk, TELEMETRY, "PUSH",
@@ -369,7 +374,8 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
             0, RD_KAFKA_REPLYQ(rk->rk_ops, 0), rd_kafka_handle_PushTelemetry,
             NULL);
 
-        rd_buf_destroy_free(metrics_payload);
+        if (metrics_payload)
+                rd_buf_destroy_free(metrics_payload);
         if (compression_used != RD_KAFKA_COMPRESSION_NONE)
                 rd_free(compressed_metrics_payload);
 

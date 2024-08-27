@@ -9072,8 +9072,8 @@ const rd_kafka_topic_partition_list_t *rd_kafka_Member_target_assignment_partiti
  *      as the lifetime of the \p partition object.
  */
 
-rd_kafka_Uuid_t rd_kafka_Member_partition_topic_id(
-    const rd_kafka_topic_partition_t *partition);
+const char *rd_kafka_Member_partition_topic_id(
+    const rd_kafka_topic_partition_t partition);
 
 /**
  * @brief Gets group id of \p grpdesc group.
@@ -9218,6 +9218,11 @@ rd_kafka_ConsumerGroupDescribeResponseData_authorized_operations(
 
 rd_kafka_error_t *rd_kafka_ConsumerGroupDescribeResponseData_error(
     const rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc);
+
+const rd_kafka_ConsumerGroupDescribeResponseData_t **
+rd_kafka_ConsumerGroupDescribe_result_groups(
+    const rd_kafka_ConsumerGroupDescribe_result_t *result,
+    size_t *cntp);
 
 /**@}*/
 

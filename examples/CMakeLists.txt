@@ -62,6 +62,9 @@ target_link_libraries(describe_cluster PUBLIC rdkafka)
 add_executable(list_offsets list_offsets.c ${win32_sources})
 target_link_libraries(list_offsets PUBLIC rdkafka)
 
+add_executable(consumer_group_describe consumer_group_describe.c ${win32_sources})
+target_link_libraries(consumer_group_describe PUBLIC rdkafka)
+
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)
     add_executable(rdkafka_example rdkafka_example.c)

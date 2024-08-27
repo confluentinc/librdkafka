@@ -8412,7 +8412,7 @@ static rd_kafka_Member_t *rd_kafka_Member_copy(const rd_kafka_Member_t *src) {
         return rd_kafka_Member_new(
             src->member_id, src->instance_id, src->rack_id, src->member_epoch,
             src->client_id, src->client_host, src->subscribed_topic_names,
-            src->subscribed_topic_regex, &src->assignment, &src->target_assignment);
+            src->subscribed_topic_regex, src->assignment.partitions, src->target_assignment.partitions);
 }
 
 /**
@@ -8504,9 +8504,11 @@ const rd_kafka_topic_partition_list_t *rd_kafka_Member_target_assignment_partiti
         return target_assignment->partitions;
 }
 
-rd_kafka_Uuid_t rd_kafka_Member_partition_topic_id(
-    const rd_kafka_topic_partition_t *partition) {
-        return rd_kafka_topic_partition_get_topic_id(partition);
+const char *rd_kafka_Member_partition_topic_id(
+    const rd_kafka_topic_partition_t partition) {
+        rd_kafka_Uuid_t topic_id =
+             rd_kafka_topic_partition_get_topic_id(&partition);
+        return rd_kafka_Uuid_base64str(&topic_id);
 }
 
 /**
@@ -8538,8 +8540,6 @@ rd_kafka_ConsumerGroupDescribeResponseData_new(
     const rd_kafka_AclOperation_t *authorized_operations,
     rd_kafka_error_t *error) {
         rd_kafka_ConsumerGroupDescribeResponseData_t *grpdesc;
-        int i;
-
         grpdesc = rd_calloc(1, sizeof(*grpdesc));
         grpdesc->group_id = rd_strdup(group_id);
         grpdesc->state = state;
@@ -8686,12 +8686,13 @@ static void rd_kafka_ConsumerGroupDescribe_response_merge(
                     rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
             rd_assert(groupres);
             rd_assert(!strcmp(groupres->group_id, grp));
-            newgroupres = rd_kafka_ConsumerGroupDescription_copy(groupres);
+            newgroupres = rd_kafka_ConsumerGroupDescribeResponseData_copy(groupres);
         } else {
             /* Op errored, e.g. timeout */
-            rd_kafka_error_t *error =
-                rd_kafka_error_new(rko_partial->rko_err,
-                            rd_kafka_err2str(rko_partial->rko_err));
+            rd_kafka_error_t *error = rd_kafka_error_new(
+                rko_partial->rko_err,
+                "%s", rd_kafka_err2str(rko_partial->rko_err)
+        );
             newgroupres =
                 rd_kafka_ConsumerGroupDescribeResponseData_new_error(grp, error);
             rd_kafka_error_destroy(error);
@@ -8729,6 +8730,7 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
         int32_t group_epoch, assignment_epoch;
         rd_kafka_AclOperation_t *operations = NULL;
         int operation_cnt = -1;
+        printf("rd_kafka_ConsumerGroupDescribeResponseParse\n");
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         rd_kafka_buf_read_throttle_time(reply);
@@ -8773,7 +8775,6 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
                 char *member_id, *instance_id, *rack_id,
                     *client_id, *client_host, *subscribed_topic_names,
                     *subscribed_topic_regex = NULL;
-                rd_kafkap_bytes_t Assignment, TargetAssignment;
                 rd_kafka_Member_t *member;
                 rd_kafka_topic_partition_list_t *assignment = NULL, *target_assignment = NULL;
 
@@ -8853,6 +8854,7 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
             operations = NULL;
         }
         *rko_resultp = rko_result;
+        printf("rd_kafka_ConsumerGroupDescribeResponseParse end\n");
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:
         if(group_id)

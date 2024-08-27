@@ -22,3 +22,4 @@ alter_consumer_group_offsets
 incremental_alter_configs
 user_scram
 list_offsets
+consumer_group_describe

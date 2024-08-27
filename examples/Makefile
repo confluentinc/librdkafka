@@ -13,6 +13,7 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	incremental_alter_configs \
 	user_scram \
 	list_offsets \
+	consumer_group_describe \
 	misc
 
 all: $(EXAMPLES)
@@ -150,6 +151,10 @@ user_scram: ../src/librdkafka.a user_scram.c
 		../src/librdkafka.a $(LIBS)
 
 list_offsets: ../src/librdkafka.a list_offsets.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+consumer_group_describe: ../src/librdkafka.a consumer_group_describe.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

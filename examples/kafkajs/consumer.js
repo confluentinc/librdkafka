@@ -1,5 +1,5 @@
 // require('kafkajs') is replaced with require('@confluentinc/kafka-javascript').KafkaJS.
-const { Kafka } = require('@confluentinc/kafka-javascript').KafkaJS;
+const { Kafka, ErrorCodes } = require('@confluentinc/kafka-javascript').KafkaJS;
 
 async function consumerStart() {
   let consumer;
@@ -22,22 +22,17 @@ async function consumerStart() {
     kafkaJS: {
       groupId: 'test-group',
       autoCommit: false,
-      rebalanceListener: {
-        onPartitionsAssigned: async (assignment) => {
-          console.log(`Assigned partitions ${JSON.stringify(assignment)}`);
-        },
-        onPartitionsRevoked: async (assignment) => {
-          console.log(`Revoked partitions ${JSON.stringify(assignment)}`);
-          if (!stopped) {
-            await consumer.commitOffsets().catch((e) => {
-              console.error(`Failed to commit ${e}`);
-            })
-          }
-        }
-      },
     },
-
     /* Properties from librdkafka can also be used */
+    rebalance_cb: (err, assignment) => {
+      if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
+        console.log(`Assigned partitions ${JSON.stringify(assignment)}`);
+      } else if (err.code === ErrorCodes.ERR__REVOKE_PARTITIONS) {
+        console.log(`Revoked partitions ${JSON.stringify(assignment)}`);
+      } else {
+        console.error(`Rebalance error ${err}`);
+      }
+    },
     'auto.commit.interval.ms': 6000,
   });
 

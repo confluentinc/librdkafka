@@ -148,12 +148,11 @@ describe('Consumer > incremental rebalance', () => {
         let revokes = 0;
 
         consumer = createConsumer(consumerConfig, {
-            rebalanceListener: {
-                onPartitionsAssigned: async (assignment) => {
+            rebalance_cb: async (err, assignment) => {
+                if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
                     assigns++;
                     expect(assignment.length).toBe(2);
-                },
-                onPartitionsRevoked: async (assignment) => {
+                } else if (err.code === ErrorCodes.ERR__REVOKE_PARTITIONS) {
                     revokes++;
                     expect(assignment.length).toBe(2);
                 }

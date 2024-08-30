@@ -234,7 +234,7 @@ void do_test_telemetry_empty_subscriptions_list(char *subscription_regex) {
         };
 
 
-        SUB_TEST();
+        SUB_TEST("Test with subscription regex: %s", subscription_regex);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_telemetry_set_requested_metrics(mcluster, NULL, 0);

@@ -609,6 +609,10 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
             RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
         size_t total_metrics_count = metrics_to_encode_count;
         size_t i, metric_idx = 0;
+
+        if (!metrics_to_encode_count)
+                return NULL;
+
         opentelemetry_proto_metrics_v1_MetricsData metrics_data =
             opentelemetry_proto_metrics_v1_MetricsData_init_zero;
 

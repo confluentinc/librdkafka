@@ -5697,7 +5697,7 @@ rd_kafka_DescribeUserScramCredentialsRequest(rd_kafka_broker_t *rkb,
                 rd_kafkap_str_t *user = rd_list_elem(userlist, i);
                 /* Name */
                 rd_kafka_buf_write_str(rkbuf, user->str, user->len);
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
         /* Last Tag buffer included automatically*/
@@ -6130,7 +6130,7 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(
                 /* Mechanism */
                 rd_kafka_buf_write_i8(
                     rkbuf, alteration->alteration.deletion.mechanism);
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_deletions, num_deletions);
 
@@ -6176,11 +6176,11 @@ rd_kafka_resp_err_t rd_kafka_AlterUserScramCredentialsRequest(
                 /* SaltedPassword */
                 rd_kafka_buf_write_kbytes(rkbuf, password_bytes);
                 rd_kafkap_bytes_destroy(password_bytes);
-                rd_kafka_buf_write_tags(rkbuf);
+                rd_kafka_buf_write_tags_empty(rkbuf);
 #endif
         }
 
-        rd_kafka_buf_write_tags(rkbuf);
+        rd_kafka_buf_write_tags_empty(rkbuf);
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;

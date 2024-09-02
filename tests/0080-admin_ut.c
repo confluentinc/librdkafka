@@ -529,7 +529,7 @@ static void do_test_ListConsumerGroups(const char *what,
 
         if (with_options) {
                 rd_kafka_error_t *error;
-                rd_kafka_consumer_group_state_t duplicate[2] = {
+                rd_kafka_consumer_group_state_t duplicate_states[2] = {
                     RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
                     RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY};
                 rd_kafka_consumer_group_type_t duplicate_types[2] = {
@@ -543,7 +543,7 @@ static void do_test_ListConsumerGroups(const char *what,
 
                 /* Test duplicate error on match states */
                 error = rd_kafka_AdminOptions_set_match_consumer_group_states(
-                    options, duplicate, 2);
+                    options, duplicate_states, 2);
                 TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
                             "Expected error on duplicate states,"
                             " got no error");

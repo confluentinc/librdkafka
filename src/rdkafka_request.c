@@ -2426,19 +2426,21 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
             4 + 1 + 32 * states_cnt, ApiVersion >= 3 /* is_flexver */);
 
         if (ApiVersion >= 4) {
-                size_t of_GroupsArrayCnt =
-                    rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_write_arraycnt(rkbuf, states_cnt);
                 for (i = 0; i < states_cnt; i++) {
                         rd_kafka_buf_write_str(rkbuf, states[i], -1);
                 }
-                rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
         }
 
         if (ApiVersion >= 5) {
-                rd_kafka_buf_write_arraycnt(rkbuf,types_cnt);
+                rd_kafka_buf_write_arraycnt(rkbuf, types_cnt);
                 for (i = 0; i < types_cnt; i++) {
                         rd_kafka_buf_write_str(rkbuf, types[i], -1);
                 }
+        }
+
+        if (ApiVersion >= 3) {
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

@@ -37,7 +37,7 @@
 #include <signal.h>
 #include <string.h>
 #include <ctype.h>
-
+#include <stdlib.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
@@ -54,7 +54,21 @@ static void stop(int sig) {
         run = 0;
 }
 
+/**
+ * @brief Parse an integer or fail.
+ */
+int64_t parse_int(const char *what, const char *str) {
+        char *end;
+        unsigned long n = strtoull(str, &end, 0);
 
+        if (end != str + strlen(str)) {
+                fprintf(stderr, "%% Invalid input for %s: %s: not an integer\n",
+                        what, str);
+                stop(1);
+        }
+
+        return (int64_t)n;
+}
 
 /**
  * @returns 1 if all bytes are printable, else 0.
@@ -77,8 +91,12 @@ int main(int argc, char **argv) {
         char errstr[512];        /* librdkafka API error reporting buffer */
         const char *brokers;     /* Argument: broker list */
         const char *groupid;     /* Argument: Consumer group id */
-        char **topics;           /* Argument: list of topics to subscribe to */
-        int topic_cnt;           /* Number of topics to subscribe to */
+        rd_kafka_consumer_group_type_t
+            grouptype;            /* Argument: Consumer group type */
+        const char *grouptypestr; /* The string value of the chosen Consumer
+                                     Group Type */
+        char **topics;            /* Argument: list of topics to subscribe to */
+        int topic_cnt;            /* Number of topics to subscribe to */
         rd_kafka_topic_partition_list_t *subscription; /* Subscribed topics */
         int i;
 
@@ -86,17 +104,27 @@ int main(int argc, char **argv) {
          * Argument validation
          */
         if (argc < 4) {
-                fprintf(stderr,
-                        "%% Usage: "
-                        "%s <broker> <group.id> <topic1> <topic2>..\n",
-                        argv[0]);
+                fprintf(
+                    stderr,
+                    "%% Usage: "
+                    "%s <broker> <group.id> <group.type> <topic1> <topic2>..\n",
+                    argv[0]);
                 return 1;
         }
 
         brokers   = argv[1];
         groupid   = argv[2];
-        topics    = &argv[3];
-        topic_cnt = argc - 3;
+        grouptype = parse_int("Consumer Group Protocol Type", argv[3]);
+        if (grouptype < RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN ||
+            grouptype >= RD_KAFKA_CONSUMER_GROUP_TYPE__CNT) {
+                fprintf(
+                    stderr,
+                    "The Consumer Group Type specified should take values from "
+                    "0(UNKNOWN) to RD_KAFKA_CONSUMER_GROUP_TYPE__CNT(3) - 1\n");
+                return 1;
+        }
+        topics    = &argv[4];
+        topic_cnt = argc - 4;
 
 
         /*
@@ -125,6 +153,35 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
+        }
+
+        /* Set the consumer group type(if broker version supports it).
+         * The following group type should be set:
+         * classic
+         * consumer
+         * unknown will give the skip the property */
+        switch (grouptype) {
+        case RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN:
+                break;
+        case RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC:
+                printf("The Consumer Group Protocol chosen is classic.\n");
+                grouptypestr = "classic";
+                break;
+        case RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER:
+                printf("The Consumer Group Protocol chosen is consumer.\n");
+                grouptypestr = "consumer";
+                break;
+        default:
+                break;
+        }
+        if (grouptype != RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN) {
+                if (rd_kafka_conf_set(conf, "group.protocol", grouptypestr,
+                                      errstr,
+                                      sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                        fprintf(stderr, "%s\n", errstr);
+                        rd_kafka_conf_destroy(conf);
+                        return 1;
+                }
         }
 
         /* If there is no previously committed offset for a partition

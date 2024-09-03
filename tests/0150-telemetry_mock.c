@@ -202,11 +202,11 @@ void do_test_telemetry_get_subscription_push_telemetry(void) {
  *        resent after the push interval until there are subscriptions.
  *        See `requests_expected` for detailed expected flow.
  */
-void do_test_telemetry_empty_subscriptions_list(void) {
+void do_test_telemetry_empty_subscriptions_list(char *subscription_regex) {
         rd_kafka_conf_t *conf;
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
-        char *expected_metrics[]           = {"*"};
+        char *expected_metrics[]           = {subscription_regex};
         rd_kafka_t *producer               = NULL;
         rd_kafka_mock_request_t **requests = NULL;
         size_t request_cnt;
@@ -234,7 +234,7 @@ void do_test_telemetry_empty_subscriptions_list(void) {
         };
 
 
-        SUB_TEST();
+        SUB_TEST("Test with subscription regex: %s", subscription_regex);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_telemetry_set_requested_metrics(mcluster, NULL, 0);
@@ -534,7 +534,11 @@ int main_0150_telemetry_mock(int argc, char **argv) {
 
         do_test_telemetry_get_subscription_push_telemetry();
 
-        do_test_telemetry_empty_subscriptions_list();
+        // All metrics are subscribed
+        do_test_telemetry_empty_subscriptions_list("*");
+
+        // No metrics are subscribed
+        do_test_telemetry_empty_subscriptions_list("non-existent-metric");
 
         do_test_telemetry_terminating_push();
 

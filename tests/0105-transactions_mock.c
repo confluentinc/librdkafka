@@ -1926,8 +1926,8 @@ retry:
                 /* The retry should succeed */
                 test_curr->ignore_dr_err = rd_false;
                 test_curr->exp_dr_err    = is_retry
-                                            ? RD_KAFKA_RESP_ERR_NO_ERROR
-                                            : RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+                                               ? RD_KAFKA_RESP_ERR_NO_ERROR
+                                               : RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
                 rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
                 rd_kafka_mock_partition_set_leader(mcluster, topic, 1, 1);
@@ -2222,12 +2222,12 @@ static void do_test_txn_coord_req_multi_find(void) {
 
         on_response_received_cb = multi_find_on_response_received_cb;
         rk                      = create_txn_producer(&mcluster, txnid, 3,
-                                 /* Need connections to all brokers so we
-                                  * can trigger coord_req_fsm events
-                                  * by toggling connections. */
-                                 "enable.sparse.connections", "false",
-                                 /* Set up on_response_received interceptor */
-                                 "on_response_received", "", NULL);
+                                                      /* Need connections to all brokers so we
+                                                       * can trigger coord_req_fsm events
+                                                       * by toggling connections. */
+                                                      "enable.sparse.connections", "false",
+                                                      /* Set up on_response_received interceptor */
+                                                      "on_response_received", "", NULL);
 
         /* Let broker 1 be both txn and group coordinator
          * so that the group coordinator connection is up when it is time
@@ -3426,9 +3426,9 @@ struct _txn_concurrent_state {
 static int txn_concurrent_thread_main(void *arg) {
         struct _txn_concurrent_state *state = arg;
         static const char *apis[]           = {
-            "init_transactions",           "begin_transaction",
-            "send_offsets_to_transaction", "commit_transaction",
-            "abort_transaction",           NULL};
+                      "init_transactions",           "begin_transaction",
+                      "send_offsets_to_transaction", "commit_transaction",
+                      "abort_transaction",           NULL};
         rd_kafka_t *rk       = state->rk;
         const char *main_api = NULL;
         int i;
@@ -3795,7 +3795,7 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
          * 2000ms for this call to succeed. */
         timeout = times_out ? 500 : 4000;
         error   = rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata,
-                                                     timeout);
+                                                       timeout);
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
 

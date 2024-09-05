@@ -677,7 +677,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
          * desynchronized clusters): if so ignore it. */
         tver_skel.rktp = rktp;
         tver           = rd_list_find(request->rkbuf_rktp_vers, &tver_skel,
-                            rd_kafka_toppar_ver_cmp);
+                                      rd_kafka_toppar_ver_cmp);
         rd_kafka_assert(NULL, tver);
         if (tver->rktp != rktp || tver->version < fetch_version) {
                 rd_rkb_dbg(rkb, MSG, "DROP",
@@ -980,19 +980,19 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_Fetch,
                                                           0, 16, NULL);
         rkbuf      = rd_kafka_buf_new_flexver_request(
-            rkb, RD_KAFKAP_Fetch, 1,
-            /* MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+
-             *   SessionId+Epoch+TopicCnt */
-            4 + 4 + 4 + 1 + 4 + 4 + 4 +
-                /* N x PartCnt+Partition+CurrentLeaderEpoch+FetchOffset+
-                 * LastFetchedEpoch+LogStartOffset+MaxBytes+?TopicNameLen?*/
-                (rkb->rkb_active_toppar_cnt *
+                 rkb, RD_KAFKAP_Fetch, 1,
+                 /* MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+
+                  *   SessionId+Epoch+TopicCnt */
+                 4 + 4 + 4 + 1 + 4 + 4 + 4 +
+                     /* N x PartCnt+Partition+CurrentLeaderEpoch+FetchOffset+
+                      * LastFetchedEpoch+LogStartOffset+MaxBytes+?TopicNameLen?*/
+                     (rkb->rkb_active_toppar_cnt *
                  (4 + 4 + 4 + 8 + 4 + 8 + 4 + 40)) +
-                /* ForgottenTopicsCnt */
-                4 +
-                /* N x ForgottenTopicsData */
-                0,
-            ApiVersion >= 12);
+                     /* ForgottenTopicsCnt */
+                     4 +
+                     /* N x ForgottenTopicsData */
+                     0,
+                 ApiVersion >= 12);
 
         if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)
                 rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion,

@@ -156,7 +156,7 @@ static void rd_kafka_toppar_consumer_lag_req(rd_kafka_toppar_t *rktp) {
 
         partitions = rd_kafka_topic_partition_list_new(1);
         rktpar     = rd_kafka_topic_partition_list_add(
-            partitions, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+                partitions, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
         rktpar->offset = RD_KAFKA_OFFSET_BEGINNING;
         rd_kafka_topic_partition_set_current_leader_epoch(
             rktpar, rktp->rktp_leader_epoch);
@@ -1274,7 +1274,7 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         if (rktp->rktp_query_pos.offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
                 int64_t orig_offset = next_pos.offset;
                 int64_t tail_cnt    = llabs(rktp->rktp_query_pos.offset -
-                                         RD_KAFKA_OFFSET_TAIL_BASE);
+                                            RD_KAFKA_OFFSET_TAIL_BASE);
 
                 if (tail_cnt > next_pos.offset)
                         next_pos.offset = 0;
@@ -1601,8 +1601,8 @@ void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
 
                 offsets = rd_kafka_topic_partition_list_new(1);
                 rktpar  = rd_kafka_topic_partition_list_add(
-                    offsets, rktp->rktp_rkt->rkt_topic->str,
-                    rktp->rktp_partition);
+                     offsets, rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition);
                 rd_kafka_topic_partition_set_from_fetch_pos(rktpar, query_pos);
                 rd_kafka_topic_partition_set_current_leader_epoch(
                     rktpar, rktp->rktp_leader_epoch);
@@ -2084,7 +2084,7 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
                          */
                         rko->rko_err = offsets->elems[0].err;
                         pos          = rd_kafka_topic_partition_get_fetch_pos(
-                            &offsets->elems[0]);
+                                     &offsets->elems[0]);
                 }
 
                 rd_kafka_topic_partition_list_destroy(offsets);

@@ -125,18 +125,18 @@ int unittest_murmur2(void) {
         const char *short_unaligned = "1234";
         const char *unaligned       = "PreAmbleWillBeRemoved,ThePrePartThatIs";
         const char *keysToTest[]    = {
-            "kafka",
-            "giberish123456789",
-            short_unaligned,
-            short_unaligned + 1,
-            short_unaligned + 2,
-            short_unaligned + 3,
-            unaligned,
-            unaligned + 1,
-            unaligned + 2,
-            unaligned + 3,
-            "",
-            NULL,
+               "kafka",
+               "giberish123456789",
+               short_unaligned,
+               short_unaligned + 1,
+               short_unaligned + 2,
+               short_unaligned + 3,
+               unaligned,
+               unaligned + 1,
+               unaligned + 2,
+               unaligned + 3,
+               "",
+               NULL,
         };
 
         const int32_t java_murmur2_results[] = {

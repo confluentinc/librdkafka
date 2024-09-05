@@ -2184,7 +2184,7 @@ rd_kafka_broker_reconnect_backoff(const rd_kafka_broker_t *rkb, rd_ts_t now) {
 static int rd_ut_reconnect_backoff(void) {
         rd_kafka_broker_t rkb = RD_ZERO_INIT;
         rd_kafka_conf_t conf  = {.reconnect_backoff_ms     = 10,
-                                .reconnect_backoff_max_ms = 90};
+                                 .reconnect_backoff_max_ms = 90};
         rd_ts_t now           = 1000000;
         int backoff;
 

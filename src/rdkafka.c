@@ -5082,13 +5082,13 @@ int rd_kafka_path_is_dir(const char *path) {
  * @returns true if directory is empty or can't be accessed, else false.
  */
 rd_bool_t rd_kafka_dir_is_empty(const char *path) {
-#if defined(_WIN32) || defined(__QNXNTO__)
+#if defined(_WIN32)
         /* FIXME: Unsupported */
         return rd_true;
 #else
         DIR *dir;
         struct dirent *d;
-#if defined(__sun)
+#if defined(__sun) || defined(__QNXNTO__)
         struct stat st;
         int ret = 0;
 #endif
@@ -5102,7 +5102,7 @@ rd_bool_t rd_kafka_dir_is_empty(const char *path) {
                 if (!strcmp(d->d_name, ".") || !strcmp(d->d_name, ".."))
                         continue;
 
-#if defined(__sun)
+#if defined(__sun) || defined(__QNXNTO__)
                 ret = stat(d->d_name, &st);
                 if (ret != 0) {
                         return rd_true;  // Can't be accessed

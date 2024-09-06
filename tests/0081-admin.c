@@ -2650,17 +2650,29 @@ static void do_test_DeleteGroups(const char *what,
 }
 
 /**
- * @brief Helper for do_test_ListConsumerGroups, verifies the number of groups
- * listed is equal to exp_group_cnt
+ * @brief Helper for do_test_ListConsumerGroups, makes ListConsumerGroups call
+ * and finds the groups in list_consumer_groups and check if the found groups is
+ * same as exp_found. The group protocol is the protocol of groups in
+ * list_consumer_groups.
  */
-static void test_ListConsumerGroups_helper(rd_kafka_t *rk,
-                                           rd_kafka_AdminOptions_t *option,
-                                           rd_kafka_queue_t *q,
-                                           size_t exp_group_cnt) {
+static void
+test_ListConsumerGroups_helper(rd_kafka_t *rk,
+                               rd_kafka_AdminOptions_t *option,
+                               rd_kafka_queue_t *q,
+                               char **list_consumer_groups,
+                               size_t list_consumer_groups_cnt,
+                               size_t exp_found,
+                               rd_kafka_consumer_group_type_t group_protocol,
+                               rd_bool_t match_states) {
         rd_kafka_event_t *rkev                             = NULL;
         const rd_kafka_ListConsumerGroups_result_t *result = NULL;
         size_t group_cnt;
-        rd_kafka_resp_err_t err;
+        size_t error_cnt;
+        size_t found;
+        size_t i, j;
+        const rd_kafka_ConsumerGroupListing_t **groups = NULL;
+
+        TEST_SAY("Call ListConsumerGroups\n");
         rd_kafka_ListConsumerGroups(rk, option, q);
         /* Poll result queue for ListConsumerGroups result.
          * Print but otherwise ignore other event types
@@ -2669,30 +2681,80 @@ static void test_ListConsumerGroups_helper(rd_kafka_t *rk,
                 rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
                 if (rkev == NULL)
                         continue;
+
                 if (rd_kafka_event_error(rkev))
                         TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
                                  rd_kafka_event_error_string(rkev));
+
                 if (rd_kafka_event_type(rkev) ==
-                    RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT) {
+                    RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT)
                         break;
-                }
+
                 rd_kafka_event_destroy(rkev);
         }
         /* Convert event to proper result */
         result = rd_kafka_event_ListConsumerGroups_result(rkev);
         TEST_ASSERT(result, "expected ListConsumerGroups_result, got %s",
                     rd_kafka_event_name(rkev));
-        /* Expecting error */
-        err = rd_kafka_event_error(rkev);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "expected ListConsumerGroups request to succeed but got %s",
-                    rd_kafka_err2str(err));
 
-        rd_kafka_ListConsumerGroups_result_valid(result, &group_cnt);
-        TEST_ASSERT(group_cnt == exp_group_cnt,
-                    "The number of groups do not match, expected %zu but got "
-                    "%zu groups",
-                    exp_group_cnt, group_cnt);
+        if (rd_kafka_event_error(rkev))
+                TEST_FAIL("ListConsumerGroups failed with %s",
+                          rd_kafka_event_error_string(rkev));
+
+        groups = rd_kafka_ListConsumerGroups_result_valid(result, &group_cnt);
+        rd_kafka_ListConsumerGroups_result_errors(result, &error_cnt);
+
+        TEST_ASSERT(error_cnt == 0,
+                    "expected ListConsumerGroups to return 0 errors,"
+                    " got %zu",
+                    error_cnt);
+
+        found = 0;
+        for (i = 0; i < group_cnt; i++) {
+                const rd_kafka_ConsumerGroupListing_t *group = groups[i];
+                const char *group_id =
+                    rd_kafka_ConsumerGroupListing_group_id(group);
+                int is_simple_consumer_group =
+                    rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
+                        group);
+                rd_kafka_consumer_group_state_t state =
+                    rd_kafka_ConsumerGroupListing_state(group);
+                rd_kafka_consumer_group_type_t group_type =
+                    rd_kafka_ConsumerGroupListing_type(group);
+                for (j = 0; j < list_consumer_groups_cnt; j++) {
+                        if (!strcmp(list_consumer_groups[j], group_id)) {
+                                found++;
+                                TEST_ASSERT(!is_simple_consumer_group,
+                                            "expected a normal group,"
+                                            " got a simple group");
+                                if (group_protocol !=
+                                    RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN) {
+                                        TEST_ASSERT(
+                                            group_type == group_protocol,
+                                            "Expected the Consumer Group Type "
+                                            "to be set by the Broker.");
+                                }
+
+                                if (!match_states)
+                                        break;
+
+                                TEST_ASSERT(
+                                    state ==
+                                        RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
+                                    "expected an Empty state,"
+                                    " got state %s",
+                                    rd_kafka_consumer_group_state_name(state));
+                                break;
+                        }
+                }
+        }
+
+        TEST_ASSERT(found == exp_found,
+                    "expected to find %" PRIusz
+                    " consumer groups,"
+                    " got %" PRIusz,
+                    exp_found, found);
+
         rd_kafka_event_destroy(rkev);
 }
 
@@ -2709,25 +2771,14 @@ static void do_test_ListConsumerGroups(const char *what,
 #define TEST_LIST_CONSUMER_GROUPS_CNT 4
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_event_t *rkev           = NULL;
-        rd_kafka_resp_err_t err;
-        size_t valid_cnt, error_cnt;
-        rd_bool_t is_simple_consumer_group;
-        rd_kafka_consumer_group_state_t state;
-        rd_kafka_consumer_group_type_t group_type;
         char errstr[512];
-        const char *errstr2, *group_id;
         char *list_consumer_groups[TEST_LIST_CONSUMER_GROUPS_CNT];
         const int partitions_cnt = 1;
         const int msgs_cnt       = 100;
-        size_t i, found;
         char *topic;
+        size_t i;
         rd_kafka_metadata_topic_t exp_mdtopic = {0};
         int64_t testid                        = test_id_generate();
-        test_timing_t timing;
-        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        const rd_kafka_ListConsumerGroups_result_t *res;
-        const rd_kafka_ConsumerGroupListing_t **groups;
         rd_bool_t has_match_states =
             test_broker_version >= TEST_BRKVER(2, 7, 0, 0);
         rd_bool_t has_match_types =
@@ -2808,112 +2859,10 @@ static void do_test_ListConsumerGroups(const char *what,
                 list_consumer_groups[i] = group;
         }
 
-        TIMING_START(&timing, "ListConsumerGroups");
-        TEST_SAY("Call ListConsumerGroups\n");
-        rd_kafka_ListConsumerGroups(rk, options, q);
-        TIMING_ASSERT_LATER(&timing, 0, 50);
-
-        TIMING_START(&timing, "ListConsumerGroups.queue_poll");
-
-        /* Poll result queue for ListConsumerGroups result.
-         * Print but otherwise ignore other event types
-         * (typically generic Error events). */
-        while (1) {
-                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
-                TEST_SAY("ListConsumerGroups: got %s in %.3fms\n",
-                         rd_kafka_event_name(rkev),
-                         TIMING_DURATION(&timing) / 1000.0f);
-                if (rkev == NULL)
-                        continue;
-                if (rd_kafka_event_error(rkev))
-                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
-                                 rd_kafka_event_error_string(rkev));
-
-                if (rd_kafka_event_type(rkev) ==
-                    RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT) {
-                        break;
-                }
-
-                rd_kafka_event_destroy(rkev);
-        }
-        /* Convert event to proper result */
-        res = rd_kafka_event_ListConsumerGroups_result(rkev);
-        TEST_ASSERT(res, "expected ListConsumerGroups_result, got %s",
-                    rd_kafka_event_name(rkev));
-
-        /* Expecting error */
-        err     = rd_kafka_event_error(rkev);
-        errstr2 = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(err == exp_err,
-                    "expected ListConsumerGroups to return %s, got %s (%s)",
-                    rd_kafka_err2str(exp_err), rd_kafka_err2str(err),
-                    err ? errstr2 : "n/a");
-
-        TEST_SAY("ListConsumerGroups: returned %s (%s)\n",
-                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
-
-        groups = rd_kafka_ListConsumerGroups_result_valid(res, &valid_cnt);
-        rd_kafka_ListConsumerGroups_result_errors(res, &error_cnt);
-
-        /* Other tests could be running */
-        TEST_ASSERT(valid_cnt >= TEST_LIST_CONSUMER_GROUPS_CNT,
-                    "expected ListConsumerGroups to return at least %" PRId32
-                    " valid groups,"
-                    " got %zu",
-                    TEST_LIST_CONSUMER_GROUPS_CNT, valid_cnt);
-
-        TEST_ASSERT(error_cnt == 0,
-                    "expected ListConsumerGroups to return 0 errors,"
-                    " got %zu",
-                    error_cnt);
-
-        found = 0;
-        for (i = 0; i < valid_cnt; i++) {
-                int j;
-                const rd_kafka_ConsumerGroupListing_t *group;
-                group    = groups[i];
-                group_id = rd_kafka_ConsumerGroupListing_group_id(group);
-                is_simple_consumer_group =
-                    rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
-                        group);
-                state      = rd_kafka_ConsumerGroupListing_state(group);
-                group_type = rd_kafka_ConsumerGroupListing_type(group);
-                for (j = 0; j < TEST_LIST_CONSUMER_GROUPS_CNT; j++) {
-                        if (!strcmp(list_consumer_groups[j], group_id)) {
-                                found++;
-                                TEST_ASSERT(!is_simple_consumer_group,
-                                            "expected a normal group,"
-                                            " got a simple group");
-                                if (match_types &&
-                                    (group_protocol_in_use !=
-                                     RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN)) {
-                                        TEST_ASSERT(
-                                            group_type == group_protocol_in_use,
-                                            "Expected the Consumer Group Type "
-                                            "to be set by the Broker.");
-                                }
-
-                                if (!has_match_states)
-                                        break;
-
-                                TEST_ASSERT(
-                                    state ==
-                                        RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
-                                    "expected an Empty state,"
-                                    " got state %s",
-                                    rd_kafka_consumer_group_state_name(state));
-                                break;
-                        }
-                }
-        }
-
-        TEST_ASSERT(found == TEST_LIST_CONSUMER_GROUPS_CNT,
-                    "expected to find %d"
-                    " started groups,"
-                    " got %" PRIusz,
-                    TEST_LIST_CONSUMER_GROUPS_CNT, found);
-
-        rd_kafka_event_destroy(rkev);
+        test_ListConsumerGroups_helper(rk, options, q, list_consumer_groups,
+                                       TEST_LIST_CONSUMER_GROUPS_CNT,
+                                       TEST_LIST_CONSUMER_GROUPS_CNT,
+                                       group_protocol_in_use, has_match_states);
 
         if (match_types) {
                 /* Simply test with the option of protocol not in use */
@@ -2925,7 +2874,9 @@ static void do_test_ListConsumerGroups(const char *what,
                     &group_protocol_not_in_use, 1);
 
                 test_ListConsumerGroups_helper(
-                    rk, option_group_protocol_not_in_use, q, 0);
+                    rk, option_group_protocol_not_in_use, q,
+                    list_consumer_groups, TEST_LIST_CONSUMER_GROUPS_CNT, 0,
+                    group_protocol_not_in_use, rd_false);
 
                 rd_kafka_AdminOptions_destroy(option_group_protocol_not_in_use);
         }

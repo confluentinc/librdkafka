@@ -8585,23 +8585,23 @@ void rd_kafka_ListConsumerGroups(rd_kafka_t *rk,
                                  rd_kafka_queue_t *rkqu);
 
 /**
- * @brief Gets the group id for the \p grplist group.
+ * @brief Gets the group id for the \p consumer_group_listing group.
  *
- * @param grplist The group listing.
+ * @param consumer_group_listing The group listing.
  *
  * @return The group id.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p grplist object.
+ *         as the lifetime of the \p consumer_group_listing object.
  */
 RD_EXPORT
 const char *rd_kafka_ConsumerGroupListing_group_id(
     const rd_kafka_ConsumerGroupListing_t *consumer_group_listing);
 
 /**
- * @brief Is the \p grplist group a simple consumer group.
+ * @brief Is the \p consumer_group_listing group a simple consumer group.
  *
- * @param grplist The group listing.
+ * @param consumer_group_listing The group listing.
  *
  * @return 1 if the group is a simple consumer group,
  *         else 0.
@@ -8611,9 +8611,9 @@ int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
     const rd_kafka_ConsumerGroupListing_t *consumer_group_listing);
 
 /**
- * @brief Gets state for the \p grplist group.
+ * @brief Gets state for the \p consumer_group_listing group.
  *
- * @param grplist The group listing.
+ * @param consumer_group_listing The group listing.
  *
  * @return A group state.
  */
@@ -8622,9 +8622,9 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
     const rd_kafka_ConsumerGroupListing_t *consumer_group_listing);
 
 /**
- * @brief Gets type for the \p grplist group.
+ * @brief Gets type for the \p consumer_group_listing group.
  *
- * @param grplist The group listing.
+ * @param consumer_group_listing The group listing.
  *
  * @return A group type.
  */

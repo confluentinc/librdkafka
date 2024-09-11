@@ -142,7 +142,7 @@ blocks:
             - export NODE_OPTIONS='--max-old-space-size=1536'
             - cd examples/performance
             - npm install
-            - ../../ci/tests/run_perf_tests.sh
+            - bash -c '../../ci/tests/run_perf_test.sh'
 
   - name: "Linux amd64: Release"
     dependencies: [ ]

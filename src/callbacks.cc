@@ -181,7 +181,7 @@ void Event::event_cb(RdKafka::Event &event) {
   dispatcher.Execute();
 }
 
-EventDispatcher::EventDispatcher() {}
+EventDispatcher::EventDispatcher() : client_name("") {}
 EventDispatcher::~EventDispatcher() {}
 
 void EventDispatcher::Add(const event_t &e) {
@@ -232,6 +232,8 @@ void EventDispatcher::Flush() {
           Nan::New(_events[i].fac.c_str()).ToLocalChecked());
         Nan::Set(jsobj, Nan::New("message").ToLocalChecked(),
           Nan::New(_events[i].message.c_str()).ToLocalChecked());
+        Nan::Set(jsobj, Nan::New("name").ToLocalChecked(),
+          Nan::New(this->client_name.c_str()).ToLocalChecked());
 
         break;
       case RdKafka::Event::EVENT_THROTTLE:
@@ -264,6 +266,10 @@ void EventDispatcher::Flush() {
 
     Dispatch(argc, argv);
   }
+}
+
+void EventDispatcher::SetClientName(const std::string& client_name) {
+  this->client_name = client_name;
 }
 
 DeliveryReportDispatcher::DeliveryReportDispatcher() {}

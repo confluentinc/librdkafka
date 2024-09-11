@@ -79,8 +79,10 @@ class EventDispatcher : public Dispatcher {
   ~EventDispatcher();
   void Add(const event_t &);
   void Flush();
+  void SetClientName(const std::string &);
  protected:
   std::vector<event_t> events;
+  std::string client_name;
 };
 
 class Event : public RdKafka::EventCb {

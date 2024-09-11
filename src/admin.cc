@@ -65,6 +65,9 @@ Baton AdminClient::Connect() {
     return Baton(RdKafka::ERR__STATE, errstr);
   }
 
+  /* Set the client name at the first possible opportunity for logging. */
+  m_event_cb.dispatcher.SetClientName(m_client->name());
+
   if (rkqu == NULL) {
     rkqu = rd_kafka_queue_new(m_client->c_ptr());
   }

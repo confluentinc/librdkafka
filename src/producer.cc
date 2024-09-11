@@ -189,6 +189,9 @@ Baton Producer::Connect() {
     return Baton(RdKafka::ERR__STATE, errstr);
   }
 
+  /* Set the client name at the first possible opportunity for logging. */
+  m_event_cb.dispatcher.SetClientName(m_client->name());
+
   baton = setupSaslOAuthBearerBackgroundQueue();
   return baton;
 }

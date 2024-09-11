@@ -1,4 +1,4 @@
-const { Kafka, ErrorCodes, CompressionTypes } = require('../../').KafkaJS;
+const { Kafka, CompressionTypes } = require('kafkajs');
 const { randomBytes } = require('crypto');
 const { hrtime } = require('process');
 
@@ -11,8 +11,8 @@ module.exports = {
 
 async function runCreateTopics(brokers, topic, topic2) {
     const kafka = new Kafka({
-        'client.id': 'kafka-test-performance',
-        "metadata.broker.list": brokers,
+        clientId: 'kafka-test-performance',
+        brokers: brokers.split(','),
     });
 
     const admin = kafka.admin();
@@ -36,7 +36,6 @@ async function runCreateTopics(brokers, topic, topic2) {
             ],
         }).catch(console.error);
         console.log(`Created topic ${t}`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); /* Propagate. */
     }
 
     await admin.disconnect();
@@ -53,9 +52,8 @@ async function runProducer(brokers, topic, batchSize, warmupMessages, totalMessa
     const messages = Array(batchSize).fill(message);
 
     const kafka = new Kafka({
-        'client.id': 'kafka-test-performance',
-        'metadata.broker.list': brokers,
-        'compression.codec': CompressionTypes[compression],
+        clientId: 'kafka-test-performance',
+        brokers: brokers.split(','),
     });
 
     const producer = kafka.producer();
@@ -66,6 +64,7 @@ async function runProducer(brokers, topic, batchSize, warmupMessages, totalMessa
         await producer.send({
             topic,
             messages,
+            compression: CompressionTypes[compression],
         });
         warmupMessages -= batchSize;
     }
@@ -85,17 +84,13 @@ async function runProducer(brokers, topic, batchSize, warmupMessages, totalMessa
             promises.push(producer.send({
                 topic,
                 messages,
+                compression: CompressionTypes[compression],
             }).then(() => {
                 totalMessagesSent += batchSize;
                 totalBytesSent += batchSize * msgSize;
             }).catch((err) => {
-                if (err.code === ErrorCodes.ERR__QUEUE_FULL) {
-                    /* do nothing, just send them again */
-                    messagesDispatched -= batchSize;
-                } else {
-                    console.error(err);
-                    throw err;
-                }
+                console.error(err);
+                throw err;
             }));
             messagesDispatched += batchSize;
         }
@@ -112,23 +107,22 @@ async function runProducer(brokers, topic, batchSize, warmupMessages, totalMessa
 
 async function runConsumer(brokers, topic, totalMessageCnt) {
     const kafka = new Kafka({
-        'client.id': 'kafka-test-performance',
-        'metadata.broker.list': brokers,
+        clientId: 'kafka-test-performance',
+        brokers: brokers.split(','),
     });
 
     const consumer = kafka.consumer({
-        'group.id': 'test-group' + Math.random(),
-        'enable.auto.commit': false,
-        'auto.offset.reset': 'earliest',
+        groupId: 'test-group' + Math.random(),
     });
     await consumer.connect();
-    await consumer.subscribe({ topic });
+    await consumer.subscribe({ topic, fromBeginning: true });
 
     let messagesReceived = 0;
     let totalMessageSize = 0;
     let startTime;
     let rate;
     consumer.run({
+        autoCommit: false,
         eachMessage: async ({ topic, partition, message }) => {
             messagesReceived++;
             totalMessageSize += message.value.length;
@@ -176,38 +170,25 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
 
 async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, totalMessageCnt, messageProcessTimeMs, ctpConcurrency) {
     const kafka = new Kafka({
-        'client.id': 'kafka-test-performance',
-        'metadata.broker.list': brokers,
+        clientId: 'kafka-test-performance',
+        brokers: brokers.split(','),
     });
 
-    const producer = kafka.producer({
-        /* We want things to be flushed immediately as we'll be awaiting this. */
-        'linger.ms': 0
-    });
+    const producer = kafka.producer({});
     await producer.connect();
 
     const consumer = kafka.consumer({
-        'group.id': 'test-group' + Math.random(),
-        'enable.auto.commit': false,
-        'auto.offset.reset': 'earliest',
-
-        /* These fields are more-or-less required for cases where eachMessage includes
-         * any async operatiosn, else `partitionsConsumedConcurrently` does not have
-         * much effect. Reason for this is that, internally, librdkafka fetches
-         * a large number of messages from one topic partition and that fills the
-         * cache up, and we end up underutilizing concurrency.
-         * TODO: remove or change these, discuss this issue and make changes in the code. */
-        'message.max.bytes': 1000,
-        'fetch.max.bytes': 1000,
+        groupId: 'test-group' + Math.random(),
     });
     await consumer.connect();
-    await consumer.subscribe({ topic: consumeTopic });
+    await consumer.subscribe({ topic: consumeTopic, fromBeginning: true });
 
     let messagesReceived = 0;
     let totalMessageSize = 0;
     let startTime;
     let rate;
     consumer.run({
+        autoCommit: false,
         partitionsConsumedConcurrently: ctpConcurrency,
         eachMessage: async ({ topic, partition, message }) => {
             /* Simulate message processing for messageProcessTimeMs */

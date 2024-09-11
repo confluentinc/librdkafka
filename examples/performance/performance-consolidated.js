@@ -1,6 +1,11 @@
-const { runProducer, runConsumer, runConsumeTransformProduce } = require('./performance-primitives');
+const mode = process.env.MODE ? process.env.MODE : 'confluent';
 
-const { CompressionTypes } = require('../../').KafkaJS;
+let runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics;
+if (mode === 'confluent') {
+    ({ runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics } = require('./performance-primitives'));
+} else {
+    ({ runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics } = require('./performance-primitives-kafkajs'));
+}
 
 const brokers = process.env.KAFKA_BROKERS || 'localhost:9092';
 const topic = process.env.KAFKA_TOPIC || 'test-topic';
@@ -8,14 +13,25 @@ const topic2 = process.env.KAFKA_TOPIC2 || 'test-topic2';
 const messageCount = process.env.MESSAGE_COUNT ? +process.env.MESSAGE_COUNT : 1000000;
 const messageSize = process.env.MESSAGE_SIZE ? +process.env.MESSAGE_SIZE : 256;
 const batchSize = process.env.BATCH_SIZE ? +process.env.BATCH_SIZE : 100;
-const compression = process.env.COMPRESSION || CompressionTypes.NONE;
+const compression = process.env.COMPRESSION || 'None';
 const warmupMessages = process.env.WARMUP_MESSAGES ? +process.env.WARMUP_MESSAGES : (batchSize * 10);
+const messageProcessTimeMs = process.env.MESSAGE_PROCESS_TIME_MS ? +process.env.MESSAGE_PROCESS_TIME_MS : 5;
+const ctpConcurrency = process.env.CONSUME_TRANSFORM_PRODUCE_CONCURRENCY ? +process.env.CONSUME_TRANSFORM_PRODUCE_CONCURRENCY : 1;
 
 (async function () {
     const producer = process.argv.includes('--producer');
     const consumer = process.argv.includes('--consumer');
     const ctp = process.argv.includes('--ctp');
     const all = process.argv.includes('--all');
+    const createTopics = process.argv.includes('--create-topics');
+
+    if (createTopics || all) {
+        console.log("=== Creating Topics (deleting if they exist already):");
+        console.log(`  Brokers: ${brokers}`);
+        console.log(`  Topic: ${topic}`);
+        console.log(`  Topic2: ${topic2}`);
+        await runCreateTopics(brokers, topic, topic2);
+    }
 
     if (producer || all) {
         console.log("=== Running Basic Producer Performance Test:")
@@ -48,7 +64,7 @@ const warmupMessages = process.env.WARMUP_MESSAGES ? +process.env.WARMUP_MESSAGE
         console.log(`  Message Count: ${messageCount}`);
         // Seed the topic with messages
         await runProducer(brokers, topic, batchSize, warmupMessages, messageCount, messageSize, compression);
-        const ctpRate = await runConsumeTransformProduce(brokers, topic, topic2, messageCount);
+        const ctpRate = await runConsumeTransformProduce(brokers, topic, topic2, messageCount, messageProcessTimeMs, ctpConcurrency);
         console.log("=== Consume-Transform-Produce Rate: ", ctpRate);
     }
 

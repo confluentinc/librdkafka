@@ -108,6 +108,38 @@ blocks:
           commands:
             - npx eslint lib/kafkajs
 
+  - name: "Linux amd64: Performance"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-amd64-4
+      env_vars:
+        - name: TARGET_PRODUCE_PERFORMANCE
+          value: "35"
+        - name: TARGET_CONSUME_PERFORMANCE
+          value: "18"
+        - name: TARGET_CTP_PERFORMANCE
+          value: "0.02"
+      prologue:
+        commands:
+          - sudo apt-get install -y librdkafka-dev bc
+          - export CKJS_LINKING=dynamic
+          - export BUILD_LIBRDKAFKA=0
+          - npm install
+          - npx node-pre-gyp --build-from-source clean
+          - npx node-pre-gyp --build-from-source configure
+          - npx node-pre-gyp --build-from-source build
+      jobs:
+        - name: "Performance Test"
+          commands:
+            - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+            - docker compose up -d && sleep 30
+            - export NODE_OPTIONS='--max-old-space-size=1536'
+            - cd examples/performance
+            - npm install
+            - ../../ci/tests/run_perf_tests.sh
+
   - name: "Linux amd64: Release"
     dependencies: [ ]
     run:

@@ -9,6 +9,7 @@
  * @fileoverview Several simple wrappers of crypto.getRandomValues.
  */
 import {InvalidArgumentsException} from './exception/invalid_arguments_exception';
+import * as crypto from 'crypto';
 
 /**
  * Randomly generates `n` bytes.

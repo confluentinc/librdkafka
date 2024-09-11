@@ -5,11 +5,10 @@ import {
   RuleMode,
   RuleSet,
   SchemaInfo,
-  SchemaMetadata, SchemaRegistryClient
+  SchemaMetadata
 } from "../schemaregistry-client";
-import {getRuleAction, getRuleExecutor} from "./rule-registry";
+import {RuleRegistry} from "./rule-registry";
 import {ClientConfig} from "../rest-service";
-import {MockClient} from "../mock-schemaregistry-client";
 
 export enum SerdeType {
   KEY = 'KEY',
@@ -29,13 +28,13 @@ export interface SerdeConfig {
   // useLatestVersion specifies whether to use the latest schema version
   useLatestVersion?: boolean
   // useLatestWithMetadata specifies whether to use the latest schema with metadata
-  useLatestWithMetadata?: Map<string, string>
+  useLatestWithMetadata?: { [key: string]: string };
   // cacheCapacity specifies the cache capacity
   cacheCapacity?: number,
   // cacheLatestTtlSecs specifies the cache latest TTL in seconds
   cacheLatestTtlSecs?: number
   // ruleConfig specifies configuration options to the rules
-  ruleConfig?: Map<string, string>
+  ruleConfig?: { [key: string]: string };
   // subjectNameStrategy specifies a function to generate a subject name
   subjectNameStrategy?: SubjectNameStrategyFunc
 }
@@ -47,11 +46,13 @@ export abstract class Serde {
   serdeType: SerdeType
   conf: SerdeConfig
   fieldTransformer: FieldTransformer | null = null
+  ruleRegistry: RuleRegistry
 
-  protected constructor(client: Client, serdeType: SerdeType, conf: SerdeConfig) {
+  protected constructor(client: Client, serdeType: SerdeType, conf: SerdeConfig, ruleRegistry?: RuleRegistry) {
     this.client = client
     this.serdeType = serdeType
     this.conf = conf
+    this.ruleRegistry = ruleRegistry ?? RuleRegistry.getGlobalInstance()
   }
 
   abstract config(): SerdeConfig
@@ -65,22 +66,15 @@ export abstract class Serde {
     return strategy(topic, this.serdeType, info)
   }
 
-  async resolveReferences(client: Client, schema: SchemaInfo, deps: Map<string, string>): Promise<void> {
+  async resolveReferences(client: Client, schema: SchemaInfo, deps: Map<string, string>, format?: string): Promise<void> {
     let references = schema.references
     if (references == null) {
       return
     }
     for (let ref of references) {
-      let metadata = await client.getSchemaMetadata(ref.subject, ref.version, true)
-      let info = {
-        schema: schema.schema,
-        schemaType: schema.schemaType,
-        references: schema.references,
-        metadata: schema.metadata,
-        ruleSet: schema.ruleSet,
-      }
+      let metadata = await client.getSchemaMetadata(ref.subject, ref.version, true, format)
       deps.set(ref.name, metadata.schema)
-      await this.resolveReferences(client, info, deps)
+      await this.resolveReferences(client, metadata, deps)
     }
   }
 
@@ -134,7 +128,7 @@ export abstract class Serde {
       }
       let ctx = new RuleContext(source, target, subject, topic,
         this.serdeType === SerdeType.KEY, ruleMode, rule, i, rules, inlineTags, this.fieldTransformer!)
-      let ruleExecutor = getRuleExecutor(rule.type)
+      let ruleExecutor = this.ruleRegistry.getExecutor(rule.type)
       if (ruleExecutor == null) {
         await this.runAction(ctx, ruleMode, rule, rule.onFailure, msg,
           new Error(`could not find rule executor of type ${rule.type}`), 'ERROR')
@@ -208,7 +202,7 @@ export abstract class Serde {
     } else if (actionName === 'NONE') {
       return new NoneAction()
     }
-    return getRuleAction(actionName)
+    return this.ruleRegistry.getAction(actionName)
   }
 }
 
@@ -222,8 +216,8 @@ export interface SerializerConfig extends SerdeConfig {
 }
 
 export abstract class Serializer extends Serde {
-  protected constructor(client: Client, serdeType: SerdeType, conf: SerializerConfig) {
-    super(client, serdeType, conf)
+  protected constructor(client: Client, serdeType: SerdeType, conf: SerializerConfig, ruleRegistry?: RuleRegistry) {
+    super(client, serdeType, conf, ruleRegistry)
   }
 
   override config(): SerializerConfig {
@@ -234,7 +228,7 @@ export abstract class Serializer extends Serde {
   abstract serialize(topic: string, msg: any): Promise<Buffer>
 
   // GetID returns a schema ID for the given schema
-  async getId(topic: string, msg: any, info: SchemaInfo): Promise<[number, SchemaInfo]> {
+  async getId(topic: string, msg: any, info: SchemaInfo, format?: string): Promise<[number, SchemaInfo]> {
     let autoRegister = this.config().autoRegisterSchemas
     let useSchemaId = this.config().useSchemaId
     let useLatestWithMetadata = this.conf.useLatestWithMetadata
@@ -246,17 +240,16 @@ export abstract class Serializer extends Serde {
     if (autoRegister) {
       id = await this.client.register(subject, info, Boolean(normalizeSchema))
     } else if (useSchemaId != null && useSchemaId >= 0) {
-      info = await this.client.getBySubjectAndId(subject, useSchemaId)
+      info = await this.client.getBySubjectAndId(subject, useSchemaId, format)
       id = await this.client.getId(subject, info, false)
       if (id !== useSchemaId) {
         throw new SerializationError(`failed to match schema ID (${id} != ${useSchemaId})`)
       }
-    } else if (useLatestWithMetadata != null && useLatestWithMetadata.size !== 0) {
-      info = await this.client.getLatestWithMetadata(
-        subject, Object.fromEntries(useLatestWithMetadata), true)
+    } else if (useLatestWithMetadata != null && Object.keys(useLatestWithMetadata).length !== 0) {
+      info = await this.client.getLatestWithMetadata(subject, useLatestWithMetadata, true, format)
       id = await this.client.getId(subject, info, false)
     } else if (useLatest) {
-      info = await this.client.getLatestSchemaMetadata(subject)
+      info = await this.client.getLatestSchemaMetadata(subject, format)
       id = await this.client.getId(subject, info, false)
     } else {
       id = await this.client.getId(subject, info, Boolean(normalizeSchema))
@@ -281,15 +274,15 @@ export interface Migration {
 }
 
 export abstract class Deserializer extends Serde {
-  protected constructor(client: Client, serdeType: SerdeType, conf: DeserializerConfig) {
-    super(client, serdeType, conf)
+  protected constructor(client: Client, serdeType: SerdeType, conf: DeserializerConfig, ruleRegistry?: RuleRegistry) {
+    super(client, serdeType, conf, ruleRegistry)
   }
 
   override config(): DeserializerConfig {
     return this.conf as DeserializerConfig
   }
 
-  async getSchema(topic: string, payload: Buffer): Promise<SchemaInfo> {
+  async getSchema(topic: string, payload: Buffer, format?: string): Promise<SchemaInfo> {
     const magicByte = payload.subarray(0, 1)
     if (!magicByte.equals(MAGIC_BYTE)) {
       throw new SerializationError(
@@ -300,18 +293,17 @@ export abstract class Deserializer extends Serde {
     }
     const id = payload.subarray(1, 5).readInt32BE(0)
     let subject = this.subjectName(topic)
-    return await this.client.getBySubjectAndId(subject, id)
+    return await this.client.getBySubjectAndId(subject, id, format)
   }
 
-  async getReaderSchema(subject: string): Promise<SchemaMetadata | null> {
+  async getReaderSchema(subject: string, format?: string): Promise<SchemaMetadata | null> {
     let useLatestWithMetadata = this.config().useLatestWithMetadata
     let useLatest = this.config().useLatestVersion
-    if (useLatestWithMetadata != null && useLatestWithMetadata.size !== 0) {
-      return await this.client.getLatestWithMetadata(
-        subject, Object.fromEntries(useLatestWithMetadata), true)
+    if (useLatestWithMetadata != null && Object.keys(useLatestWithMetadata).length !== 0) {
+      return await this.client.getLatestWithMetadata(subject, useLatestWithMetadata, true, format)
     }
     if (useLatest) {
-      return await this.client.getLatestSchemaMetadata(subject)
+      return await this.client.getLatestSchemaMetadata(subject, format)
     }
     return null
   }
@@ -349,7 +341,7 @@ export abstract class Deserializer extends Serde {
   }
 
   async getMigrations(subject: string, sourceInfo: SchemaInfo,
-                target: SchemaMetadata): Promise<Migration[]> {
+                target: SchemaMetadata, format?: string): Promise<Migration[]> {
     let version = await this.client.getVersion(subject, sourceInfo, false)
     let source: SchemaMetadata = {
       id: 0,
@@ -375,7 +367,7 @@ export abstract class Deserializer extends Serde {
       return migrations
     }
     let previous: SchemaMetadata | null = null
-    let versions = await this.getSchemasBetween(subject, first, last)
+    let versions = await this.getSchemasBetween(subject, first, last, format)
     for (let i = 0; i < versions.length; i++) {
       let version = versions[i]
       if (i === 0) {
@@ -408,7 +400,7 @@ export abstract class Deserializer extends Serde {
   }
 
   async getSchemasBetween(subject: string, first: SchemaMetadata,
-                    last: SchemaMetadata): Promise<SchemaMetadata[]> {
+                    last: SchemaMetadata, format?: string): Promise<SchemaMetadata[]> {
     if (last.version!-first.version! <= 1) {
       return [first, last]
     }
@@ -416,7 +408,7 @@ export abstract class Deserializer extends Serde {
     let version2 = last.version!
     let result = [first]
     for (let i = version1 + 1; i < version2; i++) {
-      let meta = await this.client.getSchemaMetadata(subject, i, true)
+      let meta = await this.client.getSchemaMetadata(subject, i, true, format)
       result.push(meta)
     }
     result.push(last)
@@ -615,7 +607,7 @@ export abstract class FieldRuleExecutor implements RuleExecutor {
 }
 
 function areTransformsWithSameTag(rule1: Rule, rule2: Rule): boolean {
-  return rule1.tags != null && rule1.tags.size > 0
+  return rule1.tags != null && rule1.tags.length > 0
     && rule1.kind === 'TRANSFORM'
     && rule1.kind === rule2.kind
     && rule1.mode === rule2.mode
@@ -735,12 +727,4 @@ export class RuleConditionError extends RuleError {
     }
     return errMsg
   }
-}
-
-export function newClient(config: ClientConfig): Client {
-  let url = config.baseURLs[0]
-  if (url.startsWith("mock://")) {
-    return new MockClient(config)
-  }
-  return new SchemaRegistryClient(config)
 }

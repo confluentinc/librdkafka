@@ -14,47 +14,99 @@ import {
   SchemaMetadata
 } from "../schemaregistry-client";
 import {
-  createFileRegistry,
+  createFileRegistry, createMutableRegistry,
   DescField,
   DescFile,
   DescMessage,
   FileRegistry,
-  fromBinary, getExtension, hasExtension,
-  Registry,
+  fromBinary, getExtension, hasExtension, MutableRegistry,
   ScalarType,
-  toBinary
+  toBinary,
 } from "@bufbuild/protobuf";
-import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import {
+  file_google_protobuf_any,
+  file_google_protobuf_api,
+  file_google_protobuf_descriptor,
+  file_google_protobuf_duration,
+  file_google_protobuf_empty,
+  file_google_protobuf_field_mask,
+  file_google_protobuf_source_context,
+  file_google_protobuf_struct,
+  file_google_protobuf_timestamp, file_google_protobuf_type, file_google_protobuf_wrappers,
+  FileDescriptorProtoSchema
+} from "@bufbuild/protobuf/wkt";
 import { BufferWrapper, MAX_VARINT_LEN_64 } from "./buffer-wrapper";
 import { LRUCache } from "lru-cache";
-import {field_meta, Meta} from "../confluent/meta_pb";
-import {getRuleExecutors} from "./rule-registry";
+import {field_meta, file_confluent_meta, Meta} from "../confluent/meta_pb";
+import {RuleRegistry} from "./rule-registry";
 import stringify from "json-stringify-deterministic";
+import {file_confluent_types_decimal} from "../confluent/types/decimal_pb";
+import {file_google_type_calendar_period} from "../google/type/calendar_period_pb";
+import {file_google_type_color} from "../google/type/color_pb";
+import {file_google_type_date} from "../google/type/date_pb";
+import {file_google_type_datetime} from "../google/type/datetime_pb";
+import {file_google_type_dayofweek} from "../google/type/dayofweek_pb";
+import {file_google_type_fraction} from "../google/type/fraction_pb";
+import {file_google_type_expr} from "../google/type/expr_pb";
+import {file_google_type_latlng} from "../google/type/latlng_pb";
+import {file_google_type_money} from "../google/type/money_pb";
+import {file_google_type_postal_address} from "../google/type/postal_address_pb";
+import {file_google_type_quaternion} from "../google/type/quaternion_pb";
+import {file_google_type_timeofday} from "../google/type/timeofday_pb";
+import {file_google_type_month} from "../google/type/month_pb";
+
+const builtinDeps = new Map<string, DescFile>([
+  ['confluent/meta.proto',                 file_confluent_meta],
+  ['confluent/type/decimal.proto',         file_confluent_types_decimal],
+  ['google/type/calendar_period.proto',    file_google_type_calendar_period],
+  ['google/type/color.proto',              file_google_type_color],
+  ['google/type/date.proto',               file_google_type_date],
+  ['google/type/datetime.proto',           file_google_type_datetime],
+  ['google/type/dayofweek.proto',          file_google_type_dayofweek],
+  ['google/type/expr.proto',               file_google_type_expr],
+  ['google/type/fraction.proto',           file_google_type_fraction],
+  ['google/type/latlng.proto',             file_google_type_latlng],
+  ['google/type/money.proto',              file_google_type_money],
+  ['google/type/month.proto',              file_google_type_month],
+  ['google/type/postal_address.proto',     file_google_type_postal_address],
+  ['google/type/quaternion.proto',         file_google_type_quaternion],
+  ['google/type/timeofday.proto',          file_google_type_timeofday],
+  ['google/protobuf/any.proto',            file_google_protobuf_any],
+  ['google/protobuf/api.proto',            file_google_protobuf_api],
+  ['google/protobuf/descriptor.proto',     file_google_protobuf_descriptor],
+  ['google/protobuf/duration.proto',       file_google_protobuf_duration],
+  ['google/protobuf/empty.proto',          file_google_protobuf_empty],
+  ['google/protobuf/field_mask.proto',     file_google_protobuf_field_mask],
+  ['google/protobuf/source_context.proto', file_google_protobuf_source_context],
+  ['google/protobuf/struct.proto',         file_google_protobuf_struct],
+  ['google/protobuf/timestamp.proto',      file_google_protobuf_timestamp],
+  ['google/protobuf/type.proto',           file_google_protobuf_type],
+  ['google/protobuf/wrappers.proto',       file_google_protobuf_wrappers],
+])
 
 export interface ProtobufSerde {
   schemaToDescCache: LRUCache<string, DescFile>
 }
 
 export type ProtobufSerializerConfig = SerializerConfig & {
-  registry: Registry
-  descToSchemaCache: LRUCache<string, SchemaInfo>
+  registry?: MutableRegistry
 }
 
 export class ProtobufSerializer extends Serializer implements ProtobufSerde {
-  registry: Registry
+  registry: MutableRegistry
   schemaToDescCache: LRUCache<string, DescFile>
   descToSchemaCache: LRUCache<string, SchemaInfo>
 
-  constructor(client: Client, serdeType: SerdeType, conf: ProtobufSerializerConfig) {
-    super(client, serdeType, conf)
-    this.registry = conf.registry
+  constructor(client: Client, serdeType: SerdeType, conf: ProtobufSerializerConfig, ruleRegistry?: RuleRegistry) {
+    super(client, serdeType, conf, ruleRegistry)
+    this.registry = conf.registry ?? createMutableRegistry()
     this.schemaToDescCache = new LRUCache<string, DescFile>({ max: this.config().cacheCapacity ?? 1000 } )
     this.descToSchemaCache = new LRUCache<string, SchemaInfo>({ max: this.config().cacheCapacity ?? 1000 } )
     this.fieldTransformer = async (ctx: RuleContext, fieldTransform: FieldTransform, msg: any) => {
       return await this.fieldTransform(ctx, fieldTransform, msg)
     }
-    for (const rule of getRuleExecutors()) {
-      rule.configure(client.config(), conf.ruleConfig ?? new Map<string, string>)
+    for (const rule of this.ruleRegistry.getExecutors()) {
+      rule.configure(client.config(), new Map<string, string>(Object.entries(conf.ruleConfig ?? {})))
     }
   }
 
@@ -76,7 +128,7 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
     }
     const fileDesc = messageDesc.file
     const schema = await this.getSchemaInfo(fileDesc)
-    const [id, info] = await this.getId(topic, msg, schema)
+    const [id, info] = await this.getId(topic, msg, schema, 'serialized')
     const subject = this.subjectName(topic, info)
     msg = await this.executeRules(subject, topic, RuleMode.WRITE, null, info, msg, null)
     const msgIndexBytes = this.toMessageIndexBytes(messageDesc)
@@ -114,7 +166,7 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
   toDependencies(fileDesc: DescFile, deps: Map<string, string>) {
     deps.set(fileDesc.name, Buffer.from(toBinary(FileDescriptorProtoSchema, fileDesc.proto)).toString('base64'))
     fileDesc.dependencies.forEach((dep) => {
-      if (!this.ignoreFile(dep.name)) {
+      if (!isBuiltin(dep.name)) {
         this.toDependencies(dep, deps)
       }
     })
@@ -123,17 +175,17 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
   async resolveDependencies(fileDesc: DescFile, deps: Map<string, string>, subject: string,
                             autoRegister: boolean, normalize: boolean): Promise<SchemaMetadata> {
     const refs: Reference[] = []
-    refs.length = fileDesc.dependencies.length
     for (let i = 0; i < fileDesc.dependencies.length; i++) {
       const dep = fileDesc.dependencies[i]
-      if (this.ignoreFile(dep.name)) {
+      const depName = dep.name + '.proto'
+      if (isBuiltin(depName)) {
         continue
       }
-      const ref = await this.resolveDependencies(dep, deps, dep.name, autoRegister, normalize)
+      const ref = await this.resolveDependencies(dep, deps, depName, autoRegister, normalize)
       if (ref == null) {
         throw new SerializationError('dependency not found')
       }
-      refs.push({name: dep.name, subject: ref.subject!, version: ref.version!})
+      refs.push({name: depName, subject: ref.subject!, version: ref.version!})
     }
     const info: SchemaInfo = {
       schema: deps.get(fileDesc.name)!,
@@ -182,8 +234,7 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
       // done. Allocate an array large enough to hold count+1 entries and
       // populate first value with index
       const msgIndexes: number[] = []
-      msgIndexes.length = count + 1
-      msgIndexes[0] = index
+      msgIndexes.push(index)
       return msgIndexes
     } else {
       const msgIndexes = this.toMessageIndexes(parent, count + 1)
@@ -211,12 +262,6 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
     throw new SerializationError('message descriptor not found in file descriptor');
   }
 
-  ignoreFile(name: string): boolean {
-    return name.startsWith('confluent/') ||
-      name.startsWith('google/protobuf/') ||
-      name.startsWith('google/type/')
-  }
-
   async fieldTransform(ctx: RuleContext, fieldTransform: FieldTransform, msg: any): Promise<any> {
     const typeName = msg.$typeName
     if (typeName == null) {
@@ -236,15 +281,15 @@ export class ProtobufDeserializer extends Deserializer implements ProtobufSerde 
   registry: FileRegistry
   schemaToDescCache: LRUCache<string, DescFile>
 
-  constructor(client: Client, serdeType: SerdeType, conf: ProtobufDeserializerConfig) {
-    super(client, serdeType, conf)
+  constructor(client: Client, serdeType: SerdeType, conf: ProtobufDeserializerConfig, ruleRegistry?: RuleRegistry) {
+    super(client, serdeType, conf, ruleRegistry)
     this.registry = createFileRegistry()
     this.schemaToDescCache = new LRUCache<string, DescFile>({ max: this.config().cacheCapacity ?? 1000 } )
     this.fieldTransformer = async (ctx: RuleContext, fieldTransform: FieldTransform, msg: any) => {
       return await this.fieldTransform(ctx, fieldTransform, msg)
     }
-    for (const rule of getRuleExecutors()) {
-      rule.configure(client.config(), conf.ruleConfig ?? new Map<string, string>)
+    for (const rule of this.ruleRegistry.getExecutors()) {
+      rule.configure(client.config(), new Map<string, string>(Object.entries(conf.ruleConfig ?? {})))
     }
   }
 
@@ -256,13 +301,13 @@ export class ProtobufDeserializer extends Deserializer implements ProtobufSerde 
       return null
     }
 
-    const info = await this.getSchema(topic, payload)
+    const info = await this.getSchema(topic, payload, 'serialized')
     const fd = await this.toFileDesc(this.client, info)
     const [bytesRead, msgIndexes] = this.readMessageIndexes(payload.subarray(5))
     const messageDesc = this.toMessageDesc(fd, msgIndexes)
 
     const subject = this.subjectName(topic, info)
-    const readerMeta = await this.getReaderSchema(subject)
+    const readerMeta = await this.getReaderSchema(subject, 'serialized')
 
     const msgBytes = payload.subarray(5 + bytesRead)
     let msg = fromBinary(messageDesc, msgBytes)
@@ -306,16 +351,25 @@ export class ProtobufDeserializer extends Deserializer implements ProtobufSerde 
 
   async parseFileDesc(client: Client, info: SchemaInfo): Promise<DescFile | undefined> {
     const deps = new Map<string, string>()
-    await this.resolveReferences(client, info, deps)
+    await this.resolveReferences(client, info, deps, 'serialized')
     const fileDesc = fromBinary(FileDescriptorProtoSchema, Buffer.from(info.schema, 'base64'))
     const resolve = (depName: string) => {
-      const dep = deps.get(depName)
-      if (dep == null) {
-        throw new SerializationError('dependency not found')
+      if (isBuiltin(depName)) {
+        const dep = builtinDeps.get(depName)
+        if (dep == null) {
+          throw new SerializationError(`dependency ${depName} not found`)
+        }
+        return dep
+      } else {
+        const dep = deps.get(depName)
+        if (dep == null) {
+          throw new SerializationError(`dependency ${depName} not found`)
+        }
+        const fileDesc = fromBinary(FileDescriptorProtoSchema, Buffer.from(dep, 'base64'))
+        fileDesc.name = depName
+        return fileDesc
       }
-      return fromBinary(FileDescriptorProtoSchema, Buffer.from(dep, 'base64'))
     }
-    // TODO check google protos already in registry
     const fileRegistry = createFileRegistry(fileDesc, resolve)
     this.registry = createFileRegistry(this.registry, fileRegistry)
     return this.registry.getFile(fileDesc.name)
@@ -325,9 +379,8 @@ export class ProtobufDeserializer extends Deserializer implements ProtobufSerde 
     const bw = new BufferWrapper(payload)
     const count = bw.readVarInt()
     const msgIndexes = []
-    msgIndexes.length = count
     for (let i = 0; i < count; i++) {
-      msgIndexes[i] = bw.readVarInt()
+      msgIndexes.push(bw.readVarInt())
     }
     return [bw.pos, msgIndexes]
   }
@@ -372,8 +425,8 @@ async function transform(ctx: RuleContext, descriptor: DescMessage, msg: any, fi
   }
   const fieldCtx = ctx.currentField()
   if (fieldCtx != null) {
-    const ruleTags = ctx.rule.tags
-    if (ruleTags == null || ruleTags.size === 0 || !disjoint(ruleTags, fieldCtx.tags)) {
+    const ruleTags = ctx.rule.tags ?? []
+    if (ruleTags == null || ruleTags.length === 0 || !disjoint(new Set<string>(ruleTags), fieldCtx.tags)) {
       return await fieldTransform.transform(ctx, fieldCtx, msg)
     }
   }
@@ -461,5 +514,8 @@ function disjoint(tags1: Set<string>, tags2: Set<string>): boolean {
   return true
 }
 
-
-
+function isBuiltin(name: string): boolean {
+  return name.startsWith('confluent/') ||
+    name.startsWith('google/protobuf/') ||
+    name.startsWith('google/type/')
+}

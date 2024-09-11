@@ -1,7 +1,15 @@
 
-import { Client, Compatibility, SchemaInfo, SchemaMetadata, ServerConfig } from './schemaregistry-client';
+import {
+  Client,
+  Compatibility,
+  minimize,
+  SchemaInfo,
+  SchemaMetadata,
+  ServerConfig
+} from './schemaregistry-client';
 import stringify from "json-stringify-deterministic";
 import {ClientConfig} from "./rest-service";
+import {RestError} from "./rest-error";
 
 interface VersionCacheEntry {
   version: number;
@@ -57,13 +65,13 @@ class MockClient implements Client {
   async register(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const metadata = await this.registerFullResponse(subject, schema, normalize);
     if (!metadata) {
-      throw new Error("Failed to register schema");
+      throw new RestError("Failed to register schema", 422, 42200);
     }
     return metadata.id;
   }
 
   async registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
-    const cacheKey = stringify({ subject, schema });
+    const cacheKey = stringify({ subject, schema: minimize(schema) });
 
     const cacheEntry = this.infoToSchemaCache.get(cacheKey);
     if (cacheEntry && !cacheEntry.softDeleted) {
@@ -72,7 +80,7 @@ class MockClient implements Client {
 
     const id = await this.getIDFromRegistry(subject, schema);
     if (id === -1) {
-      throw new Error("Failed to retrieve schema ID from registry");
+      throw new RestError("Failed to retrieve schema ID from registry", 422, 42200);
     }
 
     const metadata: SchemaMetadata = { ...schema, id };
@@ -112,49 +120,49 @@ class MockClient implements Client {
       newVersion = versions[versions.length - 1] + 1;
     }
 
-    const cacheKey = stringify({ subject, schema: schema });
+    const cacheKey = stringify({ subject, schema: minimize(schema) });
     this.schemaToVersionCache.set(cacheKey, { version: newVersion, softDeleted: false });
   }
 
-  async getBySubjectAndId(subject: string, id: number): Promise<SchemaInfo> {
+  async getBySubjectAndId(subject: string, id: number, format?: string): Promise<SchemaInfo> {
     const cacheKey = stringify({ subject, id });
     const cacheEntry = this.idToSchemaCache.get(cacheKey);
 
     if (!cacheEntry || cacheEntry.softDeleted) {
-      throw new Error("Schema not found");
+      throw new RestError("Schema not found", 404, 40400);
     }
     return cacheEntry.info;
   }
 
   async getId(subject: string, schema: SchemaInfo): Promise<number> {
-    const cacheKey = stringify({ subject, schema });
+    const cacheKey = stringify({ subject, schema: minimize(schema) });
     const cacheEntry = this.infoToSchemaCache.get(cacheKey);
     if (!cacheEntry || cacheEntry.softDeleted) {
-      throw new Error("Schema not found");
+      throw new RestError("Schema not found", 404, 40400);
     }
     return cacheEntry.metadata.id;
   }
 
-  async getLatestSchemaMetadata(subject: string): Promise<SchemaMetadata> {
+  async getLatestSchemaMetadata(subject: string, format?: string): Promise<SchemaMetadata> {
     const version = await this.latestVersion(subject);
     if (version === -1) {
-      throw new Error("No versions found for subject");
+      throw new RestError("No versions found for subject", 404, 40400);
     }
 
     return this.getSchemaMetadata(subject, version);
   }
 
-  async getSchemaMetadata(subject: string, version: number, deleted: boolean = false): Promise<SchemaMetadata> {
+  async getSchemaMetadata(subject: string, version: number, deleted: boolean = false, format?: string): Promise<SchemaMetadata> {
     let json;
     for (const [key, value] of this.schemaToVersionCache.entries()) {
       const parsedKey = JSON.parse(key);
-      if (parsedKey.subject === subject && value.version === version && value.softDeleted === deleted) {
+      if (parsedKey.subject === subject && value.version === version) {
         json = parsedKey;
       }
     }
 
     if (!json) {
-      throw new Error("Schema not found");
+      throw new RestError("Schema not found", 404, 40400);
     }
 
     let id: number = -1;
@@ -165,7 +173,7 @@ class MockClient implements Client {
       }
     }
     if (id === -1) {
-      throw new Error("Schema not found");
+      throw new RestError("Schema not found", 404, 40400);
     }
 
 
@@ -173,11 +181,12 @@ class MockClient implements Client {
       id,
       version,
       subject,
-      schema: json.schema.schema
+      ...json.schema,
     };
   }
 
-  async getLatestWithMetadata(subject: string, metadata: { [key: string]: string }, deleted: boolean = false): Promise<SchemaMetadata> {
+  async getLatestWithMetadata(subject: string, metadata: { [key: string]: string },
+                              deleted: boolean = false, format?: string): Promise<SchemaMetadata> {
     let metadataStr = '';
 
     for (const key in metadata) {
@@ -198,7 +207,7 @@ class MockClient implements Client {
     }
 
     if (results.length === 0) {
-      throw new Error("Schema not found");
+      throw new RestError("Schema not found", 404, 40400);
     }
 
     let latest: SchemaMetadata = results[0];
@@ -225,7 +234,7 @@ class MockClient implements Client {
     const results = await this.allVersions(subject);
 
     if (results.length === 0) {
-      throw new Error("No versions found for subject");
+      throw new RestError("No versions found for subject", 404, 40400);
     }
     return results;
   }
@@ -275,11 +284,11 @@ class MockClient implements Client {
   }
 
   async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
-    const cacheKey = stringify({ subject, schema });
+    const cacheKey = stringify({ subject, schema: minimize(schema) });
     const cacheEntry = this.schemaToVersionCache.get(cacheKey);
 
     if (!cacheEntry || cacheEntry.softDeleted) {
-      throw new Error("Schema not found");
+      throw new RestError("Schema not found", 404, 40400);
     }
 
     return cacheEntry.version;
@@ -333,7 +342,7 @@ class MockClient implements Client {
       if (parsedKey.subject === subject && value.version === version) {
         await this.deleteVersion(key, version, permanent);
 
-        const cacheKeySchema = stringify({ subject, schema: parsedKey.schema });
+        const cacheKeySchema = stringify({ subject, schema: minimize(parsedKey.schema) });
         const cacheEntry = this.infoToSchemaCache.get(cacheKeySchema);
         if (cacheEntry) {
           await this.deleteMetadata(cacheKeySchema, cacheEntry.metadata, permanent);
@@ -363,7 +372,7 @@ class MockClient implements Client {
   async getCompatibility(subject: string): Promise<Compatibility> {
     const cacheEntry = this.configCache.get(subject);
     if (!cacheEntry) {
-      throw new Error("Subject not found");
+      throw new RestError("Subject not found", 404, 40400);
     }
     return cacheEntry.compatibilityLevel as Compatibility;
   }
@@ -376,7 +385,7 @@ class MockClient implements Client {
   async getDefaultCompatibility(): Promise<Compatibility> {
     const cacheEntry = this.configCache.get(noSubject);
     if (!cacheEntry) {
-      throw new Error("Default compatibility not found");
+      throw new RestError("Default compatibility not found", 404, 40400);
     }
     return cacheEntry.compatibilityLevel as Compatibility;
   }
@@ -389,7 +398,7 @@ class MockClient implements Client {
   async getConfig(subject: string): Promise<ServerConfig> {
     const cacheEntry = this.configCache.get(subject);
     if (!cacheEntry) {
-      throw new Error("Subject not found");
+      throw new RestError("Subject not found", 404, 40400);
     }
     return cacheEntry;
   }
@@ -402,7 +411,7 @@ class MockClient implements Client {
   async getDefaultConfig(): Promise<ServerConfig> {
     const cacheEntry = this.configCache.get(noSubject);
     if (!cacheEntry) {
-      throw new Error("Default config not found");
+      throw new RestError("Default config not found", 404, 40400);
     }
     return cacheEntry;
   }

@@ -1,6 +1,7 @@
 import { Client, Dek, Kek } from "./dekregistry-client";
 import { MOCK_TS } from "./constants";
 import stringify from "json-stringify-deterministic";
+import {RestError} from "../../../rest-error";
 
 class MockDekRegistryClient implements Client {
   private kekCache: Map<string, Kek>;
@@ -39,7 +40,7 @@ class MockDekRegistryClient implements Client {
       return cachedKek;
     }
 
-    throw new Error(`Kek not found: ${name}`);
+    throw new RestError(`Kek not found: ${name}`, 404, 40400);
   }
 
   async registerDek(kekName: string, subject: string, algorithm: string,
@@ -75,18 +76,18 @@ class MockDekRegistryClient implements Client {
         }
       }
       if (latestVersion === 0) {
-        throw new Error(`Dek not found: ${subject}`);
+        throw new RestError(`Dek not found: ${subject}`, 404, 40400);
       }
       version = latestVersion;
     }
 
-    const cacheKey = stringify({ kekName, subject, version, algorithm, deleted });
+    const cacheKey = stringify({ kekName, subject, version, algorithm, deleted: false });
     const cachedDek = this.dekCache.get(cacheKey);
     if (cachedDek) {
       return cachedDek;
     }
 
-    throw new Error(`Dek not found: ${subject}`);
+    throw new RestError(`Dek not found: ${subject}`, 404, 40400);
   }
 
   async close() {

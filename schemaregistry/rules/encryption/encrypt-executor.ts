@@ -5,11 +5,11 @@ import {
   FieldType,
   MAGIC_BYTE,
   RuleContext,
-  RuleError
+  RuleError,
 } from "../../serde/serde";
 import {RuleMode,} from "../../schemaregistry-client";
-import {Client, Dek, DekRegistryClient, Kek} from "../../dekregistry/dekregistry-client";
-import {registerRuleExecutor} from "../../serde/rule-registry";
+import {Client, Dek, DekRegistryClient, Kek} from "./dekregistry/dekregistry-client";
+import {RuleRegistry} from "../../serde/rule-registry";
 import {ClientConfig} from "../../rest-service";
 import {RestError} from "../../rest-error";
 import * as Random from './tink/random';
@@ -35,7 +35,7 @@ const ENCRYPT_DEK_EXPIRY_DAYS = 'encrypt.dek.expiry.days'
 // MillisInDay represents number of milliseconds in a day
 const MILLIS_IN_DAY = 24 * 60 * 60 * 1000
 
-enum DekFormat {
+export enum DekFormat {
   AES128_GCM = 'AES128_GCM',
   AES256_GCM = 'AES256_GCM',
   AES256_SIV = 'AES256_SIV',
@@ -57,13 +57,14 @@ interface DekId {
 export class FieldEncryptionExecutor extends FieldRuleExecutor {
   client: Client | null = null
 
-  static register() {
-    registerRuleExecutor(new FieldEncryptionExecutor())
+  static register(): FieldEncryptionExecutor {
+    const executor = new FieldEncryptionExecutor()
+    RuleRegistry.registerRuleExecutor(executor)
+    return executor
   }
 
   override configure(clientConfig: ClientConfig, config: Map<string, string>) {
-    // TODO use mock
-    this.client = new DekRegistryClient(clientConfig)
+    this.client = DekRegistryClient.newClient(clientConfig)
     this.config = config
   }
 
@@ -80,9 +81,9 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
     return transform
   }
 
-  override close() {
+  async close(): Promise<void> {
     if (this.client != null) {
-      this.client.close()
+      await this.client.close()
     }
   }
 

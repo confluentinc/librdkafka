@@ -10,6 +10,7 @@ import {SecurityException} from './exception/security_exception';
 import * as Bytes from './bytes';
 import * as Random from './random';
 import * as Validators from './validators';
+import * as crypto from 'crypto';
 
 /**
  * The only supported IV size.
@@ -51,7 +52,7 @@ export class AesGcm extends Aead {
       alg['additionalData'] = associatedData;
     }
     const ciphertext =
-        await self.crypto.subtle.encrypt(alg, this.key, plaintext);
+        await crypto.subtle.encrypt(alg, this.key, plaintext);
     return Bytes.concat(iv, new Uint8Array(ciphertext));
   }
 
@@ -77,7 +78,7 @@ export class AesGcm extends Aead {
       alg['additionalData'] = associatedData;
     }
     try {
-      return new Uint8Array(await self.crypto.subtle.decrypt(
+      return new Uint8Array(await crypto.subtle.decrypt(
           alg, this.key,
           new Uint8Array(ciphertext.subarray(IV_SIZE_IN_BYTES))));
       // Preserving old behavior when moving to
@@ -92,7 +93,7 @@ export class AesGcm extends Aead {
 export async function fromRawKey(key: Uint8Array): Promise<Aead> {
   Validators.requireUint8Array(key);
   Validators.validateAesKeySize(key.length);
-  const webCryptoKey = await self.crypto.subtle.importKey(
+  const webCryptoKey = await crypto.subtle.importKey(
       /* format */
       'raw', key,
       /* keyData */

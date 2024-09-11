@@ -1,7 +1,8 @@
 import { LRUCache } from 'lru-cache';
 import { Mutex } from 'async-mutex';
-import { ClientConfig, RestService } from '../rest-service';
+import { ClientConfig, RestService } from '../../../rest-service';
 import stringify from 'json-stringify-deterministic';
+import {MockDekRegistryClient} from "./mock-dekregistry-client";
 
 /*
  * Confluent-Schema-Registry-TypeScript - Node.js wrapper for Confluent Schema Registry
@@ -74,6 +75,14 @@ class DekRegistryClient implements Client {
     this.dekCache = new LRUCache<string, Dek>(cacheOptions);
     this.kekMutex = new Mutex();
     this.dekMutex = new Mutex();
+  }
+
+  static newClient(config: ClientConfig): Client {
+    let url = config.baseURLs[0]
+    if (url.startsWith("mock://")) {
+      return new MockDekRegistryClient()
+    }
+    return new DekRegistryClient(config)
   }
 
   static getEncryptedKeyMaterialBytes(dek: Dek): Buffer | null {

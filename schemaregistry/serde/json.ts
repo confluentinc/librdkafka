@@ -27,8 +27,8 @@ import {
 } from '@criteria/json-schema/draft-07'
 import { validateJSON } from '@criteria/json-schema-validation'
 import { LRUCache } from "lru-cache";
-import { generateSchema } from "./json_util";
-import {getRuleExecutors} from "./rule-registry";
+import { generateSchema } from "./json-util";
+import {RuleRegistry} from "./rule-registry";
 import stringify from "json-stringify-deterministic";
 
 export interface ValidateFunction {
@@ -53,15 +53,15 @@ export class JsonSerializer extends Serializer implements JsonSerde {
   schemaToTypeCache: LRUCache<string, DereferencedJSONSchema>
   schemaToValidateCache: LRUCache<string, ValidateFunction>
 
-  constructor(client: Client, serdeType: SerdeType, conf: JsonSerializerConfig) {
-    super(client, serdeType, conf)
+  constructor(client: Client, serdeType: SerdeType, conf: JsonSerializerConfig, ruleRegistry?: RuleRegistry) {
+    super(client, serdeType, conf, ruleRegistry)
     this.schemaToTypeCache = new LRUCache<string, DereferencedJSONSchema>({ max: this.config().cacheCapacity ?? 1000 })
     this.schemaToValidateCache = new LRUCache<string, ValidateFunction>({ max: this.config().cacheCapacity ?? 1000 })
     this.fieldTransformer = async (ctx: RuleContext, fieldTransform: FieldTransform, msg: any) => {
       return await this.fieldTransform(ctx, fieldTransform, msg)
     }
-    for (const rule of getRuleExecutors()) {
-      rule.configure(client.config(), conf.ruleConfig ?? new Map<string, string>)
+    for (const rule of this.ruleRegistry.getExecutors()) {
+      rule.configure(client.config(), new Map<string, string>(Object.entries(conf.ruleConfig ?? {})))
     }
   }
 
@@ -123,15 +123,15 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
   schemaToTypeCache: LRUCache<string, DereferencedJSONSchema>
   schemaToValidateCache: LRUCache<string, ValidateFunction>
 
-  constructor(client: Client, serdeType: SerdeType, conf: JsonDeserializerConfig) {
-    super(client, serdeType, conf)
+  constructor(client: Client, serdeType: SerdeType, conf: JsonDeserializerConfig, ruleRegistry?: RuleRegistry) {
+    super(client, serdeType, conf, ruleRegistry)
     this.schemaToTypeCache = new LRUCache<string, DereferencedJSONSchema>({ max: this.config().cacheCapacity ?? 1000 })
     this.schemaToValidateCache = new LRUCache<string, ValidateFunction>({ max: this.config().cacheCapacity ?? 1000 })
     this.fieldTransformer = async (ctx: RuleContext, fieldTransform: FieldTransform, msg: any) => {
       return await this.fieldTransform(ctx, fieldTransform, msg)
     }
-    for (const rule of getRuleExecutors()) {
-      rule.configure(client.config(), conf.ruleConfig ?? new Map<string, string>)
+    for (const rule of this.ruleRegistry.getExecutors()) {
+      rule.configure(client.config(), new Map<string, string>(Object.entries(conf.ruleConfig ?? {})))
     }
   }
 
@@ -213,7 +213,7 @@ async function toValidateFunction(
   const spec = json.$schema
   if (spec === 'http://json-schema.org/draft/2020-12/schema') {
     const ajv2020 = new Ajv2020(conf as JsonSerdeConfig)
-    deps.forEach((name, schema) => {
+    deps.forEach((schema, name) => {
       ajv2020.addSchema(JSON.parse(schema), name)
     })
     fn = ajv2020.compile(json)
@@ -221,7 +221,7 @@ async function toValidateFunction(
     const ajv = new Ajv2019(conf as JsonSerdeConfig)
     ajv.addMetaSchema(draft6MetaSchema)
     ajv.addMetaSchema(draft7MetaSchema)
-    deps.forEach((name, schema) => {
+    deps.forEach((schema, name) => {
       ajv.addSchema(JSON.parse(schema), name)
     })
     fn = ajv.compile(json)
@@ -317,7 +317,7 @@ async function transform(ctx: RuleContext, schema: DereferencedJSONSchema, path:
     case FieldType.BOOLEAN:
       if (fieldCtx != null) {
         const ruleTags = ctx.rule.tags
-        if (ruleTags == null || ruleTags.size === 0 || !disjoint(ruleTags, fieldCtx.tags)) {
+        if (ruleTags == null || ruleTags.length === 0 || !disjoint(new Set<string>(ruleTags), fieldCtx.tags)) {
           return await fieldTransform.transform(ctx, fieldCtx, msg)
         }
       }

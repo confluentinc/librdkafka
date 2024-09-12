@@ -2792,7 +2792,7 @@ static void do_test_options(rd_kafka_t *rk) {
         }
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[16];
+                const rd_kafka_admin_op_t valid_apis[17];
         } matrix[] = {
             {"request_timeout", _all_apis},
             {"operation_timeout",

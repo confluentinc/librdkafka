@@ -10032,6 +10032,10 @@ RD_EXPORT void rd_kafka_ElectLeader(rd_kafka_t *rk,
                                     const rd_kafka_AdminOptions_t *options,
                                     rd_kafka_queue_t *rkqu);
 
+/**
+ * @brief Get an array of ElectLeader result instances
+ *        from an ElectLeader result.
+ */
 typedef struct rd_kafka_topic_partition_result_s
     rd_kafka_topic_partition_result_t;
 

@@ -54,7 +54,7 @@ module.exports = ts.config(
     },
     ...ts.configs.recommended.map((config) => ({
         ...config,
-        ignores: ["**/*.js"],
+        ignores: ["**/*.js", "types/rdkafka.d.ts", "types/kafkajs.d.ts", "types/config.d.ts"],
         rules: {
             ...config.rules,
             "prefer-const": "warn",

@@ -2,15 +2,15 @@
 
 # Variables
 NODE ?= node
-ESLINT ?= ./node_modules/.bin/eslint
-JEST ?= ./node_modules/.bin/jest
-TS_NODE ?= ./node_modules/.bin/ts-node
+ESLINT ?= ../node_modules/.bin/eslint
+JEST ?= ../node_modules/.bin/jest
+TS_NODE ?= ../node_modules/.bin/ts-node
 
 # Paths
-SRC_DIR = schemaregistry
-SR_TEST_DIR = test/schemaregistry
-DEK_TEST_DIR = test/schemaregistry/rules/encryption/dekregistry
-INTEG_DIR = e2e/schemaregistry
+SRC_DIR = .
+SR_TEST_DIR = ../test/schemaregistry
+DEK_TEST_DIR = ../test/schemaregistry/rules/encryption/dekregistry
+INTEG_DIR = ../e2e/schemaregistry
 
 # Tasks
 .PHONY: all lint test integtest

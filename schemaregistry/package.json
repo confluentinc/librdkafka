@@ -1,0 +1,59 @@
+{
+  "name": "@confluentinc/schemaregistry",
+  "version": "v0.1.16-devel",
+  "description": "Node.js client for Confluent Schema Registry",
+  "main": "lib/index.js",
+  "devDependencies": {
+    "@bufbuild/buf": "^1.37.0",
+    "@bufbuild/protoc-gen-es": "^2.0.0",
+    "@eslint/js": "^9.9.0",
+    "@types/eslint__js": "^8.42.3",
+    "@types/node": "^20.16.1",
+    "bluebird": "^3.5.3",
+    "eslint": "^8.57.0",
+    "eslint-plugin-jest": "^28.6.0",
+    "jest": "^29.7.0",
+    "jsdoc": "^4.0.2",
+    "mocha": "^10.7.0",
+    "node-gyp": "^9.3.1",
+    "ts-jest": "^29.2.4",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.2.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "^3.637.0",
+    "@azure/identity": "^4.4.1",
+    "@azure/keyvault-keys": "^4.8.0",
+    "@bufbuild/protobuf": "^2.0.0",
+    "@criteria/json-schema": "^0.10.0",
+    "@criteria/json-schema-validation": "^0.10.0",
+    "@google-cloud/kms": "^4.5.0",
+    "@hackbg/miscreant-esm": "^0.3.2-patch.3",
+    "@smithy/types": "^3.3.0",
+    "@types/validator": "^13.12.0",
+    "ajv": "^8.17.1",
+    "async-mutex": "^0.5.0",
+    "avsc": "^5.7.7",
+    "axios": "^1.7.3",
+    "json-stringify-deterministic": "^1.0.12",
+    "jsonata": "^2.0.5",
+    "lru-cache": "^11.0.0",
+    "node-vault": "^0.10.2",
+    "validator": "^13.12.0"
+  },
+  "scripts": {
+    "test:types": "tsc -p .",
+    "test:schemaregistry": "make -f Makefile.schemaregistry test"
+  },
+
+  "keywords": [
+    "schemaregistry",
+    "confluent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:confluentinc/confluent-kafka-javascript.git"
+  },
+
+  "license": "MIT"
+}

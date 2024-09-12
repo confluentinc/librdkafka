@@ -336,61 +336,68 @@ const char *rd_kafka_Node_rack(const rd_kafka_Node_t *node) {
 /**
  * @brief Creates a new rd_kafka_topic_partition_result_t object with the given
  *       \p topic \p partition \p error and \p error string.
-*/
+ */
 
-rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_new(const char *topic, 
-                                                                       int32_t partition, 
-                                                                       rd_kafka_resp_err_t err, 
-                                                                       const char *errstr) {
+rd_kafka_topic_partition_result_t *
+rd_kafka_topic_partition_result_new(const char *topic,
+                                    int32_t partition,
+                                    rd_kafka_resp_err_t err,
+                                    const char *errstr) {
 
         rd_kafka_topic_partition_result_t *desc;
 
-        desc = rd_calloc(1, sizeof(*desc));
-        desc->topic = rd_strdup(topic);
+        desc            = rd_calloc(1, sizeof(*desc));
+        desc->topic     = rd_strdup(topic);
         desc->partition = partition;
-        desc->err = err;
-        desc->errstr = rd_strdup(errstr);
+        desc->err       = err;
+        desc->errstr    = rd_strdup(errstr);
 
         return desc;
 }
 
 /**
  * @brief Returns the topic of the rd_kafka_topic_partition_result_t object.
-*/
+ */
 
-const char* rd_kafka_topic_partition_result_topic(const rd_kafka_topic_partition_result_t *desc) {
+const char *rd_kafka_topic_partition_result_topic(
+    const rd_kafka_topic_partition_result_t *desc) {
         return desc->topic;
 }
 
 /**
  * @brief Returns the partition of the rd_kafka_topic_partition_result_t object.
-*/
+ */
 
-int32_t rd_kafka_topic_partition_result_partition(const rd_kafka_topic_partition_result_t *desc) {
+int32_t rd_kafka_topic_partition_result_partition(
+    const rd_kafka_topic_partition_result_t *desc) {
         return desc->partition;
 }
 
 /**
  * @brief Returns the error of the rd_kafka_topic_partition_result_t object.
-*/
+ */
 
-rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(const rd_kafka_topic_partition_result_t *desc) {
+rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
+    const rd_kafka_topic_partition_result_t *desc) {
         return desc->err;
 }
 
 /**
- * @brief Returns the error string of the rd_kafka_topic_partition_result_t object.
-*/
+ * @brief Returns the error string of the rd_kafka_topic_partition_result_t
+ * object.
+ */
 
-const char* rd_kafka_topic_partition_result_error_string(const rd_kafka_topic_partition_result_t *desc) {
+const char *rd_kafka_topic_partition_result_error_string(
+    const rd_kafka_topic_partition_result_t *desc) {
         return desc->errstr;
 }
 
 /**
  * @brief Destroys the rd_kafka_topic_partition_result_t object.
-*/
+ */
 
-void rd_kafka_topic_partition_result_destroy(rd_kafka_topic_partition_result_t *desc) {
+void rd_kafka_topic_partition_result_destroy(
+    rd_kafka_topic_partition_result_t *desc) {
         rd_free(desc->topic);
         rd_free(desc->errstr);
         rd_free(desc);
@@ -398,13 +405,13 @@ void rd_kafka_topic_partition_result_destroy(rd_kafka_topic_partition_result_t *
 
 /**
  * @brief Destroys the array of rd_kafka_topic_partition_result_t objects.
-*/
+ */
 
 void rd_kafka_topic_partition_result_destroy_array(
     rd_kafka_topic_partition_result_t **descs,
     int32_t desc_cnt) {
         int32_t i;
-        for (i = 0; i < desc_cnt; i++){
+        for (i = 0; i < desc_cnt; i++) {
                 rd_kafka_topic_partition_result_destroy(descs[i]);
         }
 }
@@ -412,4 +419,3 @@ void rd_kafka_topic_partition_result_destroy_array(
 void rd_kafka_topic_partition_result_free(void *ptr) {
         rd_kafka_topic_partition_result_destroy(ptr);
 }
-

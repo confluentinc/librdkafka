@@ -5915,9 +5915,9 @@ rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_ElectLeaders, 1,
-            1 + (50 + 4)*elect_leader->partitions->cnt, ApiVersion >= 2);
+            1 + (50 + 4) * elect_leader->partitions->cnt, ApiVersion >= 2);
 
-        if(ApiVersion >= 1) {
+        if (ApiVersion >= 1) {
                 /* Election type */
                 rd_kafka_buf_write_i8(rkbuf, elect_leader->electionType);
         }
@@ -5927,12 +5927,11 @@ rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
-                        rkbuf, elect_leader->partitions, rd_false /*don't skip invalid offsets*/, 
-                        rd_false /* any offset */,
-                        rd_false /* don't use topic_id */,
-                        rd_true/* use topic_names */ ,
-                        fields);
-        
+            rkbuf, elect_leader->partitions,
+            rd_false /*don't skip invalid offsets*/, rd_false /* any offset */,
+            rd_false /* don't use topic_id */, rd_true /* use topic_names */,
+            fields);
+
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

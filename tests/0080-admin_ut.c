@@ -2355,10 +2355,10 @@ static void do_test_AlterUserScramCredentials(const char *what,
         SUB_TEST_PASS();
 }
 
-static void do_test_ElectLeaders(const char* what, 
+static void do_test_ElectLeaders(const char *what,
                                  rd_kafka_t *rk,
-                                 rd_kafka_queue_t *useq, 
-                                 int with_options, 
+                                 rd_kafka_queue_t *useq,
+                                 int with_options,
                                  int etype) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
@@ -2375,10 +2375,9 @@ static void do_test_ElectLeaders(const char* what,
         char errstr[512];
         void *my_opaque = NULL, *opaque;
 
-        if(etype == 0){
+        if (etype == 0) {
                 election_type = RD_KAFKA_ELECTION_TYPE_PREFERRED;
-        }
-        else{
+        } else {
                 election_type = RD_KAFKA_ELECTION_TYPE_UNCLEAN;
         }
 
@@ -2395,36 +2394,37 @@ static void do_test_ElectLeaders(const char* what,
         rd_kafka_topic_partition_list_destroy(partitions);
 
         partitions = rd_kafka_topic_partition_list_new(0);
-        empty_elect_leader = rd_kafka_ElectLeader_new(election_type, partitions);
+        empty_elect_leader =
+            rd_kafka_ElectLeader_new(election_type, partitions);
         rd_kafka_topic_partition_list_destroy(partitions);
 
         partitions = rd_kafka_topic_partition_list_new(3);
         rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
         rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
         rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
-        duplicate_elect_leader = rd_kafka_ElectLeader_new(election_type, partitions);
+        duplicate_elect_leader =
+            rd_kafka_ElectLeader_new(election_type, partitions);
         rd_kafka_topic_partition_list_destroy(partitions);
 
         if (with_options) {
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_ELECTLEADER);
 
-                exp_timeout = MY_SOCKET_TIMEOUT_MS ;
+                exp_timeout = MY_SOCKET_TIMEOUT_MS;
 
                 err = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-                if(useq){
+                if (useq) {
                         my_opaque = (void *)99981;
                         rd_kafka_AdminOptions_set_opaque(options, my_opaque);
                 }
         }
-        
+
         /*Empty topic-partition list*/
         TIMING_START(&timing, "ElectLeaders");
-        TEST_SAY("Call ElectLeaders, timeout is %dms\n",
-                 exp_timeout);
+        TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
         rd_kafka_ElectLeader(rk, empty_elect_leader, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
         rd_kafka_ElectLeader_destroy(empty_elect_leader);
@@ -2434,30 +2434,28 @@ static void do_test_ElectLeaders(const char* what,
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TIMING_ASSERT(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
-        TEST_SAY("ElectLeaders: got %s in %.3fs\n",
-                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+        TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
 
         /* Convert event to proper result */
         res = rd_kafka_event_ElectLeader_result(rkev);
         TEST_ASSERT(res, "expected ElectLeader_result, not %s",
                     rd_kafka_event_name(rkev));
         /*Expecting error*/
-        err = rd_kafka_event_error(rkev);
+        err                            = rd_kafka_event_error(rkev);
         const char *event_errstr_empty = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err, "expected ElectLeader to fail");
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "expected RD_KAFKA_RESP_ERR__INVALID_ARG, not %s",
                     rd_kafka_err2name(err));
-        TEST_ASSERT(strcmp(event_errstr_empty,
-                           "No partitions specified") == 0,
-                        "expected \"No partitions specified\", not \"%s\"",
-                        event_errstr_empty);
+        TEST_ASSERT(strcmp(event_errstr_empty, "No partitions specified") == 0,
+                    "expected \"No partitions specified\", not \"%s\"",
+                    event_errstr_empty);
         rd_kafka_event_destroy(rkev);
-        
+
         /*Duplicate topic-partition list*/
         TIMING_START(&timing, "ElectLeaders");
-        TEST_SAY("Call ElectLeaders, timeout is %dms\n",
-                 exp_timeout);
+        TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
         rd_kafka_ElectLeader(rk, duplicate_elect_leader, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
         rd_kafka_ElectLeader_destroy(duplicate_elect_leader);
@@ -2467,29 +2465,29 @@ static void do_test_ElectLeaders(const char* what,
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TIMING_ASSERT(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
-        TEST_SAY("ElectLeaders: got %s in %.3fs\n",
-                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
-        
+        TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
         /* Convert event to proper result */
         res = rd_kafka_event_ElectLeader_result(rkev);
         TEST_ASSERT(res, "expected ElectLeader_result, not %s",
                     rd_kafka_event_name(rkev));
         /*Expecting error*/
-        err = rd_kafka_event_error(rkev);
+        err                                = rd_kafka_event_error(rkev);
         const char *event_errstr_duplicate = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err, "expected ElectLeader to fail");
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "expected RD_KAFKA_RESP_ERR__INVALID_ARG, not %s",
                     rd_kafka_err2name(err));
-        TEST_ASSERT(strcmp(event_errstr_duplicate, "Duplicate partitions specified") == 0,
+        TEST_ASSERT(strcmp(event_errstr_duplicate,
+                           "Duplicate partitions specified") == 0,
                     "expected \"Duplicate partitions specified\", not \"%s\"",
                     event_errstr_duplicate);
         rd_kafka_event_destroy(rkev);
 
         /*Correct topic-partition list*/
         TIMING_START(&timing, "ElectLeaders");
-        TEST_SAY("Call ElectLeaders, timeout is %dms\n",
-                 exp_timeout);
+        TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
         rd_kafka_ElectLeader(rk, elect_leader, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
         rd_kafka_ElectLeader_destroy(elect_leader);
@@ -2499,9 +2497,9 @@ static void do_test_ElectLeaders(const char* what,
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TIMING_ASSERT(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
-        TEST_SAY("ElectLeaders: got %s in %.3fs\n",
-                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
-        
+        TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
         /* Convert event to proper result */
         res = rd_kafka_event_ElectLeader_result(rkev);
         TEST_ASSERT(res, "expected ElectLeader_result, not %s",
@@ -2510,25 +2508,25 @@ static void do_test_ElectLeaders(const char* what,
         TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
                     my_opaque, opaque);
         /*Expecting error*/
-        err = rd_kafka_event_error(rkev);
+        err                   = rd_kafka_event_error(rkev);
         const char *event_err = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err, "expected ElectLeader to fail");
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "expected RD_KAFKA_RESP_ERR__TIMED_OUT, not %s",
                     rd_kafka_err2name(err));
-        TEST_ASSERT(strcmp(event_err, 
-                          "Failed while waiting for controller: "
-                          "Local: Timed out") == 0,
-                        "expected \"Failed while waiting for controller: "
-                        "Local: Timed out\", not \"%s\"",
-                        event_err);
+        TEST_ASSERT(strcmp(event_err,
+                           "Failed while waiting for controller: "
+                           "Local: Timed out") == 0,
+                    "expected \"Failed while waiting for controller: "
+                    "Local: Timed out\", not \"%s\"",
+                    event_err);
         rd_kafka_event_destroy(rkev);
 
         if (options)
                 rd_kafka_AdminOptions_destroy(options);
-        if(!useq)
+        if (!useq)
                 rd_kafka_queue_destroy(q);
-        
+
         SUB_TEST_PASS();
 }
 
@@ -2800,8 +2798,7 @@ static void do_test_options(rd_kafka_t *rk) {
             {"operation_timeout",
              {RD_KAFKA_ADMIN_OP_CREATETOPICS, RD_KAFKA_ADMIN_OP_DELETETOPICS,
               RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
-              RD_KAFKA_ADMIN_OP_DELETERECORDS,
-              RD_KAFKA_ADMIN_OP_ELECTLEADER}},
+              RD_KAFKA_ADMIN_OP_DELETERECORDS, RD_KAFKA_ADMIN_OP_ELECTLEADER}},
             {"validate_only",
              {RD_KAFKA_ADMIN_OP_CREATETOPICS,
               RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
@@ -3055,14 +3052,22 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_AlterUserScramCredentials("main queue", rk, mainq);
         do_test_AlterUserScramCredentials("temp queue", rk, NULL);
 
-        do_test_ElectLeaders("main queue, options, Preffered Elections", rk, mainq, 1, 0);
-        do_test_ElectLeaders("main queue, options, Unclean Elections", rk, mainq, 1, 1);
-        do_test_ElectLeaders("main queue, no options, Preffered Elections", rk, mainq, 0, 0);
-        do_test_ElectLeaders("main queue, no options, Unclean Elections", rk, mainq, 0, 1);
-        do_test_ElectLeaders("temp queue, options, Preffered Elections", rk, NULL, 1, 0);
-        do_test_ElectLeaders("temp queue, options, Unclean Elections", rk, NULL, 1, 1);
-        do_test_ElectLeaders("temp queue, no options, Preffered Elections", rk, NULL, 0, 0);
-        do_test_ElectLeaders("temp queue, no options, Unclean Elections", rk, NULL, 0, 1);
+        do_test_ElectLeaders("main queue, options, Preffered Elections", rk,
+                             mainq, 1, 0);
+        do_test_ElectLeaders("main queue, options, Unclean Elections", rk,
+                             mainq, 1, 1);
+        do_test_ElectLeaders("main queue, no options, Preffered Elections", rk,
+                             mainq, 0, 0);
+        do_test_ElectLeaders("main queue, no options, Unclean Elections", rk,
+                             mainq, 0, 1);
+        do_test_ElectLeaders("temp queue, options, Preffered Elections", rk,
+                             NULL, 1, 0);
+        do_test_ElectLeaders("temp queue, options, Unclean Elections", rk, NULL,
+                             1, 1);
+        do_test_ElectLeaders("temp queue, no options, Preffered Elections", rk,
+                             NULL, 0, 0);
+        do_test_ElectLeaders("temp queue, no options, Unclean Elections", rk,
+                             NULL, 0, 1);
 
         do_test_mix(rk, mainq);
 

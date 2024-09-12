@@ -71,19 +71,20 @@ static void stop(int sig) {
 
 static void usage(const char *reason, ...) {
 
-        fprintf(stderr,
-                "Elect Leaders usage examples\n"
-                "\n"
-                "Usage: %s <options> <election_type( 0(Preffered)/ 1(Unclean))> "
-                "<topic1> <partition1> ...\n"
-                "\n"
-                "Options:\n"
-                "   -b <brokers>    Bootstrap server list to connect to.\n"
-                "   -X <prop=val>   Set librdkafka configuration property.\n"
-                "                   See CONFIGURATION.md for full list.\n"
-                "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
-                "\n",
-                argv0, rd_kafka_get_debug_contexts());
+        fprintf(
+            stderr,
+            "Elect Leaders usage examples\n"
+            "\n"
+            "Usage: %s <options> <election_type( 0(Preffered)/ 1(Unclean))> "
+            "<topic1> <partition1> ...\n"
+            "\n"
+            "Options:\n"
+            "   -b <brokers>    Bootstrap server list to connect to.\n"
+            "   -X <prop=val>   Set librdkafka configuration property.\n"
+            "                   See CONFIGURATION.md for full list.\n"
+            "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
+            "\n",
+            argv0, rd_kafka_get_debug_contexts());
 
         if (reason) {
                 va_list ap;
@@ -120,7 +121,8 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
                 fatal("Failed to set %s=%s: %s", name, val, errstr);
 }
 
-static int print_elect_leader_result(const rd_kafka_ElectLeader_result_t *result) {
+static int
+print_elect_leader_result(const rd_kafka_ElectLeader_result_t *result) {
         rd_kafka_resp_err_t err;
         const rd_kafka_topic_partition_result_t **results;
         size_t results_cnt;
@@ -131,21 +133,29 @@ static int print_elect_leader_result(const rd_kafka_ElectLeader_result_t *result
 
         results = rd_kafka_ElectionResult_partition(result, &results_cnt);
 
-        if(err){
+        if (err) {
                 printf("%% ElectLeader failed: %s\n", rd_kafka_err2str(err));
                 retval = 1;
         } else {
-                for(i = 0; i < results_cnt; i++){
-                        if(rd_kafka_topic_partition_result_error(results[i])){
-                             printf("%% ElectLeader failed for %s [%" PRId32 "] : %s\n",
-                                rd_kafka_topic_partition_result_topic(results[i]),
-                                rd_kafka_topic_partition_result_partition(results[i]),
-                                rd_kafka_topic_partition_result_error_string(results[i]));
-                        }
-                        else{
-                                printf("%% ElectLeader succeeded for %s [%" PRId32 "]\n",
-                                        rd_kafka_topic_partition_result_topic(results[i]),
-                                        rd_kafka_topic_partition_result_partition(results[i]));
+                for (i = 0; i < results_cnt; i++) {
+                        if (rd_kafka_topic_partition_result_error(results[i])) {
+                                printf(
+                                    "%% ElectLeader failed for %s [%" PRId32
+                                    "] : %s\n",
+                                    rd_kafka_topic_partition_result_topic(
+                                        results[i]),
+                                    rd_kafka_topic_partition_result_partition(
+                                        results[i]),
+                                    rd_kafka_topic_partition_result_error_string(
+                                        results[i]));
+                        } else {
+                                printf(
+                                    "%% ElectLeader succeeded for %s [%" PRId32
+                                    "]\n",
+                                    rd_kafka_topic_partition_result_topic(
+                                        results[i]),
+                                    rd_kafka_topic_partition_result_partition(
+                                        results[i]));
                         }
                 }
         }
@@ -180,27 +190,27 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
         int i;
         int retval = 0;
 
-        if(argc < 3){
+        if (argc < 3) {
                 usage("Invalid number of arguments");
         }
         int etype = parse_int("election_type", argv[0]);
-        
-        if(etype == 0){
+
+        if (etype == 0) {
                 election_type = RD_KAFKA_ELECTION_TYPE_PREFERRED;
-        } else if(etype == 1){
+        } else if (etype == 1) {
                 election_type = RD_KAFKA_ELECTION_TYPE_UNCLEAN;
         } else {
                 usage("Invalid election type");
         }
         argc--;
         argv++;
-        partitions = rd_kafka_topic_partition_list_new(argc/2);
-        if(argc % 2 != 0){
+        partitions = rd_kafka_topic_partition_list_new(argc / 2);
+        if (argc % 2 != 0) {
                 usage("Invalid number of arguments");
         }
-        for(i = 0; i < argc; i+=2){
+        for (i = 0; i < argc; i += 2) {
                 rd_kafka_topic_partition_list_add(
-                    partitions, argv[i], parse_int("partition", argv[i+1]));
+                    partitions, argv[i], parse_int("partition", argv[i + 1]));
         }
 
         elect_leader = rd_kafka_ElectLeader_new(election_type, partitions);
@@ -223,7 +233,7 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         /* Signal handler for clean shutdown */
         signal(SIGINT, stop);
-        
+
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ELECTLEADER);
 
@@ -233,22 +243,23 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
                 goto exit;
         }
 
-        if(rd_kafka_AdminOptions_set_operation_timeout(
+        if (rd_kafka_AdminOptions_set_operation_timeout(
                 options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set operation timeout: %s\n", errstr);
+                fprintf(stderr, "%% Failed to set operation timeout: %s\n",
+                        errstr);
                 goto exit;
         }
 
         rd_kafka_ElectLeader(rk, elect_leader, options, queue);
         rd_kafka_ElectLeader_destroy(elect_leader);
         rd_kafka_AdminOptions_destroy(options);
-        
-        
+
+
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by
                                                * the request timeout set
                                                * above (10s) */);
-        
+
         if (!event) {
                 /* User hit Ctrl-C,
                  * see yield call in stop() signal handler */
@@ -257,8 +268,8 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
         } else if (rd_kafka_event_error(event)) {
                 rd_kafka_resp_err_t err = rd_kafka_event_error(event);
                 /* ElectLeaders request failed */
-                fprintf(stderr, "%% ElectLeaders failed[%" PRId32 "]: %s\n", err,
-                        rd_kafka_event_error_string(event));
+                fprintf(stderr, "%% ElectLeaders failed[%" PRId32 "]: %s\n",
+                        err, rd_kafka_event_error_string(event));
                 goto exit;
         } else {
                 /* ElectLeaders request succeeded */
@@ -277,7 +288,6 @@ exit:
         rd_kafka_destroy(rk);
 
         exit(retval);
-        
 }
 
 

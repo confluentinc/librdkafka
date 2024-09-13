@@ -771,7 +771,12 @@ void rd_kafka_broker_conn_closed(rd_kafka_broker_t *rkb,
 rd_bool_t buf_contains_toppar(rd_kafka_buf_t *rkbuf, rd_kafka_toppar_t *rktp) {
 
         if (rd_list_cnt(&rkbuf->rkbuf_u.Produce.batch_list) > 0) {
-                /* this is multi-batch request, loop through all batches */
+                /* this is multi-batch request, loop through all batches.
+                   The size of this list is bounded by number of topic+partition
+                   this broker thread manages. In reality it's likely to be
+                   significantly smaller than that, given not all toppars has
+                   ready batch (linger, batch-size constraints) in each iteration
+                   of processing */
                 rd_kafka_msgbatch_t *msgbatch;
                 int i;
                 RD_LIST_FOREACH(msgbatch, &rkbuf->rkbuf_u.Produce.batch_list, i) {

@@ -128,6 +128,8 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
             totalMessageSize += message.value.length;
             if (messagesReceived === 1) {
                 consumer.pause([{ topic }]);
+            } else if (messagesReceived === 2) {
+                startTime = hrtime();
             } else if (messagesReceived === totalMessageCnt) {
                 let elapsed = hrtime(startTime);
                 let durationNanos = elapsed[0] * 1e9 + elapsed[1];
@@ -153,7 +155,6 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
     console.log("Starting consumer.")
 
     totalMessageSize = 0;
-    startTime = hrtime();
     consumer.resume([{ topic }]);
     await new Promise((resolve) => {
         let interval = setInterval(() => {
@@ -203,6 +204,8 @@ async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, t
             totalMessageSize += message.value.length;
             if (messagesReceived === 1) {
                 consumer.pause([{ topic }]);
+            } else if (messagesReceived === 2) {
+                startTime = hrtime();
             } else if (messagesReceived === totalMessageCnt) {
                 let elapsed = hrtime(startTime);
                 let durationNanos = elapsed[0] * 1e9 + elapsed[1];
@@ -228,7 +231,6 @@ async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, t
     console.log("Starting consume-transform-produce.")
 
     totalMessageSize = 0;
-    startTime = hrtime();
     consumer.resume([{ topic: consumeTopic }]);
     await new Promise((resolve) => {
         let interval = setInterval(() => {

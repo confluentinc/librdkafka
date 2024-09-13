@@ -37,12 +37,12 @@ module.exports = ts.config(
     {
         ...js.configs.recommended,
         files: ["lib/**/*.js", "test/promisified/**/*.js"],
-        ignores: ["lib/kafkajs/_heap.js"]
+        ignores: []
     },
     {
         ...ckjsSpecificSettings,
         files: ["lib/**/*.js", "test/promisified/**/*.js"],
-        ignores: ["lib/kafkajs/_heap.js"]
+        ignores: []
     },
     {
         ...jest.configs['flat/recommended'],

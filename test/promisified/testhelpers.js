@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const process = require('process');
 const { Kafka } = require('../../lib').KafkaJS;
+const { DeferredPromise } = require('../../lib/kafkajs/_common');
 
 // TODO: pick this up from a file
 const clusterInformation = {
@@ -99,6 +100,30 @@ const generateMessages = options => {
         });
 };
 
+/**
+ * Represents a list of promises that can be resolved in sequence or
+ * in a different order and awaited multiple times.
+ * Useful for testing particular ordering of async operations without
+ * relying of timing.
+ */
+class SequentialPromises {
+    #promises;
+    #current = 0;
+
+    constructor(num) {
+        this.#promises = Array(num).fill().map(() => new DeferredPromise());
+    }
+
+    get(index) {
+      return this.#promises[index];
+    }
+
+    resolveNext(value) {
+      this.#promises[this.#current].resolve(value);
+      this.#current++;
+    }
+}
+
 module.exports = {
     createConsumer,
     createProducer,
@@ -111,4 +136,5 @@ module.exports = {
     sleep,
     generateMessages,
     clusterInformation,
+    SequentialPromises
 };

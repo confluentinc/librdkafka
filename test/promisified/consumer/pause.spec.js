@@ -240,6 +240,7 @@ describe('Consumer', () => {
             await waitForConsumerToJoinGroup(consumer);
             await waitForMessages(messagesConsumed, { number: 5 });
             expect(messagesConsumed.length).toEqual(5);
+            await waitFor(() => resumeCallbacks.length >= 2, () => null, { delay: 100 });
             expect(consumer.paused()).toContainEqual({ topic: topics[0], partitions: [0] });
             expect(consumer.paused()).toContainEqual({ topic: topics[1], partitions: [1] });
             shouldPause = false;

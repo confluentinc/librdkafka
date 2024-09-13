@@ -18,11 +18,11 @@ const cases = [
     [false, 3],
 ];
 
-describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumedConcurrently) => {
+describe.each(cases)('Consumer message cache - isAutoCommit = %s - partitionsConsumedConcurrently = %s -', (isAutoCommit, partitionsConsumedConcurrently) => {
     let topicName, groupId, producer, consumer;
 
     beforeEach(async () => {
-        console.log("Starting:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
+        console.log("Starting:", expect.getState().currentTestName);
         topicName = `test-topic-${secureRandom()}`;
         groupId = `consumer-group-id-${secureRandom()}`;
 
@@ -41,7 +41,7 @@ describe.each(cases)('Consumer message cache', (isAutoCommit, partitionsConsumed
     afterEach(async () => {
         consumer && (await consumer.disconnect());
         producer && (await producer.disconnect());
-        console.log("Ending:", expect.getState().currentTestName, "| isAutoCommit =", isAutoCommit, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
+        console.log("Ending:", expect.getState().currentTestName);
     });
 
     it('is cleared on pause', async () => {

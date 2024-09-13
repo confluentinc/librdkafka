@@ -1,6 +1,6 @@
 jest.setTimeout(30000);
 
-const { CompressionTypes } = require('../../../lib').KafkaJS;
+const { CompressionTypes, ErrorCodes } = require('../../../lib').KafkaJS;
 const {
     secureRandom,
     createTopic,
@@ -15,12 +15,12 @@ const { Buffer } = require('buffer');
 /* All variations of partitionsConsumedConcurrently */
 const cases = Array(3).fill().map((_, i) => [(i % 3) + 1]);
 
-describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
+describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partitionsConsumedConcurrently) => {
     let topicName, groupId, producer, consumer;
     const partitions = 3;
 
     beforeEach(async () => {
-        console.log("Starting:", expect.getState().currentTestName, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
+        console.log("Starting:", expect.getState().currentTestName);
         topicName = `test-topic-${secureRandom()}`;
         groupId = `consumer-group-id-${secureRandom()}`;
 
@@ -38,7 +38,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
     afterEach(async () => {
         consumer && (await consumer.disconnect());
         producer && (await producer.disconnect());
-        console.log("Ending:", expect.getState().currentTestName, "| partitionsConsumedConcurrently =", partitionsConsumedConcurrently);
+        console.log("Ending:", expect.getState().currentTestName);
     });
 
     it('consume messages', async () => {
@@ -134,7 +134,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         );
     });
 
-    it.each([[true], [false]])('consumes messages using eachBatch', async (isAutoResolve) => {
+    it.each([[true], [false]])('consumes messages using eachBatch - isAutoResolve: %s', async (isAutoResolve) => {
         await consumer.connect();
         await producer.connect();
         await consumer.subscribe({ topic: topicName });
@@ -287,7 +287,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         await waitForMessages(messagesConsumed, { number: messages.length });
     });
 
-    it.each([[true], [false]])('is able to reconsume messages when an error is thrown', async (isAutoResolve) => {
+    it.each([[true], [false]])('is able to reconsume messages when an error is thrown - isAutoResolve: %s', async (isAutoResolve) => {
         await consumer.connect();
         await producer.connect();
         await consumer.subscribe({ topic: topicName });
@@ -322,7 +322,7 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
         await waitForMessages(messagesConsumed, { number: messages.length });
     });
 
-    it.each([[true], [false]])('does not reconsume resolved messages even on error', async (isAutoResolve) => {
+    it.each([[true], [false]])('does not reconsume resolved messages even on error - isAutoResolve: %s', async (isAutoResolve) => {
         await consumer.connect();
         await producer.connect();
         await consumer.subscribe({ topic: topicName });
@@ -501,4 +501,245 @@ describe.each(cases)('Consumer', (partitionsConsumedConcurrently) => {
 
         await producer.disconnect();
     });
+
+    it('max.poll.interval.ms should not be exceeded when per-message processing time < max.poll.interval.ms', async () => {
+        let rebalanceCount = 0;
+        consumer = createConsumer({
+            groupId,
+            maxWaitTimeInMs: 100,
+            fromBeginning: true,
+            rebalanceTimeout: 7000, /* also changes max.poll.interval.ms */
+            sessionTimeout: 6000, /* minimum default value, must be less than
+                                   * rebalanceTimeout */
+            autoCommitInterval: 1000,
+        }, {
+            rebalance_cb: () => {
+                rebalanceCount++;
+            },
+        });
+
+        await producer.connect();
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName });
+
+        const messagesConsumed = [];
+
+        consumer.run({
+            partitionsConsumedConcurrently,
+            eachMessage: async event => {
+                messagesConsumed.push(event);
+                await sleep(7500); /* 7.5s 'processing'
+                                    * after each message cache is cleared
+                                    * and max poll interval isn't reached */
+            }
+        });
+
+        const messages = Array(5)
+            .fill()
+            .map(() => {
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: 0 };
+            });
+
+        await producer.send({ topic: topicName, messages });
+
+        await waitForMessages(messagesConsumed, { number: 5, delay: 100 });
+        expect(rebalanceCount).toEqual(1); /* Just the assign and nothing else at this point. */
+    }, 60000);
+
+    it('max.poll.interval.ms should not be exceeded when batch processing time < max.poll.interval.ms', async () => {
+        if (partitionsConsumedConcurrently !== 1) {
+            return;
+        }
+        let assigns = 0;
+        let revokes = 0;
+        let lost = 0;
+        consumer = createConsumer({
+            groupId,
+            maxWaitTimeInMs: 100,
+            fromBeginning: true,
+            rebalanceTimeout: 7000, /* also changes max.poll.interval.ms */
+            sessionTimeout: 6000, /* minimum default value, must be less than
+                                   * rebalanceTimeout */
+            autoCommitInterval: 1000,
+        }, {
+            rebalance_cb: async (err, assignment, { assignmentLost }) => {
+                if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
+                    assigns++;
+                    expect(assignment.length).toBe(3);
+                } else if (err.code === ErrorCodes.ERR__REVOKE_PARTITIONS) {
+                    revokes++;
+                    if (assignmentLost())
+                        lost++;
+                    expect(assignment.length).toBe(3);
+                }
+            }
+        });
+
+        await producer.connect();
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName });
+
+        const messagesConsumed = [];
+
+        let errors = false;
+        let receivedMessages = 0;
+        const batchLengths = [1, 1, 2,
+                              /* cache reset */
+                              1, 1];
+        consumer.run({
+            partitionsConsumedConcurrently,
+            eachBatchAutoResolve: true,
+            eachBatch: async (event) => {
+                receivedMessages++;
+
+                try {
+                    console.log(event.batch.messages.length);
+                    expect(event.batch.messages.length)
+                        .toEqual(batchLengths[receivedMessages - 1]);
+
+                    if (receivedMessages === 3) {
+                        expect(event.isStale()).toEqual(false);
+                        await sleep(7500);
+                        /* 7.5s 'processing'
+                         * doesn't exceed max poll interval.
+                         * Cache reset is transparent */
+                        expect(event.isStale()).toEqual(false);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    errors = true;
+                }
+                messagesConsumed.push(...event.batch.messages);
+            }
+        });
+
+        const messages = Array(6)
+            .fill()
+            .map(() => {
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: 0 };
+            });
+
+        await producer.send({ topic: topicName, messages });
+
+        await waitForMessages(messagesConsumed, { number: 6, delay: 100 });
+        expect(messagesConsumed.length).toEqual(6);
+        
+        /* Triggers revocation */
+        await consumer.disconnect();
+
+        /* First assignment */
+        expect(assigns).toEqual(1);
+        /* Revocation on disconnect */
+        expect(revokes).toEqual(1);
+        expect(lost).toEqual(0);
+        expect(errors).toEqual(false);
+    }, 60000);
+
+    it('max.poll.interval.ms should be exceeded when batch processing time > max.poll.interval.ms', async () => {
+        if (partitionsConsumedConcurrently !== 1) {
+            return;
+        }
+        let assigns = 0;
+        let revokes = 0;
+        let lost = 0;
+        consumer = createConsumer({
+            groupId,
+            maxWaitTimeInMs: 100,
+            fromBeginning: true,
+            sessionTimeout: 6000, /* minimum default value, must be less than
+                                   * rebalanceTimeout */
+            autoCommitInterval: 1000,
+        }, {
+            /* Testing direct librdkafka configuration here */
+            'max.poll.interval.ms': 7000,
+            rebalance_cb: async (err, assignment, { assignmentLost }) => {
+                if (err.code === ErrorCodes.ERR__ASSIGN_PARTITIONS) {
+                    assigns++;
+                    expect(assignment.length).toBe(3);
+                } else if (err.code === ErrorCodes.ERR__REVOKE_PARTITIONS) {
+                    revokes++;
+                    if (assignmentLost())
+                        lost++;
+                    expect(assignment.length).toBe(3);
+                }
+            }
+        });
+
+        await producer.connect();
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName });
+
+        const messagesConsumed = [];
+
+        let errors = false;
+        let receivedMessages = 0;
+        const batchLengths = [/* first we reach batches of 32 message and fetches of 64
+                               * max poll interval exceeded happens on second
+                               * 32 messages batch of the 64 msg fetch. */
+                              1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 32, 32, 
+                              /* max poll interval exceeded, 32 reprocessed +
+                               * 1 new message. */
+                              1, 1, 2, 2, 4, 4, 8, 8, 3];
+        consumer.run({
+            partitionsConsumedConcurrently,
+            eachBatchAutoResolve: true,
+            eachBatch: async (event) => {
+                receivedMessages++;
+
+                try {
+                    expect(event.batch.messages.length)
+                        .toEqual(batchLengths[receivedMessages - 1]);
+
+                    if (receivedMessages === 13) {
+                        expect(event.isStale()).toEqual(false);
+                        await sleep(6000);
+                        /* 6s 'processing'
+                         * cache clearance starts at 7000 */
+                        expect(event.isStale()).toEqual(false);
+                    }
+                    if ( receivedMessages === 14) {
+                        expect(event.isStale()).toEqual(false);
+                        await sleep(10000);
+                        /* 10s 'processing'
+                         * 16s in total exceeds max poll interval.
+                         * in this last batch after clearance.
+                         * Batch is marked stale
+                         * and partitions are lost */
+                        expect(event.isStale()).toEqual(true);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    errors = true;
+                }
+                messagesConsumed.push(...event.batch.messages);
+            }
+        });
+
+        const totalMessages = 191; /* without reprocessed messages */
+        const messages = Array(totalMessages)
+            .fill()
+            .map(() => {
+                const value = secureRandom();
+                return { value: `value-${value}`, partition: 0 };
+            });
+
+        await producer.send({ topic: topicName, messages });
+        /* 32 message are re-consumed after not being resolved
+         * because of the stale batch */
+        await waitForMessages(messagesConsumed, { number: totalMessages + 32, delay: 100 });
+        expect(messagesConsumed.length).toEqual(totalMessages + 32);
+
+        /* Triggers revocation */
+        await consumer.disconnect();
+
+        /* First assignment + assignment after partitions lost */
+        expect(assigns).toEqual(2);
+        /* Partitions lost + revocation on disconnect */
+        expect(revokes).toEqual(2);
+        /* Only one of the revocations has the lost flag */
+        expect(lost).toEqual(1);
+        expect(errors).toEqual(false);
+    }, 60000);
 });

@@ -1,6 +1,6 @@
 The promisified API (lib/kafkajs) is inspired by kafkajs (github.com/tulios/kafkajs).
 The promisified tests (test/promisified) are also adapted from there.
-An async lock implementation and many error types are also adapted from there.
+Many error types are also adapted from there.
 The license notice is reproduced below.
 
 ----

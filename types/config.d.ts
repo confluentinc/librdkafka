@@ -762,7 +762,7 @@ export interface ProducerGlobalConfig extends GlobalConfig {
     /**
      * Delivery report callback (set with rd_kafka_conf_set_dr_cb())
      */
-    "dr_cb"?: boolean | Function;
+    "dr_cb"?: boolean | ((...args: any[]) => any);
 
     /**
      * Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())
@@ -936,12 +936,12 @@ export interface ConsumerGlobalConfig extends GlobalConfig {
     /**
      * Called after consumer group has been rebalanced (set with rd_kafka_conf_set_rebalance_cb())
      */
-    "rebalance_cb"?: boolean | Function;
+    "rebalance_cb"?: boolean | ((...args: any[]) => any);
 
     /**
      * Offset commit result propagation callback. (set with rd_kafka_conf_set_offset_commit_cb())
      */
-    "offset_commit_cb"?: boolean | Function;
+    "offset_commit_cb"?: boolean | ((...args: any[]) => any);
 
     /**
      * Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition.

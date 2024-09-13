@@ -150,7 +150,7 @@ describe('Consumer commit', () => {
         ]);
     });
 
-    it.each([[true], [false]])('should commit only resolved offsets while using eachBatch', async (isAutoCommit) => {
+    it.each([[true], [false]])('should commit only resolved offsets while using eachBatch - isAutocommit: %s', async (isAutoCommit) => {
         /* Evenly distribute 3*30 messages across 3 partitions */
         const numMsgs = 30;
         let i = 0;

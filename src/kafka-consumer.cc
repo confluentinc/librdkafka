@@ -488,6 +488,11 @@ Baton KafkaConsumer::RefreshAssignments() {
   }
 }
 
+Baton KafkaConsumer::AssignmentLost() {
+  bool lost = m_consumer->assignment_lost();
+  return Baton(reinterpret_cast<void *>(lost));
+}
+
 std::string KafkaConsumer::RebalanceProtocol() {
   if (!IsConnected()) {
     return std::string("NONE");
@@ -555,6 +560,7 @@ void KafkaConsumer::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "incrementalAssign", NodeIncrementalAssign);
   Nan::SetPrototypeMethod(tpl, "incrementalUnassign", NodeIncrementalUnassign);
   Nan::SetPrototypeMethod(tpl, "assignments", NodeAssignments);
+  Nan::SetPrototypeMethod(tpl, "assignmentLost", NodeAssignmentLost);
   Nan::SetPrototypeMethod(tpl, "rebalanceProtocol", NodeRebalanceProtocol);
 
   Nan::SetPrototypeMethod(tpl, "commit", NodeCommit);
@@ -728,6 +734,17 @@ NAN_METHOD(KafkaConsumer::NodeAssignments) {
 
   info.GetReturnValue().Set(
     Conversion::TopicPartition::ToV8Array(consumer->m_partitions));
+}
+
+NAN_METHOD(KafkaConsumer::NodeAssignmentLost) {
+  Nan::HandleScope scope;
+
+  KafkaConsumer* consumer = ObjectWrap::Unwrap<KafkaConsumer>(info.This());
+
+  Baton b = consumer->AssignmentLost();
+
+  bool lost = b.data<bool>();
+  info.GetReturnValue().Set(Nan::New<v8::Boolean>(lost));
 }
 
 NAN_METHOD(KafkaConsumer::NodeRebalanceProtocol) {

@@ -68,6 +68,7 @@ class KafkaConsumer : public Connection {
   Baton Position(std::vector<RdKafka::TopicPartition*> &);
 
   Baton RefreshAssignments();
+  Baton AssignmentLost();
 
   bool HasAssignedPartitions();
   int AssignedPartitionCount();
@@ -117,6 +118,7 @@ class KafkaConsumer : public Connection {
   static NAN_METHOD(NodeIncrementalAssign);
   static NAN_METHOD(NodeIncrementalUnassign);
   static NAN_METHOD(NodeAssignments);
+  static NAN_METHOD(NodeAssignmentLost);
   static NAN_METHOD(NodeRebalanceProtocol);
   static NAN_METHOD(NodeUnsubscribe);
   static NAN_METHOD(NodeCommit);

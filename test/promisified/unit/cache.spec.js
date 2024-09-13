@@ -1,349 +1,293 @@
 const MessageCache = require('../../../lib/kafkajs/_consumer_cache');
 
 describe('MessageCache', () => {
-    const expiryTime = 300000; // Long time.
-    const toppars = [{ topic: 'topic', partition: 0 }, { topic: 'topic', partition: 1 }, { topic: 'topic', partition: 2 }];
     const messages =
         Array(5000)
             .fill()
             .map((_, i) => ({ topic: 'topic', partition: i % 3, number: i }));
 
-    describe("with concurrency", () => {
-        let cache;
-        beforeEach(() => {
-            cache = new MessageCache(expiryTime, 1);
-            cache.addTopicPartitions(toppars);
-        });
-
-        it('caches messages and retrieves them', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            const receivedMessages = [];
-            let nextIdx = -1;
-            for (let i = 0; i < 90; i++) {
-                const next = cache.next(nextIdx);
-                expect(next).not.toBeNull();
-                receivedMessages.push(next);
-                nextIdx = next.index;
-            }
-
-            /* Results are on a per-partition basis and well-ordered */
-            expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(61, 30).every((msg, i) => msg.partition === receivedMessages[60].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-        });
-
-        it('caches messages and retrieves N of them', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            const receivedMessages = [];
-            let nextIdx = -1;
-            const expectedFetchedSizes = [11, 11, 8];
-            for (let i = 0; i < (90/11); i++) {
-                /* We choose to fetch 11 messages together rather than 10 so that we can test the case where
-                 * remaining messages > 0 but less than requested size. */
-                const next = cache.nextN(nextIdx, 11);
-                /* There are 30 messages per partition, the first fetch will get 11, the second 11, and the last one
-                 * 8, and then it repeats for each partition. */
-                expect(next.length).toBe(expectedFetchedSizes[i % 3]);
-                expect(next).not.toBeNull();
-                receivedMessages.push(...next);
-                nextIdx = next.index;
-            }
-
-            /* Results are on a per-partition basis and well-ordered */
-            expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(61, 30).every((msg, i) => msg.partition === receivedMessages[60].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-        });
-
-        it('does not allow fetching more than 1 message at a time', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            let next = cache.next(-1);
-            let savedIndex = next.index;
-            expect(next).not.toBeNull();
-            next = cache.next(-1);
-            expect(next).toBeNull();
-            expect(cache.pendingSize()).toBeGreaterThan(0);
-
-            // Fetch after returning index works.
-            next = cache.next(savedIndex);
-            expect(next).not.toBeNull();
-        });
-
-        it('stops fetching from stale partition', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            const receivedMessages = [];
-            let nextIdx = -1;
-            for (let i = 0; i < 3; i++) {
-                const next = cache.next(nextIdx);
-                expect(next).not.toBeNull();
-                receivedMessages.push(next);
-                nextIdx = next.index;
-                cache.markStale([{topic: next.topic, partition: next.partition}]);
-            }
-
-            // We should not be able to get anything more.
-            expect(cache.next(nextIdx)).toBeNull();
-            // Nothing should be pending, we've returned everything.
-            expect(cache.pendingSize()).toBe(0);
-            // The first 3 messages from different toppars are what we should get.
-            expect(receivedMessages).toEqual(expect.arrayContaining(msgs.slice(0, 3)));
-        });
-
+    let cache;
+    beforeEach(() => {
+        cache = new MessageCache();
     });
 
-    describe("with concurrency = 2", () => {
-        let cache;
-        beforeEach(() => {
-            cache = new MessageCache(expiryTime, 2);
-            cache.addTopicPartitions(toppars);
-        });
+    it('caches messages and retrieves them', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
 
-        it('caches messages and retrieves them', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            const receivedMessages = [];
-            let nextIdx = -1;
-            for (let i = 0; i < 90; i++) {
-                const next = cache.next(nextIdx);
-                expect(next).not.toBeNull();
-                receivedMessages.push(next);
-                nextIdx = next.index;
-            }
-
-            /* Results are on a per-partition basis and well-ordered */
-            expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(61, 30).every((msg, i) => msg.partition === receivedMessages[60].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-        });
-
-        it('caches messages and retrieves 2-at-a-time', () => {
-            const msgs = messages.slice(0, 90).filter(msg => msg.partition !== 3);
-            cache.addMessages(msgs);
-
-            const receivedMessages = [];
-            let nextIdxs = [-1, -1];
-            for (let i = 0; i < 30; i++) {
-                const next0 = cache.next(nextIdxs[0]);
-                const next1 = cache.next(nextIdxs[1]);
-                expect(next0).not.toBeNull();
-                expect(next1).not.toBeNull();
-                receivedMessages.push(next0);
-                receivedMessages.push(next1);
-                nextIdxs = [next0.index, next1.index];
-            }
-
-            expect(receivedMessages.length).toBe(60);
-            expect(receivedMessages.filter(msg => msg.partition === 0).length).toBe(30);
-            expect(receivedMessages.filter(msg => msg.partition === 1).length).toBe(30);
-        });
-
-        it('caches messages and retrieves N of them 2-at-a-time', () => {
-            const msgs = messages.slice(0, 90).filter(msg => msg.partition !== 3);
-            cache.addMessages(msgs);
-
-            const receivedMessages = [];
-            let nextIdxs = [-1, -1];
-            for (let i = 0; i < 30/11; i++) {
-                const next0 = cache.nextN(nextIdxs[0], 11);
-                const next1 = cache.nextN(nextIdxs[1], 11);
-                expect(next0).not.toBeNull();
-                expect(next1).not.toBeNull();
-                receivedMessages.push(...next0);
-                receivedMessages.push(...next1);
-                nextIdxs = [next0.index, next1.index];
-            }
-
-            expect(receivedMessages.length).toBe(60);
-            expect(receivedMessages.filter(msg => msg.partition === 0).length).toBe(30);
-            expect(receivedMessages.filter(msg => msg.partition === 1).length).toBe(30);
-        });
-
-        it('does not allow fetching more than 2 message at a time', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            let next = cache.next(-1);
-            let savedIndex = next.index;
+        const receivedMessages = [];
+        let ppc = null, next = null;
+        for (let i = 0; i < 90; i++) {
+            next = cache.next(ppc);           
             expect(next).not.toBeNull();
-            next = cache.next(-1);
+            [next, ppc] = next;
             expect(next).not.toBeNull();
-            next = cache.next(-1);
-            expect(next).toBeNull();
-            expect(cache.pendingSize()).toBe(2);
+            receivedMessages.push(next);
+        }
 
-            // Fetch after returning index works.
-            next = cache.next(savedIndex);
+        /* Results are on a per-partition basis and well-ordered */
+        expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+        expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+        expect(receivedMessages.slice(61, 30).every((msg, i) => msg.partition === receivedMessages[60].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+    });
+
+    it('caches messages and retrieves N of them', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
+
+        const receivedMessages = [];
+        let ppc = null, next = null;
+        const expectedFetchedSizes = [11, 11, 8];
+        for (let i = 0; i < (90/11); i++) {
+            /* We choose to fetch 11 messages together rather than 10 so that we can test the case where
+                * remaining messages > 0 but less than requested size. */
+            next = cache.nextN(ppc, 11);
             expect(next).not.toBeNull();
-        });
-
-
-        it('does not allow fetching more than 2 message sets at a time', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            let next = cache.nextN(-1, 11);
-            let savedIndex = next.index;
+            [next, ppc] = next;
+            /* There are 30 messages per partition, the first fetch will get 11, the second 11, and the last one
+                * 8, and then it repeats for each partition. */
+            expect(next.length).toBe(expectedFetchedSizes[i % 3]);
             expect(next).not.toBeNull();
-            next = cache.nextN(-1, 11);
+            receivedMessages.push(...next);
+        }
+
+        /* Results are on a per-partition basis and well-ordered */
+        expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+        expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+        expect(receivedMessages.slice(61, 30).every((msg, i) => msg.partition === receivedMessages[60].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+    });
+
+    it('stops fetching from stale partition', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
+
+        const receivedMessages = [];
+        let ppc = null, next = null;
+        for (let i = 0; i < 3; i++) {
+            next = cache.next(null);
             expect(next).not.toBeNull();
-            next = cache.nextN(-1, 11);
-            expect(next).toBeNull();
-            expect(cache.pendingSize()).toBe(2);
-
-            // Fetch after returning index works.
-            next = cache.nextN(savedIndex, 11);
+            [next, ppc] = next;
             expect(next).not.toBeNull();
-        });
+            receivedMessages.push(next);
+            cache.markStale([{topic: next.topic, partition: next.partition}]);
+        }
 
-        it('stops fetching from stale partition', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
+        // We should not be able to get anything more.
+        expect(cache.next(ppc)).toBeNull();
+        // Nothing should be pending, we've returned everything.
+        expect(cache.assignedSize).toBe(0);
+        // The first 3 messages from different toppars are what we should get.
+        expect(receivedMessages).toEqual(expect.arrayContaining(msgs.slice(0, 3)));
+    });
 
-            const receivedMessages = [];
-            let nextIdx = -1;
-            for (let i = 0; i < 3; i++) {
-                const next = cache.next(nextIdx);
-                expect(next).not.toBeNull();
-                receivedMessages.push(next);
-                nextIdx = next.index;
-                cache.markStale([{topic: next.topic, partition: next.partition}]);
-            }
+    it('caches messages and retrieves 2-at-a-time', () => {
+        const msgs = messages.slice(0, 90).filter(msg => msg.partition !== 3);
+        cache.addMessages(msgs);
 
-            // We should not be able to get anything more.
-            expect(cache.next(nextIdx)).toBeNull();
-            // Nothing should be pending, we've returned everything.
-            expect(cache.pendingSize()).toBe(0);
-            // The first 3 messages from different toppars are what we should get.
-            expect(receivedMessages).toEqual(expect.arrayContaining(msgs.slice(0, 3)));
-        });
+        const receivedMessages = [];
+        let next = [null, null];
+        let nextPpc = [null, null];
+        for (let i = 0; i < 30; i++) {
+            next[0] = cache.next(nextPpc[0]);
+            next[1] = cache.next(nextPpc[1]);
+            expect(next[0]).not.toBeNull();
+            expect(next[1]).not.toBeNull();
+            [next[0], nextPpc[0]] = next[0];
+            [next[1], nextPpc[1]] = next[1];
+            receivedMessages.push(next[0]);
+            receivedMessages.push(next[1]);
+        }
 
-        it('stops fetching message sets from stale partition', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
+        expect(receivedMessages.length).toBe(60);
+        expect(receivedMessages.filter(msg => msg.partition === 0).length).toBe(30);
+        expect(receivedMessages.filter(msg => msg.partition === 1).length).toBe(30);
+    });
 
-            const receivedMessages = [];
-            let nextIdx = -1;
-            for (let i = 0; i < 3; i++) {
-                const next = cache.nextN(nextIdx, 11);
-                expect(next).not.toBeNull();
-                receivedMessages.push(...next);
-                nextIdx = next.index;
-                cache.markStale([{topic: next[0].topic, partition: next[0].partition}]);
-            }
+    it('caches messages and retrieves N of them 2-at-a-time', () => {
+        const msgs = messages.slice(0, 90).filter(msg => msg.partition !== 3);
+        cache.addMessages(msgs);
 
-            // We should not be able to get anything more.
-            expect(cache.nextN(nextIdx, 11)).toBeNull();
-            // Nothing should be pending, we've returned everything.
-            expect(cache.pendingSize()).toBe(0);
-            // The first [11, 11, 11] messages from different toppars.
-            expect(receivedMessages.length).toBe(33);
-            expect(receivedMessages).toEqual(expect.arrayContaining(msgs.slice(0, 33)));
-        });
+        const receivedMessages = [];
+        let next = [null, null];
+        let nextPpc = [null, null];
+        for (let i = 0; i < 30/11; i++) {
+            next[0] = cache.nextN(nextPpc[0], 11);
+            next[1] = cache.nextN(nextPpc[1], 11);
+            expect(next[0]).not.toBeNull();
+            expect(next[1]).not.toBeNull();
+            [next[0], nextPpc[0]] = next[0];
+            [next[1], nextPpc[1]] = next[1];
+            receivedMessages.push(...next[0]);
+            receivedMessages.push(...next[1]);
+        }
 
-        it('one slow processing message should not slow down others', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
+        expect(receivedMessages.length).toBe(60);
+        expect(receivedMessages.filter(msg => msg.partition === 0).length).toBe(30);
+        expect(receivedMessages.filter(msg => msg.partition === 1).length).toBe(30);
+    });
 
-            const receivedMessages = [];
-            let nextIdx = -1;
-            cache.next(nextIdx);
-            for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
-                const next = cache.next(nextIdx);
-                expect(next).not.toBeNull();
-                receivedMessages.push(next);
-                nextIdx = next.index;
-            }
+    it('does not allow fetching messages more than available partitions at a time', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
 
+        let next = cache.next();
+        let ppc = next[1];
+        expect(next).not.toBeNull();
+        next = cache.next();
+        expect(next).not.toBeNull();
+        next = cache.next();
+        expect(next).not.toBeNull();
+        next = cache.next();
+        expect(next).toBeNull();
+        expect(cache.assignedSize).toBe(3);
 
-            // We should not be able to get anything more.
-            expect(cache.next(nextIdx)).toBeNull();
-            // The slowMsg should be pending.
-            expect(cache.pendingSize()).toBe(1);
-
-            /* Messages should be partition-wise and well-ordered. */
-            expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-        });
-
-        it('one slow processing message set should not slow down others', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
-
-            const receivedMessages = [];
-            let nextIdx = -1;
-            cache.nextN(nextIdx, 11);
-            for (let i = 0; i < 60/11; i++) { /* 60 - for non-partition 0 msgs */
-                const next = cache.nextN(nextIdx, 11);
-                expect(next).not.toBeNull();
-                receivedMessages.push(...next);
-                nextIdx = next.index;
-            }
+        // Fetch after returning ppc works.
+        cache.return(ppc);
+        next = cache.next();
+        expect(next).not.toBeNull();
+    });
 
 
-            // We should not be able to get anything more.
-            expect(cache.nextN(nextIdx, 11)).toBeNull();
-            // The slowMsg should be pending.
-            expect(cache.pendingSize()).toBe(1);
+    it('does not allow fetching message sets more than available partitions at a time', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
 
-            /* Messages should be partition-wise and well-ordered. */
-            expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-            expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
-        });
+        let next = cache.nextN(null, 11);
+        let ppc = next[1];
+        expect(next).not.toBeNull();
+        next = cache.nextN(null, 11);
+        expect(next).not.toBeNull();
+        next = cache.nextN(null, 11);
+        expect(next).not.toBeNull();
+        next = cache.nextN(null, 11);
+        expect(next).toBeNull();
+        expect(cache.assignedSize).toBe(3);
 
-        it('should not be able to handle cache-clearance in the middle of processing', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
+        // Fetch after returning ppc works.
+        cache.return(ppc);
+        next = cache.nextN(null, 11);
+        expect(next).not.toBeNull();
+    });
 
-            const receivedMessages = [];
-            let nextIdx = -1;
-            cache.next(nextIdx);
-            for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
-                const next = cache.next(nextIdx);
-                expect(next).not.toBeNull();
-                receivedMessages.push(next);
-                nextIdx = next.index;
-            }
+    it('stops fetching message sets from stale partition', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
+
+        const receivedMessages = [];
+        let next, ppc;
+        for (let i = 0; i < 3; i++) {
+            next = cache.nextN(null, 11);
+            expect(next).not.toBeNull();
+            [next, ppc] = next;
+            receivedMessages.push(...next);
+            cache.markStale([{topic: next[0].topic, partition: next[0].partition}]);
+            cache.return(ppc);
+        }
+
+        // We should not be able to get anything more.
+        expect(cache.nextN(null, 11)).toBeNull();
+        // Nothing should be pending, we've returned everything.
+        expect(cache.assignedSize).toBe(0);
+        // The first [11, 11, 11] messages from different toppars.
+        expect(receivedMessages.length).toBe(33);
+        expect(receivedMessages).toEqual(expect.arrayContaining(msgs.slice(0, 33)));
+    });
+
+    it('one slow processing message should not slow down others', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
+
+        const receivedMessages = [];
+        let next, ppc;
+        cache.next(ppc);
+        for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
+            next = cache.next(ppc);
+            expect(next).not.toBeNull();
+            [next, ppc] = next;
+            expect(next).not.toBeNull();
+            receivedMessages.push(next);
+        }
+
+        // We should not be able to get anything more.
+        expect(cache.next(ppc)).toBeNull();
+        // The slowMsg should be pending.
+        expect(cache.assignedSize).toBe(1);
+
+        /* Messages should be partition-wise and well-ordered. */
+        expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+        expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+    });
+
+    it('one slow processing message set should not slow down others', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
+
+        const receivedMessages = [];
+        let next, ppc;
+        cache.nextN(ppc, 11);
+        for (let i = 0; i < 60/11; i++) { /* 60 - for non-partition 0 msgs */
+            next = cache.nextN(ppc, 11);
+            expect(next).not.toBeNull();
+            [next, ppc] = next;
+            receivedMessages.push(...next);
+        }
 
 
-            // We should not be able to get anything more.
-            expect(cache.next(nextIdx)).toBeNull();
+        // We should not be able to get anything more.
+        expect(cache.nextN(ppc, 11)).toBeNull();
+        // The slowMsg should be pending.
+        expect(cache.assignedSize).toBe(1);
 
-            // The slowMsg should be pending.
-            expect(cache.pendingSize()).toBe(1);
+        /* Messages should be partition-wise and well-ordered. */
+        expect(receivedMessages.slice(1, 30).every((msg, i) => msg.partition === receivedMessages[0].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+        expect(receivedMessages.slice(31, 30).every((msg, i) => msg.partition === receivedMessages[30].partition && (msg.number - 3) ===  receivedMessages[i].number)).toBeTruthy();
+    });
 
-            expect(() => cache.clear()).toThrow();
-        });
+    it('should be able to handle cache-clearance in the middle of processing', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
 
-        it('should not be able to handle message adds in the middle of processing', () => {
-            const msgs = messages.slice(0, 90);
-            cache.addMessages(msgs);
+        const receivedMessages = [];
+        let next, ppc;
+        cache.next();
+        for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
+            next = cache.next(ppc);
+            expect(next).not.toBeNull();
+            [next, ppc] = next;
+            expect(next).not.toBeNull();
+            receivedMessages.push(next);
+        }
 
-            const receivedMessages = [];
-            let nextIdx = -1;
-            cache.next(nextIdx);
-            for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
-                const next = cache.next(nextIdx);
-                expect(next).not.toBeNull();
-                receivedMessages.push(next);
-                nextIdx = next.index;
-            }
+        // We should not be able to get anything more.
+        expect(cache.next(ppc)).toBeNull();
 
-            // We should not be able to get anything more.
-            expect(cache.next(nextIdx)).toBeNull();
+        // The slowMsg should be pending.
+        expect(cache.assignedSize).toBe(1);
 
-            // The slowMsg should be pending.
-            expect(cache.pendingSize()).toBe(1);
+        expect(() => cache.clear()).not.toThrow();
+    });
 
-            expect(() => cache.addMessages(msgs)).toThrow();
-        });
+    it('should be able to handle message adds in the middle of processing', () => {
+        const msgs = messages.slice(0, 90);
+        cache.addMessages(msgs);
+
+        const receivedMessages = [];
+        let next, ppc;
+        cache.next();
+        for (let i = 0; i < 60; i++) { /* 60 - for non-partition 0 msgs */
+            next = cache.next(ppc);
+            expect(next).not.toBeNull();
+            [next, ppc] = next;
+            expect(next).not.toBeNull();
+            receivedMessages.push(next);
+        }
+
+        // We should not be able to get anything more.
+        expect(cache.next(ppc)).toBeNull();
+
+        // The slowMsg should be pending.
+        expect(cache.assignedSize).toBe(1);
+
+        expect(() => cache.addMessages(msgs)).not.toThrow();
     });
 });

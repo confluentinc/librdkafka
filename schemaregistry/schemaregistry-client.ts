@@ -3,7 +3,7 @@ import { AxiosResponse } from 'axios';
 import stringify from "json-stringify-deterministic";
 import { LRUCache } from 'lru-cache';
 import { Mutex } from 'async-mutex';
-import {MockClient} from "./mock-schemaregistry-client";
+import { MockClient } from "./mock-schemaregistry-client";
 
 /*
  * Confluent-Schema-Registry-TypeScript - Node.js wrapper for Confluent Schema Registry
@@ -165,7 +165,8 @@ export class SchemaRegistryClient implements Client {
       ...(config.cacheLatestTtlSecs !== undefined && { maxAge: config.cacheLatestTtlSecs * 1000 })
     };
 
-    this.restService = new RestService(config.baseURLs, config.isForward, config.createAxiosDefaults);
+    this.restService = new RestService(config.baseURLs, config.isForward, config.createAxiosDefaults, 
+      config.bearerAuthCredentials);
 
     this.schemaToIdCache = new LRUCache(cacheOptions);
     this.idToSchemaInfoCache = new LRUCache(cacheOptions);

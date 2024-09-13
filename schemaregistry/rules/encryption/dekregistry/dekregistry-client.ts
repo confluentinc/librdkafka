@@ -78,7 +78,7 @@ class DekRegistryClient implements Client {
   }
 
   static newClient(config: ClientConfig): Client {
-    let url = config.baseURLs[0]
+    const url = config.baseURLs[0];
     if (url.startsWith("mock://")) {
       return new MockDekRegistryClient()
     }

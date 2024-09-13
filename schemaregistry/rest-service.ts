@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, CreateAxiosDefaults } from 'axios';
+import { OAuthClient } from './oauth/oauth-client';
 import { RestError } from './rest-error';
 
 /*
@@ -10,24 +11,50 @@ import { RestError } from './rest-error';
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
+export interface BearerAuthCredentials {
+  clientId: string,
+  clientSecret: string,
+  tokenHost: string,
+  tokenPath: string,
+  schemaRegistryLogicalCluster: string,
+  identityPool: string,
+  scope: string
+}
+
+//TODO: Consider retry policy, may need additional libraries on top of Axios
 export interface ClientConfig {
   baseURLs: string[],
   cacheCapacity: number,
   cacheLatestTtlSecs?: number,
-  isForward?: boolean
+  isForward?: boolean,
   createAxiosDefaults?: CreateAxiosDefaults,
+  bearerAuthCredentials?: BearerAuthCredentials,
 }
 
 export class RestService {
   private client: AxiosInstance;
   private baseURLs: string[];
+  private OAuthClient?: OAuthClient;
+  private bearerAuth: boolean = false;
 
-  constructor(baseURLs: string[], isForward?: boolean, axiosDefaults?: CreateAxiosDefaults) {
+  constructor(baseURLs: string[], isForward?: boolean, axiosDefaults?: CreateAxiosDefaults, 
+    bearerAuthCredentials?: BearerAuthCredentials) {
     this.client = axios.create(axiosDefaults);
     this.baseURLs = baseURLs;
 
     if (isForward) {
       this.client.defaults.headers.common['X-Forward'] = 'true'
+    }
+
+    if (bearerAuthCredentials) {
+      this.bearerAuth = true;
+      delete this.client.defaults.auth;
+      this.setHeaders({
+        'Confluent-Identity-Pool-Id': bearerAuthCredentials.identityPool,
+        'target-sr-cluster': bearerAuthCredentials.schemaRegistryLogicalCluster
+      });
+      this.OAuthClient = new OAuthClient(bearerAuthCredentials.clientId, bearerAuthCredentials.clientSecret, 
+        bearerAuthCredentials.tokenHost, bearerAuthCredentials.tokenPath, bearerAuthCredentials.scope);
     }
   }
 
@@ -37,6 +64,10 @@ export class RestService {
     data?: any, // eslint-disable-line @typescript-eslint/no-explicit-any
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
+
+    if (this.bearerAuth) {
+      await this.setBearerToken();
+    }
 
     for (let i = 0; i < this.baseURLs.length; i++) {
       try {
@@ -78,6 +109,15 @@ export class RestService {
     if (bearerToken) {
       this.client.defaults.headers.common['Authorization'] = `Bearer ${bearerToken}`
     }
+  }
+
+  async setBearerToken(): Promise<void> {
+    if (!this.OAuthClient) {
+      throw new Error('OAuthClient not initialized');
+    }
+
+    const bearerToken: string = await this.OAuthClient.getAccessToken();
+    this.setAuth(undefined, bearerToken);
   }
 
   setTimeout(timeout: number): void {

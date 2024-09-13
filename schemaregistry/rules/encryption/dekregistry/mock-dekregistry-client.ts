@@ -68,7 +68,7 @@ class MockDekRegistryClient implements Client {
     algorithm: string, version: number = 1, deleted: boolean = false): Promise<Dek> {
     if (version === -1) {
       let latestVersion = 0;
-      for (let key of this.dekCache.keys()) {
+      for (const key of this.dekCache.keys()) {
         const parsedKey = JSON.parse(key);
         if (parsedKey.kekName === kekName && parsedKey.subject === subject
           && parsedKey.algorithm === algorithm && parsedKey.deleted === deleted) {

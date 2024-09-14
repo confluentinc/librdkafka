@@ -199,6 +199,7 @@ producerRun().then(consumerRun).catch(console.error);
     ```
 
 * A transactional producer (with a `transactionId`) set, **cannot** send messages without initiating a transaction using `producer.transaction()`.
+* While using `sendOffsets` from a transactional producer, the `consumerGroupId` argument must be omitted, and rather, the consumer object itself must be passed instead.
 
 ### Consumer
 

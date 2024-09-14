@@ -168,7 +168,7 @@ export type Producer = Client & {
   transaction(): Promise<Transaction>
   commit(): Promise<void>
   abort(): Promise<void>
-  sendOffsets(args: { consumerGroupId?: string, consumer?: Consumer, topics: TopicOffsets[] }): Promise<void>
+  sendOffsets(args: { consumer: Consumer, topics: TopicOffsets[] }): Promise<void>
   isActive(): boolean
 }
 

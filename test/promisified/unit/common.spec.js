@@ -94,7 +94,7 @@ describe('Lock', () => {
         expect(events).toEqual([0, 2, 1, 3, 4, 5]);
     });
 
-    
+
     it('allows reentrant read locks', async () => {
         let lock = new Lock();
         let sequentialPromises = new SequentialPromises(2);

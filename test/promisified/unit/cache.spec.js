@@ -18,7 +18,7 @@ describe('MessageCache', () => {
         const receivedMessages = [];
         let ppc = null, next = null;
         for (let i = 0; i < 90; i++) {
-            next = cache.next(ppc);           
+            next = cache.next(ppc);
             expect(next).not.toBeNull();
             [next, ppc] = next;
             expect(next).not.toBeNull();

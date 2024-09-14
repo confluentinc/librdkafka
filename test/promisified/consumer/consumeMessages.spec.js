@@ -625,7 +625,7 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
 
         await waitForMessages(messagesConsumed, { number: 6, delay: 100 });
         expect(messagesConsumed.length).toEqual(6);
-        
+
         /* Triggers revocation */
         await consumer.disconnect();
 
@@ -678,7 +678,7 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
         const batchLengths = [/* first we reach batches of 32 message and fetches of 64
                                * max poll interval exceeded happens on second
                                * 32 messages batch of the 64 msg fetch. */
-                              1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 32, 32, 
+                              1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 32, 32,
                               /* max poll interval exceeded, 32 reprocessed +
                                * 1 new message. */
                               1, 1, 2, 2, 4, 4, 8, 8, 3];

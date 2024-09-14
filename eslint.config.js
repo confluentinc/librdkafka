@@ -21,6 +21,7 @@ const ckjsSpecificSettings = {
         "no-caller": "error",
         "no-new": "error",
         "no-eq-null": "error",
+        "no-trailing-spaces": "error",
         "no-constant-condition": "off",
         "semi": "error"
     }

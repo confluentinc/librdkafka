@@ -64,7 +64,7 @@ const ctpConcurrency = process.env.CONSUME_TRANSFORM_PRODUCE_CONCURRENCY ? +proc
         console.log(`  Message Count: ${messageCount}`);
         // Seed the topic with messages
         await runProducer(brokers, topic, batchSize, warmupMessages, messageCount, messageSize, compression);
-        const ctpRate = await runConsumeTransformProduce(brokers, topic, topic2, messageCount, messageProcessTimeMs, ctpConcurrency);
+        const ctpRate = await runConsumeTransformProduce(brokers, topic, topic2, warmupMessages, messageCount, messageProcessTimeMs, ctpConcurrency);
         console.log("=== Consume-Transform-Produce Rate: ", ctpRate);
     }
 

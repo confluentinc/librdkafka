@@ -120,51 +120,45 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
         'group.id': 'test-group' + Math.random(),
         'enable.auto.commit': false,
         'auto.offset.reset': 'earliest',
+        'fetch.queue.backoff.ms': '100',
     });
     await consumer.connect();
     await consumer.subscribe({ topic });
 
     let messagesReceived = 0;
+    let messagesMeasured = 0;
     let totalMessageSize = 0;
     let startTime;
     let rate;
+    const skippedMessages = 100;
+
+    console.log("Starting consumer.");
+
     consumer.run({
         eachMessage: async ({ topic, partition, message }) => {
             messagesReceived++;
-            totalMessageSize += message.value.length;
-            if (messagesReceived === 1) {
-                consumer.pause([{ topic }]);
-            } else if (messagesReceived === 2) {
-                startTime = hrtime();
-            } else if (messagesReceived === totalMessageCnt) {
-                let elapsed = hrtime(startTime);
-                let durationNanos = elapsed[0] * 1e9 + elapsed[1];
-                rate = (totalMessageSize / durationNanos) * 1e9 / (1024 * 1024); /* MB/s */
-                console.log(`Recvd ${messagesReceived} messages, ${totalMessageSize} bytes; rate is ${rate} MB/s`);
-                consumer.pause([{ topic }]);
-                // } else if (messagesReceived % 100 == 0) {
-                //     console.log(`Recvd ${messagesReceived} messages, ${totalMessageSize} bytes`);
+            
+            if (messagesReceived >= skippedMessages) {
+                messagesMeasured++;
+                totalMessageSize += message.value.length;
+
+                if (messagesReceived === skippedMessages) {
+                    startTime = hrtime();
+                } else if (messagesMeasured === totalMessageCnt) {
+                    let elapsed = hrtime(startTime);
+                    let durationNanos = elapsed[0] * 1e9 + elapsed[1];
+                    rate = (totalMessageSize / durationNanos) * 1e9 / (1024 * 1024); /* MB/s */
+                    console.log(`Recvd ${messagesMeasured} messages, ${totalMessageSize} bytes; rate is ${rate} MB/s`);
+                    consumer.pause([{ topic }]);
+                }
             }
         }
     });
 
-    // Wait until the first message is received
-    await new Promise((resolve) => {
-        let interval = setInterval(() => {
-            if (messagesReceived > 0) {
-                clearInterval(interval);
-                resolve();
-            }
-        }, 100);
-    });
-
-    console.log("Starting consumer.")
-
     totalMessageSize = 0;
-    consumer.resume([{ topic }]);
     await new Promise((resolve) => {
         let interval = setInterval(() => {
-            if (messagesReceived >= totalMessageCnt) {
+            if (messagesMeasured >= totalMessageCnt) {
                 clearInterval(interval);
                 resolve();
             }
@@ -175,7 +169,8 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
     return rate;
 }
 
-async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, totalMessageCnt, messageProcessTimeMs, ctpConcurrency) {
+async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, warmupMessages, totalMessageCnt, messageProcessTimeMs, ctpConcurrency) {
+    console.log("here");
     const kafka = new Kafka({
         'client.id': 'kafka-test-performance',
         'metadata.broker.list': brokers,
@@ -205,55 +200,55 @@ async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, t
     await consumer.subscribe({ topic: consumeTopic });
 
     let messagesReceived = 0;
+    let messagesMeasured = 0;
     let totalMessageSize = 0;
     let startTime;
     let rate;
+    const skippedMessages = warmupMessages;
+
+    console.log("Starting consume-transform-produce.");
+
     consumer.run({
         partitionsConsumedConcurrently: ctpConcurrency,
         eachMessage: async ({ topic, partition, message }) => {
-            /* Simulate message processing for messageProcessTimeMs */
-            if (messageProcessTimeMs > 0) {
-                await new Promise((resolve) => setTimeout(resolve, messageProcessTimeMs));
-            }
-            await producer.send({
-                topic: produceTopic,
-                messages: [{ value: message.value }],
-            })
             messagesReceived++;
-            totalMessageSize += message.value.length;
-            if (messagesReceived === 1) {
-                consumer.pause([{ topic }]);
-            } else if (messagesReceived === 2) {
-                startTime = hrtime();
-            } else if (messagesReceived === totalMessageCnt) {
-                let elapsed = hrtime(startTime);
-                let durationNanos = elapsed[0] * 1e9 + elapsed[1];
-                rate = (totalMessageSize / durationNanos) * 1e9 / (1024 * 1024); /* MB/s */
-                console.log(`Recvd, transformed and sent ${messagesReceived} messages, ${totalMessageSize} bytes; rate is ${rate} MB/s`);
-                consumer.pause([{ topic }]);
-                // } else if (messagesReceived % 1 == 0) {
-                //     console.log(`Recvd ${messagesReceived} messages, ${totalMessageSize} bytes`);
+
+            if (messagesReceived >= skippedMessages) {
+                messagesMeasured++;
+                totalMessageSize += message.value.length;
+
+                if (messagesReceived === skippedMessages)
+                    startTime = hrtime();
+                
+                /* Simulate message processing for messageProcessTimeMs */
+                if (messageProcessTimeMs > 0) {
+                    await new Promise((resolve) => setTimeout(resolve, messageProcessTimeMs));
+                }
+                await producer.send({
+                    topic: produceTopic,
+                    messages: [{ value: message.value }],
+                })
+
+                if (messagesMeasured === totalMessageCnt) {
+                    let elapsed = hrtime(startTime);
+                    let durationNanos = elapsed[0] * 1e9 + elapsed[1];
+                    rate = (totalMessageSize / durationNanos) * 1e9 / (1024 * 1024); /* MB/s */
+                    console.log(`Recvd, transformed and sent ${messagesMeasured} messages, ${totalMessageSize} bytes; rate is ${rate} MB/s`);
+                    consumer.pause([{ topic }]);
+                }
+            } else {
+                await producer.send({
+                    topic: produceTopic,
+                    messages: [{ value: message.value }],
+                })
             }
         }
     });
 
-    // Wait until the first message is received
-    await new Promise((resolve) => {
-        let interval = setInterval(() => {
-            if (messagesReceived > 0) {
-                clearInterval(interval);
-                resolve();
-            }
-        }, 100);
-    });
-
-    console.log("Starting consume-transform-produce.")
-
     totalMessageSize = 0;
-    consumer.resume([{ topic: consumeTopic }]);
     await new Promise((resolve) => {
         let interval = setInterval(() => {
-            if (messagesReceived >= totalMessageCnt) {
+            if (messagesMeasured >= totalMessageCnt) {
                 clearInterval(interval);
                 resolve();
             }

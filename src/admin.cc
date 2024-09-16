@@ -880,12 +880,15 @@ NAN_METHOD(AdminClient::NodeListGroups) {
       Nan::New("matchConsumerGroupStates").ToLocalChecked();
   bool is_match_states_set =
       Nan::Has(config, match_consumer_group_states_key).FromMaybe(false);
-  v8::Local<v8::Array> match_states_array;
+  v8::Local<v8::Array> match_states_array = Nan::New<v8::Array>();
 
   if (is_match_states_set) {
     match_states_array = GetParameter<v8::Local<v8::Array>>(
         config, "matchConsumerGroupStates", match_states_array);
-    match_states = Conversion::Admin::FromV8GroupStateArray(match_states_array);
+    if (match_states_array->Length()) {
+      match_states = Conversion::Admin::FromV8GroupStateArray(
+        match_states_array);
+    }
   }
 
   // Queue the work.

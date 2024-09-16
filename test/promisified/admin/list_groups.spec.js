@@ -48,7 +48,9 @@ describe('Admin > listGroups', () => {
         await waitFor(() => consumer.assignment().length > 0, () => null, 1000);
 
         await admin.connect();
-        let listGroupsResult = await admin.listGroups();
+        let listGroupsResult = await admin.listGroups({
+            matchConsumerGroupStates: undefined,
+        });
         expect(listGroupsResult.errors).toEqual([]);
         expect(listGroupsResult.groups).toEqual(
             expect.arrayContaining([

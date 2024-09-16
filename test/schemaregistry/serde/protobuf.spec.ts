@@ -22,6 +22,9 @@ import {
 } from "./test/nested_pb";
 import {TestMessageSchema} from "./test/test_pb";
 import {DependencyMessageSchema} from "./test/dep_pb";
+import {RuleRegistry} from "@confluentinc/schemaregistry/serde/rule-registry";
+import {LinkedListSchema} from "./test/cycle_pb";
+import {clearKmsClients} from "@confluentinc/schemaregistry/rules/encryption/kms-registry";
 
 const fieldEncryptionExecutor = FieldEncryptionExecutor.register()
 LocalKmsDriver.register()
@@ -139,6 +142,27 @@ describe('ProtobufSerializer', () => {
     expect(obj2.testMesssage.testFixed32).toEqual(msg.testFixed32);
     expect(obj2.testMesssage.testFixed64).toEqual(msg.testFixed64);
   })
+  it('serialize cycle', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new ProtobufSerializer(client, SerdeType.VALUE, {autoRegisterSchemas: true})
+    ser.registry.add(LinkedListSchema)
+    let inner = create(LinkedListSchema, {
+      value: 100,
+    })
+    let obj = create(LinkedListSchema, {
+      value: 1,
+      next: inner
+    })
+    let bytes = await ser.serialize(topic, obj)
+
+    let deser = new ProtobufDeserializer(client, SerdeType.VALUE, {})
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).toEqual(obj)
+  })
   it('basic encryption', async () => {
     let conf: ClientConfig = {
       baseURLs: [baseURL],
@@ -166,7 +190,7 @@ describe('ProtobufSerializer', () => {
         'encrypt.kms.type': 'local-kms',
         'encrypt.kms.key.id': 'mykey',
       },
-      onFailure: 'ERROR,ERROR'
+      onFailure: 'ERROR,NONE'
     }
     let ruleSet: RuleSet = {
       domainRules: [encRule]
@@ -201,5 +225,12 @@ describe('ProtobufSerializer', () => {
     fieldEncryptionExecutor.client = dekClient
     let obj2 = await deser.deserialize(topic, bytes)
     expect(obj2).toEqual(obj)
+
+    clearKmsClients()
+    let registry = new RuleRegistry()
+    registry.registerExecutor(new FieldEncryptionExecutor())
+    deser = new ProtobufDeserializer(client, SerdeType.VALUE, {}, registry)
+    obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).not.toEqual(obj);
   })
 })

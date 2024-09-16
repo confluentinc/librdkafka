@@ -3,7 +3,7 @@ import {HcVaultClient} from "./hcvault-client";
 
 export class HcVaultDriver implements KmsDriver {
 
-  static PREFIX = 'hcvault-kms://'
+  static PREFIX = 'hcvault://'
   static TOKEN_ID = 'token.id'
   static NAMESPACE = 'namespace'
 

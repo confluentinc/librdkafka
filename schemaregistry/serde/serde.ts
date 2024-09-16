@@ -90,13 +90,13 @@ export abstract class Serde {
         rules = target.ruleSet?.migrationRules
         break
       case RuleMode.DOWNGRADE:
-        rules = source?.ruleSet?.migrationRules?.reverse()
+        rules = source?.ruleSet?.migrationRules?.map(x => x).reverse()
         break
       default:
         rules = target.ruleSet?.domainRules
         if (ruleMode === RuleMode.READ) {
           // Execute read rules in reverse order for symmetry
-          rules = rules?.reverse()
+          rules = rules?.map(x => x).reverse()
         }
         break
     }
@@ -394,7 +394,7 @@ export abstract class Deserializer extends Serde {
       previous = version
     }
     if (migrationMode === RuleMode.DOWNGRADE) {
-      migrations = migrations.reverse()
+      migrations = migrations.map(x => x).reverse()
     }
     return migrations
   }

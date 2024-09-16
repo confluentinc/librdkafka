@@ -5,7 +5,7 @@ import {AzureKmsClient} from "./azure-client";
 export class AzureKmsDriver implements KmsDriver {
 
   static PREFIX = 'azure-kms://'
-  static TENANT_ID = 'tenant_id'
+  static TENANT_ID = 'tenant.id'
   static CLIENT_ID = 'client.id'
   static CLIENT_SECRET = 'client.secret'
 

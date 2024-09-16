@@ -36,12 +36,14 @@ export class HcVaultClient implements KmsClient {
   }
 
   async encrypt(plaintext: Buffer): Promise<Buffer> {
-    const data = await this.kmsClient.encryptData({name: this.keyName, plainText: plaintext.toString('base64') })
-    return Buffer.from(data.ciphertext, 'base64')
+    const response = await this.kmsClient.encryptData({name: this.keyName, plaintext: plaintext.toString('base64') })
+    let data = response.data.ciphertext
+    return Buffer.from(data, 'utf8')
   }
 
   async decrypt(ciphertext: Buffer): Promise<Buffer> {
-    const data = await this.kmsClient.decryptData({name: this.keyName, cipherText: ciphertext.toString('base64') })
-    return Buffer.from(data.plaintext, 'base64')
+    const response = await this.kmsClient.decryptData({name: this.keyName, ciphertext: ciphertext.toString('utf8') })
+    let data = response.data.plaintext
+    return Buffer.from(data, 'base64');
   }
 }

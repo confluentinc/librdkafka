@@ -53,31 +53,7 @@ export class AvroSerializer extends Serializer implements AvroSerde {
       throw new Error('message is empty')
     }
 
-    let enumIndex = 1
-    let fixedIndex = 1
-    let recordIndex = 1
-
-    const namingHook: TypeHook = (
-      avroSchema: avro.Schema,
-      opts: ForSchemaOptions,
-    ) => {
-      let schema = avroSchema as any
-      switch (schema.type) {
-        case 'enum':
-          schema.name = `Enum${enumIndex++}`;
-          break;
-        case 'fixed':
-          schema.name = `Fixed${fixedIndex++}`;
-          break;
-        case 'record':
-          schema.name = `Record${recordIndex++}`;
-          break;
-        default:
-      }
-      return undefined
-    }
-
-    let avroSchema = Type.forValue(msg, { typeHook: namingHook })
+    let avroSchema = AvroSerializer.messageToSchema(msg)
     const schema: SchemaInfo = {
       schemaType: 'AVRO',
       schema: JSON.stringify(avroSchema),
@@ -103,6 +79,34 @@ export class AvroSerializer extends Serializer implements AvroSerde {
       await this.resolveReferences(client, info, deps)
       return deps
     })
+  }
+
+  static messageToSchema(msg: any): avro.Type {
+    let enumIndex = 1
+    let fixedIndex = 1
+    let recordIndex = 1
+
+    const namingHook: TypeHook = (
+      avroSchema: avro.Schema,
+      opts: ForSchemaOptions,
+    ) => {
+      let schema = avroSchema as any
+      switch (schema.type) {
+        case 'enum':
+          schema.name = `Enum${enumIndex++}`;
+          break;
+        case 'fixed':
+          schema.name = `Fixed${fixedIndex++}`;
+          break;
+        case 'record':
+          schema.name = `Record${recordIndex++}`;
+          break;
+        default:
+      }
+      return undefined
+    }
+
+    return Type.forValue(msg, { typeHook: namingHook })
   }
 }
 

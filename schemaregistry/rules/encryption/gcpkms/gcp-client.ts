@@ -12,13 +12,9 @@ export class GcpKmsClient implements KmsClient {
       throw new Error(`key uri must start with ${GcpKmsDriver.PREFIX}`)
     }
     this.keyId = keyUri.substring(GcpKmsDriver.PREFIX.length)
-    const tokens = this.keyId.split(':')
-    if (tokens.length < 4) {
-      throw new Error(`invalid key uri ${this.keyId}`)
-    }
     this.kmsClient = creds != null
-      ? new KeyManagementServiceClient()
-      : new KeyManagementServiceClient({credentials: creds})
+      ? new KeyManagementServiceClient({credentials: creds})
+      : new KeyManagementServiceClient()
   }
 
   supported(keyUri: string): boolean {

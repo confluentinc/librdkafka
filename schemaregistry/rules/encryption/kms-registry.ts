@@ -42,3 +42,8 @@ export function getKmsClient(keyUrl: string): KmsClient | null {
   return null
 }
 
+export function clearKmsClients(): void {
+  kmsClients.length = 0
+}
+
+

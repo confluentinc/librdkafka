@@ -22,7 +22,7 @@ export class AzureKmsClient implements KmsClient {
   }
 
   async encrypt(plaintext: Buffer): Promise<Buffer> {
-     const result = await this.kmsClient.encrypt(AzureKmsClient.ALGORITHM, plaintext)
+    const result = await this.kmsClient.encrypt(AzureKmsClient.ALGORITHM, plaintext)
     return Buffer.from(result.result)
   }
 

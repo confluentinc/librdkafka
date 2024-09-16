@@ -73,7 +73,7 @@ export class JsonSerializer extends Serializer implements JsonSerde {
       throw new Error('message is empty')
     }
 
-    const jsonSchema = generateSchema(msg)
+    const jsonSchema = JsonSerializer.messageToSchema(msg)
     const schema: SchemaInfo = {
       schemaType: 'JSON',
       schema: JSON.stringify(jsonSchema),
@@ -92,14 +92,14 @@ export class JsonSerializer extends Serializer implements JsonSerde {
   }
 
   async fieldTransform(ctx: RuleContext, fieldTransform: FieldTransform, msg: any): Promise<any> {
-    const schema = this.toType(ctx.target)
+    const schema = await this.toType(ctx.target)
     if (typeof schema === 'boolean') {
       return msg
     }
     return await transform(ctx, schema, '$', msg, fieldTransform)
   }
 
-  toType(info: SchemaInfo): DereferencedJSONSchema {
+  async toType(info: SchemaInfo): Promise<DereferencedJSONSchema> {
     return toType(this.client, this.conf as JsonDeserializerConfig, this, info, async (client, info) => {
       const deps = new Map<string, string>()
       await this.resolveReferences(client, info, deps)
@@ -114,6 +114,10 @@ export class JsonSerializer extends Serializer implements JsonSerde {
         return deps
       },
     )
+  }
+
+  static messageToSchema(msg: any): DereferencedJSONSchema {
+    return generateSchema(msg)
   }
 }
 
@@ -173,7 +177,7 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
   }
 
   async fieldTransform(ctx: RuleContext, fieldTransform: FieldTransform, msg: any): Promise<any> {
-    const schema = this.toType(ctx.target)
+    const schema = await this.toType(ctx.target)
     return await transform(ctx, schema, '$', msg, fieldTransform)
   }
 
@@ -211,14 +215,17 @@ async function toValidateFunction(
 
   const json = JSON.parse(info.schema)
   const spec = json.$schema
-  if (spec === 'http://json-schema.org/draft/2020-12/schema') {
+  if (spec === 'http://json-schema.org/draft/2020-12/schema'
+    || spec === 'https://json-schema.org/draft/2020-12/schema') {
     const ajv2020 = new Ajv2020(conf as JsonSerdeConfig)
+    ajv2020.addKeyword("confluent:tags")
     deps.forEach((schema, name) => {
       ajv2020.addSchema(JSON.parse(schema), name)
     })
     fn = ajv2020.compile(json)
   } else {
     const ajv = new Ajv2019(conf as JsonSerdeConfig)
+    ajv.addKeyword("confluent:tags")
     ajv.addMetaSchema(draft6MetaSchema)
     ajv.addMetaSchema(draft7MetaSchema)
     deps.forEach((schema, name) => {

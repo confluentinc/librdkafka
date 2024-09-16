@@ -54,13 +54,29 @@ interface DekId {
   deleted: boolean
 }
 
+export class Clock {
+  now(): number {
+    return Date.now()
+  }
+}
+
 export class FieldEncryptionExecutor extends FieldRuleExecutor {
   client: Client | null = null
+  clock: Clock
 
   static register(): FieldEncryptionExecutor {
-    const executor = new FieldEncryptionExecutor()
+    return this.registerWithClock(new Clock())
+  }
+
+  static registerWithClock(clock: Clock): FieldEncryptionExecutor {
+    const executor = new FieldEncryptionExecutor(clock)
     RuleRegistry.registerRuleExecutor(executor)
     return executor
+  }
+
+  constructor(clock: Clock = new Clock()) {
+    super()
+    this.clock = clock
   }
 
   override configure(clientConfig: ClientConfig, config: Map<string, string>) {
@@ -416,7 +432,7 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
   }
 
   isExpired(ctx: RuleContext, dek: Dek | null): boolean {
-    const now = Date.now()
+    const now = this.executor.clock.now()
     return ctx.ruleMode !== RuleMode.READ &&
       this.dekExpiryDays > 0 &&
       dek != null &&

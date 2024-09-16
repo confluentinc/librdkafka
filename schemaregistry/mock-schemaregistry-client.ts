@@ -201,7 +201,12 @@ class MockClient implements Client {
       const parsedKey = JSON.parse(key);
       if (parsedKey.subject === subject && (!value.softDeleted || deleted)) {
         if (parsedKey.schema.metadata && this.isSubset(metadata, parsedKey.schema.metadata.properties)) {
-          results.push({ id: parsedKey.schema.id, version: value.version, subject, schema: parsedKey.schema.schema });
+          results.push({
+            id: parsedKey.schema.id,
+            version: value.version,
+            subject,
+            ...parsedKey.schema
+          });
         }
       }
     }

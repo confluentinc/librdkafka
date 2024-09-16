@@ -2901,9 +2901,8 @@ const char *rd_kafka_ResourcePatternType_name(
 }
 
 const char *rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype) {
-        static const char *names[] = {
-            "UNKNOWN", "ANY", "TOPIC", "GROUP", "BROKER", "TRANSACTIONAL_ID"
-        };
+        static const char *names[] = {"UNKNOWN", "ANY",    "TOPIC",
+                                      "GROUP",   "BROKER", "TRANSACTIONAL_ID"};
 
         if ((unsigned int)restype >= (unsigned int)RD_KAFKA_RESOURCE__CNT)
                 return "UNSUPPORTED";

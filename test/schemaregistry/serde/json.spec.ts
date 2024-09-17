@@ -105,6 +105,38 @@ const demoSchema2020_12 = `
   }
 }
 `
+const complexSchema = `
+{
+  "type": "object",
+  "properties": {
+    "arrayField": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "confluent:tags": [ "PII" ]
+    },
+    "objectField": {
+      "type": "object",
+      "properties": {
+        "stringField": { "type": "string" }
+      },
+      "confluent:tags": [ "PII" ]
+    },
+    "unionField": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "confluent:tags": [ "PII" ]
+    }
+  }
+}
+`
 
 describe('JsonSerializer', () => {
   afterEach(async () => {
@@ -130,6 +162,37 @@ describe('JsonSerializer', () => {
       boolField: true,
       bytesField: Buffer.from([0, 0, 0, 1]).toString('base64')
     }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deser = new JsonDeserializer(client, SerdeType.VALUE, {})
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).toEqual(obj)
+  })
+  it('basic serialization 2020-12', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new JsonSerializer(client, SerdeType.VALUE, {
+      useLatestVersion: true,
+      validate: true
+    })
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([0, 0, 0, 1]).toString('base64')
+    }
+    let info: SchemaInfo = {
+      schemaType: 'JSON',
+      schema: demoSchema2020_12
+    }
+
+    await client.register(subject, info, false)
+
     let bytes = await ser.serialize(topic, obj)
 
     let deser = new JsonDeserializer(client, SerdeType.VALUE, {})
@@ -237,37 +300,6 @@ describe('JsonSerializer', () => {
 
     await expect(() => ser.serialize(topic, diffObj)).rejects.toThrow(SerializationError)
   })
-  it('basic serialization 2020-12', async () => {
-    let conf: ClientConfig = {
-      baseURLs: [baseURL],
-      cacheCapacity: 1000
-    }
-    let client = SchemaRegistryClient.newClient(conf)
-    let ser = new JsonSerializer(client, SerdeType.VALUE, {
-      useLatestVersion: true,
-      validate: true
-    })
-
-    let obj = {
-      intField: 123,
-      doubleField: 45.67,
-      stringField: 'hi',
-      boolField: true,
-      bytesField: Buffer.from([0, 0, 0, 1]).toString('base64')
-    }
-    let info: SchemaInfo = {
-      schemaType: 'JSON',
-      schema: demoSchema2020_12
-    }
-
-    await client.register(subject, info, false)
-
-    let bytes = await ser.serialize(topic, obj)
-
-    let deser = new JsonDeserializer(client, SerdeType.VALUE, {})
-    let obj2 = await deser.deserialize(topic, bytes)
-    expect(obj2).toEqual(obj)
-  })
   it('basic encryption', async () => {
     let conf: ClientConfig = {
       baseURLs: [baseURL],
@@ -303,6 +335,76 @@ describe('JsonSerializer', () => {
     let info: SchemaInfo = {
       schemaType: 'JSON',
       schema: demoSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([0, 0, 0, 1]).toString('base64')
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    // reset encrypted field
+    obj.stringField = 'hi'
+    obj.bytesField = Buffer.from([0, 0, 0, 1]).toString('base64')
+
+    let deserConfig: JsonDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new JsonDeserializer(client, SerdeType.VALUE, deserConfig)
+    fieldEncryptionExecutor.client = dekClient
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).toEqual(obj)
+
+    clearKmsClients()
+    let registry = new RuleRegistry()
+    registry.registerExecutor(new FieldEncryptionExecutor())
+    deser = new JsonDeserializer(client, SerdeType.VALUE, {}, registry)
+    obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).not.toEqual(obj);
+  })
+  it('basic encryption 2020-12', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: JsonSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let ser = new JsonSerializer(client, SerdeType.VALUE, serConfig)
+    let dekClient = fieldEncryptionExecutor.client!
+
+    let encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT',
+      tags: ['PII'],
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,NONE'
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'JSON',
+      schema: demoSchema2020_12,
       ruleSet
     }
 
@@ -476,6 +578,124 @@ describe('JsonSerializer', () => {
     fieldEncryptionExecutor.client = dekClient
     let obj2 = await deser.deserialize(topic, bytes)
     expect(obj2).toEqual(obj)
+  })
+  it('complex encryption', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: JsonSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let ser = new JsonSerializer(client, SerdeType.VALUE, serConfig)
+    let dekClient = fieldEncryptionExecutor.client!
+
+    let encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT',
+      tags: ['PII'],
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,NONE'
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'JSON',
+      schema: complexSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      arrayField: [ 'hello' ],
+      objectField: { 'stringField': 'world' },
+      unionField: 'bye',
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: JsonDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new JsonDeserializer(client, SerdeType.VALUE, deserConfig)
+    fieldEncryptionExecutor.client = dekClient
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.arrayField).toEqual([ 'hello' ]);
+    expect(obj2.objectField.stringField).toEqual('world');
+    expect(obj2.unionField).toEqual('bye');
+  })
+  it('complex encryption with null', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: JsonSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let ser = new JsonSerializer(client, SerdeType.VALUE, serConfig)
+    let dekClient = fieldEncryptionExecutor.client!
+
+    let encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT',
+      tags: ['PII'],
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,NONE'
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'JSON',
+      schema: complexSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      arrayField: [ 'hello' ],
+      objectField: { 'stringField': 'world' },
+      unionField: null,
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: JsonDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new JsonDeserializer(client, SerdeType.VALUE, deserConfig)
+    fieldEncryptionExecutor.client = dekClient
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.arrayField).toEqual([ 'hello' ]);
+    expect(obj2.objectField.stringField).toEqual('world');
+    expect(obj2.unionField).toEqual(null);
   })
   it('jsonata fully compatible', async () => {
     let rule1To2 = "$merge([$sift($, function($v, $k) {$k != 'size'}), {'height': $.'size'}])"

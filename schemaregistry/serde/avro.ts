@@ -245,9 +245,9 @@ async function transform(ctx: RuleContext, schema: Type, msg: any, fieldTransfor
       return await Promise.all(array.map(item => transform(ctx, arraySchema.itemsType, item, fieldTransform)))
     case 'map':
       const mapSchema = schema as MapType
-      const map = msg as Map<string, any>
+      const map = msg as { [key: string]: any }
       for (const key of Object.keys(map)) {
-        map.set(key, await transform(ctx, mapSchema.valuesType, map.get(key), fieldTransform))
+        map[key] = await transform(ctx, mapSchema.valuesType, map[key], fieldTransform)
       }
       return map
     case 'record':

@@ -24,7 +24,7 @@ export interface BearerAuthCredentials {
 //TODO: Consider retry policy, may need additional libraries on top of Axios
 export interface ClientConfig {
   baseURLs: string[],
-  cacheCapacity: number,
+  cacheCapacity?: number,
   cacheLatestTtlSecs?: number,
   isForward?: boolean,
   createAxiosDefaults?: CreateAxiosDefaults,
@@ -37,7 +37,7 @@ export class RestService {
   private OAuthClient?: OAuthClient;
   private bearerAuth: boolean = false;
 
-  constructor(baseURLs: string[], isForward?: boolean, axiosDefaults?: CreateAxiosDefaults, 
+  constructor(baseURLs: string[], isForward?: boolean, axiosDefaults?: CreateAxiosDefaults,
     bearerAuthCredentials?: BearerAuthCredentials) {
     this.client = axios.create(axiosDefaults);
     this.baseURLs = baseURLs;
@@ -53,7 +53,7 @@ export class RestService {
         'Confluent-Identity-Pool-Id': bearerAuthCredentials.identityPool,
         'target-sr-cluster': bearerAuthCredentials.schemaRegistryLogicalCluster
       });
-      this.OAuthClient = new OAuthClient(bearerAuthCredentials.clientId, bearerAuthCredentials.clientSecret, 
+      this.OAuthClient = new OAuthClient(bearerAuthCredentials.clientId, bearerAuthCredentials.clientSecret,
         bearerAuthCredentials.tokenHost, bearerAuthCredentials.tokenPath, bearerAuthCredentials.scope);
     }
   }

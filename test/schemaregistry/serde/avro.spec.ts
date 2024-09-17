@@ -190,6 +190,60 @@ const demoSchemaWithUnion = `
   ]
 }
 `
+const schemaEvolution1 = `
+{
+  "name": "SchemaEvolution",
+  "type": "record",
+  "fields": [
+    {
+      "name": "fieldToDelete",
+      "type": "string"
+    }
+  ]
+}
+`
+const schemaEvolution2 = `
+{
+  "name": "SchemaEvolution",
+  "type": "record",
+  "fields": [
+    {
+      "name": "newOptionalField",
+      "type": ["string", "null"],
+      "default": "optional"
+    }
+  ]
+}
+`
+const complexSchema = `
+{
+  "name": "ComplexSchema",
+  "type": "record",
+  "fields": [
+    {
+      "name": "arrayField",
+      "type": {
+        "type": "array",
+        "items": "string"
+       },
+      "confluent:tags": [ "PII" ]
+    },
+    {
+      "name": "mapField",
+      "type": {
+        "type": "map",
+        "values": "string"
+       },
+      "confluent:tags": [ "PII" ]
+    },
+    {
+      "name": "unionField",
+      "type": ["null", "string"],
+      "confluent:tags": [ "PII" ]
+    }
+  ]
+}
+`
 
 class FakeClock extends Clock {
   fixedNow: number = 0
@@ -319,6 +373,38 @@ describe('AvroSerializer', () => {
     expect(obj2.otherField.stringField).toEqual(nested.stringField);
     expect(obj2.otherField.boolField).toEqual(nested.boolField);
     expect(obj2.otherField.bytesField).toEqual(nested.bytesField);
+  })
+  it('schema evolution', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new AvroSerializer(client, SerdeType.VALUE, {useLatestVersion: true})
+
+    let obj = {
+      fieldToDelete: "bye",
+    }
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: schemaEvolution1,
+    }
+
+    await client.register(subject, info, false)
+
+    let bytes = await ser.serialize(topic, obj)
+
+    info = {
+      schemaType: 'AVRO',
+      schema: schemaEvolution2,
+    }
+
+    await client.register(subject, info, false)
+
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, {useLatestVersion: true})
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.fieldToDelete).toEqual(undefined);
+    expect(obj2.newOptionalField).toEqual("optional");
   })
   it('basic encryption', async () => {
     let conf: ClientConfig = {
@@ -875,6 +961,124 @@ describe('AvroSerializer', () => {
     expect(obj2.stringField).toEqual(obj.stringField);
     expect(obj2.boolField).toEqual(obj.boolField);
     expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('complex encryption', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+    let dekClient = fieldEncryptionExecutor.client!
+
+    let encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT',
+      tags: ['PII'],
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,NONE'
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: complexSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      arrayField: [ 'hello' ],
+      mapField: { 'key': 'world' },
+      unionField: 'bye',
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    fieldEncryptionExecutor.client = dekClient
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.arrayField).toEqual([ 'hello' ]);
+    expect(obj2.mapField).toEqual({ 'key': 'world' });
+    expect(obj2.unionField).toEqual('bye');
+  })
+  it('complex encryption with null', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+    let dekClient = fieldEncryptionExecutor.client!
+
+    let encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT',
+      tags: ['PII'],
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,NONE'
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: complexSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      arrayField: [ 'hello' ],
+      mapField: { 'key': 'world' },
+      unionField: null
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    fieldEncryptionExecutor.client = dekClient
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.arrayField).toEqual([ 'hello' ]);
+    expect(obj2.mapField).toEqual({ 'key': 'world' });
+    expect(obj2.unionField).toEqual(null);
   })
   it('jsonata fully compatible', async () => {
     let rule1To2 = "$merge([$sift($, function($v, $k) {$k != 'size'}), {'height': $.'size'}])"

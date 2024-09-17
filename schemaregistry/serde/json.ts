@@ -262,7 +262,8 @@ async function toType(
   const json = JSON.parse(info.schema)
   const spec = json.$schema
   let schema
-  if (spec === 'http://json-schema.org/draft/2020-12/schema') {
+  if (spec === 'http://json-schema.org/draft/2020-12/schema'
+    || spec === 'https://json-schema.org/draft/2020-12/schema') {
     schema = await dereferenceJSONSchemaDraft2020_12(json, { retrieve })
   } else {
     schema = await dereferenceJSONSchemaDraft07(json, { retrieve })
@@ -302,6 +303,7 @@ async function transform(ctx: RuleContext, schema: DereferencedJSONSchema, path:
       for (let i = 0; i < msg.length; i++) {
         msg[i] = await transform(ctx, schema.items, path, msg[i], fieldTransform)
       }
+      return msg
     }
   }
   if (schema.$ref != null) {
@@ -355,7 +357,7 @@ async function transformField(ctx: RuleContext, path: string, propName: string, 
 function validateSubschemas(subschemas: DereferencedJSONSchema[], msg: any): DereferencedJSONSchema | null {
   for (let subschema of subschemas) {
     try {
-      validateJSON(subschema, msg)
+      validateJSON(msg, subschema)
       return subschema
     } catch (error) {
       // ignore

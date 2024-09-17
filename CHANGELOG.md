@@ -1,3 +1,26 @@
+# confluent-kafka-javascript v0.1.17-devel
+
+v0.1.17-devel is a pre-production, early-access release.
+
+## Features
+
+1. Add a commitCb method to the callback-based API which allows committing asynchronously.
+2. Pass assign/unassign functions to the rebalance callback in the promisified API, allowing
+   the user to control the assignment of partitions, or pause just after a rebalance.
+3. Remove store from promisified API and let the library handle all the stores.
+4. Add JavaScript-level debug logging to the client for debugging issues within the binding.
+5. Various fixes for performance and robustness of the consumer cache.
+6. Remove `consumerGroupId` argument from the `sendOffsets` method of the transactional producer,
+   and instead, only allow using a `consumer`.
+
+## Fixes
+
+1. Do not modify RegExps which don't start with a ^, instead, throw an error so
+   that there is no unexpected behaviour for the user (Issue [#64](https://github.com/confluentinc/confluent-kafka-javascript/issues/64)).
+2. Do not mutate arguments in run, pause and resume (Issue [#61](https://github.com/confluentinc/confluent-kafka-javascript/issues/61)).
+3. Fix a segmentation fault in `listGroups` when passing `matchConsumerGroupStates` as undefined.
+
+
 # confluent-kafka-javascript v0.1.16-devel
 
 v0.1.16-devel is a pre-production, early-access release.

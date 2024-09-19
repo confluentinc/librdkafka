@@ -9963,7 +9963,7 @@ typedef enum rd_kafka_ElectionType_t {
  *
  * @param electionType The election type that needs to be performed,
  *  preferred or unclean.
- * @param partitions The topic partition for which the leader election
+ * @param partitions The topic partitions for which the leader election
  * needs to be performed.
  *
  * @returns a new allocated ElectLeaders object.
@@ -9988,7 +9988,7 @@ rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leader);
  *        according to the specified election type.
  *
  * @param rk Client instance.
- * @param elect_leader The elect leader request having information
+ * @param elect_leader The elect leaders request having information
  *        like election type, topic partitions etc.
  * @param options Optional admin options, or NULL for defaults.
  * @param rkqu Queue to emit result on.

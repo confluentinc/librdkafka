@@ -2365,9 +2365,9 @@ static void do_test_ElectLeaders(const char *what,
         rd_kafka_event_t *rkev;
         rd_kafka_resp_err_t err;
         const rd_kafka_ElectLeaders_result_t *res;
-        rd_kafka_ElectLeaders_t *empty_elect_leader;
-        rd_kafka_ElectLeaders_t *duplicate_elect_leader;
-        rd_kafka_ElectLeaders_t *elect_leader;
+        rd_kafka_ElectLeaders_t *empty_elect_leaders;
+        rd_kafka_ElectLeaders_t *duplicate_elect_leaders;
+        rd_kafka_ElectLeaders_t *elect_leaders;
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         test_timing_t timing;
         rd_kafka_topic_partition_list_t *partitions;
@@ -2383,11 +2383,11 @@ static void do_test_ElectLeaders(const char *what,
         rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
         rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
         rd_kafka_topic_partition_list_add(partitions, "topic1", 1);
-        elect_leader = rd_kafka_ElectLeaders_new(election_type, partitions);
+        elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
         rd_kafka_topic_partition_list_destroy(partitions);
 
         partitions = rd_kafka_topic_partition_list_new(0);
-        empty_elect_leader =
+        empty_elect_leaders =
             rd_kafka_ElectLeaders_new(election_type, partitions);
         rd_kafka_topic_partition_list_destroy(partitions);
 
@@ -2395,7 +2395,7 @@ static void do_test_ElectLeaders(const char *what,
         rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
         rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
         rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
-        duplicate_elect_leader =
+        duplicate_elect_leaders =
             rd_kafka_ElectLeaders_new(election_type, partitions);
         rd_kafka_topic_partition_list_destroy(partitions);
 
@@ -2418,9 +2418,9 @@ static void do_test_ElectLeaders(const char *what,
         /*Empty topic-partition list*/
         TIMING_START(&timing, "ElectLeaders");
         TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
-        rd_kafka_ElectLeaders(rk, empty_elect_leader, options, q);
+        rd_kafka_ElectLeaders(rk, empty_elect_leaders, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
-        rd_kafka_ElectLeaders_destroy(empty_elect_leader);
+        rd_kafka_ElectLeaders_destroy(empty_elect_leaders);
 
         /* Poll result queue */
         TIMING_START(&timing, "ElectLeaders.queue_poll");
@@ -2449,9 +2449,9 @@ static void do_test_ElectLeaders(const char *what,
         /*Duplicate topic-partition list*/
         TIMING_START(&timing, "ElectLeaders");
         TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
-        rd_kafka_ElectLeaders(rk, duplicate_elect_leader, options, q);
+        rd_kafka_ElectLeaders(rk, duplicate_elect_leaders, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
-        rd_kafka_ElectLeaders_destroy(duplicate_elect_leader);
+        rd_kafka_ElectLeaders_destroy(duplicate_elect_leaders);
 
         /* Poll result queue */
         TIMING_START(&timing, "ElectLeaders.queue_poll");
@@ -2481,9 +2481,9 @@ static void do_test_ElectLeaders(const char *what,
         /*Correct topic-partition list*/
         TIMING_START(&timing, "ElectLeaders");
         TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
-        rd_kafka_ElectLeaders(rk, elect_leader, options, q);
+        rd_kafka_ElectLeaders(rk, elect_leaders, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
-        rd_kafka_ElectLeaders_destroy(elect_leader);
+        rd_kafka_ElectLeaders_destroy(elect_leaders);
 
         /* Poll result queue */
         TIMING_START(&timing, "ElectLeaders.queue_poll");

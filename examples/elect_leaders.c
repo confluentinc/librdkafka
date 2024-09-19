@@ -128,7 +128,7 @@ print_elect_leader_result(const rd_kafka_ElectLeaders_result_t *result) {
         size_t results_cnt;
         size_t i;
         int retval = 0;
-        rd_kafka_ElectLeadersResult_t *res;
+        const rd_kafka_ElectLeadersResult_t *res;
 
         res = rd_kafka_ElectionResult_result(result);
 

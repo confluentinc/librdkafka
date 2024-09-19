@@ -437,14 +437,13 @@ struct rd_kafka_DeleteAcls_result_response_s {
 };
 
 /**
- * @name ElectLeader
+ * @name ElectLeaders
  */
 
 /**
- * @struct ElectLeader request object
+ * @struct ElectLeaders request object
  */
-
-struct rd_kafka_ElectLeader_s {
+struct rd_kafka_ElectLeaders_s {
         rd_kafka_ElectionType_t electionType; /*Election Type*/
         rd_kafka_topic_partition_list_t
             *partitions; /*TopicPartitions for election*/
@@ -452,13 +451,12 @@ struct rd_kafka_ElectLeader_s {
 
 
 /**
- * @struct ElectLeader result object
+ * @struct ElectLeaders result object
  */
-
-typedef struct rd_kafka_ElectLeaderResult_s {
+struct rd_kafka_ElectLeadersResult_s {
         rd_kafka_resp_err_t error_code;
         rd_list_t partitions; /**< Type (rd_kafka_topic_partition_error_t *) */
-} rd_kafka_ElectLeaderResult_t;
+};
 
 /**@}*/
 

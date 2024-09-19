@@ -5878,7 +5878,7 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
+rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
     rd_kafka_broker_t *rkb,
     const rd_list_t *elect_leaders /*(rd_kafka_EleactLeader_t*)*/,
     rd_kafka_AdminOptions_t *options,
@@ -5889,7 +5889,7 @@ rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
     void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
-        const rd_kafka_ElectLeader_t *elect_leader;
+        const rd_kafka_ElectLeaders_t *elect_leader;
         int op_timeout;
         int i;
 

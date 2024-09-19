@@ -416,6 +416,12 @@ void rd_kafka_topic_partition_result_destroy_array(
         }
 }
 
+/**
+ * @brief Frees the memory allocated for a
+ *        rd_kafka_topic_partition_result_t object by calling
+ *        its destroy function.
+ */
+
 void rd_kafka_topic_partition_result_free(void *ptr) {
         rd_kafka_topic_partition_result_destroy(ptr);
 }

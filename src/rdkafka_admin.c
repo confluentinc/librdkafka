@@ -1723,7 +1723,7 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
             options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS ||
             options->for_api == RD_KAFKA_ADMIN_OP_DELETERECORDS ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTOFFSETS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_ELECTLEADER)
+            options->for_api == RD_KAFKA_ADMIN_OP_ELECTLEADERS)
                 rd_kafka_confval_init_int(&options->operation_timeout,
                                           "operation_timeout", -1, 3600 * 1000,
                                           rk->rk_conf.admin.request_timeout_ms);
@@ -4187,7 +4187,7 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
 /**@}*/
 
 /**
- * @name ElectLeader
+ * @name ElectLeaders
  * @{
  *
  *
@@ -4201,12 +4201,11 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
  *       \p topic_partitions and \p electionType.
 
 */
+rd_kafka_ElectLeaders_t *
+rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
+                          rd_kafka_topic_partition_list_t *partitions) {
 
-rd_kafka_ElectLeader_t *
-rd_kafka_ElectLeader_new(rd_kafka_ElectionType_t election_type,
-                         rd_kafka_topic_partition_list_t *partitions) {
-
-        rd_kafka_ElectLeader_t *elect_leader;
+        rd_kafka_ElectLeaders_t *elect_leader;
 
         elect_leader = rd_calloc(1, sizeof(*elect_leader));
         elect_leader->partitions =
@@ -4217,53 +4216,38 @@ rd_kafka_ElectLeader_new(rd_kafka_ElectionType_t election_type,
 }
 
 /**
- * @brief Copies the rd_kafka_ElectLeader_t object.
+ * @brief Copies the rd_kafka_ElectLeaders_t object.
  */
-
-rd_kafka_ElectLeader_t *
-rd_kafka_ElectLeader_copy(const rd_kafka_ElectLeader_t *elect_leader) {
-        return rd_kafka_ElectLeader_new(elect_leader->electionType,
-                                        elect_leader->partitions);
+rd_kafka_ElectLeaders_t *
+rd_kafka_ElectLeaders_copy(const rd_kafka_ElectLeaders_t *elect_leader) {
+        return rd_kafka_ElectLeaders_new(elect_leader->electionType,
+                                         elect_leader->partitions);
 }
 
 /**
- * @brief Returns the list of partitions in the rd_kafka_ElectLeader_t object.
+ * @brief Destroys the rd_kafka_ElectLeaders_t object.
  */
-
-const rd_kafka_topic_partition_list_t *
-rd_kafka_ElectLeader_partitions(const rd_kafka_ElectLeader_t *elect_leader) {
-        return elect_leader->partitions;
-}
-
-/**
- * @brief Returns the election type of the rd_kafka_ElectLeader_t object.
- */
-
-rd_kafka_ElectionType_t
-rd_kafka_ElectLeader_election_type(const rd_kafka_ElectLeader_t *elect_leader) {
-        return elect_leader->electionType;
-}
-
-/**
- * @brief Destroys the rd_kafka_ElectLeader_t object.
- */
-void rd_kafka_ElectLeader_destroy(rd_kafka_ElectLeader_t *elect_leader) {
+void rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leader) {
         rd_kafka_topic_partition_list_destroy(elect_leader->partitions);
         rd_free(elect_leader);
 }
 
-static void rd_kafka_ElectLeader_free(void *ptr) {
-        rd_kafka_ElectLeader_destroy(ptr);
+/**
+ * @brief Frees the memory allocated for an rd_kafka_ElectLeaders_t object
+ *        by calling its destroy function.
+ */
+static void rd_kafka_ElectLeaders_free(void *ptr) {
+        rd_kafka_ElectLeaders_destroy(ptr);
 }
 
 /**
- * @brief Creates a new rd_kafka_ElectLeaderResult_t object with the given
+ * @brief Creates a new rd_kafka_ElectLeadersResult_t object with the given
  *       \p error.
  */
-static rd_kafka_ElectLeaderResult_t *
-rd_kafka_ElectLeaderResult_new(rd_kafka_resp_err_t err) {
+static rd_kafka_ElectLeadersResult_t *
+rd_kafka_ElectLeadersResult_new(rd_kafka_resp_err_t err) {
 
-        rd_kafka_ElectLeaderResult_t *result;
+        rd_kafka_ElectLeadersResult_t *result;
         result = rd_calloc(1, sizeof(*result));
 
         result->error_code = err;
@@ -4274,71 +4258,81 @@ rd_kafka_ElectLeaderResult_new(rd_kafka_resp_err_t err) {
 }
 
 /**
- * @brief Returns the rd_kafka_ElectLeaderResult_t object from the
- *        rd_kafka_ElectLeader_result_t object.
+ * @brief Returns the rd_kafka_ElectLeadersResult_t object from the
+ *        rd_kafka_ElectLeaders_result_t object.
  */
-
-static const rd_kafka_ElectLeaderResult_t *
-rd_kafka_ElectLeader_result(const rd_kafka_ElectLeader_result_t *result) {
-        return (const rd_kafka_ElectLeaderResult_t *)rd_list_elem(
+static const rd_kafka_ElectLeadersResult_t *
+rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result) {
+        return (const rd_kafka_ElectLeadersResult_t *)rd_list_elem(
             &result->rko_u.admin_result.results, 0);
 }
 
 /**
- * @brief Returns the error of the rd_kafka_ElectLeaderResult_t object.
+ * @brief Returns the leader election result object from the
+ *       rd_kafka_ElectLeaders_result_t event type.
  */
+const rd_kafka_ElectLeadersResult_t *
+rd_kafka_ElectionResult_result(const rd_kafka_ElectLeaders_result_t *result) {
+        return rd_kafka_ElectLeaders_result(result);
+}
 
+/**
+ * @brief Returns the error of the rd_kafka_ElectLeadersResult_t object.
+ */
 rd_kafka_resp_err_t
-rd_kafka_ElectionResult_error(const rd_kafka_ElectLeader_result_t *result) {
-        const rd_kafka_ElectLeaderResult_t *res;
-        res = rd_kafka_ElectLeader_result(result);
-        return res->error_code;
+rd_kafka_ElectionResult_error(const rd_kafka_ElectLeadersResult_t *result) {
+        return result->error_code;
 }
 
 /**
  * @brief Returns the array of rd_kafka_topic_partition_result_t objects from
- * the rd_kafka_ElectLeader_result_t event and populate the size of the array in
- * cntp.
+ * the rd_kafka_ElectLeaders_result_t event and populate the size of the array
+ * in cntp.
  */
-
 const rd_kafka_topic_partition_result_t **
-rd_kafka_ElectionResult_partition(const rd_kafka_ElectLeader_result_t *result,
-                                  size_t *cntp) {
-
-        const rd_kafka_ElectLeaderResult_t *res;
-
-        res   = rd_kafka_ElectLeader_result(result);
-        *cntp = rd_list_cnt(&res->partitions);
-
+rd_kafka_ElectionResult_partitions(const rd_kafka_ElectLeadersResult_t *result,
+                                   size_t *cntp) {
+        *cntp = rd_list_cnt(&result->partitions);
         return (const rd_kafka_topic_partition_result_t **)
-            res->partitions.rl_elems;
+            result->partitions.rl_elems;
 }
 
+/**
+ * @brief Returns the rd_kafka_topic_partition_result_t object at the given
+ *        index from the array of rd_kafka_topic_partition_result_t objects
+ *        from the rd_kafka_ElectLeaders_result_t event.
+ *
+ * @param result The rd_kafka_ElectLeadersResult_t object.
+ * @param idx The index of the rd_kafka_topic_partition_result_t object to
+ *
+ * @returns The rd_kafka_topic_partition_result_t object at the given index.
+ */
 const rd_kafka_topic_partition_result_t *
-rd_kafka_ElectionResult_partition_by_idx(
+rd_kafka_ElectionResult_partitions_by_idx(
     const rd_kafka_topic_partition_result_t **result,
     size_t idx) {
         return result[idx];
 }
 
 /**
- * @brief Destroys the rd_kafka_ElectLeaderResult_t object.
+ * @brief Destroys the rd_kafka_ElectLeadersResult_t object.
  */
-
-static void
-rd_kafka_ElectLeaderResult_destroy(rd_kafka_ElectLeaderResult_t *result) {
+void rd_kafka_ElectLeadersResult_destroy(
+    rd_kafka_ElectLeadersResult_t *result) {
         rd_list_destroy(&result->partitions);
         rd_free(result);
 }
 
-static void rd_kafka_ElectLeaderResult_free(void *ptr) {
-        rd_kafka_ElectLeaderResult_destroy(ptr);
+/**
+ * @brief Frees the memory allocated for an rd_kafka_ElectLeadersResult_t object
+ *        by calling its destroy function.
+ */
+static void rd_kafka_ElectLeadersResult_free(void *ptr) {
+        rd_kafka_ElectLeadersResult_destroy(ptr);
 }
 
-
-
 /**
- * @brief Parse ElectLeaderResponse and create ADMIN_RESULT op.
+ * @brief Parse ElectLeadersResponse and create ADMIN_RESULT op.
  *
  * @param rko_req The original request op.
  * @param rko_resultp The resulting ADMIN_RESULT op.
@@ -4347,15 +4341,15 @@ static void rd_kafka_ElectLeaderResult_free(void *ptr) {
  * @param errstr_size The size of the error string buffer.
  */
 static rd_kafka_resp_err_t
-rd_kafka_ElectLeaderResponse_parse(rd_kafka_op_t *rko_req,
-                                   rd_kafka_op_t **rko_resultp,
-                                   rd_kafka_buf_t *reply,
-                                   char *errstr,
-                                   size_t errstr_size) {
-        const int log_decode_errors          = LOG_ERR;
-        rd_kafka_op_t *rko_result            = NULL;
-        rd_kafka_ElectLeaderResult_t *result = NULL;
-        int16_t error_code                   = 0;
+rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
+                                    rd_kafka_op_t **rko_resultp,
+                                    rd_kafka_buf_t *reply,
+                                    char *errstr,
+                                    size_t errstr_size) {
+        const int log_decode_errors           = LOG_ERR;
+        rd_kafka_op_t *rko_result             = NULL;
+        rd_kafka_ElectLeadersResult_t *result = NULL;
+        int16_t error_code                    = 0;
         int32_t TopicArrayCnt;
         int i;
 
@@ -4368,7 +4362,7 @@ rd_kafka_ElectLeaderResponse_parse(rd_kafka_op_t *rko_req,
         /* #partitions */
         rd_kafka_buf_read_arraycnt(reply, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
-        result = rd_kafka_ElectLeaderResult_new(error_code);
+        result = rd_kafka_ElectLeadersResult_new(error_code);
 
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafka_topic_partition_result_t *desc;
@@ -4415,7 +4409,7 @@ rd_kafka_ElectLeaderResponse_parse(rd_kafka_op_t *rko_req,
         rko_result = rd_kafka_admin_result_new(rko_req);
 
         rd_list_init(&rko_result->rko_u.admin_result.results, 1,
-                     rd_kafka_ElectLeaderResult_free);
+                     rd_kafka_ElectLeadersResult_free);
 
         rd_list_add(&rko_result->rko_u.admin_result.results, result);
 
@@ -4425,33 +4419,33 @@ rd_kafka_ElectLeaderResponse_parse(rd_kafka_op_t *rko_req,
 err_parse:
 
         if (result)
-                rd_kafka_ElectLeaderResult_destroy(result);
+                rd_kafka_ElectLeadersResult_destroy(result);
         if (rko_result)
                 rd_kafka_op_destroy(rko_result);
 
         rd_snprintf(errstr, errstr_size,
-                    "ElectLeader response protocol parse failure: %s",
+                    "ElectLeaders response protocol parse failure: %s",
                     rd_kafka_err2str(reply->rkbuf_err));
 
         return reply->rkbuf_err;
 }
 
-void rd_kafka_ElectLeader(rd_kafka_t *rk,
-                          rd_kafka_ElectLeader_t *elect_leader,
-                          const rd_kafka_AdminOptions_t *options,
-                          rd_kafka_queue_t *rkqu) {
+void rd_kafka_ElectLeaders(rd_kafka_t *rk,
+                           rd_kafka_ElectLeaders_t *elect_leader,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
         rd_kafka_topic_partition_list_t *copied_partitions;
 
         static const struct rd_kafka_admin_worker_cbs cbs = {
-            rd_kafka_ElectLeaderRequest,
-            rd_kafka_ElectLeaderResponse_parse,
+            rd_kafka_ElectLeadersRequest,
+            rd_kafka_ElectLeadersResponse_parse,
         };
 
         rd_assert(rkqu);
 
-        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_ELECTLEADER,
-                                            RD_KAFKA_EVENT_ELECTLEADER_RESULT,
+        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_ELECTLEADERS,
+                                            RD_KAFKA_EVENT_ELECTLEADERS_RESULT,
                                             &cbs, options, rkqu->rkqu_q);
 
         /* Non empty topic_partition_list should be present */
@@ -4476,10 +4470,10 @@ void rd_kafka_ElectLeader(rd_kafka_t *rk,
         }
 
         rd_list_init(&rko->rko_u.admin_request.args, 1,
-                     rd_kafka_ElectLeader_free);
+                     rd_kafka_ElectLeaders_free);
 
         rd_list_add(&rko->rko_u.admin_request.args,
-                    rd_kafka_ElectLeader_copy(elect_leader));
+                    rd_kafka_ElectLeaders_copy(elect_leader));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 }

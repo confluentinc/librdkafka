@@ -621,7 +621,7 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
 
-rd_kafka_resp_err_t rd_kafka_ElectLeaderRequest(
+rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
     rd_kafka_broker_t *rkb,
     const rd_list_t *elect_leaders /*(rd_kafka_EleactLeader_t*)*/,
     rd_kafka_AdminOptions_t *options,

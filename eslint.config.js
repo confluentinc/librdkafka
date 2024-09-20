@@ -1,6 +1,7 @@
 const js = require("@eslint/js");
 const jest = require('eslint-plugin-jest');
 const ts = require('typescript-eslint');
+const tsdoc = require('eslint-plugin-tsdoc');
 
 const ckjsSpecificSettings = {
     languageOptions: {
@@ -56,11 +57,16 @@ module.exports = ts.config(
     ...ts.configs.recommended.map((config) => ({
         ...config,
         ignores: ["**/*.js", "types/rdkafka.d.ts", "types/kafkajs.d.ts", "types/config.d.ts"],
+        plugins: {
+            "@typescript-eslint": ts.plugin,
+            tsdoc,
+        },
         rules: {
             ...config.rules,
             "prefer-const": "warn",
             "@typescript-eslint/no-explicit-any": "warn",
             "@typescript-eslint/no-unused-vars": "warn",
+            "tsdoc/syntax": "warn",
         }
     })),
 );

@@ -37,6 +37,9 @@ const ckjsSpecificJestSettings = {
 
 module.exports = ts.config(
     {
+        ignores: ["**/dist/"]
+    },
+    {
         ...js.configs.recommended,
         files: ["lib/**/*.js", "test/promisified/**/*.js"],
         ignores: []

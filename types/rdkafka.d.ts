@@ -296,6 +296,10 @@ export class HighLevelProducer extends Producer {
   setKeySerializer(serializer: (key: any) => MessageKey | Promise<MessageKey>): void;
   setValueSerializer(serializer: (value: any, cb: (err: any, value: MessageValue) => void) => void): void;
   setValueSerializer(serializer: (value: any) => MessageValue | Promise<MessageValue>): void;
+  setTopicKeySerializer(serializer: (topic: string, key: any, cb: (err: any, key: MessageKey) => void) => void): void;
+  setTopicKeySerializer(serializer: (topic: string, key: any) => MessageKey | Promise<MessageKey>): void;
+  setTopicValueSerializer(serializer: (topic: string, value: any, cb: (err: any, value: MessageValue) => void) => void): void;
+  setTopicValueSerializer(serializer: (topic: string, value: any) => MessageValue | Promise<MessageValue>): void;
 }
 
 export const features: string[];

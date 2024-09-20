@@ -84,11 +84,11 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
     this.config = config
   }
 
-  type(): string {
+  override type(): string {
     return 'ENCRYPT'
   }
 
-  newTransform(ctx: RuleContext): FieldTransform {
+  override newTransform(ctx: RuleContext): FieldTransform {
     const cryptor = this.getCryptor(ctx)
     const kekName = this.getKekName(ctx)
     const dekExpiryDays = this.getDekExpiryDays(ctx)
@@ -97,7 +97,7 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
     return transform
   }
 
-  async close(): Promise<void> {
+  override async close(): Promise<void> {
     if (this.client != null) {
       await this.client.close()
     }

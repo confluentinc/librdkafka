@@ -45,7 +45,7 @@ export class AvroSerializer extends Serializer implements AvroSerde {
     }
   }
 
-  async serialize(topic: string, msg: any): Promise<Buffer> {
+  override async serialize(topic: string, msg: any): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
     }
@@ -126,7 +126,7 @@ export class AvroDeserializer extends Deserializer implements AvroSerde {
     }
   }
 
-  async deserialize(topic: string, payload: Buffer): Promise<any> {
+  override async deserialize(topic: string, payload: Buffer): Promise<any> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error('Invalid buffer')
     }
@@ -366,7 +366,7 @@ function resolveUnion(schema: Type, msg: any): Type | null {
 function getInlineTags(info: SchemaInfo, deps: Map<string, string>): Map<string, Set<string>> {
   const inlineTags = new Map<string, Set<string>>()
   getInlineTagsRecursively('', '', JSON.parse(info.schema), inlineTags)
-  for (const depSchema of Object.values(deps)) {
+  for (const depSchema of deps.values()) {
     getInlineTagsRecursively('', '', JSON.parse(depSchema), inlineTags)
   }
   return inlineTags

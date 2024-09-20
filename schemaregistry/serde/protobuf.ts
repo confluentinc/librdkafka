@@ -110,7 +110,7 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
     }
   }
 
-  async serialize(topic: string, msg: any): Promise<Buffer> {
+  override async serialize(topic: string, msg: any): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
     }
@@ -293,7 +293,7 @@ export class ProtobufDeserializer extends Deserializer implements ProtobufSerde 
     }
   }
 
-  async deserialize(topic: string, payload: Buffer): Promise<any> {
+  override async deserialize(topic: string, payload: Buffer): Promise<any> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error('Invalid buffer')
     }

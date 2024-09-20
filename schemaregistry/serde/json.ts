@@ -65,7 +65,7 @@ export class JsonSerializer extends Serializer implements JsonSerde {
     }
   }
 
-  async serialize(topic: string, msg: any): Promise<Buffer> {
+  override async serialize(topic: string, msg: any): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
     }
@@ -139,7 +139,7 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
     }
   }
 
-  async deserialize(topic: string, payload: Buffer): Promise<any> {
+  override async deserialize(topic: string, payload: Buffer): Promise<any> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error('Invalid buffer')
     }

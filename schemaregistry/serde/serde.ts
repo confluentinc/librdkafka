@@ -224,7 +224,6 @@ export abstract class Serializer extends Serde {
     return this.conf as SerializerConfig
   }
 
-  // serialize will serialize the given message
   abstract serialize(topic: string, msg: any): Promise<Buffer>
 
   // GetID returns a schema ID for the given schema
@@ -281,6 +280,8 @@ export abstract class Deserializer extends Serde {
   override config(): DeserializerConfig {
     return this.conf as DeserializerConfig
   }
+
+  abstract deserialize(topic: string, payload: Buffer): Promise<any>
 
   async getSchema(topic: string, payload: Buffer, format?: string): Promise<SchemaInfo> {
     const magicByte = payload.subarray(0, 1)

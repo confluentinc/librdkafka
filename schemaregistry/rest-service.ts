@@ -1,7 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, CreateAxiosDefaults } from 'axios';
 import { OAuthClient } from './oauth/oauth-client';
 import { RestError } from './rest-error';
-
 /*
  * Confluent-Schema-Registry-TypeScript - Node.js wrapper for Confluent Schema Registry
  *
@@ -11,14 +10,27 @@ import { RestError } from './rest-error';
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
+export interface BasicAuthCredentials {
+  credentialsSource: 'USER_INFO' | 'URL' | 'SASL_INHERIT',
+  userInfo?: string,
+  saslInfo?: SaslInfo
+}
+
+export interface SaslInfo {
+  mechanism?: string,
+  username: string,
+  password: string
+}
+
 export interface BearerAuthCredentials {
-  clientId: string,
-  clientSecret: string,
-  tokenHost: string,
-  tokenPath: string,
-  schemaRegistryLogicalCluster: string,
-  identityPool: string,
-  scope: string
+  credentialsSource: 'STATIC_TOKEN' | 'OAUTHBEARER',
+  token?: string,
+  issuerEndpointUrl?: string,
+  clientId?: string,
+  clientSecret?: string,
+  scope?: string,
+  logicalCluster?: string,
+  identityPoolId?: string,
 }
 
 //TODO: Consider retry policy, may need additional libraries on top of Axios
@@ -28,17 +40,20 @@ export interface ClientConfig {
   cacheLatestTtlSecs?: number,
   isForward?: boolean,
   createAxiosDefaults?: CreateAxiosDefaults,
+  basicAuthCredentials?: BasicAuthCredentials,
   bearerAuthCredentials?: BearerAuthCredentials,
 }
+
+const toBase64 = (str: string): string => Buffer.from(str).toString('base64');
 
 export class RestService {
   private client: AxiosInstance;
   private baseURLs: string[];
-  private OAuthClient?: OAuthClient;
-  private bearerAuth: boolean = false;
+  private oauthClient?: OAuthClient;
+  private oauthBearer: boolean = false;
 
   constructor(baseURLs: string[], isForward?: boolean, axiosDefaults?: CreateAxiosDefaults,
-    bearerAuthCredentials?: BearerAuthCredentials) {
+    basicAuthCredentials?: BasicAuthCredentials, bearerAuthCredentials?: BearerAuthCredentials) {
     this.client = axios.create(axiosDefaults);
     this.baseURLs = baseURLs;
 
@@ -46,15 +61,88 @@ export class RestService {
       this.client.defaults.headers.common['X-Forward'] = 'true'
     }
 
+    this.handleBasicAuth(basicAuthCredentials);
+    this.handleBearerAuth(bearerAuthCredentials);
+
+    if (!basicAuthCredentials && !bearerAuthCredentials) {
+      throw new Error('No auth credentials provided');
+    }
+  }
+
+  handleBasicAuth(basicAuthCredentials?: BasicAuthCredentials): void {
+    if (basicAuthCredentials) {
+      switch (basicAuthCredentials.credentialsSource) {
+        case 'USER_INFO':
+          if (!basicAuthCredentials.userInfo) {
+            throw new Error('User info not provided');
+          }
+          this.setAuth(toBase64(basicAuthCredentials.userInfo!));
+          break;
+        case 'SASL_INHERIT':
+          if (!basicAuthCredentials.saslInfo) {
+            throw new Error('Sasl info not provided');
+          }
+          if (basicAuthCredentials.saslInfo.mechanism?.toUpperCase() === 'GSSAPI') {
+            throw new Error('SASL_INHERIT support PLAIN and SCRAM SASL mechanisms only');
+          }
+          this.setAuth(toBase64(`${basicAuthCredentials.saslInfo.username}:${basicAuthCredentials.saslInfo.password}`));
+          break;
+        case 'URL':
+          if (!basicAuthCredentials.userInfo) {
+            throw new Error('User info not provided');
+          }
+          const basicAuthUrl = new URL(basicAuthCredentials.userInfo);
+          this.setAuth(toBase64(`${basicAuthUrl.username}:${basicAuthUrl.password}`));
+          break;
+        default:
+          throw new Error('Invalid basic auth credentials source');
+      }
+    }
+  }
+
+  handleBearerAuth(bearerAuthCredentials?: BearerAuthCredentials): void {
     if (bearerAuthCredentials) {
-      this.bearerAuth = true;
       delete this.client.defaults.auth;
+
+      const headers = ['logicalCluster', 'identityPoolId'];
+      const missingHeaders = headers.find(header => bearerAuthCredentials[header as keyof typeof bearerAuthCredentials]);
+
+      if (missingHeaders) {
+        throw new Error(`Bearer auth header '${missingHeaders}' not provided`);
+      }
+
       this.setHeaders({
-        'Confluent-Identity-Pool-Id': bearerAuthCredentials.identityPool,
-        'target-sr-cluster': bearerAuthCredentials.schemaRegistryLogicalCluster
+        'Confluent-Identity-Pool-Id': bearerAuthCredentials.identityPoolId!,
+        'target-sr-cluster': bearerAuthCredentials.logicalCluster!
       });
-      this.OAuthClient = new OAuthClient(bearerAuthCredentials.clientId, bearerAuthCredentials.clientSecret,
-        bearerAuthCredentials.tokenHost, bearerAuthCredentials.tokenPath, bearerAuthCredentials.scope);
+
+      switch (bearerAuthCredentials.credentialsSource) {
+        case 'STATIC_TOKEN':
+          if (!bearerAuthCredentials.token) {
+            throw new Error('Bearer token not provided');
+          }
+          this.setAuth(undefined, bearerAuthCredentials.token);
+          break;
+        case 'OAUTHBEARER':
+          this.oauthBearer = true;
+          const requiredFields = [
+            'clientId',
+            'clientSecret',
+            'issuerEndpointUrl',
+            'scope'
+          ];
+          const missingField = requiredFields.find(field => bearerAuthCredentials[field as keyof typeof bearerAuthCredentials]);
+
+          if (missingField) {
+            throw new Error(`OAuth credential '${missingField}' not provided`);
+          }
+          const issuerEndPointUrl = new URL(bearerAuthCredentials.issuerEndpointUrl!);
+          this.oauthClient = new OAuthClient(bearerAuthCredentials.clientId!, bearerAuthCredentials.clientSecret!,
+            issuerEndPointUrl.host, issuerEndPointUrl.pathname, bearerAuthCredentials.scope!);
+          break;
+        default:
+          throw new Error('Invalid bearer auth credentials source');
+      }
     }
   }
 
@@ -65,8 +153,8 @@ export class RestService {
     config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
 
-    if (this.bearerAuth) {
-      await this.setBearerToken();
+    if (this.oauthBearer) {
+      await this.setOAuthBearerToken();
     }
 
     for (let i = 0; i < this.baseURLs.length; i++) {
@@ -111,12 +199,12 @@ export class RestService {
     }
   }
 
-  async setBearerToken(): Promise<void> {
-    if (!this.OAuthClient) {
+  async setOAuthBearerToken(): Promise<void> {
+    if (!this.oauthClient) {
       throw new Error('OAuthClient not initialized');
     }
 
-    const bearerToken: string = await this.OAuthClient.getAccessToken();
+    const bearerToken: string = await this.oauthClient.getAccessToken();
     this.setAuth(undefined, bearerToken);
   }
 

@@ -1,5 +1,5 @@
 import { CreateAxiosDefaults } from 'axios';
-import { ClientConfig } from '../../schemaregistry/rest-service';
+import { ClientConfig, BasicAuthCredentials } from '../../schemaregistry/rest-service';
 
 const baseUrls = ['http://localhost:8081'];
 
@@ -9,11 +9,12 @@ const createAxiosDefaults: CreateAxiosDefaults = {
   headers: {
     'Content-Type': 'application/vnd.schemaregistry.v1+json',
   },
-  auth: {
-    username: 'RBACAllowedUser-lsrc1',
-    password: 'nohash',
-  },
   timeout: 10000
+};
+
+const basicAuthCredentials: BasicAuthCredentials = {
+  credentialsSource: 'USER_INFO',
+  userInfo: 'RBACAllowedUser-lsrc1:nohash',
 };
 
 const clientConfig: ClientConfig = {
@@ -22,6 +23,7 @@ const clientConfig: ClientConfig = {
   isForward: false,
   cacheCapacity: 512,
   cacheLatestTtlSecs: 60,
+  basicAuthCredentials: basicAuthCredentials,
 };
 
 const mockClientConfig: ClientConfig = {
@@ -30,6 +32,7 @@ const mockClientConfig: ClientConfig = {
   isForward: false,
   cacheCapacity: 512,
   cacheLatestTtlSecs: 60,
+  basicAuthCredentials: basicAuthCredentials
 };
 
 export { clientConfig, mockClientConfig };

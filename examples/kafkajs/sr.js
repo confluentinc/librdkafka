@@ -96,7 +96,7 @@ const run = async () => {
                 ...message,
                 value: await registry.decode(message.value)
             };
-            console.log("Consumer recieved message.\nBefore decoding: " + JSON.stringify(message) + "\nAfter decoding: " + JSON.stringify(decodedMessage));
+            console.log("Consumer received message.\nBefore decoding: " + JSON.stringify(message) + "\nAfter decoding: " + JSON.stringify(decodedMessage));
             messageRcvd = true;
         },
     });

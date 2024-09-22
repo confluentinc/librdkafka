@@ -17,4 +17,7 @@ fi
 
 echo "Running schema registry e2e tests"
 
+# Waiting for Zookeeper and Kafka to start
+sleep 10
+
 $JEST $INTEG_DIR

@@ -944,10 +944,10 @@ static void rd_kafka_broker_fetch_reply(rd_kafka_t *rk,
 }
 
 /**
- * @brief Check if any toppars have a non-zero topic id.
+ * @brief Check if any toppars have a zero topic id.
  *
  */
-rd_bool_t can_use_topic_id(rd_kafka_broker_t *rkb) {
+static rd_bool_t can_use_topic_ids(rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp = rkb->rkb_active_toppar_next;
         do {
                 if (RD_KAFKA_UUID_IS_ZERO(rktp->rktp_rkt->rkt_topic_id))
@@ -995,8 +995,9 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                                           0, 16, NULL);
 
         /* Fallback to version 12 if topic id is null which can happen if
-         * inter.broker.protocol.version is old */
-        ApiVersion = ApiVersion > 12 && can_use_topic_id(rkb) ? ApiVersion : 12;
+         * inter.broker.protocol.version is < 2.8 */
+        ApiVersion =
+            ApiVersion > 12 && can_use_topic_ids(rkb) ? ApiVersion : 12;
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_Fetch, 1,

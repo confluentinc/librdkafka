@@ -314,8 +314,9 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
-                                const char *group_id,
-                                const char *member_id,
+                                const rd_kafkap_str_t *group_id,
+                                char *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);

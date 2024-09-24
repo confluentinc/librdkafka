@@ -1038,7 +1038,8 @@ static void rd_kafka_cgrp_leave(rd_kafka_cgrp_t *rkcg) {
                 rd_rkb_dbg(rkcg->rkcg_curr_coord, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_LeaveGroupRequest(
-                    rkcg->rkcg_coord, rkcg->rkcg_group_id->str, member_id,
+                    rkcg->rkcg_coord, rkcg->rkcg_group_id, member_id,
+                    rkcg->rkcg_group_instance_id,
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_cgrp_handle_LeaveGroup, rkcg);
         } else

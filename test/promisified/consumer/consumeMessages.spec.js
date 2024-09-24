@@ -594,7 +594,6 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
                 receivedMessages++;
 
                 try {
-                    console.log(event.batch.messages.length);
                     expect(event.batch.messages.length)
                         .toEqual(batchLengths[receivedMessages - 1]);
 

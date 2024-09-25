@@ -41,12 +41,9 @@ library's core.
 
 ### Pull Requests
 
-NOTE: Pull requests while the library in EA are discouraged, as we are still
-working on the API and may make breaking changes.
-
 * Include new test cases (either end-to-end or unit tests) with your change.
 * Follow our style guides.
-* Make sure all tests are still passing and the `linter` does not report any issues.
+* Make sure all tests are still passing and the linter does not report any issues.
 * End files with a new line.
 * Document the new code in the comments (if it is JavaScript) so the
   documentation generator can update the reference documentation.
@@ -231,7 +228,7 @@ Steps to update:
 
 ## Releasing
 
-1. Increment the `version` in `package.json`. Change the version in `client.js` and `README.md`.
+1. Increment the `version` in `package.json`. Change the version in `client.js` and `README.md`. Change the librdkafka version in `semaphore.yml` and in `package.json`.
 
 1. Run `npm install` to update the `package-lock.json` file.
 

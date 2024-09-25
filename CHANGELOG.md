@@ -1,3 +1,11 @@
+# confluent-kafka-javascript v0.2.0
+
+v0.2.0 is a limited availability release. It is supported for all usage.
+
+## Features
+1. Switch to using `librdkafka` on the latest released tag `v2.5.3` instead of `master`.
+
+
 # confluent-kafka-javascript v0.1.17-devel
 
 v0.1.17-devel is a pre-production, early-access release.

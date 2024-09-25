@@ -63,10 +63,6 @@ export class RestService {
 
     this.handleBasicAuth(basicAuthCredentials);
     this.handleBearerAuth(bearerAuthCredentials);
-
-    if (!basicAuthCredentials && !bearerAuthCredentials) {
-      throw new Error('No auth credentials provided');
-    }
   }
 
   handleBasicAuth(basicAuthCredentials?: BasicAuthCredentials): void {

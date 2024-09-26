@@ -27,5 +27,8 @@
   "include": [
     "**/*",
     "../test/**/*"
+  ],
+  "exclude": [
+    "dist"
   ]
 }

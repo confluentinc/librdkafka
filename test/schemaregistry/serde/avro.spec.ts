@@ -401,6 +401,7 @@ describe('AvroSerializer', () => {
 
     await client.register(subject, info, false)
 
+    client.clearLatestCaches()
     let deser = new AvroDeserializer(client, SerdeType.VALUE, {useLatestVersion: true})
     let obj2 = await deser.deserialize(topic, bytes)
     expect(obj2.fieldToDelete).toEqual(undefined);

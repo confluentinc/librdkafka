@@ -135,6 +135,8 @@ export interface Client {
   updateConfig(subject: string, update: ServerConfig): Promise<ServerConfig>;
   getDefaultConfig(): Promise<ServerConfig>;
   updateDefaultConfig(update: ServerConfig): Promise<ServerConfig>;
+  clearLatestCaches(): void;
+  clearCaches(): void;
   close(): void;
 }
 
@@ -557,13 +559,23 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
-  close(): void {
+  clearLatestCaches(): void {
+    this.latestToSchemaCache.clear();
+    this.metadataToSchemaCache.clear();
+  }
+
+  clearCaches(): void {
+    this.schemaToIdCache.clear();
+    this.idToSchemaInfoCache.clear();
     this.infoToSchemaCache.clear();
+    this.latestToSchemaCache.clear();
     this.schemaToVersionCache.clear();
     this.versionToSchemaCache.clear();
-    this.idToSchemaInfoCache.clear();
+    this.metadataToSchemaCache.clear();
+  }
 
-    return;
+  async close(): Promise<void> {
+    this.clearCaches();
   }
 
   // Cache methods for testing

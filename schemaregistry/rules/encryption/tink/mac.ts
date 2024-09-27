@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -19,16 +18,16 @@ export abstract class Mac {
   /**
    * Computes message authentication code (MAC) for `data`.
    *
-   * @param data the data to compute MAC
-   * @return the MAC tag
+   * @param data - the data to compute MAC
+   * @returns the MAC tag
    */
   abstract computeMac(data: Uint8Array): Promise<Uint8Array>;
 
   /**
    * Verifies whether `tag` is a correct authentication code for `data`.
    *
-   * @param tag  the MAC tag
-   * @param data the data to compute MAC
+   * @param tag - the MAC tag
+   * @param data - the data to compute MAC
    */
   abstract verifyMac(tag: Uint8Array, data: Uint8Array): Promise<boolean>;
 }

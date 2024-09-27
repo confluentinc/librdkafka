@@ -7,6 +7,9 @@ export class HcVaultDriver implements KmsDriver {
   static TOKEN_ID = 'token.id'
   static NAMESPACE = 'namespace'
 
+  /**
+   * Register the HashiCorp Vault driver with the KMS registry.
+   */
   static register(): void {
     registerKmsDriver(new HcVaultDriver())
   }

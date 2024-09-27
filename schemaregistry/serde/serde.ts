@@ -17,6 +17,9 @@ export enum SerdeType {
 
 export const MAGIC_BYTE = Buffer.alloc(1)
 
+/**
+ * SerializationError represents a serialization error
+ */
 export class SerializationError extends Error {
 
   constructor(message?: string) {
@@ -41,6 +44,9 @@ export interface SerdeConfig {
 
 export type RefResolver = (client: Client, info: SchemaInfo) => Promise<Map<string, string>>
 
+/**
+ * Serde represents a serializer/deserializer
+ */
 export abstract class Serde {
   client: Client
   serdeType: SerdeType
@@ -206,6 +212,9 @@ export abstract class Serde {
   }
 }
 
+/**
+ * SerializerConfig represents a serializer configuration
+ */
 export interface SerializerConfig extends SerdeConfig {
   // autoRegisterSchemas determines whether to automatically register schemas
   autoRegisterSchemas?: boolean
@@ -215,6 +224,9 @@ export interface SerializerConfig extends SerdeConfig {
   normalizeSchemas?: boolean
 }
 
+/**
+ * Serializer represents a serializer
+ */
 export abstract class Serializer extends Serde {
   protected constructor(client: Client, serdeType: SerdeType, conf: SerializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
@@ -224,6 +236,11 @@ export abstract class Serializer extends Serde {
     return this.conf as SerializerConfig
   }
 
+  /**
+   * Serialize serializes a message
+   * @param topic - the topic
+   * @param msg - the message
+   */
   abstract serialize(topic: string, msg: any): Promise<Buffer>
 
   // GetID returns a schema ID for the given schema
@@ -263,15 +280,23 @@ export abstract class Serializer extends Serde {
   }
 }
 
+/**
+ * DeserializerConfig represents a deserializer configuration
+ */
 export type DeserializerConfig = SerdeConfig
 
-// Migration represents a migration
+/**
+ * Migration represents a migration
+ */
 export interface Migration {
   ruleMode: RuleMode
   source: SchemaMetadata | null
   target: SchemaMetadata | null
 }
 
+/**
+ * Deserializer represents a deserializer
+ */
 export abstract class Deserializer extends Serde {
   protected constructor(client: Client, serdeType: SerdeType, conf: DeserializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
@@ -281,6 +306,11 @@ export abstract class Deserializer extends Serde {
     return this.conf as DeserializerConfig
   }
 
+  /**
+   * Deserialize deserializes a message
+   * @param topic - the topic
+   * @param payload - the payload
+   */
   abstract deserialize(topic: string, payload: Buffer): Promise<any>
 
   async getSchema(topic: string, payload: Buffer, format?: string): Promise<SchemaInfo> {
@@ -425,13 +455,20 @@ export abstract class Deserializer extends Serde {
   }
 }
 
+/**
+ * SubjectNameStrategyFunc determines the subject from the given parameters
+ */
 export type SubjectNameStrategyFunc = (
   topic: string,
   serdeType: SerdeType,
   schema?: SchemaInfo,
 ) => string
 
-// TopicNameStrategy creates a subject name by appending -[key|value] to the topic name.
+/**
+ * TopicNameStrategy creates a subject name by appending -[key|value] to the topic name.
+ * @param topic - the topic name
+ * @param serdeType - the serde type
+ */
 export const TopicNameStrategy: SubjectNameStrategyFunc = (topic: string, serdeType: SerdeType) => {
   let suffix = '-value'
   if (serdeType === SerdeType.KEY) {
@@ -440,7 +477,9 @@ export const TopicNameStrategy: SubjectNameStrategyFunc = (topic: string, serdeT
   return topic + suffix
 }
 
-// RuleContext represents a rule context
+/**
+ * RuleContext represents a rule context
+ */
 export class RuleContext {
   source: SchemaInfo | null
   target: SchemaInfo
@@ -544,7 +583,6 @@ export class RuleContext {
   }
 }
 
-// RuleBase represents a rule base
 export interface RuleBase {
   configure(clientConfig: ClientConfig, config: Map<string, string>): void
 
@@ -553,20 +591,28 @@ export interface RuleBase {
   close(): void
 }
 
-// RuleExecutor represents a rule executor
+/**
+ * RuleExecutor represents a rule executor
+ */
 export interface RuleExecutor extends RuleBase {
   transform(ctx: RuleContext, msg: any): Promise<any>
 }
 
-// FieldTransformer represents a field transformer
+/**
+ * FieldTransformer represents a field transformer
+ */
 export type FieldTransformer = (ctx: RuleContext, fieldTransform: FieldTransform, msg: any) => any;
 
-// FieldTransform represents a field transform
+/**
+ * FieldTransform represents a field transform
+ */
 export interface FieldTransform {
   transform(ctx: RuleContext, fieldCtx: FieldContext, fieldValue: any): Promise<any>;
 }
 
-// FieldRuleExecutor represents a field rule executor
+/**
+ * FieldRuleExecutor represents a field rule executor
+ */
 export abstract class FieldRuleExecutor implements RuleExecutor {
   config: Map<string, string> | null = null
 
@@ -616,7 +662,9 @@ function areTransformsWithSameTag(rule1: Rule, rule2: Rule): boolean {
     && rule1.tags === rule2.tags
 }
 
-// FieldContext represents a field context
+/**
+ * FieldContext represents a field context
+ */
 export class FieldContext {
   containingMessage: any
   fullName: string
@@ -644,7 +692,6 @@ export class FieldContext {
   }
 }
 
-// FieldType represents the field type
 export enum FieldType {
   RECORD = 'RECORD',
   ENUM = 'ENUM',
@@ -662,12 +709,16 @@ export enum FieldType {
   NULL = 'NULL',
 }
 
-// RuleAction represents a rule action
+/**
+ * RuleAction represents a rule action
+ */
 export interface RuleAction extends RuleBase {
   run(ctx: RuleContext, msg: any, err: Error | null): Promise<void>
 }
 
-// ErrorAction represents an error action
+/**
+ * ErrorAction represents an error action
+ */
 export class ErrorAction implements RuleAction {
   configure(clientConfig: ClientConfig, config: Map<string, string>): void {
   }
@@ -684,7 +735,9 @@ export class ErrorAction implements RuleAction {
   }
 }
 
-// NoneAction represents a no-op action
+/**
+ * NoneAction represents a no-op action
+ */
 export class NoneAction implements RuleAction {
   configure(clientConfig: ClientConfig, config: Map<string, string>): void {
   }
@@ -701,18 +754,30 @@ export class NoneAction implements RuleAction {
   }
 }
 
-// RuleError represents a rule condition error
+/**
+ * RuleError represents a rule error
+ */
 export class RuleError extends Error {
 
+  /**
+   * Creates a new rule error.
+   * @param message - The error message.
+   */
   constructor(message?: string) {
     super(message)
   }
 }
 
-// RuleConditionError represents a rule condition error
+/**
+ * RuleConditionError represents a rule condition error
+ */
 export class RuleConditionError extends RuleError {
   rule: Rule
 
+  /**
+   * Creates a new rule condition error.
+   * @param rule - The rule.
+   */
   constructor(rule: Rule) {
     super(RuleConditionError.error(rule))
     this.rule = rule

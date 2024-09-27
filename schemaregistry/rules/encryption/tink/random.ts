@@ -1,12 +1,11 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 
 /**
- * @fileoverview Several simple wrappers of crypto.getRandomValues.
+ * Several simple wrappers of crypto.getRandomValues.
  */
 import {InvalidArgumentsException} from './exception/invalid_arguments_exception';
 import * as crypto from 'crypto';
@@ -14,9 +13,8 @@ import * as crypto from 'crypto';
 /**
  * Randomly generates `n` bytes.
  *
- * @param n number of bytes to generate
- * @return the random bytes
- * @static
+ * @param n - number of bytes to generate
+ * @returns the random bytes
  */
 export function randBytes(n: number): Uint8Array {
   if (!Number.isInteger(n) || n < 0) {

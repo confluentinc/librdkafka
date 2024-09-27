@@ -29,6 +29,9 @@ export interface CompatibilityLevel {
   compatibilityLevel?: Compatibility;
 }
 
+/**
+ * Rule represents a data contract rule
+ */
 export interface Rule {
   name: string
   doc?: string
@@ -52,6 +55,9 @@ export enum RuleMode {
   WRITEREAD = 'WRITEREAD',
 }
 
+/**
+ * SchemaInfo represents a schema and its associated information
+ */
 export interface SchemaInfo {
   schema: string;
   schemaType?: string;
@@ -60,7 +66,7 @@ export interface SchemaInfo {
   ruleSet?: RuleSet;
 }
 
-// Ensure that SchemaMetadata fields are removed
+// Ensure that SchemaMetadata fields are removed from the SchemaInfo
 export function minimize(info: SchemaInfo): SchemaInfo {
   return {
     schemaType: info.schemaType,
@@ -71,29 +77,44 @@ export function minimize(info: SchemaInfo): SchemaInfo {
   }
 }
 
+/**
+ * SchemaMetadata extends SchemaInfo with additional metadata
+ */
 export interface SchemaMetadata extends SchemaInfo {
   id: number;
   subject?: string;
   version?: number;
 }
 
+/**
+ * Reference represents a schema reference
+ */
 export interface Reference {
   name: string;
   subject: string;
   version: number;
 }
 
+/**
+ * Metadata represents user-defined metadata
+ */
 export interface Metadata {
   tags?: { [key: string]: string[] };
   properties?: { [key: string]: string };
   sensitive?: string[];
 }
 
+/**
+ * RuleSet represents a data contract rule set
+ */
 export interface RuleSet {
   migrationRules?: Rule[];
   domainRules?: Rule[];
 }
 
+/**
+ * ServerConfig represents config params for Schema Registry
+ */
 export interface ServerConfig {
   alias?: string;
   normalize?: boolean;
@@ -110,6 +131,11 @@ export interface isCompatibleResponse {
   is_compatible: boolean;
 }
 
+/**
+ * Client is an interface for clients interacting with the Confluent Schema Registry.
+ * The Schema Registry's REST interface is further explained in Confluent's Schema Registry API documentation
+ * https://github.com/confluentinc/schema-registry/blob/master/client/src/main/java/io/confluent/kafka/schemaregistry/client/SchemaRegistryClient.java
+ */
 export interface Client {
   config(): ClientConfig;
   register(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
@@ -140,6 +166,10 @@ export interface Client {
   close(): void;
 }
 
+/**
+ * SchemaRegistryClient is a client for interacting with the Confluent Schema Registry.
+ * This client will cache responses from Schema Registry to reduce network requests.
+ */
 export class SchemaRegistryClient implements Client {
   private clientConfig: ClientConfig;
   private restService: RestService;
@@ -160,6 +190,10 @@ export class SchemaRegistryClient implements Client {
   private versionToSchemaMutex: Mutex;
   private metadataToSchemaMutex: Mutex;
 
+  /**
+   * Create a new Schema Registry client.
+   * @param config - The client configuration.
+   */
   constructor(config: ClientConfig) {
     this.clientConfig = config
     const cacheOptions = {
@@ -198,12 +232,24 @@ export class SchemaRegistryClient implements Client {
     return this.clientConfig
   }
 
+  /**
+   * Register a schema with the Schema Registry and return the schema ID.
+   * @param subject - The subject under which to register the schema.
+   * @param schema - The schema to register.
+   * @param normalize - Whether to normalize the schema before registering.
+   */
   async register(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const metadataResult = await this.registerFullResponse(subject, schema, normalize);
 
     return metadataResult.id;
   }
 
+  /**
+   * Register a schema with the Schema Registry and return the full response.
+   * @param subject - The subject under which to register the schema.
+   * @param schema - The schema to register.
+   * @param normalize - Whether to normalize the schema before registering.
+   */
   async registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, schema: minimize(schema) });
 
@@ -225,6 +271,12 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  /**
+   * Get a schema by subject and ID.
+   * @param subject - The subject under which the schema is registered.
+   * @param id - The schema ID.
+   * @param format - The format of the schema.
+   */
   async getBySubjectAndId(subject: string, id: number, format?: string): Promise<SchemaInfo> {
     const cacheKey = stringify({ subject, id });
     return await this.idToSchemaInfoMutex.runExclusive(async () => {
@@ -246,6 +298,12 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  /**
+   * Get the ID for a schema.
+   * @param subject - The subject under which the schema is registered.
+   * @param schema - The schema whose ID to get.
+   * @param normalize - Whether to normalize the schema before getting the ID.
+   */
   async getId(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const cacheKey = stringify({ subject, schema: minimize(schema) });
 
@@ -267,6 +325,11 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  /**
+   * Get the latest schema metadata for a subject.
+   * @param subject - The subject for which to get the latest schema metadata.
+   * @param format - The format of the schema.
+   */
   async getLatestSchemaMetadata(subject: string, format?: string): Promise<SchemaMetadata> {
     return await this.latestToSchemaMutex.runExclusive(async () => {
       const cachedSchema: SchemaMetadata | undefined = this.latestToSchemaCache.get(subject);
@@ -287,6 +350,13 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  /**
+   * Get the schema metadata for a subject and version.
+   * @param subject - The subject for which to get the schema metadata.
+   * @param version - The version of the schema.
+   * @param deleted - Whether to include deleted schemas.
+   * @param format - The format of the schema.
+   */
   async getSchemaMetadata(subject: string, version: number, deleted: boolean = false, format?: string): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, version, deleted });
 
@@ -309,6 +379,13 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  /**
+   * Get the latest schema metadata for a subject with the given metadata.
+   * @param subject - The subject for which to get the latest schema metadata.
+   * @param metadata - The metadata to match.
+   * @param deleted - Whether to include deleted schemas.
+   * @param format - The format of the schema.
+   */
   async getLatestWithMetadata(subject: string, metadata: { [key: string]: string },
                               deleted: boolean = false, format?: string): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, metadata, deleted });
@@ -340,7 +417,10 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
-
+  /**
+   * Get all versions of a schema for a subject.
+   * @param subject - The subject for which to get all versions.
+   */
   async getAllVersions(subject: string): Promise<number[]> {
     const response: AxiosResponse<number[]> = await this.restService.handleRequest(
       `/subjects/${subject}/versions`,
@@ -349,6 +429,12 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
+  /**
+   * Get the version of a schema for a subject.
+   * @param subject - The subject for which to get the version.
+   * @param schema - The schema for which to get the version.
+   * @param normalize - Whether to normalize the schema before getting the version.
+   */
   async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const cacheKey = stringify({ subject, schema: minimize(schema) });
 
@@ -370,6 +456,9 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  /**
+   * Get all subjects in the Schema Registry.
+   */
   async getAllSubjects(): Promise<string[]> {
     const response: AxiosResponse<string[]> = await this.restService.handleRequest(
       `/subjects`,
@@ -378,6 +467,11 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
+  /**
+   * Delete a subject from the Schema Registry.
+   * @param subject - The subject to delete.
+   * @param permanent - Whether to permanently delete the subject.
+   */
   async deleteSubject(subject: string, permanent: boolean = false): Promise<number[]> {
     await this.infoToSchemaMutex.runExclusive(async () => {
       this.infoToSchemaCache.forEach((_, key) => {
@@ -424,6 +518,12 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
+  /**
+   * Delete a version of a subject from the Schema Registry.
+   * @param subject - The subject to delete.
+   * @param version - The version to delete.
+   * @param permanent - Whether to permanently delete the version.
+   */
   async deleteSubjectVersion(subject: string, version: number, permanent: boolean = false): Promise<number> {
     return await this.schemaToVersionMutex.runExclusive(async () => {
       let metadataValue: SchemaMetadata | undefined;
@@ -463,6 +563,11 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  /**
+   * Test the compatibility of a schema with the latest schema for a subject.
+   * @param subject - The subject for which to test compatibility.
+   * @param schema - The schema to test compatibility.
+   */
   async testSubjectCompatibility(subject: string, schema: SchemaInfo): Promise<boolean> {
     subject = encodeURIComponent(subject);
 
@@ -474,6 +579,12 @@ export class SchemaRegistryClient implements Client {
     return response.data.is_compatible;
   }
 
+  /**
+   * Test the compatibility of a schema with a specific version of a subject.
+   * @param subject - The subject for which to test compatibility.
+   * @param version - The version of the schema for which to test compatibility.
+   * @param schema - The schema to test compatibility.
+   */
   async testCompatibility(subject: string, version: number, schema: SchemaInfo): Promise<boolean> {
     subject = encodeURIComponent(subject);
 
@@ -485,6 +596,10 @@ export class SchemaRegistryClient implements Client {
     return response.data.is_compatible;
   }
 
+  /**
+   * Get the compatibility level for a subject.
+   * @param subject - The subject for which to get the compatibility level.
+   */
   async getCompatibility(subject: string): Promise<Compatibility> {
     subject = encodeURIComponent(subject);
 
@@ -495,6 +610,11 @@ export class SchemaRegistryClient implements Client {
     return response.data.compatibilityLevel!;
   }
 
+  /**
+   * Update the compatibility level for a subject.
+   * @param subject - The subject for which to update the compatibility level.
+   * @param update - The compatibility level to update to.
+   */
   async updateCompatibility(subject: string, update: Compatibility): Promise<Compatibility> {
     subject = encodeURIComponent(subject);
 
@@ -506,6 +626,9 @@ export class SchemaRegistryClient implements Client {
     return response.data.compatibility!;
   }
 
+  /**
+   * Get the default/global compatibility level.
+   */
   async getDefaultCompatibility(): Promise<Compatibility> {
     const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
       `/config`,
@@ -514,6 +637,10 @@ export class SchemaRegistryClient implements Client {
     return response.data.compatibilityLevel!;
   }
 
+  /**
+   * Update the default/global compatibility level.
+   * @param update - The compatibility level to update to.
+   */
   async updateDefaultCompatibility(update: Compatibility): Promise<Compatibility> {
     const response: AxiosResponse<CompatibilityLevel> = await this.restService.handleRequest(
       `/config`,
@@ -523,6 +650,10 @@ export class SchemaRegistryClient implements Client {
     return response.data.compatibility!;
   }
 
+  /**
+   * Get the config for a subject.
+   * @param subject - The subject for which to get the config.
+   */
   async getConfig(subject: string): Promise<ServerConfig> {
     subject = encodeURIComponent(subject);
 
@@ -533,6 +664,11 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
+  /**
+   * Update the config for a subject.
+   * @param subject - The subject for which to update the config.
+   * @param update - The config to update to.
+   */
   async updateConfig(subject: string, update: ServerConfig): Promise<ServerConfig> {
     const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
       `/config/${subject}`,
@@ -542,6 +678,9 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
+  /**
+   * Get the default/global config.
+   */
   async getDefaultConfig(): Promise<ServerConfig> {
     const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
       `/config`,
@@ -550,6 +689,10 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
+  /**
+   * Update the default/global config.
+   * @param update - The config to update to.
+   */
   async updateDefaultConfig(update: ServerConfig): Promise<ServerConfig> {
     const response: AxiosResponse<ServerConfig> = await this.restService.handleRequest(
       `/config`,
@@ -559,11 +702,17 @@ export class SchemaRegistryClient implements Client {
     return response.data;
   }
 
+  /**
+   * Clear the latest caches.
+   */
   clearLatestCaches(): void {
     this.latestToSchemaCache.clear();
     this.metadataToSchemaCache.clear();
   }
 
+  /**
+   * Clear all caches.
+   */
   clearCaches(): void {
     this.schemaToIdCache.clear();
     this.idToSchemaInfoCache.clear();
@@ -574,6 +723,9 @@ export class SchemaRegistryClient implements Client {
     this.metadataToSchemaCache.clear();
   }
 
+  /**
+   * Close the client.
+   */
   async close(): Promise<void> {
     this.clearCaches();
   }

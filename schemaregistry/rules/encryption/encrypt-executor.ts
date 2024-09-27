@@ -64,6 +64,9 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
   client: Client | null = null
   clock: Clock
 
+  /**
+   * Register the field encryption executor with the rule registry.
+   */
   static register(): FieldEncryptionExecutor {
     return this.registerWithClock(new Clock())
   }

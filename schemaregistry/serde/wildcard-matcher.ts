@@ -16,9 +16,9 @@
  * wildcardMatch("alice.bob.eve", "alice.bob**") --&gt; true
  * </pre>
  *
- * @param str             the string to match on
- * @param wildcardMatcher the wildcard string to match against
- * @return true if the string matches the wildcard string
+ * @param str             - the string to match on
+ * @param wildcardMatcher - the wildcard string to match against
+ * @returns true - if the string matches the wildcard string
  */
 export function match(str: string, wildcardMatcher: string): boolean {
   let re = wildcardToRegexp(wildcardMatcher, '.')

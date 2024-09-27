@@ -10,6 +10,9 @@ export class GcpKmsDriver implements KmsDriver {
   static PRIVATE_KEY_ID = "private.key.id";
   static PRIVATE_KEY= "private.key";
 
+  /**
+   * Register the GCP KMS driver with the KMS registry.
+   */
   static register(): void {
     registerKmsDriver(new GcpKmsDriver())
   }

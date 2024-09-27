@@ -47,12 +47,25 @@ export interface JsonSerde {
   schemaToValidateCache: LRUCache<string, ValidateFunction>
 }
 
+/**
+ * JsonSerializerConfig is the configuration for the JsonSerializer.
+ */
 export type JsonSerializerConfig = SerializerConfig & JsonSerdeConfig
 
+/**
+ * JsonSerializer is a serializer for JSON messages.
+ */
 export class JsonSerializer extends Serializer implements JsonSerde {
   schemaToTypeCache: LRUCache<string, DereferencedJSONSchema>
   schemaToValidateCache: LRUCache<string, ValidateFunction>
 
+  /**
+   * Creates a new JsonSerializer.
+   * @param client - the schema registry client
+   * @param serdeType - the serializer type
+   * @param conf - the serializer configuration
+   * @param ruleRegistry - the rule registry
+   */
   constructor(client: Client, serdeType: SerdeType, conf: JsonSerializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
     this.schemaToTypeCache = new LRUCache<string, DereferencedJSONSchema>({ max: this.config().cacheCapacity ?? 1000 })
@@ -65,6 +78,11 @@ export class JsonSerializer extends Serializer implements JsonSerde {
     }
   }
 
+  /**
+   * Serializes a message.
+   * @param topic - the topic
+   * @param msg - the message
+   */
   override async serialize(topic: string, msg: any): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
@@ -121,12 +139,25 @@ export class JsonSerializer extends Serializer implements JsonSerde {
   }
 }
 
+/**
+ * JsonDeserializerConfig is the configuration for the JsonDeserializer.
+ */
 export type JsonDeserializerConfig = DeserializerConfig & JsonSerdeConfig
 
+/**
+ * JsonDeserializer is a deserializer for JSON messages.
+ */
 export class JsonDeserializer extends Deserializer implements JsonSerde {
   schemaToTypeCache: LRUCache<string, DereferencedJSONSchema>
   schemaToValidateCache: LRUCache<string, ValidateFunction>
 
+  /**
+   * Creates a new JsonDeserializer.
+   * @param client - the schema registry client
+   * @param serdeType - the deserializer type
+   * @param conf - the deserializer configuration
+   * @param ruleRegistry - the rule registry
+   */
   constructor(client: Client, serdeType: SerdeType, conf: JsonDeserializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
     this.schemaToTypeCache = new LRUCache<string, DereferencedJSONSchema>({ max: this.config().cacheCapacity ?? 1000 })
@@ -139,6 +170,11 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
     }
   }
 
+  /**
+   * Deserializes a message.
+   * @param topic - the topic
+   * @param payload - the message payload
+   */
   override async deserialize(topic: string, payload: Buffer): Promise<any> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error('Invalid buffer')

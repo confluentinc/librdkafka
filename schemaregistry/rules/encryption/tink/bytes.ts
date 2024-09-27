@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,9 +7,9 @@ import {InvalidArgumentsException} from './exception/invalid_arguments_exception
 
 /**
  * Does near constant time byte array comparison.
- * @param ba1 The first bytearray to check.
- * @param ba2 The second bytearray to check.
- * @return If the array are equal.
+ * @param ba1 - The first bytearray to check.
+ * @param ba2 - The second bytearray to check.
+ * @returns If the array are equal.
  */
 export function isEqual(ba1: Uint8Array, ba2: Uint8Array): boolean {
   if (ba1.length !== ba2.length) {
@@ -45,10 +44,9 @@ export function concat(...var_args: Uint8Array[]): Uint8Array {
 
 /**
  * Converts a non-negative integer number to a 64-bit big-endian byte array.
- * @param value The number to convert.
- * @return The number as a big-endian byte array.
- * @throws {InvalidArgumentsException}
- * @static
+ * @param value - The number to convert.
+ * @returns The number as a big-endian byte array.
+ * @throws {@link InvalidArgumentsException}
  */
 export function fromNumber(value: number): Uint8Array {
   if (Number.isNaN(value) || value % 1 !== 0) {
@@ -79,10 +77,9 @@ export function fromNumber(value: number): Uint8Array {
 /**
  * Converts the hex string to a byte array.
  *
- * @param hex the input
- * @return the byte array output
- * @throws {!InvalidArgumentsException}
- * @static
+ * @param hex - the input
+ * @returns the byte array output
+ * @throws {@link InvalidArgumentsException}
  */
 export function fromHex(hex: string): Uint8Array {
   if (hex.length % 2 != 0) {
@@ -99,9 +96,8 @@ export function fromHex(hex: string): Uint8Array {
 /**
  * Converts a byte array to hex.
  *
- * @param bytes the byte array input
- * @return hex the output
- * @static
+ * @param bytes - the byte array input
+ * @returns hex the output
  */
 export function toHex(bytes: Uint8Array): string {
   let result = '';
@@ -115,11 +111,10 @@ export function toHex(bytes: Uint8Array): string {
 /**
  * Converts the Base64 string to a byte array.
  *
- * @param encoded the base64 string
- * @param opt_webSafe True indicates we should use the alternative
+ * @param encoded - the base64 string
+ * @param opt_webSafe - True indicates we should use the alternative
  *     alphabet, which does not require escaping for use in URLs.
- * @return the byte array output
- * @static
+ * @returns the byte array output
  */
 export function fromBase64(encoded: string, opt_webSafe?: boolean): Uint8Array {
   if (opt_webSafe) {
@@ -132,11 +127,10 @@ export function fromBase64(encoded: string, opt_webSafe?: boolean): Uint8Array {
 /**
  * Base64 encode a byte array.
  *
- * @param bytes the byte array input
- * @param opt_webSafe True indicates we should use the alternative
+ * @param bytes - the byte array input
+ * @param opt_webSafe - True indicates we should use the alternative
  *     alphabet, which does not require escaping for use in URLs.
- * @return base64 output
- * @static
+ * @returns base64 - output
  */
 export function toBase64(bytes: Uint8Array, opt_webSafe?: boolean): string {
   const encoded = window
@@ -154,9 +148,8 @@ export function toBase64(bytes: Uint8Array, opt_webSafe?: boolean): string {
  * Converts a byte string to a byte array. Only support ASCII and Latin-1
  * strings, does not support multi-byte characters.
  *
- * @param str the input
- * @return the byte array output
- * @static
+ * @param str - the input
+ * @returns the byte array output
  */
 export function fromByteString(str: string): Uint8Array {
   const output = [];
@@ -173,9 +166,9 @@ export function fromByteString(str: string): Uint8Array {
  * characters to which the numbers correspond. Each byte is corresponding to a
  * character. Does not support multi-byte characters.
  *
- * @param bytes Array of numbers representing
+ * @param bytes - Array of numbers representing
  *     characters.
- * @return Stringification of the array.
+ * @returns Stringification of the array.
  */
 export function toByteString(bytes: Uint8Array): string {
   let str = '';

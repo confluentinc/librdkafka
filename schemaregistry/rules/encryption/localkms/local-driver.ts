@@ -6,6 +6,9 @@ export class LocalKmsDriver implements KmsDriver {
   static PREFIX: string = 'local-kms://'
   static SECRET: string = 'secret'
 
+  /**
+   * Register the local KMS driver with the KMS registry.
+   */
   static register(): void {
     registerKmsDriver(new LocalKmsDriver())
   }

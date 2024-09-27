@@ -29,11 +29,24 @@ export interface AvroSerde {
   schemaToTypeCache: LRUCache<string, [avro.Type, Map<string, string>]>
 }
 
+/**
+ * AvroSerializerConfig is used to configure the AvroSerializer.
+ */
 export type AvroSerializerConfig = SerializerConfig & AvroSerdeConfig
 
+/**
+ * AvroSerializer is used to serialize messages using Avro.
+ */
 export class AvroSerializer extends Serializer implements AvroSerde {
   schemaToTypeCache: LRUCache<string, [avro.Type, Map<string, string>]>
 
+  /**
+   * Create a new AvroSerializer.
+   * @param client - the schema registry client
+   * @param serdeType - the type of the serializer
+   * @param conf - the serializer configuration
+   * @param ruleRegistry - the rule registry
+   */
   constructor(client: Client, serdeType: SerdeType, conf: AvroSerializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
     this.schemaToTypeCache = new LRUCache<string, [Type, Map<string, string>]>({ max: this.conf.cacheCapacity ?? 1000 })
@@ -45,6 +58,11 @@ export class AvroSerializer extends Serializer implements AvroSerde {
     }
   }
 
+  /**
+   * serialize is used to serialize a message using Avro.
+   * @param topic - the topic to serialize the message for
+   * @param msg - the message to serialize
+   */
   override async serialize(topic: string, msg: any): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
@@ -110,11 +128,24 @@ export class AvroSerializer extends Serializer implements AvroSerde {
   }
 }
 
+/**
+ * AvroDeserializerConfig is used to configure the AvroDeserializer.
+ */
 export type AvroDeserializerConfig = DeserializerConfig & AvroSerdeConfig
 
+/**
+ * AvroDeserializer is used to deserialize messages using Avro.
+ */
 export class AvroDeserializer extends Deserializer implements AvroSerde {
   schemaToTypeCache: LRUCache<string, [avro.Type, Map<string, string>]>
 
+  /**
+   * Create a new AvroDeserializer.
+   * @param client - the schema registry client
+   * @param serdeType - the type of the deserializer
+   * @param conf - the deserializer configuration
+   * @param ruleRegistry - the rule registry
+   */
   constructor(client: Client, serdeType: SerdeType, conf: AvroDeserializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
     this.schemaToTypeCache = new LRUCache<string, [Type, Map<string, string>]>({ max: this.conf.cacheCapacity ?? 1000 })

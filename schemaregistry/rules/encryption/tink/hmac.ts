@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,12 +19,11 @@ const MIN_TAG_SIZE_IN_BYTES: number = 10;
 /**
  * Implementation of HMAC.
  *
- * @final
  */
 export class Hmac extends Mac {
   /**
-   * @param hash accepted names are SHA-1, SHA-256 and SHA-512
-   * @param tagSize the size of the tag
+   * @param hash - accepted names are SHA-1, SHA-256 and SHA-512
+   * @param tagSize - the size of the tag
    */
   constructor(
       private readonly hash: string, private readonly key: CryptoKey,
@@ -53,8 +51,8 @@ export class Hmac extends Mac {
 }
 
 /**
- * @param hash accepted names are SHA-1, SHA-256 and SHA-512
- * @param tagSize the size of the tag
+ * @param hash -  accepted names are SHA-1, SHA-256 and SHA-512
+ * @param tagSize - the size of the tag
  */
 export async function fromRawKey(
     hash: string, key: Uint8Array, tagSize: number): Promise<Mac> {

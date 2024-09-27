@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,7 +12,6 @@ import * as crypto from 'crypto';
 /**
  * Implementation of AES-SIV.
  *
- * @final
  */
 export class AesSiv extends Aead {
   constructor(private readonly key: Uint8Array) {

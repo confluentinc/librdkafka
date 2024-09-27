@@ -1,12 +1,11 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 
 /**
- * @fileoverview An implementation of HKDF, RFC 5869.
+ * An implementation of HKDF, RFC 5869.
  */
 import {InvalidArgumentsException} from './exception/invalid_arguments_exception';
 
@@ -16,17 +15,17 @@ import * as Validators from './validators';
 /**
  * Computes an HKDF.
  *
- * @param size The length of the generated pseudorandom string in
+ * @param size - The length of the generated pseudorandom string in
  *     bytes. The maximal size is 255 * DigestSize, where DigestSize is the size
  *     of the underlying HMAC.
- * @param hash the name of the hash function. Accepted names are SHA-1,
+ * @param hash - the name of the hash function. Accepted names are SHA-1,
  *     SHA-256 and SHA-512
- * @param ikm Input keying material.
- * @param info Context and application specific
+ * @param ikm - Input keying material.
+ * @param info - Context and application specific
  *     information (can be a zero-length array).
- * @param opt_salt Salt value (a non-secret random
+ * @param opt_salt - Salt value (a non-secret random
  *     value). If not provided, it is set to a string of hash length zeros.
- * @return Output keying material (okm).
+ * @returns Output keying material (okm).
  */
 export async function compute(
     size: number, hash: string, ikm: Uint8Array, info: Uint8Array,

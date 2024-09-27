@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -27,7 +26,6 @@ const TAG_SIZE_IN_BITS: number = 128;
 /**
  * Implementation of AES-GCM.
  *
- * @final
  */
 export class AesGcm extends Aead {
   constructor(private readonly key: CryptoKey) {

@@ -9,6 +9,9 @@ export class AzureKmsDriver implements KmsDriver {
   static CLIENT_ID = 'client.id'
   static CLIENT_SECRET = 'client.secret'
 
+  /**
+   * Register the Azure KMS driver with the KMS registry.
+   */
   static register(): void {
     registerKmsDriver(new AzureKmsDriver())
   }

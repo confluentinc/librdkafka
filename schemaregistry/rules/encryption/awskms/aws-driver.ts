@@ -8,6 +8,9 @@ export class AwsKmsDriver implements KmsDriver {
   static ACCESS_KEY_ID = 'access.key.id'
   static SECRET_ACCESS_KEY = 'secret.access.key'
 
+  /**
+   * Register the AWS KMS driver with the KMS registry.
+   */
   static register(): void {
     registerKmsDriver(new AwsKmsDriver())
   }

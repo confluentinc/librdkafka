@@ -8,6 +8,9 @@ export class JsonataExecutor implements RuleExecutor {
   config: Map<string, string> | null = null
   cache: LRUCache<string, Expression> = new LRUCache({max: 1000})
 
+  /**
+   * Register the JSONata rule executor with the rule registry.
+   */
   static register(): JsonataExecutor {
     const executor = new JsonataExecutor()
     RuleRegistry.registerRuleExecutor(executor)

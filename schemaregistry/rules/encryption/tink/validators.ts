@@ -1,5 +1,4 @@
 /**
- * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,9 +11,8 @@ const SUPPORTED_AES_KEY_SIZES: number[] = [16, 32];
  * Validates AES key sizes, at the moment only 128-bit and 256-bit keys are
  * supported.
  *
- * @param n the key size in bytes
- * @throws {!InvalidArgumentsException}
- * @static
+ * @param n - the key size in bytes
+ * @throws {@link InvalidArgumentsException}
  */
 export function validateAesKeySize(n: number) {
   if (!SUPPORTED_AES_KEY_SIZES.includes(n)) {
@@ -25,8 +23,7 @@ export function validateAesKeySize(n: number) {
 /**
  * Validates that the input is a non null Uint8Array.
  *
- * @throws {!InvalidArgumentsException}
- * @static
+ * @throws {@link InvalidArgumentsException}
  */
 export function requireUint8Array(input: Uint8Array) {
   if (input == null || !(input instanceof Uint8Array)) {
@@ -40,8 +37,7 @@ export function requireUint8Array(input: Uint8Array) {
  *
  * @param candidate - version to be validated
  * @param maxVersion - upper bound on version
- * @throws {!SecurityException}
- * @static
+ * @throws {@link SecurityException}
  */
 export function validateVersion(candidate: number, maxVersion: number) {
   if (candidate < 0 || candidate > maxVersion) {
@@ -54,7 +50,7 @@ export function validateVersion(candidate: number, maxVersion: number) {
 /**
  * Validates ECDSA parameters.
  *
- * @throws {!SecurityException}
+ * @throws {@link SecurityException}
  */
 export function validateEcdsaParams(curve: string, hash: string) {
   switch (curve) {

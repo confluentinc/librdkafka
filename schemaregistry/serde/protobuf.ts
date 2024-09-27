@@ -88,15 +88,28 @@ export interface ProtobufSerde {
   schemaToDescCache: LRUCache<string, DescFile>
 }
 
+/**
+ * ProtobufSerializerConfig is the configuration for ProtobufSerializer.
+ */
 export type ProtobufSerializerConfig = SerializerConfig & {
   registry?: MutableRegistry
 }
 
+/**
+ * ProtobufSerializer is a serializer for Protobuf messages.
+ */
 export class ProtobufSerializer extends Serializer implements ProtobufSerde {
   registry: MutableRegistry
   schemaToDescCache: LRUCache<string, DescFile>
   descToSchemaCache: LRUCache<string, SchemaInfo>
 
+  /**
+   * Creates a new ProtobufSerializer.
+   * @param client - the schema registry client
+   * @param serdeType - the serializer type
+   * @param conf - the serializer configuration
+   * @param ruleRegistry - the rule registry
+   */
   constructor(client: Client, serdeType: SerdeType, conf: ProtobufSerializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
     this.registry = conf.registry ?? createMutableRegistry()
@@ -110,6 +123,11 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
     }
   }
 
+  /**
+   * Serializes a message.
+   * @param topic - the topic
+   * @param msg - the message
+   */
   override async serialize(topic: string, msg: any): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
@@ -275,12 +293,25 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
   }
 }
 
+/**
+ * ProtobufDeserializerConfig is the configuration for ProtobufDeserializer.
+ */
 export type ProtobufDeserializerConfig = DeserializerConfig
 
+/**
+ * ProtobufDeserializer is a deserializer for Protobuf messages.
+ */
 export class ProtobufDeserializer extends Deserializer implements ProtobufSerde {
   registry: FileRegistry
   schemaToDescCache: LRUCache<string, DescFile>
 
+  /**
+   * Creates a new ProtobufDeserializer.
+   * @param client - the schema registry client
+   * @param serdeType - the deserializer type
+   * @param conf - the deserializer configuration
+   * @param ruleRegistry - the rule registry
+   */
   constructor(client: Client, serdeType: SerdeType, conf: ProtobufDeserializerConfig, ruleRegistry?: RuleRegistry) {
     super(client, serdeType, conf, ruleRegistry)
     this.registry = createFileRegistry()
@@ -293,6 +324,11 @@ export class ProtobufDeserializer extends Deserializer implements ProtobufSerde 
     }
   }
 
+  /**
+   * Deserializes a message.
+   * @param topic - the topic
+   * @param payload - the message payload
+   */
   override async deserialize(topic: string, payload: Buffer): Promise<any> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error('Invalid buffer')

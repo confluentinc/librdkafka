@@ -130,7 +130,7 @@ export function fromBase64(encoded: string, opt_webSafe?: boolean): Uint8Array {
  * @param bytes - the byte array input
  * @param opt_webSafe - True indicates we should use the alternative
  *     alphabet, which does not require escaping for use in URLs.
- * @returns base64 - output
+ * @returns base64 output
  */
 export function toBase64(bytes: Uint8Array, opt_webSafe?: boolean): string {
   const encoded = window

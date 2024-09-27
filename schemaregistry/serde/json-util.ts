@@ -12,7 +12,7 @@ import { deepStrictEqual } from 'assert';
  * Generate JSON schema from value.
  *
  * @param value - Value.
- * @returns - JSON schema.
+ * @returns JSON schema.
  */
 export function generateSchema(value: any): any {
   switch (true) {

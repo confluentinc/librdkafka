@@ -1,11 +1,11 @@
 // require('kafkajs') is replaced with require('@confluentinc/kafka-javascript').KafkaJS.
 const { Kafka } = require('@confluentinc/kafka-javascript').KafkaJS;
 
-// Note: The kafkajs/confluent-schema-registry will need to be installed separately to run this example,
+// Note: The @confluentinc/schemaregistry will need to be installed separately to run this example,
 //       as it isn't a dependency of confluent-kafka-javascript.
-const { SchemaRegistry, SchemaType } = require('@kafkajs/confluent-schema-registry');
+const { SchemaRegistryClient, SerdeType, AvroSerializer, AvroDeserializer} = require('@confluentinc/schemaregistry');
 
-const registry = new SchemaRegistry({ host: '<fill>' })
+const registry = new SchemaRegistryClient({ baseURLs: ['<fill>'] })
 const kafka = new Kafka({
     kafkaJS: {
         brokers: ['<fill>'],
@@ -17,11 +17,12 @@ const kafka = new Kafka({
         },
     }
 });
+
 let consumer = kafka.consumer({
-  kafkaJS: {
-    groupId: "test-group",
-    fromBeginning: true,
-  },
+    kafkaJS: {
+        groupId: "test-group",
+        fromBeginning: true,
+    },
 });
 let producer = kafka.producer();
 
@@ -43,40 +44,42 @@ const schemaB = {
 };
 
 const topicName = 'test-topic';
+const subjectName = topicName + '-value';
 
 const run = async () => {
     // Register schemaB.
     await registry.register(
+        'avro-b',
         {
-            type: SchemaType.AVRO,
+            schemaType: 'AVRO',
             schema: JSON.stringify(schemaB),
-        },
-        { subject: 'Avro:B' },
+        }
     );
-    const response = await registry.api.Subject.latestVersion({ subject: 'Avro:B' });
-    const { version } = JSON.parse(response.responseData);
+    const response = await registry.getLatestSchemaMetadata('avro-b');
+    const version = response.version
 
     // Register schemaA, which references schemaB.
-    const { id } = await registry.register(
+    const id = await registry.register(
+        subjectName,
         {
-            type: SchemaType.AVRO,
+            schemaType: 'AVRO',
             schema: JSON.stringify(schemaA),
             references: [
                 {
                     name: 'test.B',
-                    subject: 'Avro:B',
+                    subject: 'avro-b',
                     version,
                 },
             ],
-        },
-        { subject: 'Avro:A' },
+        }
     )
 
     // Produce a message with schemaA.
     await producer.connect()
+    const ser = new AvroSerializer(registry, SerdeType.VALUE, { useLatestVersion: true });
     const outgoingMessage = {
         key: 'key',
-        value: await registry.encode(id, { id: 1, b: { id: 2 } })
+        value: await ser.serialize(topicName, { id: 1, b: { id: 2 } }),
     }
     await producer.send({
         topic: topicName,
@@ -90,11 +93,12 @@ const run = async () => {
     await consumer.subscribe({ topic: topicName })
 
     let messageRcvd = false;
+    const deser = new AvroDeserializer(registry, SerdeType.VALUE, {});
     await consumer.run({
         eachMessage: async ({ message }) => {
             const decodedMessage = {
                 ...message,
-                value: await registry.decode(message.value)
+                value: await deser.deserialize(topicName, message.value)
             };
             console.log("Consumer received message.\nBefore decoding: " + JSON.stringify(message) + "\nAfter decoding: " + JSON.stringify(decodedMessage));
             messageRcvd = true;

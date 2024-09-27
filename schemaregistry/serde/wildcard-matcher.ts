@@ -18,7 +18,7 @@
  *
  * @param str             - the string to match on
  * @param wildcardMatcher - the wildcard string to match against
- * @returns true - if the string matches the wildcard string
+ * @returns true if the string matches the wildcard string
  */
 export function match(str: string, wildcardMatcher: string): boolean {
   let re = wildcardToRegexp(wildcardMatcher, '.')

@@ -13,7 +13,7 @@ import { RestError } from './rest-error';
 export interface BasicAuthCredentials {
   credentialsSource: 'USER_INFO' | 'URL' | 'SASL_INHERIT',
   userInfo?: string,
-  saslInfo?: SaslInfo
+  sasl?: SaslInfo
 }
 
 export interface SaslInfo {
@@ -75,13 +75,13 @@ export class RestService {
           this.setAuth(toBase64(basicAuthCredentials.userInfo!));
           break;
         case 'SASL_INHERIT':
-          if (!basicAuthCredentials.saslInfo) {
+          if (!basicAuthCredentials.sasl) {
             throw new Error('Sasl info not provided');
           }
-          if (basicAuthCredentials.saslInfo.mechanism?.toUpperCase() === 'GSSAPI') {
+          if (basicAuthCredentials.sasl.mechanism?.toUpperCase() === 'GSSAPI') {
             throw new Error('SASL_INHERIT support PLAIN and SCRAM SASL mechanisms only');
           }
-          this.setAuth(toBase64(`${basicAuthCredentials.saslInfo.username}:${basicAuthCredentials.saslInfo.password}`));
+          this.setAuth(toBase64(`${basicAuthCredentials.sasl.username}:${basicAuthCredentials.sasl.password}`));
           break;
         case 'URL':
           if (!basicAuthCredentials.userInfo) {

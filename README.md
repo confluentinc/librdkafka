@@ -1,4 +1,4 @@
-Confluent's Javascript Client for Apache Kafka<sup>TM</sup>
+Confluent's JavaScript Client for Apache Kafka<sup>TM</sup>
 =====================================================
 
 **confluent-kafka-javascript** is Confluent's JavaScript client for [Apache Kafka](http://kafka.apache.org/) and the

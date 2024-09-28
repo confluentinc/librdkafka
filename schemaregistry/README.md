@@ -1,77 +1,119 @@
-Confluent's Javascript Client for Schema Registry<sup>TM</sup>
+Confluent's JavaScript Client for Schema Registry<sup>TM</sup>
 =====================================================
 
-**confluent-kafka-javascript** includes Confluent's JavaScript client for [Schema Registry](https://docs.confluent.io/cloud/current/sr/index.html) and the accompanying package to Confluent's Javascript Client for Apache Kafka
-[Confluent's Javascript Client for Apache Kafka](https://www.npmjs.com/package/@confluentinc/kafka-javascript). This is an **Early Availability** library. The goal is to provide an highly performant, reliable and easy to use JavaScript client in line with other clients such as our [Go](https://github.com/confluentinc/confluent-kafka-go) and [Python](https://github.com/confluentinc/confluent-kafka-python) clients.
+Confluent's JavaScript client for [Schema Registry](https://docs.confluent.io/cloud/current/sr/index.html) supports Avro, Protobuf and JSON Schema, and is designed to work with
+[Confluent's JavaScript Client for Apache Kafka](https://www.npmjs.com/package/@confluentinc/kafka-javascript). This is an **Early Availability** library.
+The goal is to provide a highly performant, reliable and easy to use JavaScript client in line with other Schema Registry clients
+such as our [Go](https://github.com/confluentinc/confluent-kafka-go), [.NET](https://github.com/confluentinc/confluent-kafka-dotnet),
+and [Java](https://github.com/confluentinc/schema-registry) clients.
 
-<!-- Features:
-- **High performance** - confluent-kafka-javascript is a lightweight wrapper around
-[librdkafka](https://github.com/confluentinc/librdkafka), a finely tuned C
-client.
-- **Reliability** - There are a lot of details to get right when writing an Apache Kafka
-client. We get them right in one place (librdkafka) and leverage this work
-across all of our clients.
-- **Supported** - Commercial support is offered by [Confluent](https://confluent.io/).
-- **Future proof** - Confluent, founded by the
-creators of Kafka, is building a [streaming platform](https://www.confluent.io/product/)
-with Apache Kafka at its core. It's high priority for us that client features keep
-pace with core Apache Kafka and components of the [Confluent Platform](https://www.confluent.io/product/).
-This library leverages the work and concepts from two popular Apache Kafka JavaScript clients: [node-rdkafka](https://github.com/Blizzard/node-rdkafka) and [KafkaJS](https://github.com/tulios/kafkajs). The core is heavily based on the node-rdkafka library, which uses our own [librdkafka](https://github.com/confluentinc/librdkafka) library for core client functionality. However, we leverage a promisified API and a more idiomatic interface, similar to the one in KafkaJS, making it easy for developers to migrate and adopt this client depending on the patterns and interface they prefer. We're very happy to have been able to leverage the excellent work of the many authors of these libraries!
-### This library is currently in limited-availability - it is supported for all usage but for the schema-registry client.
-To use **Schema Registry**, use the existing [kafkajs/confluent-schema-registry](https://github.com/kafkajs/confluent-schema-registry) library that is compatible with this library. For a simple schema registry example, see [sr.js](https://github.com/confluentinc/confluent-kafka-javascript/blob/dev_early_access_development_branch/examples/kafkajs/sr.js).
-**DISCLAIMER:** Although it is compatible with **confluent-kafka-javascript**, Confluent does not own or maintain kafkajs/confluent-schema-registry, and the use and functionality of the library should be considered "as is".
-## Requirements
-The following configurations are supported:
-* Any supported version of Node.js (The two LTS versions, 18 and 20, and the latest versions, 21 and 22).
-* Linux (x64 and arm64) - both glibc and musl/alpine.
-* macOS - arm64/m1.
-* Windows - x64.
-Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required.
-In case your system configuration is not within the supported ones, [a supported version of Python](https://devguide.python.org/versions/) must be available on the system for the installation process. [This is required for the `node-gyp` build tool.](https://github.com/nodejs/node-gyp?tab=readme-ov-file#configuring-python-dependency).
+## Installation
 ```bash
-npm install @confluentinc/kafka-javascript
+npm install @confluentinc/schemaregistry
 ```
-Yarn and pnpm support is experimental.
+
 # Getting Started
-Below is a simple produce example for users migrating from KafkaJS.
+Below is a simple example of using Avro serialization with the Schema Registry client and the KafkaJS client.
 ```javascript
-// require('kafkajs') is replaced with require('@confluentinc/kafka-javascript').KafkaJS.
-const { Kafka } = require("@confluentinc/kafka-javascript").KafkaJS;
-async function producerStart() {
-    const kafka = new Kafka({
-        kafkaJS: {
-            brokers: ['<fill>'],
-            ssl: true,
-            sasl: {
-                mechanism: 'plain',
-                username: '<fill>',
-                password: '<fill>',
-            },
-        }
-    });
-    const producer = kafka.producer();
-    await producer.connect();
-    console.log("Connected successfully");
-    const res = []
-    for (let i = 0; i < 50; i++) {
-        res.push(producer.send({
-            topic: 'test-topic',
-            messages: [
-                { value: 'v222', partition: 0 },
-                { value: 'v11', partition: 0, key: 'x' },
-            ]
-        }));
+const { Kafka } = require('@confluentinc/kafka-javascript').KafkaJS;
+const { SchemaRegistryClient, SerdeType, AvroSerializer, AvroDeserializer} = require('@confluentinc/schemaregistry');
+
+const registry = new SchemaRegistryClient({ baseURLs: ['http://localhost:8081'] })
+const kafka = new Kafka({
+  kafkaJS: {
+    brokers: ['localhost:9092']
+  }
+});
+
+let consumer = kafka.consumer({
+  kafkaJS: {
+    groupId: "test-group",
+    fromBeginning: true,
+  },
+});
+let producer = kafka.producer();
+
+const schema = {
+  type: 'record',
+  namespace: 'examples',
+  name: 'RandomTest',
+  fields: [
+    { name: 'fullName', type: 'string' }
+  ],
+};
+
+const topicName = 'test-topic';
+const subjectName = topicName + '-value';
+
+const run = async () => {
+  // Register schema
+  const id = await registry.register(
+    subjectName,
+    {
+      schemaType: 'AVRO',
+      schema: JSON.stringify(schema)
     }
-    await Promise.all(res);
-    await producer.disconnect();
-    console.log("Disconnected successfully");
+  )
+
+  // Create an Avro serializer
+  const ser = new AvroSerializer(registry, SerdeType.VALUE, { useLatestVersion: true });
+
+  // Produce a message with the schema
+  await producer.connect()
+  const outgoingMessage = {
+    key: 'key',
+    value: await ser.serialize(topicName, { fullName: 'John Doe' }),
+  }
+  await producer.send({
+    topic: topicName,
+    messages: [outgoingMessage]
+  });
+  console.log("Producer sent its message.")
+  await producer.disconnect();
+  producer = null;
+
+  // Create an Avro deserializer
+  const deser = new AvroDeserializer(registry, SerdeType.VALUE, {});
+
+  await consumer.connect()
+  await consumer.subscribe({ topic: topicName })
+
+  let messageRcvd = false;
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      const decodedMessage = {
+        ...message,
+        value: await deser.deserialize(topicName, message.value)
+      };
+      console.log("Consumer received message.\nBefore decoding: " + JSON.stringify(message) + "\nAfter decoding: " + JSON.stringify(decodedMessage));
+      messageRcvd = true;
+    },
+  });
+
+  // Wait around until we get a message, and then disconnect.
+  while (!messageRcvd) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  await consumer.disconnect();
+  consumer = null;
 }
-producerStart();
+
+run().catch (async e => {
+  console.error(e);
+  consumer && await consumer.disconnect();
+  producer && await producer.disconnect();
+  process.exit(1);
+})
 ```
-1. If you're migrating from `kafkajs`, you can use the [migration guide](MIGRATION.md#kafkajs).
-2. If you're migrating from `node-rdkafka`, you can use the [migration guide](MIGRATION.md#node-rdkafka).
-3. If you're starting afresh, you can use the [quickstart guide](QUICKSTART.md).
-An in-depth reference may be found at [INTRODUCTION.md](INTRODUCTION.md). -->
+
+## Features and Limitations
+- Full Avro and JSON Schema support
+- Protobuf support requires (upcoming) release: CP 7.4.8, 7.5.7, 7.6.4, 7.7.2, 7.8.0
+- Support for CSFLE (Client-Side Field Level Encryption)
+- Support for schema migration rules for Avro and JSON Schema
+- Data quality rules are not yet supported
+- Support for OAuth
 
 ## Contributing
 

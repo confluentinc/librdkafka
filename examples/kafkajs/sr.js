@@ -74,9 +74,11 @@ const run = async () => {
         }
     )
 
+    // Create an Avro serializer
+    const ser = new AvroSerializer(registry, SerdeType.VALUE, { useLatestVersion: true });
+
     // Produce a message with schemaA.
     await producer.connect()
-    const ser = new AvroSerializer(registry, SerdeType.VALUE, { useLatestVersion: true });
     const outgoingMessage = {
         key: 'key',
         value: await ser.serialize(topicName, { id: 1, b: { id: 2 } }),
@@ -89,11 +91,13 @@ const run = async () => {
     await producer.disconnect();
     producer = null;
 
+    // Create an Avro deserializer
+    const deser = new AvroDeserializer(registry, SerdeType.VALUE, {});
+
     await consumer.connect()
     await consumer.subscribe({ topic: topicName })
 
     let messageRcvd = false;
-    const deser = new AvroDeserializer(registry, SerdeType.VALUE, {});
     await consumer.run({
         eachMessage: async ({ message }) => {
             const decodedMessage = {

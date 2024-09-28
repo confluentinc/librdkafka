@@ -16,3 +16,9 @@ export * from './serde/serde'
 export * from './rest-error'
 export * from './mock-schemaregistry-client'
 export * from './schemaregistry-client'
+export {
+  BasicAuthCredentials,
+  BearerAuthCredentials,
+  ClientConfig,
+  SaslInfo
+} from './rest-service';

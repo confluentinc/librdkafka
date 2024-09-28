@@ -1,6 +1,6 @@
 {
   "name": "@confluentinc/schemaregistry",
-  "version": "v0.1.17.3-devel",
+  "version": "v0.1.17.4-devel",
   "description": "Node.js client for Confluent Schema Registry",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,6 +14,7 @@
     "@eslint/js": "^9.9.0",
     "@types/eslint__js": "^8.42.3",
     "@types/node": "^20.16.1",
+    "@types/uuid": "^10.0.0",
     "bluebird": "^3.5.3",
     "eslint": "^8.57.0",
     "eslint-plugin-jest": "^28.6.0",

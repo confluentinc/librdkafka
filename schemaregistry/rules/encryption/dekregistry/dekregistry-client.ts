@@ -46,7 +46,7 @@ interface Dek {
   deleted?: boolean;
 }
 
-interface Client {
+interface DekClient {
   registerKek(name: string, kmsType: string, kmsKeyId: string, shared: boolean,
               kmsProps?: { [key: string]: string }, doc?: string): Promise<Kek>;
   getKek(name: string, deleted: boolean): Promise<Kek>;
@@ -56,7 +56,7 @@ interface Client {
   close(): Promise<void>;
 }
 
-class DekRegistryClient implements Client {
+class DekRegistryClient implements DekClient {
   private restService: RestService;
   private kekCache: LRUCache<string, Kek>;
   private dekCache: LRUCache<string, Dek>;
@@ -78,7 +78,7 @@ class DekRegistryClient implements Client {
     this.dekMutex = new Mutex();
   }
 
-  static newClient(config: ClientConfig): Client {
+  static newClient(config: ClientConfig): DekClient {
     const url = config.baseURLs[0];
     if (url.startsWith("mock://")) {
       return new MockDekRegistryClient()
@@ -242,5 +242,5 @@ class DekRegistryClient implements Client {
   }
 }
 
-export { DekRegistryClient, Client, Kek, Dek };
+export { DekRegistryClient, DekClient, Kek, Dek };
 

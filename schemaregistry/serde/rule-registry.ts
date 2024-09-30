@@ -1,7 +1,7 @@
 import {RuleAction, RuleExecutor} from "./serde";
 
 /**
- * 
+ * RuleRegistry is used to register and fetch rule executors and actions.
  */
 export class RuleRegistry {
   private ruleExecutors: Map<string, RuleExecutor> = new Map<string, RuleExecutor>()

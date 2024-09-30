@@ -8,7 +8,7 @@ import {
   RuleError,
 } from "../../serde/serde";
 import {RuleMode,} from "../../schemaregistry-client";
-import {Client, Dek, DekRegistryClient, Kek} from "./dekregistry/dekregistry-client";
+import {DekClient, Dek, DekRegistryClient, Kek} from "./dekregistry/dekregistry-client";
 import {RuleRegistry} from "../../serde/rule-registry";
 import {ClientConfig} from "../../rest-service";
 import {RestError} from "../../rest-error";
@@ -61,7 +61,7 @@ export class Clock {
 }
 
 export class FieldEncryptionExecutor extends FieldRuleExecutor {
-  client: Client | null = null
+  client: DekClient | null = null
   clock: Clock
 
   /**

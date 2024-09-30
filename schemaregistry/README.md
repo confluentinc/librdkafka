@@ -12,7 +12,7 @@ and [Java](https://github.com/confluentinc/schema-registry) clients.
 npm install @confluentinc/schemaregistry
 ```
 
-# Getting Started
+## Getting Started
 Below is a simple example of using Avro serialization with the Schema Registry client and the KafkaJS client.
 ```javascript
 const { Kafka } = require('@confluentinc/kafka-javascript').KafkaJS;
@@ -109,7 +109,7 @@ run().catch (async e => {
 
 ## Features and Limitations
 - Full Avro and JSON Schema support
-- Protobuf support requires (upcoming) release: CP 7.4.8, 7.5.7, 7.6.4, 7.7.2, 7.8.0
+- Protobuf support requires Schema Registry in (upcoming) release: CP 7.4.8, 7.5.7, 7.6.4, 7.7.2, 7.8.0
 - Support for CSFLE (Client-Side Field Level Encryption)
 - Support for schema migration rules for Avro and JSON Schema
 - Data quality rules are not yet supported

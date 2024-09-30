@@ -5907,7 +5907,7 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "ElectLeaders Admin API (KIP-460) not supported "
-                            "by broker");
+                            "by broker, requires broker version >= v2.4.0");
                 rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
@@ -5921,7 +5921,7 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
         if (ApiVersion >= 1) {
                 /* Election type */
                 rd_kafka_buf_write_i8(rkbuf,
-                                      elect_leaders_request->electionType);
+                                      elect_leaders_request->election_type);
         }
 
         /* Write partition list */

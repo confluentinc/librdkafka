@@ -130,11 +130,11 @@ print_elect_leader_result(const rd_kafka_ElectLeaders_result_t *result) {
         int retval = 0;
         const rd_kafka_ElectLeadersResult_t *res;
 
-        res = rd_kafka_ElectionResult_result(result);
+        res = rd_kafka_ElectLeaders_result(result);
 
-        err = rd_kafka_ElectionResult_error(res);
+        err = rd_kafka_ElectLeadersResult_error(res);
 
-        results = rd_kafka_ElectionResult_partitions(res, &results_cnt);
+        results = rd_kafka_ElectLeadersResult_partitions(res, &results_cnt);
 
         if (err) {
                 printf("%% ElectLeaders failed: %s\n", rd_kafka_err2str(err));

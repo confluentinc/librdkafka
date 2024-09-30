@@ -101,10 +101,10 @@ export class RestService {
       delete this.client.defaults.auth;
 
       const headers = ['logicalCluster', 'identityPoolId'];
-      const missingHeaders = headers.find(header => bearerAuthCredentials[header as keyof typeof bearerAuthCredentials]);
+      const missingHeader = headers.find(header => !(header in bearerAuthCredentials));
 
-      if (missingHeaders) {
-        throw new Error(`Bearer auth header '${missingHeaders}' not provided`);
+      if (missingHeader) {
+        throw new Error(`Bearer auth header '${missingHeader}' not provided`);
       }
 
       this.setHeaders({
@@ -127,14 +127,14 @@ export class RestService {
             'issuerEndpointUrl',
             'scope'
           ];
-          const missingField = requiredFields.find(field => bearerAuthCredentials[field as keyof typeof bearerAuthCredentials]);
+          const missingField = requiredFields.find(field => !(field in bearerAuthCredentials));
 
           if (missingField) {
             throw new Error(`OAuth credential '${missingField}' not provided`);
           }
           const issuerEndPointUrl = new URL(bearerAuthCredentials.issuerEndpointUrl!);
           this.oauthClient = new OAuthClient(bearerAuthCredentials.clientId!, bearerAuthCredentials.clientSecret!,
-            issuerEndPointUrl.host, issuerEndPointUrl.pathname, bearerAuthCredentials.scope!);
+            issuerEndPointUrl.origin, issuerEndPointUrl.pathname, bearerAuthCredentials.scope!);
           break;
         default:
           throw new Error('Invalid bearer auth credentials source');

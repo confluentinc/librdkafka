@@ -9,9 +9,8 @@
 # Requires docker.
 # Supported docker images:
 #   alpine:3.16
-#   quay.io/pypa/manylinux2014_aarch64 (centos7)
-#   quay.io/pypa/manylinux2014_x86_64  (centos7)
-#   quay.io/pypa/manylinux2010_x86_64  (centos6)
+#   quay.io/pypa/manylinux_2_28_aarch64 (centos8)
+#   quay.io/pypa/manylinux_2_28_x86_64  (centos8)
 #
 # Usage:
 # packaging/tools/build-release-artifacts.sh [--disable-gssapi] <docker-image> <relative-output-tarball-path.tgz>
@@ -77,12 +76,14 @@ if grep -q alpine /etc/os-release 2>/dev/null ; then
 
 else
     # CentOS
-    yum install -y libstdc++-devel gcc gcc-c++ python3 git perl-IPC-Cmd $extra_pkgs_rpm
+    yum install -y libstdc++-devel gcc gcc-c++ python3 git perl-IPC-Cmd perl-Pod-Html $extra_pkgs_rpm
 fi
 
 
 # Clone the repo so other builds are unaffected of what we're doing
 # and we get a pristine build tree.
+git config --system --add safe.directory '/v/.git'
+git config --system --add safe.directory '/librdkafka/.git'
 git clone /v /librdkafka
 
 cd /librdkafka

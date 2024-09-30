@@ -1,8 +1,94 @@
+# librdkafka v2.5.3
+
+librdkafka v2.5.3 is a feature release.
+
+* Fix an assert being triggered during push telemetry call when no metrics matched on the client side. (#4826)
+
+## Fixes
+
+### Telemetry fixes
+
+* Issue: #4833
+Fix a regression introduced with [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) support in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription.
+Happening since 2.5.0 (#4826).
+
+*Note: there were no v2.5.1 and v2.5.2 librdkafka releases*
+
+
+# librdkafka v2.5.0
+
+> [!WARNING]
+This version has introduced a regression in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription. 
+>
+> You won't face any problem if:
+> * Broker doesn't support [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability).
+> * [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) feature is disabled on the broker side.
+> * [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) feature is disabled on the client side. This is enabled by default. Set configuration `enable.metrics.push` to `false`.
+> * If [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) is enabled on the broker side and there is no subscription configured there.
+> * If [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) is enabled on the broker side with subscriptions that match the [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) metrics defined on the client.
+> 
+> Having said this, we strongly recommend using `v2.5.3` and above to not face this regression at all.
+
+librdkafka v2.5.0 is a feature release.
+
+* [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+  Leader discovery optimisations for the client (#4756, #4767).
+* Fix segfault when using long client id because of erased segment when using flexver. (#4689)
+* Fix for an idempotent producer error, with a message batch not reconstructed
+  identically when retried (#4750)
+* Removed support for CentOS 6 and CentOS 7 (#4775).
+* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client 
+  metrics and observability (#4721).
+
+## Upgrade considerations
+
+ * CentOS 6 and CentOS 7 support was removed as they reached EOL
+   and security patches aren't publicly available anymore.
+   ABI compatibility from CentOS 8 on is maintained through pypa/manylinux,
+   AlmaLinux based.
+   See also [Confluent supported OSs page](https://docs.confluent.io/platform/current/installation/versions-interoperability.html#operating-systems) (#4775).
+
+## Enhancements
+
+  * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
+    [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
+    bugfixes and performance improvements (#4726).
+  * [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+    With this KIP leader updates are received through Produce and Fetch responses
+    in case of errors corresponding to leader changes and a partition migration
+    happens before refreshing the metadata cache (#4756, #4767).
+
+
+## Fixes
+
+### General fixes
+
+*  Issues: [confluentinc/confluent-kafka-dotnet#2084](https://github.com/confluentinc/confluent-kafka-dotnet/issues/2084)
+   Fix segfault when a segment is erased and more data is written to the buffer.
+   Happens since 1.x when a portion of the buffer (segment) is erased for flexver or compression.
+   More likely to happen since 2.1.0, because of the upgrades to flexver, with certain string sizes like a long client id (#4689).
+
+### Idempotent producer fixes
+
+ * Issues: #4736
+   Fix for an idempotent producer error, with a message batch not reconstructed
+   identically when retried. Caused the error message "Local: Inconsistent state: Unable to reconstruct MessageSet".
+   Happening on large batches. Solved by using the same backoff baseline for all messages
+   in the batch.
+   Happens since 2.2.0 (#4750).
+
+
+
 # librdkafka v2.4.0
 
 librdkafka v2.4.0 is a feature release:
 
- * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records) Augment ProduceResponse error messaging for specific culprit records (#4583).
+ * [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol): The Next Generation of the Consumer Rebalance Protocol.
+   **Early Access**: This should be used only for evaluation and must not be used in production. Features and contract of this KIP might change in future (#4610).
+ * [KIP-467](https://cwiki.apache.org/confluence/display/KAFKA/KIP-467%3A+Augment+ProduceResponse+error+messaging+for+specific+culprit+records): Augment ProduceResponse error messaging for specific culprit records (#4583).
+ * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
+   Continue partial implementation by adding a metadata cache by topic id
+   and updating the topic id corresponding to the partition name (#4676)
  * Upgrade OpenSSL to v3.0.12 (while building from source) with various security fixes,
    check the [release notes](https://www.openssl.org/news/cl30.txt).
  * Integration tests can be started in KRaft mode and run against any
@@ -12,9 +98,6 @@ librdkafka v2.4.0 is a feature release:
    max period of 1 ms (#4671).
  * Fixed a bug causing duplicate message consumption from a stale
    fetch start offset in some particular cases (#4636)
- * [KIP-516](https://cwiki.apache.org/confluence/display/KAFKA/KIP-516%3A+Topic+Identifiers)
-   Continue partial implementation by adding a metadata cache by topic id
-   and updating the topic id corresponding to the partition name (#4676)
  * Fix to metadata cache expiration on full metadata refresh (#4677).
  * Fix for a wrong error returned on full metadata refresh before joining
    a consumer group (#4678).
@@ -22,6 +105,11 @@ librdkafka v2.4.0 is a feature release:
  * Fix for an undesired partition migration with stale leader epoch (#4680).
  * Fix hang in cooperative consumer mode if an assignment is processed
    while closing the consumer (#4528).
+ * Upgrade OpenSSL to v3.0.13 (while building from source) with various security fixes,
+   check the [release notes](https://www.openssl.org/news/cl30.txt)
+   (@janjwerner-confluent, #4690).
+ * Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.8.0 (@janjwerner-confluent, #4690).
+
 
 
 ## Upgrade considerations
@@ -32,6 +120,20 @@ librdkafka v2.4.0 is a feature release:
    error. Rest of records in the batch will fail with the new error code
    _INVALID_DIFFERENT_RECORD (Java: KafkaException) and can be retried manually,
    depending on the application logic (#4583).
+
+
+## Early Access
+
+### [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol): The Next Generation of the Consumer Rebalance Protocol
+ * With this new protocol the role of the Group Leader (a member) is removed and
+   the assignment is calculated by the Group Coordinator (a broker) and sent
+   to each member through heartbeats.
+
+   The feature is still _not production-ready_.
+   It's possible to try it in a non-production enviroment.
+
+   A [guide](INTRODUCTION.md#next-generation-of-the-consumer-group-protocol-kip-848) is available
+   with considerations and steps to follow to test it (#4610).
 
 
 ## Fixes

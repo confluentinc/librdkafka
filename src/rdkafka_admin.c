@@ -4403,8 +4403,6 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:
 
-        if (result)
-                rd_kafka_ElectLeadersResult_destroy(result);
         if (rko_result)
                 rd_kafka_op_destroy(rko_result);
 

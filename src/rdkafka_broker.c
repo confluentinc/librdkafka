@@ -1873,7 +1873,16 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find(rd_kafka_broker_t *rkb,
                 rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
                 rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
                            rkbuf->rkbuf_ts_sent);
-
+                if (rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Fetch) {
+                        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current
+                                        .rkb_avg_fetch_latency,
+                                   rkbuf->rkbuf_ts_sent);
+                } else if (rkbuf->rkbuf_reqhdr.ApiKey ==
+                           RD_KAFKAP_OffsetCommit) {
+                        rd_avg_add(&rkb->rkb_rk->rk_telemetry.rd_avg_current
+                                        .rk_avg_commit_latency,
+                                   rkbuf->rkbuf_ts_sent);
+                }
                 if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
                     rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1) == 1)
                         rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
@@ -4809,6 +4818,13 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
             &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
         rd_avg_destroy(
             &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
+        if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
+                rd_avg_destroy(
+                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency);
+                rd_avg_destroy(
+                    &rkb->rkb_telemetry.rd_avg_current.rkb_avg_fetch_latency);
+        }
+
 
         mtx_lock(&rkb->rkb_logname_lock);
         rd_free(rkb->rkb_logname);
@@ -4921,6 +4937,16 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
                     RD_AVG_GAUGE, 0, 100 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
+        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                rd_avg_init(
+                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rkb->rkb_telemetry.rd_avg_current.rkb_avg_fetch_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+        }
 
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */

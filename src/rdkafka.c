@@ -964,6 +964,18 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 rd_kafka_assignment_destroy(rk);
                 if (rk->rk_consumer.q)
                         rd_kafka_q_destroy(rk->rk_consumer.q);
+                rd_avg_destroy(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
+                rd_avg_destroy(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency);
+                rd_avg_destroy(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency);
+                rd_avg_destroy(
+                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio);
+                rd_avg_destroy(
+                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency);
+                rd_avg_destroy(
+                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency);
         }
 
         /* Purge op-queues */
@@ -2534,6 +2546,29 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rk->rk_consumer.q = rd_kafka_q_keep(rk->rk_rep);
                 }
 
+                rd_avg_init(
+                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio,
+                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
+                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency,
+                    RD_AVG_GAUGE, 0, 900000 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                    rk->rk_conf.enable_metrics_push);
+
         } else if (type == RD_KAFKA_PRODUCER) {
                 rk->rk_eos.transactional_id =
                     rd_kafkap_str_new(rk->rk_conf.eos.transactional_id, -1);
@@ -3143,8 +3178,7 @@ static rd_kafka_op_res_t rd_kafka_consume_callback0(
         struct consume_ctx ctx = {.consume_cb = consume_cb, .opaque = opaque};
         rd_kafka_op_res_t res;
 
-        if (timeout_ms)
-                rd_kafka_app_poll_blocking(rkq->rkq_rk);
+        rd_kafka_app_poll_start(rkq->rkq_rk, 0, timeout_ms);
 
         res = rd_kafka_q_serve(rkq, timeout_ms, max_cnt, RD_KAFKA_Q_CB_RETURN,
                                rd_kafka_consume_cb, &ctx);
@@ -3212,16 +3246,15 @@ static rd_kafka_message_t *
 rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
         rd_kafka_op_t *rko;
         rd_kafka_message_t *rkmessage = NULL;
-        rd_ts_t abs_timeout           = rd_timeout_init(timeout_ms);
+        rd_ts_t now                   = rd_clock();
+        rd_ts_t abs_timeout           = rd_timeout_init0(now, timeout_ms);
 
-        if (timeout_ms)
-                rd_kafka_app_poll_blocking(rk);
+        rd_kafka_app_poll_start(rk, now, timeout_ms);
 
         rd_kafka_yield_thread = 0;
         while ((
             rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(abs_timeout), 0))) {
                 rd_kafka_op_res_t res;
-
                 res =
                     rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN, NULL);
 
@@ -3894,7 +3927,8 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                     cb_type == RD_KAFKA_Q_CB_FORCE_RETURN)
                         return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
                 else {
-                        struct consume_ctx ctx = {.consume_cb =
+                        rk->rk_ts_last_poll_end = rd_clock();
+                        struct consume_ctx ctx  = {.consume_cb =
                                                       rk->rk_conf.consume_cb,
                                                   .opaque = rk->rk_conf.opaque};
 

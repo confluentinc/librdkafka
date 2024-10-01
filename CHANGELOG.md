@@ -1,3 +1,25 @@
+# librdkafka v2.6.0
+
+librdkafka v2.6.0 is a feature release:
+
+ * [KIP-714] Complete consumer metrics support (#4808).
+ * Fix for permanent fetch errors when using a newer Fetch RPC version with an older
+   inter broker protocol (#4806).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * Issues: #4806
+   Fix for permanent fetch errors when brokers support a Fetch RPC version greater than 12 
+   but cluster is configured to use an inter broker protocol that is less than 2.8.
+   In this case returned topic ids are zero valued and Fetch has to fall back
+   to version 12, using topic names.
+   Happening since v2.5.0 (#4806)
+
+
+
 # librdkafka v2.5.3
 
 librdkafka v2.5.3 is a feature release.

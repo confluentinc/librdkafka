@@ -4198,7 +4198,7 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
 
 /**
  * @brief Creates a new rd_kafka_ElectLeaders_t object with the given
- *       \p election_type and \p topic_partitions.
+ *       \p election_type and \p partitions.
 
 */
 rd_kafka_ElectLeaders_t *
@@ -4253,7 +4253,8 @@ rd_kafka_ElectLeadersResult_new(rd_kafka_resp_err_t err,
 
         result->err = err;
         rd_list_init_copy(&result->partitions, partitions);
-        rd_list_copy_to(&result->partitions, partitions, NULL, NULL);
+        rd_list_copy_to(&result->partitions, partitions,
+                        rd_kafka_topic_partition_result_copy_opaque, NULL);
         return result;
 }
 
@@ -4399,6 +4400,8 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_add(&rko_result->rko_u.admin_result.results, result);
 
         *rko_resultp = rko_result;
+
+        rd_list_destroy(&partitions_arr);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:

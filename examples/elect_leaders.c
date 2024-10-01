@@ -43,11 +43,9 @@
 #include <getopt.h>
 #endif
 
-
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
-
 
 const char *argv0;
 
@@ -303,7 +301,6 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
-
 
         /*
          * Parse common options

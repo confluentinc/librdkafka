@@ -160,7 +160,13 @@ rd_kafka_topic_partition_result_new(const char *topic,
                                     const char *errstr);
 
 void rd_kafka_topic_partition_result_destroy(
-    rd_kafka_topic_partition_result_t *desc);
+    rd_kafka_topic_partition_result_t *partition_result);
+
+rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_copy(
+    const rd_kafka_topic_partition_result_t *src);
+
+void *rd_kafka_topic_partition_result_copy_opaque(const void *src,
+                                                  void *opaque);
 
 void rd_kafka_topic_partition_result_free(void *ptr);
 

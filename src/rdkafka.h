@@ -10077,7 +10077,7 @@ rd_kafka_topic_partition_result_by_idx(
     size_t idx);
 
 /**
- * @brief Destroy and free an rd_kafka_topic_partition_result_t object.
+ * @brief Destroy and free a rd_kafka_topic_partition_result_t object.
  *
  * @param partition_result The rd_kafka_topic_partition_result_t object to be
  * destroyed.

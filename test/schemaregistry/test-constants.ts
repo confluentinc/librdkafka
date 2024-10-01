@@ -6,9 +6,6 @@ const baseUrls = ['http://localhost:8081'];
 const mockBaseUrls = ['http://mocked-url'];
 
 const createAxiosDefaults: CreateAxiosDefaults = {
-  headers: {
-    'Content-Type': 'application/vnd.schemaregistry.v1+json',
-  },
   timeout: 10000
 };
 

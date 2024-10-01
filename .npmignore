@@ -6,6 +6,7 @@ deps/*
 Dockerfile
 deps/librdkafka/config.h
 schemaregistry
+schemaregistry-examples
 build
 .github
 .vscode

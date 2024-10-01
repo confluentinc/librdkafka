@@ -58,9 +58,10 @@ export class RestService {
     this.baseURLs = baseURLs;
 
     if (isForward) {
-      this.client.defaults.headers.common['X-Forward'] = 'true'
+      this.setHeaders({ 'X-Forward': 'true' });
     }
-
+    this.setHeaders({ 'Content-Type': 'application/vnd.schemaregistry.v1+json' });
+    
     this.handleBasicAuth(basicAuthCredentials);
     this.handleBearerAuth(bearerAuthCredentials);
   }

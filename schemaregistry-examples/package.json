@@ -1,0 +1,15 @@
+{
+  "name": "schemaregistry-examples",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@confluentinc/kafka-javascript": "^0.2.0",
+    "@confluentinc/schemaregistry": "^v0.1.17.6-devel",
+    "uuid": "^10.0.0"
+  }
+}

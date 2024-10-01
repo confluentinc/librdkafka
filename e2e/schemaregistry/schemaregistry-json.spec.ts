@@ -13,7 +13,12 @@ import stringify from 'json-stringify-deterministic';
 import { v4 } from 'uuid';
 
 let schemaRegistryClient: SchemaRegistryClient;
-let producer: any;
+let serializerConfig: JsonSerializerConfig;
+let serializer: JsonSerializer;
+let deserializer: JsonDeserializer;
+let producer: KafkaJS.Producer;
+let consumer: KafkaJS.Consumer;
+
 
 const kafkaBrokerList = 'localhost:9092';
 const kafka = new KafkaJS.Kafka({
@@ -248,12 +253,6 @@ const schemaInfo: SchemaInfo = {
   schemaType: 'JSON'
 };
 
-const customerSubject = 'Customer';
-const orderSubject = 'Order';
-const orderDetailsSubject = 'OrderDetails';
-
-const subjectList = [orderSubject, orderDetailsSubject, customerSubject];
-
 describe('SchemaRegistryClient json Integration Test', () => {
 
   beforeEach(async () => {
@@ -267,35 +266,28 @@ describe('SchemaRegistryClient json Integration Test', () => {
       }
     });
     await producer.connect();
-    const subjects: string[] = await schemaRegistryClient.getAllSubjects();
 
-    for (const subject of subjectList) {
-      if (subjects && subjects.includes(subject)) {
-        await schemaRegistryClient.deleteSubject(subject);
-        await schemaRegistryClient.deleteSubject(subject, true);
-
-        const subjectValue = subject + '-value';
-        if (subjects && subjects.includes(subjectValue)) {
-          await schemaRegistryClient.deleteSubject(subjectValue);
-          await schemaRegistryClient.deleteSubject(subjectValue, true);
-        }
-      }
-    }
+    consumer = kafka.consumer({
+      kafkaJS: {
+        groupId: 'test-group',
+        fromBeginning: true,
+        partitionAssigners: [KafkaJS.PartitionAssigners.roundRobin],
+      },
+    });
   });
 
   afterEach(async () => {
     await producer.disconnect();
-    producer = null;
   });
 
   it("Should serialize and deserialize json", async () => {
     const testTopic = v4();
 
-    await schemaRegistryClient.register(testTopic, schemaInfo);
+    await schemaRegistryClient.register(testTopic + "-value", schemaInfo);
 
-    const serializerConfig: JsonSerializerConfig = { autoRegisterSchemas: true };
-    const serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
-    const deserializer = new JsonDeserializer(schemaRegistryClient, SerdeType.VALUE, {});
+    serializerConfig = { useLatestVersion: true };
+    serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
+    deserializer = new JsonDeserializer(schemaRegistryClient, SerdeType.VALUE, {});
 
     const outgoingMessage = {
       key: 'key',
@@ -307,7 +299,7 @@ describe('SchemaRegistryClient json Integration Test', () => {
       messages: [outgoingMessage]
     });
 
-    let consumer = kafka.consumer({
+    consumer = kafka.consumer({
       kafkaJS: {
         groupId: 'test-group',
         fromBeginning: true,
@@ -338,12 +330,11 @@ describe('SchemaRegistryClient json Integration Test', () => {
     await consumer.disconnect();
   }, 30000);
 
-  it("Should serialize with UseLatestVersion enabled", async () => {
+  it("Should serialize with autoRegisterSchemas enabled and useLatestVersion disabled", async () => {
     const testTopic = v4();
-    await schemaRegistryClient.register(testTopic, schemaInfo);
 
-    const serializerConfig: JsonSerializerConfig = { autoRegisterSchemas: true, useLatestVersion: true };
-    const serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
+    serializerConfig = { autoRegisterSchemas: true, useLatestVersion: false };
+    serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
 
     const outgoingMessage = {
       key: 'key',
@@ -359,10 +350,9 @@ describe('SchemaRegistryClient json Integration Test', () => {
 
   it('Should fail to serialize with UseLatestVersion enabled and autoRegisterSchemas disabled', async () => {
     const testTopic = v4();
-    await schemaRegistryClient.register(testTopic, schemaInfo);
 
-    const serializerConfig: JsonSerializerConfig = { autoRegisterSchemas: false, useLatestVersion: true };
-    const serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
+    serializerConfig = { autoRegisterSchemas: false, useLatestVersion: true };
+    serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
 
     const messageValue = { "name": "Bob Jones", "age": 25 };
 
@@ -371,9 +361,12 @@ describe('SchemaRegistryClient json Integration Test', () => {
 
   it("Should serialize referenced schemas", async () => {
     const testTopic = v4();
-    const serializerConfig: JsonSerializerConfig = { autoRegisterSchemas: true };
-    const serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
-    const deserializer = new JsonDeserializer(schemaRegistryClient, SerdeType.VALUE, {});
+    serializerConfig = { useLatestVersion: true };
+    serializer = new JsonSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
+    deserializer = new JsonDeserializer(schemaRegistryClient, SerdeType.VALUE, {});
+
+    const customerSubject = v4();
+    const orderDetailsSubject = v4();
 
     await schemaRegistryClient.register(customerSubject, customerSchema);
     const customerIdVersion: number = (await schemaRegistryClient.getLatestSchemaMetadata(customerSubject)).version!;
@@ -395,7 +388,7 @@ describe('SchemaRegistryClient json Integration Test', () => {
     };
     orderSchema.references = [orderDetailsReference];
 
-    await schemaRegistryClient.register(orderSubject, orderSchema);
+    await schemaRegistryClient.register(testTopic + "-value", orderSchema);
 
     const order = {
       order_details: {
@@ -412,7 +405,7 @@ describe('SchemaRegistryClient json Integration Test', () => {
 
     const outgoingMessage = {
       key: 'key',
-      value: await serializer.serialize(orderSubject, order)
+      value: await serializer.serialize(testTopic, order)
     };
 
     await producer.send({
@@ -420,7 +413,7 @@ describe('SchemaRegistryClient json Integration Test', () => {
       messages: [outgoingMessage]
     });
 
-    let consumer = kafka.consumer({
+    consumer = kafka.consumer({
       kafkaJS: {
         groupId: 'test-group',
         fromBeginning: true,
@@ -437,7 +430,7 @@ describe('SchemaRegistryClient json Integration Test', () => {
       eachMessage: async ({ message }) => {
         const decodedMessage = {
           ...message,
-          value: await deserializer.deserialize(orderSubject, message.value as Buffer)
+          value: await deserializer.deserialize(testTopic, message.value as Buffer)
         };
         messageRcvd = true;
 

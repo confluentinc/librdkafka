@@ -12,7 +12,11 @@ import stringify from 'json-stringify-deterministic';
 import { v4 } from 'uuid';
 
 let schemaRegistryClient: SchemaRegistryClient;
-let producer: any;
+let serializerConfig: AvroSerializerConfig;
+let serializer: AvroSerializer;
+let deserializer: AvroDeserializer;
+let producer: KafkaJS.Producer;
+let consumer: KafkaJS.Consumer;
 
 const kafkaBrokerList = 'localhost:9092';
 const kafka = new KafkaJS.Kafka({
@@ -48,11 +52,6 @@ const schemaInfo: SchemaInfo = {
   metadata: metadata
 };
 
-let serializerConfig: AvroSerializerConfig;
-let serializer: AvroSerializer;
-let deserializer: AvroDeserializer;
-let consumer: KafkaJS.Consumer;
-
 describe('Schema Registry Avro Integration Test', () => {
 
   beforeEach(async () => {
@@ -78,15 +77,14 @@ describe('Schema Registry Avro Integration Test', () => {
 
   afterEach(async () => {
     await producer.disconnect();
-    producer = null;
   });
 
   it("Should serialize and deserialize Avro", async () => {
-    const testTopic = 'test-topic-' + v4();
+    const testTopic = v4();
 
-    await schemaRegistryClient.register(testTopic, schemaInfo);
+    await schemaRegistryClient.register(testTopic + "-value", schemaInfo);
 
-    serializerConfig = { autoRegisterSchemas: true };
+    serializerConfig = { useLatestVersion: true };
     serializer = new AvroSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
     deserializer = new AvroDeserializer(schemaRegistryClient, SerdeType.VALUE, {});
 
@@ -123,28 +121,8 @@ describe('Schema Registry Avro Integration Test', () => {
     await consumer.disconnect();
   }, 30000);
 
-  it("Should serialize with UseLatestVersion enabled", async () => {
+  it('Should fail to serialize with useLatestVersion enabled and autoRegisterSchemas disabled', async () => {
     const testTopic = v4();
-    await schemaRegistryClient.register(testTopic, schemaInfo);
-
-    serializerConfig = { autoRegisterSchemas: true, useLatestVersion: true };
-    serializer = new AvroSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
-
-    const outgoingMessage = {
-      key: 'key',
-      value: await serializer.serialize(testTopic, messageValue)
-    };
-
-    await producer.send({
-      topic: testTopic,
-      messages: [outgoingMessage]
-    });
-
-  }, 30000);
-
-  it('Should fail to serialize with UseLatestVersion enabled and autoRegisterSchemas disabled', async () => {
-    const testTopic = v4();
-    await schemaRegistryClient.register(testTopic, schemaInfo);
 
     serializerConfig = { autoRegisterSchemas: false, useLatestVersion: true };
     serializer = new AvroSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
@@ -154,12 +132,11 @@ describe('Schema Registry Avro Integration Test', () => {
     await expect(serializer.serialize(testTopic, messageValue)).rejects.toThrowError();
   });
 
-  it('Should serialize with schemas registered, UseLatestVersion enabled and autoRegisterSchemas disabled', async () => {
+  it('Should serialize with autoRegisterSchemas enabled and useLatestVersion disabled', async () => {
     const testTopic = v4();
-    await schemaRegistryClient.register(testTopic, schemaInfo);
-    await schemaRegistryClient.register(testTopic+'-value', schemaInfo);
+    await schemaRegistryClient.register(testTopic +' -value', schemaInfo);
 
-    serializerConfig = { autoRegisterSchemas: false, useLatestVersion: true };
+    serializerConfig = { autoRegisterSchemas: true, useLatestVersion: false };
     serializer = new AvroSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
 
     const messageValue = { "name": "Bob Jones", "age": 25 };
@@ -257,7 +234,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       }
     });
     await producer.connect();
-    serializerConfig = { autoRegisterSchemas: true };
+    serializerConfig = { useLatestVersion: true };
 
     serializer = new AvroSerializer(schemaRegistryClient, SerdeType.VALUE, serializerConfig);
     deserializer = new AvroDeserializer(schemaRegistryClient, SerdeType.VALUE, {});
@@ -272,7 +249,6 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
 
   afterEach(async () => {
     await producer.disconnect();
-    producer = null;
   });
 
   it('Should serialize and deserialize string', async () => {
@@ -287,7 +263,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       metadata: metadata
     };
 
-    await schemaRegistryClient.register(stringTopic, stringSchemaInfo);
+    await schemaRegistryClient.register(stringTopic + "-value", stringSchemaInfo);
 
     const stringMessageValue = "Hello, World!";
     const outgoingStringMessage = {
@@ -335,7 +311,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       metadata: metadata
     };
 
-    await schemaRegistryClient.register(topic, stringSchemaInfo);
+    await schemaRegistryClient.register(topic + "-value", stringSchemaInfo);
 
     const messageValue = Buffer.from("Hello, World!");
     const outgoingMessage = {
@@ -383,7 +359,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       metadata: metadata
     };
 
-    await schemaRegistryClient.register(topic, stringSchemaInfo);
+    await schemaRegistryClient.register(topic + "-value", stringSchemaInfo);
 
     const messageValue = 25;
     const outgoingMessage = {
@@ -431,7 +407,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       metadata: metadata
     };
 
-    await schemaRegistryClient.register(topic, stringSchemaInfo);
+    await schemaRegistryClient.register(topic + "-value", stringSchemaInfo);
 
     const messageValue = 25;
     const outgoingMessage = {
@@ -479,7 +455,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       metadata: metadata
     };
 
-    await schemaRegistryClient.register(topic, stringSchemaInfo);
+    await schemaRegistryClient.register(topic + "-value", stringSchemaInfo);
 
     const messageValue = true;
     const outgoingMessage = {
@@ -527,7 +503,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       metadata: metadata
     };
 
-    await schemaRegistryClient.register(topic, stringSchemaInfo);
+    await schemaRegistryClient.register(topic + "-value", stringSchemaInfo);
 
     const messageValue = 1.354;
     const outgoingMessage = {
@@ -575,7 +551,7 @@ describe('Schema Registry Avro Integration Test - Primitives', () => {
       metadata: metadata
     };
 
-    await schemaRegistryClient.register(topic, stringSchemaInfo);
+    await schemaRegistryClient.register(topic + "-value", stringSchemaInfo);
 
     const messageValue = 1.354;
     const outgoingMessage = {

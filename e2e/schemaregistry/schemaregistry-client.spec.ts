@@ -8,6 +8,7 @@ import {
 } from '../../schemaregistry/schemaregistry-client';
 import { beforeEach, describe, expect, it } from '@jest/globals';
 import { clientConfig } from '../../test/schemaregistry/test-constants';
+import { v4 } from 'uuid';
 
 /* eslint-disable @typescript-eslint/no-non-null-asserted-optional-chain */
 
@@ -77,7 +78,7 @@ describe('SchemaRegistryClient Integration Test', () => {
   });
 
   it("Should return RestError when retrieving non-existent schema", async () => {
-    await expect(schemaRegistryClient.getBySubjectAndId(testSubject, 1)).rejects.toThrow();
+    await expect(schemaRegistryClient.getLatestSchemaMetadata(v4())).rejects.toThrow();
   });
 
   it('Should register, retrieve, and delete a schema', async () => {

@@ -4414,7 +4414,7 @@ err_parse:
 }
 
 void rd_kafka_ElectLeaders(rd_kafka_t *rk,
-                           rd_kafka_ElectLeaders_t *elect_leader,
+                           rd_kafka_ElectLeaders_t *elect_leaders,
                            const rd_kafka_AdminOptions_t *options,
                            rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
@@ -4432,7 +4432,7 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
                                             &cbs, options, rkqu->rkqu_q);
 
         /* Non empty topic_partition_list should be present */
-        if (elect_leader->partitions->cnt == 0) {
+        if (elect_leaders->partitions->cnt == 0) {
                 rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                                            "No partitions specified");
                 rd_kafka_admin_common_worker_destroy(rk, rko,
@@ -4442,7 +4442,7 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
 
         /* Duplicate topic partitions should not be present in the list */
         copied_partitions =
-            rd_kafka_topic_partition_list_copy(elect_leader->partitions);
+            rd_kafka_topic_partition_list_copy(elect_leaders->partitions);
         if (rd_kafka_topic_partition_list_has_duplicates(
                 copied_partitions, rd_false /* check partition*/)) {
                 rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -4457,7 +4457,7 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
                      rd_kafka_ElectLeaders_free);
 
         rd_list_add(&rko->rko_u.admin_request.args,
-                    rd_kafka_ElectLeaders_copy(elect_leader));
+                    rd_kafka_ElectLeaders_copy(elect_leaders));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 

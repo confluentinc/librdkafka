@@ -122,7 +122,7 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 }
 
 static int
-print_elect_leader_result(const rd_kafka_ElectLeaders_result_t *result) {
+print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
         rd_kafka_resp_err_t err;
         const rd_kafka_topic_partition_result_t **results;
         size_t results_cnt;
@@ -182,14 +182,14 @@ int64_t parse_int(const char *what, const char *str) {
         return (int64_t)n;
 }
 
-static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
+static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *event = NULL;
         rd_kafka_topic_partition_list_t *partitions;
         rd_kafka_ElectionType_t election_type;
-        rd_kafka_ElectLeaders_t *elect_leader;
+        rd_kafka_ElectLeaders_t *elect_leaders;
         int i;
         int retval = 0;
 
@@ -216,7 +216,7 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
                     partitions, argv[i], parse_int("partition", argv[i + 1]));
         }
 
-        elect_leader = rd_kafka_ElectLeaders_new(election_type, partitions);
+        elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
 
         /*
          * Create consumer instance
@@ -253,8 +253,8 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
                 goto exit;
         }
 
-        rd_kafka_ElectLeaders(rk, elect_leader, options, queue);
-        rd_kafka_ElectLeaders_destroy(elect_leader);
+        rd_kafka_ElectLeaders(rk, elect_leaders, options, queue);
+        rd_kafka_ElectLeaders_destroy(elect_leaders);
         rd_kafka_AdminOptions_destroy(options);
 
 
@@ -278,7 +278,7 @@ static void cmd_elect_leader(rd_kafka_conf_t *conf, int argc, char **argv) {
                 /* ElectLeaders request succeeded */
                 const rd_kafka_ElectLeaders_result_t *result;
                 result = rd_kafka_event_ElectLeaders_result(event);
-                retval = print_elect_leader_result(result);
+                retval = print_elect_leaders_result(result);
         }
 
 
@@ -336,7 +336,7 @@ int main(int argc, char **argv) {
                 }
         }
 
-        cmd_elect_leader(conf, argc - optind, &argv[optind]);
+        cmd_elect_leaders(conf, argc - optind, &argv[optind]);
 
         return 0;
 }

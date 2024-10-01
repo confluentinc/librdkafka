@@ -9972,11 +9972,11 @@ rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
  * @brief Destroy and free an ElectLeaders object previously created with
  *        rd_kafka_ElectLeaders_new()
  *
- * @param elect_leader The ElectLeaders object to be destroyed.
+ * @param elect_leaders The ElectLeaders object to be destroyed.
  *
  */
 RD_EXPORT void
-rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leader);
+rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leaders);
 
 /**
  * @brief Elect Leaders for the provided Topic Partitions

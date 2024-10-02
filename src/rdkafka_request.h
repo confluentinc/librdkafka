@@ -447,7 +447,13 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
 int rd_kafka_ProduceRequest(rd_kafka_broker_t *rkb,
                             rd_kafka_toppar_t *rktp,
                             const rd_kafka_pid_t pid,
-                            uint64_t epoch_base_msgid);
+                            uint64_t epoch_base_msgid,
+                            rd_bool_t skip_sending,
+                            rd_list_t *batch_bufq);
+
+int rd_kafka_MultiBatchProduceRequest(rd_kafka_broker_t *rkb,
+                            const rd_kafka_pid_t pid,
+                            rd_list_t *batch_bufq);
 
 rd_kafka_resp_err_t
 rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,

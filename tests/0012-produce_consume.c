@@ -101,6 +101,8 @@ static void produce_messages(uint64_t testid,
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
+        test_create_partitions(rk, topic, partition_cnt);
+
         /* Create messages. */
         prod_msg_remains = msgcnt;
         rkmessages       = calloc(sizeof(*rkmessages), msgcnt / partition_cnt);
@@ -492,7 +494,7 @@ static void consume_messages_with_queues(uint64_t testid,
  */
 static void test_produce_consume(void) {
         int msgcnt        = test_quick ? 100 : 1000;
-        int partition_cnt = 2;
+        int partition_cnt = 10;
         int i;
         uint64_t testid;
         int msg_base = 0;

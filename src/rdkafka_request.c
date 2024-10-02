@@ -5878,6 +5878,18 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Construct and send ElectLeadersRequest to \p rkb
+ *        with the partitions (ElectLeaders_t*) in \p elect_leaders, using
+ *        \p options.
+ * 
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ * 
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
 rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
     rd_kafka_broker_t *rkb,
     const rd_list_t *elect_leaders /*(rd_kafka_EleactLeaders_t*)*/,
@@ -5907,7 +5919,7 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "ElectLeaders Admin API (KIP-460) not supported "
-                            "by broker, requires broker version >= v2.4.0");
+                            "by broker, requires broker version >= 2.4.0");
                 rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }

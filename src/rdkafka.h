@@ -263,6 +263,7 @@ typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 typedef struct rd_kafka_group_result_s rd_kafka_group_result_t;
 typedef struct rd_kafka_acl_result_s rd_kafka_acl_result_t;
 typedef struct rd_kafka_Uuid_s rd_kafka_Uuid_t;
+typedef struct rd_kafka_topic_partition_result_s rd_kafka_topic_partition_result_t;
 /* @endcond */
 
 
@@ -6960,6 +6961,54 @@ rd_kafka_group_result_name(const rd_kafka_group_result_t *groupres);
 RD_EXPORT const rd_kafka_topic_partition_list_t *
 rd_kafka_group_result_partitions(const rd_kafka_group_result_t *groupres);
 
+/**
+ * @brief Topic Partition Result provides per-topic+partition operation result
+ * 
+ */
+
+/**
+ * @returns the topic name from the topic partition result object.
+ * @remark lifetime of the returned string is the same as the \p partition_result.
+ */
+RD_EXPORT const char *rd_kafka_topic_partition_result_topic(
+    const rd_kafka_topic_partition_result_t *partition_result);
+
+/**
+ * @returns the partition number from the topic partition result object.
+ * @remark lifetime of the returned string is the same as the \p partition_result.
+ */
+RD_EXPORT int32_t rd_kafka_topic_partition_result_partition(
+    const rd_kafka_topic_partition_result_t *partition_result);
+
+/**
+ * @returns the error code from the topic partition result object.
+ * @remark lifetime of the returned error is the same as the \p partition_result.
+ */
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
+    const rd_kafka_topic_partition_result_t *partition_result);
+
+/**
+ * @returns the error string or NULL if there was no error.
+ * @remark lifetime of the returned string is the same as the \p partition_result.
+ */
+RD_EXPORT const char *rd_kafka_topic_partition_result_error_string(
+    const rd_kafka_topic_partition_result_t *partition_result);
+
+/**
+ * @brief Destroy and free a rd_kafka_topic_partition_result_t object.
+ */
+RD_EXPORT void rd_kafka_topic_partition_result_destroy(
+    rd_kafka_topic_partition_result_t *partition_result);
+
+/**
+ * @brief Destroy and free an array of rd_kafka_topic_partition_result_t
+ *        objects.
+ * @remark The array itself is not freed.
+ */
+RD_EXPORT void rd_kafka_topic_partition_result_destroy_array(
+    rd_kafka_topic_partition_result_t **partition_results,
+    int32_t partition_results_cnt);
+
 
 /**@}*/
 
@@ -9935,11 +9984,11 @@ RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
                                    rd_kafka_queue_t *rkqu);
 
 /**
+ * ElectLeaders - Perform Preffered/ Unclean Elections
  *
- * ElectLeaders - Perform Preferred or Unclean Election on specific topic
- * partitions
  *
  */
+
 typedef struct rd_kafka_ElectLeaders_s rd_kafka_ElectLeaders_t;
 
 /**
@@ -9953,15 +10002,15 @@ typedef enum rd_kafka_ElectionType_t {
 
 
 /**
- * @brief Create a new ElectLeaders object. This object is later passed to
+ * @brief Create a new elect leaders object. This object is later passed to
  *        rd_kafka_ElectLeaders().
  *
  * @param election_type The election type that needs to be performed,
- *  preferred or unclean.
+ *        preferred or unclean.
  * @param partitions The topic partitions for which the leader election
- * needs to be performed.
+ *        needs to be performed.
  *
- * @returns a new allocated ElectLeaders object.
+ * @returns a new allocated elect leaders object.
  *          Use rd_kafka_ElectLeaders_destroy() to free object when done.
  */
 RD_EXPORT rd_kafka_ElectLeaders_t *
@@ -9969,11 +10018,10 @@ rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
                           rd_kafka_topic_partition_list_t *partitions);
 
 /**
- * @brief Destroy and free an ElectLeaders object previously created with
+ * @brief Destroy and free an elect leaders object previously created with
  *        rd_kafka_ElectLeaders_new()
  *
- * @param elect_leaders The ElectLeaders object to be destroyed.
- *
+ * @param elect_leaders The elect leaders object to be destroyed.
  */
 RD_EXPORT void
 rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leaders);
@@ -9984,7 +10032,7 @@ rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leaders);
  *
  * @param rk Client instance.
  * @param elect_leaders The elect leaders request containing
- *          election type and partitions information.
+ *        election type and partitions information.
  * @param options Optional admin options, or NULL for defaults.
  * @param rkqu Queue to emit result on.
  *
@@ -10003,151 +10051,56 @@ RD_EXPORT void rd_kafka_ElectLeaders(rd_kafka_t *rk,
                                      rd_kafka_queue_t *rkqu);
 
 /**
- * @brief A struct consisting of Topic Partition result
- *        including custom error message.
- */
-typedef struct rd_kafka_topic_partition_result_s
-    rd_kafka_topic_partition_result_t;
-
-/**
  * @brief  A struct representing result of elect leaders admin operation.
  */
 typedef struct rd_kafka_ElectLeadersResult_s rd_kafka_ElectLeadersResult_t;
 
 /**
- * @brief Get the topic name from the rd_kafka_topic_partition_result_t object.
+ * @brief Get the elect leaders result from the elect leaders result event.
  *
- * @param partition_result The rd_kafka_topic_partition_result_t object.
+ * @param result The elect leaders result event.
  *
- * @returns the topic name from the rd_kafka_topic_partition_result_t object.
+ * @returns the elect leaders result from the elect leaders result event.
  */
-RD_EXPORT const char *rd_kafka_topic_partition_result_topic(
-    const rd_kafka_topic_partition_result_t *partition_result);
+RD_EXPORT const rd_kafka_ElectLeadersResult_t *
+rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result);
 
 /**
- * @brief Get the partition number from the rd_kafka_topic_partition_result_t
- * object.
+ * @brief Get error code from the elect leaders result.
  *
- * @param partition_result The rd_kafka_topic_partition_result_t object.
+ * @param result The elect leaders result event.
  *
- * @returns the partition number from the rd_kafka_topic_partition_result_t
- * object.
- */
-RD_EXPORT int32_t rd_kafka_topic_partition_result_partition(
-    const rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @brief Get the error code from the rd_kafka_topic_partition_result_t object.
- *
- * @param partition_result The rd_kafka_topic_partition_result_t object.
- *
- * @returns the error code from the rd_kafka_topic_partition_result_t object.
- */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
-    const rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @brief Get the error string from the rd_kafka_topic_partition_result_t
- * object.
- *
- * @param partition_result The rd_kafka_topic_partition_result_t object.
- *
- * @returns the error string or NULL if there was no error.
- */
-RD_EXPORT const char *rd_kafka_topic_partition_result_error_string(
-    const rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @brief Get the rd_kafka_topic_partition_result_t object at index \p idx from
- * the rd_kafka_topic_partition_result_t array.
- *
- * @param result The array of rd_kafka_topic_partition_result_t objects.
- * @param idx The index of the object to be retrieved.
- *
- * @returns the rd_kafka_topic_partition_result_t object at index \p idx from
- * the rd_kafka_topic_partition_result_t array.
- *
- * @remark The index \p idx must be less than the size of the array.
- *
- *
- */
-RD_EXPORT const rd_kafka_topic_partition_result_t *
-rd_kafka_topic_partition_result_by_idx(
-    const rd_kafka_topic_partition_result_t **result,
-    size_t idx);
-
-/**
- * @brief Destroy and free a rd_kafka_topic_partition_result_t object.
- *
- * @param partition_result The rd_kafka_topic_partition_result_t object to be
- * destroyed.
- */
-RD_EXPORT void rd_kafka_topic_partition_result_destroy(
-    rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @brief Destroy and free an array of rd_kafka_topic_partition_result_t
- * objects.
- *
- * @param partition_results The array of rd_kafka_topic_partition_result_t
- * objects to be destroyed.
- * @param partition_results_cnt The number of elements in the array.
- *
- * @remark The array itself is not freed.
- */
-RD_EXPORT void rd_kafka_topic_partition_result_destroy_array(
-    rd_kafka_topic_partition_result_t **partition_results,
-    int32_t partition_results_cnt);
-
-/**
- * @brief Get error code from the ElectLeaders result.
- *
- * @param result The ElectLeaders result event.
- *
- * @returns the error code from the ElectLeaders result.
+ * @returns the error code from the elect leaders result.
+ * 
+ * @remark This error is related to the overall elect leaders operation.
+ *         Individual partition related errors are present at partition level. 
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_ElectLeadersResult_error(const rd_kafka_ElectLeadersResult_t *result);
 
 /**
- * @brief Get the ElectLeaders result from the ElectLeaders result event.
- *
- * @param result The ElectLeaders result event.
- *
- * @returns the ElectLeaders result from the ElectLeaders result event.
- *
- * @remark This error is related to the overall ElectLeaders operation.
-           Individual partition related errors are present at partition level.
- */
-
-RD_EXPORT const rd_kafka_ElectLeadersResult_t *
-rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result);
-
-/**
- * @brief Destroy and free an rd_kafka_ElectLeadersResult_t object.
- *
- * @param result The rd_kafka_ElectLeadersResult_t object to be destroyed.
- */
-
-RD_EXPORT void
-rd_kafka_ElectLeadersResult_destroy(rd_kafka_ElectLeadersResult_t *result);
-
-/**
- * @brief Get the array of rd_kafka_topic_partition_result_t objects from the
- *        ElectLeaders result event and populates the size of the
+ * @brief Get the array of topic partition result objects from the
+ *        elect leaders result event and populates the size of the
  *        array in \p cntp.
  *
- * @param result The ElectLeaders result event.
+ * @param result The elect leaders result event.
  * @param cntp The number of elements in the array.
  *
- * @returns the array of rd_kafka_topic_partition_result_t objects from the
- *         ElectLeaders result event.
+ * @returns the array of topic partition result objects from the
+ *          elect leaders result event.
  */
 RD_EXPORT const rd_kafka_topic_partition_result_t **
 rd_kafka_ElectLeadersResult_partitions(
     const rd_kafka_ElectLeadersResult_t *result,
     size_t *cntp);
 
+/**
+ * @brief Destroy and free an elect leaders result object.
+ *
+ * @param result The elect leaders result object to be destroyed.
+ */
+RD_EXPORT void
+rd_kafka_ElectLeadersResult_destroy(rd_kafka_ElectLeadersResult_t *result);
 
 /**@}*/
 

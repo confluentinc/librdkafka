@@ -216,6 +216,8 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
 
+        rd_kafka_topic_partition_list_destroy(partitions);
+
         /*
          * Create consumer instance
          * NOTE: rd_kafka_new() takes ownership of the conf object

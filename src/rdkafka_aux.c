@@ -345,8 +345,8 @@ rd_kafka_topic_partition_result_new(const char *topic,
 
         rd_kafka_topic_partition_result_t *new_topic_partition;
 
-        new_topic_partition        = rd_calloc(1, sizeof(*new_topic_partition));
-        new_topic_partition->topic = rd_strdup(topic);
+        new_topic_partition            = rd_calloc(1, sizeof(*new_topic_partition));
+        new_topic_partition->topic     = rd_strdup(topic);
         new_topic_partition->partition = partition;
         new_topic_partition->err       = err;
         new_topic_partition->errstr    = rd_strdup(errstr);
@@ -372,22 +372,6 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
 const char *rd_kafka_topic_partition_result_error_string(
     const rd_kafka_topic_partition_result_t *partition_result) {
         return partition_result->errstr;
-}
-
-/**
- * @brief Returns the rd_kafka_topic_partition_result_t object at the given
- *        index from the array of rd_kafka_topic_partition_result_t objects
- *        from the rd_kafka_ElectLeaders_result_t event.
- *
- * @param result The rd_kafka_ElectLeadersResult_t object.
- * @param idx The index of the rd_kafka_topic_partition_result_t object to
- *
- * @returns The rd_kafka_topic_partition_result_t object at the given index.
- */
-const rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_by_idx(
-    const rd_kafka_topic_partition_result_t **result,
-    size_t idx) {
-        return result[idx];
 }
 
 /**

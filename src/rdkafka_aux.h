@@ -129,8 +129,7 @@ void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
 void rd_kafka_Node_free(void *node);
 
 /**
- * @brief Represents a topic partition result with topic,
- *        partition, error code, and error string.
+ * @brief Represents a topic partition result object.
  *
  * @remark Public Type
  */
@@ -142,16 +141,16 @@ struct rd_kafka_topic_partition_result_s {
 };
 
 /**
- * @brief Create a new rd_kafka_topic_partition_result_t object.
+ * @brief Create a new topic partition result object.
  *
  * @param topic The topic name.
  * @param partition The partition number.
  * @param err The error code.
  * @param errstr The error string.
  *
- * @returns a new allocated rd_kafka_topic_partition_result_t object.
+ * @returns a newly allocated topic partition result object.
  *          Use rd_kafka_topic_partition_result_destroy() to free object when
- * done.
+ *          done.
  */
 rd_kafka_topic_partition_result_t *
 rd_kafka_topic_partition_result_new(const char *topic,

@@ -5882,10 +5882,10 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
  * @brief Construct and send ElectLeadersRequest to \p rkb
  *        with the partitions (ElectLeaders_t*) in \p elect_leaders, using
  *        \p options.
- * 
+ *
  *        The response (unparsed) will be enqueued on \p replyq
  *        for handling by \p resp_cb (with \p opaque passed).
- * 
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
  *          transmission, otherwise an error code and errstr will be
  *          updated with a human readable error string.

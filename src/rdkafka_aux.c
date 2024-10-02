@@ -334,7 +334,7 @@ const char *rd_kafka_Node_rack(const rd_kafka_Node_t *node) {
 }
 
 /**
- * @brief Creates a new rd_kafka_topic_partition_result_t object.
+ * @brief Creates a new topic partition result object.
  */
 
 rd_kafka_topic_partition_result_t *
@@ -343,15 +343,15 @@ rd_kafka_topic_partition_result_new(const char *topic,
                                     rd_kafka_resp_err_t err,
                                     const char *errstr) {
 
-        rd_kafka_topic_partition_result_t *new_topic_partition;
+        rd_kafka_topic_partition_result_t *new_obj;
 
-        new_topic_partition            = rd_calloc(1, sizeof(*new_topic_partition));
-        new_topic_partition->topic     = rd_strdup(topic);
-        new_topic_partition->partition = partition;
-        new_topic_partition->err       = err;
-        new_topic_partition->errstr    = rd_strdup(errstr);
+        new_obj            = rd_calloc(1, sizeof(*new_obj));
+        new_obj->topic     = rd_strdup(topic);
+        new_obj->partition = partition;
+        new_obj->err       = err;
+        new_obj->errstr    = rd_strdup(errstr);
 
-        return new_topic_partition;
+        return new_obj;
 }
 
 const char *rd_kafka_topic_partition_result_topic(
@@ -385,7 +385,7 @@ void rd_kafka_topic_partition_result_destroy(
 }
 
 /**
- * @brief Destroys the array of rd_kafka_topic_partition_result_t objects.
+ * @brief Destroys the array of topic partition result  objects.
  */
 void rd_kafka_topic_partition_result_destroy_array(
     rd_kafka_topic_partition_result_t **partition_results,
@@ -410,7 +410,7 @@ void *rd_kafka_topic_partition_result_copy_opaque(const void *src,
 
 /**
  * @brief Frees the memory allocated for a
- *        rd_kafka_topic_partition_result_t object by calling
+ *        topic partition result object by calling
  *        its destroy function.
  */
 void rd_kafka_topic_partition_result_free(void *ptr) {

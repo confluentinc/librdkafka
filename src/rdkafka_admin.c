@@ -9141,8 +9141,8 @@ void rd_kafka_DescribeCluster(rd_kafka_t *rk,
 
 /**
  * @brief Creates a new ElectLeaders object with the given
- *       \p election_type and \p partitions.
-*/
+ *        \p election_type and \p partitions.
+ */
 rd_kafka_ElectLeaders_t *
 rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
                           rd_kafka_topic_partition_list_t *partitions) {
@@ -9174,7 +9174,7 @@ static void rd_kafka_ElectLeaders_free(void *ptr) {
 
 /**
  * @brief Creates a new elect leaders result object with the given
- *       \p error.
+ *        \p error.
  */
 static rd_kafka_ElectLeadersResult_t *
 rd_kafka_ElectLeadersResult_new(rd_kafka_resp_err_t err,
@@ -9266,7 +9266,7 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_arraycnt(reply, &PartArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
 
-                for(idx = 0; idx < PartArrayCnt; idx++) {
+                for (idx = 0; idx < PartArrayCnt; idx++) {
                         rd_kafka_buf_read_i32(reply, &partition);
                         rd_kafka_buf_read_i16(reply, &partition_error_code);
                         rd_kafka_buf_read_str(reply, &partition_error_msg);
@@ -9314,8 +9314,9 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:
 
-        for(int k = 0; k <= idx; k++){
-                rd_kafka_topic_partition_result_destroy(partitions_arr.rl_elems[k]);
+        for (int k = 0; k <= idx; k++) {
+                rd_kafka_topic_partition_result_destroy(
+                    partitions_arr.rl_elems[k]);
         }
         rd_free(&partitions_arr);
 

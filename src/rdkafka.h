@@ -263,7 +263,8 @@ typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 typedef struct rd_kafka_group_result_s rd_kafka_group_result_t;
 typedef struct rd_kafka_acl_result_s rd_kafka_acl_result_t;
 typedef struct rd_kafka_Uuid_s rd_kafka_Uuid_t;
-typedef struct rd_kafka_topic_partition_result_s rd_kafka_topic_partition_result_t;
+typedef struct rd_kafka_topic_partition_result_s
+    rd_kafka_topic_partition_result_t;
 /* @endcond */
 
 
@@ -6963,45 +6964,49 @@ rd_kafka_group_result_partitions(const rd_kafka_group_result_t *groupres);
 
 /**
  * @brief Topic Partition Result provides per-topic+partition operation result
- * 
+ *
  */
 
 /**
  * @returns the topic name from the topic partition result object.
- * @remark lifetime of the returned string is the same as the \p partition_result.
+ * @remark lifetime of the returned string is the same as the \p
+ *         partition_result.
  */
 RD_EXPORT const char *rd_kafka_topic_partition_result_topic(
     const rd_kafka_topic_partition_result_t *partition_result);
 
 /**
  * @returns the partition number from the topic partition result object.
- * @remark lifetime of the returned string is the same as the \p partition_result.
+ * @remark lifetime of the returned string is the same as the \p
+ *         partition_result.
  */
 RD_EXPORT int32_t rd_kafka_topic_partition_result_partition(
     const rd_kafka_topic_partition_result_t *partition_result);
 
 /**
  * @returns the error code from the topic partition result object.
- * @remark lifetime of the returned error is the same as the \p partition_result.
+ * @remark lifetime of the returned error is the same as the \p
+ *         partition_result.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
     const rd_kafka_topic_partition_result_t *partition_result);
 
 /**
  * @returns the error string or NULL if there was no error.
- * @remark lifetime of the returned string is the same as the \p partition_result.
+ * @remark lifetime of the returned string is the same as the \p
+ * partition_result.
  */
 RD_EXPORT const char *rd_kafka_topic_partition_result_error_string(
     const rd_kafka_topic_partition_result_t *partition_result);
 
 /**
- * @brief Destroy and free a rd_kafka_topic_partition_result_t object.
+ * @brief Destroy and free a topic partition result object.
  */
 RD_EXPORT void rd_kafka_topic_partition_result_destroy(
     rd_kafka_topic_partition_result_t *partition_result);
 
 /**
- * @brief Destroy and free an array of rd_kafka_topic_partition_result_t
+ * @brief Destroy and free an array of topic partition result
  *        objects.
  * @remark The array itself is not freed.
  */
@@ -10000,7 +10005,6 @@ typedef enum rd_kafka_ElectionType_t {
         RD_KAFKA_ELECTION_TYPE_UNCLEAN   = 1  /**< Unclean Election */
 } rd_kafka_ElectionType_t;
 
-
 /**
  * @brief Create a new elect leaders object. This object is later passed to
  *        rd_kafka_ElectLeaders().
@@ -10068,12 +10072,12 @@ rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result);
 /**
  * @brief Get error code from the elect leaders result.
  *
- * @param result The elect leaders result event.
+ * @param result The elect leaders result.
  *
  * @returns the error code from the elect leaders result.
- * 
+ *
  * @remark This error is related to the overall elect leaders operation.
- *         Individual partition related errors are present at partition level. 
+ *         Individual partition related errors are present at partition level.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_ElectLeadersResult_error(const rd_kafka_ElectLeadersResult_t *result);
@@ -10083,7 +10087,7 @@ rd_kafka_ElectLeadersResult_error(const rd_kafka_ElectLeadersResult_t *result);
  *        elect leaders result event and populates the size of the
  *        array in \p cntp.
  *
- * @param result The elect leaders result event.
+ * @param result The elect leaders result.
  * @param cntp The number of elements in the array.
  *
  * @returns the array of topic partition result objects from the

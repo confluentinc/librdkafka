@@ -4184,8 +4184,6 @@ rd_kafka_ListOffsetsResponse_parse(rd_kafka_op_t *rko_req,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-/**@}*/
-
 /**
  * @brief Should the received error code cause a metadata refresh?
  */

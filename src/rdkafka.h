@@ -6977,7 +6977,7 @@ RD_EXPORT const char *rd_kafka_topic_partition_result_topic(
 
 /**
  * @returns the partition number from the topic partition result object.
- * @remark lifetime of the returned string is the same as the \p
+ * @remark lifetime of the returned integer is the same as the \p
  *         partition_result.
  */
 RD_EXPORT int32_t rd_kafka_topic_partition_result_partition(
@@ -9988,12 +9988,17 @@ RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
                                    const rd_kafka_AdminOptions_t *options,
                                    rd_kafka_queue_t *rkqu);
 
+/**@}*/
+
 /**
- * ElectLeaders - Perform Preffered/ Unclean Elections
- *
+ * @name Admin API - Elect Leaders
+ * @{
  *
  */
 
+/**
+ * @brief Start leader election for the specified Topic Partitions.
+ */
 typedef struct rd_kafka_ElectLeaders_s rd_kafka_ElectLeaders_t;
 
 /**

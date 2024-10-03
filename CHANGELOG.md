@@ -3,6 +3,7 @@
 librdkafka v2.6.0 is a feature release:
 
  * [KIP-714] Complete consumer metrics support (#4808).
+ * [KIP-714] Produce latency average and maximum metrics support for parity with Java client (#4847).
  * Fix for permanent fetch errors when using a newer Fetch RPC version with an older
    inter broker protocol (#4806).
 

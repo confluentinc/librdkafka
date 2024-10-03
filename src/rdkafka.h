@@ -9991,7 +9991,7 @@ typedef struct rd_kafka_ElectLeaders_s rd_kafka_ElectLeaders_t;
 typedef enum rd_kafka_ElectionType_t {
         RD_KAFKA_ELECTION_TYPE_PREFERRED = 0, /**< Preferred Replica Election */
         RD_KAFKA_ELECTION_TYPE_UNCLEAN   = 1,  /**< Unclean Election */
-        RD_KAFKA_ELECTION_TYPE_CNT
+        RD_KAFKA_ELECTION_TYPE__CNT
 } rd_kafka_ElectionType_t;
 
 /**

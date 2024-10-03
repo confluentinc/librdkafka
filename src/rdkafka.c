@@ -4737,6 +4737,26 @@ rd_kafka_consumer_group_state_code(const char *name) {
         return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
 }
 
+static const char *rd_kafka_consumer_group_type_names[] = {
+    "Unknown", "Consumer", "Classic"};
+
+const char *
+rd_kafka_consumer_group_type_name(rd_kafka_consumer_group_type_t type) {
+        if (type < 0 || type >= RD_KAFKA_CONSUMER_GROUP_TYPE__CNT)
+                return NULL;
+        return rd_kafka_consumer_group_type_names[type];
+}
+
+rd_kafka_consumer_group_type_t
+rd_kafka_consumer_group_type_code(const char *name) {
+        size_t i;
+        for (i = 0; i < RD_KAFKA_CONSUMER_GROUP_TYPE__CNT; i++) {
+                if (!rd_strcasecmp(rd_kafka_consumer_group_type_names[i], name))
+                        return i;
+        }
+        return RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN;
+}
+
 static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                                             rd_kafka_broker_t *rkb,
                                             rd_kafka_resp_err_t err,
@@ -5002,7 +5022,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
                 state.wait_cnt++;
                 rkb_cnt++;
                 error = rd_kafka_ListGroupsRequest(
-                    rkb, 0, NULL, 0, RD_KAFKA_REPLYQ(state.q, 0),
+                    rkb, 0, NULL, 0, NULL, 0, RD_KAFKA_REPLYQ(state.q, 0),
                     rd_kafka_ListGroups_resp_cb, &state);
                 if (error) {
                         rd_kafka_ListGroups_resp_cb(rk, rkb,

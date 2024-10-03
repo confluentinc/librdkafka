@@ -2439,10 +2439,6 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                 }
         }
 
-        if (ApiVersion >= 3) {
-                rd_kafka_buf_write_tags_empty(rkbuf);
-        }
-
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
         return NULL;

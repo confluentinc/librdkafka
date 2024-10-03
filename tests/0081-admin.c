@@ -2651,9 +2651,9 @@ static void do_test_DeleteGroups(const char *what,
 
 /**
  * @brief Helper for do_test_ListConsumerGroups, makes ListConsumerGroups call
- * and finds the groups in list_consumer_groups and check if the found groups is
- * same as exp_found. The group protocol is the protocol of groups in
- * list_consumer_groups.
+ * and checks returned group count equals to \p exp_found.
+ * Parameter \p exp_type, if not UNKNOWN, needs to match
+ * returned groups type.
  */
 static void
 test_ListConsumerGroups_helper(rd_kafka_t *rk,
@@ -2662,7 +2662,7 @@ test_ListConsumerGroups_helper(rd_kafka_t *rk,
                                char **list_consumer_groups,
                                size_t list_consumer_groups_cnt,
                                size_t exp_found,
-                               rd_kafka_consumer_group_type_t group_protocol,
+                               rd_kafka_consumer_group_type_t exp_type,
                                rd_bool_t match_states) {
         rd_kafka_event_t *rkev                             = NULL;
         const rd_kafka_ListConsumerGroups_result_t *result = NULL;
@@ -2719,7 +2719,7 @@ test_ListConsumerGroups_helper(rd_kafka_t *rk,
                         group);
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupListing_state(group);
-                rd_kafka_consumer_group_type_t group_type =
+                rd_kafka_consumer_group_type_t type =
                     rd_kafka_ConsumerGroupListing_type(group);
                 for (j = 0; j < list_consumer_groups_cnt; j++) {
                         if (!strcmp(list_consumer_groups[j], group_id)) {
@@ -2727,10 +2727,10 @@ test_ListConsumerGroups_helper(rd_kafka_t *rk,
                                 TEST_ASSERT(!is_simple_consumer_group,
                                             "expected a normal group,"
                                             " got a simple group");
-                                if (group_protocol !=
+                                if (exp_type !=
                                     RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN) {
                                         TEST_ASSERT(
-                                            group_type == group_protocol,
+                                            type == exp_type,
                                             "Expected the Consumer Group Type "
                                             "to be set by the Broker.");
                                 }
@@ -2770,7 +2770,7 @@ static void do_test_ListConsumerGroups(const char *what,
                                        rd_bool_t match_types) {
 #define TEST_LIST_CONSUMER_GROUPS_CNT 4
         rd_kafka_queue_t *q;
-        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_AdminOptions_t *options;
         char errstr[512];
         char *list_consumer_groups[TEST_LIST_CONSUMER_GROUPS_CNT];
         const int partitions_cnt = 1;
@@ -2783,6 +2783,7 @@ static void do_test_ListConsumerGroups(const char *what,
             test_broker_version >= TEST_BRKVER(2, 7, 0, 0);
         rd_bool_t has_match_types =
             test_broker_version >= TEST_BRKVER(3, 8, 0, 0);
+
         rd_kafka_consumer_group_type_t group_protocol_in_use =
             RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN;
         rd_kafka_consumer_group_type_t group_protocol_not_in_use =
@@ -2794,49 +2795,49 @@ static void do_test_ListConsumerGroups(const char *what,
             rd_kafka_name(rk), what, request_timeout, RD_STR_ToF(match_states),
             RD_STR_ToF(match_types));
 
-        /* match_types would not work if the broker version is below 3.8.0.0 */
-        if (has_match_types && match_types)
-                match_types = rd_true;
-        else
+        /* match_states would not work if broker version is below 2.7.0 */
+        if (!has_match_states)
+                match_states = rd_false;
+
+        /* match_types would not work if broker version is below 3.8.0 */
+        if (!has_match_types)
                 match_types = rd_false;
 
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
+
+        if (request_timeout != -1) {
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr)));
+        }
+
+        if (match_states) {
+                rd_kafka_consumer_group_state_t empty =
+                    RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY;
+
+                TEST_CALL_ERROR__(
+                    rd_kafka_AdminOptions_set_match_consumer_group_states(
+                        options, &empty, 1));
+        }
+
         if (match_types) {
-                if (test_consumer_group_protocol_consumer()) {
-                        group_protocol_in_use =
-                            RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER;
-                        group_protocol_not_in_use =
-                            RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC;
-                } else if (test_consumer_group_protocol_classic()) {
+                if (test_consumer_group_protocol_classic()) {
                         group_protocol_in_use =
                             RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC;
                         group_protocol_not_in_use =
                             RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER;
                 } else {
-                        TEST_SAY(
-                            "'TEST_CONSUMER_GROUP_PROTOCOL' Environment "
-                            "variable not set properly, cane be consumer or "
-                            "classic\n");
-                        match_types = rd_false;
+                        group_protocol_in_use =
+                            RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER;
+                        group_protocol_not_in_use =
+                            RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC;
                 }
+                TEST_CALL_ERROR__(
+                    rd_kafka_AdminOptions_set_match_consumer_group_types(
+                        options, &group_protocol_in_use, 1));
         }
-        q = useq ? useq : rd_kafka_queue_new(rk);
-
-        if (request_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(
-                    rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
-                if (match_states) {
-                        rd_kafka_consumer_group_state_t empty =
-                            RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY;
-
-                        TEST_CALL_ERROR__(
-                            rd_kafka_AdminOptions_set_match_consumer_group_states(
-                                options, &empty, 1));
-                }
-
-                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
-                    options, request_timeout, errstr, sizeof(errstr)));
-        }
-
 
         topic             = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         exp_mdtopic.topic = topic;
@@ -2890,8 +2891,7 @@ static void do_test_ListConsumerGroups(const char *what,
 
         rd_free(topic);
 
-        if (options)
-                rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_AdminOptions_destroy(options);
 
         if (!useq)
                 rd_kafka_queue_destroy(q);

@@ -506,6 +506,7 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
 
         rd_kafka_broker_t *rkb = rd_calloc(1, sizeof(*rkb));
         rkb->rkb_nodeid        = 1001;
+        mtx_init(&rkb->rkb_lock, mtx_plain);
 
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
@@ -587,6 +588,7 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency);
         rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency);
 
+        mtx_destroy(&rkb->rkb_lock);
         rd_free(rkb);
         rwlock_destroy(&rk->rk_lock);
         rd_free(rk->rk_cgrp);

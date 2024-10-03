@@ -141,14 +141,14 @@ struct rd_kafka_topic_partition_result_s {
 };
 
 /**
- * @brief Create a new topic partition result object.
+ * @brief Create a new rd_kafka_topic_partition_result_t object.
  *
  * @param topic The topic name.
  * @param partition The partition number.
  * @param err The error code.
  * @param errstr The error string.
  *
- * @returns a newly allocated topic partition result object.
+ * @returns a newly allocated rd_kafka_topic_partition_result_t object.
  *          Use rd_kafka_topic_partition_result_destroy() to free object when
  *          done.
  */
@@ -157,9 +157,6 @@ rd_kafka_topic_partition_result_new(const char *topic,
                                     int32_t partition,
                                     rd_kafka_resp_err_t err,
                                     const char *errstr);
-
-void rd_kafka_topic_partition_result_destroy(
-    rd_kafka_topic_partition_result_t *partition_result);
 
 rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_copy(
     const rd_kafka_topic_partition_result_t *src);

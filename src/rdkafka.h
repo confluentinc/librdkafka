@@ -9980,7 +9980,7 @@ RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
  */
 
 /**
- * @brief Start leader election for the specified Topic Partitions.
+ * @brief Represents elect leaders request.
  */
 typedef struct rd_kafka_ElectLeaders_s rd_kafka_ElectLeaders_t;
 
@@ -9994,8 +9994,8 @@ typedef enum rd_kafka_ElectionType_t {
 } rd_kafka_ElectionType_t;
 
 /**
- * @brief Create a new elect leaders object. This object is later passed to
- *        rd_kafka_ElectLeaders().
+ * @brief Create a new rd_kafka_ElectLeaders_t object. This object is later
+ *        passed to rd_kafka_ElectLeaders().
  *
  * @param election_type The election type that needs to be performed,
  *        preferred or unclean.
@@ -10010,10 +10010,10 @@ rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
                           rd_kafka_topic_partition_list_t *partitions);
 
 /**
- * @brief Destroy and free an elect leaders object previously created with
- *        rd_kafka_ElectLeaders_new()
+ * @brief Destroy and free a rd_kafka_ElectLeaders_t object previously created
+ *        with rd_kafka_ElectLeaders_new()
  *
- * @param elect_leaders The elect leaders object to be destroyed.
+ * @param elect_leaders The rd_kafka_ElectLeaders_t object to be destroyed.
  */
 RD_EXPORT void
 rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leaders);
@@ -10087,9 +10087,9 @@ rd_kafka_ElectLeadersResult_partitions(
     size_t *cntp);
 
 /**
- * @brief Destroy and free an elect leaders result object.
+ * @brief Destroy and free a rd_kafka_ElectLeadersResult_t object.
  *
- * @param result The elect leaders result object to be destroyed.
+ * @param result The rd_kafka_ElectLeadersResult_t object to be destroyed.
  */
 RD_EXPORT void
 rd_kafka_ElectLeadersResult_destroy(rd_kafka_ElectLeadersResult_t *result);

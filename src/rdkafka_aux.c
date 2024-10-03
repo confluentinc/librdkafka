@@ -334,7 +334,7 @@ const char *rd_kafka_Node_rack(const rd_kafka_Node_t *node) {
 }
 
 /**
- * @brief Creates a new topic partition result object.
+ * @brief Creates a new rd_kafka_topic_partition_result_t object.
  */
 
 rd_kafka_topic_partition_result_t *
@@ -385,7 +385,7 @@ void rd_kafka_topic_partition_result_destroy(
 }
 
 /**
- * @brief Destroys the array of topic partition result  objects.
+ * @brief Destroys the array of rd_kafka_topic_partition_result_t  objects.
  */
 void rd_kafka_topic_partition_result_destroy_array(
     rd_kafka_topic_partition_result_t **partition_results,

@@ -360,6 +360,18 @@ void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
         if ((int)rkcg->rkcg_join_state == join_state)
                 return;
 
+        if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT ||
+            rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                /* Start timer when leaving the INIT or STEADY state */
+                rkcg->rkcg_ts_rebalance_start = rd_clock();
+        } else if (join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                /* End timer when reaching the STEADY state */
+                rd_dassert(rkcg->rkcg_ts_rebalance_start);
+                rd_avg_add(&rkcg->rkcg_rk->rk_telemetry.rd_avg_current
+                                .rk_avg_rebalance_latency,
+                           rd_clock() - rkcg->rkcg_ts_rebalance_start);
+        }
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPJOINSTATE",
                      "Group \"%.*s\" changed join state %s -> %s "
                      "(state %s)",
@@ -6497,7 +6509,9 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_OP_SUBSCRIBE:
-                rd_kafka_app_polled(rk);
+                /* We just want to avoid reaching max poll interval,
+                 * without anything else is done on poll. */
+                rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
 
                 /* New atomic subscription (may be NULL) */
                 if (rkcg->rkcg_group_protocol ==

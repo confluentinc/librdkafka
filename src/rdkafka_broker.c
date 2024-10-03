@@ -1873,16 +1873,31 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find(rd_kafka_broker_t *rkb,
                 rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
                 rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
                            rkbuf->rkbuf_ts_sent);
-                if (rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Fetch) {
-                        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current
-                                        .rkb_avg_fetch_latency,
-                                   rkbuf->rkbuf_ts_sent);
-                } else if (rkbuf->rkbuf_reqhdr.ApiKey ==
-                           RD_KAFKAP_OffsetCommit) {
-                        rd_avg_add(&rkb->rkb_rk->rk_telemetry.rd_avg_current
-                                        .rk_avg_commit_latency,
-                                   rkbuf->rkbuf_ts_sent);
+
+                switch (rkbuf->rkbuf_reqhdr.ApiKey) {
+                case RD_KAFKAP_Fetch:
+                        if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER)
+                                rd_avg_add(&rkb->rkb_telemetry.rd_avg_current
+                                                .rkb_avg_fetch_latency,
+                                           rkbuf->rkbuf_ts_sent);
+                        break;
+                case RD_KAFKAP_OffsetCommit:
+                        if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER)
+                                rd_avg_add(
+                                    &rkb->rkb_rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_commit_latency,
+                                    rkbuf->rkbuf_ts_sent);
+                        break;
+                case RD_KAFKAP_Produce:
+                        if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER)
+                                rd_avg_add(&rkb->rkb_telemetry.rd_avg_current
+                                                .rkb_avg_produce_latency,
+                                           rkbuf->rkbuf_ts_sent);
+                        break;
+                default:
+                        break;
                 }
+
                 if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
                     rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1) == 1)
                         rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
@@ -4818,11 +4833,17 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
             &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_outbuf_latency);
         rd_avg_destroy(
             &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
+
         if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
                 rd_avg_destroy(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency);
                 rd_avg_destroy(
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_fetch_latency);
+        } else if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER) {
+                rd_avg_destroy(
+                    &rkb->rkb_telemetry.rd_avg_current.rkb_avg_produce_latency);
+                rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover
+                                    .rkb_avg_produce_latency);
         }
 
 
@@ -4937,6 +4958,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
                     RD_AVG_GAUGE, 0, 100 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
+
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 rd_avg_init(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency,
@@ -4946,6 +4968,13 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_fetch_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
+        } else if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                rd_avg_init(
+                    &rkb->rkb_telemetry.rd_avg_current.rkb_avg_produce_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+                rd_avg_init(
+                    &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_produce_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         }
 
         rd_refcnt_init(&rkb->rkb_refcnt, 0);

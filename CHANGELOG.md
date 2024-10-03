@@ -8,7 +8,7 @@ librdkafka v2.6.0 is a feature release:
    of given types.
  * Fix for permanent fetch errors when using a newer Fetch RPC version with an older
    inter broker protocol (#4806).
- * [KIP-460]Adds a public API ElectLeaders to start Preferred/ Unclean Election for specified Topic Partitions. (#4845)
+ * [KIP-460](https://cwiki.apache.org/confluence/display/KAFKA/KIP-460%3A+Admin+Leader+Election+RPC) Admin Leader Election    RPC (#4845)
 
 
 ## Fixes

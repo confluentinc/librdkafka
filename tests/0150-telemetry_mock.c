@@ -121,13 +121,15 @@ static void test_telemetry_check_protocol_request_times(
                 expected_idx++;
         }
 
+        if (expected_idx < expected_cnt) {
+                TEST_FAIL("Expected %lu requests, got %lu", expected_cnt,
+                          expected_idx);
+        }
         rd_kafka_mock_request_destroy_array(requests, request_cnt);
 }
 
-static void test_poll_timeout(rd_kafka_t *rk,
-                              int64_t duration_ms,
-                              const char *topic,
-                              const char *bootstraps) {
+static void
+test_poll_timeout(rd_kafka_t *rk, int64_t duration_ms, const char *topic) {
         int64_t start_time = test_clock(), now, iteration_start_time = 0;
         rd_kafka_topic_t *rkt = NULL;
         rd_kafka_type_t type  = rd_kafka_type(rk);
@@ -235,7 +237,8 @@ do_test_telemetry_get_subscription_push_telemetry(rd_kafka_type_t type) {
              .jitter_percent   = 30},
         };
 
-        SUB_TEST("type %s", type == 0 ? "PRODUCER" : "CONSUMER");
+        SUB_TEST("type %s",
+                 type == RD_KAFKA_PRODUCER ? "PRODUCER" : "CONSUMER");
 
         mcluster = create_mcluster(&bootstraps, expected_metrics,
                                    RD_ARRAY_SIZE(expected_metrics),
@@ -245,7 +248,7 @@ do_test_telemetry_get_subscription_push_telemetry(rd_kafka_type_t type) {
 
         /* Poll for enough time for two pushes to be triggered, and a little
          * extra, so 2.5 x push interval. */
-        test_poll_timeout(rk, push_interval * 2.5, topic, bootstraps);
+        test_poll_timeout(rk, push_interval * 2.5, topic);
 
         test_telemetry_check_protocol_request_times(
             mcluster, requests_expected, RD_ARRAY_SIZE(requests_expected));
@@ -296,7 +299,8 @@ do_test_telemetry_empty_subscriptions_list(rd_kafka_type_t type,
 
 
         SUB_TEST("type %s, subscription regex: %s",
-                 type == 0 ? "PRODUCER" : "CONSUMER", subscription_regex);
+                 type == RD_KAFKA_PRODUCER ? "PRODUCER" : "CONSUMER",
+                 subscription_regex);
 
         mcluster = create_mcluster(&bootstraps, NULL, 0, push_interval, topic);
 
@@ -305,7 +309,7 @@ do_test_telemetry_empty_subscriptions_list(rd_kafka_type_t type,
 
         /* Poll for enough time so that the first GetTelemetrySubscription
          * request is triggered. */
-        test_poll_timeout(rk, (push_interval * 0.5), topic, bootstraps);
+        test_poll_timeout(rk, (push_interval * 0.5), topic);
 
         /* Set expected_metrics before the second GetTelemetrySubscription is
          * triggered. */
@@ -314,7 +318,7 @@ do_test_telemetry_empty_subscriptions_list(rd_kafka_type_t type,
 
         /* Poll for enough time so that the second GetTelemetrySubscriptions and
          * subsequent PushTelemetry request is triggered. */
-        test_poll_timeout(rk, (push_interval * 2), topic, bootstraps);
+        test_poll_timeout(rk, (push_interval * 2), topic);
 
         test_telemetry_check_protocol_request_times(mcluster, requests_expected,
                                                     3);
@@ -357,7 +361,8 @@ static void do_test_telemetry_terminating_push(rd_kafka_type_t type) {
              .jitter_percent   = 30},
         };
 
-        SUB_TEST("type %s", type == 0 ? "PRODUCER" : "CONSUMER");
+        SUB_TEST("type %s",
+                 type == RD_KAFKA_PRODUCER ? "PRODUCER" : "CONSUMER");
 
         mcluster = create_mcluster(&bootstraps, expected_metrics,
                                    RD_ARRAY_SIZE(expected_metrics),
@@ -368,7 +373,7 @@ static void do_test_telemetry_terminating_push(rd_kafka_type_t type) {
         /* Poll for enough time so that the initial GetTelemetrySubscriptions
          * can be sent and handled, and keep polling till it's time to
          * terminate. */
-        test_poll_timeout(rk, wait_before_termination, topic, bootstraps);
+        test_poll_timeout(rk, wait_before_termination, topic);
 
         /* Destroy the client to trigger a terminating push request
          * immediately. */
@@ -434,7 +439,8 @@ void do_test_telemetry_preferred_broker_change(rd_kafka_type_t type) {
              .jitter_percent   = 30},
         };
 
-        SUB_TEST("type %s", type == 0 ? "PRODUCER" : "CONSUMER");
+        SUB_TEST("type %s",
+                 type == RD_KAFKA_PRODUCER ? "PRODUCER" : "CONSUMER");
 
         mcluster = create_mcluster(&bootstraps, expected_metrics,
                                    RD_ARRAY_SIZE(expected_metrics),
@@ -448,13 +454,13 @@ void do_test_telemetry_preferred_broker_change(rd_kafka_type_t type) {
 
         /* Poll for enough time that the initial GetTelemetrySubscription can be
          * sent and the first PushTelemetry request can be scheduled. */
-        test_poll_timeout(rk, 0.5 * push_interval, topic, bootstraps);
+        test_poll_timeout(rk, 0.5 * push_interval, topic);
 
         /* Poll for enough time that 2 PushTelemetry requests can be sent. Set
          * the all brokers up during this time, but the preferred broker (1)
          * should remain sticky. */
         rd_kafka_mock_broker_set_up(mcluster, 2);
-        test_poll_timeout(rk, 2 * push_interval, topic, bootstraps);
+        test_poll_timeout(rk, 2 * push_interval, topic);
 
         /* Set the preferred broker (1) down. */
         rd_kafka_mock_broker_set_down(mcluster, 1);
@@ -464,13 +470,13 @@ void do_test_telemetry_preferred_broker_change(rd_kafka_type_t type) {
         rd_kafka_mock_coordinator_set(mcluster, "group", topic, 2);
 
         /* Poll for enough time that 1 PushTelemetry request can be sent. */
-        test_poll_timeout(rk, 1.25 * push_interval, topic, bootstraps);
+        test_poll_timeout(rk, 1.25 * push_interval, topic);
 
         /* Poll for enough time that 1 PushTelemetry request can be sent.  Set
          * the all brokers up during this time, but the preferred broker (2)
          * should remain sticky. */
         rd_kafka_mock_broker_set_up(mcluster, 1);
-        test_poll_timeout(rk, 1.25 * push_interval, topic, bootstraps);
+        test_poll_timeout(rk, 1.25 * push_interval, topic);
 
         test_telemetry_check_protocol_request_times(mcluster, requests_expected,
                                                     5);
@@ -529,7 +535,8 @@ void do_test_subscription_id_change(rd_kafka_type_t type) {
              .jitter_percent   = 30},
         };
 
-        SUB_TEST("type %s", type == 0 ? "PRODUCER" : "CONSUMER");
+        SUB_TEST("type %s",
+                 type == RD_KAFKA_PRODUCER ? "PRODUCER" : "CONSUMER");
 
         mcluster = create_mcluster(&bootstraps, expected_metrics,
                                    RD_ARRAY_SIZE(expected_metrics),
@@ -537,13 +544,13 @@ void do_test_subscription_id_change(rd_kafka_type_t type) {
 
         rk = create_handle(bootstraps, type, topic);
 
-        test_poll_timeout(rk, push_interval * 1.5, topic, bootstraps);
+        test_poll_timeout(rk, push_interval * 1.5, topic);
 
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_PushTelemetry, 1,
             RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID);
 
-        test_poll_timeout(rk, push_interval * 2.5, topic, bootstraps);
+        test_poll_timeout(rk, push_interval * 2.5, topic);
 
         test_telemetry_check_protocol_request_times(
             mcluster, requests_expected, RD_ARRAY_SIZE(requests_expected));
@@ -554,6 +561,67 @@ void do_test_subscription_id_change(rd_kafka_type_t type) {
 
         SUB_TEST_PASS();
 }
+
+
+/**
+ * @brief Invalid record from broker should stop metrics
+ */
+void do_test_invalid_record(rd_kafka_type_t type) {
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        char *expected_metrics[]    = {"*"};
+        rd_kafka_t *rk              = NULL;
+        const int64_t push_interval = 1000;
+        const char *topic           = test_mk_topic_name(__FUNCTION__, 1);
+
+        rd_kafka_telemetry_expected_request_t requests_expected[] = {
+            /* T= 0 : The initial GetTelemetrySubscriptions request. */
+            {.ApiKey           = RD_KAFKAP_GetTelemetrySubscriptions,
+             .broker_id        = -1,
+             .expected_diff_ms = -1,
+             .jitter_percent   = 0},
+            /* T = push_interval + jitter : The first PushTelemetry request,
+             * sent to the preferred broker 1.
+             */
+            {.ApiKey           = RD_KAFKAP_PushTelemetry,
+             .broker_id        = -1,
+             .expected_diff_ms = push_interval,
+             .jitter_percent   = 20},
+            /* T = 2*push_interval  : The second PushTelemetry request,
+             * which will fail with RD_KAFKA_RESP_ERR_INVALID_RECORD and no
+             * further telemetry requests would be sent.
+             */
+            {.ApiKey           = RD_KAFKAP_PushTelemetry,
+             .broker_id        = -1,
+             .expected_diff_ms = push_interval,
+             .jitter_percent   = 0},
+        };
+        SUB_TEST("type %s",
+                 type == RD_KAFKA_PRODUCER ? "PRODUCER" : "CONSUMER");
+
+        mcluster = create_mcluster(&bootstraps, expected_metrics,
+                                   RD_ARRAY_SIZE(expected_metrics),
+                                   push_interval, topic);
+
+        rk = create_handle(bootstraps, type, topic);
+
+        test_poll_timeout(rk, push_interval * 1.2, topic);
+
+        rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_PushTelemetry, 1,
+                                          RD_KAFKA_RESP_ERR_INVALID_RECORD);
+
+        test_poll_timeout(rk, push_interval * 2.5, topic);
+
+        test_telemetry_check_protocol_request_times(
+            mcluster, requests_expected, RD_ARRAY_SIZE(requests_expected));
+
+        /* Clean up. */
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 
 int main_0150_telemetry_mock(int argc, char **argv) {
         int type;
@@ -573,6 +641,7 @@ int main_0150_telemetry_mock(int argc, char **argv) {
                 do_test_telemetry_terminating_push(type);
                 do_test_telemetry_preferred_broker_change(type);
                 do_test_subscription_id_change(type);
+                do_test_invalid_record(type);
         };
 
         return 0;

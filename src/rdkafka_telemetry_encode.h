@@ -60,6 +60,8 @@ typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_MAX,
         RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_AVG,
         RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_LATENCY_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_LATENCY_MAX,
         RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT
 } rd_kafka_telemetry_producer_metric_name_t;
 
@@ -169,6 +171,22 @@ static const rd_kafka_telemetry_metric_info_t
                 {.name        = "producer.record.queue.time.max",
                  .description = "The maximum time in ms a record spends in the "
                                 "producer queue.",
+                 .unit          = "ms",
+                 .is_int        = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_LATENCY_AVG] =
+                {.name = "producer.request.latency.avg",
+                 .description =
+                     "The average request latency in ms for produce requests.",
+                 .unit          = "ms",
+                 .is_int        = rd_false,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_LATENCY_MAX] =
+                {.name = "producer.request.latency.max",
+                 .description =
+                     "The maximum request latency in ms for produce requests.",
                  .unit          = "ms",
                  .is_int        = rd_true,
                  .is_per_broker = rd_false,

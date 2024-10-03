@@ -37,28 +37,60 @@
 
 
 #define _NANOPB_STRING_DECODE_MAX_BUFFER_SIZE 1024
+#define MAX_LABELS                            10
+#define UNITTEST_MARKER                       "unittest"
 
-struct metric_unit_test_data {
+enum unit_test_string_decoding_state {
+        STATE_LABELS,
+        STATE_VERSION,
+        STATE_METRIC_NAME,
+        STATE_METRIC_DESCRIPTION,
+        STATE_COMPLETE
+};
+
+struct unit_test_metric_label {
+        char key[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
+        char value[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
+};
+
+struct unit_test_data {
         rd_kafka_telemetry_metric_type_t type;
         int32_t current_field;
+        struct unit_test_metric_label labels[MAX_LABELS];
+        int label_count;
+        char version[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
         char metric_name[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
         char metric_description[_NANOPB_STRING_DECODE_MAX_BUFFER_SIZE];
         int64_t metric_value_int;
+        int64_t expected_metric_value_int;
         double metric_value_double;
+        double expected_metric_value_double;
         int64_t int64_value;
         uint64_t metric_time;
+        enum unit_test_string_decoding_state state;
+        bool expecting_label_value;
 };
 
-static struct metric_unit_test_data unit_test_data;
+static struct unit_test_data unit_test_data;
 
-static void clear_unit_test_data(void) {
-        unit_test_data.type           = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE;
-        unit_test_data.current_field  = 0;
-        unit_test_data.metric_name[0] = '\0';
-        unit_test_data.metric_description[0] = '\0';
-        unit_test_data.metric_value_int      = 0;
-        unit_test_data.metric_time           = 0;
-        unit_test_data.int64_value           = 0;
+static void clear_unit_test_data(int64_t expected_value_int,
+                                 double expected_value_double) {
+        memset(&unit_test_data, 0, sizeof(unit_test_data));
+
+        unit_test_data.type  = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE;
+        unit_test_data.state = STATE_LABELS;
+        unit_test_data.expecting_label_value        = false;
+        unit_test_data.version[0]                   = '\0';
+        unit_test_data.metric_name[0]               = '\0';
+        unit_test_data.metric_description[0]        = '\0';
+        unit_test_data.current_field                = 0;
+        unit_test_data.label_count                  = 0;
+        unit_test_data.metric_value_int             = 0;
+        unit_test_data.metric_value_double          = 0.0;
+        unit_test_data.metric_time                  = 0;
+        unit_test_data.int64_value                  = 0;
+        unit_test_data.expected_metric_value_int    = expected_value_int;
+        unit_test_data.expected_metric_value_double = expected_value_double;
 }
 
 static bool
@@ -403,20 +435,59 @@ int rd_kafka_telemetry_decode_metrics(
 
 static void unit_test_telemetry_decoded_string(void *opaque,
                                                const uint8_t *decoded) {
-        switch (unit_test_data.current_field) {
-        case 2:
+
+        switch (unit_test_data.state) {
+        case STATE_LABELS:
+                if (strcmp((const char *)decoded, UNITTEST_MARKER) == 0) {
+                        unit_test_data.state                 = STATE_VERSION;
+                        unit_test_data.expecting_label_value = false;
+                } else if (unit_test_data.expecting_label_value) {
+                        rd_snprintf(unit_test_data
+                                        .labels[unit_test_data.label_count - 1]
+                                        .value,
+                                    sizeof(unit_test_data.labels[0].value),
+                                    "%s", decoded);
+                        unit_test_data.expecting_label_value = false;
+                } else {
+                        if (unit_test_data.label_count < MAX_LABELS) {
+                                rd_snprintf(
+                                    unit_test_data
+                                        .labels[unit_test_data.label_count]
+                                        .key,
+                                    sizeof(unit_test_data.labels[0].key), "%s",
+                                    decoded);
+                                unit_test_data.label_count++;
+                                unit_test_data.expecting_label_value = true;
+                        }
+                }
+                unit_test_data.current_field++;
+                break;
+
+        case STATE_VERSION:
+                rd_snprintf(unit_test_data.version,
+                            sizeof(unit_test_data.version), "%s", decoded);
+                unit_test_data.state = STATE_METRIC_NAME;
+                unit_test_data.current_field++;
+                break;
+
+        case STATE_METRIC_NAME:
                 rd_snprintf(unit_test_data.metric_name,
                             sizeof(unit_test_data.metric_name), "%s", decoded);
+                unit_test_data.state = STATE_METRIC_DESCRIPTION;
+                unit_test_data.current_field++;
                 break;
-        case 3:
+
+        case STATE_METRIC_DESCRIPTION:
                 rd_snprintf(unit_test_data.metric_description,
                             sizeof(unit_test_data.metric_description), "%s",
                             decoded);
+                unit_test_data.state = STATE_COMPLETE;
+                unit_test_data.current_field++;
                 break;
-        default:
+
+        case STATE_COMPLETE:
                 break;
         }
-        unit_test_data.current_field++;
 }
 
 static void unit_test_telemetry_decoded_NumberDataPoint(
@@ -459,9 +530,22 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
                         rd_bool_t is_double,
                         rd_bool_t is_per_broker,
                         void (*set_metric_value)(rd_kafka_t *,
-                                                 rd_kafka_broker_t *)) {
+                                                 rd_kafka_broker_t *),
+                        int64_t expected_value_int,
+                        double expected_value_double) {
         rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
         rwlock_init(&rk->rk_lock);
+        rd_kafka_conf_t *conf = rd_kafka_conf_new();
+        char *client_rack = "rack1", *transactional_id = "tx-id",
+             *group_id = "group-id", *group_instance_id = "group-instance-id";
+        rd_kafka_conf_set(conf, "client.rack", client_rack, NULL, 0);
+        rd_kafka_conf_set(conf, "transactional.id", transactional_id, NULL, 0);
+        rd_kafka_conf_set(conf, "group.id", group_id, NULL, 0);
+        rd_kafka_conf_set(conf, "group.instance.id", group_instance_id, NULL,
+                          0);
+        rk->rk_conf = *conf;
+        rd_free(conf);
+
         rk->rk_type           = rk_type;
         rk->rk_cgrp           = rd_calloc(1, sizeof(*rk->rk_cgrp));
         rk->rk_broker_cnt.val = 1;
@@ -490,7 +574,7 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
 
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
-        clear_unit_test_data();
+        clear_unit_test_data(expected_value_int, expected_value_double);
 
         rd_kafka_telemetry_decode_interface_t decode_interface = {
             .decoded_string = unit_test_telemetry_decoded_string,
@@ -506,6 +590,7 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
 
         rd_kafka_broker_t *rkb = rd_calloc(1, sizeof(*rkb));
         rkb->rkb_nodeid        = 1001;
+        mtx_init(&rkb->rkb_lock, mtx_plain);
 
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_rtt,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
@@ -524,7 +609,10 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
-
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_produce_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_produce_latency,
+                    RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
 
         set_metric_value(rk, rkb);
 
@@ -543,21 +631,62 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         RD_UT_ASSERT(unit_test_data.type == expected_type,
                      "Metric type mismatch");
         RD_UT_ASSERT(strcmp(unit_test_data.metric_name, expected_name) == 0,
-                     "Metric name mismatch");
+                     "Metric name mismatch %s != %s",
+                     unit_test_data.metric_name, expected_name);
         RD_UT_ASSERT(strcmp(unit_test_data.metric_description,
                             expected_description) == 0,
                      "Metric description mismatch");
         if (is_double)
                 RD_UT_ASSERT(
-                    rd_dbl_eq0(unit_test_data.metric_value_double, 1.0, 0.01),
+                    rd_dbl_eq0(unit_test_data.metric_value_double,
+                               unit_test_data.expected_metric_value_double,
+                               0.01),
                     "Metric value mismatch");
         else
-                RD_UT_ASSERT(unit_test_data.metric_value_int == 1,
+                RD_UT_ASSERT(unit_test_data.metric_value_int ==
+                                 unit_test_data.expected_metric_value_int,
                              "Metric value mismatch");
         if (is_per_broker)
                 RD_UT_ASSERT(unit_test_data.int64_value == 1001,
                              "Expected broker mismatch");
         RD_UT_ASSERT(unit_test_data.metric_time != 0, "Metric time mismatch");
+        if (rk_type == RD_KAFKA_PRODUCER) {
+                RD_UT_ASSERT(unit_test_data.label_count == 2,
+                             "Label count mismatch");
+                RD_UT_ASSERT(
+                    strcmp(unit_test_data.labels[0].key, "client_rack") == 0,
+                    "Client rack key mismatch");
+                RD_UT_ASSERT(
+                    strcmp(unit_test_data.labels[0].value, client_rack) == 0,
+                    "Client rack value mismatch");
+                RD_UT_ASSERT(strcmp(unit_test_data.labels[1].key,
+                                    "transactional_id") == 0,
+                             "Transactional id key mismatch");
+                RD_UT_ASSERT(strcmp(unit_test_data.labels[1].value,
+                                    transactional_id) == 0,
+                             "Transactional id value mismatch");
+        } else {
+                RD_UT_ASSERT(unit_test_data.label_count == 3,
+                             "Label count mismatch");
+                RD_UT_ASSERT(
+                    strcmp(unit_test_data.labels[0].key, "client_rack") == 0,
+                    "Client rack key mismatch");
+                RD_UT_ASSERT(
+                    strcmp(unit_test_data.labels[0].value, client_rack) == 0,
+                    "Client rack value mismatch");
+                RD_UT_ASSERT(strcmp(unit_test_data.labels[1].key, "group_id") ==
+                                 0,
+                             "Group id key mismatch");
+                RD_UT_ASSERT(strcmp(unit_test_data.labels[1].value, group_id) ==
+                                 0,
+                             "Group id value mismatch");
+                RD_UT_ASSERT(strcmp(unit_test_data.labels[2].key,
+                                    "group_instance_id") == 0,
+                             "Group instance id key mismatch");
+                RD_UT_ASSERT(strcmp(unit_test_data.labels[2].value,
+                                    group_instance_id) == 0,
+                             "Group instance id value mismatch");
+        }
 
         rd_free(rk->rk_telemetry.matched_metrics);
         rd_buf_destroy_free(rbuf);
@@ -587,9 +716,16 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency);
         rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency);
 
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_produce_latency);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_produce_latency);
+
+        mtx_destroy(&rkb->rkb_lock);
         rd_free(rkb);
         rwlock_destroy(&rk->rk_lock);
         rd_free(rk->rk_cgrp);
+        rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_free(rk);
         RD_UT_PASS();
         return 0;
@@ -597,6 +733,10 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
 
 void unit_test_telemetry_set_connects(rd_kafka_t *rk, rd_kafka_broker_t *rkb) {
         rkb->rkb_c.connects.val = 1;
+}
+
+void unit_test_telemetry_set_connects2(rd_kafka_t *rk, rd_kafka_broker_t *rkb) {
+        rkb->rkb_c.connects.val = 2;
 }
 
 void unit_test_telemetry_set_rtt(rd_kafka_t *rk, rd_kafka_broker_t *rkb) {
@@ -620,6 +760,14 @@ void unit_test_telemetry_set_queue_time(rd_kafka_t *rk,
         rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
                    1000);
         rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency,
+                   1000);
+}
+
+void unit_test_telemetry_set_produce_latency(rd_kafka_t *rk,
+                                             rd_kafka_broker_t *rkb) {
+        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_produce_latency,
+                   1000);
+        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_produce_latency,
                    1000);
 }
 
@@ -662,7 +810,9 @@ void unit_test_telemetry_set_commit_latency(rd_kafka_t *rk,
 }
 
 int unit_test_telemetry_gauge(void) {
-        int fails = 0;
+        int fails                            = 0;
+        int64_t default_expected_value_int   = 1;
+        double default_expected_value_double = 1.0;
         /* Producer metrics */
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
@@ -671,7 +821,8 @@ int unit_test_telemetry_gauge(void) {
             "producer.connection.creation.rate",
             "The rate of connections established per second.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_connects);
+            unit_test_telemetry_set_connects, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_AVG,
@@ -679,7 +830,8 @@ int unit_test_telemetry_gauge(void) {
             "producer.node.request.latency.avg",
             "The average request latency in ms for a node.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_true,
-            unit_test_telemetry_set_rtt);
+            unit_test_telemetry_set_rtt, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_NODE_REQUEST_LATENCY_MAX,
@@ -687,7 +839,8 @@ int unit_test_telemetry_gauge(void) {
             "producer.node.request.latency.max",
             "The maximum request latency in ms for a node.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_true,
-            unit_test_telemetry_set_rtt);
+            unit_test_telemetry_set_rtt, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_AVG,
@@ -695,7 +848,8 @@ int unit_test_telemetry_gauge(void) {
             "producer.produce.throttle.time.avg",
             "The average throttle time in ms for a node.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_throttle_time);
+            unit_test_telemetry_set_throttle_time, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_THROTTLE_TIME_MAX,
@@ -703,21 +857,40 @@ int unit_test_telemetry_gauge(void) {
             "producer.produce.throttle.time.max",
             "The maximum throttle time in ms for a node.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
-            unit_test_telemetry_set_throttle_time);
+            unit_test_telemetry_set_throttle_time, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_AVG,
             RD_KAFKA_TELEMETRY_METRIC_PREFIX "producer.record.queue.time.avg",
             "The average time in ms a record spends in the producer queue.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_queue_time);
+            unit_test_telemetry_set_queue_time, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
             RD_KAFKA_TELEMETRY_METRIC_PRODUCER_RECORD_QUEUE_TIME_MAX,
             RD_KAFKA_TELEMETRY_METRIC_PREFIX "producer.record.queue.time.max",
             "The maximum time in ms a record spends in the producer queue.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
-            unit_test_telemetry_set_queue_time);
+            unit_test_telemetry_set_queue_time, default_expected_value_int,
+            default_expected_value_double);
+        fails += unit_test_telemetry(
+            RD_KAFKA_PRODUCER,
+            RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_LATENCY_AVG,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX "producer.request.latency.avg",
+            "The average request latency in ms for produce requests.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
+            unit_test_telemetry_set_produce_latency, default_expected_value_int,
+            default_expected_value_double);
+        fails += unit_test_telemetry(
+            RD_KAFKA_PRODUCER,
+            RD_KAFKA_TELEMETRY_METRIC_PRODUCER_PRODUCE_LATENCY_MAX,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX "producer.request.latency.max",
+            "The maximum request latency in ms for produce requests.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
+            unit_test_telemetry_set_produce_latency, default_expected_value_int,
+            default_expected_value_double);
 
         /* Consumer metrics */
         fails += unit_test_telemetry(
@@ -727,7 +900,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.connection.creation.rate",
             "The rate of connections established per second.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_connects);
+            unit_test_telemetry_set_connects, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG,
@@ -735,7 +909,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.node.request.latency.avg",
             "The average request latency in ms for a node.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_true,
-            unit_test_telemetry_set_rtt);
+            unit_test_telemetry_set_rtt, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX,
@@ -743,7 +918,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.node.request.latency.max",
             "The maximum request latency in ms for a node.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_true,
-            unit_test_telemetry_set_rtt);
+            unit_test_telemetry_set_rtt, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS,
@@ -751,7 +927,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.coordinator.assigned.partitions",
             "The number of partitions currently assigned to this consumer.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
-            unit_test_telemetry_set_coordinator_assigned_partitions);
+            unit_test_telemetry_set_coordinator_assigned_partitions,
+            default_expected_value_int, default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_REBALANCE_LATENCY_AVG,
@@ -760,7 +937,8 @@ int unit_test_telemetry_gauge(void) {
             "The average rebalance latency in ms for the "
             "consumer coordinator.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_rebalance_latency);
+            unit_test_telemetry_set_rebalance_latency,
+            default_expected_value_int, default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_REBALANCE_LATENCY_MAX,
@@ -769,7 +947,8 @@ int unit_test_telemetry_gauge(void) {
             "The maximum rebalance latency in ms for the "
             "consumer coordinator.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
-            unit_test_telemetry_set_rebalance_latency);
+            unit_test_telemetry_set_rebalance_latency,
+            default_expected_value_int, default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_FETCH_MANAGER_FETCH_LATENCY_AVG,
@@ -777,7 +956,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.fetch.manager.fetch.latency.avg",
             "The average fetch latency in ms for the fetch manager.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_fetch_latency);
+            unit_test_telemetry_set_fetch_latency, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_FETCH_MANAGER_FETCH_LATENCY_MAX,
@@ -785,14 +965,16 @@ int unit_test_telemetry_gauge(void) {
             "consumer.fetch.manager.fetch.latency.max",
             "The maximum fetch latency in ms for the fetch manager.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
-            unit_test_telemetry_set_fetch_latency);
+            unit_test_telemetry_set_fetch_latency, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_POLL_IDLE_RATIO_AVG,
             RD_KAFKA_TELEMETRY_METRIC_PREFIX "consumer.poll.idle.ratio.avg",
             "The average ratio of idle to poll for a consumer.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_poll_idle_ratio);
+            unit_test_telemetry_set_poll_idle_ratio, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_COMMIT_LATENCY_AVG,
@@ -800,7 +982,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.coordinator.commit.latency.avg",
             "The average commit latency in ms for the consumer coordinator.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_commit_latency);
+            unit_test_telemetry_set_commit_latency, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_COMMIT_LATENCY_MAX,
@@ -808,12 +991,16 @@ int unit_test_telemetry_gauge(void) {
             "consumer.coordinator.commit.latency.max",
             "The maximum commit latency in ms for the consumer coordinator.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
-            unit_test_telemetry_set_commit_latency);
+            unit_test_telemetry_set_commit_latency, default_expected_value_int,
+            default_expected_value_double);
         return fails;
 }
 
 int unit_test_telemetry_sum(void) {
-        int fails = 0;
+        int fails                            = 0;
+        int64_t default_expected_value_int   = 1;
+        double default_expected_value_double = 1.0;
+
         /* Producer metrics */
         fails += unit_test_telemetry(
             RD_KAFKA_PRODUCER,
@@ -822,7 +1009,8 @@ int unit_test_telemetry_sum(void) {
             "producer.connection.creation.total",
             "The total number of connections established.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
-            unit_test_telemetry_set_connects);
+            unit_test_telemetry_set_connects, default_expected_value_int,
+            default_expected_value_double);
 
         /* Consumer metrics */
         fails += unit_test_telemetry(
@@ -832,7 +1020,18 @@ int unit_test_telemetry_sum(void) {
             "consumer.connection.creation.total",
             "The total number of connections established.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
-            unit_test_telemetry_set_connects);
+            unit_test_telemetry_set_connects, default_expected_value_int,
+            default_expected_value_double);
+        /* Test with expected value 2 */
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.connection.creation.total",
+            "The total number of connections established.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
+            unit_test_telemetry_set_connects2, 2, 0.0);
+
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_REBALANCE_LATENCY_TOTAL,
@@ -841,7 +1040,8 @@ int unit_test_telemetry_sum(void) {
             "The total rebalance latency in ms for the "
             "consumer coordinator.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
-            unit_test_telemetry_set_rebalance_latency);
+            unit_test_telemetry_set_rebalance_latency,
+            default_expected_value_int, default_expected_value_double);
         return fails;
 }
 

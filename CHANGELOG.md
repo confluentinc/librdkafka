@@ -1,8 +1,18 @@
+# confluent-kafka-javascript v0.2.1
+
+v0.2.1 is a limited availability release. It is supported for all usage.
+
+## Features
+
+1. Update README, docs, and examples for Confluent's Schema Registry client.
+
+
 # confluent-kafka-javascript v0.2.0
 
 v0.2.0 is a limited availability release. It is supported for all usage.
 
 ## Features
+
 1. Switch to using `librdkafka` on the latest released tag `v2.5.3` instead of `master`.
 
 

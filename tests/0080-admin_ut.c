@@ -2403,7 +2403,7 @@ static void do_test_ElectLeaders(const char *what,
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_ELECTLEADERS);
 
-                exp_timeout = MY_SOCKET_TIMEOUT_MS;
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
 
                 err = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));

@@ -69,20 +69,19 @@ static void stop(int sig) {
 
 static void usage(const char *reason, ...) {
 
-        fprintf(
-            stderr,
-            "Elect Leaders usage examples\n"
-            "\n"
-            "Usage: %s <options> <election_type( 0(Preffered)/ 1(Unclean))> "
-            "<topic1> <partition1> ...\n"
-            "\n"
-            "Options:\n"
-            "   -b <brokers>    Bootstrap server list to connect to.\n"
-            "   -X <prop=val>   Set librdkafka configuration property.\n"
-            "                   See CONFIGURATION.md for full list.\n"
-            "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
-            "\n",
-            argv0, rd_kafka_get_debug_contexts());
+        fprintf(stderr,
+                "Elect Leaders usage examples\n"
+                "\n"
+                "Usage: %s <options> <election_type> "
+                "<topic1> <partition1> ...\n"
+                "\n"
+                "Options:\n"
+                "   -b <brokers>    Bootstrap server list to connect to.\n"
+                "   -X <prop=val>   Set librdkafka configuration property.\n"
+                "                   See CONFIGURATION.md for full list.\n"
+                "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
+                "\n",
+                argv0, rd_kafka_get_debug_contexts());
 
         if (reason) {
                 va_list ap;
@@ -125,7 +124,6 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
         const rd_kafka_topic_partition_result_t **results;
         size_t results_cnt;
         size_t i;
-        int retval = 0;
         const rd_kafka_ElectLeadersResult_t *res;
 
         res = rd_kafka_ElectLeaders_result(result);
@@ -135,8 +133,9 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
         results = rd_kafka_ElectLeadersResult_partitions(res, &results_cnt);
 
         if (err) {
-                printf("%% ElectLeaders failed: %s\n", rd_kafka_err2str(err));
-                retval = 1;
+                fprintf(stderr, "%% ElectLeaders failed: %s\n",
+                        rd_kafka_err2str(err));
+                return 1;
         } else {
                 for (i = 0; i < results_cnt; i++) {
                         if (rd_kafka_topic_partition_result_error(results[i])) {
@@ -161,7 +160,7 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
                 }
         }
 
-        return retval;
+        return 0;
 }
 
 /**
@@ -191,30 +190,29 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         int i;
         int retval = 0;
 
-        if (argc < 3) {
+        if (argc < 3 || (argc - 1) % 2 != 0) {
                 usage("Invalid number of arguments");
         }
-        int etype = parse_int("election_type", argv[0]);
 
-        if (etype == 0) {
-                election_type = RD_KAFKA_ELECTION_TYPE_PREFERRED;
-        } else if (etype == 1) {
-                election_type = RD_KAFKA_ELECTION_TYPE_UNCLEAN;
-        } else {
-                usage("Invalid election type");
-        }
+        election_type = parse_int("election_type", argv[0]);
+
         argc--;
         argv++;
         partitions = rd_kafka_topic_partition_list_new(argc / 2);
-        if (argc % 2 != 0) {
-                usage("Invalid number of arguments");
-        }
         for (i = 0; i < argc; i += 2) {
                 rd_kafka_topic_partition_list_add(
                     partitions, argv[i], parse_int("partition", argv[i + 1]));
         }
 
         elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
+
+        if (elect_leaders == NULL) {
+                rd_kafka_topic_partition_list_destroy(partitions);
+                fatal(
+                    "Failed to create ElectLeaders object, check election "
+                    "type");
+                goto exit;
+        }
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
@@ -225,9 +223,8 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
          *       this call.
          */
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-        if (!rk) {
-                usage("Failed to create new consumer: %s", errstr);
-        }
+        if (!rk)
+                fatal("Failed to create new consumer: %s", errstr);
 
         /*
          * Elect Leaders
@@ -254,7 +251,9 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         }
 
         rd_kafka_ElectLeaders(rk, elect_leaders, options, queue);
+
         rd_kafka_ElectLeaders_destroy(elect_leaders);
+
         rd_kafka_AdminOptions_destroy(options);
 
 

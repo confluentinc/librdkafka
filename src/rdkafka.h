@@ -9990,7 +9990,7 @@ typedef struct rd_kafka_ElectLeaders_s rd_kafka_ElectLeaders_t;
  */
 typedef enum rd_kafka_ElectionType_t {
         RD_KAFKA_ELECTION_TYPE_PREFERRED = 0, /**< Preferred Replica Election */
-        RD_KAFKA_ELECTION_TYPE_UNCLEAN   = 1,  /**< Unclean Election */
+        RD_KAFKA_ELECTION_TYPE_UNCLEAN   = 1, /**< Unclean Election */
         RD_KAFKA_ELECTION_TYPE__CNT
 } rd_kafka_ElectionType_t;
 
@@ -10003,7 +10003,8 @@ typedef enum rd_kafka_ElectionType_t {
  * @param partitions The topic partitions for which the leader election
  *        needs to be performed.
  *
- * @returns a new allocated elect leaders object.
+ * @returns a new allocated elect leaders object or returns NULL in case
+ *          of invalid election_type.
  *          Use rd_kafka_ElectLeaders_destroy() to free object when done.
  */
 RD_EXPORT rd_kafka_ElectLeaders_t *

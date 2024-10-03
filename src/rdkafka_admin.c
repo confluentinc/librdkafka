@@ -9145,9 +9145,8 @@ rd_kafka_ElectLeaders_t *
 rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
                           rd_kafka_topic_partition_list_t *partitions) {
 
-        if(election_type >= RD_KAFKA_ELECTION_TYPE_CNT){
-                rd_snprintf(errstr, errstr_size,
-                            "Invalid election type: %d", election_type);
+        if (election_type < RD_KAFKA_ELECTION_TYPE_PREFERRED ||
+            election_type >= RD_KAFKA_ELECTION_TYPE__CNT) {
                 return NULL;
         }
 

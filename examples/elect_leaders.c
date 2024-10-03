@@ -245,9 +245,7 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_ElectLeaders(rk, elect_leaders, options, queue);
 
         rd_kafka_ElectLeaders_destroy(elect_leaders);
-
         rd_kafka_AdminOptions_destroy(options);
-
 
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by

@@ -9235,8 +9235,8 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_t partitions_arr;
         rd_kafka_ElectLeaders_t *request =
             rko_req->rko_u.admin_request.args.rl_elems[0];
-        rd_kafka_topic_partition_list_t *topic_partitions = request->partitions;
         int i;
+        int j;
 
         rd_kafka_buf_read_throttle_time(reply);
 
@@ -9267,7 +9267,7 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_arraycnt(reply, &PartArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
 
-                for (int j = 0; j < PartArrayCnt; j++) {
+                for (j = 0; j < PartArrayCnt; j++) {
                         rd_kafka_buf_read_i32(reply, &partition);
                         rd_kafka_buf_read_i16(reply, &partition_error_code);
                         rd_kafka_buf_read_str(reply, &partition_error_msg);
@@ -9292,7 +9292,7 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
                             partition_errstr);
 
                         orig_pos = rd_kafka_topic_partition_list_find_idx(
-                            topic_partitions, topic, partition);
+                            request->partitions, topic, partition);
 
                         if (orig_pos == -1) {
                                 rd_kafka_buf_parse_fail(

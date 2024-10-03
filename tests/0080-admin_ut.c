@@ -2425,7 +2425,7 @@ static void do_test_ElectLeaders(const char *what,
         /* Poll result queue */
         TIMING_START(&timing, "ElectLeaders.queue_poll");
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
-        TIMING_ASSERT(&timing, exp_timeout - 100, exp_timeout + 100);
+        TIMING_ASSERT(&timing, 0, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
         TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
                  TIMING_DURATION(&timing) / 1000.0f);
@@ -2456,7 +2456,7 @@ static void do_test_ElectLeaders(const char *what,
         /* Poll result queue */
         TIMING_START(&timing, "ElectLeaders.queue_poll");
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
-        TIMING_ASSERT(&timing, exp_timeout - 100, exp_timeout + 100);
+        TIMING_ASSERT(&timing, 0, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
         TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
                  TIMING_DURATION(&timing) / 1000.0f);

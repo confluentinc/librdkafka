@@ -206,14 +206,6 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
 
-        if (elect_leaders == NULL) {
-                rd_kafka_topic_partition_list_destroy(partitions);
-                fatal(
-                    "Failed to create ElectLeaders object, check election "
-                    "type");
-                goto exit;
-        }
-
         rd_kafka_topic_partition_list_destroy(partitions);
 
         /*

@@ -9145,11 +9145,6 @@ rd_kafka_ElectLeaders_t *
 rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
                           rd_kafka_topic_partition_list_t *partitions) {
 
-        if (election_type < RD_KAFKA_ELECTION_TYPE_PREFERRED ||
-            election_type >= RD_KAFKA_ELECTION_TYPE__CNT) {
-                return NULL;
-        }
-
         rd_kafka_ElectLeaders_t *elect_leaders;
 
         elect_leaders = rd_calloc(1, sizeof(*elect_leaders));

@@ -446,6 +446,11 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                         rd_list_destroy(rko->rko_u.admin_request.options
                                             .match_consumer_group_states.u.PTR);
                 }
+                if (rko->rko_u.admin_request.options.match_consumer_group_types
+                        .u.PTR) {
+                        rd_list_destroy(rko->rko_u.admin_request.options
+                                            .match_consumer_group_types.u.PTR);
+                }
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);
                 RD_IF_FREE(rko->rko_u.admin_request.coordkey, rd_free);
                 break;

@@ -5903,7 +5903,6 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
         int16_t ApiVersion;
         const rd_kafka_ElectLeaders_t *elect_leaders_request;
         int op_timeout;
-        int i;
 
         if (rd_list_cnt(elect_leaders) == 0) {
                 rd_snprintf(errstr, errstr_size,

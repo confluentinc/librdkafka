@@ -343,15 +343,15 @@ rd_kafka_topic_partition_result_new(const char *topic,
                                     rd_kafka_resp_err_t err,
                                     const char *errstr) {
 
-        rd_kafka_topic_partition_result_t *new_obj;
+        rd_kafka_topic_partition_result_t *new_result;
 
-        new_obj            = rd_calloc(1, sizeof(*new_obj));
-        new_obj->topic     = rd_strdup(topic);
-        new_obj->partition = partition;
-        new_obj->err       = err;
-        new_obj->errstr    = rd_strdup(errstr);
+        new_result            = rd_calloc(1, sizeof(*new_result));
+        new_result->topic     = rd_strdup(topic);
+        new_result->partition = partition;
+        new_result->err       = err;
+        new_result->errstr    = rd_strdup(errstr);
 
-        return new_obj;
+        return new_result;
 }
 
 const char *rd_kafka_topic_partition_result_topic(

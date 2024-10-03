@@ -129,7 +129,7 @@ void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
 void rd_kafka_Node_free(void *node);
 
 /**
- * @brief Represents a topic partition result object.
+ * @brief Represents a topic partition result.
  *
  * @remark Public Type
  */
@@ -166,6 +166,13 @@ rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_copy(
 
 void *rd_kafka_topic_partition_result_copy_opaque(const void *src,
                                                   void *opaque);
+
+void rd_kafka_topic_partition_result_destroy(
+    rd_kafka_topic_partition_result_t *partition_result);
+
+void rd_kafka_topic_partition_result_destroy_array(
+    rd_kafka_topic_partition_result_t **partition_results,
+    int32_t partition_results_cnt);
 
 void rd_kafka_topic_partition_result_free(void *ptr);
 

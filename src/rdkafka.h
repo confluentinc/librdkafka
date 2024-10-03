@@ -6977,16 +6977,12 @@ RD_EXPORT const char *rd_kafka_topic_partition_result_topic(
 
 /**
  * @returns the partition number from the topic partition result object.
- * @remark lifetime of the returned integer is the same as the \p
- *         partition_result.
  */
 RD_EXPORT int32_t rd_kafka_topic_partition_result_partition(
     const rd_kafka_topic_partition_result_t *partition_result);
 
 /**
  * @returns the error code from the topic partition result object.
- * @remark lifetime of the returned error is the same as the \p
- *         partition_result.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
     const rd_kafka_topic_partition_result_t *partition_result);
@@ -6994,25 +6990,10 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
 /**
  * @returns the error string or NULL if there was no error.
  * @remark lifetime of the returned string is the same as the \p
- * partition_result.
+ *         partition_result.
  */
 RD_EXPORT const char *rd_kafka_topic_partition_result_error_string(
     const rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @brief Destroy and free a topic partition result object.
- */
-RD_EXPORT void rd_kafka_topic_partition_result_destroy(
-    rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @brief Destroy and free an array of topic partition result
- *        objects.
- * @remark The array itself is not freed.
- */
-RD_EXPORT void rd_kafka_topic_partition_result_destroy_array(
-    rd_kafka_topic_partition_result_t **partition_results,
-    int32_t partition_results_cnt);
 
 
 /**@}*/
@@ -9993,6 +9974,8 @@ RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
 /**
  * @name Admin API - Elect Leaders
  * @{
+ *
+ *
  *
  */
 

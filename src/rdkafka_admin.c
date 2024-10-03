@@ -9233,6 +9233,11 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
         int16_t top_level_error_code          = 0;
         int32_t TopicArrayCnt;
         rd_list_t partitions_arr;
+        rd_kafka_ElectLeaders_t *elect_leaders_request =
+            rko_req->rko_u.admin_request.args.rl_elems[0];
+        rd_kafka_topic_partition_list_t *topic_partitions =
+            rd_kafka_topic_partition_list_copy(
+                elect_leaders_request->partitions);
         int i;
         int idx;
 
@@ -9257,6 +9262,7 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafkap_str_t partition_error_msg;
                 char *partition_errstr;
                 int32_t PartArrayCnt;
+                int orig_pos;
 
                 rd_kafka_buf_read_str(reply, &ktopic);
                 RD_KAFKAP_STR_DUPA(&topic, &ktopic);
@@ -9288,7 +9294,32 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
                             topic, partition, partition_error_code,
                             partition_errstr);
 
-                        rd_list_add(&partitions_arr, partition_result);
+                        orig_pos = rd_kafka_topic_partition_list_find_idx(
+                            topic_partitions, topic, partition);
+
+                        if (orig_pos == -1) {
+                                rd_kafka_topic_partition_list_destroy(
+                                    topic_partitions);
+                                rd_kafka_buf_parse_fail(
+                                    reply,
+                                    "Broker returned partition %s [%" PRId32
+                                    "] that was not "
+                                    "included in the original request",
+                                    topic, partition);
+                        }
+
+                        if (rd_list_elem(&partitions_arr, orig_pos) != NULL) {
+                                rd_kafka_topic_partition_list_destroy(
+                                    topic_partitions);
+                                rd_kafka_buf_parse_fail(
+                                    reply,
+                                    "Broker returned partition %s [%" PRId32
+                                    "] multiple times",
+                                    topic, partition);
+                        }
+
+                        rd_list_set(&partitions_arr, orig_pos,
+                                    partition_result);
                 }
                 rd_kafka_buf_skip_tags(reply);
         }
@@ -9307,16 +9338,13 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
 
         *rko_resultp = rko_result;
 
+        rd_kafka_topic_partition_list_destroy(topic_partitions);
         rd_list_destroy(&partitions_arr);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:
 
-        for (int k = 0; k <= idx; k++) {
-                rd_kafka_topic_partition_result_destroy(
-                    partitions_arr.rl_elems[k]);
-        }
-        rd_free(&partitions_arr);
+        rd_list_destroy(&partitions_arr);
 
         if (rko_result)
                 rd_kafka_op_destroy(rko_result);

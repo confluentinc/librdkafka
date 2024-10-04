@@ -104,6 +104,17 @@ rd_ut_coverage_check(const char *file, const char *func, int line, int covnr) {
 }
 /**@}*/
 
+#else
+
+void rd_ut_coverage(const char * /* file */, const char * /* func */, int /* line */, int /* covnr */) {
+}
+
+
+int64_t
+rd_ut_coverage_check(const char * /* file */, const char * /* func */, int /* line */, int /* covnr */) {
+    return 1;
+}
+
 #endif /* ENABLE_CODECOV */
 
 

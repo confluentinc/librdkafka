@@ -244,16 +244,7 @@ static RD_INLINE RD_UNUSED void rtrim(char *str) {
         if (test_needs_auth()) {                                               \
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");         \
                 return RET;                                                    \
-        }                                                                      \
-        if (test_consumer_group_protocol() &&                                  \
-            strcmp(test_consumer_group_protocol(), "classic")) {               \
-                TEST_SKIP(                                                     \
-                    "Mock cluster cannot be used "                             \
-                    "with group.protocol=%s\n",                                \
-                    test_consumer_group_protocol());                           \
-                return RET;                                                    \
         }
-
 
 void test_conf_init(rd_kafka_conf_t **conf,
                     rd_kafka_topic_conf_t **topic_conf,
@@ -709,6 +700,7 @@ void test_any_conf_set(rd_kafka_conf_t *conf,
                        const char *name,
                        const char *val);
 
+rd_kafka_topic_partition_list_t *test_topic_partitions(int cnt, ...);
 void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions);
 int test_partition_list_cmp(rd_kafka_topic_partition_list_t *al,
@@ -726,6 +718,11 @@ void test_create_topic(rd_kafka_t *use_rk,
                        const char *topicname,
                        int partition_cnt,
                        int replication_factor);
+void test_create_topic_wait_exists(rd_kafka_t *use_rk,
+                                   const char *topicname,
+                                   int partition_cnt,
+                                   int replication_factor,
+                                   int timeout);
 rd_kafka_resp_err_t test_auto_create_topic_rkt(rd_kafka_t *rk,
                                                rd_kafka_topic_t *rkt,
                                                int timeout_ms);
@@ -866,6 +863,10 @@ size_t test_mock_wait_matching_requests(
     rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
     void *opaque);
 
+void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
+                                         int member_cnt,
+                                         ...);
+
 int test_error_is_not_fatal_cb(rd_kafka_t *rk,
                                rd_kafka_resp_err_t err,
                                const char *reason);
@@ -873,7 +874,7 @@ int test_error_is_not_fatal_cb(rd_kafka_t *rk,
 
 const char *test_consumer_group_protocol();
 
-int test_consumer_group_protocol_generic();
+int test_consumer_group_protocol_classic();
 
 int test_consumer_group_protocol_consumer();
 

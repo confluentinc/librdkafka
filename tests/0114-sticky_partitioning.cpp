@@ -44,7 +44,7 @@
  */
 static void do_test_sticky_partitioning(int sticky_delay) {
   std::string topic = Test::mk_topic_name(__FILE__, 1);
-  Test::create_topic(NULL, topic.c_str(), 3, 1);
+  Test::create_topic_wait_exists(NULL, topic.c_str(), 3, 1, 5000);
 
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 0);

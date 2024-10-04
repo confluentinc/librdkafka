@@ -131,6 +131,8 @@ int main_0068_produce_timeout(int argc, char **argv) {
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
 
+        TEST_LATER_CHECK();
+
         return 0;
 }
 

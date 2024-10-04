@@ -64,6 +64,7 @@ int main_0009_mock_cluster(int argc, char **argv) {
         c = test_create_consumer(topic, NULL, conf, NULL);
 
         rkt = test_create_producer_topic(p, topic, NULL);
+        test_wait_topic_exists(p, topic, 5000);
 
         /* Produce */
         test_produce_msgs(p, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, NULL, 0);

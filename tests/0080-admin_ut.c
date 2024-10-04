@@ -528,19 +528,41 @@ static void do_test_ListConsumerGroups(const char *what,
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         if (with_options) {
-                rd_kafka_consumer_group_state_t duplicate[2] = {
+                rd_kafka_error_t *error;
+                rd_kafka_consumer_group_state_t duplicate_states[2] = {
                     RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
                     RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY};
+                rd_kafka_consumer_group_type_t duplicate_types[2] = {
+                    RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC,
+                    RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC};
+                rd_kafka_consumer_group_type_t unknown_type[1] = {
+                    RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN};
 
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
                 /* Test duplicate error on match states */
-                rd_kafka_error_t *error =
-                    rd_kafka_AdminOptions_set_match_consumer_group_states(
-                        options, duplicate, 2);
+                error = rd_kafka_AdminOptions_set_match_consumer_group_states(
+                    options, duplicate_states, 2);
                 TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
                             "Expected error on duplicate states,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test duplicate error on match group types */
+                error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                    options, duplicate_types, 2);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on duplicate group types,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test invalid args error on setting UNKNOWN group type in
+                 * match group types */
+                error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                    options, unknown_type, 1);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on Unknown group type,"
                             " got no error");
                 rd_kafka_error_destroy(error);
 
@@ -2555,6 +2577,10 @@ static void do_test_unclean_destroy(rd_kafka_type_t cltype, int with_mainq) {
          * rely on the controller not being found. */
         test_conf_set(conf, "bootstrap.servers", "");
         test_conf_set(conf, "socket.timeout.ms", "60000");
+        if (test_consumer_group_protocol()) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol());
+        }
 
         rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
@@ -2761,6 +2787,10 @@ static rd_kafka_t *create_admin_client(rd_kafka_type_t cltype) {
          * rely on the controller not being found. */
         test_conf_set(conf, "bootstrap.servers", "");
         test_conf_set(conf, "socket.timeout.ms", MY_SOCKET_TIMEOUT_MS_STR);
+        if (test_consumer_group_protocol()) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol());
+        }
         /* For use with the background queue */
         rd_kafka_conf_set_background_event_cb(conf, background_event_cb);
 

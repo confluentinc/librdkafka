@@ -9175,13 +9175,10 @@ static void rd_kafka_ElectLeaders_free(void *ptr) {
  *        \p error and \p partitions.
  */
 static rd_kafka_ElectLeadersResult_t *
-rd_kafka_ElectLeadersResult_new(rd_kafka_resp_err_t err,
-                                rd_list_t *partitions) {
+rd_kafka_ElectLeadersResult_new(rd_list_t *partitions) {
 
         rd_kafka_ElectLeadersResult_t *result;
         result = rd_calloc(1, sizeof(*result));
-
-        result->err = err;
         rd_list_init_copy(&result->partitions, partitions);
         rd_list_copy_to(&result->partitions, partitions,
                         rd_kafka_topic_partition_result_copy_opaque, NULL);
@@ -9192,11 +9189,6 @@ const rd_kafka_ElectLeadersResult_t *
 rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result) {
         return (const rd_kafka_ElectLeadersResult_t *)rd_list_elem(
             &result->rko_u.admin_result.results, 0);
-}
-
-rd_kafka_resp_err_t
-rd_kafka_ElectLeadersResult_error(const rd_kafka_ElectLeadersResult_t *result) {
-        return result->err;
 }
 
 const rd_kafka_topic_partition_result_t **
@@ -9242,6 +9234,12 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
 
         if (rd_kafka_buf_ApiVersion(reply) >= 1) {
                 rd_kafka_buf_read_i16(reply, &top_level_error_code);
+        }
+
+        if (top_level_error_code) {
+                rd_kafka_admin_result_fail(rko_req, top_level_error_code,
+                                           "ElectLeaders request failed: %s", rd_kafka_err2str(top_level_error_code));
+                return top_level_error_code;
         }
 
         /* #partitions */
@@ -9319,8 +9317,7 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
 
         rd_kafka_buf_skip_tags(reply);
 
-        result = rd_kafka_ElectLeadersResult_new(top_level_error_code,
-                                                 &partitions_arr);
+        result = rd_kafka_ElectLeadersResult_new(&partitions_arr);
 
         rko_result = rd_kafka_admin_result_new(rko_req);
 

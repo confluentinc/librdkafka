@@ -120,7 +120,6 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 
 static int
 print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
-        rd_kafka_resp_err_t err;
         const rd_kafka_topic_partition_result_t **results;
         size_t results_cnt;
         size_t i;
@@ -128,35 +127,26 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
 
         res = rd_kafka_ElectLeaders_result(result);
 
-        err = rd_kafka_ElectLeadersResult_error(res);
-
         results = rd_kafka_ElectLeadersResult_partitions(res, &results_cnt);
-
-        if (err) {
-                fprintf(stderr, "%% ElectLeaders failed: %s\n",
-                        rd_kafka_err2str(err));
-                return 1;
-        } else {
-                for (i = 0; i < results_cnt; i++) {
-                        if (rd_kafka_topic_partition_result_error(results[i])) {
-                                printf(
-                                    "%% ElectLeaders failed for %s [%" PRId32
-                                    "] : %s\n",
-                                    rd_kafka_topic_partition_result_topic(
-                                        results[i]),
-                                    rd_kafka_topic_partition_result_partition(
-                                        results[i]),
-                                    rd_kafka_topic_partition_result_error_string(
-                                        results[i]));
-                        } else {
-                                printf(
-                                    "%% ElectLeaders succeeded for %s [%" PRId32
-                                    "]\n",
-                                    rd_kafka_topic_partition_result_topic(
-                                        results[i]),
-                                    rd_kafka_topic_partition_result_partition(
-                                        results[i]));
-                        }
+        for (i = 0; i < results_cnt; i++) {
+                if (rd_kafka_topic_partition_result_error(results[i])) {
+                        printf(
+                                "%% ElectLeaders failed for %s [%" PRId32
+                                "] : %s\n",
+                                rd_kafka_topic_partition_result_topic(
+                                results[i]),
+                                rd_kafka_topic_partition_result_partition(
+                                results[i]),
+                                rd_kafka_topic_partition_result_error_string(
+                                results[i]));
+                } else {
+                        printf(
+                                "%% ElectLeaders succeeded for %s [%" PRId32
+                                "]\n",
+                                rd_kafka_topic_partition_result_topic(
+                                results[i]),
+                                rd_kafka_topic_partition_result_partition(
+                                results[i]));
                 }
         }
 

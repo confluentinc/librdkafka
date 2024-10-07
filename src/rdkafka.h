@@ -5315,9 +5315,9 @@ rd_kafka_consumer_group_type_name(rd_kafka_consumer_group_type_t type);
  *
  * @param name The group type name.
  *
- * @remark The comparison is case-insensitive.
- *
  * @return The group type value corresponding to the provided group type name.
+ *
+ * @remark The comparison is case-insensitive.
  */
 RD_EXPORT
 rd_kafka_consumer_group_type_t

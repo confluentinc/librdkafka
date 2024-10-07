@@ -2534,6 +2534,14 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+void rd_kafka_mock_group_initial_rebalance_delay_ms(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t delay_ms) {
+        mtx_lock(&mcluster->lock);
+        mcluster->defaults.group_initial_rebalance_delay_ms = delay_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
 
 static rd_kafka_op_res_t
 rd_kafka_mock_cluster_op_serve(rd_kafka_t *rk,
@@ -2694,7 +2702,8 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->topics);
         mcluster->defaults.partition_cnt      = 4;
         mcluster->defaults.replication_factor = RD_MIN(3, broker_cnt);
-        mcluster->track_requests              = rd_false;
+        mcluster->defaults.group_initial_rebalance_delay_ms = 3000;
+        mcluster->track_requests                            = rd_false;
 
         TAILQ_INIT(&mcluster->cgrps);
 

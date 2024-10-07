@@ -134,10 +134,8 @@ void rd_kafka_Node_free(void *node);
  * @remark Public Type
  */
 struct rd_kafka_topic_partition_result_s {
-        char *topic;
-        int32_t partition;
-        rd_kafka_resp_err_t err;
-        char *errstr;
+        rd_kafka_topic_partition_t *topic_partition;
+        rd_kafka_error_t *error;
 };
 
 /**

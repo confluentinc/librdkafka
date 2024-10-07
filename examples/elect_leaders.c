@@ -129,24 +129,21 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
 
         results = rd_kafka_ElectLeadersResult_partitions(res, &results_cnt);
         for (i = 0; i < results_cnt; i++) {
-                if (rd_kafka_topic_partition_result_error(results[i])) {
+                const rd_kafka_topic_partition_t *partition = rd_kafka_topic_partition_result_partition(results[i]);
+                const rd_kafka_error_t *err = rd_kafka_topic_partition_result_error(results[i]);
+                if (rd_kafka_error_code(err)) {
                         printf(
                                 "%% ElectLeaders failed for %s [%" PRId32
                                 "] : %s\n",
-                                rd_kafka_topic_partition_result_topic(
-                                results[i]),
-                                rd_kafka_topic_partition_result_partition(
-                                results[i]),
-                                rd_kafka_topic_partition_result_error_string(
-                                results[i]));
+                                partition->topic,
+                                partition->partition,
+                                rd_kafka_error_string(err));
                 } else {
                         printf(
                                 "%% ElectLeaders succeeded for %s [%" PRId32
                                 "]\n",
-                                rd_kafka_topic_partition_result_topic(
-                                results[i]),
-                                rd_kafka_topic_partition_result_partition(
-                                results[i]));
+                                partition->topic,
+                                partition->partition);
                 }
         }
 

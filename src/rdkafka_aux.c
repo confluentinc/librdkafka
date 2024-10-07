@@ -346,32 +346,21 @@ rd_kafka_topic_partition_result_new(const char *topic,
         rd_kafka_topic_partition_result_t *new_result;
 
         new_result            = rd_calloc(1, sizeof(*new_result));
-        new_result->topic     = rd_strdup(topic);
-        new_result->partition = partition;
-        new_result->err       = err;
-        new_result->errstr    = rd_strdup(errstr);
+        new_result->topic_partition = rd_kafka_topic_partition_new(topic, partition);
+        new_result->topic_partition->err = err;
+        new_result->error = rd_kafka_error_new(err, "%s", errstr);
 
         return new_result;
 }
 
-const char *rd_kafka_topic_partition_result_topic(
+const rd_kafka_topic_partition_t *rd_kafka_topic_partition_result_partition(
     const rd_kafka_topic_partition_result_t *partition_result) {
-        return partition_result->topic;
+        return partition_result->topic_partition;
 }
 
-int32_t rd_kafka_topic_partition_result_partition(
+const rd_kafka_error_t *rd_kafka_topic_partition_result_error(
     const rd_kafka_topic_partition_result_t *partition_result) {
-        return partition_result->partition;
-}
-
-rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
-    const rd_kafka_topic_partition_result_t *partition_result) {
-        return partition_result->err;
-}
-
-const char *rd_kafka_topic_partition_result_error_string(
-    const rd_kafka_topic_partition_result_t *partition_result) {
-        return partition_result->errstr;
+        return partition_result->error;
 }
 
 /**
@@ -379,8 +368,10 @@ const char *rd_kafka_topic_partition_result_error_string(
  */
 void rd_kafka_topic_partition_result_destroy(
     rd_kafka_topic_partition_result_t *partition_result) {
-        rd_free(partition_result->topic);
-        rd_free(partition_result->errstr);
+        if (partition_result->topic_partition)
+                rd_kafka_topic_partition_destroy(partition_result->topic_partition);
+        if (partition_result->error)
+                rd_kafka_error_destroy(partition_result->error);
         rd_free(partition_result);
 }
 
@@ -398,8 +389,10 @@ void rd_kafka_topic_partition_result_destroy_array(
 
 rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_copy(
     const rd_kafka_topic_partition_result_t *src) {
-        return rd_kafka_topic_partition_result_new(src->topic, src->partition,
-                                                   src->err, src->errstr);
+        return rd_kafka_topic_partition_result_new(src->topic_partition->topic,
+                                                   src->topic_partition->partition,
+                                                   src->topic_partition->err,
+                                                   src->error->errstr);
 }
 
 void *rd_kafka_topic_partition_result_copy_opaque(const void *src,

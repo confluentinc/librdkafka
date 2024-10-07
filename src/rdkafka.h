@@ -6968,33 +6968,22 @@ rd_kafka_group_result_partitions(const rd_kafka_group_result_t *groupres);
  */
 
 /**
- * @returns the topic name from the topic partition result object.
- * @remark lifetime of the returned string is the same as the \p
- *         partition_result.
+ * @returns the topic partition object from the topic partition result object.
+ * @remarks lifetime of the returned string is the same as the \p
+ *          partition_result.
+ *          The error object is set inside the topic partition object. For the 
+ *          detailed error information, use rd_kafka_topic_partition_result_error()     
  */
-RD_EXPORT const char *rd_kafka_topic_partition_result_topic(
+RD_EXPORT const rd_kafka_topic_partition_t *rd_kafka_topic_partition_result_partition(
     const rd_kafka_topic_partition_result_t *partition_result);
 
 /**
- * @returns the partition number from the topic partition result object.
+ * @returns the error object from the topic partition result object.
+ * @remarks lifetime of the returned string is the same as the \p
+ *          partition_result.
  */
-RD_EXPORT int32_t rd_kafka_topic_partition_result_partition(
+RD_EXPORT const rd_kafka_error_t *rd_kafka_topic_partition_result_error(
     const rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @returns the error code from the topic partition result object.
- */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_topic_partition_result_error(
-    const rd_kafka_topic_partition_result_t *partition_result);
-
-/**
- * @returns the error string or NULL if there was no error.
- * @remark lifetime of the returned string is the same as the \p
- *         partition_result.
- */
-RD_EXPORT const char *rd_kafka_topic_partition_result_error_string(
-    const rd_kafka_topic_partition_result_t *partition_result);
-
 
 /**@}*/
 
@@ -10057,19 +10046,6 @@ typedef struct rd_kafka_ElectLeadersResult_s rd_kafka_ElectLeadersResult_t;
  */
 RD_EXPORT const rd_kafka_ElectLeadersResult_t *
 rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result);
-
-/**
- * @brief Get error code from the elect leaders result.
- *
- * @param result The elect leaders result.
- *
- * @returns the error code from the elect leaders result.
- *
- * @remark This error is related to the overall elect leaders operation.
- *         Individual partition related errors are present at partition level.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ElectLeadersResult_error(const rd_kafka_ElectLeadersResult_t *result);
 
 /**
  * @brief Get the array of topic partition result objects from the

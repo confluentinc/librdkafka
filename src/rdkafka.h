@@ -6964,17 +6964,19 @@ rd_kafka_group_result_partitions(const rd_kafka_group_result_t *groupres);
 
 /**
  * @brief Topic Partition Result provides per-topic+partition operation result
- *
+ *        Consists of TopicPartition object and error object.
  */
 
 /**
  * @returns the topic partition object from the topic partition result object.
  * @remarks lifetime of the returned string is the same as the \p
  *          partition_result.
- *          The error object is set inside the topic partition object. For the 
- *          detailed error information, use rd_kafka_topic_partition_result_error()     
+ *          The error object is set inside the topic partition object. For the
+ *          detailed error information, use
+ *          rd_kafka_topic_partition_result_error()
  */
-RD_EXPORT const rd_kafka_topic_partition_t *rd_kafka_topic_partition_result_partition(
+RD_EXPORT const rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_result_partition(
     const rd_kafka_topic_partition_result_t *partition_result);
 
 /**

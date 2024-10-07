@@ -9237,8 +9237,10 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
         }
 
         if (top_level_error_code) {
-                rd_kafka_admin_result_fail(rko_req, top_level_error_code,
-                                           "ElectLeaders request failed: %s", rd_kafka_err2str(top_level_error_code));
+                rd_kafka_admin_result_fail(
+                    rko_req, top_level_error_code,
+                    "ElectLeaders request failed: %s",
+                    rd_kafka_err2str(top_level_error_code));
                 return top_level_error_code;
         }
 

@@ -345,8 +345,9 @@ rd_kafka_topic_partition_result_new(const char *topic,
 
         rd_kafka_topic_partition_result_t *new_result;
 
-        new_result            = rd_calloc(1, sizeof(*new_result));
-        new_result->topic_partition = rd_kafka_topic_partition_new(topic, partition);
+        new_result = rd_calloc(1, sizeof(*new_result));
+        new_result->topic_partition =
+            rd_kafka_topic_partition_new(topic, partition);
         new_result->topic_partition->err = err;
         new_result->error = rd_kafka_error_new(err, "%s", errstr);
 
@@ -369,7 +370,8 @@ const rd_kafka_error_t *rd_kafka_topic_partition_result_error(
 void rd_kafka_topic_partition_result_destroy(
     rd_kafka_topic_partition_result_t *partition_result) {
         if (partition_result->topic_partition)
-                rd_kafka_topic_partition_destroy(partition_result->topic_partition);
+                rd_kafka_topic_partition_destroy(
+                    partition_result->topic_partition);
         if (partition_result->error)
                 rd_kafka_error_destroy(partition_result->error);
         rd_free(partition_result);
@@ -389,10 +391,9 @@ void rd_kafka_topic_partition_result_destroy_array(
 
 rd_kafka_topic_partition_result_t *rd_kafka_topic_partition_result_copy(
     const rd_kafka_topic_partition_result_t *src) {
-        return rd_kafka_topic_partition_result_new(src->topic_partition->topic,
-                                                   src->topic_partition->partition,
-                                                   src->topic_partition->err,
-                                                   src->error->errstr);
+        return rd_kafka_topic_partition_result_new(
+            src->topic_partition->topic, src->topic_partition->partition,
+            src->topic_partition->err, src->error->errstr);
 }
 
 void *rd_kafka_topic_partition_result_copy_opaque(const void *src,

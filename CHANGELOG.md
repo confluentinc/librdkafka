@@ -6,6 +6,8 @@ librdkafka v2.5.3 is a feature release.
 
 ## Fixes
 
+* Fix crashes (null-pointer access) in rd_kafka_metadata_cache_entry_by_id_cmp() during rd_avl_insert()
+
 ### Telemetry fixes
 
 * Issue: #4833

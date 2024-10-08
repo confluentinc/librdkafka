@@ -2379,7 +2379,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
 
 /**
  * @brief Construct and send ListGroupsRequest to \p rkb
- *        with the states (const char *) in \p states.
+ *        with the states (const char *) in \p states,
+ *        and the types (const char *) in \p types.
  *        Uses \p max_ApiVersion as maximum API version,
  *        pass -1 to use the maximum available version.
  *
@@ -2393,6 +2394,8 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              int16_t max_ApiVersion,
                                              const char **states,
                                              size_t states_cnt,
+                                             const char **types,
+                                             size_t types_cnt,
                                              rd_kafka_replyq_t replyq,
                                              rd_kafka_resp_cb_t *resp_cb,
                                              void *opaque) {
@@ -2401,7 +2404,7 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         size_t i;
 
         if (max_ApiVersion < 0)
-                max_ApiVersion = 4;
+                max_ApiVersion = 5;
 
         if (max_ApiVersion > ApiVersion) {
                 /* Remark: don't check if max_ApiVersion is zero.
@@ -2423,12 +2426,17 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
             4 + 1 + 32 * states_cnt, ApiVersion >= 3 /* is_flexver */);
 
         if (ApiVersion >= 4) {
-                size_t of_GroupsArrayCnt =
-                    rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_write_arraycnt(rkbuf, states_cnt);
                 for (i = 0; i < states_cnt; i++) {
                         rd_kafka_buf_write_str(rkbuf, states[i], -1);
                 }
-                rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
+        }
+
+        if (ApiVersion >= 5) {
+                rd_kafka_buf_write_arraycnt(rkbuf, types_cnt);
+                for (i = 0; i < types_cnt; i++) {
+                        rd_kafka_buf_write_str(rkbuf, types[i], -1);
+                }
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

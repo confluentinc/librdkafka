@@ -380,7 +380,20 @@ struct rd_kafka_s {
                                         *   (or equivalent).
                                         *   Used to enforce
                                         *   max.poll.interval.ms.
-                                        *   Only relevant for consumer. */
+                                        *   Set to INT64_MAX while polling
+                                        *   to avoid reaching
+                                        * max.poll.interval.ms. during that time
+                                        * frame. Only relevant for consumer. */
+        rd_ts_t rk_ts_last_poll_start; /**< Timestamp of last application
+                                        *   consumer_poll() call start
+                                        *   Only relevant for consumer.
+                                        *   Not an atomic as Kafka consumer
+                                        *   isn't thread safe. */
+        rd_ts_t rk_ts_last_poll_end;   /**< Timestamp of last application
+                                        *   consumer_poll() call end
+                                        *   Only relevant for consumer.
+                                        *   Not an atomic as Kafka consumer
+                                        *   isn't thread safe. */
         /* First fatal error. */
         struct {
                 rd_atomic32_t err; /**< rd_kafka_resp_err_t */
@@ -696,7 +709,27 @@ struct rd_kafka_s {
                         rd_ts_t ts_last;  /**< Timestamp of last push */
                         rd_ts_t ts_start; /**< Timestamp from when collection
                                            *   started */
+                        /** Total rebalance latency (ms) up to previous push */
+                        uint64_t rebalance_latency_total;
                 } rk_historic_c;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Current commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Current rebalance
+                                                       *   latency avg */
+                } rd_avg_current;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Rolled over commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Rolled over rebalance
+                                                       *   latency avg */
+                } rd_avg_rollover;
 
         } rk_telemetry;
 
@@ -1093,7 +1126,7 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
         last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
 
         /* Application is blocked in librdkafka function, see
-         * rd_kafka_app_poll_blocking(). */
+         * rd_kafka_app_poll_start(). */
         if (last_poll == INT64_MAX)
                 return 0;
 
@@ -1119,9 +1152,30 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
  * @locality any
  * @locks none
  */
-static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER)
+static RD_INLINE RD_UNUSED void
+rd_kafka_app_poll_start(rd_kafka_t *rk, rd_ts_t now, rd_bool_t is_blocking) {
+        if (rk->rk_type != RD_KAFKA_CONSUMER)
+                return;
+
+        if (!now)
+                now = rd_clock();
+        if (is_blocking)
                 rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
+        if (rk->rk_ts_last_poll_end) {
+                int64_t poll_idle_ratio = 0;
+                rd_ts_t poll_interval   = now - rk->rk_ts_last_poll_start;
+                if (poll_interval) {
+                        rd_ts_t idle_interval =
+                            rk->rk_ts_last_poll_end - rk->rk_ts_last_poll_start;
+                        poll_idle_ratio =
+                            idle_interval * 1000000 / poll_interval;
+                }
+                rd_avg_add(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
+                    poll_idle_ratio);
+                rk->rk_ts_last_poll_start = now;
+                rk->rk_ts_last_poll_end   = 0;
+        }
 }
 
 /**
@@ -1134,7 +1188,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
  */
 static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
-                rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+                rd_ts_t now = rd_clock();
+                rd_atomic64_set(&rk->rk_ts_last_poll, now);
                 if (unlikely(rk->rk_cgrp &&
                              rk->rk_cgrp->rkcg_group_protocol ==
                                  RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
@@ -1144,6 +1199,10 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
                             rk->rk_cgrp,
                             "app polled after poll interval exceeded");
                 }
+                if (!rk->rk_ts_last_poll_end)
+                        rk->rk_ts_last_poll_end = now;
+                rd_dassert(rk->rk_ts_last_poll_end >=
+                           rk->rk_ts_last_poll_start);
         }
 }
 

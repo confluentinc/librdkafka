@@ -394,6 +394,8 @@ struct rd_kafka_mock_cluster_s {
         struct {
                 int partition_cnt;      /**< Auto topic create part cnt */
                 int replication_factor; /**< Auto topic create repl factor */
+                /** Group initial rebalance delay */
+                int32_t group_initial_rebalance_delay_ms;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

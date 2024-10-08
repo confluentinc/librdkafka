@@ -369,11 +369,8 @@ const rd_kafka_error_t *rd_kafka_topic_partition_result_error(
  */
 void rd_kafka_topic_partition_result_destroy(
     rd_kafka_topic_partition_result_t *partition_result) {
-        if (partition_result->topic_partition)
-                rd_kafka_topic_partition_destroy(
-                    partition_result->topic_partition);
-        if (partition_result->error)
-                rd_kafka_error_destroy(partition_result->error);
+        rd_kafka_topic_partition_destroy(partition_result->topic_partition);
+        rd_kafka_error_destroy(partition_result->error);
         rd_free(partition_result);
 }
 

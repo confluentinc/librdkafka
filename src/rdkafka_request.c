@@ -5902,6 +5902,7 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
         const rd_kafka_ElectLeaders_t *elect_leaders_request;
+        int rd_buf_size_estimate;
         int op_timeout;
 
         if (rd_list_cnt(elect_leaders) == 0) {
@@ -5923,15 +5924,14 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        if (elect_leaders_request->partitions != NULL) {
-                rkbuf = rd_kafka_buf_new_flexver_request(
-                    rkb, RD_KAFKAP_ElectLeaders, 1,
-                    1 + (50 + 4) * elect_leaders_request->partitions->cnt,
-                    ApiVersion >= 2);
-        } else {
-                rkbuf = rd_kafka_buf_new_flexver_request(
-                    rkb, RD_KAFKAP_ElectLeaders, 1, 1 + 4, ApiVersion >= 2);
-        }
+        rd_buf_size_estimate =
+            1 /* ElectionType */ + 4 /* #TopicPartitions */ + 4 /* TimeoutMs */;
+        if (elect_leaders_request->partitions)
+                rd_buf_size_estimate +=
+                    (50 + 4) * elect_leaders_request->partitions->cnt;
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_ElectLeaders, 1,
+                                                 rd_buf_size_estimate,
+                                                 ApiVersion >= 2);
 
         if (ApiVersion >= 1) {
                 /* Election type */
@@ -5940,7 +5940,7 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
         }
 
         /* Write partition list */
-        if (elect_leaders_request->partitions != NULL) {
+        if (elect_leaders_request->partitions) {
                 const rd_kafka_topic_partition_field_t fields[] = {
                     RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                     RD_KAFKA_TOPIC_PARTITION_FIELD_END};

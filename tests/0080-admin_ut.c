@@ -2365,7 +2365,6 @@ static void do_test_ElectLeaders(const char *what,
         rd_kafka_event_t *rkev;
         rd_kafka_resp_err_t err;
         const rd_kafka_ElectLeaders_result_t *res;
-        rd_kafka_ElectLeaders_t *empty_elect_leaders;
         rd_kafka_ElectLeaders_t *duplicate_elect_leaders;
         rd_kafka_ElectLeaders_t *elect_leaders;
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;

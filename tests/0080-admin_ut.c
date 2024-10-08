@@ -2386,11 +2386,6 @@ static void do_test_ElectLeaders(const char *what,
         elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
         rd_kafka_topic_partition_list_destroy(partitions);
 
-        partitions = rd_kafka_topic_partition_list_new(0);
-        empty_elect_leaders =
-            rd_kafka_ElectLeaders_new(election_type, partitions);
-        rd_kafka_topic_partition_list_destroy(partitions);
-
         partitions = rd_kafka_topic_partition_list_new(3);
         rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
         rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
@@ -2414,37 +2409,6 @@ static void do_test_ElectLeaders(const char *what,
                         rd_kafka_AdminOptions_set_opaque(options, my_opaque);
                 }
         }
-
-        /*Empty topic-partition list*/
-        TIMING_START(&timing, "ElectLeaders");
-        TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
-        rd_kafka_ElectLeaders(rk, empty_elect_leaders, options, q);
-        TIMING_ASSERT_LATER(&timing, 0, 10);
-        rd_kafka_ElectLeaders_destroy(empty_elect_leaders);
-
-        /* Poll result queue */
-        TIMING_START(&timing, "ElectLeaders.queue_poll");
-        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
-        TIMING_ASSERT(&timing, 0, exp_timeout + 100);
-        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
-        TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
-                 TIMING_DURATION(&timing) / 1000.0f);
-
-        /* Convert event to proper result */
-        res = rd_kafka_event_ElectLeaders_result(rkev);
-        TEST_ASSERT(res, "expected ElectLeaders_result, not %s",
-                    rd_kafka_event_name(rkev));
-        /*Expecting error*/
-        err                            = rd_kafka_event_error(rkev);
-        const char *event_errstr_empty = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(err, "expected ElectLeaders to fail");
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "expected RD_KAFKA_RESP_ERR__INVALID_ARG, not %s",
-                    rd_kafka_err2name(err));
-        TEST_ASSERT(strcmp(event_errstr_empty, "No partitions specified") == 0,
-                    "expected \"No partitions specified\", not \"%s\"",
-                    event_errstr_empty);
-        rd_kafka_event_destroy(rkev);
 
         /*Duplicate topic-partition list*/
         TIMING_START(&timing, "ElectLeaders");

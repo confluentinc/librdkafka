@@ -168,14 +168,14 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
-        rd_kafka_event_t *event = NULL;
-        rd_kafka_topic_partition_list_t *partitions;
+        rd_kafka_event_t *event                     = NULL;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
         rd_kafka_ElectionType_t election_type;
         rd_kafka_ElectLeaders_t *elect_leaders;
         int i;
         int retval = 0;
 
-        if (argc < 3 || (argc - 1) % 2 != 0) {
+        if ((argc - 1) % 2 != 0) {
                 usage("Invalid number of arguments");
         }
 
@@ -183,15 +183,20 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         argc--;
         argv++;
-        partitions = rd_kafka_topic_partition_list_new(argc / 2);
-        for (i = 0; i < argc; i += 2) {
-                rd_kafka_topic_partition_list_add(
-                    partitions, argv[i], parse_int("partition", argv[i + 1]));
+        if (argc > 0) {
+                partitions = rd_kafka_topic_partition_list_new(argc / 2);
+                for (i = 0; i < argc; i += 2) {
+                        rd_kafka_topic_partition_list_add(
+                            partitions, argv[i],
+                            parse_int("partition", argv[i + 1]));
+                }
         }
 
         elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
 
-        rd_kafka_topic_partition_list_destroy(partitions);
+        if (partitions != NULL) {
+                rd_kafka_topic_partition_list_destroy(partitions);
+        }
 
         /*
          * Create consumer instance

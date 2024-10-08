@@ -5923,11 +5923,15 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-
-        rkbuf = rd_kafka_buf_new_flexver_request(
-            rkb, RD_KAFKAP_ElectLeaders, 1,
-            1 + (50 + 4) * elect_leaders_request->partitions->cnt,
-            ApiVersion >= 2);
+        if (elect_leaders_request->partitions != NULL) {
+                rkbuf = rd_kafka_buf_new_flexver_request(
+                    rkb, RD_KAFKAP_ElectLeaders, 1,
+                    1 + (50 + 4) * elect_leaders_request->partitions->cnt,
+                    ApiVersion >= 2);
+        } else {
+                rkbuf = rd_kafka_buf_new_flexver_request(
+                    rkb, RD_KAFKAP_ElectLeaders, 1, 1 + 4, ApiVersion >= 2);
+        }
 
         if (ApiVersion >= 1) {
                 /* Election type */
@@ -5936,15 +5940,19 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
         }
 
         /* Write partition list */
-        const rd_kafka_topic_partition_field_t fields[] = {
-            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
-            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-        rd_kafka_buf_write_topic_partitions(
-            rkbuf, elect_leaders_request->partitions,
-            rd_false /*don't skip invalid offsets*/, rd_false /* any offset */,
-            rd_false /* don't use topic_id */, rd_true /* use topic_names */,
-            fields);
-
+        if (elect_leaders_request->partitions != NULL) {
+                const rd_kafka_topic_partition_field_t fields[] = {
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                rd_kafka_buf_write_topic_partitions(
+                    rkbuf, elect_leaders_request->partitions,
+                    rd_false /*don't skip invalid offsets*/,
+                    rd_false /* any offset */,
+                    rd_false /* don't use topic_id */,
+                    rd_true /* use topic_names */, fields);
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

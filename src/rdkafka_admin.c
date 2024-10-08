@@ -9148,8 +9148,12 @@ rd_kafka_ElectLeaders_new(rd_kafka_ElectionType_t election_type,
         rd_kafka_ElectLeaders_t *elect_leaders;
 
         elect_leaders = rd_calloc(1, sizeof(*elect_leaders));
-        elect_leaders->partitions =
-            rd_kafka_topic_partition_list_copy(partitions);
+        if (partitions != NULL)
+                elect_leaders->partitions =
+                    rd_kafka_topic_partition_list_copy(partitions);
+        else {
+                elect_leaders->partitions = NULL;
+        }
         elect_leaders->election_type = election_type;
 
         return elect_leaders;
@@ -9162,7 +9166,9 @@ rd_kafka_ElectLeaders_copy(const rd_kafka_ElectLeaders_t *elect_leaders) {
 }
 
 void rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leaders) {
-        rd_kafka_topic_partition_list_destroy(elect_leaders->partitions);
+        if (elect_leaders->partitions != NULL)
+                rd_kafka_topic_partition_list_destroy(
+                    elect_leaders->partitions);
         rd_free(elect_leaders);
 }
 
@@ -9291,28 +9297,35 @@ rd_kafka_ElectLeadersResponse_parse(rd_kafka_op_t *rko_req,
                             topic, partition, partition_error_code,
                             partition_errstr);
 
-                        orig_pos = rd_kafka_topic_partition_list_find_idx(
-                            request->partitions, topic, partition);
+                        if (request->partitions != NULL) {
+                                orig_pos =
+                                    rd_kafka_topic_partition_list_find_idx(
+                                        request->partitions, topic, partition);
 
-                        if (orig_pos == -1) {
-                                rd_kafka_buf_parse_fail(
-                                    reply,
-                                    "Broker returned partition %s [%" PRId32
-                                    "] that was not "
-                                    "included in the original request",
-                                    topic, partition);
+                                if (orig_pos == -1) {
+                                        rd_kafka_buf_parse_fail(
+                                            reply,
+                                            "Broker returned partition %s "
+                                            "[%" PRId32
+                                            "] that was not "
+                                            "included in the original request",
+                                            topic, partition);
+                                }
+
+                                if (rd_list_elem(&partitions_arr, orig_pos) !=
+                                    NULL) {
+                                        rd_kafka_buf_parse_fail(
+                                            reply,
+                                            "Broker returned partition %s "
+                                            "[%" PRId32 "] multiple times",
+                                            topic, partition);
+                                }
+
+                                rd_list_set(&partitions_arr, orig_pos,
+                                            partition_result);
+                        } else {
+                                rd_list_add(&partitions_arr, partition_result);
                         }
-
-                        if (rd_list_elem(&partitions_arr, orig_pos) != NULL) {
-                                rd_kafka_buf_parse_fail(
-                                    reply,
-                                    "Broker returned partition %s [%" PRId32
-                                    "] multiple times",
-                                    topic, partition);
-                        }
-
-                        rd_list_set(&partitions_arr, orig_pos,
-                                    partition_result);
                 }
                 rd_kafka_buf_skip_tags(reply);
         }
@@ -9352,7 +9365,7 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
                            const rd_kafka_AdminOptions_t *options,
                            rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
-        rd_kafka_topic_partition_list_t *copied_partitions;
+        rd_kafka_topic_partition_list_t *copied_partitions = NULL;
 
         static const struct rd_kafka_admin_worker_cbs cbs = {
             rd_kafka_ElectLeadersRequest,
@@ -9365,26 +9378,22 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
                                             RD_KAFKA_EVENT_ELECTLEADERS_RESULT,
                                             &cbs, options, rkqu->rkqu_q);
 
-        /* Non empty topic_partition_list should be present */
-        if (elect_leaders->partitions->cnt == 0) {
-                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                           "No partitions specified");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                return;
-        }
-
-        /* Duplicate topic partitions should not be present in the list */
-        copied_partitions =
-            rd_kafka_topic_partition_list_copy(elect_leaders->partitions);
-        if (rd_kafka_topic_partition_list_has_duplicates(
-                copied_partitions, rd_false /* check partition*/)) {
-                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                           "Duplicate partitions specified");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                rd_kafka_topic_partition_list_destroy(copied_partitions);
-                return;
+        if (elect_leaders->partitions != NULL) {
+                /* Duplicate topic partitions should not be present in the list
+                 */
+                copied_partitions = rd_kafka_topic_partition_list_copy(
+                    elect_leaders->partitions);
+                if (rd_kafka_topic_partition_list_has_duplicates(
+                        copied_partitions, rd_false /* check partition*/)) {
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate partitions specified");
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko, rd_true /*destroy*/);
+                        rd_kafka_topic_partition_list_destroy(
+                            copied_partitions);
+                        return;
+                }
         }
 
         rd_list_init(&rko->rko_u.admin_request.args, 1,
@@ -9394,8 +9403,8 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
                     rd_kafka_ElectLeaders_copy(elect_leaders));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
-
-        rd_kafka_topic_partition_list_destroy(copied_partitions);
+        if (copied_partitions != NULL)
+                rd_kafka_topic_partition_list_destroy(copied_partitions);
 }
 
 /**@}*/

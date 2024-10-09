@@ -118,7 +118,7 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
                 fatal("Failed to set %s=%s: %s", name, val, errstr);
 }
 
-static int
+static void
 print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
         const rd_kafka_topic_partition_result_t **results;
         size_t results_cnt;
@@ -144,8 +144,6 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
                                partition->topic, partition->partition);
                 }
         }
-
-        return 0;
 }
 
 /**
@@ -220,13 +218,13 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ELECTLEADERS);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
+                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 goto exit;
         }
 
         if (rd_kafka_AdminOptions_set_operation_timeout(
-                options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
+                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set operation timeout: %s\n",
                         errstr);
                 goto exit;
@@ -240,7 +238,7 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by
                                                * the request timeout set
-                                               * above (10s) */);
+                                               * above  */);
 
         if (!event) {
                 /* User hit Ctrl-C,
@@ -252,12 +250,13 @@ static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
                 /* ElectLeaders request failed */
                 fprintf(stderr, "%% ElectLeaders failed[%" PRId32 "]: %s\n",
                         err, rd_kafka_event_error_string(event));
+                retval = 1;
                 goto exit;
         } else {
                 /* ElectLeaders request succeeded */
                 const rd_kafka_ElectLeaders_result_t *result;
                 result = rd_kafka_event_ElectLeaders_result(event);
-                retval = print_elect_leaders_result(result);
+                print_elect_leaders_result(result);
         }
 
 

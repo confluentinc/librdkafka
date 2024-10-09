@@ -4213,10 +4213,8 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
         rd_bool_t may_send      = rd_true;
         rd_bool_t flushing      = rd_false;
         rd_list_t batch_bufq;
-        /* TODO implement a proper feature flag, and make sure the mult-batch
-           feature is disabled when enable.idempotence is set */
         rd_bool_t multi_batch_request = rd_kafka_is_idempotent(rkb->rkb_rk) ?
-                                        rd_false : rd_true;
+                                        rd_false : rkb->rkb_rk->rk_conf.multibatch;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;

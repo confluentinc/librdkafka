@@ -1470,6 +1470,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "A higher value allows for more effective batching of these "
      "messages.",
      0, 900000, 10},
+    {_RK_GLOBAL | _RK_PRODUCER, "multibatch", _RK_C_BOOL,
+     _RK(multibatch), "Batch produce requests across multiple partitions.", 0,
+     1, 0},
     {_RK_GLOBAL, "client.dns.lookup", _RK_C_S2I, _RK(client_dns_lookup),
      "Controls how the client uses DNS lookups. By default, when the lookup "
      "returns multiple IP addresses for a hostname, they will all be attempted "

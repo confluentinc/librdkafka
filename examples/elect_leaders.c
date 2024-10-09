@@ -123,11 +123,8 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
         const rd_kafka_topic_partition_result_t **results;
         size_t results_cnt;
         size_t i;
-        const rd_kafka_ElectLeadersResult_t *res;
 
-        res = rd_kafka_ElectLeaders_result(result);
-
-        results = rd_kafka_ElectLeadersResult_partitions(res, &results_cnt);
+        results = rd_kafka_ElectLeaders_result_partitions(result, &results_cnt);
         printf("ElectLeaders response has %zu partition(s):\n", results_cnt);
         for (i = 0; i < results_cnt; i++) {
                 const rd_kafka_topic_partition_t *partition =

@@ -610,9 +610,9 @@ struct rd_kafka_ElectLeaders_s {
 /**
  * @struct ElectLeaders result object
  */
-struct rd_kafka_ElectLeadersResult_s {
+typedef struct rd_kafka_ElectLeadersResult_s {
         rd_list_t partitions; /**< Type (rd_kafka_topic_partition_result_t *) */
-};
+} rd_kafka_ElectLeadersResult_t;
 
 /**@}*/
 

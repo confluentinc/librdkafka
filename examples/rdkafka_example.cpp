@@ -121,7 +121,7 @@ static void sigterm(int sig) {
 
 class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
  public:
-  void dr_cb(RdKafka::Message &message) {
+  void dr_cb(RdKafka::Message &message) RD_OVERRIDE {
     std::string status_name;
     switch (message.status()) {
     case RdKafka::Message::MSG_STATUS_NOT_PERSISTED:
@@ -148,7 +148,7 @@ class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
 
 class ExampleEventCb : public RdKafka::EventCb {
  public:
-  void event_cb(RdKafka::Event &event) {
+  void event_cb(RdKafka::Event &event) RD_OVERRIDE {
     switch (event.type()) {
     case RdKafka::Event::EVENT_ERROR:
       if (event.fatal()) {
@@ -185,7 +185,7 @@ class MyHashPartitionerCb : public RdKafka::PartitionerCb {
   int32_t partitioner_cb(const RdKafka::Topic *topic,
                          const std::string *key,
                          int32_t partition_cnt,
-                         void *msg_opaque) {
+                         void *msg_opaque) RD_OVERRIDE {
     return djb_hash(key->c_str(), key->size()) % partition_cnt;
   }
 
@@ -251,7 +251,7 @@ void msg_consume(RdKafka::Message *message, void *opaque) {
 
 class ExampleConsumeCb : public RdKafka::ConsumeCb {
  public:
-  void consume_cb(RdKafka::Message &msg, void *opaque) {
+  void consume_cb(RdKafka::Message &msg, void *opaque) RD_OVERRIDE {
     msg_consume(&msg, opaque);
   }
 };

@@ -79,7 +79,7 @@
 #include "rdunittest.h"
 
 
-static const int rd_kafka_max_block_ms = 1000;
+static const int rd_kafka_max_block_ms = 10;
 
 const char *rd_kafka_broker_state_names[] = {
     "INIT",        "DOWN",  "TRY_CONNECT", "CONNECT",          "SSL_HANDSHAKE",

@@ -593,4 +593,27 @@ typedef struct rd_kafka_ClusterDescription_s {
 
 /**@}*/
 
+/**
+ * @name ElectLeaders
+ * @{
+ */
+
+/**
+ * @struct ElectLeaders request object
+ */
+struct rd_kafka_ElectLeaders_s {
+        rd_kafka_ElectionType_t election_type; /*Election Type*/
+        rd_kafka_topic_partition_list_t
+            *partitions; /*TopicPartitions for election*/
+};
+
+/**
+ * @struct ElectLeaders result object
+ */
+struct rd_kafka_ElectLeadersResult_s {
+        rd_list_t partitions; /**< Type (rd_kafka_topic_partition_result_t *) */
+};
+
+/**@}*/
+
 #endif /* _RDKAFKA_ADMIN_H_ */

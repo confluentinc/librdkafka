@@ -10028,7 +10028,7 @@ rd_kafka_ElectLeaders_destroy(rd_kafka_ElectLeaders_t *elect_leaders);
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_ELECTLEADERS_RESULT
- * @remark If we are passing partitions as Null, then the broker
+ * @remark If we are passing partitions as NULL, then the broker
  *         will attempt leader election for all partitions, but the results
  *         will contain only partitions for which there was an election or
  *         resulted in an error.

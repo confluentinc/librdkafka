@@ -2024,7 +2024,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-436 - Start time in stats                                            | 2.3.0                       | Supported                                                                                     |
 | KIP-447 - Producer scalability for EOS                                   | 2.5.0                       | Supported                                                                                     |
 | KIP-455 - AdminAPI: Replica assignment                                   | 2.4.0 (WIP)                 | Not supported                                                                                 |
-| KIP-460 - AdminAPI: electLeaders                                         | 2.6.0                       | supported                                                                                 |
+| KIP-460 - AdminAPI: electLeaders                                         | 2.6.0                       | Supported                                                                                     |
 | KIP-464 - AdminAPI: defaults for createTopics                            | 2.4.0                       | Supported                                                                                     |
 | KIP-467 - Per-message (sort of) error codes in ProduceResponse           | 2.4.0                       | Supported                                                                                     |
 | KIP-480 - Sticky partitioner                                             | 2.4.0                       | Supported                                                                                     |
@@ -2102,6 +2102,7 @@ release of librdkafka.
 | 36      | SaslAuthenticate              | 2          | 1              |
 | 37      | CreatePartitions              | 3          | 0              |
 | 42      | DeleteGroups                  | 2          | 1              |
+| 43      | ElectLeaders                  | 2          | 2              | 
 | 44      | IncrementalAlterConfigs       | 1          | 1              |
 | 47      | OffsetDelete                  | 0          | 0              |
 | 50      | DescribeUserScramCredentials  | 0          | 0              |

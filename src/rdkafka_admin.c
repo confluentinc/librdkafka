@@ -8638,7 +8638,7 @@ static void rd_kafka_TopicDescription_free(void *ptr) {
         rd_kafka_TopicDescription_destroy(ptr);
 }
 
-const int rd_kafka_TopicPartitionInfo_partition(
+int rd_kafka_TopicPartitionInfo_partition(
     const rd_kafka_TopicPartitionInfo_t *partition) {
         return partition->partition;
 }

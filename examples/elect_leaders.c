@@ -128,6 +128,7 @@ print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
         res = rd_kafka_ElectLeaders_result(result);
 
         results = rd_kafka_ElectLeadersResult_partitions(res, &results_cnt);
+        printf("ElectLeaders response has %zu partition(s):\n", results_cnt);
         for (i = 0; i < results_cnt; i++) {
                 const rd_kafka_topic_partition_t *partition =
                     rd_kafka_topic_partition_result_partition(results[i]);

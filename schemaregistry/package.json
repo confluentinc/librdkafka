@@ -1,6 +1,6 @@
 {
   "name": "@confluentinc/schemaregistry",
-  "version": "v0.1.17.6-devel",
+  "version": "v0.2.1",
   "description": "Node.js client for Confluent Schema Registry",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -10040,21 +10040,6 @@ RD_EXPORT void rd_kafka_ElectLeaders(rd_kafka_t *rk,
                                      rd_kafka_queue_t *rkqu);
 
 /**
- * @brief  A struct representing result of elect leaders admin operation.
- */
-typedef struct rd_kafka_ElectLeadersResult_s rd_kafka_ElectLeadersResult_t;
-
-/**
- * @brief Get the elect leaders result from the elect leaders result event.
- *
- * @param result The elect leaders result event.
- *
- * @returns the elect leaders result from the elect leaders result event.
- */
-RD_EXPORT const rd_kafka_ElectLeadersResult_t *
-rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result);
-
-/**
  * @brief Get the array of topic partition result objects from the
  *        elect leaders result event and populates the size of the
  *        array in \p cntp.
@@ -10066,17 +10051,9 @@ rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result);
  *          elect leaders result event.
  */
 RD_EXPORT const rd_kafka_topic_partition_result_t **
-rd_kafka_ElectLeadersResult_partitions(
-    const rd_kafka_ElectLeadersResult_t *result,
+rd_kafka_ElectLeaders_result_partitions(
+    const rd_kafka_ElectLeaders_result_t *result,
     size_t *cntp);
-
-/**
- * @brief Destroy and free a rd_kafka_ElectLeadersResult_t object.
- *
- * @param result The rd_kafka_ElectLeadersResult_t object to be destroyed.
- */
-RD_EXPORT void
-rd_kafka_ElectLeadersResult_destroy(rd_kafka_ElectLeadersResult_t *result);
 
 /**@}*/
 

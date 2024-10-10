@@ -9187,13 +9187,7 @@ rd_kafka_ElectLeadersResult_new(rd_list_t *partitions) {
         return result;
 }
 
-const rd_kafka_ElectLeadersResult_t *
-rd_kafka_ElectLeaders_result(const rd_kafka_ElectLeaders_result_t *result) {
-        return (const rd_kafka_ElectLeadersResult_t *)rd_list_elem(
-            &result->rko_u.admin_result.results, 0);
-}
-
-const rd_kafka_topic_partition_result_t **
+static const rd_kafka_topic_partition_result_t **
 rd_kafka_ElectLeadersResult_partitions(
     const rd_kafka_ElectLeadersResult_t *result,
     size_t *cntp) {
@@ -9202,14 +9196,28 @@ rd_kafka_ElectLeadersResult_partitions(
             result->partitions.rl_elems;
 }
 
-void rd_kafka_ElectLeadersResult_destroy(
-    rd_kafka_ElectLeadersResult_t *result) {
+static void
+rd_kafka_ElectLeadersResult_destroy(rd_kafka_ElectLeadersResult_t *result) {
         rd_list_destroy(&result->partitions);
         rd_free(result);
 }
 
 static void rd_kafka_ElectLeadersResult_free(void *ptr) {
         rd_kafka_ElectLeadersResult_destroy(ptr);
+}
+
+static const rd_kafka_ElectLeadersResult_t *rd_kafka_ElectLeaders_result_result(
+    const rd_kafka_ElectLeaders_result_t *result) {
+        return (const rd_kafka_ElectLeadersResult_t *)rd_list_elem(
+            &result->rko_u.admin_result.results, 0);
+}
+
+const rd_kafka_topic_partition_result_t **
+rd_kafka_ElectLeaders_result_partitions(
+    const rd_kafka_ElectLeaders_result_t *result,
+    size_t *cntp) {
+        return rd_kafka_ElectLeadersResult_partitions(
+            rd_kafka_ElectLeaders_result_result(result), cntp);
 }
 
 /**

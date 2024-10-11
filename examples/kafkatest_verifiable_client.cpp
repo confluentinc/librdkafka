@@ -54,11 +54,7 @@
 #include <getopt.h>
 #endif
 
-/*
- * Typically include path in a real application would be
- * #include <librdkafka/rdkafkacpp.h>
- */
-#include "rdkafkacpp.h"
+#include <librdkafka/rdkafkacpp.h>
 
 static volatile sig_atomic_t run = 1;
 static bool exit_eof             = false;

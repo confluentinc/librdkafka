@@ -1,17 +1,17 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
  */
+#include "src/config.h"
 
+#include <iostream>
 #include <string>
 #include <vector>
 #include <list>
-
-#include "src/config.h"
 
 using Nan::MaybeLocal;
 using Nan::Maybe;
@@ -81,75 +81,139 @@ Conf * Conf::create(RdKafka::Conf::ConfType type, v8::Local<v8::Object> object, 
           return NULL;
       }
     } else {
-      v8::Local<v8::Function> cb = value.As<v8::Function>();
-      rdconf->ConfigureCallback(string_key, cb, true, errstr);
-      if (!errstr.empty()) {
-        delete rdconf;
-        return NULL;
-      }
-      rdconf->ConfigureCallback(string_key, cb, false, errstr);
-      if (!errstr.empty()) {
-        delete rdconf;
-        return NULL;
-      }
+     // Do nothing - NodeConfigureCallbacks will handle this for each
+     // of the three client types, called from within JavaScript.
     }
   }
 
   return rdconf;
 }
 
-void Conf::ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add, std::string &errstr) {
+void Conf::ConfigureCallback(
+  const std::string &string_key,
+  const v8::Local<v8::Function> &cb,
+  bool add, std::string &errstr) {
   if (string_key.compare("rebalance_cb") == 0) {
+    NodeKafka::Callbacks::Rebalance *rebalance = rebalance_cb();
     if (add) {
-      if (this->m_rebalance_cb == NULL) {
-        this->m_rebalance_cb = new NodeKafka::Callbacks::Rebalance();
+      if (rebalance == NULL) {
+        rebalance = new NodeKafka::Callbacks::Rebalance();
+        this->set(string_key, rebalance, errstr);
       }
-      this->m_rebalance_cb->dispatcher.AddCallback(cb);
-      this->set(string_key, this->m_rebalance_cb, errstr);
+      rebalance->dispatcher.AddCallback(cb);
+      this->set(string_key, rebalance, errstr);
     } else {
-      if (this->m_rebalance_cb != NULL) {
-        this->m_rebalance_cb->dispatcher.RemoveCallback(cb);
+      if (rebalance == NULL) {
+        rebalance->dispatcher.RemoveCallback(cb);
+        this->set(string_key, rebalance, errstr);
       }
     }
   } else if (string_key.compare("offset_commit_cb") == 0) {
+    NodeKafka::Callbacks::OffsetCommit *offset_commit = offset_commit_cb();
     if (add) {
-      if (this->m_offset_commit_cb == NULL) {
-        this->m_offset_commit_cb = new NodeKafka::Callbacks::OffsetCommit();
+      if (offset_commit == NULL) {
+        offset_commit = new NodeKafka::Callbacks::OffsetCommit();
+        this->set(string_key, offset_commit, errstr);
       }
-      this->m_offset_commit_cb->dispatcher.AddCallback(cb);
-      this->set(string_key, this->m_offset_commit_cb, errstr);
+      offset_commit->dispatcher.AddCallback(cb);
     } else {
-      if (this->m_offset_commit_cb != NULL) {
-        this->m_offset_commit_cb->dispatcher.RemoveCallback(cb);
+      if (offset_commit != NULL) {
+        offset_commit->dispatcher.RemoveCallback(cb);
       }
     }
+  } else if (string_key.compare("oauthbearer_token_refresh_cb") == 0) {
+    NodeKafka::Callbacks::OAuthBearerTokenRefresh *oauthbearer_token_refresh =
+        oauthbearer_token_refresh_cb();
+    if (add) {
+      if (oauthbearer_token_refresh == NULL) {
+        oauthbearer_token_refresh =
+            new NodeKafka::Callbacks::OAuthBearerTokenRefresh();
+        this->set(string_key, oauthbearer_token_refresh, errstr);
+      }
+      oauthbearer_token_refresh->dispatcher.AddCallback(cb);
+    } else {
+      if (oauthbearer_token_refresh != NULL) {
+        oauthbearer_token_refresh->dispatcher.RemoveCallback(cb);
+      }
+    }
+  } else {
+    errstr = "Invalid callback type";
   }
 }
 
 void Conf::listen() {
-  if (m_rebalance_cb) {
-    m_rebalance_cb->dispatcher.Activate();
+  NodeKafka::Callbacks::Rebalance *rebalance = rebalance_cb();
+  if (rebalance) {
+    rebalance->dispatcher.Activate();
   }
 
-  if (m_offset_commit_cb) {
-    m_offset_commit_cb->dispatcher.Activate();
+  NodeKafka::Callbacks::OffsetCommit *offset_commit = offset_commit_cb();
+  if (offset_commit) {
+    offset_commit->dispatcher.Activate();
+  }
+
+  NodeKafka::Callbacks::OAuthBearerTokenRefresh *oauthbearer_token_refresh =
+      oauthbearer_token_refresh_cb();
+  if (oauthbearer_token_refresh) {
+    oauthbearer_token_refresh->dispatcher.Activate();
   }
 }
 
 void Conf::stop() {
-  if (m_rebalance_cb) {
-    m_rebalance_cb->dispatcher.Deactivate();
+  NodeKafka::Callbacks::Rebalance *rebalance = rebalance_cb();
+  if (rebalance) {
+    rebalance->dispatcher.Deactivate();
   }
 
-  if (m_offset_commit_cb) {
-    m_offset_commit_cb->dispatcher.Deactivate();
+  NodeKafka::Callbacks::OffsetCommit *offset_commit = offset_commit_cb();
+  if (offset_commit) {
+    offset_commit->dispatcher.Deactivate();
+  }
+
+  NodeKafka::Callbacks::OAuthBearerTokenRefresh *oauthbearer_token_refresh =
+      oauthbearer_token_refresh_cb();
+  if (oauthbearer_token_refresh) {
+    oauthbearer_token_refresh->dispatcher.Deactivate();
   }
 }
 
 Conf::~Conf() {
-  if (m_rebalance_cb) {
-    delete m_rebalance_cb;
+  // Delete the rdconf object, since that's what we are internally.
+  RdKafka::Conf *rdconf = static_cast<RdKafka::Conf*>(this);
+  delete rdconf;
+}
+
+NodeKafka::Callbacks::Rebalance* Conf::rebalance_cb() const {
+  RdKafka::RebalanceCb *cb = NULL;
+  if (this->get(cb) != RdKafka::Conf::CONF_OK) {
+    return NULL;
   }
+  return static_cast<NodeKafka::Callbacks::Rebalance*>(cb);
+}
+
+NodeKafka::Callbacks::OffsetCommit* Conf::offset_commit_cb() const {
+  RdKafka::OffsetCommitCb *cb = NULL;
+  if (this->get(cb) != RdKafka::Conf::CONF_OK) {
+    return NULL;
+  }
+  return static_cast<NodeKafka::Callbacks::OffsetCommit*>(cb);
+}
+
+NodeKafka::Callbacks::OAuthBearerTokenRefresh *
+Conf::oauthbearer_token_refresh_cb() const {
+  RdKafka::OAuthBearerTokenRefreshCb *cb = NULL;
+  if (this->get(cb) != RdKafka::Conf::CONF_OK) {
+    return NULL;
+  }
+  return static_cast<NodeKafka::Callbacks::OAuthBearerTokenRefresh *>(cb);
+}
+
+bool Conf::is_sasl_oauthbearer() const {
+  std::string sasl_mechanism;
+  if (this->get("sasl.mechanisms", sasl_mechanism) != RdKafka::Conf::CONF_OK) {
+    return false;
+  }
+  return sasl_mechanism.compare("OAUTHBEARER") == 0;
 }
 
 }  // namespace NodeKafka

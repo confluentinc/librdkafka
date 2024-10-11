@@ -1,4 +1,7 @@
 {
+  "variables": {
+    "CKJS_LINKING%": "<!(node ../util/get-env.js CKJS_LINKING static)",
+  },
   'targets': [
     {
       "target_name": "librdkafka",
@@ -25,31 +28,49 @@
                 "inputs": [
                   "librdkafka/config.h",
                 ],
+                "outputs": [
+                  "deps/librdkafka/src/librdkafka.so",
+                ],
                 "action": [
-                  "make", "-j5", "-C", "librdkafka", "libs", "install"
+                  "make", "-C", "librdkafka", "libs", "install"
                 ],
                 "conditions": [
                   [
-                    'OS=="mac"',
+                    'CKJS_LINKING=="dynamic"',
                     {
-                      'outputs': [
-                        'deps/librdkafka/src-cpp/librdkafka++.dylib',
-                        'deps/librdkafka/src-cpp/librdkafka++.1.dylib',
-                        'deps/librdkafka/src/librdkafka.dylib',
-                        'deps/librdkafka/src/librdkafka.1.dylib'
-                      ],
+                      "conditions": [
+                        [
+                          'OS=="mac"',
+                          {
+                            'outputs': [
+                              'deps/librdkafka/src-cpp/librdkafka++.dylib',
+                              'deps/librdkafka/src-cpp/librdkafka++.1.dylib',
+                              'deps/librdkafka/src/librdkafka.dylib',
+                              'deps/librdkafka/src/librdkafka.1.dylib',
+                              'deps/librdkafka/src-cpp/librdkafka++.a',
+                              'deps/librdkafka/src/librdkafka.a',
+                            ]
+                          },
+                          {
+                            'outputs': [
+                              'deps/librdkafka/src-cpp/librdkafka++.so',
+                              'deps/librdkafka/src-cpp/librdkafka++.so.1',
+                              'deps/librdkafka/src/librdkafka.so',
+                              'deps/librdkafka/src/librdkafka.so.1',
+                              'deps/librdkafka/src-cpp/librdkafka++.a',
+                              'deps/librdkafka/src/librdkafka.a',
+                            ],
+                          },
+                        ],
+                      ]
                     },
                     {
                       'outputs': [
-                        'deps/librdkafka/src-cpp/librdkafka++.so',
-                        'deps/librdkafka/src-cpp/librdkafka++.so.1',
-                        'deps/librdkafka/src/librdkafka.so',
-                        'deps/librdkafka/src/librdkafka.so.1',
                         'deps/librdkafka/src-cpp/librdkafka++.a',
-                        'deps/librdkafka/src/librdkafka.a',
+                        'deps/librdkafka/src/librdkafka-static.a',
                       ],
                     }
-                  ]
+                  ],
                 ],
               }
             ]

@@ -1,7 +1,8 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2024 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -13,8 +14,8 @@
 
 namespace NodeKafka {
 
-v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err, std::string errstr) {  // NOLINT
-  //
+v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err,
+                                   const std::string &errstr) {
   int code = static_cast<int>(err);
 
   v8::Local<v8::Object> ret = Nan::New<v8::Object>();
@@ -28,11 +29,13 @@ v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err, std::string er
 }
 
 v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err) {
-  return RdKafkaError(err, RdKafka::err2str(err));
+  std::string errstr = RdKafka::err2str(err);
+  return RdKafkaError(err, errstr);
 }
 
-v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &err, std::string errstr,
-      bool isFatal, bool isRetriable, bool isTxnRequiresAbort) {
+v8::Local<v8::Object> RdKafkaError(
+  const RdKafka::ErrorCode &err, std::string errstr,
+  bool isFatal, bool isRetriable, bool isTxnRequiresAbort) {
   v8::Local<v8::Object> ret = RdKafkaError(err, errstr);
 
   Nan::Set(ret, Nan::New("isFatal").ToLocalChecked(),
@@ -68,6 +71,26 @@ Baton::Baton(const RdKafka::ErrorCode &code, std::string errstr, bool isFatal,
   m_isTxnRequiresAbort = isTxnRequiresAbort;
 }
 
+/**
+ * Creates a Baton from an rd_kafka_error_t* and destroys it.
+ */
+Baton Baton::BatonFromErrorAndDestroy(rd_kafka_error_t *error) {
+  std::string errstr = rd_kafka_error_string(error);
+  RdKafka::ErrorCode err =
+      static_cast<RdKafka::ErrorCode>(rd_kafka_error_code(error));
+  rd_kafka_error_destroy(error);
+  return Baton(err, errstr);
+}
+
+/**
+ * Creates a Baton from an RdKafka::Error* and deletes it.
+ */
+Baton Baton::BatonFromErrorAndDestroy(RdKafka::Error *error) {
+  std::string errstr = error->str();
+  RdKafka::ErrorCode err = error->code();
+  delete error;
+  return Baton(err, errstr);
+}
 
 v8::Local<v8::Object> Baton::ToObject() {
   if (m_errstr.empty()) {
@@ -78,7 +101,7 @@ v8::Local<v8::Object> Baton::ToObject() {
 }
 
 v8::Local<v8::Object> Baton::ToTxnObject() {
-  return RdKafkaError(m_err, m_errstr, m_isFatal, m_isRetriable, m_isTxnRequiresAbort);
+  return RdKafkaError(m_err, m_errstr, m_isFatal, m_isRetriable, m_isTxnRequiresAbort); // NOLINT
 }
 
 RdKafka::ErrorCode Baton::err() {

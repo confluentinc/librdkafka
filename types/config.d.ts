@@ -1,4 +1,4 @@
-// ====== Generated from librdkafka 2.3.0 file CONFIGURATION.md ======
+// ====== Generated from librdkafka master file CONFIGURATION.md ======
 // Code that generated this is a derivative work of the code from Nam Nguyen
 // https://gist.github.com/ntgn81/066c2c8ec5b4238f85d1e9168a04e3fb
 
@@ -762,7 +762,7 @@ export interface ProducerGlobalConfig extends GlobalConfig {
     /**
      * Delivery report callback (set with rd_kafka_conf_set_dr_cb())
      */
-    "dr_cb"?: boolean | Function;
+    "dr_cb"?: boolean | ((...args: any[]) => any);
 
     /**
      * Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())
@@ -810,7 +810,7 @@ export interface ConsumerGlobalConfig extends GlobalConfig {
     "heartbeat.interval.ms"?: number;
 
     /**
-     * Group protocol type. NOTE: Currently, the only supported group protocol type is `consumer`.
+     * Group protocol type for the `generic` group protocol. NOTE: Currently, the only supported group protocol type is `consumer`.
      *
      * @default consumer
      */
@@ -936,12 +936,12 @@ export interface ConsumerGlobalConfig extends GlobalConfig {
     /**
      * Called after consumer group has been rebalanced (set with rd_kafka_conf_set_rebalance_cb())
      */
-    "rebalance_cb"?: boolean | Function;
+    "rebalance_cb"?: boolean | ((...args: any[]) => any);
 
     /**
      * Offset commit result propagation callback. (set with rd_kafka_conf_set_offset_commit_cb())
      */
-    "offset_commit_cb"?: boolean | Function;
+    "offset_commit_cb"?: boolean | ((...args: any[]) => any);
 
     /**
      * Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition.

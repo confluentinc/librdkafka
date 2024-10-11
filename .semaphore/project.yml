@@ -6,12 +6,12 @@
 apiVersion: v1alpha
 kind: Project
 metadata:
-  name: confluent-kafka-js
+  name: confluent-kafka-javascript
   description: ""
 spec:
   visibility: private
   repository:
-    url: git@github.com:confluentinc/confluent-kafka-js.git
+    url: git@github.com:confluentinc/confluent-kafka-javascript.git
     run_on:
     - branches
     - tags

@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -18,7 +18,7 @@ var topic = process.argv[3] || 'test';
 
 var stream = Kafka.createReadStream({
   'metadata.broker.list': host,
-  'group.id': 'confluent-kafka-js-benchs',
+  'group.id': 'confluent-kafka-javascript-benchs',
   'fetch.wait.max.ms': 100,
   'fetch.message.max.bytes': 1024 * 1024,
   'enable.auto.commit': false

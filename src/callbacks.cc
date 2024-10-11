@@ -1,17 +1,20 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2023 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
  */
 
-#include <string>
-#include <vector>
-#include <algorithm>
-
 #include "src/callbacks.h"
+
+#include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "src/kafka-consumer.h"
 
 using v8::Local;
@@ -73,10 +76,16 @@ void Dispatcher::Activate() {
   }
 }
 
+void Dispatcher::AsyncHandleCloseCallback(uv_handle_t *handle) {
+  uv_async_t *a = reinterpret_cast<uv_async_t *>(handle);
+  delete a;
+}
+
 // Should be able to run this regardless of whether it is active or not
 void Dispatcher::Deactivate() {
   if (async) {
-    uv_close(reinterpret_cast<uv_handle_t*>(async), NULL);
+    uv_close(reinterpret_cast<uv_handle_t *>(async),
+             Dispatcher::AsyncHandleCloseCallback);
     async = NULL;
   }
 }
@@ -172,7 +181,7 @@ void Event::event_cb(RdKafka::Event &event) {
   dispatcher.Execute();
 }
 
-EventDispatcher::EventDispatcher() {}
+EventDispatcher::EventDispatcher() : client_name("") {}
 EventDispatcher::~EventDispatcher() {}
 
 void EventDispatcher::Add(const event_t &e) {
@@ -223,6 +232,8 @@ void EventDispatcher::Flush() {
           Nan::New(_events[i].fac.c_str()).ToLocalChecked());
         Nan::Set(jsobj, Nan::New("message").ToLocalChecked(),
           Nan::New(_events[i].message.c_str()).ToLocalChecked());
+        Nan::Set(jsobj, Nan::New("name").ToLocalChecked(),
+          Nan::New(this->client_name.c_str()).ToLocalChecked());
 
         break;
       case RdKafka::Event::EVENT_THROTTLE:
@@ -255,6 +266,10 @@ void EventDispatcher::Flush() {
 
     Dispatch(argc, argv);
   }
+}
+
+void EventDispatcher::SetClientName(const std::string& client_name) {
+  this->client_name = client_name;
 }
 
 DeliveryReportDispatcher::DeliveryReportDispatcher() {}
@@ -291,7 +306,7 @@ void DeliveryReportDispatcher::Flush() {
 
     if (event.is_error) {
         // If it is an error we need the first argument to be set
-        argv[0] = Nan::Error(event.error_string.c_str());
+        argv[0] = Nan::New(event.error_code);
     } else {
         argv[0] = Nan::Null();
     }
@@ -537,6 +552,37 @@ void OffsetCommitDispatcher::Flush() {
 void OffsetCommit::offset_commit_cb(RdKafka::ErrorCode err,
     std::vector<RdKafka::TopicPartition*> &offsets) {
   dispatcher.Add(offset_commit_event_t(err, offsets));
+  dispatcher.Execute();
+}
+
+// OAuthBearerTokenRefresh callback
+void OAuthBearerTokenRefreshDispatcher::Add(
+    const std::string &oauthbearer_config) {
+  scoped_mutex_lock lock(async_lock);
+  m_oauthbearer_config = oauthbearer_config;
+}
+
+void OAuthBearerTokenRefreshDispatcher::Flush() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+
+  std::string oauthbearer_config;
+  {
+    scoped_mutex_lock lock(async_lock);
+    oauthbearer_config = m_oauthbearer_config;
+    m_oauthbearer_config.clear();
+  }
+
+  v8::Local<v8::Value> argv[argc] = {};
+  argv[0] = Nan::New<v8::String>(oauthbearer_config.c_str()).ToLocalChecked();
+
+  Dispatch(argc, argv);
+}
+
+void OAuthBearerTokenRefresh::oauthbearer_token_refresh_cb(
+    RdKafka::Handle *handle, const std::string &oauthbearer_config) {
+  dispatcher.Add(oauthbearer_config);
   dispatcher.Execute();
 }
 

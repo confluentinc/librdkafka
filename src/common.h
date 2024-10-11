@@ -1,7 +1,8 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2024 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -12,11 +13,12 @@
 
 #include <nan.h>
 
+#include <list>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 #include "rdkafka.h"  // NOLINT
 
 #include "src/errors.h"
@@ -34,8 +36,11 @@ template<> std::string GetParameter<std::string>(
   v8::Local<v8::Object>, std::string, std::string);
 template<> std::vector<std::string> GetParameter<std::vector<std::string> >(
   v8::Local<v8::Object>, std::string, std::vector<std::string>);
+template<> v8::Local<v8::Array> GetParameter<v8::Local<v8::Array> >(
+  v8::Local<v8::Object>, std::string, v8::Local<v8::Array>);
 // template int GetParameter<int>(v8::Local<v8::Object, std::string, int);
 std::vector<std::string> v8ArrayToStringVector(v8::Local<v8::Array>);
+std::list<std::string> v8ArrayToStringList(v8::Local<v8::Array>);
 
 class scoped_mutex_lock {
  public:
@@ -90,22 +95,49 @@ class scoped_shared_read_lock {
 
 namespace Conversion {
 
-namespace Admin {
-  // Topics from topic object, or topic object array
-  rd_kafka_NewTopic_t* FromV8TopicObject(
-    v8::Local<v8::Object>, std::string &errstr);  // NOLINT
-  rd_kafka_NewTopic_t** FromV8TopicObjectArray(v8::Local<v8::Array>);
-}
+namespace Util {
+std::vector<std::string> ToStringVector(v8::Local<v8::Array>);
+v8::Local<v8::Array> ToV8Array(std::vector<std::string>);
+v8::Local<v8::Array> ToV8Array(const rd_kafka_error_t **error_list,
+                               size_t error_cnt);
+v8::Local<v8::Array> ToV8Array(const rd_kafka_AclOperation_t *, size_t);
 
-namespace Topic {
-  std::vector<std::string> ToStringVector(v8::Local<v8::Array>);
-  v8::Local<v8::Array> ToV8Array(std::vector<std::string>);
-}  // namespace Topic
+v8::Local<v8::Object> ToV8Object(const rd_kafka_Node_t *);
+}  // namespace Util
+
+namespace Admin {
+// Topics from topic object, or topic object array
+rd_kafka_NewTopic_t *FromV8TopicObject(v8::Local<v8::Object>,
+                                       std::string &errstr);
+rd_kafka_NewTopic_t **FromV8TopicObjectArray(v8::Local<v8::Array>);
+
+// ListGroups: request
+std::vector<rd_kafka_consumer_group_state_t> FromV8GroupStateArray(
+    v8::Local<v8::Array>);
+
+// ListGroups: response
+v8::Local<v8::Object> FromListConsumerGroupsResult(
+    const rd_kafka_ListConsumerGroups_result_t *);
+
+// DescribeGroups: response
+v8::Local<v8::Object> FromMemberDescription(
+    const rd_kafka_MemberDescription_t *member);
+v8::Local<v8::Object> FromConsumerGroupDescription(
+    const rd_kafka_ConsumerGroupDescription_t *desc);
+v8::Local<v8::Object> FromDescribeConsumerGroupsResult(
+    const rd_kafka_DescribeConsumerGroups_result_t *);
+
+// DeleteGroups: Response
+v8::Local<v8::Array> FromDeleteGroupsResult(
+    const rd_kafka_DeleteGroups_result_t *);
+}  // namespace Admin
 
 namespace TopicPartition {
 
-v8::Local<v8::Array> ToV8Array(std::vector<RdKafka::TopicPartition*> &);
-RdKafka::TopicPartition * FromV8Object(v8::Local<v8::Object>);
+v8::Local<v8::Array> ToV8Array(std::vector<RdKafka::TopicPartition *> &);
+v8::Local<v8::Array> ToTopicPartitionV8Array(
+    const rd_kafka_topic_partition_list_t *, bool include_offset);
+RdKafka::TopicPartition *FromV8Object(v8::Local<v8::Object>);
 std::vector<RdKafka::TopicPartition *> FromV8Array(const v8::Local<v8::Array> &);  // NOLINT
 
 }  // namespace TopicPartition

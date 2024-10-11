@@ -7,7 +7,6 @@ var path = require('path');
 
 var baseDir = path.resolve(__dirname, '../');
 var releaseDir = path.join(baseDir, 'build', 'deps');
-
 var isWin = /^win/.test(process.platform);
 
 // Skip running this if we are running on a windows system

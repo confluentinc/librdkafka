@@ -1,7 +1,8 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2023 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -16,7 +17,7 @@
 #include <string>
 #include <vector>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 
 #include "src/common.h"
 #include "src/connection.h"
@@ -67,6 +68,7 @@ class KafkaConsumer : public Connection {
   Baton Position(std::vector<RdKafka::TopicPartition*> &);
 
   Baton RefreshAssignments();
+  Baton AssignmentLost();
 
   bool HasAssignedPartitions();
   int AssignedPartitionCount();
@@ -74,9 +76,12 @@ class KafkaConsumer : public Connection {
   Baton Assign(std::vector<RdKafka::TopicPartition*>);
   Baton Unassign();
 
-  Baton Seek(const RdKafka::TopicPartition &partition, int timeout_ms);
+  Baton IncrementalAssign(std::vector<RdKafka::TopicPartition*>);
+  Baton IncrementalUnassign(std::vector<RdKafka::TopicPartition*>);
 
-  std::string Name();
+  std::string RebalanceProtocol();
+
+  Baton Seek(const RdKafka::TopicPartition &partition, int timeout_ms);
 
   Baton Subscribe(std::vector<std::string>);
   Baton Consume(int timeout_ms);
@@ -100,17 +105,27 @@ class KafkaConsumer : public Connection {
 
   void* m_consume_loop = nullptr;
 
+  /* This is the same client as stored in m_client.
+   * Prevents a dynamic_cast in every single method. */
+  RdKafka::KafkaConsumer *m_consumer = nullptr;
+
   // Node methods
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeSubscribe);
   static NAN_METHOD(NodeDisconnect);
   static NAN_METHOD(NodeAssign);
   static NAN_METHOD(NodeUnassign);
+  static NAN_METHOD(NodeIncrementalAssign);
+  static NAN_METHOD(NodeIncrementalUnassign);
   static NAN_METHOD(NodeAssignments);
+  static NAN_METHOD(NodeAssignmentLost);
+  static NAN_METHOD(NodeRebalanceProtocol);
   static NAN_METHOD(NodeUnsubscribe);
   static NAN_METHOD(NodeCommit);
   static NAN_METHOD(NodeCommitSync);
+  static NAN_METHOD(NodeCommitCb);
   static NAN_METHOD(NodeOffsetsStore);
+  static NAN_METHOD(NodeOffsetsStoreSingle);
   static NAN_METHOD(NodeCommitted);
   static NAN_METHOD(NodePosition);
   static NAN_METHOD(NodeSubscription);

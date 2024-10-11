@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
  * This software may be modified and distributed under the terms
@@ -10,17 +10,20 @@ var t = require('assert');
 var crypto = require('crypto');
 
 var eventListener = require('./listener');
+const { createTopics, deleteTopics } = require('./topicUtils');
 
 var KafkaConsumer = require('../').KafkaConsumer;
 
 var kafkaBrokerList = process.env.KAFKA_HOST || 'localhost:9092';
-var topic = 'test';
 
 describe('Consumer', function() {
   var gcfg;
+  let topic;
+  let createdTopics = [];
 
-  beforeEach(function() {
+  beforeEach(function(done) {
     var grp = 'kafka-mocha-grp-' + crypto.randomBytes(20).toString('hex');
+    topic = 'test' + crypto.randomBytes(20).toString('hex');
      gcfg = {
       'bootstrap.servers': kafkaBrokerList,
       'group.id': grp,
@@ -28,6 +31,12 @@ describe('Consumer', function() {
       'rebalance_cb': true,
       'enable.auto.commit': false
     };
+    createTopics([{topic, num_partitions: 1, replication_factor: 1}], kafkaBrokerList, done);
+    createdTopics.push(topic);
+  });
+
+  after(function(done) {
+    deleteTopics(createdTopics, kafkaBrokerList, done);
   });
 
   describe('commit', function() {
@@ -94,31 +103,47 @@ describe('Consumer', function() {
       t.equal(position.length, 0);
     });
 
-    it('after assign, should get committed array without offsets ', function(done) {
-      consumer.assign([{topic:topic, partition:0}]);
-      // Defer this for a second
-      setTimeout(function() {
-        consumer.committed(null, 1000, function(err, committed) {
-          t.ifError(err);
-          t.equal(committed.length, 1);
-          t.equal(typeof committed[0], 'object', 'TopicPartition should be an object');
-          t.deepStrictEqual(committed[0].partition, 0);
-          t.equal(committed[0].offset, undefined);
-          done();
-        });
+    it('after assign, should get committed array without offsets ', function (done) {
+      consumer.assign([{ topic: topic, partition: 0 }]);
+      consumer.committed(null, 1000, function (err, committed) {
+        t.ifError(err);
+        t.equal(committed.length, 1);
+        t.equal(typeof committed[0], 'object', 'TopicPartition should be an object');
+        t.deepStrictEqual(committed[0].partition, 0);
+        t.equal(committed[0].offset, undefined);
+        done();
       }, 1000);
     });
 
-    it('after assign and commit, should get committed offsets', function(done) {
+    it('after assign and commit, should get committed offsets with same metadata', function(done) {
       consumer.assign([{topic:topic, partition:0}]);
-      consumer.commitSync({topic:topic, partition:0, offset:1000});
+      consumer.commitSync({topic:topic, partition:0, offset:1000, metadata: 'A string with unicode ǂ'});
       consumer.committed(null, 1000, function(err, committed) {
         t.ifError(err);
         t.equal(committed.length, 1);
         t.equal(typeof committed[0], 'object', 'TopicPartition should be an object');
         t.deepStrictEqual(committed[0].partition, 0);
         t.deepStrictEqual(committed[0].offset, 1000);
+        t.deepStrictEqual(committed[0].metadata, 'A string with unicode ǂ');
         done();
+      });
+    });
+
+    it('after assign and commit, a different consumer should get the same committed offsets and metadata', function(done) {
+      consumer.assign([{topic:topic, partition:0}]);
+      consumer.commitSync({topic:topic, partition:0, offset:1000, metadata: 'A string with unicode ǂ'});
+
+      let consumer2 = new KafkaConsumer(gcfg, {});
+      consumer2.connect({ timeout: 2000 }, function (err, info) {
+        consumer2.committed([{ topic, partition: 0 }], 1000, function (err, committed) {
+          t.ifError(err);
+          t.equal(committed.length, 1);
+          t.equal(typeof committed[0], 'object', 'TopicPartition should be an object');
+          t.deepStrictEqual(committed[0].partition, 0);
+          t.deepStrictEqual(committed[0].offset, 1000);
+          t.deepStrictEqual(committed[0].metadata, 'A string with unicode ǂ');
+          consumer2.disconnect(done);
+        });
       });
     });
 
@@ -154,7 +179,7 @@ describe('Consumer', function() {
       consumer.connect({ timeout: 2000 }, function(err, info) {
         t.ifError(err);
         consumer.assign([{
-          topic: 'test',
+          topic,
           partition: 0,
           offset: 0
         }]);
@@ -172,7 +197,7 @@ describe('Consumer', function() {
 
     it('should be able to seek', function(cb) {
       consumer.seek({
-        topic: 'test',
+        topic,
         partition: 0,
         offset: 0
       }, 1, function(err) {
@@ -183,7 +208,7 @@ describe('Consumer', function() {
 
     it('should be able to seek with a timeout of 0', function(cb) {
       consumer.seek({
-        topic: 'test',
+        topic,
         partition: 0,
         offset: 0
       }, 0, function(err) {
@@ -217,7 +242,7 @@ describe('Consumer', function() {
       t.equal(0, consumer.subscription().length);
       consumer.subscribe([topic]);
       t.equal(1, consumer.subscription().length);
-      t.equal('test', consumer.subscription()[0]);
+      t.equal(topic, consumer.subscription()[0]);
       t.equal(0, consumer.assignments().length);
     });
 
@@ -308,6 +333,7 @@ describe('Consumer', function() {
 
         consumer.subscribe([topic]);
 
+        consumer.setDefaultConsumeTimeout(500); // Topic might not have any messages.
         consumer.consume(1, function(err, messages) {
           t.ifError(err);
 

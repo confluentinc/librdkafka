@@ -1,39 +1,17 @@
-# Contributing to `confluent-kafka-js`
+# Contributing to `confluent-kafka-javascript`
 
 :+1::tada: First off, thanks for taking the time to contribute! :tada::+1:
 
-The following is a set of guidelines for contributing to `confluent-kafka-js`
+The following is a set of guidelines for contributing to `confluent-kafka-javascript`
 which is hosted by [Confluent Inc.](https://github.com/confluentinc)
 on GitHub. This document lists rules, guidelines, and help getting started,
 so if you feel something is missing feel free to send a pull request.
-
-#### Table Of Contents
-
-[What should I know before I get started?](#what-should-i-know-before-i-get-started)
-  * [Contributor Agreement](#contributor-agreement)
-
-[How Can I Contribute?](#how-can-i-contribute)
-  * [Reporting Bugs](#reporting-bugs)
-  * [Suggesting Enhancements](#suggesting-enhancements)
-  * [Pull Requests](#pull-requests)
-
-[Styleguides](#styleguides)
-  * [Git Commit Messages](#git-commit-messages)
-  * [JavaScript Styleguide](#javascript-styleguide)
-  * [C++ Styleguide](#c++-styleguide)
-  * [Specs Styleguide](#specs-styleguide)
-  * [Documentation Styleguide](#documentation-styleguide)
-
-[Debugging](#debugging)
-  * [Debugging C++](#debugging-c)
-
-[Updating librdkafka version](#updating-librdkafka-version)
 
 ## What should I know before I get started?
 
 ### Contributor Agreement
 
-Not currently required.
+Required (please follow instructions after making any Pull Requests).
 
 ## How can I contribute?
 
@@ -49,6 +27,10 @@ replicas, partitions, and brokers you are connecting to, because some issues
 might be related to Kafka. A list of `librdkafka` configuration key-value pairs
 also helps.
 
+Adding the property `debug` in your `librdkafka` configuration will help us. A list of
+possible values is available [here](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md),
+but you can set it to `all` if verbose logs are okay.
+
 ### Suggesting Enhancements
 
 Please use __Github Issues__ to suggest enhancements. We are happy to consider
@@ -61,7 +43,7 @@ library's core.
 
 * Include new test cases (either end-to-end or unit tests) with your change.
 * Follow our style guides.
-* Make sure all tests are still passing and the `linter` does not report any issues.
+* Make sure all tests are still passing and the linter does not report any issues.
 * End files with a new line.
 * Document the new code in the comments (if it is JavaScript) so the
   documentation generator can update the reference documentation.
@@ -103,15 +85,8 @@ In short:
 
 ### JavaScript Styleguide
 
-* Place `module.exports` at or near the top of the file.
-  * Defined functions are hoisted, so it is appropriate to define the
-    function after you export it.
-  * When exporting an object, define it first, then export it, and then add
-    methods or properties.
-* Do not use ES2015 specific features (for example, do not use `let`, `const`,
-  or `class`).
 * All callbacks should follow the standard Node.js callback signature.
-* Your JavaScript should properly pass the linter (`make jslint`).
+* Your JavaScript should properly pass the linter (`make jslint` and `make eslint`).
 
 ### C++ Styleguide
 
@@ -121,7 +96,8 @@ In short:
 
 ### Specs Styleguide
 
-* Write all JavaScript tests by using the `mocha` testing framework.
+* Write JavaScript tests by using the `mocha` testing framework for the
+  non-promisified API and `jest` for the promisified API.
 * All `mocha` tests should use exports syntax.
 * All `mocha` test files should be suffixed with `.spec.js` instead of `.js`.
 * Unit tests should mirror the JavaScript files they test (for example,
@@ -144,7 +120,7 @@ In short:
 
 ## Editor
 
-Using Visual Studio code to develop on `confluent-kafka-js`. If you use it you can configure the C++ plugin to resolve the paths needed to inform your intellisense. This is the config file I am using on a mac to resolve the required paths:
+Using Visual Studio code to develop on `confluent-kafka-javascript`. If you use it you can configure the C++ plugin to resolve the paths needed to inform your intellisense. This is the config file I am using on a mac to resolve the required paths:
 
 `c_cpp_properties.json`
 ```
@@ -176,6 +152,26 @@ Using Visual Studio code to develop on `confluent-kafka-js`. If you use it you c
 }
 ```
 
+## Tests
+
+This project includes three types of tests in this project:
+* end-to-end integration tests (`mocha`)
+* unit tests (`mocha`)
+* integration tests for promisified API (`jest`)
+
+You can run all types of tests by using `Makefile`. Doing so calls `mocha` or `jest` in your locally installed `node_modules` directory.
+
+* Before you run the tests, be sure to init and update the submodules:
+  1. `git submodule init`
+  2. `git submodule update`
+* To run the unit tests, you can run `make lint` or `make test`.
+* To run the promisified integration tests, you can use `make promisified_test`.
+  You must have a running Kafka installation available. By default, the test tries to connect to `localhost:9092`;
+  however, you can supply the `KAFKA_HOST` environment variable to override this default behavior.
+* To run the integration tests, you can use `make e2e`.
+  You must have a running Kafka installation available. By default, the test tries to connect to `localhost:9092`;
+  however, you can supply the `KAFKA_HOST` environment variable to override this default behavior. Run `make e2e`.
+
 ## Debugging
 
 ### Debugging C++
@@ -193,12 +189,22 @@ gdb node
 
 You can add breakpoints and so on after that.
 
+### Debugging and Profiling JavaScript
+
+Run the code with the `--inspect` flag, and then open `chrome://inspect` in Chrome and connect to the debugger.
+
+Example:
+
+```
+node --inspect path/to/file.js
+```
+
 ## Updating librdkafka version
 
-The librdkafka should be periodically updated to the latest release in https://github.com/edenhill/librdkafka/releases
+The librdkafka should be periodically updated to the latest release in https://github.com/confluentinc/librdkafka/releases
 
 Steps to update:
-1. Update the `librdkafka` property in [`package.json`](https://github.com/confluentinc/confluent-kafka-js/blob/master/package.json) to the desired version.
+1. Update the `librdkafka` property in [`package.json`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/package.json) to the desired version.
 
 1. Update the librdkafka git submodule to that versions release commit (example below)
 
@@ -209,20 +215,27 @@ Steps to update:
 
     If you get an error during that checkout command, double check that the submodule was initialized / cloned! You may need to run `git submodule update --init --recursive`
 
-1. Update [`config.d.ts`](https://github.com/confluentinc/confluent-kafka-js/blob/master/config.d.ts) and [`errors.d.ts`](https://github.com/confluentinc/confluent-kafka-js/blob/master/errors.d.ts) TypeScript definitions by running:
+1. Update [`config.d.ts`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/config.d.ts) and [`errors.d.ts`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/errors.d.ts) TypeScript definitions by running:
     ```bash
     node ci/librdkafka-defs-generator.js
     ```
-    Note: This is ran automatically during CI flows but it's good to run it during the version upgrade pull request.
 
 1. Run `npm install --lockfile-version 2` to build with the new version and fix any build errors that occur.
 
 1. Run unit tests: `npm run test`
 
-1. Update the version numbers referenced in the [`README.md`](https://github.com/confluentinc/confluent-kafka-js/blob/master/README.md) file to the new version.
+1. Update the version numbers referenced in the [`README.md`](https://github.com/confluentinc/confluent-kafka-javascript/blob/master/README.md) file to the new version.
 
-## Publishing new npm version
+## Releasing
 
-1. Increment the `version` in `package.json` and merge that change in.
+1. Increment the `version` in `package.json`. Change the version in `client.js` and `README.md`. Change the librdkafka version in `semaphore.yml` and in `package.json`.
 
-1. Create a new github release. Set the tag & release title to the same string as `version` in `package.json`.
+1. Run `npm install` to update the `package-lock.json` file.
+
+1. Create a PR and merge the above changes, and tag the merged commit with the new version, e.g. `git tag vx.y.z && git push origin vx.y.z`.
+   This should be the same string as `version` in `package.json`.
+
+1. The CI will run on the tag, which will create the release artifacts in Semaphore CI.
+
+1. Create a new GitHub release with the tag, and upload the release artifacts from Semaphore CI.
+   The release title should be the same string as `version` in `package.json`.

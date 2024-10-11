@@ -1,0 +1,15 @@
+{
+  "name": "oauthbearer_callback_authentication",
+  "version": "1.0.0",
+  "description": "",
+  "main": "oauthbearer_callback_authentication.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "file:../../..",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

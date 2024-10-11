@@ -84,24 +84,15 @@ function getBranch(cb) {
 }
 
 function getPackageVersion(tag, branch) {
-  const baseVersion = `v${tag.major}.${tag.minor}.${tag.patch}`;
+  let baseVersion = `v${tag.major}.${tag.minor}.${tag.patch}`;
+
+
+  // publish with a -devel suffix for EA and RC releases.
+  if (tag.prerelease.length > 0) {
+    baseVersion += '-' + tag.prerelease.join('-');
+  }
 
   console.log(`Package version is "${baseVersion}"`);
-
-  // never publish with an suffix
-  // fixes https://github.com/confluentinc/confluent-kafka-js/issues/981
-  // baseVersion += '-';
-
-  // if (tag.commit === 0 && branch === 'master') {
-  //   return baseVersion;
-  // }
-
-  // if (branch !== 'master') {
-  //   baseVersion += (tag.commit + 1 + '.' + branch);
-  // } else {
-  //   baseVersion += (tag.commit + 1);
-  // }
-
   return baseVersion;
 }
 
@@ -114,7 +105,6 @@ getVersion((err, tag) => {
     if (err) {
       throw err;
     }
-
     pjs.version = getPackageVersion(tag, branch);
 
     fs.writeFileSync(pjsPath, JSON.stringify(pjs, null, 2));

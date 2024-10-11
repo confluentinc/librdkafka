@@ -1,7 +1,8 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2024 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -14,7 +15,7 @@
 #include <iostream>
 #include <string>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 
 #include "src/common.h"
 
@@ -27,6 +28,9 @@ class Baton {
   explicit Baton(const RdKafka::ErrorCode &, std::string);
   explicit Baton(const RdKafka::ErrorCode &, std::string, bool isFatal,
                  bool isRetriable, bool isTxnRequiresAbort);
+
+  static Baton BatonFromErrorAndDestroy(rd_kafka_error_t *error);
+  static Baton BatonFromErrorAndDestroy(RdKafka::Error *error);
 
   template<typename T> T data() {
     return static_cast<T>(m_data);
@@ -48,6 +52,8 @@ class Baton {
 };
 
 v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &);
+v8::Local<v8::Object> RdKafkaError(const RdKafka::ErrorCode &,
+                                   const std::string &);
 
 }  // namespace NodeKafka
 

@@ -1,6 +1,7 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2023 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -15,7 +16,7 @@
 #include <vector>
 #include <deque>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 #include "src/common.h"
 
 typedef Nan::Persistent<v8::Function,
@@ -52,6 +53,7 @@ class Dispatcher {
             static_cast<Dispatcher*>(async->data);
      dispatcher->Flush();
   }
+  static void AsyncHandleCloseCallback(uv_handle_t *);
 
   uv_async_t *async;
 };
@@ -77,8 +79,10 @@ class EventDispatcher : public Dispatcher {
   ~EventDispatcher();
   void Add(const event_t &);
   void Flush();
+  void SetClientName(const std::string &);
  protected:
   std::vector<event_t> events;
+  std::string client_name;
 };
 
 class Event : public RdKafka::EventCb {
@@ -118,7 +122,7 @@ class DeliveryReport {
   void* opaque;
 
   // Key. It is a pointer to avoid corrupted values
-  // https://github.com/confluentinc/confluent-kafka-js/issues/208
+  // https://github.com/confluentinc/confluent-kafka-javascript/issues/208
   void* key;
   size_t key_len;
 
@@ -244,6 +248,23 @@ class OffsetCommit : public RdKafka::OffsetCommitCb {
   OffsetCommitDispatcher dispatcher;
  private:
   v8::Persistent<v8::Function> m_cb;
+};
+
+class OAuthBearerTokenRefreshDispatcher : public Dispatcher {
+ public:
+  OAuthBearerTokenRefreshDispatcher() {}
+  ~OAuthBearerTokenRefreshDispatcher() {}
+  void Add(const std::string &oauthbearer_config);
+  void Flush();
+
+ private:
+  std::string m_oauthbearer_config;
+};
+
+class OAuthBearerTokenRefresh : public RdKafka::OAuthBearerTokenRefreshCb {
+ public:
+  void oauthbearer_token_refresh_cb(RdKafka::Handle *, const std::string &);
+  OAuthBearerTokenRefreshDispatcher dispatcher;
 };
 
 class Partitioner : public RdKafka::PartitionerCb {

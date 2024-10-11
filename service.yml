@@ -1,10 +1,11 @@
-name: confluent-kafka-js
+name: confluent-kafka-javascript
 lang: unknown
 lang_version: unknown
 git:
   enable: true
 github:
   enable: true
+  repo_name: confluentinc/confluent-kafka-javascript
 codeowners:
   enable: true
 semaphore:

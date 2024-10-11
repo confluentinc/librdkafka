@@ -9,11 +9,11 @@ about: Create a report to help us improve
  - Node Version [e.g. 8.2.1]:
  - NPM Version [e.g. 5.4.2]:
  - C++ Toolchain [e.g. Visual Studio, llvm, g++]:
- - confluent-kafka-js version [e.g. 2.3.3]:
+ - confluent-kafka-javascript version [e.g. 2.3.3]:
 
 **Steps to Reproduce**
 
-**confluent-kafka-js Configuration Settings**
+**confluent-kafka-javascript Configuration Settings**
 
 
 **Additional context**

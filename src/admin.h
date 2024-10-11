@@ -1,7 +1,8 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2024 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -16,7 +17,7 @@
 #include <string>
 #include <vector>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 #include "rdkafka.h"  // NOLINT
 
 #include "src/common.h"
@@ -51,6 +52,15 @@ class AdminClient : public Connection {
   Baton CreatePartitions(rd_kafka_NewPartitions_t* topic, int timeout_ms);
   // Baton AlterConfig(rd_kafka_NewTopic_t* topic, int timeout_ms);
   // Baton DescribeConfig(rd_kafka_NewTopic_t* topic, int timeout_ms);
+  Baton ListGroups(bool is_match_states_set,
+                   std::vector<rd_kafka_consumer_group_state_t>& match_states,
+                   int timeout_ms,
+                   rd_kafka_event_t** event_response);
+  Baton DescribeGroups(std::vector<std::string>& groups,
+                       bool include_authorized_operations, int timeout_ms,
+                       rd_kafka_event_t** event_response);
+  Baton DeleteGroups(rd_kafka_DeleteGroup_t** group_list, size_t group_cnt,
+                     int timeout_ms, rd_kafka_event_t** event_response);
 
  protected:
   static Nan::Persistent<v8::Function> constructor;
@@ -67,6 +77,11 @@ class AdminClient : public Connection {
   static NAN_METHOD(NodeCreateTopic);
   static NAN_METHOD(NodeDeleteTopic);
   static NAN_METHOD(NodeCreatePartitions);
+
+  // Consumer group operations
+  static NAN_METHOD(NodeListGroups);
+  static NAN_METHOD(NodeDescribeGroups);
+  static NAN_METHOD(NodeDeleteGroups);
 
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);

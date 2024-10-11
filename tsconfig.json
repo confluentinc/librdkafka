@@ -6,7 +6,7 @@
     "noImplicitThis": true,
     "strictNullChecks": true,
     "baseUrl": ".",
-    "types": ["node_modules/@types/node"],
+    "types": ["./node_modules/@types/node"],
     "typeRoots": ["."],
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,

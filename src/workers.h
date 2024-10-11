@@ -1,7 +1,8 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2023 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -13,6 +14,7 @@
 #include <uv.h>
 #include <nan.h>
 #include <string>
+#include <optional>
 #include <vector>
 
 #include "src/common.h"
@@ -36,8 +38,13 @@ class ErrorAwareWorker : public Nan::AsyncWorker {
   void HandleErrorCallback() {
     Nan::HandleScope scope;
 
+    // Construct error and add code to it.
+    v8::Local<v8::Value> error = Nan::Error(ErrorMessage());
+    Nan::Set(error.As<v8::Object>(), Nan::New("code").ToLocalChecked(),
+      Nan::New(GetErrorCode()));
+
     const unsigned int argc = 1;
-    v8::Local<v8::Value> argv[argc] = { Nan::Error(ErrorMessage()) };
+    v8::Local<v8::Value> argv[argc] = { error };
 
     callback->Call(argc, argv);
   }
@@ -417,6 +424,21 @@ class KafkaConsumerCommitted : public ErrorAwareWorker {
   const int m_timeout_ms;
 };
 
+class KafkaConsumerCommitCb : public ErrorAwareWorker {
+ public:
+  KafkaConsumerCommitCb(Nan::Callback*,
+    NodeKafka::KafkaConsumer*,
+    std::optional<std::vector<RdKafka::TopicPartition*>> &);
+  ~KafkaConsumerCommitCb();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+ private:
+  NodeKafka::KafkaConsumer * m_consumer;
+  std::optional<std::vector<RdKafka::TopicPartition*>> m_topic_partitions;
+};
+
 class KafkaConsumerSeek : public ErrorAwareWorker {
  public:
   KafkaConsumerSeek(Nan::Callback*, NodeKafka::KafkaConsumer*,
@@ -435,7 +457,7 @@ class KafkaConsumerSeek : public ErrorAwareWorker {
 class KafkaConsumerConsumeNum : public ErrorAwareWorker {
  public:
   KafkaConsumerConsumeNum(Nan::Callback*, NodeKafka::KafkaConsumer*,
-    const uint32_t &, const int &);
+    const uint32_t &, const int &, bool);
   ~KafkaConsumerConsumeNum();
 
   void Execute();
@@ -445,6 +467,7 @@ class KafkaConsumerConsumeNum : public ErrorAwareWorker {
   NodeKafka::KafkaConsumer * m_consumer;
   const uint32_t m_num_messages;
   const int m_timeout_ms;
+  const bool m_timeout_only_for_first_message;
   std::vector<RdKafka::Message*> m_messages;
 };
 
@@ -500,6 +523,70 @@ class AdminClientCreatePartitions : public ErrorAwareWorker {
   NodeKafka::AdminClient * m_client;
   rd_kafka_NewPartitions_t* m_partitions;
   const int m_timeout_ms;
+};
+
+/**
+ * @brief List consumer groups on a remote broker cluster.
+ */
+class AdminClientListGroups : public ErrorAwareWorker {
+ public:
+  AdminClientListGroups(Nan::Callback *, NodeKafka::AdminClient *, bool,
+                        std::vector<rd_kafka_consumer_group_state_t> &,
+                        const int &);
+  ~AdminClientListGroups();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+
+ private:
+  NodeKafka::AdminClient *m_client;
+  const bool m_is_match_states_set;
+  std::vector<rd_kafka_consumer_group_state_t> m_match_states;
+  const int m_timeout_ms;
+  rd_kafka_event_t *m_event_response;
+};
+
+/**
+ * @brief Describe consumer groups on a remote broker cluster.
+ */
+class AdminClientDescribeGroups : public ErrorAwareWorker {
+ public:
+  AdminClientDescribeGroups(Nan::Callback *, NodeKafka::AdminClient *,
+                            std::vector<std::string> &, bool, const int &);
+  ~AdminClientDescribeGroups();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+
+ private:
+  NodeKafka::AdminClient *m_client;
+  std::vector<std::string> m_groups;
+  const bool m_include_authorized_operations;
+  const int m_timeout_ms;
+  rd_kafka_event_t *m_event_response;
+};
+
+/**
+ * @brief Delete consumer groups on a remote broker cluster.
+ */
+class AdminClientDeleteGroups : public ErrorAwareWorker {
+ public:
+  AdminClientDeleteGroups(Nan::Callback *, NodeKafka::AdminClient *,
+                            rd_kafka_DeleteGroup_t **, size_t, const int &);
+  ~AdminClientDeleteGroups();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+
+ private:
+  NodeKafka::AdminClient *m_client;
+  rd_kafka_DeleteGroup_t **m_group_list;
+  size_t m_group_cnt;
+  const int m_timeout_ms;
+  rd_kafka_event_t *m_event_response;
 };
 
 }  // namespace Workers

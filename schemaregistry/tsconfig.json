@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "es2021",
+    "lib": [
+      "es2021", "dom"
+    ],
+    "declaration": true,
+    "outDir": "dist",
+    "types": ["../node_modules/@types/node"],
+    "esModuleInterop": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "useUnknownInCatchVariables": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "nodenext",
+    "module": "nodenext",
+    "skipLibCheck": true
+  },
+  "include": [
+    "**/*",
+    "../test/**/*"
+  ],
+  "exclude": [
+    "dist"
+  ]
+}

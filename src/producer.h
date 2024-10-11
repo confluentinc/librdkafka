@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -14,8 +14,9 @@
 #include <node.h>
 #include <node_buffer.h>
 #include <string>
+#include <vector>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 
 #include "src/common.h"
 #include "src/connection.h"
@@ -54,6 +55,7 @@ class Producer : public Connection {
   Baton Connect();
   void Disconnect();
   void Poll();
+  Baton SetPollInBackground(bool);
   #if RD_KAFKA_VERSION > 0x00090200
   Baton Flush(int timeout_ms);
   #endif
@@ -75,12 +77,11 @@ class Producer : public Connection {
     int64_t timestamp, void* opaque,
     RdKafka::Headers* headers);
 
-  std::string Name();
-
   void ActivateDispatchers();
   void DeactivateDispatchers();
 
-  void ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add) override;
+  void ConfigureCallback(const std::string& string_key,
+                         const v8::Local<v8::Function>& cb, bool add) override;
 
   Baton InitTransactions(int32_t timeout_ms);
   Baton BeginTransaction();
@@ -89,8 +90,7 @@ class Producer : public Connection {
   Baton SendOffsetsToTransaction(
     std::vector<RdKafka::TopicPartition*> &offsets,
     NodeKafka::KafkaConsumer* consumer,
-    int timeout_ms
-  );
+    int timeout_ms);
 
  protected:
   static Nan::Persistent<v8::Function> constructor;
@@ -105,6 +105,7 @@ class Producer : public Connection {
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);
   static NAN_METHOD(NodePoll);
+  static NAN_METHOD(NodeSetPollInBackground);
   #if RD_KAFKA_VERSION > 0x00090200
   static NAN_METHOD(NodeFlush);
   #endif
@@ -116,6 +117,7 @@ class Producer : public Connection {
 
   Callbacks::Delivery m_dr_cb;
   Callbacks::Partitioner m_partitioner_cb;
+  bool m_is_background_polling;
 };
 
 }  // namespace NodeKafka

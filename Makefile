@@ -1,19 +1,14 @@
 NODE-GYP ?= node_modules/.bin/node-gyp
 
-# Sick of changing this. Do a check and try to use python 2 if it doesn't work
-PYTHON_VERSION_FULL := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
-PYTHON_VERSION_MAJOR := $(word 1,${PYTHON_VERSION_FULL})
-
-ifeq ($(PYTHON_VERSION_MAJOR), 2)
 PYTHON = python
-else
-PYTHON = python2
+ifeq (, $(shell command -v python))
+  PYTHON = python3
 endif
-
 NODE ?= node
 CPPLINT ?= cpplint.py
 BUILDTYPE ?= Release
-TESTS = "test/**/*.js"
+TESTS = $(ls test/producer/*.js test/*.js test/tools/*.js)
+PROMISIFIED_TESTS = "test/promisified"
 E2E_TESTS = $(wildcard e2e/*.spec.js)
 TEST_REPORTER =
 TEST_OUTPUT =
@@ -23,8 +18,7 @@ CONFIG_OUTPUTS = \
   build/binding.Makefile build/config.gypi
 
 CPPLINT_FILES = $(wildcard src/*.cc src/*.h)
-CPPLINT_FILTER = -legal/copyright
-JSLINT_FILES = lib/*.js test/*.js e2e/*.js
+CPPLINT_FILTER = -legal/copyright,-readability/todo,-whitespace/indent_namespace,-runtime/references
 
 PACKAGE = $(shell node -pe 'require("./package.json").name.split("/")[1]')
 VERSION = $(shell node -pe 'require("./package.json").version')
@@ -38,13 +32,13 @@ endif
 
 all: lint lib test e2e
 
-lint: cpplint jslint
+lint: cpplint eslint
 
 cpplint:
 	@$(PYTHON) $(CPPLINT) --filter=$(CPPLINT_FILTER) $(CPPLINT_FILES)
 
-jslint: node_modules/.dirstamp
-	@./node_modules/.bin/jshint --verbose $(JSLINT_FILES)
+eslint: node_modules/.dirstamp
+	@./node_modules/.bin/eslint .
 
 lib: node_modules/.dirstamp $(CONFIG_OUTPUTS)
 	@PYTHONHTTPSVERIFY=0 $(NODE-GYP) build $(GYPBUILDARGS)
@@ -58,6 +52,9 @@ $(CONFIG_OUTPUTS): node_modules/.dirstamp binding.gyp
 
 test: node_modules/.dirstamp
 	@./node_modules/.bin/mocha --ui exports $(TEST_REPORTER) $(TESTS) $(TEST_OUTPUT)
+
+promisified_test: node_modules/.dirstamp
+	@./node_modules/.bin/jest --ci --runInBand $(PROMISIFIED_TESTS)
 
 check: node_modules/.dirstamp
 	@$(NODE) util/test-compile.js
@@ -78,7 +75,7 @@ endef
 
 docs: node_modules/.dirstamp
 	@rm -rf docs
-	@./node_modules/jsdoc/jsdoc.js --destination docs \
+	@./node_modules/jsdoc/jsdoc.js --debug --destination docs \
 		--recurse -R ./README.md \
 		-c ./jsdoc.conf \
 		--tutorials examples/ ./lib

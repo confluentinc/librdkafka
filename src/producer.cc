@@ -1,7 +1,8 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2023 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
@@ -32,10 +33,13 @@ namespace NodeKafka {
 Producer::Producer(Conf* gconfig, Conf* tconfig):
   Connection(gconfig, tconfig),
   m_dr_cb(),
-  m_partitioner_cb() {
+  m_partitioner_cb(),
+  m_is_background_polling(false) {
     std::string errstr;
 
-    m_gconfig->set("default_topic_conf", m_tconfig, errstr);
+    if (m_tconfig)
+      m_gconfig->set("default_topic_conf", m_tconfig, errstr);
+
     m_gconfig->set("dr_cb", &m_dr_cb, errstr);
   }
 
@@ -69,6 +73,11 @@ void Producer::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "getMetadata", NodeGetMetadata);
   Nan::SetPrototypeMethod(tpl, "queryWatermarkOffsets", NodeQueryWatermarkOffsets);  // NOLINT
   Nan::SetPrototypeMethod(tpl, "poll", NodePoll);
+  Nan::SetPrototypeMethod(tpl, "setPollInBackground", NodeSetPollInBackground);
+  Nan::SetPrototypeMethod(tpl, "setSaslCredentials", NodeSetSaslCredentials);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerToken", NodeSetOAuthBearerToken);
+  Nan::SetPrototypeMethod(tpl, "setOAuthBearerTokenFailure",
+                          NodeSetOAuthBearerTokenFailure);
 
   /*
    * @brief Methods exposed to do with message production
@@ -87,7 +96,7 @@ void Producer::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "beginTransaction", NodeBeginTransaction);
   Nan::SetPrototypeMethod(tpl, "commitTransaction", NodeCommitTransaction);
   Nan::SetPrototypeMethod(tpl, "abortTransaction", NodeAbortTransaction);
-  Nan::SetPrototypeMethod(tpl, "sendOffsetsToTransaction", NodeSendOffsetsToTransaction);
+  Nan::SetPrototypeMethod(tpl, "sendOffsetsToTransaction", NodeSendOffsetsToTransaction); // NOLINT
 
     // connect. disconnect. resume. pause. get meta data
   constructor.Reset((tpl->GetFunction(Nan::GetCurrentContext()))
@@ -110,10 +119,6 @@ void Producer::New(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     return Nan::ThrowError("Global configuration data must be specified");
   }
 
-  if (!info[1]->IsObject()) {
-    return Nan::ThrowError("Topic configuration must be specified");
-  }
-
   std::string errstr;
 
   Conf* gconfig =
@@ -124,14 +129,18 @@ void Producer::New(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     return Nan::ThrowError(errstr.c_str());
   }
 
-  Conf* tconfig =
-    Conf::create(RdKafka::Conf::CONF_TOPIC,
-      (info[1]->ToObject(Nan::GetCurrentContext())).ToLocalChecked(), errstr);
+  // If tconfig isn't set, then just let us pick properties from gconf.
+  Conf* tconfig = nullptr;
+  if (info[1]->IsObject()) {
+    tconfig = Conf::create(
+        RdKafka::Conf::CONF_TOPIC,
+        (info[1]->ToObject(Nan::GetCurrentContext())).ToLocalChecked(), errstr);
 
-  if (!tconfig) {
-    // No longer need this since we aren't instantiating anything
-    delete gconfig;
-    return Nan::ThrowError(errstr.c_str());
+    if (!tconfig) {
+      // No longer need this since we aren't instantiating anything
+      delete gconfig;
+      return Nan::ThrowError(errstr.c_str());
+    }
   }
 
   Producer* producer = new Producer(gconfig, tconfig);
@@ -159,39 +168,42 @@ v8::Local<v8::Object> Producer::NewInstance(v8::Local<v8::Value> arg) {
   return scope.Escape(instance);
 }
 
-
-std::string Producer::Name() {
-  if (!IsConnected()) {
-    return std::string("");
-  }
-  return std::string(m_client->name());
-}
-
 Baton Producer::Connect() {
   if (IsConnected()) {
     return Baton(RdKafka::ERR_NO_ERROR);
   }
 
   std::string errstr;
+
+  Baton baton = setupSaslOAuthBearerConfig();
+  if (baton.err() != RdKafka::ERR_NO_ERROR) {
+    return baton;
+  }
+
   {
     scoped_shared_read_lock lock(m_connection_lock);
     m_client = RdKafka::Producer::create(m_gconfig, errstr);
   }
 
   if (!m_client) {
-    // @todo implement errstr into this somehow
     return Baton(RdKafka::ERR__STATE, errstr);
   }
 
-  return Baton(RdKafka::ERR_NO_ERROR);
+  /* Set the client name at the first possible opportunity for logging. */
+  m_event_cb.dispatcher.SetClientName(m_client->name());
+
+  baton = setupSaslOAuthBearerBackgroundQueue();
+  return baton;
 }
 
 void Producer::ActivateDispatchers() {
+  m_gconfig->listen();               // From global config.
   m_event_cb.dispatcher.Activate();  // From connection
   m_dr_cb.dispatcher.Activate();
 }
 
 void Producer::DeactivateDispatchers() {
+  m_gconfig->stop();                   // From global config.
   m_event_cb.dispatcher.Deactivate();  // From connection
   m_dr_cb.dispatcher.Deactivate();
 }
@@ -324,14 +336,45 @@ Baton Producer::Produce(void* message, size_t size, std::string topic,
 }
 
 void Producer::Poll() {
+  // We're not allowed to call poll when we have forwarded the main
+  // queue to the background queue, as that would indirectly poll
+  // the background queue. However, that's not allowed by librdkafka.
+  if (m_is_background_polling) {
+    return;
+  }
   m_client->poll(0);
 }
 
-void Producer::ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add) {
+Baton Producer::SetPollInBackground(bool set) {
+  scoped_shared_read_lock lock(m_connection_lock);
+  rd_kafka_t* rk = this->m_client->c_ptr();
+  if (!IsConnected()) {
+    return Baton(RdKafka::ERR__STATE, "Producer is disconnected");
+  }
+
+  if (set && !m_is_background_polling) {
+    m_is_background_polling = true;
+    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
+    rd_kafka_queue_t* background_q = rd_kafka_queue_get_background(rk);
+    rd_kafka_queue_forward(main_q, background_q);
+    rd_kafka_queue_destroy(main_q);
+    rd_kafka_queue_destroy(background_q);
+  } else if (!set && m_is_background_polling) {
+    m_is_background_polling = false;
+    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
+    rd_kafka_queue_forward(main_q, NULL);
+    rd_kafka_queue_destroy(main_q);
+  }
+
+  return Baton(RdKafka::ERR_NO_ERROR);
+}
+
+void Producer::ConfigureCallback(const std::string& string_key,
+                                 const v8::Local<v8::Function>& cb, bool add) {
   if (string_key.compare("delivery_cb") == 0) {
     if (add) {
       bool dr_msg_cb = false;
-      v8::Local<v8::String> dr_msg_cb_key = Nan::New("dr_msg_cb").ToLocalChecked();
+      v8::Local<v8::String> dr_msg_cb_key = Nan::New("dr_msg_cb").ToLocalChecked(); // NOLINT
       if (Nan::Has(cb, dr_msg_cb_key).FromMaybe(false)) {
         v8::Local<v8::Value> v = Nan::Get(cb, dr_msg_cb_key).ToLocalChecked();
         if (v->IsBoolean()) {
@@ -347,18 +390,6 @@ void Producer::ConfigureCallback(const std::string &string_key, const v8::Local<
     }
   } else {
     Connection::ConfigureCallback(string_key, cb, add);
-  }
-}
-
-Baton rdkafkaErrorToBaton(RdKafka::Error* error) {
-  if ( NULL == error) {
-    return Baton(RdKafka::ERR_NO_ERROR);
-  }
-  else {
-    Baton result(error->code(), error->str(), error->is_fatal(),
-                 error->is_retriable(), error->txn_requires_abort());
-    delete error;
-    return result;
   }
 }
 
@@ -414,10 +445,12 @@ Baton Producer::SendOffsetsToTransaction(
     return Baton(RdKafka::ERR__STATE);
   }
 
-  RdKafka::ConsumerGroupMetadata* group_metadata = dynamic_cast<RdKafka::KafkaConsumer*>(consumer->m_client)->groupMetadata();
+  RdKafka::ConsumerGroupMetadata* group_metadata =
+      dynamic_cast<RdKafka::KafkaConsumer*>(consumer->m_client)->groupMetadata(); // NOLINT
 
   RdKafka::Producer* producer = dynamic_cast<RdKafka::Producer*>(m_client);
-  RdKafka::Error* error = producer->send_offsets_to_transaction(offsets, group_metadata, timeout_ms);
+  RdKafka::Error* error =
+    producer->send_offsets_to_transaction(offsets, group_metadata, timeout_ms);
   delete group_metadata;
 
   return rdkafkaErrorToBaton( error);
@@ -489,9 +522,11 @@ NAN_METHOD(Producer::NodeProduce) {
     message_buffer_data = node::Buffer::Data(message_buffer_object);
     if (message_buffer_data == NULL) {
       // empty string message buffer should not end up as null message
-      v8::Local<v8::Object> message_buffer_object_emptystring = Nan::NewBuffer(new char[0], 0).ToLocalChecked();
-      message_buffer_length = node::Buffer::Length(message_buffer_object_emptystring);
-      message_buffer_data = node::Buffer::Data(message_buffer_object_emptystring);
+      v8::Local<v8::Object> message_buffer_object_emptystring =
+          Nan::NewBuffer(new char[0], 0).ToLocalChecked();
+      message_buffer_length =
+          node::Buffer::Length(message_buffer_object_emptystring);
+      message_buffer_data = node::Buffer::Data(message_buffer_object_emptystring); // NOLINT
     }
   }
 
@@ -519,9 +554,10 @@ NAN_METHOD(Producer::NodeProduce) {
     key_buffer_data = node::Buffer::Data(key_buffer_object);
     if (key_buffer_data == NULL) {
       // empty string key buffer should not end up as null key
-        v8::Local<v8::Object> key_buffer_object_emptystring = Nan::NewBuffer(new char[0], 0).ToLocalChecked();
-        key_buffer_length = node::Buffer::Length(key_buffer_object_emptystring);
-        key_buffer_data = node::Buffer::Data(key_buffer_object_emptystring);
+      v8::Local<v8::Object> key_buffer_object_emptystring =
+          Nan::NewBuffer(new char[0], 0).ToLocalChecked();
+      key_buffer_length = node::Buffer::Length(key_buffer_object_emptystring);
+      key_buffer_data = node::Buffer::Data(key_buffer_object_emptystring);
     }
   } else {
     // If it was a string just use the utf8 value.
@@ -569,18 +605,37 @@ NAN_METHOD(Producer::NodeProduce) {
 
         v8::Local<v8::Array> props = header->GetOwnPropertyNames(
           Nan::GetCurrentContext()).ToLocalChecked();
-        Nan::MaybeLocal<v8::String> v8Key = Nan::To<v8::String>(
-            Nan::Get(props, 0).ToLocalChecked());
-        Nan::MaybeLocal<v8::String> v8Value = Nan::To<v8::String>(
-            Nan::Get(header, v8Key.ToLocalChecked()).ToLocalChecked());
 
+        // TODO: Other properties in the list of properties should not be
+        // ignored, but they are. This is a bug, need to handle it either in JS
+        // or here.
+        Nan::MaybeLocal<v8::String> v8Key =
+            Nan::To<v8::String>(Nan::Get(props, 0).ToLocalChecked());
+
+        // The key must be a string.
+        if (v8Key.IsEmpty()) {
+          Nan::ThrowError("Header key must be a string");
+        }
         Nan::Utf8String uKey(v8Key.ToLocalChecked());
         std::string key(*uKey);
 
-        Nan::Utf8String uValue(v8Value.ToLocalChecked());
-        std::string value(*uValue);
-        headers.push_back(
-          RdKafka::Headers::Header(key, value.c_str(), value.size()));
+        // Valid types for the header are string or buffer.
+        // Other types will throw an error.
+        v8::Local<v8::Value> v8Value =
+            Nan::Get(header, v8Key.ToLocalChecked()).ToLocalChecked();
+
+        if (node::Buffer::HasInstance(v8Value)) {
+          const char* value = node::Buffer::Data(v8Value);
+          const size_t value_len = node::Buffer::Length(v8Value);
+          headers.push_back(RdKafka::Headers::Header(key, value, value_len));
+        } else if (v8Value->IsString()) {
+          Nan::Utf8String uValue(v8Value);
+          std::string value(*uValue);
+          headers.push_back(
+              RdKafka::Headers::Header(key, value.c_str(), value.size()));
+        } else {
+          Nan::ThrowError("Header value must be a string or buffer");
+        }
       }
     }
   }
@@ -692,6 +747,23 @@ NAN_METHOD(Producer::NodePoll) {
   }
 }
 
+NAN_METHOD(Producer::NodeSetPollInBackground) {
+  Nan::HandleScope scope;
+  if (info.Length() < 1 || !info[0]->IsBoolean()) {
+    // Just throw an exception
+    return Nan::ThrowError(
+        "Need to specify a boolean for setting or unsetting");
+  }
+  bool set = Nan::To<bool>(info[0]).FromJust();
+
+  Producer* producer = ObjectWrap::Unwrap<Producer>(info.This());
+  Baton b = producer->SetPollInBackground(set);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    return Nan::ThrowError(b.errstr().c_str());
+  }
+  info.GetReturnValue().Set(b.ToObject());
+}
+
 Baton Producer::Flush(int timeout_ms) {
   RdKafka::ErrorCode response_code;
   if (IsConnected()) {
@@ -761,7 +833,8 @@ NAN_METHOD(Producer::NodeInitTransactions) {
   Nan::Callback *callback = new Nan::Callback(cb);
 
   Producer* producer = ObjectWrap::Unwrap<Producer>(info.This());
-  Nan::AsyncQueueWorker(new Workers::ProducerInitTransactions(callback, producer, timeout_ms));
+  Nan::AsyncQueueWorker(
+      new Workers::ProducerInitTransactions(callback, producer, timeout_ms));
 
   info.GetReturnValue().Set(Nan::Null());
 }
@@ -777,7 +850,7 @@ NAN_METHOD(Producer::NodeBeginTransaction) {
   Nan::Callback *callback = new Nan::Callback(cb);
 
   Producer* producer = ObjectWrap::Unwrap<Producer>(info.This());
-  Nan::AsyncQueueWorker(new Workers::ProducerBeginTransaction(callback, producer));
+  Nan::AsyncQueueWorker(new Workers::ProducerBeginTransaction(callback, producer)); // NOLINT
 
   info.GetReturnValue().Set(Nan::Null());
 }
@@ -795,7 +868,8 @@ NAN_METHOD(Producer::NodeCommitTransaction) {
   Nan::Callback *callback = new Nan::Callback(cb);
 
   Producer* producer = ObjectWrap::Unwrap<Producer>(info.This());
-  Nan::AsyncQueueWorker(new Workers::ProducerCommitTransaction(callback, producer, timeout_ms));
+  Nan::AsyncQueueWorker(
+      new Workers::ProducerCommitTransaction(callback, producer, timeout_ms));
 
   info.GetReturnValue().Set(Nan::Null());
 }
@@ -813,7 +887,8 @@ NAN_METHOD(Producer::NodeAbortTransaction) {
   Nan::Callback *callback = new Nan::Callback(cb);
 
   Producer* producer = ObjectWrap::Unwrap<Producer>(info.This());
-  Nan::AsyncQueueWorker(new Workers::ProducerAbortTransaction(callback, producer, timeout_ms));
+  Nan::AsyncQueueWorker(
+      new Workers::ProducerAbortTransaction(callback, producer, timeout_ms));
 
   info.GetReturnValue().Set(Nan::Null());
 }
@@ -822,10 +897,12 @@ NAN_METHOD(Producer::NodeSendOffsetsToTransaction) {
   Nan::HandleScope scope;
 
   if (info.Length() < 4) {
-    return Nan::ThrowError("Need to specify offsets, consumer, timeout for 'send offsets to transaction', and callback");
+    return Nan::ThrowError(
+      "Need to specify offsets, consumer, timeout for 'send offsets to transaction', and callback"); // NOLINT
   }
   if (!info[0]->IsArray()) {
-    return Nan::ThrowError("First argument to 'send offsets to transaction' has to be a consumer object");
+    return Nan::ThrowError(
+      "First argument to 'send offsets to transaction' has to be a consumer object"); // NOLINT
   }
   if (!info[1]->IsObject()) {
     Nan::ThrowError("Kafka consumer must be provided");
@@ -851,8 +928,7 @@ NAN_METHOD(Producer::NodeSendOffsetsToTransaction) {
     producer,
     toppars,
     consumer,
-    timeout_ms
-  ));
+    timeout_ms));
 
   info.GetReturnValue().Set(Nan::Null());
 }

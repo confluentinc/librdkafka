@@ -1,5 +1,5 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
  *
@@ -16,7 +16,7 @@
 #include <list>
 #include <string>
 
-#include "rdkafkacpp.h"
+#include "rdkafkacpp.h" // NOLINT
 #include "src/common.h"
 #include "src/callbacks.h"
 
@@ -32,10 +32,28 @@ class Conf : public RdKafka::Conf {
   void listen();
   void stop();
 
-  void ConfigureCallback(const std::string &string_key, const v8::Local<v8::Function> &cb, bool add, std::string &errstr);
- protected:
-  NodeKafka::Callbacks::Rebalance * m_rebalance_cb = NULL;
-  NodeKafka::Callbacks::OffsetCommit * m_offset_commit_cb = NULL;
+  void ConfigureCallback(
+    const std::string &string_key,
+    const v8::Local<v8::Function> &cb,
+    bool add, std::string &errstr);
+
+  bool is_sasl_oauthbearer() const;
+
+ private:
+  NodeKafka::Callbacks::Rebalance *rebalance_cb() const;
+  NodeKafka::Callbacks::OffsetCommit *offset_commit_cb() const;
+  NodeKafka::Callbacks::OAuthBearerTokenRefresh *oauthbearer_token_refresh_cb()
+      const;
+
+  // NOTE: Do NOT add any members to this class.
+  // Internally, to get an instance of this class, we just cast RdKafka::Conf*
+  // that we obtain from RdKafka::Conf::create(). However, that's internally an
+  // instance of a sub-class, ConfImpl. This means that any members here are
+  // aliased to that with the wrong name (for example, the first member of this
+  // class, if it's a pointer, will be aliased to consume_cb_ in the ConfImpl,
+  // and and changing one will change the other!)
+  // TODO: Just don't inherit from RdKafka::Conf, and instead have a member of
+  // type RdKafka::Conf*.
 };
 
 }  // namespace NodeKafka

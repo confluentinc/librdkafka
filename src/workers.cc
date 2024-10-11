@@ -1,16 +1,16 @@
 /*
- * confluent-kafka-js - Node.js wrapper  for RdKafka C/C++ library
+ * confluent-kafka-javascript - Node.js wrapper  for RdKafka C/C++ library
  *
  * Copyright (c) 2016-2023 Blizzard Entertainment
+ *           (c) 2024 Confluent, Inc.
  *
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE.txt file for details.
  */
+#include "src/workers.h"
 
 #include <string>
 #include <vector>
-
-#include "src/workers.h"
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -199,6 +199,11 @@ ProducerConnect::ProducerConnect(Nan::Callback *callback, Producer* producer):
 ProducerConnect::~ProducerConnect() {}
 
 void ProducerConnect::Execute() {
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  producer->ActivateDispatchers();
+
   Baton b = producer->Connect();
 
   if (b.err() != RdKafka::ERR_NO_ERROR) {
@@ -217,14 +222,13 @@ void ProducerConnect::HandleOKCallback() {
 
   v8::Local<v8::Value> argv[argc] = { Nan::Null(), obj};
 
-  // Activate the dispatchers
-  producer->ActivateDispatchers();
-
   callback->Call(argc, argv);
 }
 
 void ProducerConnect::HandleErrorCallback() {
   Nan::HandleScope scope;
+
+  producer->DeactivateDispatchers();
 
   const unsigned int argc = 1;
   v8::Local<v8::Value> argv[argc] = { GetErrorObject() };
@@ -356,9 +360,9 @@ void ProducerInitTransactions::HandleErrorCallback() {
  * @sa NodeKafka::Producer::BeginTransaction
  */
 
-ProducerBeginTransaction::ProducerBeginTransaction(Nan::Callback *callback, Producer* producer):
-  ErrorAwareWorker(callback),
-  producer(producer) {}
+ProducerBeginTransaction::ProducerBeginTransaction(Nan::Callback* callback,
+                                                   Producer* producer)
+    : ErrorAwareWorker(callback), producer(producer) {}
 
 ProducerBeginTransaction::~ProducerBeginTransaction() {}
 
@@ -508,11 +512,8 @@ ProducerSendOffsetsToTransaction::ProducerSendOffsetsToTransaction(
 ProducerSendOffsetsToTransaction::~ProducerSendOffsetsToTransaction() {}
 
 void ProducerSendOffsetsToTransaction::Execute() {
-  Baton b = producer->SendOffsetsToTransaction(
-    m_topic_partitions,
-    consumer,
-    m_timeout_ms
-  );
+  Baton b = producer->SendOffsetsToTransaction(m_topic_partitions, consumer,
+                                               m_timeout_ms);
 
   if (b.err() != RdKafka::ERR_NO_ERROR) {
     SetErrorBaton(b);
@@ -557,6 +558,11 @@ KafkaConsumerConnect::KafkaConsumerConnect(Nan::Callback *callback,
 KafkaConsumerConnect::~KafkaConsumerConnect() {}
 
 void KafkaConsumerConnect::Execute() {
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  consumer->ActivateDispatchers();
+
   Baton b = consumer->Connect();
   // consumer->Wait();
 
@@ -576,13 +582,14 @@ void KafkaConsumerConnect::HandleOKCallback() {
     Nan::New(consumer->Name()).ToLocalChecked());
 
   v8::Local<v8::Value> argv[argc] = { Nan::Null(), obj };
-  consumer->ActivateDispatchers();
 
   callback->Call(argc, argv);
 }
 
 void KafkaConsumerConnect::HandleErrorCallback() {
   Nan::HandleScope scope;
+
+  consumer->DeactivateDispatchers();
 
   const unsigned int argc = 1;
   v8::Local<v8::Value> argv[argc] = { Nan::Error(ErrorMessage()) };
@@ -648,9 +655,9 @@ void KafkaConsumerDisconnect::HandleErrorCallback() {
  * consumer is flagged as disconnected or as unsubscribed.
  *
  * @todo thread-safe isConnected checking
- * @note Chances are, when the connection is broken with the way librdkafka works,
- * we are shutting down. But we want it to shut down properly so we probably
- * need the consumer to have a thread lock that can be used when
+ * @note Chances are, when the connection is broken with the way librdkafka
+ * works, we are shutting down. But we want it to shut down properly so we
+ * probably need the consumer to have a thread lock that can be used when
  * we are dealing with manipulating the `client`
  *
  * @sa RdKafka::KafkaConsumer::Consume
@@ -666,7 +673,8 @@ KafkaConsumerConsumeLoop::KafkaConsumerConsumeLoop(Nan::Callback *callback,
   m_looping(true),
   m_timeout_ms(timeout_ms),
   m_timeout_sleep_delay_ms(timeout_sleep_delay_ms) {
-  uv_thread_create(&thread_event_loop, KafkaConsumerConsumeLoop::ConsumeLoop, (void*)this);
+  uv_thread_create(&thread_event_loop, KafkaConsumerConsumeLoop::ConsumeLoop,
+                   reinterpret_cast<void*>(this));
 }
 
 KafkaConsumerConsumeLoop::~KafkaConsumerConsumeLoop() {}
@@ -680,8 +688,9 @@ void KafkaConsumerConsumeLoop::Execute(const ExecutionMessageBus& bus) {
   // ConsumeLoop is used instead
 }
 
-void KafkaConsumerConsumeLoop::ConsumeLoop(void *arg) {
-  KafkaConsumerConsumeLoop* consumerLoop = (KafkaConsumerConsumeLoop*)arg;
+void KafkaConsumerConsumeLoop::ConsumeLoop(void* arg) {
+  KafkaConsumerConsumeLoop* consumerLoop =
+      reinterpret_cast<KafkaConsumerConsumeLoop*>(arg);
   ExecutionMessageBus bus(consumerLoop);
   KafkaConsumer* consumer = consumerLoop->consumer;
 
@@ -719,7 +728,8 @@ void KafkaConsumerConsumeLoop::ConsumeLoop(void *arg) {
           consumerLoop->m_looping = false;
           break;
         }
-    } else if (ec == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART || ec == RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED) {
+    } else if (ec == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART ||
+               ec == RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED) {
       bus.SendWarning(ec);
     } else {
       // Unknown error. We need to break out of this
@@ -729,7 +739,8 @@ void KafkaConsumerConsumeLoop::ConsumeLoop(void *arg) {
   }
 }
 
-void KafkaConsumerConsumeLoop::HandleMessageCallback(RdKafka::Message* msg, RdKafka::ErrorCode ec) {
+void KafkaConsumerConsumeLoop::HandleMessageCallback(RdKafka::Message* msg,
+                                                     RdKafka::ErrorCode ec) {
   Nan::HandleScope scope;
 
   const unsigned int argc = 4;
@@ -797,11 +808,13 @@ void KafkaConsumerConsumeLoop::HandleErrorCallback() {
 KafkaConsumerConsumeNum::KafkaConsumerConsumeNum(Nan::Callback *callback,
                                      KafkaConsumer* consumer,
                                      const uint32_t & num_messages,
-                                     const int & timeout_ms) :
+                                     const int & timeout_ms,
+                                     bool timeout_only_for_first_message) :
   ErrorAwareWorker(callback),
   m_consumer(consumer),
   m_num_messages(num_messages),
-  m_timeout_ms(timeout_ms) {}
+  m_timeout_ms(timeout_ms),
+  m_timeout_only_for_first_message(timeout_only_for_first_message) {}
 
 KafkaConsumerConsumeNum::~KafkaConsumerConsumeNum() {}
 
@@ -825,8 +838,9 @@ void KafkaConsumerConsumeNum::Execute() {
             timeout_ms = 1;
           }
 
-          // We will only go into this code path when `enable.partition.eof` is set to true
-          // In this case, consumer is also interested in EOF messages, so we return an EOF message
+          // We will only go into this code path when `enable.partition.eof`
+          // is set to true. In this case, consumer is also interested in EOF
+          // messages, so we return an EOF message
           m_messages.push_back(message);
           eof_event_count += 1;
           break;
@@ -838,6 +852,15 @@ void KafkaConsumerConsumeNum::Execute() {
           break;
         case RdKafka::ERR_NO_ERROR:
           m_messages.push_back(b.data<RdKafka::Message*>());
+
+          // This allows getting ready messages, while not waiting for new ones.
+          // This is useful when we want to get the as many messages as possible
+          // within the timeout but not wait if we already have one or more
+          // messages.
+          if (m_timeout_only_for_first_message) {
+            timeout_ms = 1;
+          }
+
           break;
         default:
           // Set the error for any other errors and break
@@ -876,7 +899,8 @@ void KafkaConsumerConsumeNum::HandleOKCallback() {
       switch (message->err()) {
         case RdKafka::ERR_NO_ERROR:
           ++returnArrayIndex;
-          Nan::Set(returnArray, returnArrayIndex, Conversion::Message::ToV8Object(message));
+          Nan::Set(returnArray, returnArrayIndex,
+                   Conversion::Message::ToV8Object(message));
           break;
         case RdKafka::ERR__PARTITION_EOF:
           ++eofEventsArrayIndex;
@@ -891,10 +915,12 @@ void KafkaConsumerConsumeNum::HandleOKCallback() {
           Nan::Set(eofEvent, Nan::New<v8::String>("partition").ToLocalChecked(),
             Nan::New<v8::Number>(message->partition()));
 
-          // also store index at which position in the message array this event was emitted
-          // this way, we can later emit it at the right point in time
-          Nan::Set(eofEvent, Nan::New<v8::String>("messageIndex").ToLocalChecked(),
-            Nan::New<v8::Number>(returnArrayIndex));
+          // also store index at which position in the message array this event
+          // was emitted this way, we can later emit it at the right point in
+          // time
+          Nan::Set(eofEvent,
+                   Nan::New<v8::String>("messageIndex").ToLocalChecked(),
+                   Nan::New<v8::Number>(returnArrayIndex));
 
           Nan::Set(eofEventsArray, eofEventsArrayIndex, eofEvent);
       }
@@ -1028,6 +1054,58 @@ void KafkaConsumerCommitted::HandleOKCallback() {
 }
 
 void KafkaConsumerCommitted::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = { GetErrorObject() };
+
+  callback->Call(argc, argv);
+}
+
+/**
+ * @brief KafkaConsumer commit offsets with a callback function.
+ * 
+ * The first callback argument is the commit error, or null on success.
+ *
+ * @see RdKafka::KafkaConsumer::commitSync
+ */
+KafkaConsumerCommitCb::KafkaConsumerCommitCb(Nan::Callback *callback,
+    KafkaConsumer* consumer,
+    std::optional<std::vector<RdKafka::TopicPartition*>> & t) :
+  ErrorAwareWorker(callback),
+  m_consumer(consumer),
+  m_topic_partitions(t) {}
+
+KafkaConsumerCommitCb::~KafkaConsumerCommitCb() {
+  // Delete the underlying topic partitions as they are ephemeral or cloned
+  if (m_topic_partitions.has_value())
+    RdKafka::TopicPartition::destroy(m_topic_partitions.value());
+}
+
+void KafkaConsumerCommitCb::Execute() {
+  Baton b = Baton(NULL);
+  if (m_topic_partitions.has_value()) {
+    b = m_consumer->Commit(m_topic_partitions.value());
+  } else {
+    b = m_consumer->Commit();
+  }
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void KafkaConsumerCommitCb::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+
+  callback->Call(argc, argv);
+}
+
+void KafkaConsumerCommitCb::HandleErrorCallback() {
   Nan::HandleScope scope;
 
   const unsigned int argc = 1;
@@ -1239,6 +1317,172 @@ void AdminClientCreatePartitions::HandleErrorCallback() {
 
   callback->Call(argc, argv);
 }
+
+/**
+ * @brief List consumer groups in an asynchronous worker.
+ *
+ * This callback will list consumer groups.
+ *
+ */
+AdminClientListGroups::AdminClientListGroups(
+    Nan::Callback* callback, AdminClient* client, bool is_match_states_set,
+    std::vector<rd_kafka_consumer_group_state_t>& match_states,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_is_match_states_set(is_match_states_set),
+      m_match_states(match_states),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientListGroups::~AdminClientListGroups() {
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientListGroups::Execute() {
+  Baton b = m_client->ListGroups(m_is_match_states_set, m_match_states,
+                                 m_timeout_ms, &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientListGroups::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+
+  const rd_kafka_ListConsumerGroups_result_t* result =
+      rd_kafka_event_ListConsumerGroups_result(m_event_response);
+
+  argv[1] = Conversion::Admin::FromListConsumerGroupsResult(result);
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientListGroups::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
+/**
+ * @brief Describe consumer groups in an asynchronous worker.
+ *
+ * This callback will describe consumer groups.
+ *
+ */
+AdminClientDescribeGroups::AdminClientDescribeGroups(
+    Nan::Callback* callback, NodeKafka::AdminClient* client,
+    std::vector<std::string>& groups, bool include_authorized_operations,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_groups(groups),
+      m_include_authorized_operations(include_authorized_operations),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientDescribeGroups::~AdminClientDescribeGroups() {
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientDescribeGroups::Execute() {
+  Baton b = m_client->DescribeGroups(m_groups, m_include_authorized_operations,
+                                     m_timeout_ms, &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientDescribeGroups::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+  argv[1] = Conversion::Admin::FromDescribeConsumerGroupsResult(
+      rd_kafka_event_DescribeConsumerGroups_result(m_event_response));
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientDescribeGroups::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
+/**
+ * @brief Delete consumer groups in an asynchronous worker.
+ *
+ * This callback will delete consumer groups.
+ *
+ */
+AdminClientDeleteGroups::AdminClientDeleteGroups(
+    Nan::Callback* callback, NodeKafka::AdminClient* client,
+    rd_kafka_DeleteGroup_t **group_list,
+    size_t group_cnt,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_group_list(group_list),
+      m_group_cnt(group_cnt),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientDeleteGroups::~AdminClientDeleteGroups() {
+  if (m_group_list) {
+    rd_kafka_DeleteGroup_destroy_array(m_group_list, m_group_cnt);
+    free(m_group_list);
+  }
+
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientDeleteGroups::Execute() {
+  Baton b = m_client->DeleteGroups(m_group_list, m_group_cnt, m_timeout_ms,
+                                   &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientDeleteGroups::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+  argv[1] = Conversion::Admin::FromDeleteGroupsResult(
+      rd_kafka_event_DeleteGroups_result(m_event_response));
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientDeleteGroups::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
 
 }  // namespace Workers
 }  // namespace NodeKafka

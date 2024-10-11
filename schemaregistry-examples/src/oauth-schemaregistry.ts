@@ -1,8 +1,8 @@
 import { SchemaRegistryClient, BearerAuthCredentials, ClientConfig } from '@confluentinc/schemaregistry';
 import { CreateAxiosDefaults } from 'axios';
 import {
-  issuerEndpointUrl, clientId, clientSecret, scope,
-  identityPoolId, logicalCluster, baseUrl
+  issuerEndpointUrl, oauthClientId, oauthClientSecret, scope,
+  identityPoolId, schemaRegistryLogicalCluster, baseUrl
 } from './constants';
 
 async function oauthSchemaRegistry() {
@@ -10,11 +10,11 @@ async function oauthSchemaRegistry() {
   const bearerAuthCredentials: BearerAuthCredentials = {
     credentialsSource: 'OAUTHBEARER',
     issuerEndpointUrl: issuerEndpointUrl,
-    clientId: clientId,
-    clientSecret: clientSecret,
+    clientId: oauthClientId,
+    clientSecret: oauthClientSecret,
     scope: scope,
     identityPoolId: identityPoolId,
-    logicalCluster: logicalCluster
+    logicalCluster: schemaRegistryLogicalCluster
   }
 
   const createAxiosDefaults: CreateAxiosDefaults = {

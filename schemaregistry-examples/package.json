@@ -9,7 +9,8 @@
   "description": "",
   "devDependencies": {
     "@confluentinc/kafka-javascript": "^0.2.0",
-    "@confluentinc/schemaregistry": "^v0.1.17.6-devel",
+    "@confluentinc/schemaregistry": "^v0.2.1",
+    "axios": "^1.7.7",
     "uuid": "^10.0.0"
   }
 }

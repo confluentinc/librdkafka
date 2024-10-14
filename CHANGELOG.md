@@ -1,3 +1,21 @@
+# librdkafka v2.6.1
+
+librdkafka v2.6.1 is a maintenance release:
+
+ * Fix for a Fetch regression when connecting to Apache Kafka < 2.7 (#).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * Issues: #4870
+   Fix for a Fetch regression when connecting to Apache Kafka < 2.7, causing
+   fetches to fail.
+   Happening since v2.6.0 (#)
+
+
+
 # librdkafka v2.6.0
 
 librdkafka v2.6.0 is a feature release:

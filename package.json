@@ -2,8 +2,8 @@
   "name": "@confluentinc/kafka-javascript",
   "version": "v0.2.1",
   "description": "Node.js bindings for librdkafka",
-  "librdkafka": "2.5.3",
-  "librdkafka_win": "2.5.3",
+  "librdkafka": "2.6.0",
+  "librdkafka_win": "2.6.0",
   "main": "lib/index.js",
   "types": "types/index.d.ts",
   "scripts": {
@@ -11,6 +11,7 @@
     "build": "node-gyp build",
     "test": "make test",
     "install": "node-pre-gyp install --fallback-to-build",
+    "install-from-source": "npm ci && node-pre-gyp install --build-from-source=@confluentinc/kafka-javascript --fallback-to-build",
     "prepack": "node ./ci/prepublish.js",
     "test:types": "tsc -p ."
   },

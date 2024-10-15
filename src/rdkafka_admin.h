@@ -278,6 +278,29 @@ struct rd_kafka_ConfigResource_result_s {
                               *   but with response error values. */
 };
 
+typedef enum rd_kafka_InternalConfigResourceType_t {
+        RD_KAFKA_INTERNAL_RESOURCE_CONFIG_UNKNOWN = 0,
+        RD_KAFKA_INTERNAL_RESOURCE_CONFIG_ANY     = 1,
+        RD_KAFKA_INTERNAL_RESOURCE_CONFIG_TOPIC   = 2 ,
+        RD_KAFKA_INTERNAL_RESOURCE_CONFIG_GROUP   = 32,  // Changed value for config APIs
+        RD_KAFKA_INTERNAL_RESOURCE_CONFIG_BROKER  = 4,
+        RD_KAFKA_INTERNAL_RESOURCE_CONFIG_CNT,
+} rd_kafka_InternalConfigResourceType_t;
+
+/**
+ * @brief Map from rd_kafka_ResourceType_t to rd_kafka_InternalConfigResourceType_t
+ */
+rd_kafka_InternalConfigResourceType_t
+map_to_internal_config_resourcetype(rd_kafka_ResourceType_t resourcetype);
+
+/**
+ * @brief Map from rd_kafka_InternalConfigResourceType_t to rd_kafka_ResourceType_t
+ */
+
+rd_kafka_ResourceType_t map_from_internal_config_resourcetype(
+    rd_kafka_InternalConfigResourceType_t internal_resourcetype);
+
+
 /**@}*/
 
 

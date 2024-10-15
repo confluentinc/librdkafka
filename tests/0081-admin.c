@@ -949,11 +949,9 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                     "background.threads", "DELETE",   "",
                     "log.cleanup.policy", "SUBTRACT", "compact"};
                 const char *confs_set_append_group[] = {
-                    "consumer.session.timeout.ms", "SET",
-                    "30000"};
+                    "consumer.session.timeout.ms", "SET", "30000"};
                 const char *confs_delete_group[] = {
-                    "consumer.session.timeout.ms", "DELETE",
-                    ""};
+                    "consumer.session.timeout.ms", "DELETE", ""};
 
                 TEST_SAY("Testing test helper with SET and APPEND\n");
                 test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,

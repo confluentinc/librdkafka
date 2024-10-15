@@ -3422,7 +3422,8 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                 rd_kafka_buf_skip_tags(reply);
 
-                res_type = map_from_internal_config_resourcetype(internal_res_type);
+                res_type =
+                    map_from_internal_config_resourcetype(internal_res_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||

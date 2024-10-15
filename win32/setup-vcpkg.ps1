@@ -5,7 +5,7 @@ if (!(Test-Path -Path vcpkg/.git)) {
 }
 
 cd vcpkg
-git checkout 2023.11.20
+git checkout 2024.09.30
 cd ..
 
 .\vcpkg\bootstrap-vcpkg.bat

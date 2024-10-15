@@ -1,3 +1,12 @@
+# librdkafka v2.6.1
+
+librdkafka v2.6.1 is a maintenance release:
+
+ * Upgrade Windows dependencies: MSVC runtime to 14.40.338160.0,
+   zstd 1.5.6, zlib 1.3.1, OpenSSL 3.3.2, CURL 8.10.1 (#4872).
+
+
+
 # librdkafka v2.6.0
 
 librdkafka v2.6.0 is a feature release:

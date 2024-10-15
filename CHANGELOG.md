@@ -1,3 +1,11 @@
+# librdkafka v2.6.1
+
+librdkafka v2.6.1 is a maintenance release:
+
+ * Upgrade Linux dependencies: OpenSSL 3.0.15, CURL 8.10.1 (#4875).
+
+
+
 # librdkafka v2.6.0
 
 librdkafka v2.6.0 is a feature release:

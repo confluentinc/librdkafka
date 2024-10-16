@@ -206,7 +206,7 @@ static void do_test_with_assign(const char *topic) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(NULL, topic, 2, 1);
+        test_create_topic_wait_exists(NULL, topic, 2, 1, 5000);
 
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "max.poll.interval.ms", "7000" /*7s*/);
@@ -251,7 +251,7 @@ static void do_test_no_poll(const char *topic) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(NULL, topic, 2, 1);
+        test_create_topic_wait_exists(NULL, topic, 2, 1, 5000);
 
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "max.poll.interval.ms", "7000" /*7s*/);
@@ -285,7 +285,7 @@ int main_0091_max_poll_interval_timeout(int argc, char **argv) {
         const char *topic =
             test_mk_topic_name("0091_max_poll_interval_tmout", 1);
 
-        test_create_topic(NULL, topic, 2, 1);
+        test_create_topic_wait_exists(NULL, topic, 2, 1, 5000);
 
         do_test_with_subscribe(topic);
 

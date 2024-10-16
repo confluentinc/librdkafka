@@ -77,6 +77,7 @@ int main_0017_compression(int argc, char **argv) {
                     msg_cnt, codecs[i], topics[i]);
                 rkt_p = test_create_producer_topic(
                     rk_p, topics[i], "compression.codec", codecs[i], NULL);
+                test_wait_topic_exists(rk_p, topics[i], 5000);
 
                 /* Produce small message that will not decrease with
                  * compression (issue #781) */

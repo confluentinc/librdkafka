@@ -98,7 +98,8 @@ int main_0083_cb_event(int argc, char **argv) {
 
         rk_p  = test_create_producer();
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-        err   = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
+        test_wait_topic_exists(rk_p, topic, 5000);
+        err = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
         TEST_ASSERT(!err, "Topic auto creation failed: %s",
                     rd_kafka_err2str(err));
 

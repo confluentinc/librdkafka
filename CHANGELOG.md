@@ -5,6 +5,8 @@ librdkafka v2.6.1 is a maintenance release:
 * Fix for a Fetch regression when connecting to Apache Kafka < 2.7 (#4871).
 * Fix for an infinite loop happening with cooperative-sticky assignor
   under some particular conditions (#4800).
+* Fix for retrieving offset commit metadata when it contains
+  zeros and configured with `strndup` (#4876)
 
 
 ## Fixes
@@ -23,6 +25,13 @@ librdkafka v2.6.1 is a maintenance release:
   assignable partitions.
   Solved by removing the infinite loop cause.
   Happening since: 1.6.0 (#4800).
+* Issues: #4649.
+  When retrieving offset metadata, if the binary value contained zeros
+  and librdkafka was configured with `strndup`, part of
+  the buffer after first zero contained uninitialized data
+  instead of rest of metadata. Solved by avoiding to use
+  `strndup` for copying metadata.
+  Happening since: 0.9.0 (#4876).
 
 
 

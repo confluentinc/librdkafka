@@ -2,17 +2,27 @@
 
 librdkafka v2.6.1 is a maintenance release:
 
- * Fix for a Fetch regression when connecting to Apache Kafka < 2.7 (#4871).
+* Fix for a Fetch regression when connecting to Apache Kafka < 2.7 (#4871).
+* Fix for an infinite loop happening with cooperative-sticky assignor
+  under some particular conditions (#4800).
 
 
 ## Fixes
 
 ### Consumer fixes
 
- * Issues: #4870
-   Fix for a Fetch regression when connecting to Apache Kafka < 2.7, causing
-   fetches to fail.
-   Happening since v2.6.0 (#4871)
+* Issues: #4870
+  Fix for a Fetch regression when connecting to Apache Kafka < 2.7, causing
+  fetches to fail.
+  Happening since v2.6.0 (#4871)
+* Issues: #4783.
+  A consumer configured with the `cooperative-sticky` partition assignment
+  strategy could get stuck in an infinite loop, with corresponding spike of
+  main thread CPU usage.
+  That happened with some particular orders of members and potential 
+  assignable partitions.
+  Solved by removing the infinite loop cause.
+  Happening since: 1.6.0 (#4800).
 
 
 

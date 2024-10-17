@@ -257,16 +257,15 @@ export abstract class Serializer extends Serde {
       id = await this.client.register(subject, info, Boolean(normalizeSchema))
     } else if (useSchemaId != null && useSchemaId >= 0) {
       info = await this.client.getBySubjectAndId(subject, useSchemaId, format)
-      id = await this.client.getId(subject, info, false)
-      if (id !== useSchemaId) {
-        throw new SerializationError(`failed to match schema ID (${id} != ${useSchemaId})`)
-      }
+      id = useSchemaId
     } else if (useLatestWithMetadata != null && Object.keys(useLatestWithMetadata).length !== 0) {
-      info = await this.client.getLatestWithMetadata(subject, useLatestWithMetadata, true, format)
-      id = await this.client.getId(subject, info, false)
+      let metadata = await this.client.getLatestWithMetadata(subject, useLatestWithMetadata, true, format)
+      info = metadata
+      id = metadata.id
     } else if (useLatest) {
-      info = await this.client.getLatestSchemaMetadata(subject, format)
-      id = await this.client.getId(subject, info, false)
+      let metadata = await this.client.getLatestSchemaMetadata(subject, format)
+      info = metadata
+      id = metadata.id
     } else {
       id = await this.client.getId(subject, info, Boolean(normalizeSchema))
     }

@@ -1,3 +1,12 @@
+# confluent-kafka-javascript v0.3.0
+
+v0.3.0 is a limited availability feature release. It is supported for all usage.
+
+## Features
+
+1. References librdkafka v2.6.0. Refer to the [librdkafka v2.6.0 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.6.0) for more information.
+
+
 # confluent-kafka-javascript v0.2.1
 
 v0.2.1 is a limited availability release. It is supported for all usage.

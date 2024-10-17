@@ -233,6 +233,8 @@ Steps to update:
 1. Increment the `version` in `package.json`. Change the version in `util.js` too.
 If it's needed to change librdkafka version, see the **Updating librdkafka version** section.
 
+1. Run `npm run prepack` to verify package version.
+
 1. Run `npm install` to update the `package-lock.json` file.
 
 1. Create a PR and merge the above changes, and tag the merged commit with the new version. This should be the same string as `version` in `package.json`.
@@ -241,3 +243,15 @@ If it's needed to change librdkafka version, see the **Updating librdkafka versi
 
 1. Create a new GitHub release with the tag, and upload the release artifacts from Semaphore CI.
    The release title should be the same string as `version` in `package.json`.
+
+1. build schemaregistry project to prepare for the release:
+   `(cd schemaregistry && npm run build)`
+
+1. Clear any file that isn't ignored by `.npmignore`
+
+1. In case it's a release candidate add `--tag rc` to the following commands,
+   to avoid setting it as latest one
+
+1. Publish Kafka client, with `--dry-run` first: `npm publish --dry-run --workspace=. --otp=<otp_here>`
+
+1. Publish Schema Registry client, with `--dry-run` first: `npm publish --dry-run --workspace=schemaregistry --otp=<otp_here>`

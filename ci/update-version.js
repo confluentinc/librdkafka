@@ -84,7 +84,7 @@ function getBranch(cb) {
 }
 
 function getPackageVersion(tag, branch) {
-  let baseVersion = `v${tag.major}.${tag.minor}.${tag.patch}`;
+  let baseVersion = `${tag.major}.${tag.minor}.${tag.patch}`;
 
 
   // publish with a -devel suffix for EA and RC releases.

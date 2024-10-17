@@ -11,3 +11,9 @@ build
 .github
 .vscode
 .semaphore
+examples
+test
+e2e
+bench
+ci
+proto

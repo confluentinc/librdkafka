@@ -1,6 +1,6 @@
 {
   "name": "@confluentinc/schemaregistry",
-  "version": "v0.2.1",
+  "version": "0.3.0-RC1",
   "description": "Node.js client for Confluent Schema Registry",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,7 @@
   "devDependencies": {
     "@bufbuild/buf": "^1.37.0",
     "@bufbuild/protoc-gen-es": "^2.0.0",
-    "@confluentinc/kafka-javascript": "^0.2.0",
+    "@confluentinc/kafka-javascript": "file:..",
     "@eslint/js": "^9.9.0",
     "@types/eslint__js": "^8.42.3",
     "@types/node": "^20.16.1",

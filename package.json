@@ -1,6 +1,6 @@
 {
   "name": "@confluentinc/kafka-javascript",
-  "version": "v0.2.1",
+  "version": "0.3.0-RC1",
   "description": "Node.js bindings for librdkafka",
   "librdkafka": "2.6.0",
   "librdkafka_win": "2.6.0",
@@ -78,6 +78,7 @@
     "node": ">=18.0.0"
   },
   "workspaces": [
+    ".",
     "schemaregistry",
     "schemaregistry-examples"
   ]

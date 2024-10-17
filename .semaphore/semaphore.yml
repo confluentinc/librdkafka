@@ -143,6 +143,7 @@ blocks:
             - cd examples/performance
             - npm install
             - bash -c '../../ci/tests/run_perf_test.sh'
+            - rm -rf ./node_modules
 
   - name: "Linux amd64: Release"
     dependencies: [ ]

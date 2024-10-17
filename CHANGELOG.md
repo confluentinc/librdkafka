@@ -8,7 +8,7 @@ librdkafka v2.6.1 is a maintenance release:
 * Fix for retrieving offset commit metadata when it contains
   zeros and configured with `strndup` (#4876)
  * Fix for a loop of ListOffset requests, happening in a Fetch From Follower
-   scenario, if such request is made to the follower (#4616, #4754 @kphelps).
+   scenario, if such request is made to the follower (#4616, #4754, @kphelps).
 
 
 ## Fixes
@@ -39,7 +39,7 @@ librdkafka v2.6.1 is a maintenance release:
   ListOffsets request is made to the follower, causing a repeated
   "Not leader for partition" error. Fixed by sending the request always
   to the leader.
-  Happening since 1.5.0 (tested version) or previous ones (#4616, @kphelps).
+  Happening since 1.5.0 (tested version) or previous ones (#4616, #4754, @kphelps).
 
 
 

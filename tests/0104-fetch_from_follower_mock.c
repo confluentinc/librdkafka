@@ -110,8 +110,8 @@ static void do_test_offset_reset(const char *auto_offset_reset) {
         else
                 test_consumer_poll(auto_offset_reset, c, 0, 1, 0, msgcnt, NULL);
 
-        /* send another batch of messages to ensure the consumer isn't stuck.
-         * sending ListOffsets to the replica and receiving 
+        /* send another batch of messages to ensure the consumer isn't stuck
+         * sending ListOffsets to the replica and receiving
          * NOT_LEADER_OR_FOLLOWER errors.
          * See PR #4616 */
         test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 1000,

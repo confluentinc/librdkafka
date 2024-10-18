@@ -56,6 +56,7 @@ int main_0021_rkt_destroy(int argc, char **argv) {
         testid = test_id_generate();
         rk     = test_create_producer();
         rkt    = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
 
         test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA, 0,

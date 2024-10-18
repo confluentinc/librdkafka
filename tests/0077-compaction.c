@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -193,6 +194,7 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
             "--config file.delete.delay.ms=10000 "
             "--config max.compaction.lag.ms=100",
             topic, partition + 1);
+        test_wait_topic_exists(NULL, topic, 5000);
 
         test_conf_init(&conf, NULL, 120);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);

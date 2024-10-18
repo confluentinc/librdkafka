@@ -1359,7 +1359,7 @@ static void rd_kafka_toppar_handle_Offset(rd_kafka_t *rk,
 
         rd_kafka_toppar_lock(rktp);
         /* Drop reply from previous partition leader */
-        if (err != RD_KAFKA_RESP_ERR__DESTROY && rktp->rktp_broker != rkb)
+        if (err != RD_KAFKA_RESP_ERR__DESTROY && rktp->rktp_leader != rkb)
                 err = RD_KAFKA_RESP_ERR__OUTDATED;
         rd_kafka_toppar_unlock(rktp);
 
@@ -1549,7 +1549,7 @@ void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
         rd_kafka_assert(NULL,
                         thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread));
 
-        rkb = rktp->rktp_broker;
+        rkb = rktp->rktp_leader;
 
         if (!backoff_ms && (!rkb || rkb->rkb_source == RD_KAFKA_INTERNAL))
                 backoff_ms = 500;

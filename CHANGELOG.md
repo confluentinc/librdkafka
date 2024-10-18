@@ -2,9 +2,10 @@
 
 v0.3.0 is a limited availability feature release. It is supported for all usage.
 
-## Features
+## Enhancements
 
 1. References librdkafka v2.6.0. Refer to the [librdkafka v2.6.0 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.6.0) for more information.
+1. Minor optimization to reduce schema ID lookups (#123).
 
 
 # confluent-kafka-javascript v0.2.1

@@ -484,6 +484,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The maximum propagation time is calculated from the time the "
      "topic is first referenced in the client, e.g., on produce().",
      0, 60 * 60 * 1000, 30 * 1000},
+    {_RK_GLOBAL, "topic.metadata.refresh.skip.notexists", _RK_C_BOOL,
+     _RK(metadata_skip_notexists_topics),
+     "Avoid refreshing non-existent topics", 0, 1, 0},
     {_RK_GLOBAL, "topic.blacklist", _RK_C_PATLIST, _RK(topic_blacklist),
      "Topic blacklist, a comma-separated list of regular expressions "
      "for matching topic names that should be ignored in "

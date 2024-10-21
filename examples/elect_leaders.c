@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2022, Magnus Edenhill
+ * Copyright (c) 2024, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,7 +16,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * ARE DISCLAIMED. IN NO EVENT SH THE COPYRIGHT OWNER OR CONTRIBUTORS BE
  * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
@@ -27,10 +27,11 @@
  */
 
 /**
- * ListConsumerGroups usage example.
+ * Example utility that shows how to use Elect Leaders (AdminAPI)
+ * to trigger preffered or unclean elections for
+ * one or more topic partitions.
  */
 
-#include <stdio.h>
 #include <signal.h>
 #include <string.h>
 #include <stdlib.h>
@@ -42,17 +43,15 @@
 #include <getopt.h>
 #endif
 
-
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
-
 const char *argv0;
 
-static rd_kafka_queue_t *queue; /** Admin result queue.
-                                 *  This is a global so we can
-                                 *  yield in stop() */
+static rd_kafka_queue_t *queue = NULL; /** Admin result queue.
+                                        *  This is a global so we can
+                                        *  yield in stop() */
 static volatile sig_atomic_t run = 1;
 
 /**
@@ -64,17 +63,17 @@ static void stop(int sig) {
                 exit(2);
         }
         run = 0;
-        rd_kafka_queue_yield(queue);
+        if (queue)
+                rd_kafka_queue_yield(queue);
 }
-
 
 static void usage(const char *reason, ...) {
 
         fprintf(stderr,
-                "List groups usage examples\n"
+                "Elect Leaders usage examples\n"
                 "\n"
-                "Usage: %s <options> <state_cnt> [<state1> <state2> ...] "
-                "<type_cnt> [<type1> <type2> ...]\n"
+                "Usage: %s <options> <election_type> "
+                "<topic1> <partition1> ...\n"
                 "\n"
                 "Options:\n"
                 "   -b <brokers>    Bootstrap server list to connect to.\n"
@@ -119,50 +118,30 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
                 fatal("Failed to set %s=%s: %s", name, val, errstr);
 }
 
-/**
- * @brief Print group information.
- */
-static int print_groups_info(const rd_kafka_ListConsumerGroups_result_t *list) {
+static void
+print_elect_leaders_result(const rd_kafka_ElectLeaders_result_t *result) {
+        const rd_kafka_topic_partition_result_t **results;
+        size_t results_cnt;
         size_t i;
-        const rd_kafka_ConsumerGroupListing_t **result_groups;
-        const rd_kafka_error_t **errors;
-        size_t result_groups_cnt;
-        size_t result_error_cnt;
-        result_groups =
-            rd_kafka_ListConsumerGroups_result_valid(list, &result_groups_cnt);
-        errors =
-            rd_kafka_ListConsumerGroups_result_errors(list, &result_error_cnt);
 
-        if (result_groups_cnt == 0) {
-                fprintf(stderr, "No matching groups found\n");
+        results = rd_kafka_ElectLeaders_result_partitions(result, &results_cnt);
+        printf("ElectLeaders response has %zu partition(s):\n", results_cnt);
+        for (i = 0; i < results_cnt; i++) {
+                const rd_kafka_topic_partition_t *partition =
+                    rd_kafka_topic_partition_result_partition(results[i]);
+                const rd_kafka_error_t *err =
+                    rd_kafka_topic_partition_result_error(results[i]);
+                if (rd_kafka_error_code(err)) {
+                        printf("%% ElectLeaders failed for %s [%" PRId32
+                               "] : %s\n",
+                               partition->topic, partition->partition,
+                               rd_kafka_error_string(err));
+                } else {
+                        printf("%% ElectLeaders succeeded for %s [%" PRId32
+                               "]\n",
+                               partition->topic, partition->partition);
+                }
         }
-
-        for (i = 0; i < result_groups_cnt; i++) {
-                const rd_kafka_ConsumerGroupListing_t *group = result_groups[i];
-                const char *group_id =
-                    rd_kafka_ConsumerGroupListing_group_id(group);
-                rd_kafka_consumer_group_state_t state =
-                    rd_kafka_ConsumerGroupListing_state(group);
-                int is_simple_consumer_group =
-                    rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
-                        group);
-                rd_kafka_consumer_group_type_t type =
-                    rd_kafka_ConsumerGroupListing_type(group);
-
-                printf("Group \"%s\", is simple %" PRId32
-                       ", "
-                       "state %s, type %s",
-                       group_id, is_simple_consumer_group,
-                       rd_kafka_consumer_group_state_name(state),
-                       rd_kafka_consumer_group_type_name(type));
-                printf("\n");
-        }
-        for (i = 0; i < result_error_cnt; i++) {
-                const rd_kafka_error_t *error = errors[i];
-                printf("Error[%" PRId32 "]: %s\n", rd_kafka_error_code(error),
-                       rd_kafka_error_string(error));
-        }
-        return 0;
 }
 
 /**
@@ -181,53 +160,38 @@ int64_t parse_int(const char *what, const char *str) {
         return (int64_t)n;
 }
 
-/**
- * @brief Call rd_kafka_ListConsumerGroups() with a list of
- * groups.
- */
-static void
-cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
+static void cmd_elect_leaders(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
-        rd_kafka_event_t *event = NULL;
-        rd_kafka_error_t *error = NULL;
+        rd_kafka_event_t *event                     = NULL;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_ElectionType_t election_type;
+        rd_kafka_ElectLeaders_t *elect_leaders;
         int i;
-        int retval         = 0;
-        int states_cnt     = 0;
-        int types_cnt      = 0;
-        const int min_argc = 2;
+        int retval = 0;
 
-        rd_kafka_consumer_group_state_t *states;
-        rd_kafka_consumer_group_type_t *types;
+        if ((argc - 1) % 2 != 0) {
+                usage("Invalid number of arguments");
+        }
 
-        /*
-         * Argument validation
-         */
-        if (argc < min_argc)
-                usage("Expected at least %d arguments", min_argc);
-        else {
-                states_cnt = parse_int("state count", argv[0]);
-                if (argc < states_cnt + 2) {
-                        usage("Expected %d state code(s) after states count",
-                              states_cnt);
-                }
+        election_type = parse_int("election_type", argv[0]);
 
-                types_cnt = parse_int("type count", argv[1 + states_cnt]);
-                if (argc < 1 + states_cnt + 1 + types_cnt) {
-                        usage("Expected %d type(s) after type count",
-                              types_cnt);
+        argc--;
+        argv++;
+        if (argc > 0) {
+                partitions = rd_kafka_topic_partition_list_new(argc / 2);
+                for (i = 0; i < argc; i += 2) {
+                        rd_kafka_topic_partition_list_add(
+                            partitions, argv[i],
+                            parse_int("partition", argv[i + 1]));
                 }
         }
 
-        states = calloc(states_cnt, sizeof(rd_kafka_consumer_group_state_t));
-        for (i = 0; i < states_cnt; i++) {
-                states[i] = parse_int("state code", argv[i + 1]);
-        }
+        elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
 
-        types = calloc(types_cnt, sizeof(rd_kafka_consumer_group_type_t));
-        for (i = 0; i < types_cnt; i++) {
-                types[i] = parse_int("type code", argv[i + states_cnt + 2]);
+        if (partitions) {
+                rd_kafka_topic_partition_list_destroy(partitions);
         }
 
         /*
@@ -241,45 +205,38 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                 fatal("Failed to create new consumer: %s", errstr);
 
         /*
-         * List consumer groups
+         * Elect Leaders
          */
         queue = rd_kafka_queue_new(rk);
 
         /* Signal handler for clean shutdown */
         signal(SIGINT, stop);
 
-        options =
-            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ELECTLEADERS);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
-                options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
+                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 goto exit;
         }
 
-        if ((error = rd_kafka_AdminOptions_set_match_consumer_group_states(
-                 options, states, states_cnt))) {
-                fprintf(stderr, "%% Failed to set states: %s\n",
-                        rd_kafka_error_string(error));
+        if (rd_kafka_AdminOptions_set_operation_timeout(
+                options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
+                fprintf(stderr, "%% Failed to set operation timeout: %s\n",
+                        errstr);
                 goto exit;
         }
-        free(states);
-        if ((error = rd_kafka_AdminOptions_set_match_consumer_group_types(
-                 options, types, types_cnt))) {
-                fprintf(stderr, "%% Failed to set types: %s\n",
-                        rd_kafka_error_string(error));
-                goto exit;
-        }
-        free(types);
 
+        rd_kafka_ElectLeaders(rk, elect_leaders, options, queue);
 
-        rd_kafka_ListConsumerGroups(rk, options, queue);
+        rd_kafka_ElectLeaders_destroy(elect_leaders);
         rd_kafka_AdminOptions_destroy(options);
 
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by
                                                * the request timeout set
-                                               * above (10s) */);
+                                               * above  */);
 
         if (!event) {
                 /* User hit Ctrl-C,
@@ -288,34 +245,30 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         } else if (rd_kafka_event_error(event)) {
                 rd_kafka_resp_err_t err = rd_kafka_event_error(event);
-                /* ListConsumerGroups request failed */
-                fprintf(stderr,
-                        "%% ListConsumerGroups failed[%" PRId32 "]: %s\n", err,
-                        rd_kafka_event_error_string(event));
+                /* ElectLeaders request failed */
+                fprintf(stderr, "%% ElectLeaders failed[%" PRId32 "]: %s\n",
+                        err, rd_kafka_event_error_string(event));
+                retval = 1;
                 goto exit;
-
         } else {
-                /* ListConsumerGroups request succeeded, but individual
-                 * groups may have errors. */
-                const rd_kafka_ListConsumerGroups_result_t *result;
-
-                result = rd_kafka_event_ListConsumerGroups_result(event);
-                printf("ListConsumerGroups results:\n");
-                retval = print_groups_info(result);
+                /* ElectLeaders request succeeded */
+                const rd_kafka_ElectLeaders_result_t *result;
+                result = rd_kafka_event_ElectLeaders_result(event);
+                print_elect_leaders_result(result);
         }
 
 
 exit:
-        if (error)
-                rd_kafka_error_destroy(error);
         if (event)
                 rd_kafka_event_destroy(event);
+
         rd_kafka_queue_destroy(queue);
         /* Destroy the client instance */
         rd_kafka_destroy(rk);
 
         exit(retval);
 }
+
 
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
@@ -326,7 +279,6 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
-
 
         /*
          * Parse common options
@@ -359,7 +311,7 @@ int main(int argc, char **argv) {
                 }
         }
 
-        cmd_list_consumer_groups(conf, argc - optind, &argv[optind]);
+        cmd_elect_leaders(conf, argc - optind, &argv[optind]);
 
         return 0;
 }

@@ -1,3 +1,76 @@
+# librdkafka v2.6.1
+
+librdkafka v2.6.1 is a maintenance release:
+
+* Fix for a Fetch regression when connecting to Apache Kafka < 2.7 (#4871).
+* Fix for an infinite loop happening with cooperative-sticky assignor
+  under some particular conditions (#4800).
+* Fix for retrieving offset commit metadata when it contains
+  zeros and configured with `strndup` (#4876)
+ * Fix for a loop of ListOffset requests, happening in a Fetch From Follower
+   scenario, if such request is made to the follower (#4616, #4754, @kphelps).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4870
+  Fix for a Fetch regression when connecting to Apache Kafka < 2.7, causing
+  fetches to fail.
+  Happening since v2.6.0 (#4871)
+* Issues: #4783.
+  A consumer configured with the `cooperative-sticky` partition assignment
+  strategy could get stuck in an infinite loop, with corresponding spike of
+  main thread CPU usage.
+  That happened with some particular orders of members and potential 
+  assignable partitions.
+  Solved by removing the infinite loop cause.
+  Happening since: 1.6.0 (#4800).
+* Issues: #4649.
+  When retrieving offset metadata, if the binary value contained zeros
+  and librdkafka was configured with `strndup`, part of
+  the buffer after first zero contained uninitialized data
+  instead of rest of metadata. Solved by avoiding to use
+  `strndup` for copying metadata.
+  Happening since: 0.9.0 (#4876).
+* Issues: #4616
+  When an out of range on a follower caused an offset reset, the corresponding
+  ListOffsets request is made to the follower, causing a repeated
+  "Not leader for partition" error. Fixed by sending the request always
+  to the leader.
+  Happening since 1.5.0 (tested version) or previous ones (#4616, #4754, @kphelps).
+
+
+
+# librdkafka v2.6.0
+
+librdkafka v2.6.0 is a feature release:
+
+ * [KIP-460](https://cwiki.apache.org/confluence/display/KAFKA/KIP-460%3A+Admin+Leader+Election+RPC) Admin Leader Election RPC (#4845)
+ * [KIP-714] Complete consumer metrics support (#4808).
+ * [KIP-714] Produce latency average and maximum metrics support for parity with Java client (#4847).
+ * [KIP-848] ListConsumerGroups Admin API now has an optional filter to return only groups
+   of given types.
+ * Added Transactional id resource type for ACL operations (@JohnPreston, #4856).
+ * Fix for permanent fetch errors when using a newer Fetch RPC version with an older
+   inter broker protocol (#4806).
+
+
+
+## Fixes
+
+### Consumer fixes
+
+ * Issues: #4806
+   Fix for permanent fetch errors when brokers support a Fetch RPC version greater than 12 
+   but cluster is configured to use an inter broker protocol that is less than 2.8.
+   In this case returned topic ids are zero valued and Fetch has to fall back
+   to version 12, using topic names.
+   Happening since v2.5.0 (#4806)
+
+
+
 # librdkafka v2.5.3
 
 librdkafka v2.5.3 is a feature release.

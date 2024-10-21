@@ -169,6 +169,15 @@ rd_kafka_mock_push_request_errors_array(rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
+ * @brief Apply broker configuration group.initial.rebalance.delay.ms
+ *        to the whole \p mcluster.
+ */
+RD_EXPORT void rd_kafka_mock_group_initial_rebalance_delay_ms(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t delay_ms);
+
+
+/**
  * @brief Push \p cnt errors and RTT tuples in the \p ... va-arg list onto
  *        the broker's error stack for the given \p ApiKey.
  *

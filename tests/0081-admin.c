@@ -5108,8 +5108,9 @@ static void do_test_ListOffsets(const char *what,
                         continue;
                 }
                 if (test_fixture.query == RD_KAFKA_OFFSET_SPEC_MAX_TIMESTAMP &&
-                    test_broker_version >= TEST_BRKVER(3, 7, 0, 0)) {
-                        /* FIXME: re-enable it when a fix will be available */
+                    test_broker_version >= TEST_BRKVER(3, 7, 0, 0) &&
+                    test_broker_version < TEST_BRKVER(3, 8, 0, 0)) {
+                        /* 3.8.0 released fix for KAFKA-16310 */
                         TEST_SAY(
                             "Skipping offset MAX_TIMESTAMP,"
                             " as there was a regression in this version\n");

@@ -26,10 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-extern "C" {
-#include "../src/rdkafka_protocol.h"
-#include "test.h"
-}
 #include <iostream>
 #include <map>
 #include <set>
@@ -39,6 +35,10 @@ extern "C" {
 #include <assert.h>
 #include "testcpp.h"
 #include <fstream>
+extern "C" {
+#include "../src/rdkafka_protocol.h"
+#include "test.h"
+}
 
 using namespace std;
 

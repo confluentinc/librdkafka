@@ -1289,9 +1289,15 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                                 rktpar->metadata      = NULL;
                                 rktpar->metadata_size = 0;
                         } else {
-                                rktpar->metadata = RD_KAFKAP_STR_DUP(&metadata);
-                                rktpar->metadata_size =
-                                    RD_KAFKAP_STR_LEN(&metadata);
+                                /* It cannot use strndup because
+                                 * it stops at first 0 occurrence. */
+                                size_t len = RD_KAFKAP_STR_LEN(&metadata);
+                                rktpar->metadata_size = len;
+                                unsigned char *metadata_bytes =
+                                    rd_malloc(len + 1);
+                                rktpar->metadata = metadata_bytes;
+                                memcpy(rktpar->metadata, metadata.str, len);
+                                metadata_bytes[len] = '\0';
                         }
 
                         /* Loose ref from get_toppar() */
@@ -2379,7 +2385,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
 
 /**
  * @brief Construct and send ListGroupsRequest to \p rkb
- *        with the states (const char *) in \p states.
+ *        with the states (const char *) in \p states,
+ *        and the types (const char *) in \p types.
  *        Uses \p max_ApiVersion as maximum API version,
  *        pass -1 to use the maximum available version.
  *
@@ -2393,6 +2400,8 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              int16_t max_ApiVersion,
                                              const char **states,
                                              size_t states_cnt,
+                                             const char **types,
+                                             size_t types_cnt,
                                              rd_kafka_replyq_t replyq,
                                              rd_kafka_resp_cb_t *resp_cb,
                                              void *opaque) {
@@ -2401,7 +2410,7 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         size_t i;
 
         if (max_ApiVersion < 0)
-                max_ApiVersion = 4;
+                max_ApiVersion = 5;
 
         if (max_ApiVersion > ApiVersion) {
                 /* Remark: don't check if max_ApiVersion is zero.
@@ -2423,12 +2432,17 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
             4 + 1 + 32 * states_cnt, ApiVersion >= 3 /* is_flexver */);
 
         if (ApiVersion >= 4) {
-                size_t of_GroupsArrayCnt =
-                    rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_write_arraycnt(rkbuf, states_cnt);
                 for (i = 0; i < states_cnt; i++) {
                         rd_kafka_buf_write_str(rkbuf, states[i], -1);
                 }
-                rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
+        }
+
+        if (ApiVersion >= 5) {
+                rd_kafka_buf_write_arraycnt(rkbuf, types_cnt);
+                for (i = 0; i < types_cnt; i++) {
+                        rd_kafka_buf_write_str(rkbuf, types[i], -1);
+                }
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
@@ -5870,6 +5884,95 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Construct and send ElectLeadersRequest to \p rkb
+ *        with the partitions (ElectLeaders_t*) in \p elect_leaders, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *elect_leaders /*(rd_kafka_EleactLeaders_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        const rd_kafka_ElectLeaders_t *elect_leaders_request;
+        int rd_buf_size_estimate;
+        int op_timeout;
+
+        if (rd_list_cnt(elect_leaders) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No partitions specified for leader election");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        elect_leaders_request = rd_list_elem(elect_leaders, 0);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ElectLeaders, 0, 2, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "ElectLeaders Admin API (KIP-460) not supported "
+                            "by broker, requires broker version >= 2.4.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rd_buf_size_estimate =
+            1 /* ElectionType */ + 4 /* #TopicPartitions */ + 4 /* TimeoutMs */;
+        if (elect_leaders_request->partitions)
+                rd_buf_size_estimate +=
+                    (50 + 4) * elect_leaders_request->partitions->cnt;
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_ElectLeaders, 1,
+                                                 rd_buf_size_estimate,
+                                                 ApiVersion >= 2);
+
+        if (ApiVersion >= 1) {
+                /* Election type */
+                rd_kafka_buf_write_i8(rkbuf,
+                                      elect_leaders_request->election_type);
+        }
+
+        /* Write partition list */
+        if (elect_leaders_request->partitions) {
+                const rd_kafka_topic_partition_field_t fields[] = {
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                rd_kafka_buf_write_topic_partitions(
+                    rkbuf, elect_leaders_request->partitions,
+                    rd_false /*don't skip invalid offsets*/,
+                    rd_false /* any offset */,
+                    rd_false /* don't use topic_id */,
+                    rd_true /* use topic_names */, fields);
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 /**
  * @brief Parses and handles an InitProducerId reply.
  *

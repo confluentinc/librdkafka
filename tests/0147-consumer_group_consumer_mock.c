@@ -155,7 +155,7 @@ do_test_consumer_group_heartbeat_fatal_error(rd_kafka_resp_err_t err,
         SUB_TEST_QUICK("%s, variation %d", rd_kafka_err2name(err), variation);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        rd_kafka_mock_set_default_heartbeat_interval(mcluster, 1000);
+        rd_kafka_mock_group_consumer_heartbeat_interval_ms(mcluster, 1000);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
 
         TIMING_START(&timing, "consumer_group_heartbeat_fatal_error");
@@ -299,7 +299,7 @@ do_test_consumer_group_heartbeat_retriable_error(rd_kafka_resp_err_t err,
 
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        rd_kafka_mock_set_default_heartbeat_interval(mcluster, 1000);
+        rd_kafka_mock_group_consumer_heartbeat_interval_ms(mcluster, 1000);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
 
         c = create_consumer(bootstraps, topic, rd_true);
@@ -431,7 +431,7 @@ do_test_consumer_group_heartbeat_fenced_error(rd_kafka_resp_err_t err,
         SUB_TEST_QUICK("%s, variation %d", rd_kafka_err2name(err), variation);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        rd_kafka_mock_set_default_heartbeat_interval(mcluster, 1000);
+        rd_kafka_mock_group_consumer_heartbeat_interval_ms(mcluster, 1000);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
 
         if (variation == 1) {
@@ -483,6 +483,11 @@ do_test_consumer_group_heartbeat_fenced_error(rd_kafka_resp_err_t err,
                 rkmessage = rd_kafka_consumer_poll(c, 100);
                 TEST_ASSERT(!rkmessage, "No message should be returned");
 
+                TEST_ASSERT(rebalance_cnt == expected_rebalance_cnt,
+                            "Expected %d rebalance events after assign "
+                            "callback, got %d",
+                            expected_rebalance_cnt, rebalance_cnt);
+
                 TEST_SAY("Awaiting partition lost callback\n");
                 /* Second HB acks and loses partitions */
                 expected_rebalance_cnt++;
@@ -491,6 +496,11 @@ do_test_consumer_group_heartbeat_fenced_error(rd_kafka_resp_err_t err,
                 /* Needs to wait HB interval */
                 rkmessage = rd_kafka_consumer_poll(c, 750);
                 TEST_ASSERT(!rkmessage, "No message should be returned");
+
+                TEST_ASSERT(
+                    rebalance_cnt == expected_rebalance_cnt,
+                    "Expected %d rebalance events after lost callback, got %d",
+                    expected_rebalance_cnt, rebalance_cnt);
 
                 /* Third HB assigns again */
         }
@@ -509,7 +519,7 @@ do_test_consumer_group_heartbeat_fenced_error(rd_kafka_resp_err_t err,
         TEST_ASSERT(!rkmessage, "No message should be returned");
 
         TEST_ASSERT(rebalance_cnt == expected_rebalance_cnt,
-                    "Expected %d rebalance events, got %d",
+                    "Expected %d total rebalance events, got %d",
                     expected_rebalance_cnt, rebalance_cnt);
 
         if (variation == 0) {
@@ -597,7 +607,7 @@ static void do_test_metadata_unknown_topic_id_error(int variation) {
         SUB_TEST_QUICK("variation: %d", variation);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        rd_kafka_mock_set_default_heartbeat_interval(mcluster, 500);
+        rd_kafka_mock_group_consumer_heartbeat_interval_ms(mcluster, 500);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
         if (variation == 1) {
                 rd_kafka_mock_topic_create(mcluster, topic2, 1, 1);

@@ -175,6 +175,7 @@ int main_0120_asymmetric_subscription(int argc, char **argv) {
          * given we're not testing the assignment here,
          * as it's mocked. */
         if (test_consumer_group_protocol_classic()) {
+                do_test_asymmetric("range", bootstraps);
                 do_test_asymmetric("roundrobin", bootstraps);
                 do_test_asymmetric("cooperative-sticky", bootstraps);
         }

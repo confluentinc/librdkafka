@@ -499,6 +499,7 @@ typedef struct rd_kafka_mock_cgrp_consumer_target_assignment_s
  * @param member_cnt Number of members.
  * @param assignment Array of (rd_kafka_topic_partition_list_t *) of size \p
  * member_cnt.
+ * @param member_cnt Number of members.
  */
 RD_EXPORT rd_kafka_mock_cgrp_consumer_target_assignment_t *
 rd_kafka_mock_cgrp_consumer_target_assignment_new(

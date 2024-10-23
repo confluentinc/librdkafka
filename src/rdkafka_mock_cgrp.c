@@ -750,9 +750,9 @@ rd_kafka_mock_cgrp_consumer_target_assignment_new0(rd_list_t *member_ids,
 
 rd_kafka_mock_cgrp_consumer_target_assignment_t *
 rd_kafka_mock_cgrp_consumer_target_assignment_new(
-    int member_cnt,
     char **member_ids,
-    rd_kafka_topic_partition_list_t **assignment) {
+    rd_kafka_topic_partition_list_t **assignment,
+    int member_cnt) {
         int i;
         rd_list_t *member_id_list, *assignment_list;
         rd_kafka_mock_cgrp_consumer_target_assignment_t *ret;
@@ -862,12 +862,17 @@ typedef RD_MAP_TYPE(const char *, int *) map_str_int;
 
 /**
  * @brief Calculate a simple range target assignment for the consumer group \p
- * mcgrp.
+ * mcgrp. This isn't replicating any given broker assignor but is used
+ * when the test doesn't need a specific type of assignment.
+ *
+ * If the test needs it, instead of replicating same conditions with all the
+ * members, one can mock the assignment directly with
+ * `rd_kafka_mock_cgrp_consumer_target_assignment`.
  */
 static rd_kafka_mock_cgrp_consumer_target_assignment_t *
 rd_kafka_mock_cgrp_consumer_target_assignment_calculate_simple(
     const rd_kafka_mock_cgrp_consumer_t *mcgrp) {
-        int i, *ip;
+        int i, *i_pointer;
         const char *topic;
         rd_list_t *members;
         rd_kafka_mock_cgrp_consumer_member_t *member;
@@ -902,9 +907,9 @@ rd_kafka_mock_cgrp_consumer_target_assignment_calculate_simple(
                                 members = RD_MAP_GET(&topic_members, topic);
                         rd_list_add(members, member);
                 }
-                ip  = rd_calloc(1, sizeof(*ip));
-                *ip = i;
-                RD_MAP_SET(&member_idx, member->id, ip);
+                i_pointer  = rd_calloc(1, sizeof(*i_pointer));
+                *i_pointer = i;
+                RD_MAP_SET(&member_idx, member->id, i_pointer);
                 i++;
         }
 
@@ -1052,17 +1057,19 @@ static void rd_kafka_mock_cgrp_consumer_member_returned_assignment_set(
 }
 
 /**
- * @brief Returns a copy of \p assignment containing only partitions
- *        that can be assignment, whose topic id is non-zero.
+ * @brief Returns a copy of \p member target assignment containing only
+ * partitions that can be assignment, whose topic id is non-zero.
  *
- * @param assignment The assignment to filter.
- * @return Filtered assignment.
+ * @param member The group member.
  *
  * @remark The returned pointer ownership is transferred to the caller.
+ *
+ * @locks mcluster->lock MUST be held.
  */
 static rd_kafka_topic_partition_list_t *
-rd_kafka_mock_cgrp_consumer_member_assignment_filter(
-    rd_kafka_topic_partition_list_t *assignment) {
+rd_kafka_mock_cgrp_consumer_member_target_assignment_assignable(
+    rd_kafka_mock_cgrp_consumer_member_t *member) {
+        rd_kafka_topic_partition_list_t *assignment = member->target_assignment;
         rd_kafka_topic_partition_t *rktpar;
         rd_kafka_topic_partition_list_t *ret =
             rd_kafka_topic_partition_list_new(assignment->cnt);
@@ -1081,6 +1088,11 @@ rd_kafka_mock_cgrp_consumer_member_assignment_filter(
 /**
  * Returns true iff \p new_assignment doesn't have any intersection with any
  * other member current assignment.
+ *
+ * If there's an intersection, it means we cannot bump the epoch at the moment,
+ * because some of these partitions are held by a different member. They have
+ * to be revoked from that member before it's possible to increase the epoch
+ * and assign additional partitions to this member.
  */
 rd_bool_t rd_kafka_mock_cgrp_consumer_member_next_assignment_can_bump_epoch(
     rd_kafka_mock_cgrp_consumer_member_t *member,
@@ -1131,13 +1143,97 @@ rd_bool_t rd_kafka_mock_cgrp_consumer_member_next_assignment_can_bump_epoch(
 }
 
 /**
+ * @brief Calculates if \p member,
+ *        needs a revocation, that is if its current assignment
+ *        isn't a subset of its target assignment.
+ *        In case it needs a revocation, it returns
+ *        the intersection between the two assignments,
+ *        that is the remaining partitions after revocation
+ *        of those not included in target assignment.
+ *
+ * @param member The group member.
+ *
+ * @return The remaining set of partitions, or NULL in case no revocation
+ *         is needed.
+ *
+ * @remark The returned pointer ownership is transferred to the caller.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static rd_kafka_topic_partition_list_t *
+rd_kafka_mock_cgrp_consumer_member_needs_revocation(
+    rd_kafka_mock_cgrp_consumer_member_t *member) {
+        rd_kafka_topic_partition_list_t *intersection;
+        rd_bool_t needs_revocation;
+
+        if (member->current_assignment)
+                /* If we have a current assignment we
+                 * calculate the intersection with
+                 * target assignment. */
+                intersection = rd_kafka_topic_partition_list_intersection_by_id(
+                    member->current_assignment, member->target_assignment);
+        else
+                /* Otherwise intersection is empty. */
+                intersection = rd_kafka_topic_partition_list_new(0);
+
+        needs_revocation = member->current_assignment &&
+                           intersection->cnt < member->current_assignment->cnt;
+        if (needs_revocation) {
+                return intersection;
+        }
+
+        rd_kafka_topic_partition_list_destroy(intersection);
+        return NULL;
+}
+
+/**
+ * @brief Calculates if \p member,
+ *        can receive new partitions, given revocation is completed.
+ *        In case new partitions aren't held by other members it
+ *        returns the assignable target assignment and bumps current
+ *        member epoch, otherwise it returns NULL and
+ *        doesn't change current member epoch.
+ *
+ * @param member The group member.
+ *
+ * @return The assignable set of partitions, or NULL in case new partitions
+ *         cannot be assigned yet.
+ *
+ * @remark The returned pointer ownership is transferred to the caller.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static rd_kafka_topic_partition_list_t *
+rd_kafka_mock_cgrp_consumer_member_needs_assignment(
+    rd_kafka_mock_cgrp_consumer_member_t *member) {
+        rd_kafka_topic_partition_list_t *returned_assignment =
+            rd_kafka_mock_cgrp_consumer_member_target_assignment_assignable(
+                member);
+
+        if (!rd_kafka_mock_cgrp_consumer_member_next_assignment_can_bump_epoch(
+                member, returned_assignment)) {
+                /* We can't bump the epoch still,
+                 * there are some partitions held by other members.
+                 * We have to return NULL. */
+                rd_kafka_topic_partition_list_destroy(returned_assignment);
+                return NULL;
+        }
+
+        /* No partitions to remove, return
+         * target assignment and reconcile the
+         * epochs */
+        member->current_member_epoch = member->target_member_epoch;
+        return returned_assignment;
+}
+
+/**
  * @brief Calculates next assignment and member epoch for a \p member,
  *        given \p current_assignment.
  *
  * @param member The group member.
  * @param current_assignment The assignment sent by the member, or NULL if it
  *                           didn't change. Must be NULL if *member_epoch is 0.
- * @param member_epoch Pointer to reported member epoch. Can be updated.
+ * @param member_epoch Pointer to client reported member epoch. Can be updated.
  *
  * @return The new assignment to return to the member.
  *
@@ -1161,83 +1257,66 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
 
         if (*member_epoch > 0 &&
             member->current_member_epoch != *member_epoch) {
-                /* FENCED_MEMBER_EPOCH */
-                *member_epoch = -1;
+                /* Member epoch is different from the one we expect,
+                 * that means we have to fence the member. */
+                *member_epoch = -1; /* FENCED_MEMBER_EPOCH */
                 return NULL;
         }
 
         if (member->target_assignment) {
+                /* We have a target assignment,
+                 * let's check if we can assign it. */
+
                 if (*member_epoch != member->current_member_epoch ||
                     member->current_member_epoch !=
                         member->target_member_epoch) {
                         /* Epochs are different, that means we have to bump the
-                         * epoch
-                         * immediately or do some revocations before that. */
+                         * epoch immediately or do some revocations
+                         * before that. */
 
-                        rd_kafka_topic_partition_list_t *intersection;
-
-                        if (member->current_assignment)
-                                intersection =
-                                    rd_kafka_topic_partition_list_intersection_by_id(
-                                        member->current_assignment,
-                                        member->target_assignment);
-                        else
-                                intersection =
-                                    rd_kafka_topic_partition_list_new(0);
-
-                        if (!member->current_assignment ||
-                            intersection->cnt ==
-                                member->current_assignment->cnt) {
+                        returned_assignment =
+                            rd_kafka_mock_cgrp_consumer_member_needs_revocation(
+                                member);
+                        if (!returned_assignment) {
+                                /* After revocation we only have to
+                                 * add new partitions.
+                                 * In case these new partitions are held
+                                 * by other members we still cannot do it. */
                                 returned_assignment =
-                                    rd_kafka_mock_cgrp_consumer_member_assignment_filter(
-                                        member->target_assignment);
-
-                                if (!rd_kafka_mock_cgrp_consumer_member_next_assignment_can_bump_epoch(
-                                        member, returned_assignment)) {
-                                        rd_kafka_topic_partition_list_destroy(
-                                            returned_assignment);
-                                        returned_assignment = NULL;
-                                } else {
-                                        /* No partitions to remove, return
-                                         * target assignment and reconcile the
-                                         * epochs */
-                                        member->current_member_epoch =
-                                            member->target_member_epoch;
-                                }
-                                rd_kafka_topic_partition_list_destroy(
-                                    intersection);
-                        } else {
-                                /* Some partitions to remove, return
-                                 * intersection and leave the same epoch. */
-                                returned_assignment = intersection;
+                                    rd_kafka_mock_cgrp_consumer_member_needs_assignment(
+                                        member);
                         }
                 } else if (!member->returned_assignment) {
                         /* If all the epochs are the same, the only case
                          * where we have to return the assignment is
                          * after a disconnection, when returned_assignment has
                          * been reset to NULL. */
-
                         returned_assignment =
-                            rd_kafka_mock_cgrp_consumer_member_assignment_filter(
-                                member->target_assignment);
+                            rd_kafka_mock_cgrp_consumer_member_target_assignment_assignable(
+                                member);
                 }
         }
 
         *member_epoch = member->current_member_epoch;
         if (returned_assignment) {
                 /* Compare returned_assignment with last returned_assignment.
-                 * If equal return NULL, otherwise return returned_assignment
+                 * If equal, return NULL, otherwise return returned_assignment
                  * and update last returned_assignment. */
                 rd_bool_t same_returned_assignment =
                     member->returned_assignment &&
                     !rd_kafka_topic_partition_list_cmp(
                         member->returned_assignment, returned_assignment,
                         rd_kafka_topic_partition_by_id_cmp);
+
                 if (same_returned_assignment) {
+                        /* Returned assignment is the same as previous
+                         * one, we return NULL instead to show no change. */
                         rd_kafka_topic_partition_list_destroy(
                             returned_assignment);
                         returned_assignment = NULL;
                 } else {
+                        /* We store returned assignment
+                         * for later comparison. */
                         rd_kafka_mock_cgrp_consumer_member_returned_assignment_set(
                             member, returned_assignment);
                 }
@@ -1287,8 +1366,8 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
  * @brief Set the subscribed topics for member \p member
  *        to \p SubscribedTopicNames .
  *        Deduplicates the list after sorting it.
- * @return `rd_true` if the subscription was changed, if set and different
- *         from previous one.
+ * @return `rd_true` if the subscription was changed, that happens
+ *         if it's set and different from previous one.
  *
  * @locks mcluster->lock MUST be held.
  */
@@ -1298,6 +1377,8 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
     int32_t SubscribedTopicNamesCnt) {
         rd_bool_t changed = rd_false;
         if (!SubscribedTopicNames)
+                /* When client is sending NULL,
+                 * its subscription didn't change */
                 return changed;
 
         int32_t i;
@@ -1380,9 +1461,10 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
             rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                 member, SubscribedTopicNames, SubscribedTopicNamesCnt);
 
-        mcgrp->session_timeout_ms = mcgrp->cluster->defaults.session_timeout_ms;
+        mcgrp->session_timeout_ms =
+            mcgrp->cluster->defaults.group_consumer_session_timeout_ms;
         mcgrp->heartbeat_interval_ms =
-            mcgrp->cluster->defaults.heartbeat_interval_ms;
+            mcgrp->cluster->defaults.group_consumer_heartbeat_interval_ms;
 
         member->conn = conn;
 
@@ -1574,19 +1656,21 @@ destroy:
         mtx_unlock(&mcluster->lock);
 }
 
-void rd_kafka_mock_set_default_session_timeout(
+void rd_kafka_mock_group_consumer_session_timeout_ms(
     rd_kafka_mock_cluster_t *mcluster,
-    int session_timeout_ms) {
+    int group_consumer_session_timeout_ms) {
         mtx_lock(&mcluster->lock);
-        mcluster->defaults.session_timeout_ms = session_timeout_ms;
+        mcluster->defaults.group_consumer_session_timeout_ms =
+            group_consumer_session_timeout_ms;
         mtx_unlock(&mcluster->lock);
 }
 
-void rd_kafka_mock_set_default_heartbeat_interval(
+void rd_kafka_mock_group_consumer_heartbeat_interval_ms(
     rd_kafka_mock_cluster_t *mcluster,
-    int heartbeat_interval_ms) {
+    int group_consumer_heartbeat_interval_ms) {
         mtx_lock(&mcluster->lock);
-        mcluster->defaults.heartbeat_interval_ms = heartbeat_interval_ms;
+        mcluster->defaults.group_consumer_heartbeat_interval_ms =
+            group_consumer_heartbeat_interval_ms;
         mtx_unlock(&mcluster->lock);
 }
 

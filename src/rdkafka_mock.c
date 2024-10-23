@@ -2708,10 +2708,10 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->topics);
         mcluster->defaults.partition_cnt      = 4;
         mcluster->defaults.replication_factor = RD_MIN(3, broker_cnt);
-        mcluster->defaults.group_initial_rebalance_delay_ms = 3000;
-        mcluster->track_requests                            = rd_false;
-        mcluster->defaults.session_timeout_ms               = 30000;
-        mcluster->defaults.heartbeat_interval_ms            = 3000;
+        mcluster->defaults.group_initial_rebalance_delay_ms     = 3000;
+        mcluster->track_requests                                = rd_false;
+        mcluster->defaults.group_consumer_session_timeout_ms    = 30000;
+        mcluster->defaults.group_consumer_heartbeat_interval_ms = 3000;
 
         TAILQ_INIT(&mcluster->cgrps_classic);
 
@@ -3057,8 +3057,8 @@ static int ut_cgrp_consumer_member_next_assignment0(
 
                         target_assignment =
                             rd_kafka_mock_cgrp_consumer_target_assignment_new(
-                                1, (char **)&MemberId.str,
-                                &member_target_assignment);
+                                (char **)&MemberId.str,
+                                &member_target_assignment, 1);
 
                         rd_kafka_mock_cgrp_consumer_target_assignment(
                             mcluster, GroupId.str, target_assignment);

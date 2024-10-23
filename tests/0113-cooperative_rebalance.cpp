@@ -2694,7 +2694,7 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
 
   Test::Say("Disposing consumers\n");
   for (int i = 0; i < N_CONSUMERS; i++) {
-    /* A consumer will nor necessarily get a rebalance after a
+    /* A consumer will not necessarily get a rebalance after a
      * subscription change with the consumer protocol */
     if (test_consumer_group_protocol_classic()) {
       TEST_ASSERT(!use_rebalance_cb || !rebalance_cbs[i].wait_rebalance,

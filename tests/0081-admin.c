@@ -5326,14 +5326,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                     "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
                     rd_false /* don't create topics */);
 
-                /* TODO: check this test after KIP-848 admin operation
-                 * implementation */
-                if (test_consumer_group_protocol_classic()) {
-                        do_test_AlterConsumerGroupOffsets(
-                            "main queue", rk, mainq, 1500,
-                            rd_true, /*with subscribing consumer*/
-                            rd_true);
-                }
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true, /*with subscribing consumer*/
+                    rd_true);
         }
 
         if (test_broker_version >= TEST_BRKVER(2, 0, 0, 0)) {

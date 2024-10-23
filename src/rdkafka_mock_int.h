@@ -456,8 +456,10 @@ struct rd_kafka_mock_cluster_s {
                 int replication_factor; /**< Auto topic create repl factor */
                 /** Group initial rebalance delay */
                 int32_t group_initial_rebalance_delay_ms;
-                int session_timeout_ms;    /**< Session timeout */
-                int heartbeat_interval_ms; /**< Heartbeat interval */
+                /** Session timeout (KIP 848) */
+                int group_consumer_session_timeout_ms;
+                /** Heartbeat interval (KIP 848) */
+                int group_consumer_heartbeat_interval_ms;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

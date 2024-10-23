@@ -4595,7 +4595,7 @@ rd_kafka_consumer_group_metadata_new_with_genid(const char *group_id,
 /**
  * @brief Get group id of a group metadata.
  *
- * @param group_metadata The group metadata
+ * @param group_metadata The group metadata.
  *
  * @returns The group id contained in the passed \p group_metadata.
  *
@@ -4608,9 +4608,9 @@ const char *rd_kafka_consumer_group_metadata_group_id(
 /**
  * @brief Get group instance id of a group metadata.
  *
- * @param group_metadata The group metadata
+ * @param group_metadata The group metadata.
  *
- * @returns The group instance id contained in the passed \p group_metadata.
+ * @returns The group instance id contained in the passed \p group_metadata
  *          or NULL.
  *
  * @remark The returned pointer has the same lifetime as \p group_metadata.
@@ -4622,7 +4622,7 @@ const char *rd_kafka_consumer_group_metadata_group_instance_id(
 /**
  * @brief Get member id of a group metadata.
  *
- * @param group_metadata The group metadata
+ * @param group_metadata The group metadata.
  *
  * @returns The member id contained in the passed \p group_metadata.
  *
@@ -4636,7 +4636,7 @@ const char *rd_kafka_consumer_group_metadata_member_id(
  * @brief Get member epoch of a group metadata.
  *        Corresponds to the generation id in consumer protocol classic;
  *
- * @param group_metadata The group metadata
+ * @param group_metadata The group metadata.
  *
  * @returns The member epoch id contained in the passed \p group_metadata.
  */

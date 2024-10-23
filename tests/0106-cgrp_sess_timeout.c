@@ -169,8 +169,8 @@ static void do_test_session_timeout(const char *use_commit_type) {
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.auto.commit",
                       !strcmp(commit_type, "auto") ? "true" : "false");
-        rd_kafka_mock_set_default_session_timeout(mcluster, 1000);
-        rd_kafka_mock_set_default_heartbeat_interval(mcluster, 100);
+        rd_kafka_mock_group_consumer_session_timeout_ms(mcluster, 1000);
+        rd_kafka_mock_group_consumer_heartbeat_interval_ms(mcluster, 100);
 
         c = test_create_consumer(groupid, rebalance_cb, conf, NULL);
 
@@ -198,7 +198,8 @@ static void do_test_session_timeout(const char *use_commit_type) {
 
         if (!test_consumer_group_protocol_classic()) {
                 /* Increase HB interval so member is fenced from the group */
-                rd_kafka_mock_set_default_heartbeat_interval(mcluster, 2000);
+                rd_kafka_mock_group_consumer_heartbeat_interval_ms(mcluster,
+                                                                   2000);
         }
 
         /* The commit in the rebalance callback should fail when the

@@ -7267,6 +7267,8 @@ void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
                 const char *member_id       = NULL;
                 const char *member_group_id = NULL;
                 rd_bool_t first_time        = rd_true;
+                /* Await member joins the group and obtains a member id
+                 * to use for setting target assignment. */
                 while (!member_id || *member_id == '\0' || !member_group_id) {
                         if (!first_time)
                                 rd_usleep(100000, NULL);
@@ -7292,7 +7294,7 @@ void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
         va_end(ap);
 
         target_assignment = rd_kafka_mock_cgrp_consumer_target_assignment_new(
-            member_cnt, member_ids, assignment);
+            member_ids, assignment, member_cnt);
         rd_kafka_mock_cgrp_consumer_target_assignment(mcluster, group_id,
                                                       target_assignment);
         rd_kafka_mock_cgrp_consumer_target_assignment_destroy(

@@ -110,7 +110,7 @@ void conf_init(RdKafka::Conf **conf, RdKafka::Conf **topic_conf, int timeout) {
   if (*conf && (group_protocol = test_consumer_group_protocol())) {
     if ((*conf)->set("group.protocol", group_protocol, errstr) !=
         RdKafka::Conf::CONF_OK)
-      Test::Fail("TEST_CONSUMER_GROUP_PROTOCOL failed: " + errstr);
+      Test::Fail("set group.protocol failed: " + errstr);
   }
 
   if (timeout)

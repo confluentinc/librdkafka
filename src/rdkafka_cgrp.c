@@ -3341,8 +3341,8 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
          * Need to drain all ops in rkcg_ops,
          * in case some ops are waiting for reply and hang forever
          */
-        rd_kafka_q_serve(rkcg->rkcg_ops, RD_POLL_INFINITE, 0,
-                         RD_KAFKA_Q_CB_CALLBACK, NULL, NULL);
+        while(rd_kafka_q_serve(rkcg->rkcg_ops, RD_POLL_NOWAIT, 0,
+                         RD_KAFKA_Q_CB_CALLBACK, NULL, NULL));
         rd_kafka_q_purge(rkcg->rkcg_ops);
 
         if (rkcg->rkcg_curr_coord)

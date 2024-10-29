@@ -34,7 +34,9 @@
 
 #include <stdarg.h>
 
-
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
+#include <openssl/rand.h>
+#endif
 
 /** @brief Descriptive strings for rko_u.admin_request.state */
 static const char *rd_kafka_admin_state_desc[] = {

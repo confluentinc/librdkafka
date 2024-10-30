@@ -7,8 +7,10 @@ librdkafka v2.6.1 is a maintenance release:
   under some particular conditions (#4800).
 * Fix for retrieving offset commit metadata when it contains
   zeros and configured with `strndup` (#4876)
- * Fix for a loop of ListOffset requests, happening in a Fetch From Follower
-   scenario, if such request is made to the follower (#4616, #4754, @kphelps).
+* Fix for a loop of ListOffset requests, happening in a Fetch From Follower
+  scenario, if such request is made to the follower (#4616, #4754, @kphelps).
+* Fix to remove fetch queue messages that blocked the destroy of rdkafka
+  instances (#4724)
 
 
 ## Fixes
@@ -40,6 +42,14 @@ librdkafka v2.6.1 is a maintenance release:
   "Not leader for partition" error. Fixed by sending the request always
   to the leader.
   Happening since 1.5.0 (tested version) or previous ones (#4616, #4754, @kphelps).
+* Issues:
+  Fix to remove fetch queue messages that blocked the destroy of rdkafka
+  instances. Circular dependencies from a partition fetch queue message to
+  the same partition blocked the destroy of an instance, that happened
+  in case the partition was removed from the cluster while it was being
+  consumed. Solved by purging internal partition queue, after being stopped
+  and removed, to allow reference count to reach zero and trigger a destroy.
+  Happening since 2.0.2 (#4724).
 
 
 

@@ -474,7 +474,7 @@ async function transformField(ctx: RuleContext, fd: DescField, desc: DescMessage
   try {
     ctx.enterField(
       msg,
-      desc.name + '.' + fd.name,
+      desc.typeName + '.' + fd.name,
       fd.name,
       getType(fd),
       getInlineTags(fd)
@@ -494,11 +494,13 @@ async function transformField(ctx: RuleContext, fd: DescField, desc: DescMessage
 }
 
 function getType(fd: DescField): FieldType {
-  switch (fd.fieldKind) {
+  let kind = fd.fieldKind
+  if (fd.fieldKind === 'list') {
+    kind = fd.listKind
+  }
+  switch (kind) {
     case 'map':
       return FieldType.MAP
-    case 'list':
-      return FieldType.ARRAY
     case 'message':
       return FieldType.RECORD
     case 'enum':
@@ -526,6 +528,8 @@ function getType(fd: DescField): FieldType {
           return FieldType.DOUBLE
         case ScalarType.BOOL:
           return FieldType.BOOLEAN
+        default:
+          return FieldType.NULL
       }
     default:
       return FieldType.NULL

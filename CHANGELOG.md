@@ -10,6 +10,7 @@ librdkafka v2.2.1 is a maintenance release backporting:
      check the [release notes](https://www.openssl.org/news/cl30.txt)
      (@janjwerner-confluent, #4690).
 * Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.8.0 (@janjwerner-confluent, #4690).
+* Upgrade Linux dependencies: OpenSSL 3.0.15, CURL 8.10.1 (#4875).
 
 
 

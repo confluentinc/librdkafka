@@ -275,7 +275,6 @@ blocks:
       prologue:
         commands:
           # install vcpkg in the parent directory.
-          - pwd
           - cd ..
           # Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
@@ -283,12 +282,6 @@ blocks:
           - ..\vcpkg\vcpkg integrate install
           # Install required packages.
           - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
-          - cd ..
-          - pwd
-          - ls vcpkg/
-          - echo $Env:VCPKG_ROOT
-          - pwd
-          - cd librdkafka
       epilogue:
         commands:
           - Get-ChildItem . -include *.dll -recurse

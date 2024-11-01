@@ -12,6 +12,8 @@ librdkafka v2.6.1 is a maintenance release:
 * Fix to remove fetch queue messages that blocked the destroy of rdkafka
   instances (#4724)
 * Upgrade Linux dependencies: OpenSSL 3.0.15, CURL 8.10.1 (#4875).
+* Upgrade Windows dependencies: MSVC runtime to 14.40.338160.0,
+  zstd 1.5.6, zlib 1.3.1, OpenSSL 3.3.2, CURL 8.10.1 (#4872).
 
 
 ## Fixes

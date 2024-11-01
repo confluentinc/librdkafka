@@ -350,8 +350,7 @@ async function transform(ctx: RuleContext, schema: DereferencedJSONSchema, path:
     case FieldType.RECORD:
       if (schema.properties != null) {
         for (let [propName, propSchema] of Object.entries(schema.properties)) {
-          let value = msg[propName]
-          await transformField(ctx, path, propName, msg, value, propSchema, fieldTransform)
+          await transformField(ctx, path, propName, msg, propSchema, fieldTransform)
         }
       }
       return msg
@@ -371,12 +370,13 @@ async function transform(ctx: RuleContext, schema: DereferencedJSONSchema, path:
   return msg
 }
 
-async function transformField(ctx: RuleContext, path: string, propName: string, msg: any, value: any,
-                        propSchema: DereferencedJSONSchema,
-                        fieldTransform: FieldTransform): Promise<void> {
+async function transformField(ctx: RuleContext, path: string, propName: string, msg: any,
+                              propSchema: DereferencedJSONSchema,
+                              fieldTransform: FieldTransform): Promise<void> {
   const fullName = path + '.' + propName
   try {
     ctx.enterField(msg, fullName, propName, getType(propSchema), getInlineTags(propSchema))
+    let value = msg[propName]
     const newVal = await transform(ctx, propSchema, fullName, value, fieldTransform)
     if (ctx.rule.kind === 'CONDITION') {
       if (newVal === false) {

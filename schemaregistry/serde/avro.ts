@@ -285,7 +285,7 @@ async function transform(ctx: RuleContext, schema: Type, msg: any, fieldTransfor
       const recordSchema = schema as RecordType
       const record = msg as Record<string, any>
       for (const field of recordSchema.fields) {
-        await transformField(ctx, recordSchema, field, record, record[field.name], fieldTransform)
+        await transformField(ctx, recordSchema, field, record, fieldTransform)
       }
       return record
     default:
@@ -304,13 +304,12 @@ async function transformField(
   recordSchema: RecordType,
   field: Field,
   record: Record<string, any>,
-  val: any,
   fieldTransform: FieldTransform,
 ): Promise<void> {
   const fullName = recordSchema.name + '.' + field.name
   try {
     ctx.enterField(
-      val,
+      record,
       fullName,
       field.name,
       getType(field.type),

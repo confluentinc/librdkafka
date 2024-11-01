@@ -91,10 +91,16 @@ export class JsonSerializer extends Serializer implements JsonSerde {
       throw new Error('message is empty')
     }
 
-    const jsonSchema = JsonSerializer.messageToSchema(msg)
-    const schema: SchemaInfo = {
-      schemaType: 'JSON',
-      schema: JSON.stringify(jsonSchema),
+    let schema: SchemaInfo | undefined = undefined
+    // Don't derive the schema if it is being looked up in the following ways
+    if (this.config().useSchemaId == null &&
+      !this.config().useLatestVersion &&
+      this.config().useLatestWithMetadata == null) {
+      const jsonSchema = JsonSerializer.messageToSchema(msg)
+      schema = {
+        schemaType: 'JSON',
+        schema: JSON.stringify(jsonSchema),
+      }
     }
     const [id, info] = await this.getId(topic, msg, schema)
     const subject = this.subjectName(topic, info)

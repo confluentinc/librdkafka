@@ -71,12 +71,19 @@ export class AvroSerializer extends Serializer implements AvroSerde {
       throw new Error('message is empty')
     }
 
-    let avroSchema = AvroSerializer.messageToSchema(msg)
-    const schema: SchemaInfo = {
-      schemaType: 'AVRO',
-      schema: JSON.stringify(avroSchema),
+    let schema: SchemaInfo | undefined = undefined
+    // Don't derive the schema if it is being looked up in the following ways
+    if (this.config().useSchemaId == null &&
+        !this.config().useLatestVersion &&
+        this.config().useLatestWithMetadata == null) {
+      const avroSchema = AvroSerializer.messageToSchema(msg)
+      schema = {
+        schemaType: 'AVRO',
+        schema: JSON.stringify(avroSchema),
+      }
     }
     const [id, info] = await this.getId(topic, msg, schema)
+    let avroSchema: avro.Type
     let deps: Map<string, string>
     [avroSchema, deps] = await this.toType(info)
     const subject = this.subjectName(topic, info)

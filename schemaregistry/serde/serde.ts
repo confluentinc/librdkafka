@@ -244,7 +244,7 @@ export abstract class Serializer extends Serde {
   abstract serialize(topic: string, msg: any): Promise<Buffer>
 
   // GetID returns a schema ID for the given schema
-  async getId(topic: string, msg: any, info: SchemaInfo, format?: string): Promise<[number, SchemaInfo]> {
+  async getId(topic: string, msg: any, info?: SchemaInfo, format?: string): Promise<[number, SchemaInfo]> {
     let autoRegister = this.config().autoRegisterSchemas
     let useSchemaId = this.config().useSchemaId
     let useLatestWithMetadata = this.conf.useLatestWithMetadata
@@ -254,7 +254,7 @@ export abstract class Serializer extends Serde {
     let id = -1
     let subject = this.subjectName(topic, info)
     if (autoRegister) {
-      id = await this.client.register(subject, info, Boolean(normalizeSchema))
+      id = await this.client.register(subject, info!, Boolean(normalizeSchema))
     } else if (useSchemaId != null && useSchemaId >= 0) {
       info = await this.client.getBySubjectAndId(subject, useSchemaId, format)
       id = useSchemaId
@@ -267,9 +267,9 @@ export abstract class Serializer extends Serde {
       info = metadata
       id = metadata.id
     } else {
-      id = await this.client.getId(subject, info, Boolean(normalizeSchema))
+      id = await this.client.getId(subject, info!, Boolean(normalizeSchema))
     }
-    return [id, info]
+    return [id, info!]
   }
 
   writeBytes(id: number, msgBytes: Buffer): Buffer {

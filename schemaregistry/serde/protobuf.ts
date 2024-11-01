@@ -149,8 +149,15 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
     if (messageDesc == null) {
       throw new SerializationError('message descriptor not in registry')
     }
-    const fileDesc = messageDesc.file
-    const schema = await this.getSchemaInfo(fileDesc)
+
+    let schema: SchemaInfo | undefined = undefined
+    // Don't derive the schema if it is being looked up in the following ways
+    if (this.config().useSchemaId == null &&
+      !this.config().useLatestVersion &&
+      this.config().useLatestWithMetadata == null) {
+      const fileDesc = messageDesc.file
+      schema = await this.getSchemaInfo(fileDesc)
+    }
     const [id, info] = await this.getId(topic, msg, schema, 'serialized')
     const subject = this.subjectName(topic, info)
     msg = await this.executeRules(subject, topic, RuleMode.WRITE, null, info, msg, null)

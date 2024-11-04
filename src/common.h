@@ -130,6 +130,10 @@ v8::Local<v8::Object> FromDescribeConsumerGroupsResult(
 // DeleteGroups: Response
 v8::Local<v8::Array> FromDeleteGroupsResult(
     const rd_kafka_DeleteGroups_result_t *);
+
+// ListConsumerGroupOffsets: Request
+v8::Local<v8::Array> FromListConsumerGroupOffsetsResult(
+    const rd_kafka_ListConsumerGroupOffsets_result_t *result);
 }  // namespace Admin
 
 namespace TopicPartition {
@@ -139,6 +143,8 @@ v8::Local<v8::Array> ToTopicPartitionV8Array(
     const rd_kafka_topic_partition_list_t *, bool include_offset);
 RdKafka::TopicPartition *FromV8Object(v8::Local<v8::Object>);
 std::vector<RdKafka::TopicPartition *> FromV8Array(const v8::Local<v8::Array> &);  // NOLINT
+rd_kafka_topic_partition_list_t *TopicPartitionv8ArrayToTopicPartitionList(
+    v8::Local<v8::Array> parameter, bool include_offset);
 
 }  // namespace TopicPartition
 

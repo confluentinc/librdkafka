@@ -1483,6 +1483,68 @@ void AdminClientDeleteGroups::HandleErrorCallback() {
   callback->Call(argc, argv);
 }
 
+/**
+ * @brief List Consumer Group Offsets in an asynchronous worker
+ *
+ * This callback will list all the consumer group offsets for the specified
+ * group's topic partitions.
+ *
+ */
+AdminClientListConsumerGroupOffsets::AdminClientListConsumerGroupOffsets(
+    Nan::Callback* callback, NodeKafka::AdminClient* client,
+    rd_kafka_ListConsumerGroupOffsets_t **req,
+    size_t req_cnt,
+    const bool require_stable_offsets,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_req(req),
+      m_req_cnt(req_cnt),
+      m_require_stable_offsets(require_stable_offsets),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientListConsumerGroupOffsets::~AdminClientListConsumerGroupOffsets() {
+  if (m_req) {
+    rd_kafka_ListConsumerGroupOffsets_destroy_array(m_req, m_req_cnt);
+    free(m_req);
+  }
+
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientListConsumerGroupOffsets::Execute() {
+  Baton b = m_client->ListConsumerGroupOffsets(m_req, m_req_cnt,
+                                               m_require_stable_offsets,
+                                               m_timeout_ms, &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientListConsumerGroupOffsets::HandleOKCallback() {
+  Nan::HandleScope scope;
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+  argv[1] = Conversion::Admin::FromListConsumerGroupOffsetsResult(
+      rd_kafka_event_ListConsumerGroupOffsets_result(m_event_response));
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientListConsumerGroupOffsets::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
+
 
 }  // namespace Workers
 }  // namespace NodeKafka

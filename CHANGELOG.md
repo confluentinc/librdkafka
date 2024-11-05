@@ -1,3 +1,61 @@
+# librdkafka v2.6.1
+
+librdkafka v2.6.1 is a maintenance release:
+
+* Fix for a Fetch regression when connecting to Apache Kafka < 2.7 (#4871).
+* Fix for an infinite loop happening with cooperative-sticky assignor
+  under some particular conditions (#4800).
+* Fix for retrieving offset commit metadata when it contains
+  zeros and configured with `strndup` (#4876)
+* Fix for a loop of ListOffset requests, happening in a Fetch From Follower
+  scenario, if such request is made to the follower (#4616, #4754, @kphelps).
+* Fix to remove fetch queue messages that blocked the destroy of rdkafka
+  instances (#4724)
+* Upgrade Linux dependencies: OpenSSL 3.0.15, CURL 8.10.1 (#4875).
+* Upgrade Windows dependencies: MSVC runtime to 14.40.338160.0,
+  zstd 1.5.6, zlib 1.3.1, OpenSSL 3.3.2, CURL 8.10.1 (#4872).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4870
+  Fix for a Fetch regression when connecting to Apache Kafka < 2.7, causing
+  fetches to fail.
+  Happening since v2.6.0 (#4871)
+* Issues: #4783.
+  A consumer configured with the `cooperative-sticky` partition assignment
+  strategy could get stuck in an infinite loop, with corresponding spike of
+  main thread CPU usage.
+  That happened with some particular orders of members and potential 
+  assignable partitions.
+  Solved by removing the infinite loop cause.
+  Happening since: 1.6.0 (#4800).
+* Issues: #4649.
+  When retrieving offset metadata, if the binary value contained zeros
+  and librdkafka was configured with `strndup`, part of
+  the buffer after first zero contained uninitialized data
+  instead of rest of metadata. Solved by avoiding to use
+  `strndup` for copying metadata.
+  Happening since: 0.9.0 (#4876).
+* Issues: #4616
+  When an out of range on a follower caused an offset reset, the corresponding
+  ListOffsets request is made to the follower, causing a repeated
+  "Not leader for partition" error. Fixed by sending the request always
+  to the leader.
+  Happening since 1.5.0 (tested version) or previous ones (#4616, #4754, @kphelps).
+* Issues:
+  Fix to remove fetch queue messages that blocked the destroy of rdkafka
+  instances. Circular dependencies from a partition fetch queue message to
+  the same partition blocked the destroy of an instance, that happened
+  in case the partition was removed from the cluster while it was being
+  consumed. Solved by purging internal partition queue, after being stopped
+  and removed, to allow reference count to reach zero and trigger a destroy.
+  Happening since 2.0.2 (#4724).
+
+
+
 # librdkafka v2.6.0
 
 librdkafka v2.6.0 is a feature release:

@@ -7,6 +7,7 @@ module.exports = {
     runConsumer,
     runConsumeTransformProduce,
     runCreateTopics,
+    runProducerConsumerTogether,
 };
 
 async function runCreateTopics(brokers, topic, topic2) {
@@ -137,7 +138,7 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
     consumer.run({
         eachMessage: async ({ topic, partition, message }) => {
             messagesReceived++;
-            
+
             if (messagesReceived >= skippedMessages) {
                 messagesMeasured++;
                 totalMessageSize += message.value.length;
@@ -170,7 +171,6 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
 }
 
 async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, warmupMessages, totalMessageCnt, messageProcessTimeMs, ctpConcurrency) {
-    console.log("here");
     const kafka = new Kafka({
         'client.id': 'kafka-test-performance',
         'metadata.broker.list': brokers,
@@ -219,7 +219,7 @@ async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, w
 
                 if (messagesReceived === skippedMessages)
                     startTime = hrtime();
-                
+
                 /* Simulate message processing for messageProcessTimeMs */
                 if (messageProcessTimeMs > 0) {
                     await new Promise((resolve) => setTimeout(resolve, messageProcessTimeMs));
@@ -258,4 +258,100 @@ async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, w
     await consumer.disconnect();
     await producer.disconnect();
     return rate;
+}
+
+async function runProducerConsumerTogether(brokers, topic, totalMessageCnt, msgSize, produceMessageProcessTimeMs, consumeMessageProcessTimeMs) {
+    const kafka = new Kafka({
+        'client.id': 'kafka-test-performance',
+        'metadata.broker.list': brokers,
+    });
+
+    const producer = kafka.producer({
+        /* We want things to be flushed immediately as we'll be awaiting this. */
+        'linger.ms': 0,
+    });
+    await producer.connect();
+
+    let consumerReady = false;
+    let consumerFinished = false;
+    const consumer = kafka.consumer({
+        'group.id': 'test-group' + Math.random(),
+        'enable.auto.commit': false,
+        'auto.offset.reset': 'earliest',
+        rebalance_cb: function(err) {
+            if (err.code !== ErrorCodes.ERR__ASSIGN_PARTITIONS) return;
+            if (!consumerReady) {
+                consumerReady = true;
+                console.log("Consumer ready.");
+            }
+        }
+    });
+    await consumer.connect();
+    await consumer.subscribe({ topic: topic });
+
+    let startTime = null;
+    let diffs = [];
+    console.log("Starting consumer.");
+
+    consumer.run({
+        eachMessage: async ({ topic, partition, message }) => {
+            if (startTime === null)
+                return;
+            let endTime = hrtime.bigint();
+            diffs.push(endTime - startTime);
+            await new Promise(resolve => setTimeout(resolve, consumeMessageProcessTimeMs));
+            if (diffs.length >= totalMessageCnt) {
+                consumerFinished = true;
+            }
+        }
+    });
+
+    while(!consumerReady) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    const message = {
+        value: randomBytes(msgSize),
+    }
+
+    // Don't initialize startTime here, the first message includes the metadata
+    // request and isn't representative of latency measurements.
+    await producer.send({
+        topic,
+        messages: [message],
+    });
+    // We don't want this to show up at all for our measurements, so make sure the
+    // consumer processes this and ignores it before proceeding.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    console.log("Starting producer.");
+
+    for (let i = 0; i < totalMessageCnt; i++) {
+        startTime = hrtime.bigint();
+        await producer.send({
+            topic,
+            messages: [message],
+        });
+        await new Promise(resolve => setTimeout(resolve, produceMessageProcessTimeMs));
+    }
+
+    while (!consumerFinished) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    console.log("Consumer finished.");
+
+    await consumer.disconnect();
+    await producer.disconnect();
+
+    const nanoDiffs = diffs.map(d => parseInt(d));
+    const sortedDiffs = nanoDiffs.sort((a, b) => a - b);
+    const p50 = sortedDiffs[Math.floor(sortedDiffs.length / 2)] / 1e6;
+    const p90 = sortedDiffs[Math.floor(sortedDiffs.length * 0.9)] / 1e6;
+    const p95 = sortedDiffs[Math.floor(sortedDiffs.length * 0.95)] / 1e6;
+    const mean = nanoDiffs.reduce((acc, d) => acc + d, 0) / nanoDiffs.length / 1e6;
+    // Count outliers: elements 10x or more than the p50. My choice of what an
+    // outlier is defined as, is arbitrary.
+    const outliers = sortedDiffs.map(d => d/1e6).filter(d => (d) > (10 * p50));
+    return { mean, p50, p90, p95, outliers };
 }

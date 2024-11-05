@@ -279,6 +279,26 @@ class Partitioner : public RdKafka::PartitionerCb {
   static unsigned int random(const RdKafka::Topic*, int32_t);
 };
 
+class QueueNotEmptyDispatcher : public Dispatcher {
+ public:
+  QueueNotEmptyDispatcher();
+  ~QueueNotEmptyDispatcher();
+  void Flush();
+};
+
+// This callback does not extend from any class because it's a C callback
+// The only reason we have a class here is to maintain similarity with how
+// callbacks are structured in the rest of the library.
+class QueueNotEmpty {
+ public:
+  QueueNotEmpty();
+  ~QueueNotEmpty();
+  // This is static because it must be passed to C. The `this` reference will be
+  // passde within `self`.
+  static void queue_not_empty_cb(rd_kafka_t *rk, void *self);
+  QueueNotEmptyDispatcher dispatcher;
+};
+
 }  // namespace Callbacks
 
 }  // namespace NodeKafka

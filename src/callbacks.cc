@@ -652,6 +652,27 @@ void Partitioner::SetCallback(v8::Local<v8::Function> cb) {
   callback(cb);
 }
 
+QueueNotEmptyDispatcher::QueueNotEmptyDispatcher() {}
+QueueNotEmptyDispatcher::~QueueNotEmptyDispatcher() {}
+
+void QueueNotEmptyDispatcher::Flush() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 0;
+  Dispatch(argc, nullptr);
+}
+
+QueueNotEmpty::QueueNotEmpty() {}
+QueueNotEmpty::~QueueNotEmpty() {}
+
+void QueueNotEmpty::queue_not_empty_cb(rd_kafka_t *rk, void *self) {
+  QueueNotEmpty *queue_not_empty = static_cast<QueueNotEmpty *>(self);
+  if (!queue_not_empty->dispatcher.HasCallbacks()) {
+    return;
+  }
+
+  queue_not_empty->dispatcher.Execute();
+}
 
 }  // end namespace Callbacks
 

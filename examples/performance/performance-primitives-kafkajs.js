@@ -7,6 +7,7 @@ module.exports = {
     runConsumer,
     runConsumeTransformProduce,
     runCreateTopics,
+    runProducerConsumerTogether,
 };
 
 async function runCreateTopics(brokers, topic, topic2) {
@@ -130,7 +131,7 @@ async function runConsumer(brokers, topic, totalMessageCnt) {
         autoCommit: false,
         eachMessage: async ({ topic, partition, message }) => {
             messagesReceived++;
-            
+
             if (messagesReceived >= skippedMessages) {
                 messagesMeasured++;
                 totalMessageSize += message.value.length;
@@ -238,4 +239,94 @@ async function runConsumeTransformProduce(brokers, consumeTopic, produceTopic, w
     await consumer.disconnect();
     await producer.disconnect();
     return rate;
+}
+
+
+async function runProducerConsumerTogether(brokers, topic, totalMessageCnt, msgSize, produceMessageProcessTimeMs, consumeMessageProcessTimeMs) {
+    const kafka = new Kafka({
+        clientId: 'kafka-test-performance',
+        brokers: brokers.split(','),
+    });
+
+    const producer = kafka.producer({});
+    await producer.connect();
+
+    let consumerReady = false;
+    let consumerFinished = false;
+    const consumer = kafka.consumer({
+        groupId: 'test-group' + Math.random(),
+    });
+    await consumer.connect();
+    await consumer.subscribe({ topic: topic, fromBeginning: true });
+
+    let startTime = null;
+    let diffs = [];
+    console.log("Starting consumer.");
+
+    consumer.run({
+        autoCommit: false,
+        eachMessage: async ({ topic, partition, message }) => {
+            if (!consumerReady) {
+                consumerReady = true;
+                return;
+            }
+            if (startTime === null)
+                return;
+            let endTime = hrtime.bigint();
+            diffs.push(endTime - startTime);
+            await new Promise(resolve => setTimeout(resolve, consumeMessageProcessTimeMs));
+            if (diffs.length >= totalMessageCnt) {
+                consumerFinished = true;
+            }
+        }
+    });
+
+    const message = {
+        value: randomBytes(msgSize),
+    }
+
+    // Don't initialize startTime here, the first message includes the metadata
+    // request and isn't representative of latency measurements.
+    await producer.send({
+        topic,
+        messages: [message],
+    });
+    // We don't want this to show up at all for our measurements, so make sure the
+    // consumer processes this and ignores it before proceeding.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    while(!consumerReady) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+
+    console.log("Starting producer.");
+
+    for (let i = 0; i < totalMessageCnt; i++) {
+        startTime = hrtime.bigint();
+        await producer.send({
+            topic,
+            messages: [message],
+        });
+        await new Promise(resolve => setTimeout(resolve, produceMessageProcessTimeMs));
+    }
+
+    while (!consumerFinished) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    console.log("Consumer finished.");
+
+    await consumer.disconnect();
+    await producer.disconnect();
+
+    const nanoDiffs = diffs.map(d => parseInt(d));
+    const sortedDiffs = nanoDiffs.sort((a, b) => a - b);
+    const p50 = sortedDiffs[Math.floor(sortedDiffs.length / 2)] / 1e6;
+    const p90 = sortedDiffs[Math.floor(sortedDiffs.length * 0.9)] / 1e6;
+    const p95 = sortedDiffs[Math.floor(sortedDiffs.length * 0.95)] / 1e6;
+    const mean = nanoDiffs.reduce((acc, d) => acc + d, 0) / nanoDiffs.length / 1e6;
+    // Count outliers: elements 10x or more than the p50.
+    const outliers = sortedDiffs.map(d => d/1e6).filter(d => (d) > (10 * p50));
+    return { mean, p50, p90, p95, outliers };
 }

@@ -89,6 +89,9 @@ class KafkaConsumer : public Connection {
   void ActivateDispatchers();
   void DeactivateDispatchers();
 
+  void ConfigureCallback(const std::string& string_key,
+                         const v8::Local<v8::Function>& cb, bool add) override;
+
  protected:
   static Nan::Persistent<v8::Function> constructor;
   static void New(const Nan::FunctionCallbackInfo<v8::Value>& info);
@@ -104,6 +107,7 @@ class KafkaConsumer : public Connection {
   bool m_is_subscribed = false;
 
   void* m_consume_loop = nullptr;
+  Callbacks::QueueNotEmpty m_queue_not_empty_cb;
 
   /* This is the same client as stored in m_client.
    * Prevents a dynamic_cast in every single method. */

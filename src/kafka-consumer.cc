@@ -77,6 +77,11 @@ Baton KafkaConsumer::Connect() {
     m_client->resume(m_partitions);
   }
 
+  rd_kafka_queue_t* queue = rd_kafka_queue_get_consumer(m_client->c_ptr());
+  rd_kafka_queue_cb_event_enable(
+      queue, &m_queue_not_empty_cb.queue_not_empty_cb, &m_queue_not_empty_cb);
+  rd_kafka_queue_destroy(queue);
+
   return Baton(RdKafka::ERR_NO_ERROR);
 }
 
@@ -89,6 +94,7 @@ void KafkaConsumer::ActivateDispatchers() {
 
   // This should be refactored to config based management
   m_event_cb.dispatcher.Activate();
+  m_queue_not_empty_cb.dispatcher.Activate();
 }
 
 Baton KafkaConsumer::Disconnect() {
@@ -119,6 +125,21 @@ void KafkaConsumer::DeactivateDispatchers() {
 
   // Also this one
   m_event_cb.dispatcher.Deactivate();
+  m_queue_not_empty_cb.dispatcher.Deactivate();
+}
+
+void KafkaConsumer::ConfigureCallback(const std::string& string_key,
+                                      const v8::Local<v8::Function>& cb,
+                                      bool add) {
+  if (string_key.compare("queue_non_empty_cb") == 0) {
+    if (add) {
+      this->m_queue_not_empty_cb.dispatcher.AddCallback(cb);
+    } else {
+      this->m_queue_not_empty_cb.dispatcher.RemoveCallback(cb);
+    }
+  } else {
+    Connection::ConfigureCallback(string_key, cb, add);
+  }
 }
 
 bool KafkaConsumer::IsSubscribed() {

@@ -3,12 +3,13 @@
 The library can be benchmarked by running the following command:
 
 ```bash
-node performance-consolidated.js [--producer] [--consumer] [--ctp] [--all]
+node performance-consolidated.js [--producer] [--consumer] [--ctp] [--latency] [--all]
 ```
 
 The `--producer` flag will run the producer benchmark, the `--consumer` flag
 will run the consumer benchmark, and the `--ctp` flag will run the
-consume-transform-produce benchmark.
+consume-transform-produce benchmark. The `--latency` flag will run the latency
+test for produce-to-consume latency.
 
 The `--create-topics` flag will create the topics before running the benchmarks
 (and delete any existing topics of the same name). It's recommended to use this
@@ -36,4 +37,6 @@ default values given in parentheses.
 | WARMUP_MESSAGES | Number of messages to produce before starting the produce benchmark | BATCH_SIZE * 10 |
 | MESSAGE_PROCESS_TIME_MS | Time to sleep after consuming each message in the consume-transform-produce benchmark. Simulates "transform". May be 0. | 5 |
 | CONSUME_TRANSFORM_PRODUCE_CONCURRENCY | partitionsConsumedConcurrently for the consume-transform-produce benchmark | 1 |
+| CONSUMER_PROCESSING_TIME | Time to sleep (ms) after consuming each message in the latency benchmark. | 100 |
+| PRODUCER_PROCESSING_TIME | Time to sleep (ms) after producing each message in the latency benchmark. | 100 |
 | MODE | Mode to run the benchmarks in (confluent, kafkajs). Can be used for comparison with KafkaJS | confluent |

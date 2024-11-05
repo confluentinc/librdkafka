@@ -1,10 +1,10 @@
 const mode = process.env.MODE ? process.env.MODE : 'confluent';
 
-let runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics;
+let runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics, runProducerConsumerTogether;
 if (mode === 'confluent') {
-    ({ runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics } = require('./performance-primitives'));
+    ({ runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics, runProducerConsumerTogether } = require('./performance-primitives'));
 } else {
-    ({ runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics } = require('./performance-primitives-kafkajs'));
+    ({ runProducer, runConsumer, runConsumeTransformProduce, runCreateTopics, runProducerConsumerTogether } = require('./performance-primitives-kafkajs'));
 }
 
 const brokers = process.env.KAFKA_BROKERS || 'localhost:9092';
@@ -17,11 +17,14 @@ const compression = process.env.COMPRESSION || 'None';
 const warmupMessages = process.env.WARMUP_MESSAGES ? +process.env.WARMUP_MESSAGES : (batchSize * 10);
 const messageProcessTimeMs = process.env.MESSAGE_PROCESS_TIME_MS ? +process.env.MESSAGE_PROCESS_TIME_MS : 5;
 const ctpConcurrency = process.env.CONSUME_TRANSFORM_PRODUCE_CONCURRENCY ? +process.env.CONSUME_TRANSFORM_PRODUCE_CONCURRENCY : 1;
+const consumerProcessingTime = process.env.CONSUMER_PROCESSING_TIME ? +process.env.CONSUMER_PROCESSING_TIME : 100;
+const producerProcessingTime = process.env.PRODUCER_PROCESSING_TIME ? +process.env.PRODUCER_PROCESSING_TIME : 100;
 
 (async function () {
     const producer = process.argv.includes('--producer');
     const consumer = process.argv.includes('--consumer');
     const ctp = process.argv.includes('--ctp');
+    const produceConsumeLatency = process.argv.includes('--latency');
     const all = process.argv.includes('--all');
     const createTopics = process.argv.includes('--create-topics');
 
@@ -68,4 +71,20 @@ const ctpConcurrency = process.env.CONSUME_TRANSFORM_PRODUCE_CONCURRENCY ? +proc
         console.log("=== Consume-Transform-Produce Rate: ", ctpRate);
     }
 
+    if (produceConsumeLatency || all) {
+        console.log("=== Running Produce-To-Consume Latency Performance Test:")
+        console.log(`  Brokers: ${brokers}`);
+        console.log(`  Topic: ${topic}`);
+        console.log(`  Message Count: ${messageCount}`);
+        console.log(`  Consumer Processing Time: ${consumerProcessingTime}`);
+        console.log(`  Producer Processing Time: ${producerProcessingTime}`);
+        const { mean, p50, p90, p95, outliers } = await runProducerConsumerTogether(brokers, topic, messageCount, messageSize, producerProcessingTime, consumerProcessingTime);
+        console.log(`=== Produce-To-Consume Latency (ms): Mean: ${mean}, P50: ${p50}, P90: ${p90}, P95: ${p95}`);
+
+        // The presence of outliers invalidates the mean measurement, and rasies concerns as to why there are any.
+        // Ideally, the test should not have outliers if consumer processing time is less or equal to producer processing time.
+        if (outliers.length > 0) {
+            console.log("=== Outliers (ms): ", outliers);
+        }
+    }
 })();

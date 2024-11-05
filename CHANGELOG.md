@@ -1,3 +1,21 @@
+# librdkafka v2.6.2
+
+librdkafka v2.6.2 is a maintenance release:
+
+* Socket options are now all set before connection (#4893).
+
+
+## Fixes
+
+### General fixes
+
+* Socket options are now all set before connection, as [documentation](https://man7.org/linux/man-pages/man7/tcp.7.html)
+  says it's needed for socket buffers to take effect, even if in some
+  cases they could have effect even after connection.
+  Happening since v0.9.0 (#4893).
+
+
+
 # librdkafka v2.6.1
 
 librdkafka v2.6.1 is a maintenance release:

@@ -416,7 +416,7 @@ blocks:
           type: s1-prod-macos-13-5-amd64
       env_vars:
         - name: ARCHITECTURE
-          value: "amd64"
+          value: "x64"
         - name: PLATFORM
           value: "darwin"
         - name: LIBC

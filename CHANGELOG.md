@@ -9,6 +9,7 @@ v0.4.0 is a limited availability feature release. It is supported for all usage.
 3. Reduce consumer poll timeout to nil and add wakeups for new messages. This improves
    the consumer efficiency, and resolves issues while running multiple consumers within
    the same node process (#135).
+4. Add pre-built binaries for macOS (Intel).
 
 
 # confluent-kafka-javascript v0.3.0

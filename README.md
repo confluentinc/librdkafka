@@ -34,7 +34,7 @@ The following configurations are supported:
 
 * Any supported version of Node.js (The two LTS versions, 18 and 20, and the latest versions, 21 and 22).
 * Linux (x64 and arm64) - both glibc and musl/alpine.
-* macOS - arm64/m1.
+* macOS - arm64/m1. macOS (Intel) is supported on a best-effort basis.
 * Windows - x64.
 
 Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required.

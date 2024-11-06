@@ -845,6 +845,41 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
         return 1;
 }
 
+void test_read_file(const char *path, char *dst, size_t dst_size) {
+        FILE *fp;
+        char buf[1024];
+        int line       = 0;
+        size_t dst_len = 0;
+
+#ifndef _WIN32
+        fp = fopen(path, "r");
+#else
+        fp    = NULL;
+        errno = fopen_s(&fp, path, "r");
+#endif
+        if (!fp) {
+                if (errno == ENOENT) {
+                        TEST_SAY("Test file %s not found\n", path);
+                        return;
+                } else
+                        TEST_FAIL("Failed to read %s: %s", path,
+                                  strerror(errno));
+        }
+
+        while (fgets(buf, sizeof(buf) - 1, fp) && dst_len + 1 < dst_size) {
+                size_t len = strlen(buf);
+                if (dst_len + len + 1 > dst_size)
+                        len = dst_size - dst_len - 1;
+
+                line++;
+
+                snprintf(dst + dst_len, len + 1, "%s", buf);
+                dst_len += len;
+        }
+
+        fclose(fp);
+}
+
 static void test_read_conf_file(const char *conf_path,
                                 rd_kafka_conf_t *conf,
                                 rd_kafka_topic_conf_t *topic_conf,

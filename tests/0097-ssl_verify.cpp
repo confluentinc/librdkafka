@@ -410,15 +410,21 @@ int main_0097_ssl_verify(int argc, char **argv) {
                  RdKafka::CERT_ENC_PEM, USE_CONF, RdKafka::CERT_ENC_PEM);
   do_test_verify(__LINE__, true, USE_SETTER, RdKafka::CERT_ENC_PEM, USE_SETTER,
                  RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_PKCS12);
-  do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_SETTER, RdKafka::CERT_ENC_DER, USE_SETTER,
-                 RdKafka::CERT_ENC_DER);
-  do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_SETTER, RdKafka::CERT_ENC_DER, USE_SETTER,
-                 RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
-  do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_SETTER, RdKafka::CERT_ENC_DER, USE_CONF,
-                 RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
+  if (test_getenv("SSL_intermediate_pub_pem", NULL) == NULL) {
+    /* DER format can contain only a single certificate so it's
+     * not suited for sending the complete chain of trust
+     * corresponding to the private key,
+     * that is necessary when using an intermediate CA. */
+    do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
+                   USE_SETTER, RdKafka::CERT_ENC_DER, USE_SETTER,
+                   RdKafka::CERT_ENC_DER);
+    do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
+                   USE_SETTER, RdKafka::CERT_ENC_DER, USE_SETTER,
+                   RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
+    do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
+                   USE_SETTER, RdKafka::CERT_ENC_DER, USE_CONF,
+                   RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
+  }
   do_test_verify(__LINE__, true, USE_SETTER, RdKafka::CERT_ENC_PKCS12,
                  USE_SETTER, RdKafka::CERT_ENC_PKCS12, USE_SETTER,
                  RdKafka::CERT_ENC_PKCS12);

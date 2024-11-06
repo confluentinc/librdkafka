@@ -3,6 +3,8 @@
 librdkafka v2.6.2 is a maintenance release:
 
 * Socket options are now all set before connection (#4893).
+* Client certificate chain is now sent when using `ssl.certificate.pem`
+  or `ssl_certificate` or `ssl.keystore.location` (#4894).
 
 
 ## Fixes
@@ -13,6 +15,13 @@ librdkafka v2.6.2 is a maintenance release:
   says it's needed for socket buffers to take effect, even if in some
   cases they could have effect even after connection.
   Happening since v0.9.0 (#4893).
+* Issues: #3225.
+  Client certificate chain is now sent when using `ssl.certificate.pem`
+  or `ssl_certificate` or `ssl.keystore.location`.
+  Without that, broker must explicitly add any intermediate certification
+  authority certificate to its truststore to be able to accept client
+  certificate.
+  Happens since: 1.x (#4894).
 
 
 

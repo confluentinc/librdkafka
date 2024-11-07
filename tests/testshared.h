@@ -189,7 +189,7 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
 const char *test_getenv(const char *env, const char *def);
-void test_read_file(const char *path, char *dst, size_t dst_size);
+size_t test_read_file(const char *path, char *dst, size_t dst_size);
 
 int test_needs_auth(void);
 

@@ -845,39 +845,48 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
         return 1;
 }
 
-void test_read_file(const char *path, char *dst, size_t dst_size) {
+/**
+ * Reads max \p dst_size - 1 bytes from text or binary file at \p path
+ * to \p dst . In any case \p dst is NULL terminated.
+ *
+ * @return The number of bytes read, 0 if file was not found.
+ */
+size_t test_read_file(const char *path, char *dst, size_t dst_size) {
         FILE *fp;
         char buf[1024];
-        int line       = 0;
         size_t dst_len = 0;
+        size_t read_bytes;
 
 #ifndef _WIN32
-        fp = fopen(path, "r");
+        fp = fopen(path, "rb");
 #else
         fp    = NULL;
-        errno = fopen_s(&fp, path, "r");
+        errno = fopen_s(&fp, path, "rb");
 #endif
         if (!fp) {
                 if (errno == ENOENT) {
                         TEST_SAY("Test file %s not found\n", path);
-                        return;
+                        return 0;
                 } else
                         TEST_FAIL("Failed to read %s: %s", path,
                                   strerror(errno));
         }
 
-        while (fgets(buf, sizeof(buf) - 1, fp) && dst_len + 1 < dst_size) {
-                size_t len = strlen(buf);
-                if (dst_len + len + 1 > dst_size)
-                        len = dst_size - dst_len - 1;
+        read_bytes = fread(buf, 1, sizeof(buf), fp);
+        while (read_bytes) {
+                if (dst_len + 1 >= dst_size)
+                        break;
 
-                line++;
-
-                snprintf(dst + dst_len, len + 1, "%s", buf);
-                dst_len += len;
+                if (dst_len + read_bytes + 1 > dst_size)
+                        read_bytes = dst_size - dst_len - 1;
+                memcpy(dst + dst_len, buf, read_bytes);
+                dst_len += read_bytes;
+                read_bytes = fread(buf, 1, sizeof(buf), fp);
         }
+        dst[dst_len] = '\0';
 
         fclose(fp);
+        return dst_len;
 }
 
 static void test_read_conf_file(const char *conf_path,

@@ -82,10 +82,15 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
                                       TEST_FIXTURES_KEY_PASSWORD " and more");
         } else if (!strcmp(type, "PEM_STRING")) {
                 char buf[1024 * 50];
-                test_read_file(TEST_CERTIFICATE_LOCATION, buf, sizeof(buf));
+                if (!test_read_file(TEST_CERTIFICATE_LOCATION, buf,
+                                    sizeof(buf)))
+                        TEST_FAIL("Failed to read certificate file\n");
                 test_conf_set(conf, "ssl.certificate.pem", buf);
-                test_read_file(TEST_KEY_LOCATION, buf, sizeof(buf));
+
+                if (!test_read_file(TEST_KEY_LOCATION, buf, sizeof(buf)))
+                        TEST_FAIL("Failed to read key file\n");
                 test_conf_set(conf, "ssl.key.pem", buf);
+
                 if (correct_password)
                         test_conf_set(conf, "ssl.key.password",
                                       TEST_FIXTURES_KEY_PASSWORD);
@@ -98,8 +103,8 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
 
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         if ((rk != NULL) != correct_password) {
-                TEST_FAIL("Expected rd_kafka creation to %s\n",
-                          correct_password ? "succeed" : "fail");
+                TEST_FAIL("Expected rd_kafka creation to %s: %s\n",
+                          correct_password ? "succeed" : "fail", errstr);
         }
 
         if (rk)

@@ -14,9 +14,19 @@ librdkafka v2.6.1 is a maintenance release:
 * Upgrade Linux dependencies: OpenSSL 3.0.15, CURL 8.10.1 (#4875).
 * Upgrade Windows dependencies: MSVC runtime to 14.40.338160.0,
   zstd 1.5.6, zlib 1.3.1, OpenSSL 3.3.2, CURL 8.10.1 (#4872).
+* SASL/SCRAM authentication fix: avoid concatenating
+  client side nonce once more, as it's already prepended in server sent nonce (#4895).
 
 
 ## Fixes
+
+### General fixes
+
+* SASL/SCRAM authentication fix: avoid concatenating
+  client side nonce once more, as it's already prepended in 
+  server sent nonce.
+  librdkafka was incorrectly concatenating the client side nonce again, leading to [this fix](https://github.com/apache/kafka/commit/0a004562b8475d48a9961d6dab3a6aa24021c47f) being made on AK side, released with 3.8.1, with `endsWith` instead of `equals`.
+  Happening since v0.0.99 (#4895).
 
 ### Consumer fixes
 

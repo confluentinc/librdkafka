@@ -1544,6 +1544,67 @@ void AdminClientListConsumerGroupOffsets::HandleErrorCallback() {
   callback->Call(argc, argv);
 }
 
+/**
+ * @brief Delete Records in an asynchronous worker.
+ *
+ * This callback will delete records for the specified topic partitions
+ * till the given offset, or till the end of the partition.
+ *
+ */
+AdminClientDeleteRecords::AdminClientDeleteRecords(
+    Nan::Callback* callback, NodeKafka::AdminClient* client,
+    rd_kafka_DeleteRecords_t **del_records,
+    size_t del_records_cnt,
+    const int& operation_timeout_ms,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_del_records(del_records),
+      m_del_records_cnt(del_records_cnt),
+      m_operation_timeout_ms(operation_timeout_ms),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientDeleteRecords::~AdminClientDeleteRecords() {
+  if (m_del_records) {
+    rd_kafka_DeleteRecords_destroy_array(m_del_records, m_del_records_cnt);
+    free(m_del_records);
+  }
+
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientDeleteRecords::Execute() {
+  Baton b = m_client->DeleteRecords(m_del_records, m_del_records_cnt,
+                                    m_operation_timeout_ms, m_timeout_ms,
+                                    &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientDeleteRecords::HandleOKCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+  argv[1] = Conversion::Admin::FromDeleteRecordsResult(
+      rd_kafka_event_DeleteRecords_result(m_event_response));
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientDeleteRecords::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
 
 
 }  // namespace Workers

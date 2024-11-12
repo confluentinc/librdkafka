@@ -65,6 +65,9 @@ class AdminClient : public Connection {
                                  size_t req_cnt,
                                  bool require_stable_offsets, int timeout_ms,
                                  rd_kafka_event_t** event_response);
+  Baton DeleteRecords(rd_kafka_DeleteRecords_t** del_records,
+                      size_t del_records_cnt, int operation_timeout_ms,
+                      int timeout_ms, rd_kafka_event_t** event_response);
 
  protected:
   static Nan::Persistent<v8::Function> constructor;
@@ -87,6 +90,7 @@ class AdminClient : public Connection {
   static NAN_METHOD(NodeDescribeGroups);
   static NAN_METHOD(NodeDeleteGroups);
   static NAN_METHOD(NodeListConsumerGroupOffsets);
+  static NAN_METHOD(NodeDeleteRecords);
 
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);

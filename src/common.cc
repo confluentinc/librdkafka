@@ -458,7 +458,7 @@ rd_kafka_topic_partition_list_t* TopicPartitionv8ArrayToTopicPartitionList(
     }
 
     if (!v->IsObject()) {
-      return NULL; // Return NULL to indicate an error
+      return NULL;  // Return NULL to indicate an error
     }
 
     v8::Local<v8::Object> item = v.As<v8::Object>();
@@ -1240,6 +1240,51 @@ v8::Local<v8::Array> FromListConsumerGroupOffsetsResult(
   }
 
   return returnArray;
+}
+
+/**
+ * @brief Converts a rd_kafka_DeleteRecords_result_t* into a v8 Array.
+ */
+v8::Local<v8::Array> FromDeleteRecordsResult(
+    const rd_kafka_DeleteRecords_result_t* result) {
+  /* Return object type:
+    [{
+      topic: string,
+      partition: number,
+      lowWatermark: number,
+      error?: LibrdKafkaError
+    }]
+  */
+  const rd_kafka_topic_partition_list_t* partitionList =
+      rd_kafka_DeleteRecords_result_offsets(result);
+
+  v8::Local<v8::Array> partitionsArray = Nan::New<v8::Array>();
+  int partitionIndex = 0;
+
+  for (int j = 0; j < partitionList->cnt; j++) {
+    const rd_kafka_topic_partition_t* partition = &partitionList->elems[j];
+
+    // Create the TopicPartitionOffset object
+    v8::Local<v8::Object> partition_object = Nan::New<v8::Object>();
+
+    // Set topic, partition, and offset and error(if required)
+    Nan::Set(partition_object, Nan::New("topic").ToLocalChecked(),
+             Nan::New<v8::String>(partition->topic).ToLocalChecked());
+    Nan::Set(partition_object, Nan::New("partition").ToLocalChecked(),
+             Nan::New<v8::Number>(partition->partition));
+    Nan::Set(partition_object, Nan::New("lowWatermark").ToLocalChecked(),
+             Nan::New<v8::Number>(partition->offset));
+
+    if (partition->err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+      RdKafka::ErrorCode code = static_cast<RdKafka::ErrorCode>(partition->err);
+      Nan::Set(partition_object, Nan::New("error").ToLocalChecked(),
+               RdKafkaError(code, rd_kafka_err2str(partition->err)));
+    }
+
+    Nan::Set(partitionsArray, partitionIndex++, partition_object);
+  }
+
+  return partitionsArray;
 }
 
 }  // namespace Admin

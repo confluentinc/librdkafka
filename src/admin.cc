@@ -115,6 +115,7 @@ void AdminClient::Init(v8::Local<v8::Object> exports) {
   Nan::SetPrototypeMethod(tpl, "createTopic", NodeCreateTopic);
   Nan::SetPrototypeMethod(tpl, "deleteTopic", NodeDeleteTopic);
   Nan::SetPrototypeMethod(tpl, "createPartitions", NodeCreatePartitions);
+  Nan::SetPrototypeMethod(tpl, "deleteRecords", NodeDeleteRecords);
 
   // Consumer group related operations
   Nan::SetPrototypeMethod(tpl, "listGroups", NodeListGroups);
@@ -743,6 +744,74 @@ Baton AdminClient::ListConsumerGroupOffsets(
   }
 }
 
+Baton AdminClient::DeleteRecords(rd_kafka_DeleteRecords_t **del_records,
+                                 size_t del_records_cnt,
+                                 int operation_timeout_ms, int timeout_ms,
+                                 rd_kafka_event_t **event_response) {
+  if (!IsConnected()) {
+    return Baton(RdKafka::ERR__STATE);
+  }
+
+  {
+    scoped_shared_write_lock lock(m_connection_lock);
+    if (!IsConnected()) {
+      return Baton(RdKafka::ERR__STATE);
+    }
+
+    // Make admin options to establish that we are deleting records
+    rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(
+        m_client->c_ptr(), RD_KAFKA_ADMIN_OP_DELETERECORDS);
+
+    char errstr[512];
+    rd_kafka_resp_err_t err = rd_kafka_AdminOptions_set_request_timeout(
+        options, timeout_ms, errstr, sizeof(errstr));
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+      return Baton(static_cast<RdKafka::ErrorCode>(err), errstr);
+    }
+
+    err = rd_kafka_AdminOptions_set_operation_timeout(
+        options, operation_timeout_ms, errstr, sizeof(errstr));
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+      return Baton(static_cast<RdKafka::ErrorCode>(err), errstr);
+    }
+
+    // Create queue just for this operation.
+    rd_kafka_queue_t *rkqu = rd_kafka_queue_new(m_client->c_ptr());
+
+    rd_kafka_DeleteRecords(m_client->c_ptr(), del_records,
+                           del_records_cnt, options, rkqu);
+
+    // Poll for an event by type in that queue
+    // DON'T destroy the event. It is the out parameter, and ownership is
+    // the caller's.
+    *event_response =
+        PollForEvent(rkqu, RD_KAFKA_EVENT_DELETERECORDS_RESULT, timeout_ms);
+
+    // Destroy the queue since we are done with it.
+    rd_kafka_queue_destroy(rkqu);
+
+    // Destroy the options we just made because we polled already
+    rd_kafka_AdminOptions_destroy(options);
+
+    // If we got no response from that operation, this is a failure
+    // likely due to time out
+    if (*event_response == NULL) {
+      return Baton(RdKafka::ERR__TIMED_OUT);
+    }
+
+    // Now we can get the error code from the event
+    if (rd_kafka_event_error(*event_response)) {
+      // If we had a special error code, get out of here with it
+      const rd_kafka_resp_err_t errcode = rd_kafka_event_error(*event_response);
+      return Baton(static_cast<RdKafka::ErrorCode>(errcode));
+    }
+
+    // At this point, event_response contains the result, which needs
+    // to be parsed/converted by the caller.
+    return Baton(RdKafka::ERR_NO_ERROR);
+  }
+}
+
 void AdminClient::ActivateDispatchers() {
   // Listen to global config
   m_gconfig->listen();
@@ -1147,10 +1216,7 @@ NAN_METHOD(AdminClient::NodeListConsumerGroupOffsets) {
   }
 
   // Now process the second argument: options (timeout and requireStableOffsets)
-  v8::Local<v8::Object> options = Nan::New<v8::Object>();
-  if (info.Length() > 2 && info[1]->IsObject()) {
-    options = info[1].As<v8::Object>();
-  }
+  v8::Local<v8::Object> options = info[1].As<v8::Object>();
 
   bool require_stable_offsets =
       GetParameter<bool>(options, "requireStableOffsets", false);
@@ -1165,6 +1231,71 @@ NAN_METHOD(AdminClient::NodeListConsumerGroupOffsets) {
   Nan::AsyncQueueWorker(new Workers::AdminClientListConsumerGroupOffsets(
       callback, client, requests, listGroupOffsets->Length(),
       require_stable_offsets, timeout_ms));
+}
+
+/**
+ * Delete Records.
+ */
+NAN_METHOD(AdminClient::NodeDeleteRecords) {
+  Nan::HandleScope scope;
+
+  if (info.Length() < 3 || !info[2]->IsFunction()) {
+    return Nan::ThrowError("Need to specify a callback");
+  }
+
+  if (!info[0]->IsArray()) {
+    return Nan::ThrowError(
+        "Must provide array containg 'TopicPartitionOffset' objects");
+  }
+
+  if (!info[1]->IsObject()) {
+    return Nan::ThrowError("Must provide 'options' object");
+  }
+
+  // Get list of TopicPartitions to delete records from
+  // and convert it into rd_kafka_DeleteRecords_t array
+  v8::Local<v8::Array> delete_records_list = info[0].As<v8::Array>();
+
+  if (delete_records_list->Length() == 0) {
+    return Nan::ThrowError("Must provide at least one TopicPartitionOffset");
+  }
+
+  /**
+   * The ownership of this is taken by
+   * Workers::AdminClientDeleteRecords and freeing it is also handled
+   * by that class.
+   */
+  rd_kafka_DeleteRecords_t **delete_records =
+      static_cast<rd_kafka_DeleteRecords_t **>(
+          malloc(sizeof(rd_kafka_DeleteRecords_t *) * 1));
+
+  rd_kafka_topic_partition_list_t *partitions =
+      Conversion::TopicPartition::TopicPartitionv8ArrayToTopicPartitionList(
+          delete_records_list, true);
+  if (partitions == NULL) {
+    return Nan::ThrowError(
+        "Failed to convert objects in delete records list, provide proper "
+        "TopicPartitionOffset objects");
+  }
+  delete_records[0] = rd_kafka_DeleteRecords_new(partitions);
+
+  rd_kafka_topic_partition_list_destroy(partitions);
+
+  // Now process the second argument: options (timeout and operation_timeout)
+  v8::Local<v8::Object> options = info[1].As<v8::Object>();
+
+  int operation_timeout_ms =
+      GetParameter<int64_t>(options, "operation_timeout", 60000);
+  int timeout_ms = GetParameter<int64_t>(options, "timeout", 5000);
+
+  // Create the final callback object
+  v8::Local<v8::Function> cb = info[2].As<v8::Function>();
+  Nan::Callback *callback = new Nan::Callback(cb);
+  AdminClient *client = ObjectWrap::Unwrap<AdminClient>(info.This());
+
+  // Queue the worker to process the offset fetch request asynchronously
+  Nan::AsyncQueueWorker(new Workers::AdminClientDeleteRecords(
+      callback, client, delete_records, 1, operation_timeout_ms, timeout_ms));
 }
 
 }  // namespace NodeKafka

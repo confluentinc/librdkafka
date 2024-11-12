@@ -426,6 +426,13 @@ export type GroupResults = {
     partitions: TopicPartitionOffsetAndMetadata[]
 }
 
+export type DeleteRecordsResult = {
+    topic: string
+    partition: number
+    lowWatermark: number
+    error?: LibrdKafkaError
+}
+
 export interface IAdminClient {
     createTopic(topic: NewTopic, cb?: (err: LibrdKafkaError) => void): void;
     createTopic(topic: NewTopic, timeout?: number, cb?: (err: LibrdKafkaError) => void): void;
@@ -456,6 +463,10 @@ export interface IAdminClient {
     listConsumerGroupOffsets(listGroupOffsets : ListGroupOffsets[],
         options?: { timeout?: number, requireStableOffsets?: boolean },
         cb?: (err: LibrdKafkaError, result: GroupResults[]) => any): void;
+
+    deleteRecords(delRecords: TopicPartitionOffset[],
+        options?: { timeout?: number, operationTimeout?: number },
+        cb?: (err: LibrdKafkaError, result: DeleteRecordsResult[]) => any): void;
 
     disconnect(): void;
 }

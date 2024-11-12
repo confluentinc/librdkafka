@@ -333,6 +333,8 @@ The admin-client only has support for a limited subset of methods, with more to 
   * The `deleteGroups` method is supported with an additional `timeout` option.
   * The `fetchOffsets` method is supported with additional `timeout` and 
   `requireStableOffsets` option but `resolveOffsets` option is not yet supported.
+  * The `deleteTopicRecords` method is supported with additional `timeout`
+  and `operationTimeout` option.
 
 ### Using the Schema Registry
 

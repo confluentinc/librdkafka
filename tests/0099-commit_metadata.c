@@ -158,6 +158,7 @@ int main_0099_commit_metadata(int argc, char **argv) {
         rd_kafka_topic_partition_list_t *expected_toppar;
         const char *topic = test_mk_topic_name("0099-commit_metadata", 0);
         char group_id[16];
+        char *metadata;
 
         test_conf_init(NULL, NULL, 20 /*timeout*/);
 
@@ -171,10 +172,14 @@ int main_0099_commit_metadata(int argc, char **argv) {
 
         expected_toppar = rd_kafka_topic_partition_list_copy(origin_toppar);
 
-        expected_toppar->elems[0].offset   = 42;
-        expected_toppar->elems[0].metadata = rd_strdup("Hello world!");
-        expected_toppar->elems[0].metadata_size =
-            strlen(expected_toppar->elems[0].metadata);
+        metadata                                = rd_strdup("Hello world!");
+        expected_toppar->elems[0].offset        = 42;
+        expected_toppar->elems[0].metadata      = metadata;
+        expected_toppar->elems[0].metadata_size = strlen(metadata);
+        /* Make sure it's interpreted as bytes.
+         * To fail before the fix it needs to be configured
+         * with HAVE_STRNDUP */
+        metadata[5] = '\0';
 
         get_committed_metadata(group_id, origin_toppar, origin_toppar);
 

@@ -424,6 +424,339 @@ static void do_test_store_offset_without_leader_epoch(void) {
         SUB_TEST_PASS();
 }
 
+static rd_bool_t is_broker_fetch_request(rd_kafka_mock_request_t *request,
+                                         void *opaque) {
+        return rd_kafka_mock_request_id(request) == *(int *)(opaque) &&
+               rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Fetch;
+}
+
+static rd_bool_t
+is_offset_for_leader_epoch_request(rd_kafka_mock_request_t *request,
+                                   void *opaque) {
+        return rd_kafka_mock_request_id(request) == *(int *)(opaque) &&
+               rd_kafka_mock_request_api_key(request) ==
+                   RD_KAFKAP_OffsetForLeaderEpoch;
+}
+
+static rd_bool_t is_metadata_request(rd_kafka_mock_request_t *request,
+                                     void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Fetch;
+}
+
+/**
+ * @brief A second leader change is triggered after first one switches
+ * to a leader supporting KIP-320, the second leader either:
+ *
+ * - variation 0: doesn't support KIP-320 (leader epoch -1).
+ *   This can happed during a cluster roll for upgrading the cluster.
+ *   See #4796.
+ * - variation 1: the leader epoch is the same as previous leader.
+ *   This can happen when the broker doesn't need that a validation
+ *   should be performed after a leader change.
+ *
+ * In both cases no validation should be performed
+ * and it should continue fetching messages on the new leader.
+ */
+static void do_test_leader_change_no_validation(int variation) {
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const char *c1_groupid = topic;
+        rd_kafka_t *c1;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        int msg_cnt     = 5;
+        uint64_t testid = test_id_generate();
+        rd_kafka_conf_t *conf;
+        int i, leader = 1;
+        size_t matching_requests;
+        /* No KIP-320 support on second leader change */
+        int32_t leader_epoch = -1;
+        if (variation == 1) {
+                /* Same leader epoch on second leader change */
+                leader_epoch = 2;
+        }
+
+        SUB_TEST_QUICK("variation: %d", variation);
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_cnt, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "1", NULL);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "false");
+
+        c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
+        test_consumer_subscribe(c1, topic);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+        TEST_SAY("Consume initial messages and join the group, etc.\n");
+        test_consumer_poll("MSG_INIT", c1, testid, 0, 0, msg_cnt, NULL);
+
+        TEST_SAY("Wait Fetch request to broker 1\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_broker_fetch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests > 0,
+                          "Expected at least one Fetch request to broker 1");
+
+        /* No validation is performed on first fetch. */
+        TEST_SAY("Wait no OffsetForLeaderEpoch request to broker 1\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 0, 1000, is_offset_for_leader_epoch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests == 0,
+                          "Expected no OffsetForLeaderEpoch request"
+                          " to broker 1, got %" PRIusz,
+                          matching_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        /* The leader will change from 1->2, and the OffsetForLeaderEpoch will
+         * be sent to broker 2. Leader epoch becomes 1. */
+        rd_kafka_mock_start_request_tracking(mcluster);
+        TEST_SAY("Changing leader to broker 2\n");
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+        leader = 2;
+        rd_kafka_poll(c1, 1000);
+
+        TEST_SAY("Wait Fetch request to broker 2\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_broker_fetch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests > 0,
+                          "Expected at least one fetch request to broker 2");
+
+        TEST_SAY("Wait OffsetForLeaderEpoch request to broker 2\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_offset_for_leader_epoch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests == 1,
+                          "Expected one OffsetForLeaderEpoch request"
+                          " to broker 2, got %" PRIusz,
+                          matching_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        /* Reset leader, set leader epoch to `leader_epoch`
+         * to trigger this special case. */
+        TEST_SAY("Changing leader to broker 1\n");
+        for (i = 0; i < 5; i++) {
+                rd_kafka_mock_partition_push_leader_response(mcluster, topic, 0,
+                                                             1, leader_epoch);
+        }
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        leader = 1;
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_poll(c1, 1000);
+
+        TEST_SAY("Wait Fetch request to broker 1\n");
+        /* 0 is correct here as second parameter as we don't wait to receive
+         * at least one Fetch request, given in the failure case it'll take more
+         * than 1s and it's possible a OffsetForLeaderEpoch is received after
+         * that, because we ran out of overridden leader responses. */
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 0, 1000, is_broker_fetch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests > 0,
+                          "Expected at least one fetch request to broker 1");
+
+        /* Given same leader epoch, or -1, is returned,
+         * no validation is performed */
+        TEST_SAY("Wait no OffsetForLeaderEpoch request to broker 1\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 0, 1000, is_offset_for_leader_epoch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests == 0,
+                          "Expected no OffsetForLeaderEpoch request"
+                          " to broker 1, got %" PRIusz,
+                          matching_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        rd_kafka_destroy(c1);
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+}
+
+static int
+is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
+        /* Ignore UNKNOWN_TOPIC_OR_PART errors. */
+        TEST_SAY("is_fatal?: %s: %s\n", rd_kafka_err2str(err), reason);
+        if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION ||
+            err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                return 0;
+        return 1;
+}
+
+/**
+ * @brief Test partition validation when it's temporarily delegated to
+ * the internal broker. There are two variations:
+ *
+ * variation 1: leader epoch bump is simultaneous to the partition
+ *              delegation returning from the internal broker to the
+ *              new leader.
+ * variation 2: leader epoch bump is triggered immediately by KIP-951
+ *              and validation fails, later metadata request fails
+ *              and partition is delegated to the internal broker.
+ *              When partition is delegated back to the leader,
+ *              it finds the same leader epoch but validation must
+ *              be completed as state is still VALIDATE_EPOCH_WAIT.
+ *
+ * In both cases, fetch must continue with the new leader and
+ * after the validation is completed.
+ *
+ * See #4804.
+ */
+static void do_test_leader_change_from_internal_broker(int variation) {
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const char *c1_groupid = topic;
+        rd_kafka_t *c1;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        int msg_cnt     = 5;
+        uint64_t testid = test_id_generate();
+        rd_kafka_conf_t *conf;
+        int leader = 1;
+        size_t matching_requests, expected_offset_for_leader_epoch_requests = 1;
+
+        SUB_TEST_QUICK("variation: %d", variation);
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_cnt, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "1", NULL);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "false");
+
+        c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
+        test_consumer_subscribe(c1, topic);
+        test_curr->is_fatal_cb = is_fatal_cb;
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+        TEST_SAY("Consume initial messages and join the group, etc.\n");
+        test_consumer_poll("MSG_INIT", c1, testid, 0, 0, msg_cnt, NULL);
+
+        TEST_SAY("Wait Fetch request to broker 1\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_broker_fetch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests > 0,
+                          "Expected at least one Fetch request to broker 1");
+
+        /* No validation is performed on first fetch. */
+        TEST_SAY("Wait no OffsetForLeaderEpoch request to broker 1\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 0, 1000, is_offset_for_leader_epoch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests == 0,
+                          "Expected no OffsetForLeaderEpoch request"
+                          " to broker 1, got %" PRIusz,
+                          matching_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        /* The leader will change from 1->2, and the OffsetForLeaderEpoch will
+         * be sent to broker 2. Leader epoch becomes 1. */
+        rd_kafka_mock_start_request_tracking(mcluster);
+        TEST_SAY("Changing leader to broker 2\n");
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+        leader = 2;
+        rd_kafka_poll(c1, 1000);
+
+        TEST_SAY("Wait Fetch request to broker 2\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_broker_fetch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests > 0,
+                          "Expected at least one fetch request to broker 2");
+
+        TEST_SAY("Wait OffsetForLeaderEpoch request to broker 2\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_offset_for_leader_epoch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests == 1,
+                          "Expected one OffsetForLeaderEpoch request"
+                          " to broker 2, got %" PRIusz,
+                          matching_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        /* Reset leader, Metadata request fails in between and delegates
+         * the partition to the internal broker. */
+        TEST_SAY("Changing leader to broker 1\n");
+        if (variation == 0) {
+                /* Fail Fetch request too, otherwise KIP-951 mechanism is faster
+                 * than the Metadata request. */
+                rd_kafka_mock_push_request_errors(
+                    mcluster, RD_KAFKAP_Fetch, 1,
+                    RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        } else if (variation == 1) {
+                /* First OffsetForLeaderEpoch is triggered by KIP-951,
+                 * it updates leader epoch, then it fails, triggers metadata
+                 * refresh,
+                 * Metadata fails too and partition is delegated to the internal
+                 * broker.
+                 * Validation is retried three times during this period
+                 * and it should fail because we want to see what happens
+                 * next when partition isn't delegated to the internal
+                 * broker anymore. */
+                rd_kafka_mock_push_request_errors(
+                    mcluster, RD_KAFKAP_OffsetForLeaderEpoch, 3,
+                    RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+                    RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+                    RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        }
+
+        /* This causes a Metadata request error. */
+        rd_kafka_mock_topic_set_error(mcluster, topic,
+                                      RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        leader = 1;
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_poll(c1, 1000);
+
+        TEST_SAY(
+            "Wait a Metadata request that fails and delegates partition to"
+            " the internal broker.\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_metadata_request, NULL);
+        TEST_ASSERT_LATER(matching_requests > 0,
+                          "Expected at least one Metadata request");
+        TEST_SAY(
+            "Reset partition error status."
+            " Partition is delegated to broker 1.\n");
+        rd_kafka_mock_topic_set_error(mcluster, topic,
+                                      RD_KAFKA_RESP_ERR_NO_ERROR);
+
+        TEST_SAY("Wait Fetch request to broker 1\n");
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 2000, is_broker_fetch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests > 0,
+                          "Expected at least one fetch request to broker 1");
+
+        TEST_SAY("Wait OffsetForLeaderEpoch request to broker 1\n");
+        if (variation == 1) {
+                /* There's three OffsetForLeaderEpoch requests more in
+                 * variation 1. See previous comment. */
+                expected_offset_for_leader_epoch_requests += 3;
+        }
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_offset_for_leader_epoch_request, &leader);
+        TEST_ASSERT_LATER(
+            matching_requests == expected_offset_for_leader_epoch_requests,
+            "Expected %" PRIusz
+            " OffsetForLeaderEpoch request"
+            " to broker 1, got %" PRIusz,
+            expected_offset_for_leader_epoch_requests, matching_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        rd_kafka_destroy(c1);
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+        test_curr->is_fatal_cb = NULL;
+}
 
 int main_0139_offset_validation_mock(int argc, char **argv) {
 
@@ -437,6 +770,12 @@ int main_0139_offset_validation_mock(int argc, char **argv) {
         do_test_two_leader_changes();
 
         do_test_store_offset_without_leader_epoch();
+
+        do_test_leader_change_no_validation(0);
+        do_test_leader_change_no_validation(1);
+
+        do_test_leader_change_from_internal_broker(0);
+        do_test_leader_change_from_internal_broker(1);
 
         return 0;
 }

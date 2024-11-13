@@ -520,8 +520,10 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
 
         let calls = 0;
         let failedSeek = false;
+        let eachMessageStarted = false;
         consumer.run({
             eachMessage: async ({ message }) => {
+                eachMessageStarted = true;
                 /* Take a long time to process the message. */
                 await sleep(7000);
                 try {
@@ -540,7 +542,7 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
 
         /* Waiting for assignment and then a bit more means that the first eachMessage starts running. */
         await waitFor(() => consumer.assignment().length > 0, () => { }, { delay: 50 });
-        await sleep(200);
+        await waitFor(() => eachMessageStarted, () => { }, { delay: 50 });
         await consumer.disconnect();
 
         /* Even without explicitly waiting for it, a pending call to eachMessage must complete before disconnect does. */

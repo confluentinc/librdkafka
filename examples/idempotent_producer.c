@@ -43,10 +43,17 @@
 #define _BSD_SOURCE     /* vsnprintf() */
 #include <stdio.h>
 #include <signal.h>
-#include <unistd.h>
 #include <string.h>
 
+#include "tinycthread.h"
 
+/* Platform specific includes */
+#if defined(_TTHREAD_POSIX_)
+  #include <unistd.h>
+#elif defined(_TTHREAD_WIN32_)
+  #include <process.h>
+  #include "rdwin32.h"
+#endif
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
@@ -318,7 +325,7 @@ int main(int argc, char **argv) {
 
                 /* Short sleep to rate-limit this example.
                  * A real application should not do this. */
-                usleep(500 * 1000); /* 500ms */
+                rd_usleep(500 * 1000); /* 500ms */
         }
 
 

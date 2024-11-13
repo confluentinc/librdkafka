@@ -1031,6 +1031,91 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
 #endif
 }
 
+/**
+ * @brief Simple utility function to check if \p ca DN is matching
+ *        any of the DNs in the \p ca_dns stack.
+ */
+static int rd_kafka_ssl_cert_issuer_match(STACK_OF(X509_NAME) * ca_dns,
+                                          X509 *ca) {
+        X509_NAME *issuer_dn = X509_get_issuer_name(ca);
+        X509_NAME *dn;
+        int i;
+
+        for (i = 0; i < sk_X509_NAME_num(ca_dns); i++) {
+                dn = sk_X509_NAME_value(ca_dns, i);
+                if (0 == X509_NAME_cmp(dn, issuer_dn)) {
+                        /* match found */
+                        return 1;
+                }
+        }
+        return 0;
+}
+
+/**
+ * @brief callback function for SSL_CTX_set_cert_cb, see
+ * https://docs.openssl.org/master/man3/SSL_CTX_set_cert_cb for details
+ * of the callback function requirements.
+ *
+ * According to section 4.2.4 of RFC 8446:
+ * The "certificate_authorities" extension is used to indicate the
+ * certificate authorities (CAs) which an endpoint supports and which
+ * SHOULD be used by the receiving endpoint to guide certificate
+ * selection.
+ *
+ * We avoid sending a client certificate if the issuer doesn't match any DN
+ * of server trusted certificate authorities (SSL_get_client_CA_list).
+ * This is done to avoid sending a client certificate that would almost
+ * certainly be rejected by the peer and would avoid successful
+ * SASL_SSL authentication on the same connection in case
+ * `ssl.client.auth=requested`.
+ */
+static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
+        STACK_OF(X509_NAME) * ca_list;
+        STACK_OF(X509) *certs = NULL;
+        X509 *cert;
+        int i;
+
+        /* Get the accepted client CA list from the SSL connection, this
+         * comes from the `certificate_authorities` field. */
+        ca_list = SSL_get_client_CA_list(ssl);
+        if (sk_X509_NAME_num(ca_list) < 1) {
+                /* `certificate_authorities` is supported either
+                 * in CertificateRequest (SSL <= 3, TLS <= 1.2)
+                 * or as an extension (TLS >= 1.3). This should be always
+                 * available, but in case it isn't, just send the certificate
+                 * and let the server validate it. */
+                return 1;
+        }
+
+        /* Get client cert from SSL connection */
+        cert = SSL_get_certificate(ssl);
+
+        if (cert != NULL && rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
+                /* A match is found, use the certificate. */
+                return 1;
+        }
+
+        /* Get client cert chain from SSL connection */
+        SSL_get0_chain_certs(ssl, &certs);
+
+        if (certs) {
+                /* Check if there's a match in the CA list for
+                 * each cert in the chain. */
+                for (i = 0; i < sk_X509_num(certs); i++) {
+                        cert = sk_X509_value(certs, i);
+                        if (rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
+                                /* A match is found, use the certificate. */
+                                return 1;
+                        }
+                }
+        }
+
+        /* No match is found, which means they would almost certainly be
+         * rejected by the peer.
+         * We decide to send no certificates. */
+        SSL_certs_clear(ssl);
+        return 1;
+}
 
 /**
  * @brief Registers certificates, keys, etc, on the SSL_CTX
@@ -1525,6 +1610,10 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 rd_snprintf(errstr, errstr_size, "Private key check failed: ");
                 return -1;
         }
+
+        /* Set client certificate callback to control the behaviour
+         * of client certificate selection TLS handshake. */
+        SSL_CTX_set_cert_cb(ctx, rd_kafka_ssl_cert_callback, rk);
 
         return 0;
 }

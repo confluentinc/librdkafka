@@ -3681,6 +3681,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         for (i = 0; i < (int)res_cnt; i++) {
                 int16_t error_code;
                 rd_kafkap_str_t error_msg;
+                int8_t internal_res_type;
                 int8_t res_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
@@ -3692,9 +3693,12 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
-                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_i8(reply, &internal_res_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+
+                res_type =
+                    map_from_internal_config_resourcetype(internal_res_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||

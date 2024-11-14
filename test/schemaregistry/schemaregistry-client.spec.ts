@@ -10,7 +10,7 @@ import { RestService } from '../../schemaregistry/rest-service';
 import { AxiosResponse } from 'axios';
 import stringify from "json-stringify-deterministic";
 import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
-import { mockClientConfig } from '../../test/schemaregistry/test-constants';
+import { mockClientConfig, mockTtlClientConfig } from '../../test/schemaregistry/test-constants';
 
 jest.mock('../../schemaregistry/rest-service');
 
@@ -75,6 +75,10 @@ const schemaInfoMetadata2 = {
 };
 const subjects: string[] = [mockSubject, mockSubject2];
 const versions: number[] = [1, 2, 3];
+
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 describe('SchemaRegistryClient-Register', () => {
 
@@ -628,5 +632,35 @@ describe('SchemaRegistryClient-Config', () => {
 
     expect(response).toMatchObject(expectedResponse);
     expect(restService.handleRequest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SchemaRegistryClient-Cache', () => {
+  beforeEach(() => {
+    restService = new RestService(mockClientConfig.baseURLs) as jest.Mocked<RestService>;
+    client = new SchemaRegistryClient(mockTtlClientConfig);
+    (client as any).restService = restService;
+  });
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('Should delete cached item after expiry', async () => {
+    const expectedResponse = {
+      id: 1,
+      version: 1,
+      schema: schemaString,
+      metadata: metadata,
+    };
+
+    restService.handleRequest.mockResolvedValue({ data: expectedResponse } as AxiosResponse);
+
+    await client.register(mockSubject, schemaInfo);
+
+    await sleep(2000);
+
+    await client.register(mockSubject, schemaInfo);
+
+    expect(restService.handleRequest).toHaveBeenCalledTimes(2);
   });
 });

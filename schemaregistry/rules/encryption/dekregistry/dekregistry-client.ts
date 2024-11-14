@@ -66,7 +66,7 @@ class DekRegistryClient implements DekClient {
   constructor(config: ClientConfig) {
     const cacheOptions = {
       max: config.cacheCapacity !== undefined ? config.cacheCapacity : 1000,
-      ...(config.cacheLatestTtlSecs !== undefined && { maxAge: config.cacheLatestTtlSecs * 1000 }),
+      ...(config.cacheLatestTtlSecs !== undefined && { ttl: config.cacheLatestTtlSecs * 1000 }),
     };
 
 

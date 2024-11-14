@@ -32,4 +32,13 @@ const mockClientConfig: ClientConfig = {
   basicAuthCredentials: basicAuthCredentials
 };
 
-export { clientConfig, mockClientConfig };
+const mockTtlClientConfig: ClientConfig = {
+  baseURLs: mockBaseUrls,
+  createAxiosDefaults: createAxiosDefaults,
+  isForward: false,
+  cacheCapacity: 512,
+  cacheLatestTtlSecs: 1,
+  basicAuthCredentials: basicAuthCredentials
+};
+
+export { clientConfig, mockClientConfig, mockTtlClientConfig };

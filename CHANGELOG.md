@@ -16,6 +16,8 @@ librdkafka v2.6.1 is a maintenance release:
   zstd 1.5.6, zlib 1.3.1, OpenSSL 3.3.2, CURL 8.10.1 (#4872).
 * SASL/SCRAM authentication fix: avoid concatenating
   client side nonce once more, as it's already prepended in server sent nonce (#4895).
+* Allow retrying for status code 429 ('Too Many Requests') in HTTP requests for
+  OAUTHBEARER OIDC (#4902).
 
 
 ## Fixes

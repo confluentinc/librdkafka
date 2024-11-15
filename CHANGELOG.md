@@ -1,3 +1,29 @@
+# librdkafka v2.6.2
+
+librdkafka v2.6.2 is a maintenance release:
+
+* Fixes to allow to migrate partitions to leaders with same leader epoch,
+  or NULL leader epoch (#4901).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4796.
+  Fix to allow to migrate partitions to leaders with NULL leader epoch.
+  NULL leader epoch can happen during a cluster roll with an upgrade to a
+  version supporting KIP-320.
+  Happening since v2.1.0 (#4901).
+* Issues: #4804.
+  Fix to allow to migrate partitions to leaders with same leader epoch.
+  Same leader epoch can happen when partition is
+  temporarily migrated to the internal broker (#4804), or if broker implementation
+  never bumps it, as it's not needed to validate the offsets.
+  Happening since v2.4.0 (#4901).
+
+
+
 # librdkafka v2.6.1
 
 librdkafka v2.6.1 is a maintenance release:

@@ -46,7 +46,7 @@
     "axios": "^1.7.3",
     "json-stringify-deterministic": "^1.0.12",
     "jsonata": "^2.0.5",
-    "lru-cache": "^11.0.0",
+    "lru-cache": "^10.4.3",
     "node-vault": "^0.10.2",
     "simple-oauth2": "^5.1.0",
     "validator": "^13.12.0"

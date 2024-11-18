@@ -44,6 +44,7 @@
     "async-mutex": "^0.5.0",
     "avsc": "^5.7.7",
     "axios": "^1.7.3",
+    "axios-retry": "^4.5.0",
     "json-stringify-deterministic": "^1.0.12",
     "jsonata": "^2.0.5",
     "lru-cache": "^10.4.3",

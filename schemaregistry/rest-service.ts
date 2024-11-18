@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, CreateAxiosDefaults } from 'axios';
 import { OAuthClient } from './oauth/oauth-client';
 import { RestError } from './rest-error';
+import axiosRetry from "axios-retry";
 /*
  * Confluent-Schema-Registry-TypeScript - Node.js wrapper for Confluent Schema Registry
  *
@@ -33,7 +34,6 @@ export interface BearerAuthCredentials {
   identityPoolId?: string,
 }
 
-//TODO: Consider retry policy, may need additional libraries on top of Axios
 export interface ClientConfig {
   baseURLs: string[],
   cacheCapacity?: number,
@@ -42,6 +42,9 @@ export interface ClientConfig {
   createAxiosDefaults?: CreateAxiosDefaults,
   basicAuthCredentials?: BasicAuthCredentials,
   bearerAuthCredentials?: BearerAuthCredentials,
+  maxRetries?: number,
+  retriesWaitMs?: number,
+  retriesMaxWaitMs?: number,
 }
 
 const toBase64 = (str: string): string => Buffer.from(str).toString('base64');
@@ -53,17 +56,36 @@ export class RestService {
   private oauthBearer: boolean = false;
 
   constructor(baseURLs: string[], isForward?: boolean, axiosDefaults?: CreateAxiosDefaults,
-    basicAuthCredentials?: BasicAuthCredentials, bearerAuthCredentials?: BearerAuthCredentials) {
+              basicAuthCredentials?: BasicAuthCredentials, bearerAuthCredentials?: BearerAuthCredentials,
+              maxRetries?: number, retriesWaitMs?: number, retriesMaxWaitMs?: number) {
     this.client = axios.create(axiosDefaults);
+    axiosRetry(this.client, {
+      retries: maxRetries ?? 2,
+      retryDelay: (retryCount) => {
+        return this.fullJitter(retriesWaitMs ?? 1000, retriesMaxWaitMs ?? 20000, retryCount - 1)
+      },
+      retryCondition: (error) => {
+        return this.isRetriable(error.response?.status ?? 0);
+      }
+    });
     this.baseURLs = baseURLs;
 
     if (isForward) {
       this.setHeaders({ 'X-Forward': 'true' });
     }
     this.setHeaders({ 'Content-Type': 'application/vnd.schemaregistry.v1+json' });
-    
+
     this.handleBasicAuth(basicAuthCredentials);
     this.handleBearerAuth(bearerAuthCredentials);
+  }
+
+  isRetriable(statusCode: number): boolean {
+    return statusCode == 408 || statusCode == 429
+      || statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504;
+  }
+
+  fullJitter(baseDelayMs: number, maxDelayMs: number, retriesAttempted: number): number {
+    return Math.random() * Math.min(maxDelayMs, baseDelayMs * 2 ** retriesAttempted)
   }
 
   handleBasicAuth(basicAuthCredentials?: BasicAuthCredentials): void {

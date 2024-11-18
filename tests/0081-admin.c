@@ -949,7 +949,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                     "background.threads", "DELETE",   "",
                     "log.cleanup.policy", "SUBTRACT", "compact"};
                 const char *confs_set_append_group[] = {
-                    "consumer.session.timeout.ms", "SET", "30000"};
+                    "consumer.session.timeout.ms", "SET", "50000"};
                 const char *confs_delete_group[] = {
                     "consumer.session.timeout.ms", "DELETE", ""};
 
@@ -1059,7 +1059,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
 
         error = rd_kafka_ConfigResource_add_incremental_config(
             configs[ci], "consumer.session.timeout.ms",
-            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "100000");
+            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
         exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;

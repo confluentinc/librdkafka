@@ -335,6 +335,8 @@ The admin-client only has support for a limited subset of methods, with more to 
   `requireStableOffsets` option but `resolveOffsets` option is not yet supported.
   * The `deleteTopicRecords` method is supported with additional `timeout`
   and `operationTimeout` option.
+  * The `fetchTopicMetadata` method is supported with additional `timeout`
+  and `includeAuthorizedOperations` option. Fetching for all topics is not advisable.
 
 ### Using the Schema Registry
 

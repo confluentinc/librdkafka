@@ -100,6 +100,7 @@ std::vector<std::string> ToStringVector(v8::Local<v8::Array>);
 v8::Local<v8::Array> ToV8Array(std::vector<std::string>);
 v8::Local<v8::Array> ToV8Array(const rd_kafka_error_t **error_list,
                                size_t error_cnt);
+v8::Local<v8::Object> UuidToV8Object(const rd_kafka_Uuid_t* uuid);
 v8::Local<v8::Array> ToV8Array(const rd_kafka_AclOperation_t *, size_t);
 
 v8::Local<v8::Object> ToV8Object(const rd_kafka_Node_t *);
@@ -138,6 +139,10 @@ v8::Local<v8::Array> FromListConsumerGroupOffsetsResult(
 // DeleteRecords: Response
 v8::Local<v8::Array> FromDeleteRecordsResult(
     const rd_kafka_DeleteRecords_result_t* result);
+
+// DescribeTopics: Response
+v8::Local<v8::Array> FromDescribeTopicsResult(
+    const rd_kafka_DescribeTopics_result_t* result);
 }  // namespace Admin
 
 namespace TopicPartition {

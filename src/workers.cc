@@ -1606,6 +1606,61 @@ void AdminClientDeleteRecords::HandleErrorCallback() {
   callback->Call(argc, argv);
 }
 
+/**
+ * @brief Describe Topics in an asynchronous worker
+ * 
+ * This callback will describe topics.
+ */
+AdminClientDescribeTopics::AdminClientDescribeTopics(
+    Nan::Callback* callback, NodeKafka::AdminClient* client,
+    rd_kafka_TopicCollection_t* topics,
+    const bool include_authorized_operations,
+    const int& timeout_ms)
+    : ErrorAwareWorker(callback),
+      m_client(client),
+      m_topics(topics),
+      m_include_authorized_operations(include_authorized_operations),
+      m_timeout_ms(timeout_ms) {}
+
+AdminClientDescribeTopics::~AdminClientDescribeTopics() {
+  if (m_topics) {
+    rd_kafka_TopicCollection_destroy(m_topics);
+  }
+
+  if (this->m_event_response) {
+    rd_kafka_event_destroy(this->m_event_response);
+  }
+}
+
+void AdminClientDescribeTopics::Execute() {
+  Baton b = m_client->DescribeTopics(m_topics, m_include_authorized_operations,
+                                     m_timeout_ms, &m_event_response);
+  if (b.err() != RdKafka::ERR_NO_ERROR) {
+    SetErrorBaton(b);
+  }
+}
+
+void AdminClientDescribeTopics::HandleOKCallback() {
+  Nan::HandleScope scope;
+  const unsigned int argc = 2;
+  v8::Local<v8::Value> argv[argc];
+
+  argv[0] = Nan::Null();
+  argv[1] = Conversion::Admin::FromDescribeTopicsResult(
+      rd_kafka_event_DescribeTopics_result(m_event_response));
+
+  callback->Call(argc, argv);
+}
+
+void AdminClientDescribeTopics::HandleErrorCallback() {
+  Nan::HandleScope scope;
+
+  const unsigned int argc = 1;
+  v8::Local<v8::Value> argv[argc] = {GetErrorObject()};
+
+  callback->Call(argc, argv);
+}
+
 
 }  // namespace Workers
 }  // namespace NodeKafka

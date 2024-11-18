@@ -609,6 +609,9 @@ class AdminClientListConsumerGroupOffsets : public ErrorAwareWorker {
   rd_kafka_event_t *m_event_response;
 };
 
+/**
+ * @brief Delete Records on a remote broker cluster.
+ */
 class AdminClientDeleteRecords : public ErrorAwareWorker {
  public:
   AdminClientDeleteRecords(Nan::Callback *, NodeKafka::AdminClient *,
@@ -625,6 +628,28 @@ class AdminClientDeleteRecords : public ErrorAwareWorker {
   rd_kafka_DeleteRecords_t **m_del_records;
   size_t m_del_records_cnt;
   const int m_operation_timeout_ms;
+  const int m_timeout_ms;
+  rd_kafka_event_t *m_event_response;
+};
+
+/**
+ * @brief Describe Topics on a remote broker cluster.
+ */
+class AdminClientDescribeTopics : public ErrorAwareWorker {
+ public:
+  AdminClientDescribeTopics(Nan::Callback *, NodeKafka::AdminClient *,
+                            rd_kafka_TopicCollection_t *, const bool,
+                            const int &);
+  ~AdminClientDescribeTopics();
+
+  void Execute();
+  void HandleOKCallback();
+  void HandleErrorCallback();
+
+ private:
+  NodeKafka::AdminClient *m_client;
+  rd_kafka_TopicCollection_t *m_topics;
+  const bool m_include_authorized_operations;
   const int m_timeout_ms;
   rd_kafka_event_t *m_event_response;
 };

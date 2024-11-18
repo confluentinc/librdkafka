@@ -392,6 +392,12 @@ export type Node = {
     rack?: string
 }
 
+export type Uuid = {
+    mostSignificantBits: bigint; // Most significant 64 bits for the UUID
+    leastSignificantBits: bigint; // Least significant 64 bits for the UUID
+    base64str: string; // Base64 encoding for the UUID
+}
+
 export type GroupDescription = {
     groupId: string
     error?: LibrdKafkaError
@@ -433,6 +439,22 @@ export type DeleteRecordsResult = {
     error?: LibrdKafkaError
 }
 
+export type TopicPartitionInfo = {
+    partition: number
+    leader: Node
+    isr: Node[]
+    replicas: Node[]
+}
+
+export type TopicDescription = {
+    name: string
+    topicId: Uuid
+    isInternal: boolean
+    partitions: TopicPartitionInfo[]
+    error?: LibrdKafkaError
+    authorizedOperations?: AclOperationTypes[]
+}
+
 export interface IAdminClient {
     createTopic(topic: NewTopic, cb?: (err: LibrdKafkaError) => void): void;
     createTopic(topic: NewTopic, timeout?: number, cb?: (err: LibrdKafkaError) => void): void;
@@ -467,6 +489,10 @@ export interface IAdminClient {
     deleteRecords(delRecords: TopicPartitionOffset[],
         options?: { timeout?: number, operationTimeout?: number },
         cb?: (err: LibrdKafkaError, result: DeleteRecordsResult[]) => any): void;
+    
+    describeTopics(topics: string[],
+        options?: { includeAuthorizedOperations?: boolean, timeout?: number },
+        cb?: (err: LibrdKafkaError, result: TopicDescription[]) => any): void;
 
     disconnect(): void;
 }

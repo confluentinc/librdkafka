@@ -5,7 +5,10 @@ import {
   LibrdKafkaError,
   GroupDescriptions,
   DeleteGroupsResult,
-  DeleteRecordsResult
+  DeleteRecordsResult,
+  Node,
+  AclOperationTypes,
+  Uuid
 } from './rdkafka'
 
 // Admin API related interfaces, types etc; and Error types are common, so
@@ -16,7 +19,10 @@ export {
   LibrdKafkaError,
   GroupDescriptions,
   DeleteGroupsResult,
-  DeleteRecordsResult
+  DeleteRecordsResult,
+  Node,
+  AclOperationTypes,
+  Uuid
 } from './rdkafka'
 
 export interface OauthbearerProviderResponse {
@@ -157,6 +163,18 @@ export type RecordMetadata = {
   baseOffset?: string
   logAppendTime?: string
   logStartOffset?: string
+}
+
+export type PartitionMetadata = {
+  partitionErrorCode: number
+  partitionId: number
+  leader: number
+  leaderNode?: Node
+  replicas: number[]
+  replicaNodes?: Node[]
+  isr: number[]
+  isrNodes?: Node[]
+  offlineReplicas?: number[]
 }
 
 export type Transaction = Producer;
@@ -319,6 +337,14 @@ export type TopicInput = string[] | { topic: string; partitions: number[] }[]
 
 export type SeekEntry = PartitionOffset
 
+export type ITopicMetadata = {
+  name: string
+  topicId?: Uuid
+  isInternal?: boolean
+  partitions: PartitionMetadata[]
+  authorizedOperations?: AclOperationTypes[]
+}
+
 export type Consumer = Client & {
   subscribe(subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic): Promise<void>
   stop(): Promise<void>
@@ -387,4 +413,9 @@ export type Admin = {
     topic: string; partitions: SeekEntry[];
     timeout?: number; operationTimeout?: number
   }): Promise<DeleteRecordsResult[]>
+  fetchTopicMetadata(options?: {
+    topics?: string[],
+    includeAuthorizedOperations?: boolean,
+    timeout?: number
+  }): Promise<{ topics: Array<ITopicMetadata> }>
 }

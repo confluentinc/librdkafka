@@ -372,7 +372,7 @@ export abstract class Deserializer extends Serde {
 
   async getMigrations(subject: string, sourceInfo: SchemaInfo,
                 target: SchemaMetadata, format?: string): Promise<Migration[]> {
-    let version = await this.client.getVersion(subject, sourceInfo, false)
+    let version = await this.client.getVersion(subject, sourceInfo, false, true)
     let source: SchemaMetadata = {
       id: 0,
       version:    version,

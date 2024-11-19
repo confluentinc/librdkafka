@@ -298,7 +298,8 @@ class MockClient implements Client {
     }
   }
 
-  async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
+  async getVersion(subject: string, schema: SchemaInfo,
+                   normalize: boolean = false, deleted: boolean = false): Promise<number> {
     const cacheKey = stringify({ subject, schema: minimize(schema) });
     const cacheEntry = this.schemaToVersionCache.get(cacheKey);
 

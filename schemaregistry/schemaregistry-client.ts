@@ -147,7 +147,7 @@ export interface Client {
   getLatestWithMetadata(subject: string, metadata: { [key: string]: string },
                         deleted: boolean, format?: string): Promise<SchemaMetadata>;
   getAllVersions(subject: string): Promise<number[]>;
-  getVersion(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
+  getVersion(subject: string, schema: SchemaInfo, normalize: boolean, deleted: boolean): Promise<number>;
   getAllSubjects(): Promise<string[]>;
   deleteSubject(subject: string, permanent: boolean): Promise<number[]>;
   deleteSubjectVersion(subject: string, version: number, permanent: boolean): Promise<number>;
@@ -436,8 +436,9 @@ export class SchemaRegistryClient implements Client {
    * @param schema - The schema for which to get the version.
    * @param normalize - Whether to normalize the schema before getting the version.
    */
-  async getVersion(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
-    const cacheKey = stringify({ subject, schema: minimize(schema) });
+  async getVersion(subject: string, schema: SchemaInfo,
+                   normalize: boolean = false, deleted: boolean = false): Promise<number> {
+    const cacheKey = stringify({ subject, schema: minimize(schema), deleted });
 
     return await this.schemaToVersionMutex.runExclusive(async () => {
       const cachedVersion: number | undefined = this.schemaToVersionCache.get(cacheKey);
@@ -448,7 +449,7 @@ export class SchemaRegistryClient implements Client {
       subject = encodeURIComponent(subject);
 
       const response: AxiosResponse<SchemaMetadata> = await this.restService.handleRequest(
-        `/subjects/${subject}?normalize=${normalize}`,
+        `/subjects/${subject}?normalize=${normalize}&deleted=${deleted}`,
         'POST',
         schema
       );

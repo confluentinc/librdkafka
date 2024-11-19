@@ -231,7 +231,7 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
         id = await this.client.getId(subject, info, normalize)
 
       }
-      version = await this.client.getVersion(subject, info, normalize)
+      version = await this.client.getVersion(subject, info, normalize, false)
     }
     return {
       id: id,

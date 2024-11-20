@@ -3793,7 +3793,12 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
-                /* Revoke assignment and rebalance on illegal generation */
+                /* Revoke assignment and rebalance on illegal generation,
+                 * only if not rebalancing, because a new generation id
+                 * can be received soon after this error. */
+                if (RD_KAFKA_CGRP_REBALANCING(rkcg))
+                        break;
+
                 rk->rk_cgrp->rkcg_generation_id = -1;
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(
                     rkcg, rd_true /*assignment is lost*/,

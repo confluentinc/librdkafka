@@ -6,9 +6,14 @@ v0.5.0 is a limited availability feature release. It is supported for all usage.
 ## Enhancements
 
 1. Add support for an Admin API to delete records.(#141).
-2. Fixes an issue with unresolved raced Promises leaking in the consumer (#151).
-3. Add support for an Admin API to describe topics.(#155).
-4. Add support for dependent Admin client (#153).
+2. Add support for an Admin API to describe topics.(#155).
+3. Add support for dependent Admin client (#153).
+4. References librdkafka v2.6.1. Refer to the [librdkafka v2.6.1 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.6.1) for more information.
+
+## Fixes
+
+1. Fixes an issue with unresolved raced Promises leaking in the consumer (#151).
+2. Removes schemaregistry dependencies from root package.json to prevent issues with Node 18 (#162).
 
 
 # confluent-kafka-javascript v0.4.0

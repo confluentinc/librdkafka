@@ -1,3 +1,23 @@
+# librdkafka v2.6.2
+
+librdkafka v2.6.2 is a maintenance release:
+
+* Commits during a rebalance aren't causing to lose the assignment 
+  if the generation id has been bumped in between (#4908).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4059.
+  Commits during a rebalance could cause to lose the assignment if the
+  generation id was bumped by second join group request.
+  Solved by not rejoining the group in case an illegal generation error happens
+  during a rebalance.
+  Happening since v1.6.0 (#4908).
+
+
 # librdkafka v2.6.1
 
 librdkafka v2.6.1 is a maintenance release:

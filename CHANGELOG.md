@@ -1,3 +1,25 @@
+# librdkafka v2.8.3
+
+librdkafka v2.8.3 is a maintenance release:
+
+* Commits during a cooperative incremental rebalance aren't causing
+  an assignment lost if the generation id was bumped in between (#4908).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #4059
+  Commits during a cooperative incremental rebalance could cause an
+  assignment lost if the generation id was bumped by a second join
+  group request.
+  Solved by not rejoining the group in case an illegal generation error happens
+  during a rebalance.
+  Happening since v1.6.0 (#4908)
+
+
+
 # librdkafka v2.8.0
 
 librdkafka v2.8.0 is a maintenance release:

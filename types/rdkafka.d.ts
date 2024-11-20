@@ -503,6 +503,7 @@ export type EventHandlers = {
 
 export abstract class AdminClient {
     static create(conf: GlobalConfig, eventHandlers?: EventHandlers): IAdminClient;
+    static createFrom(existingClient: Producer | KafkaConsumer, eventHandlers?: EventHandlers): IAdminClient;
 }
 
 export type RdKafka = {

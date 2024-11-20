@@ -79,6 +79,7 @@ class Connection : public Nan::ObjectWrap {
 
  protected:
   Connection(Conf*, Conf*);
+  explicit Connection(Connection *);
   ~Connection();
 
   static Nan::Persistent<v8::Function> constructor;
@@ -88,7 +89,6 @@ class Connection : public Nan::ObjectWrap {
   Baton setupSaslOAuthBearerConfig();
   Baton setupSaslOAuthBearerBackgroundQueue();
 
-  bool m_has_been_disconnected;
   bool m_is_closing;
 
   Conf* m_gconfig;
@@ -96,6 +96,7 @@ class Connection : public Nan::ObjectWrap {
   std::string m_errstr;
 
   uv_rwlock_t m_connection_lock;
+  bool m_has_underlying = false;
 
   RdKafka::Handle* m_client;
 

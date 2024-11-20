@@ -77,9 +77,10 @@ class AdminClient : public Connection {
   static void New(const Nan::FunctionCallbackInfo<v8::Value>& info);
 
   explicit AdminClient(Conf* globalConfig);
+  explicit AdminClient(Connection* existingConnection);
   ~AdminClient();
 
-  rd_kafka_queue_t* rkqu;
+  bool is_derived = false;
 
  private:
   // Node methods

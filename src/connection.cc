@@ -57,9 +57,32 @@ Connection::Connection(Conf* gconfig, Conf* tconfig):
     m_gconfig->set("event_cb", &m_event_cb, errstr);
   }
 
-Connection::~Connection() {
-  uv_rwlock_destroy(&m_connection_lock);
+/* Use an existing Connection object as the underlying for this object.
+ * At this point, the underlying connection is assumed to be connected with
+ * the m_client set. */
+Connection::Connection(Connection *existing):
+  m_event_cb() {
+    m_client = existing->m_client;
 
+    m_gconfig = existing->m_gconfig;
+    m_tconfig = existing->m_tconfig;
+
+    m_is_closing = false;
+    m_has_underlying = true;
+
+    // We must share the same connection lock as the existing connection to
+    // avoid getting disconnected while the existing connection is still in use.
+    m_connection_lock = existing->m_connection_lock;
+  }
+
+
+Connection::~Connection() {
+  // The underlying connection will take care of cleanup.
+  if (m_has_underlying) {
+    return;
+  }
+
+  uv_rwlock_destroy(&m_connection_lock);
   if (m_tconfig) {
     delete m_tconfig;
   }
@@ -253,6 +276,9 @@ Baton Connection::GetMetadata(
   } else {
     err = RdKafka::ERR__STATE;
   }
+
+  if (topic != NULL)
+    delete topic;
 
   if (err == RdKafka::ERR_NO_ERROR) {
     return Baton(metadata);

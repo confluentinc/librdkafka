@@ -1,7 +1,19 @@
+# confluent-kafka-javascript v0.5.1
+
+v0.5.1 is a limited availability maintenance release. It is supported for all usage.
+
+## Fixes
+
+1. Fix an issue where `sendOffsets` wasn't working correctly in the transactional
+   producer (#172).
+
 
 # confluent-kafka-javascript v0.5.0
 
 v0.5.0 is a limited availability feature release. It is supported for all usage.
+
+Note: v0.5.0 was not released because of the bug mentioned in v0.5.1 section. Instead,
+      v0.5.1 was released with the fix directly.
 
 ## Enhancements
 

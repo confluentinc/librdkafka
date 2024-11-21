@@ -221,12 +221,15 @@ describe('JsonSerializer', () => {
       validate: true
     })
 
-    let obj = {
+    let nested = {
       intField: 123,
       doubleField: 45.67,
       stringField: 'hi',
       boolField: true,
       bytesField: Buffer.from([0, 0, 0, 1]).toString('base64')
+    }
+    let obj = {
+      otherField: nested
     }
     let bytes = await ser.serialize(topic, obj)
 

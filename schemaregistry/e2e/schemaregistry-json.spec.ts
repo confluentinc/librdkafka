@@ -4,11 +4,11 @@ import {
   SchemaRegistryClient,
   SchemaInfo,
   Reference
-} from '../../schemaregistry/schemaregistry-client';
+} from '../schemaregistry-client';
 import { beforeEach, afterEach, describe, expect, it } from '@jest/globals';
-import { clientConfig } from '../../test/schemaregistry/test-constants';
-import { JsonSerializer, JsonSerializerConfig, JsonDeserializer } from '../../schemaregistry/serde/json';
-import { SerdeType } from "../../schemaregistry/serde/serde";
+import { clientConfig } from '../test/test-constants';
+import { JsonSerializer, JsonSerializerConfig, JsonDeserializer } from '../serde/json';
+import { SerdeType } from "../serde/serde";
 import stringify from 'json-stringify-deterministic';
 import { v4 } from 'uuid';
 

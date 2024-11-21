@@ -5,9 +5,9 @@ import {
   SchemaInfo,
   SchemaMetadata,
   Metadata
-} from '../../schemaregistry/schemaregistry-client';
+} from '../schemaregistry-client';
 import { beforeEach, describe, expect, it } from '@jest/globals';
-import { clientConfig } from '../../test/schemaregistry/test-constants';
+import { clientConfig } from '../test/test-constants';
 import { v4 } from 'uuid';
 
 /* eslint-disable @typescript-eslint/no-non-null-asserted-optional-chain */

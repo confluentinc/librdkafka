@@ -1,12 +1,12 @@
 import {afterEach, describe, expect, it} from '@jest/globals';
-import {ClientConfig} from "../../../schemaregistry/rest-service";
+import {ClientConfig} from "../../rest-service";
 import {
   AvroDeserializer,
   AvroDeserializerConfig,
   AvroSerializer,
   AvroSerializerConfig
-} from "../../../schemaregistry/serde/avro";
-import {SerdeType, Serializer} from "../../../schemaregistry/serde/serde";
+} from "../../serde/avro";
+import {SerdeType, Serializer} from "../../serde/serde";
 import {
   Client,
   Rule,
@@ -14,16 +14,16 @@ import {
   RuleSet,
   SchemaInfo,
   SchemaRegistryClient
-} from "../../../schemaregistry/schemaregistry-client";
-import {LocalKmsDriver} from "../../../schemaregistry/rules/encryption/localkms/local-driver";
+} from "../../schemaregistry-client";
+import {LocalKmsDriver} from "../../rules/encryption/localkms/local-driver";
 import {
   Clock,
   FieldEncryptionExecutor
-} from "../../../schemaregistry/rules/encryption/encrypt-executor";
-import {GcpKmsDriver} from "../../../schemaregistry/rules/encryption/gcpkms/gcp-driver";
-import {AwsKmsDriver} from "../../../schemaregistry/rules/encryption/awskms/aws-driver";
-import {AzureKmsDriver} from "../../../schemaregistry/rules/encryption/azurekms/azure-driver";
-import {HcVaultDriver} from "../../../schemaregistry/rules/encryption/hcvault/hcvault-driver";
+} from "../../rules/encryption/encrypt-executor";
+import {GcpKmsDriver} from "../../rules/encryption/gcpkms/gcp-driver";
+import {AwsKmsDriver} from "../../rules/encryption/awskms/aws-driver";
+import {AzureKmsDriver} from "../../rules/encryption/azurekms/azure-driver";
+import {HcVaultDriver} from "../../rules/encryption/hcvault/hcvault-driver";
 import {JsonataExecutor} from "@confluentinc/schemaregistry/rules/jsonata/jsonata-executor";
 import stringify from "json-stringify-deterministic";
 import {RuleRegistry} from "@confluentinc/schemaregistry/serde/rule-registry";

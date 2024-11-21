@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { BufferWrapper, MAX_VARINT_LEN_32 } from "../../../schemaregistry/serde/buffer-wrapper";
+import { BufferWrapper, MAX_VARINT_LEN_32 } from "../../serde/buffer-wrapper";
 
 describe('BufferWrapper', () => {
   it('write and read 100', () => {

@@ -1,19 +1,19 @@
 import {afterEach, describe, expect, it} from '@jest/globals';
-import {ClientConfig} from "../../../schemaregistry/rest-service";
+import {ClientConfig} from "../../rest-service";
 import {
   ProtobufDeserializer, ProtobufDeserializerConfig,
   ProtobufSerializer, ProtobufSerializerConfig,
-} from "../../../schemaregistry/serde/protobuf";
-import {SerdeType} from "../../../schemaregistry/serde/serde";
+} from "../../serde/protobuf";
+import {SerdeType} from "../../serde/serde";
 import {
   Rule,
   RuleMode,
   RuleSet,
   SchemaInfo,
   SchemaRegistryClient
-} from "../../../schemaregistry/schemaregistry-client";
-import {LocalKmsDriver} from "../../../schemaregistry/rules/encryption/localkms/local-driver";
-import {FieldEncryptionExecutor} from "../../../schemaregistry/rules/encryption/encrypt-executor";
+} from "../../schemaregistry-client";
+import {LocalKmsDriver} from "../../rules/encryption/localkms/local-driver";
+import {FieldEncryptionExecutor} from "../../rules/encryption/encrypt-executor";
 import {AuthorSchema, file_test_schemaregistry_serde_example, PizzaSchema} from "./test/example_pb";
 import {create, toBinary} from "@bufbuild/protobuf";
 import {FileDescriptorProtoSchema} from "@bufbuild/protobuf/wkt";

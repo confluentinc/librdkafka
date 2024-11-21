@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 import axios from 'axios';
 import MockAdapter from 'axios-mock-adapter';
-import { RestService } from '../../schemaregistry/rest-service';
+import { RestService } from '../rest-service';
 import * as retryHelper from '@confluentinc/schemaregistry/retry-helper';
 import { maxRetries, retriesWaitMs, retriesMaxWaitMs } from './test-constants';
 

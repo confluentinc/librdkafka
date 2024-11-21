@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv1";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
-import { file_confluent_meta } from "../../../../schemaregistry/confluent/meta_pb";
+import { file_confluent_meta } from "../../../confluent/meta_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**

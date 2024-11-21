@@ -1,5 +1,5 @@
 import { CreateAxiosDefaults } from 'axios';
-import { ClientConfig, BasicAuthCredentials } from '../../schemaregistry/rest-service';
+import { ClientConfig, BasicAuthCredentials } from '../rest-service';
 
 const baseUrls = ['http://localhost:8081'];
 

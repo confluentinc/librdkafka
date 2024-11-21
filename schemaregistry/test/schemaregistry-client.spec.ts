@@ -5,12 +5,12 @@ import {
   SchemaInfo,
   SchemaMetadata,
   ServerConfig
-} from '../../schemaregistry/schemaregistry-client';
-import { RestService } from '../../schemaregistry/rest-service';
+} from '../schemaregistry-client';
+import { RestService } from '../rest-service';
 import { AxiosResponse } from 'axios';
 import stringify from "json-stringify-deterministic";
 import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
-import { mockClientConfig, mockTtlClientConfig } from '../../test/schemaregistry/test-constants';
+import { mockClientConfig, mockTtlClientConfig } from './test-constants';
 
 jest.mock('../../schemaregistry/rest-service');
 

@@ -1,5 +1,5 @@
-import { MOCK_TS } from "../../../../../schemaregistry/rules/encryption/dekregistry/constants";
-import { Kek, Dek } from "../../../../../schemaregistry/rules/encryption/dekregistry/dekregistry-client";
+import { MOCK_TS } from "../../rules/encryption/dekregistry/constants";
+import { Kek, Dek } from "../../rules/encryption/dekregistry/dekregistry-client";
 
 const TEST_KEK_NAME: string = 'test-kek-name';
 const TEST_KEK_NAME_2: string = 'test-kek-name2';

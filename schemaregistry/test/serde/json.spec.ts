@@ -1,6 +1,6 @@
 import {afterEach, describe, expect, it} from '@jest/globals';
-import {ClientConfig} from "../../../schemaregistry/rest-service";
-import {SerdeType, SerializationError, Serializer} from "../../../schemaregistry/serde/serde";
+import {ClientConfig} from "../../rest-service";
+import {SerdeType, SerializationError, Serializer} from "../../serde/serde";
 import {
   Client,
   Rule,
@@ -8,14 +8,14 @@ import {
   RuleSet,
   SchemaInfo,
   SchemaRegistryClient
-} from "../../../schemaregistry/schemaregistry-client";
-import {LocalKmsDriver} from "../../../schemaregistry/rules/encryption/localkms/local-driver";
-import {FieldEncryptionExecutor} from "../../../schemaregistry/rules/encryption/encrypt-executor";
+} from "../../schemaregistry-client";
+import {LocalKmsDriver} from "../../rules/encryption/localkms/local-driver";
+import {FieldEncryptionExecutor} from "../../rules/encryption/encrypt-executor";
 import {
   JsonDeserializer, JsonDeserializerConfig,
   JsonSerializer,
   JsonSerializerConfig
-} from "../../../schemaregistry/serde/json";
+} from "../../serde/json";
 import {RuleRegistry} from "@confluentinc/schemaregistry/serde/rule-registry";
 import stringify from "json-stringify-deterministic";
 import {JsonataExecutor} from "@confluentinc/schemaregistry/rules/jsonata/jsonata-executor";

@@ -3,11 +3,11 @@ import {
   Metadata,
   SchemaRegistryClient,
   SchemaInfo
-} from '../../schemaregistry/schemaregistry-client';
+} from '../schemaregistry-client';
 import { beforeEach, afterEach, describe, expect, it } from '@jest/globals';
-import { clientConfig } from '../../test/schemaregistry/test-constants';
-import { AvroDeserializer, AvroSerializer, AvroSerializerConfig } from '../../schemaregistry/serde/avro';
-import { SerdeType } from "../../schemaregistry/serde/serde";
+import { clientConfig } from '../test/test-constants';
+import { AvroDeserializer, AvroSerializer, AvroSerializerConfig } from '../serde/avro';
+import { SerdeType } from "../serde/serde";
 import stringify from 'json-stringify-deterministic';
 import { v4 } from 'uuid';
 

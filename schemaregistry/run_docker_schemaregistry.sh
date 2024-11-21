@@ -3,7 +3,7 @@
 COMPOSE_VERSION=$(docker-compose --version)
 DOCKER_VERSION=$(docker --version)
 JEST=${JEST:-../node_modules/.bin/jest}
-INTEG_DIR=../e2e/schemaregistry
+INTEG_DIR=./e2e/schemaregistry
 
 # Start the docker compose file
 echo "Running docker compose up. Docker version $DOCKER_VERSION. Compose version $COMPOSE_VERSION. "

@@ -1,4 +1,4 @@
-import { match } from '../../../schemaregistry/serde/wildcard-matcher';
+import { match } from '../../serde/wildcard-matcher';
 import { describe, expect, it } from '@jest/globals';
 
 describe('WildcardMatcher', () => {

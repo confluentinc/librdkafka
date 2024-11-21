@@ -216,6 +216,7 @@ _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(0101_fetch_from_follower);
 _TEST_DECL(0102_static_group_rebalance);
+_TEST_DECL(0102_static_group_rebalance_mock);
 _TEST_DECL(0103_transactions_local);
 _TEST_DECL(0103_transactions);
 _TEST_DECL(0104_fetch_from_follower_mock);
@@ -464,6 +465,7 @@ struct test tests[] = {
     _TEST(0100_thread_interceptors, TEST_F_LOCAL),
     _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2, 3, 0, 0)),
+    _TEST(0102_static_group_rebalance_mock, TEST_F_LOCAL),
     _TEST(0103_transactions_local, TEST_F_LOCAL),
     _TEST(0103_transactions,
           0,

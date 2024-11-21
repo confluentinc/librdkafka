@@ -28,6 +28,7 @@
 
 #include "test.h"
 
+#include "../src/rdkafka_proto.h"
 
 /**
  * @name KafkaConsumer static membership tests
@@ -620,6 +621,153 @@ static void do_test_fenced_member_consumer(void) {
 
         SUB_TEST_PASS();
 }
+/**
+ * @brief Create a new consumer with given \p boostraps
+ *        \p group_id and \p group_instance_id .
+ */
+static rd_kafka_t *create_consumer(const char *bootstraps,
+                                   const char *group_id,
+                                   const char *group_instance_id) {
+        rd_kafka_conf_t *conf;
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.instance.id", group_instance_id);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.partition.eof", "true");
+        return test_create_consumer(group_id, NULL, conf, NULL);
+}
+
+/**
+ * @brief Get generation id of consumer \p consumer .
+ */
+static int32_t consumer_generation_id(rd_kafka_t *consumer) {
+        rd_kafka_consumer_group_metadata_t *group_metadata;
+        int32_t generation_id;
+
+        group_metadata = rd_kafka_consumer_group_metadata(consumer);
+        generation_id =
+            rd_kafka_consumer_group_metadata_member_epoch(group_metadata);
+        rd_kafka_consumer_group_metadata_destroy(group_metadata);
+        return generation_id;
+}
+
+/**
+ * @brief Check if the API key in \p request is the same as that
+ *        pointed by \p opaque .
+ */
+static rd_bool_t is_api_key(rd_kafka_mock_request_t *request, void *opaque) {
+        int32_t api_key = *(int32_t *)opaque;
+        return rd_kafka_mock_request_api_key(request) == api_key;
+}
+
+/**
+ * @brief Static group membership tests with the mock cluster.
+ *        Checks that consumer returns the same assignment
+ *        and generation id after re-joining.
+ *
+ *        variation 1) consumer 1 leaves and rejoins the group.
+ *        variation 2) consumer 1 leaves and a new consumer with same
+ *                     group.instance.id joins the group.
+ */
+static void do_test_static_membership_mock(int variation) {
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        int32_t api_key   = RD_KAFKAP_ConsumerGroupHeartbeat;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        rd_kafka_t *consumer1, *consumer2, *consumer_1_to_destroy = NULL;
+        int32_t prev_generation_id1, next_generation_id1, prev_generation_id2,
+            next_generation_id2;
+        rd_kafka_topic_partition_list_t *prev_assignment1, *prev_assignment2,
+            *next_assignment1, *next_assignment2;
+
+        SUB_TEST_QUICK("%s", variation == 1 ? "with unsubscribe"
+                                            : "with new instance");
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 3);
+
+        TEST_SAY("Creating consumers\n");
+        consumer1 = create_consumer(bootstraps, topic, "c1");
+        consumer2 = create_consumer(bootstraps, topic, "c2");
+
+        TEST_SAY("Subscribing consumers to topic \"%s\"\n", topic);
+        test_consumer_subscribe(consumer1, topic);
+        test_consumer_subscribe(consumer2, topic);
+
+        TEST_SAY("Waiting one EOF of consumer 1\n");
+        test_consumer_poll_exact("first consumer", consumer1, 0, 1, 0, 0,
+                                 rd_true, NULL);
+        TEST_SAY("Waiting one EOF of consumer 2\n");
+        test_consumer_poll_exact("second consumer", consumer2, 0, 1, 0, 0,
+                                 rd_true, NULL);
+
+        prev_generation_id1 = consumer_generation_id(consumer1);
+        prev_generation_id2 = consumer_generation_id(consumer2);
+        TEST_CALL_ERR__(rd_kafka_assignment(consumer1, &prev_assignment1));
+        TEST_CALL_ERR__(rd_kafka_assignment(consumer2, &prev_assignment2));
+        TEST_ASSERT(prev_assignment1 != NULL,
+                    "Expected assignment for consumer 1 before the change");
+        TEST_ASSERT(prev_assignment2 != NULL,
+                    "Expected assignment for consumer 2 before the change");
+
+        TEST_SAY("Unsubscribing consumer 1\n");
+        rd_kafka_mock_start_request_tracking(mcluster);
+        TEST_CALL_ERR__(rd_kafka_unsubscribe(consumer1));
+        test_mock_wait_matching_requests(mcluster, 1, 1000, is_api_key,
+                                         &api_key);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        if (variation == 2) {
+                /* Don't destroy it immediately because the
+                 * topic partition lists still hold a reference. */
+                consumer_1_to_destroy = consumer1;
+
+                TEST_SAY("Re-creating consumer 1\n");
+                /* Re-create the consumer with same group and instance id. */
+                consumer1 = create_consumer(bootstraps, topic, "c1");
+        }
+
+        TEST_SAY("Subscribing consumer 1 again\n");
+        test_consumer_subscribe(consumer1, topic);
+        test_consumer_wait_assignment(consumer1, rd_false);
+
+        next_generation_id1 = consumer_generation_id(consumer1);
+        next_generation_id2 = consumer_generation_id(consumer2);
+
+        TEST_ASSERT(next_generation_id1 == prev_generation_id1,
+                    "Expected same generation id for consumer 1, "
+                    "got %d != %d",
+                    prev_generation_id1, next_generation_id1);
+        TEST_ASSERT(next_generation_id2 == prev_generation_id2,
+                    "Expected same generation id for consumer 2, "
+                    "got %d != %d",
+                    prev_generation_id2, next_generation_id2);
+
+        TEST_CALL_ERR__(rd_kafka_assignment(consumer1, &next_assignment1));
+        TEST_CALL_ERR__(rd_kafka_assignment(consumer2, &next_assignment2));
+        TEST_ASSERT(next_assignment1 != NULL,
+                    "Expected assignment for consumer 1 after the change");
+        TEST_ASSERT(next_assignment2 != NULL,
+                    "Expected assignment for consumer 2 after the change");
+        TEST_ASSERT(!test_partition_list_and_offsets_cmp(prev_assignment1,
+                                                         next_assignment1),
+                    "Expected same assignment for consumer 1 after the change");
+        TEST_ASSERT(!test_partition_list_and_offsets_cmp(prev_assignment2,
+                                                         next_assignment2),
+                    "Expected same assignment for consumer 2 after the change");
+
+        rd_kafka_topic_partition_list_destroy(prev_assignment1);
+        rd_kafka_topic_partition_list_destroy(prev_assignment2);
+        rd_kafka_topic_partition_list_destroy(next_assignment1);
+        rd_kafka_topic_partition_list_destroy(next_assignment2);
+
+        RD_IF_FREE(consumer_1_to_destroy, rd_kafka_destroy);
+        rd_kafka_destroy(consumer1);
+        rd_kafka_destroy(consumer2);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
 
 int main_0102_static_group_rebalance(int argc, char **argv) {
         /* TODO: check again when regexes
@@ -634,5 +782,20 @@ int main_0102_static_group_rebalance(int argc, char **argv) {
                 do_test_fenced_member_consumer();
         }
 
+        return 0;
+}
+
+int main_0102_static_group_rebalance_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
+        if (test_consumer_group_protocol_classic()) {
+                TEST_SKIP(
+                    "Static membership isn't implemented "
+                    "in mock cluster for classic protocol\n");
+                return 0;
+        }
+
+        do_test_static_membership_mock(1);
+        do_test_static_membership_mock(2);
         return 0;
 }

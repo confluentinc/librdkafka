@@ -116,7 +116,7 @@ static int wait_all_heartbeats_done(rd_kafka_mock_cluster_t *mcluster,
 }
 
 static rd_kafka_t *create_consumer(const char *bootstraps,
-                                   const char *topic,
+                                   const char *group_id,
                                    rd_bool_t with_rebalance_cb) {
         rd_kafka_conf_t *conf;
         test_conf_init(&conf, NULL, 0);
@@ -124,7 +124,7 @@ static rd_kafka_t *create_consumer(const char *bootstraps,
         test_conf_set(conf, "group.protocol", "consumer");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         return test_create_consumer(
-            topic, with_rebalance_cb ? rebalance_cb : NULL, conf, NULL);
+            group_id, with_rebalance_cb ? rebalance_cb : NULL, conf, NULL);
 }
 
 /**

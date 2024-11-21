@@ -1363,6 +1363,34 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
 }
 
 /**
+ * @brief Finds a member in consumer group \p mcgrp by \p InstanceId.
+ *
+ * @param mcgrp Consumer group to search.
+ * @param InstanceId Instance id to look for.
+ * @return Found member or NULL.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+rd_kafka_mock_cgrp_consumer_member_t *
+rd_kafka_mock_cgrp_consumer_member_find_by_instance_id(
+    const rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    const rd_kafkap_str_t *InstanceId) {
+        if (RD_KAFKAP_STR_IS_NULL(InstanceId))
+                return NULL;
+
+        const rd_kafka_mock_cgrp_consumer_member_t *member;
+        TAILQ_FOREACH(member, &mcgrp->members, link) {
+                if (!member->instance_id)
+                        continue;
+
+                if (!rd_kafkap_str_cmp_str(InstanceId, member->instance_id))
+                        return (rd_kafka_mock_cgrp_consumer_member_t *)member;
+        }
+
+        return NULL;
+}
+
+/**
  * @brief Set the subscribed topics for member \p member
  *        to \p SubscribedTopicNames .
  *        Deduplicates the list after sorting it.
@@ -1417,7 +1445,7 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
  *                             Mandatory if the member is a new one.
  * @param SubscribedTopicNamesCnt Number of elements in \p SubscribedTopicNames.
  *
- * @return New or existing member.
+ * @return New or existing member, NULL if the member cannot be added.
  *
  * @locks mcluster->lock MUST be held.
  */
@@ -1434,6 +1462,22 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
         /* Find member */
         member = rd_kafka_mock_cgrp_consumer_member_find(mcgrp, MemberId);
         if (!member) {
+                member = rd_kafka_mock_cgrp_consumer_member_find_by_instance_id(
+                    mcgrp, InstanceId);
+                if (member && RD_KAFKAP_STR_LEN(MemberId) > 0 &&
+                    rd_kafkap_str_cmp_str(MemberId, member->id) != 0) {
+                        /* Either member is a new instance and is rejoining
+                         * with same InstanceId, so MemberId is NULL,
+                         * or it's rejoining after unsubscribing,
+                         * then it must have the same MemberId as before,
+                         * as it lasts for member lifetime.
+                         * It both don't hold, we cannot add the member
+                         * to the group. */
+                        return NULL;
+                }
+        }
+
+        if (!member) {
                 if (SubscribedTopicNamesCnt < 1)
                         return NULL;
 
@@ -1441,7 +1485,7 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                 member        = rd_calloc(1, sizeof(*member));
                 member->mcgrp = mcgrp;
 
-                if (!RD_KAFKAP_STR_LEN(MemberId)) {
+                if (RD_KAFKAP_STR_LEN(MemberId) == 0) {
                         /* Generate a member id */
                         rd_kafka_Uuid_t member_id = rd_kafka_Uuid_random();
                         member->id =
@@ -1449,7 +1493,7 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                 } else
                         member->id = RD_KAFKAP_STR_DUP(MemberId);
 
-                if (RD_KAFKAP_STR_LEN(InstanceId))
+                if (!RD_KAFKAP_STR_IS_NULL(InstanceId))
                         member->instance_id = RD_KAFKAP_STR_DUP(InstanceId);
 
                 TAILQ_INSERT_TAIL(&mcgrp->members, member, link);
@@ -1457,6 +1501,7 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                 changed                     = rd_true;
                 member->target_member_epoch = mcgrp->group_epoch;
         }
+
         changed |=
             rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                 member, SubscribedTopicNames, SubscribedTopicNamesCnt);
@@ -1516,17 +1561,23 @@ static void rd_kafka_mock_cgrp_consumer_member_destroy(
  *
  * @param mcgrp Consumer group to leave.
  * @param member Member that leaves.
+ * @param is_static If true, the member is leaving with static group membership.
  *
  * @locks mcluster->lock MUST be held.
  */
 void rd_kafka_mock_cgrp_consumer_member_leave(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,
     rd_kafka_mock_cgrp_consumer_member_t *member) {
+        rd_bool_t is_static = member->instance_id != NULL;
 
         rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
-                     "Member %s is leaving group %s", member->id, mcgrp->id);
-
-        rd_kafka_mock_cgrp_consumer_member_destroy(mcgrp, member);
+                     "Member %s is leaving group %s, is static: %s", member->id,
+                     mcgrp->id, RD_STR_ToF(is_static));
+        if (!is_static)
+                rd_kafka_mock_cgrp_consumer_member_destroy(mcgrp, member);
+        else
+                rd_kafka_mock_cgrp_consumer_member_returned_assignment_set(
+                    member, NULL);
 }
 
 /**

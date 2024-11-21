@@ -2745,31 +2745,34 @@ static void rd_kafka_mock_handle_ConsumerGroupHeartbeat_write_TopicPartitions(
 static int
 rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                             rd_kafka_buf_t *rkbuf) {
-        const rd_bool_t log_decode_errors = rd_true;
-        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        const rd_bool_t log_decode_errors   = rd_true;
+        rd_bool_t sent_assignment_parse_err = rd_false;
+        rd_kafka_mock_cluster_t *mcluster   = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
-        rd_kafka_topic_partition_list_t *current_assignment       = NULL,
-                                        *next_assignment          = NULL,
-                                        *pending_topic_partitions = NULL;
+        rd_kafka_topic_partition_list_t *sent_assignment     = NULL,
+                                        *existing_assignment = NULL,
+                                        *next_assignment     = NULL;
+        rd_kafka_topic_partition_t *rktpar;
         rd_kafkap_str_t GroupId, MemberId, InstanceId, RackId, ServerAssignor;
         rd_kafkap_str_t *SubscribedTopicNames = NULL;
-        int32_t MemberEpoch, RebalanceTimeoutMs, SubscribedTopicNamesCnt,
-            TopicPartitionsCnt;
+        int32_t MemberEpoch, RebalanceTimeoutMs, SubscribedTopicNamesCnt;
         int32_t i;
         rd_kafka_resp_err_t err;
         rd_kafka_mock_cgrp_consumer_t *mcgrp         = NULL;
         rd_kafka_mock_broker_t *mrkb                 = NULL;
         rd_kafka_mock_cgrp_consumer_member_t *member = NULL;
-        pending_topic_partitions = rd_kafka_topic_partition_list_new(0);
 
         /* GroupId */
         rd_kafka_buf_read_str(rkbuf, &GroupId);
+        rd_assert(!RD_KAFKAP_STR_IS_NULL(&GroupId));
 
         /* MemberId */
         rd_kafka_buf_read_str(rkbuf, &MemberId);
+        rd_assert(!RD_KAFKAP_STR_IS_NULL(&MemberId));
 
         /* MemberEpoch */
         rd_kafka_buf_read_i32(rkbuf, &MemberEpoch);
+        rd_assert(MemberEpoch >= -2);
 
         /* InstanceId */
         rd_kafka_buf_read_str(rkbuf, &InstanceId);
@@ -2779,6 +2782,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
 
         /* RebalanceTimeoutMs */
         rd_kafka_buf_read_i32(rkbuf, &RebalanceTimeoutMs);
+        rd_assert(RebalanceTimeoutMs >= -1);
 
         /* #SubscribedTopicNames */
         rd_kafka_buf_read_arraycnt(rkbuf, &SubscribedTopicNamesCnt,
@@ -2797,41 +2801,40 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &ServerAssignor);
 
         /* #TopicPartitions */
-        rd_kafka_buf_read_arraycnt(rkbuf, &TopicPartitionsCnt,
-                                   RD_KAFKAP_PARTITIONS_MAX);
-        if (TopicPartitionsCnt)
-                current_assignment =
-                    rd_kafka_topic_partition_list_new(TopicPartitionsCnt);
-        for (i = 0; i < TopicPartitionsCnt; i++) {
-                int32_t PartitionsCnt;
-                rd_kafka_Uuid_t TopicId;
-                rd_kafka_mock_topic_t *mtopic;
-                int j;
+        const rd_kafka_topic_partition_field_t sent_assignment_fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        sent_assignment = rd_kafka_buf_read_topic_partitions_nullable(
+            rkbuf, rd_true, rd_false, 0, sent_assignment_fields,
+            &sent_assignment_parse_err);
+        if (sent_assignment_parse_err)
+                goto err_parse;
 
-                /* TopicId */
-                rd_kafka_buf_read_uuid(rkbuf, &TopicId);
+        if (sent_assignment) {
+                rd_kafka_Uuid_t last_topic_id = RD_KAFKA_UUID_ZERO;
+                rd_kafka_mock_topic_t *mtopic = NULL;
+                existing_assignment =
+                    rd_kafka_topic_partition_list_new(sent_assignment->cnt);
+                RD_KAFKA_TPLIST_FOREACH(rktpar, sent_assignment) {
+                        rd_kafka_Uuid_t current_topic_id =
+                            rd_kafka_topic_partition_get_topic_id(rktpar);
 
-                mtopic = rd_kafka_mock_topic_find_by_id(mcluster, TopicId);
-
-                /* #Partitions */
-                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionsCnt,
-                                           RD_KAFKAP_PARTITIONS_MAX);
-                for (j = 0; j < PartitionsCnt; j++) {
-                        int32_t Partition;
-                        rd_kafka_topic_partition_t *rktpar;
-
-                        /* Partitions[j] */
-                        rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        if (rd_kafka_Uuid_cmp(current_topic_id,
+                                              last_topic_id) != 0) {
+                                last_topic_id = current_topic_id;
+                                mtopic        = rd_kafka_mock_topic_find_by_id(
+                                    mcluster, current_topic_id);
+                        }
 
                         if (mtopic) {
-                                rktpar = rd_kafka_topic_partition_list_add(
-                                    current_assignment, "", Partition);
-                                rd_kafka_topic_partition_set_topic_id(rktpar,
-                                                                      TopicId);
+                                rd_kafka_topic_partition_t *added =
+                                    rd_kafka_topic_partition_list_add(
+                                        existing_assignment, "",
+                                        rktpar->partition);
+                                rd_kafka_topic_partition_set_topic_id(
+                                    added, last_topic_id);
                         }
                 }
-
-                rd_kafka_buf_skip_tags(rkbuf);
         }
 
         /* Inject error, if any */
@@ -2860,7 +2863,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                         if (MemberEpoch >= 0) {
                                 next_assignment =
                                     rd_kafka_mock_cgrp_consumer_member_next_assignment(
-                                        member, current_assignment,
+                                        member, existing_assignment,
                                         &MemberEpoch);
                                 if (MemberEpoch < 0) {
                                         err =
@@ -2946,16 +2949,16 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         rd_kafka_mock_connection_send_response(mconn, resp);
 
         rd_free(SubscribedTopicNames);
-        RD_IF_FREE(current_assignment, rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(sent_assignment, rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(existing_assignment, rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(next_assignment, rd_kafka_topic_partition_list_destroy);
-        rd_kafka_topic_partition_list_destroy(pending_topic_partitions);
         return 0;
 
 err_parse:
         RD_IF_FREE(SubscribedTopicNames, rd_free);
-        RD_IF_FREE(current_assignment, rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(sent_assignment, rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(existing_assignment, rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(next_assignment, rd_kafka_topic_partition_list_destroy);
-        rd_kafka_topic_partition_list_destroy(pending_topic_partitions);
         rd_kafka_buf_destroy(resp);
         return -1;
 }

@@ -35,9 +35,13 @@
 
 #if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 &&                        \
     !defined(OPENSSL_IS_BORINGSSL)
+#ifdef OPENSSL_NO_ENGINE
+#include <openssl/rand.h>
+#else
 #define WITH_SSL_ENGINE 1
 /* Deprecated in OpenSSL 3 */
 #include <openssl/engine.h>
+#endif
 #endif /* WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 */
 
 /**

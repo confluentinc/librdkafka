@@ -1,3 +1,10 @@
+# confluent-kafka-javascript v0.5.2
+
+v0.5.2 is a limited availability maintenance release. It is supported for all usage.
+
+Note: v0.5.2 has no code changes from v0.5.1, version is bumped to sync with @confluentinc/schemaregistry.
+
+
 # confluent-kafka-javascript v0.5.1
 
 v0.5.1 is a limited availability maintenance release. It is supported for all usage.

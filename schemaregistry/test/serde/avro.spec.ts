@@ -244,6 +244,31 @@ const complexSchema = `
   ]
 }
 `
+const unionFieldSchema = `
+{
+  "type": "record",
+    "name": "UnionTest",
+    "namespace": "test",
+    "fields": [
+    {
+      "name": "color",
+      "type": [
+        "string",
+        {
+          "type": "enum",
+          "name": "Color",
+          "symbols": [
+            "RED",
+            "BLUE"
+          ]
+        }
+      ],
+      "default": "BLUE"
+
+    }
+  ],
+  "version": "1"
+}`;
 
 class FakeClock extends Clock {
   fixedNow: number = 0
@@ -373,6 +398,61 @@ describe('AvroSerializer', () => {
     expect(obj2.otherField.stringField).toEqual(nested.stringField);
     expect(obj2.otherField.boolField).toEqual(nested.boolField);
     expect(obj2.otherField.bytesField).toEqual(nested.bytesField);
+  })
+  it('field with union with non-applicable rule', async () => {
+    const conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    };
+    const client = SchemaRegistryClient.newClient(conf)
+    const serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    };
+    const ser = new AvroSerializer(client, SerdeType.VALUE, serConfig);
+    const dekClient = fieldEncryptionExecutor.client!;
+
+    const encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT',
+      tags: ['PII'],
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,ERROR'
+    };
+    const ruleSet: RuleSet = {
+      domainRules: [encRule]
+    };
+
+    const info = {
+      schemaType: 'AVRO',
+      schema: unionFieldSchema,
+      ruleSet
+    };
+
+    await client.register(subject, info, false);
+
+    const obj = {
+      color: {"test.Color": "BLUE"}
+    };
+    const bytes = await ser.serialize(topic, obj);
+
+    const deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    };
+    const deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig);
+    fieldEncryptionExecutor.client = dekClient;
+    const obj2 = await deser.deserialize(topic, bytes);
+    expect(obj2.color).toEqual(obj.color);
   })
   it('schema evolution', async () => {
     let conf: ClientConfig = {

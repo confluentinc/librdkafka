@@ -386,14 +386,25 @@ function resolveUnion(schema: Type, msg: any): Type | null {
   if (schema.typeName === 'union:unwrapped') {
     const union = schema as UnwrappedUnionType
     unionTypes = union.types.slice()
+    if (unionTypes != null) {
+      for (let i = 0; i < unionTypes.length; i++) {
+        if (unionTypes[i].isValid(msg)) {
+          return unionTypes[i]
+        }
+      }
+    }
   } else if (schema.typeName === 'union:wrapped') {
     const union = schema as WrappedUnionType
     unionTypes = union.types.slice()
-  }
-  if (unionTypes != null) {
-    for (let i = 0; i < unionTypes.length; i++) {
-      if (unionTypes[i].isValid(msg)) {
-        return unionTypes[i]
+    if (typeof msg === 'object') {
+      let keys = Object.keys(msg)
+      if (keys.length === 1) {
+        let name = keys[0]
+        for (let i = 0; i < unionTypes.length; i++) {
+          if (unionTypes[i].branchName === name) {
+            return unionTypes[i]
+          }
+        }
       }
     }
   }

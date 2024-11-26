@@ -18,6 +18,7 @@ librdkafka v2.6.1 is a maintenance release:
   client side nonce once more, as it's already prepended in server sent nonce (#4895).
 * Allow retrying for status code 429 ('Too Many Requests') in HTTP requests for
   OAUTHBEARER OIDC (#4902).
+* Support versions of OpenSSL without the ENGINE component (Chris Novakovic, #3535).
 
 
 ## Fixes

@@ -20,8 +20,13 @@ export class HcVaultDriver implements KmsDriver {
 
   newKmsClient(config: Map<string, string>, keyUrl?: string): KmsClient {
     const uriPrefix = keyUrl != null ? keyUrl : HcVaultDriver.PREFIX
-    const tokenId = config.get(HcVaultDriver.TOKEN_ID)
-    const ns = config.get(HcVaultDriver.NAMESPACE)
+    let tokenId = config.get(HcVaultDriver.TOKEN_ID)
+    let ns = config.get(HcVaultDriver.NAMESPACE)
+    if (tokenId == null)
+    {
+      tokenId = process.env["VAULT_TOKEN"]
+      ns = process.env["VAULT_NAMESPACE"]
+    }
     return new HcVaultClient(uriPrefix, ns, tokenId)
   }
 }

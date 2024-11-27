@@ -10,13 +10,7 @@ export class LocalKmsClient implements KmsClient {
   private secret: string
   private cryptor: Cryptor
 
-  constructor(secret?: string) {
-    if (secret == null) {
-      secret = process.env['LOCAL_SECRET']
-    }
-    if (secret == null) {
-      throw new Error('cannot load secret')
-    }
+  constructor(secret: string) {
     this.secret = secret
     this.cryptor = new Cryptor(DekFormat.AES128_GCM)
   }

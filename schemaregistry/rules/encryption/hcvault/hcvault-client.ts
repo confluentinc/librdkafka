@@ -9,10 +9,6 @@ export class HcVaultClient implements KmsClient {
   private keyName: string
 
   constructor(keyUri: string, namespace?: string, token?: string) {
-    if (token == null)
-    {
-      namespace = process.env["VAULT_NAMESPACE"]
-    }
     if (!keyUri.startsWith(HcVaultDriver.PREFIX)) {
       throw new Error(`key uri must start with ${HcVaultDriver.PREFIX}`)
     }

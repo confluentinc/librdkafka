@@ -18,7 +18,13 @@ export class LocalKmsDriver implements KmsDriver {
   }
 
   newKmsClient(config: Map<string, string>, keyUrl: string): KmsClient {
-    const secret = config.get(LocalKmsDriver.SECRET)
+    let secret = config.get(LocalKmsDriver.SECRET)
+    if (secret == null) {
+      secret = process.env['LOCAL_SECRET']
+    }
+    if (secret == null) {
+      throw new Error('cannot load secret')
+    }
     return new LocalKmsClient(secret)
   }
 }

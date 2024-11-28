@@ -1246,7 +1246,7 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
     rd_kafka_mock_cgrp_consumer_member_t *member,
     rd_kafka_topic_partition_list_t *current_assignment,
     int *member_epoch) {
-        rd_kafka_topic_partition_list_t *returned_assignment = NULL;
+        rd_kafka_topic_partition_list_t *assignment_to_return = NULL;
 
         if (current_assignment) {
                 /* Update current assignment to reflect what is provided
@@ -1274,15 +1274,15 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
                          * epoch immediately or do some revocations
                          * before that. */
 
-                        returned_assignment =
+                        assignment_to_return =
                             rd_kafka_mock_cgrp_consumer_member_needs_revocation(
                                 member);
-                        if (!returned_assignment) {
+                        if (!assignment_to_return) {
                                 /* After revocation we only have to
                                  * add new partitions.
                                  * In case these new partitions are held
                                  * by other members we still cannot do it. */
-                                returned_assignment =
+                                assignment_to_return =
                                     rd_kafka_mock_cgrp_consumer_member_needs_assignment(
                                         member);
                         }
@@ -1291,37 +1291,37 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
                          * where we have to return the assignment is
                          * after a disconnection, when returned_assignment has
                          * been reset to NULL. */
-                        returned_assignment =
+                        assignment_to_return =
                             rd_kafka_mock_cgrp_consumer_member_target_assignment_assignable(
                                 member);
                 }
         }
 
         *member_epoch = member->current_member_epoch;
-        if (returned_assignment) {
-                /* Compare returned_assignment with last returned_assignment.
-                 * If equal, return NULL, otherwise return returned_assignment
+        if (assignment_to_return) {
+                /* Compare assignment_to_return with last returned_assignment.
+                 * If equal, return NULL, otherwise return assignment_to_return
                  * and update last returned_assignment. */
                 rd_bool_t same_returned_assignment =
                     member->returned_assignment &&
                     !rd_kafka_topic_partition_list_cmp(
-                        member->returned_assignment, returned_assignment,
+                        member->returned_assignment, assignment_to_return,
                         rd_kafka_topic_partition_by_id_cmp);
 
                 if (same_returned_assignment) {
                         /* Returned assignment is the same as previous
                          * one, we return NULL instead to show no change. */
                         rd_kafka_topic_partition_list_destroy(
-                            returned_assignment);
-                        returned_assignment = NULL;
+                            assignment_to_return);
+                        assignment_to_return = NULL;
                 } else {
                         /* We store returned assignment
                          * for later comparison. */
                         rd_kafka_mock_cgrp_consumer_member_returned_assignment_set(
-                            member, returned_assignment);
+                            member, assignment_to_return);
                 }
         }
-        return returned_assignment;
+        return assignment_to_return;
 }
 
 /**

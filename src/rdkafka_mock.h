@@ -496,15 +496,15 @@ typedef struct rd_kafka_mock_cgrp_consumer_target_assignment_s
  *         in KIP-848 consumer group protocol.
  *
  * @param member_ids Array of member ids of size \p member_cnt.
+ * @param member_cnt Number of members.
  * @param assignment Array of (rd_kafka_topic_partition_list_t *) of size \p
  * member_cnt.
- * @param member_cnt Number of members.
  */
 RD_EXPORT rd_kafka_mock_cgrp_consumer_target_assignment_t *
 rd_kafka_mock_cgrp_consumer_target_assignment_new(
     char **member_ids,
-    rd_kafka_topic_partition_list_t **assignment,
-    int member_cnt);
+    int member_cnt,
+    rd_kafka_topic_partition_list_t **assignment);
 
 /**
  * @brief Destroy target assignment \p target_assignment .

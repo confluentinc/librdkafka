@@ -3057,8 +3057,8 @@ static int ut_cgrp_consumer_member_next_assignment0(
 
                         target_assignment =
                             rd_kafka_mock_cgrp_consumer_target_assignment_new(
-                                (char **)&MemberId.str,
-                                &member_target_assignment, 1);
+                                (char **)&MemberId.str, 1,
+                                &member_target_assignment);
 
                         rd_kafka_mock_cgrp_consumer_target_assignment(
                             mcluster, GroupId.str, target_assignment);

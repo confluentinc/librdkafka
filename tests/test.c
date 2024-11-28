@@ -7262,7 +7262,7 @@ void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
         va_start(ap, member_cnt);
         for (i = 0; i < member_cnt; i++) {
                 rd_kafka_consumer_group_metadata_t *cgmetadata = NULL;
-                rd_kafka_t *c = va_arg(ap, rd_kafka_t *);
+                rd_kafka_t *consumer = va_arg(ap, rd_kafka_t *);
                 rd_kafka_topic_partition_list_t *member_assignment =
                     va_arg(ap, rd_kafka_topic_partition_list_t *);
 
@@ -7274,7 +7274,7 @@ void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
                 while (!member_id || *member_id == '\0' || !member_group_id) {
                         if (!first_time)
                                 rd_usleep(100000, NULL);
-                        cgmetadata = rd_kafka_consumer_group_metadata(c);
+                        cgmetadata = rd_kafka_consumer_group_metadata(consumer);
                         member_id  = rd_kafka_consumer_group_metadata_member_id(
                             cgmetadata);
                         member_group_id =
@@ -7296,7 +7296,7 @@ void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
         va_end(ap);
 
         target_assignment = rd_kafka_mock_cgrp_consumer_target_assignment_new(
-            member_ids, assignment, member_cnt);
+            member_ids, member_cnt, assignment);
         rd_kafka_mock_cgrp_consumer_target_assignment(mcluster, group_id,
                                                       target_assignment);
         rd_kafka_mock_cgrp_consumer_target_assignment_destroy(

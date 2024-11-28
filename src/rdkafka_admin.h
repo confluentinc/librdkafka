@@ -495,6 +495,8 @@ struct rd_kafka_MemberDescription_s {
         char *group_instance_id;                /**< Group instance id */
         char *host;                             /**< Group member host */
         rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
+        rd_kafka_MemberAssignment_t 
+        target_assignment;                      /**< Target assignment */
 };
 
 /**
@@ -524,6 +526,8 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_AclOperation_t *authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;
+        /**< Consumer group type. */
+        rd_kafka_consumer_group_type_t type;
 };
 
 /**@}*/

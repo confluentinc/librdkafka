@@ -539,7 +539,7 @@ RD_EXPORT void rd_kafka_mock_cgrp_consumer_target_assignment(
  * @param mcluster Mock cluster instance.
  * @param group_consumer_session_timeout_ms Session timeout in milliseconds.
  */
-RD_EXPORT void rd_kafka_mock_group_consumer_session_timeout_ms(
+RD_EXPORT void rd_kafka_mock_set_group_consumer_session_timeout_ms(
     rd_kafka_mock_cluster_t *mcluster,
     int group_consumer_session_timeout_ms);
 
@@ -554,7 +554,7 @@ RD_EXPORT void rd_kafka_mock_group_consumer_session_timeout_ms(
  * @param group_consumer_heartbeat_interval_ms Heartbeat interval in
  * milliseconds.
  */
-RD_EXPORT void rd_kafka_mock_group_consumer_heartbeat_interval_ms(
+RD_EXPORT void rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(
     rd_kafka_mock_cluster_t *mcluster,
     int group_consumer_heartbeat_interval_ms);
 

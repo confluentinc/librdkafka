@@ -870,7 +870,7 @@ typedef RD_MAP_TYPE(const char *, int *) map_str_int;
  * `rd_kafka_mock_cgrp_consumer_target_assignment`.
  */
 static rd_kafka_mock_cgrp_consumer_target_assignment_t *
-rd_kafka_mock_cgrp_consumer_target_assignment_calculate_simple(
+rd_kafka_mock_cgrp_consumer_target_assignment_calculate_range(
     const rd_kafka_mock_cgrp_consumer_t *mcgrp) {
         int i, *i_pointer;
         const char *topic;
@@ -977,7 +977,7 @@ static void rd_kafka_mock_cgrp_consumer_target_assignment_recalculate(
                 return;
 
         rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment =
-            rd_kafka_mock_cgrp_consumer_target_assignment_calculate_simple(
+            rd_kafka_mock_cgrp_consumer_target_assignment_calculate_range(
                 mcgrp);
         rd_kafka_mock_cgrp_consumer_target_assignment_set(mcgrp,
                                                           target_assignment);

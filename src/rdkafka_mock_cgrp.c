@@ -1707,7 +1707,7 @@ destroy:
         mtx_unlock(&mcluster->lock);
 }
 
-void rd_kafka_mock_group_consumer_session_timeout_ms(
+void rd_kafka_mock_set_group_consumer_session_timeout_ms(
     rd_kafka_mock_cluster_t *mcluster,
     int group_consumer_session_timeout_ms) {
         mtx_lock(&mcluster->lock);
@@ -1716,7 +1716,7 @@ void rd_kafka_mock_group_consumer_session_timeout_ms(
         mtx_unlock(&mcluster->lock);
 }
 
-void rd_kafka_mock_group_consumer_heartbeat_interval_ms(
+void rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(
     rd_kafka_mock_cluster_t *mcluster,
     int group_consumer_heartbeat_interval_ms) {
         mtx_lock(&mcluster->lock);

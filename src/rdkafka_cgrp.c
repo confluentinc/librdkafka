@@ -6769,7 +6769,7 @@ const char *rd_kafka_consumer_group_metadata_group_instance_id(
         return group_metadata->group_instance_id;
 }
 
-int32_t rd_kafka_consumer_group_metadata_member_epoch(
+int32_t rd_kafka_consumer_group_metadata_generation_id(
     const rd_kafka_consumer_group_metadata_t *group_metadata) {
         return group_metadata->generation_id;
 }

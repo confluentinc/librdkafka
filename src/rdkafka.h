@@ -4633,15 +4633,16 @@ const char *rd_kafka_consumer_group_metadata_member_id(
     const rd_kafka_consumer_group_metadata_t *group_metadata);
 
 /**
- * @brief Get member epoch of a group metadata.
- *        Corresponds to the generation id in consumer protocol classic;
+ * @brief Get the generation id (classic protocol)
+ *        or member epoch (consumer protocol) of a group metadata.
  *
  * @param group_metadata The group metadata.
  *
- * @returns The member epoch id contained in the passed \p group_metadata.
+ * @returns The generation id or member epoch
+ *          contained in the passed \p group_metadata.
  */
 RD_EXPORT
-int32_t rd_kafka_consumer_group_metadata_member_epoch(
+int32_t rd_kafka_consumer_group_metadata_generation_id(
     const rd_kafka_consumer_group_metadata_t *group_metadata);
 
 /**

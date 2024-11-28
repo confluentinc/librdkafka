@@ -735,7 +735,7 @@ typedef struct rd_kafka_mock_cgrp_consumer_target_assignment_s {
                                   (rd_kafka_topic_partition_list_t *). */
 } rd_kafka_mock_cgrp_consumer_target_assignment_t;
 
-rd_kafka_mock_cgrp_consumer_target_assignment_t *
+static rd_kafka_mock_cgrp_consumer_target_assignment_t *
 rd_kafka_mock_cgrp_consumer_target_assignment_new0(rd_list_t *member_ids,
                                                    rd_list_t *assignment) {
         rd_assert(member_ids->rl_cnt == assignment->rl_cnt);
@@ -751,8 +751,8 @@ rd_kafka_mock_cgrp_consumer_target_assignment_new0(rd_list_t *member_ids,
 rd_kafka_mock_cgrp_consumer_target_assignment_t *
 rd_kafka_mock_cgrp_consumer_target_assignment_new(
     char **member_ids,
-    rd_kafka_topic_partition_list_t **assignment,
-    int member_cnt) {
+    int member_cnt,
+    rd_kafka_topic_partition_list_t **assignment) {
         int i;
         rd_list_t *member_id_list, *assignment_list;
         rd_kafka_mock_cgrp_consumer_target_assignment_t *ret;

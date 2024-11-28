@@ -689,10 +689,6 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
                                        rd_kafkap_str_t *SubscribedTopicNames,
                                        int32_t SubscribedTopicNamesCnt);
 
-rd_kafka_mock_cgrp_consumer_target_assignment_t *
-rd_kafka_mock_cgrp_consumer_target_assignment_new0(rd_list_t *member_ids,
-                                                   rd_list_t *assignment);
-
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);
 /**

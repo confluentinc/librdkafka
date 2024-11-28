@@ -646,7 +646,7 @@ static int32_t consumer_generation_id(rd_kafka_t *consumer) {
 
         group_metadata = rd_kafka_consumer_group_metadata(consumer);
         generation_id =
-            rd_kafka_consumer_group_metadata_member_epoch(group_metadata);
+            rd_kafka_consumer_group_metadata_generation_id(group_metadata);
         rd_kafka_consumer_group_metadata_destroy(group_metadata);
         return generation_id;
 }

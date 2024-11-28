@@ -105,6 +105,21 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
 
 
 int main_0133_ssl_keys(int argc, char **argv) {
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+        rd_kafka_conf_res_t res;
+
+        test_conf_init(&conf, NULL, 10);
+
+        /* Check that we're linked/built with OpenSSL 3.x */
+        res = rd_kafka_conf_set(conf, "ssl.providers", "a,b", errstr,
+                                sizeof(errstr));
+        rd_kafka_conf_destroy(conf);
+        if (res == RD_KAFKA_CONF_INVALID) {
+                TEST_SKIP("%s\n", errstr);
+                return 0;
+        }
+
         do_test_ssl_keys("PKCS12", rd_true);
         do_test_ssl_keys("PKCS12", rd_false);
         do_test_ssl_keys("PEM", rd_true);

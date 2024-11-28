@@ -3336,17 +3336,12 @@ static int rd_kafka_handle_Produce_error(rd_kafka_broker_t *rkb,
                          * which should not be treated as a fatal error
                          * since this request and sub-sequent requests
                          * will be retried and thus return to order.
-                         * Unless the error was a timeout, or similar,
-                         * in which case the request might have made it
-                         * and the messages are considered possibly persisted:
-                         * in this case we allow the next in-flight response
-                         * to be successful, in which case we mark
-                         * this request's messages as succesfully delivered. */
-                        if (perr->status &
-                            RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED)
-                                perr->update_next_ack = rd_true;
-                        else
-                                perr->update_next_ack = rd_false;
+                         * In case the message is possibly persisted
+                         * we still treat it as not persisted,
+                         * expecting DUPLICATE_SEQUENCE_NUMBER
+                         * in case it was persisted or NO_ERROR in case
+                         * it wasn't. */
+                        perr->update_next_ack = rd_false;
                         perr->update_next_err = rd_true;
 
                         /* Drain outstanding requests so that retries
@@ -3627,7 +3622,7 @@ static void rd_kafka_msgbatch_handle_Produce_result(
                     .err             = err,
                     .incr_retry      = 1,
                     .status          = status,
-                    .update_next_ack = rd_true,
+                    .update_next_ack = rd_false,
                     .update_next_err = rd_true,
                     .last_seq        = (batch->first_seq +
                                  rd_kafka_msgq_len(&batch->msgq) - 1)};

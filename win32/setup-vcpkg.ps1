@@ -5,8 +5,7 @@ if (!(Test-Path -Path vcpkg/.git)) {
 }
 
 cd vcpkg
-# latest version is having an issue while doing vcpkg integrate install
-git checkout 328bd79eb8340b8958f567aaf5f8ffb81056cd36
+git checkout 2024.09.30
 cd ..
 
 .\vcpkg\bootstrap-vcpkg.bat

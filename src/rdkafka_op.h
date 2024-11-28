@@ -39,6 +39,7 @@
 typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
+typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the

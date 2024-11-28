@@ -642,6 +642,16 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque);
 
+rd_kafka_resp_err_t
+rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                      const rd_list_t *groups /*(char*)*/,
+                                      rd_kafka_AdminOptions_t *options,
+                                      char *errstr,
+                                      size_t errstr_size,
+                                      rd_kafka_replyq_t replyq,
+                                      rd_kafka_resp_cb_t *resp_cb,
+                                      void *opaque);
+
 void rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
     rd_tmpabuf_t *tbuf,
     rd_kafkap_NodeEndpoints_t *NodeEndpoints);

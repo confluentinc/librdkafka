@@ -6062,6 +6062,65 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+
+/**
+ * @brief Construct and send ConsumerGroupDescribe Request to broker.
+ *
+ * @return RD_KAFKA_RESP_ERR_NO_ERROR on success, a new error instance that
+ *         must be released with rd_kafka_error_destroy() in case of error.
+ */
+rd_kafka_resp_err_t
+rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                      const rd_list_t *groups /*(char*)*/,
+                                      rd_kafka_AdminOptions_t *options,
+                                      char *errstr,
+                                      size_t errstr_size,
+                                      rd_kafka_replyq_t replyq,
+                                      rd_kafka_resp_cb_t *resp_cb,
+                                      void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t maxApiVersion = 0;
+        int16_t ApiVersion    = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, maxApiVersion, NULL);
+        size_t ofGroupsArrayCnt;
+        int grp_ids_cnt = rd_list_cnt(groups);
+        int i, include_authorized_operations;
+        char *group;
+
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Broker does not support ConsumerGroupDescribe");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        include_authorized_operations =
+            rd_kafka_confval_get_int(&options->include_authorized_operations);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ConsumerGroupDescribe, 1,
+            4 /* rd_kafka_buf_write_arraycnt_pos */ +
+                1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
+                32 * grp_ids_cnt /* Groups */,
+            rd_true /* flexver */);
+
+        ofGroupsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+        rd_kafka_buf_finalize_arraycnt(rkbuf, ofGroupsArrayCnt, grp_ids_cnt);
+        printf("grp_ids_cnt: %d\n", grp_ids_cnt);
+        printf("include_authorized_operations: %d\n", include_authorized_operations);
+        RD_LIST_FOREACH(group, groups, i) {
+                group = rd_list_elem(groups, i);
+                printf("group: %s\n", group);
+                rd_kafka_buf_write_str(rkbuf, group, -1);
+        }
+
+        rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        printf("rd_kafka_ConsumerGroupDescribeRequest: done\n");
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 /**
  * @brief Parses and handles an InitProducerId reply.
  *

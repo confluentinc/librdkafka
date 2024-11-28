@@ -1660,6 +1660,7 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                 [RD_KAFKAP_AlterClientQuotas]            = rd_true,
                 [RD_KAFKAP_DescribeUserScramCredentials] = rd_true,
                 [RD_KAFKAP_AlterUserScramCredentials]    = rd_true,
+                [RD_KAFKAP_ConsumerGroupDescribe]        = rd_true,
             }};
         int i;
         int cnt = 0;

@@ -167,6 +167,14 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields);
 
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions_nullable(
+    rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields,
+    rd_bool_t *parse_err);
+
 int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     const rd_kafka_topic_partition_list_t *parts,

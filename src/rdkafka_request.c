@@ -200,16 +200,15 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
         return actions;
 }
 
-
 /**
  * @brief Read a list of topic+partitions+extra from \p rkbuf.
  *
- * @param rkbuf buffer to read from
+ * @param rkbuf Buffer to read from
  * @param fields An array of fields to read from the buffer and set on
  *               the rktpar object, in the specified order, must end
  *               with RD_KAFKA_TOPIC_PARTITION_FIELD_END.
  *
- * @returns a newly allocated list on success, or NULL on parse error.
+ * @returns A newly allocated list on success, or NULL on parse error.
  */
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
@@ -217,14 +216,44 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_bool_t use_topic_name,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields) {
+        rd_bool_t parse_err;
+        /* Even if NULL it should be treated as a parse error,
+         * as this field isn't nullable. */
+        return rd_kafka_buf_read_topic_partitions_nullable(
+            rkbuf, use_topic_id, use_topic_name, estimated_part_cnt, fields,
+            &parse_err);
+}
+
+/**
+ * @brief Read a nullable list of topic+partitions+extra from \p rkbuf.
+ *
+ * @param rkbuf Buffer to read from
+ * @param fields An array of fields to read from the buffer and set on
+ *               the rktpar object, in the specified order, must end
+ *               with RD_KAFKA_TOPIC_PARTITION_FIELD_END.
+ * @param parse_err Is set to true if a parsing error occurred.
+ *
+ * @returns A newly allocated list, or NULL.
+ */
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions_nullable(
+    rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields,
+    rd_bool_t *parse_err) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         rd_kafka_topic_partition_list_t *parts = NULL;
 
-        /* We assume here that the topic partition list is not NULL.
-         * FIXME: check NULL topic array case, if required in future. */
+        rd_dassert(parse_err);
+        *parse_err = rd_false;
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
+        if (TopicArrayCnt < -1)
+                goto err_parse;
+        else if (TopicArrayCnt == -1)
+                return NULL;
 
         parts = rd_kafka_topic_partition_list_new(
             RD_MAX(TopicArrayCnt * 4, (int)estimated_part_cnt));
@@ -334,6 +363,7 @@ err_parse:
         if (parts)
                 rd_kafka_topic_partition_list_destroy(parts);
 
+        *parse_err = rd_true;
         return NULL;
 }
 

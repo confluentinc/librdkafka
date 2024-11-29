@@ -444,7 +444,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_LISTOFFSETS:
-        case RD_KAFKA_OP_ELECTLEADERS:    
+        case RD_KAFKA_OP_ELECTLEADERS:
+        case RD_KAFKA_OP_CONSUMERGROUPDESCRIBE:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 if (rko->rko_u.admin_request.options.match_consumer_group_states

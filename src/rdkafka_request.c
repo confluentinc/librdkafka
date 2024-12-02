@@ -6108,18 +6108,15 @@ rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
 
         ofGroupsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
         rd_kafka_buf_finalize_arraycnt(rkbuf, ofGroupsArrayCnt, grp_ids_cnt);
-        printf("grp_ids_cnt: %d\n", grp_ids_cnt);
-        printf("include_authorized_operations: %d\n", include_authorized_operations);
+
         RD_LIST_FOREACH(group, groups, i) {
                 group = rd_list_elem(groups, i);
-                printf("group: %s\n", group);
                 rd_kafka_buf_write_str(rkbuf, group, -1);
         }
 
         rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
-        printf("rd_kafka_ConsumerGroupDescribeRequest: done\n");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

@@ -7992,7 +7992,6 @@ rd_kafka_ConsumerGroupDescription_new_error(const char *group_id,
 static rd_kafka_ConsumerGroupDescription_t *
 rd_kafka_ConsumerGroupDescription_copy(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        printf("rd_kafka_ConsumerGroupDescription_copy\n");
         return rd_kafka_ConsumerGroupDescription_new(
             grpdesc->group_id, grpdesc->is_simple_consumer_group,
             &grpdesc->members, grpdesc->partition_assignor,
@@ -8388,7 +8387,6 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
         int32_t nodeid;
         uint16_t port;
         int operation_cnt = -1;
-        printf("rd_kafka_ConsumerGroupDescribeResponseParse\n");
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         rd_kafka_buf_read_throttle_time(reply);
@@ -8428,14 +8426,6 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
             group_state = RD_KAFKAP_STR_DUP(&GroupState);
             assignor_name = RD_KAFKAP_STR_DUP(&AssignorName);
             error_str = RD_KAFKAP_STR_DUP(&ErrorString);
-            printf("error_code: %d\n", error_code);
-            printf("error string: %s\n", error_str);
-            printf("group_id: %s\n", group_id);
-            printf("group_state: %s\n", group_state);
-            printf("group_epoch: %d\n", group_epoch);
-            printf("assignment_epoch: %d\n", assignment_epoch);
-            printf("assignor_name: %s\n", assignor_name);
-            printf("member_cnt: %d\n", member_cnt); 
 
             if(error_code) {
                 error = rd_kafka_error_new(error_code, "ConsumerGroupDescribe: %s", error_str);
@@ -8462,35 +8452,28 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
                 rd_kafka_buf_read_str(reply, &ClientId);
                 rd_kafka_buf_read_str(reply, &ClientHost);
                 rd_kafka_buf_read_arraycnt(reply, &subscribed_topic_names_array_cnt, 100000);
-                printf("subscribed_topic_names_array_cnt: %d\n", subscribed_topic_names_array_cnt);
+
                 subscribed_topic_names_array = rd_calloc(subscribed_topic_names_array_cnt, sizeof(char*));
                 for(idx=0; idx < subscribed_topic_names_array_cnt; idx++) {
                     rd_kafkap_str_t SubscribedTopicName;
                     rd_kafka_buf_read_str(reply, &SubscribedTopicName);
                     char *subscribed_topic_name = RD_KAFKAP_STR_DUP(&SubscribedTopicName);
                     subscribed_topic_names_array[idx] = subscribed_topic_name;
-                    printf("subscribed_topic_name: %s\n", subscribed_topic_name);
                 }
                 rd_kafka_buf_read_str(reply, &SubscribedTopicRegex);
                 const rd_kafka_topic_partition_field_t fields[] = {
                     RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
                     RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-                // rd_kafka_buf_read_i8(reply, &are_assignments_present);
-                // printf("are_assignments_present: %d\n", are_assignments_present);
-                // if(are_assignments_present == 1) {
-                    assignment = rd_kafka_buf_read_topic_partitions(
-                        reply, rd_true /* use topic_id */,
-                        rd_true /* use topic name*/, 0, fields);
-                        rd_kafka_buf_skip_tags(reply);
-                // }
-                // rd_kafka_buf_read_i8(reply, &are_target_assignments_present);
-                // printf("are_target_assignments_present: %d\n", are_target_assignments_present);
-                // if(are_target_assignments_present == 1) {
+ 
+                assignment = rd_kafka_buf_read_topic_partitions(
+                    reply, rd_true /* use topic_id */,
+                    rd_true /* use topic name*/, 0, fields);
+                    rd_kafka_buf_skip_tags(reply);
 
-                        target_assignment = rd_kafka_buf_read_topic_partitions(
-                                reply, rd_true /* use topic_id */,
-                                rd_true /* use topic name*/, 0, fields);
-                //}
+                target_assignment = rd_kafka_buf_read_topic_partitions(
+                    reply, rd_true /* use topic_id */,
+                    rd_true /* use topic name*/, 0, fields);
+
                 rd_kafka_buf_skip_tags(reply);    
 
                 member_id = RD_KAFKAP_STR_DUP(&MemberId);
@@ -8500,33 +8483,10 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
                 client_host = RD_KAFKAP_STR_DUP(&ClientHost);
                 subscribed_topic_regex = RD_KAFKAP_STR_DUP(&SubscribedTopicRegex);
 
-                printf("member_id: %s\n", member_id);
-                printf("instance_id: %s\n", instance_id);
-                printf("rack_id: %s\n", rack_id);
-                printf("member_epoch: %d\n", MemberEpoch);
-                printf("client_id: %s\n", client_id);
-                printf("client_host: %s\n", client_host);
-                printf("subscribed topic names: ");
-                for(int i=0;i<subscribed_topic_names_array_cnt;i++) {
-                    printf("%s ", subscribed_topic_names_array[i]);
-                }
-                printf("\n");
-                printf("subscribed_topic_regex: %s\n", subscribed_topic_regex);
-                if(assignment) {
-                    printf("assignment: topic: %s partition: %d\n", assignment->elems[0].topic, assignment->elems[0].partition);
-                }
-                else {
-                    printf("assignment is null\n");
-                }
-                if(target_assignment) {
-                    printf("target_assignment: topic: %s partition: %d\n", target_assignment->elems[0].topic, target_assignment->elems[0].partition);
-                }
-                else {
-                    printf("target_assignment is null\n");
-                }
                 member = rd_kafka_MemberDescription_new(
                     client_id, member_id, instance_id, client_host, assignment, target_assignment);
-
+                
+                rd_kafka_buf_skip_tags(reply);
                 rd_list_add(&members, member);
 
                 if(assignment)
@@ -8574,7 +8534,6 @@ static rd_kafka_resp_err_t rd_kafka_ConsumerGroupDescribeResponseParse(
         }
         rd_kafka_buf_skip_tags(reply);
         *rko_resultp = rko_result;
-        printf("rd_kafka_ConsumerGroupDescribeResponseParse end\n");
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:
         if(group_id)
@@ -8607,11 +8566,9 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
         rd_kafka_ConsumerGroupDescription_t *newgroupres;
         const char *grp = rko_partial->rko_u.admin_result.opaque;
         int orig_pos;
-        printf("rd_kafka_DescribeConsumerGroups_response_merge\n");
+
         rd_assert(rko_partial->rko_evtype ==
                   RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT || rko_partial->rko_evtype == RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT);
-        printf("rko_partial->rko_evtype: %d\n", rko_partial->rko_evtype);
-        printf("processing group: %s\n", grp);
 
         if (!rko_partial->rko_err) {
                 /* Proper results.
@@ -8621,7 +8578,6 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
                 rd_assert(groupres);
                 rd_assert(!strcmp(groupres->group_id, grp));
                 newgroupres = rd_kafka_ConsumerGroupDescription_copy(groupres);
-                printf("newgroupres->type: %d\n", newgroupres->type);
         } else {
                 /* Op errored, e.g. timeout */
                 rd_kafka_error_t *error =
@@ -8630,11 +8586,9 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
                     rd_kafka_ConsumerGroupDescription_new_error(grp, error, RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN);
                 rd_kafka_error_destroy(error);
         }
-        printf("newgroupres->type: %d\n", newgroupres->type);
 
-        if(newgroupres->type == RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER && 
+        if(newgroupres->type == RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER && newgroupres->error &&
                 (newgroupres->error->code == RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND || newgroupres->error->code == RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION)) {
-                printf("group not found\n");
                 rko_fanout->rko_u.admin_request.fanout.outstanding++;
                 static const struct rd_kafka_admin_worker_cbs cbs = {
                     rd_kafka_admin_DescribeConsumerGroupsRequest,
@@ -8665,7 +8619,6 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
                 rd_kafka_q_enq(rko_fanout->rko_rk->rk_ops, rko);
         }
         else {
-                printf("group found\n");
                 /* As a convenience to the application we insert group result
                 * in the same order as they were requested. */
                 orig_pos = rd_list_index(&rko_fanout->rko_u.admin_request.args, grp,
@@ -8678,9 +8631,7 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
 
                 rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, orig_pos,
                         newgroupres);
-                printf("processed group: %s\n", grp);
         }
-        printf("rd_kafka_DescribeConsumerGroups_response_merge end\n");
 }
 
 void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
@@ -8788,7 +8739,6 @@ rd_kafka_DescribeConsumerGroups_result_groups(
     const rd_kafka_DescribeConsumerGroups_result_t *result,
     size_t *cntp) {
         const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
-        printf("rd_kafka_DescribeConsumerGroups_result_groups\n");
         rd_kafka_op_type_t reqtype =
             rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
         rd_assert(reqtype == RD_KAFKA_OP_DESCRIBECONSUMERGROUPS || reqtype == RD_KAFKA_OP_CONSUMERGROUPDESCRIBE);

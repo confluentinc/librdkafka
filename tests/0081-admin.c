@@ -902,7 +902,7 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
  */
 static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                                             rd_kafka_queue_t *rkqu) {
-#define MY_CONFRES_CNT 3
+#define MY_CONFRES_CNT 4
         char *topics[MY_CONFRES_CNT];
         rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
         rd_kafka_AdminOptions_t *options;
@@ -935,6 +935,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         /** Test the test helper, for use in other tests. */
         do {
                 const char *broker_id = tsprintf("%d", avail_brokers[0]);
+                const char *group_id  = "my-group";
                 const char *confs_set_append[] = {
                     "compression.type", "SET",    "lz4",
                     "cleanup.policy",   "APPEND", "compact"};
@@ -947,6 +948,10 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 const char *confs_delete_subtract_broker[] = {
                     "background.threads", "DELETE",   "",
                     "log.cleanup.policy", "SUBTRACT", "compact"};
+                const char *confs_set_append_group[] = {
+                    "consumer.session.timeout.ms", "SET", "50000"};
+                const char *confs_delete_group[] = {
+                    "consumer.session.timeout.ms", "DELETE", ""};
 
                 TEST_SAY("Testing test helper with SET and APPEND\n");
                 test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
@@ -969,6 +974,17 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 test_IncrementalAlterConfigs_simple(
                     rk, RD_KAFKA_RESOURCE_BROKER, broker_id,
                     confs_delete_subtract_broker, 2);
+                TEST_SAY(
+                    "Testing test helper with SET with GROUP resource type\n");
+                test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_GROUP,
+                                                    group_id,
+                                                    confs_set_append_group, 1);
+                TEST_SAY(
+                    "Testing test helper with DELETE with GROUP resource "
+                    "type\n");
+                test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_GROUP,
+                                                    group_id,
+                                                    confs_delete_group, 1);
                 TEST_SAY("End testing test helper\n");
         } while (0);
 
@@ -1033,6 +1049,23 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
         else
                 exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN;
+        ci++;
+
+        /**
+         * ConfigResource #3: valid group config
+         */
+        configs[ci] =
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, "my-group");
+
+        error = rd_kafka_ConfigResource_add_incremental_config(
+            configs[ci], "consumer.session.timeout.ms",
+            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+        if (!test_consumer_group_protocol_classic()) {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        }
         ci++;
 
         /*
@@ -1149,7 +1182,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
  * @brief Test DescribeConfigs
  */
 static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
-#define MY_CONFRES_CNT 3
+#define MY_CONFRES_CNT 4
         char *topics[MY_CONFRES_CNT];
         rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
         rd_kafka_AdminOptions_t *options;
@@ -1159,6 +1192,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         const rd_kafka_DescribeConfigs_result_t *res;
         const rd_kafka_ConfigResource_t **rconfigs;
         size_t rconfig_cnt;
+        char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         char errstr[128];
         const char *errstr2;
         int ci = 0;
@@ -1208,6 +1242,18 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         else
                 exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+        ci++;
+
+        /*
+         * ConfigResource #3: group config, for a non-existent group.
+         */
+        configs[ci] =
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
+        if (!test_consumer_group_protocol_classic()) {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        }
         ci++;
 
 

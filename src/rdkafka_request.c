@@ -5468,7 +5468,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
 
                 /* resource_type */
                 rd_kafka_buf_write_i8(
-                    rkbuf, 
+                    rkbuf,
                     map_to_internal_config_resourcetype(config->restype));
 
                 /* resource_name */

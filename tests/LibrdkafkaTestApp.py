@@ -129,9 +129,11 @@ class LibrdkafkaTestApp(App):
         # SSL config
         if getattr(cluster, 'ssl', None) is not None:
             ssl = cluster.ssl
+            ssl_intermediate_ca = cluster.conf.get(
+                'ssl_intermediate_ca', False)
 
             key = ssl.create_cert('librdkafka%s' % self.appid,
-                                  through_intermediate=True)
+                                  through_intermediate=ssl_intermediate_ca)
 
             conf_blob.append('ssl.ca.location=%s' % ssl.ca['pem'])
             conf_blob.append('ssl.certificate.location=%s' % key['pub']['pem'])
@@ -147,6 +149,8 @@ class LibrdkafkaTestApp(App):
                 self.env['SSL_unused_ca_{}'.format(k)] = v
 
             self.env['SSL_all_cas_pem'] = ssl.all_cas['pem']
+            self.env['SSL_client_auth'] = cluster.conf.get(
+                'ssl_client_auth', 'required')
 
             # Set envs for all generated keys so tests can find them.
             for k, v in key.items():

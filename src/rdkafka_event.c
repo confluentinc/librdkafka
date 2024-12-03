@@ -384,7 +384,7 @@ rd_kafka_event_ListConsumerGroups_result(rd_kafka_event_t *rkev) {
 const rd_kafka_DescribeConsumerGroups_result_t *
 rd_kafka_event_DescribeConsumerGroups_result(rd_kafka_event_t *rkev) {
         if (!rkev ||
-            (rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT && rkev->rko_evtype != RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT))
+            (rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT))
                 return NULL;
         else
                 return (const rd_kafka_DescribeConsumerGroups_result_t *)rkev;

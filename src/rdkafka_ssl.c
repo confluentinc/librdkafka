@@ -706,9 +706,10 @@ static EVP_PKEY *rd_kafka_ssl_PKEY_from_string(rd_kafka_t *rk,
  *
  * @return 0 on success, -1 on error.
  */
-static int rd_kafka_ssl_read_cert_chain_from_BIO(rd_kafka_t *rk,
-                                                 BIO *in,
-                                                 STACK_OF(X509) * chainp) {
+int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
+                                          STACK_OF(X509) * chainp,
+                                          pem_password_cb *password_cb,
+                                          void *password_cb_opaque) {
         X509 *ca;
         int r, ret = 0;
         unsigned long err;
@@ -717,8 +718,8 @@ static int rd_kafka_ssl_read_cert_chain_from_BIO(rd_kafka_t *rk,
                 if (ca == NULL) {
                         rd_assert(!*"X509_new() allocation failed");
                 }
-                if (PEM_read_bio_X509(in, &ca, rd_kafka_transport_ssl_passwd_cb,
-                                      rk) != NULL) {
+                if (PEM_read_bio_X509(in, &ca, password_cb,
+                                      password_cb_opaque) != NULL) {
                         r = sk_X509_push(chainp, ca);
                         if (!r) {
                                 X509_free(ca);
@@ -767,9 +768,18 @@ static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
                 return NULL;
         }
 
-        if (rd_kafka_ssl_read_cert_chain_from_BIO(rk, bio, chainp) != 0) {
+        if (rd_kafka_ssl_read_cert_chain_from_BIO(
+                bio, chainp, rd_kafka_transport_ssl_passwd_cb, rk) != 0) {
+                /* Rest of the certificate is present,
+                 * but couldn't be read,
+                 * returning NULL as certificate cannot be verified
+                 * without its chain. */
+                rd_kafka_log(rk, LOG_WARNING, "SSL",
+                             "Failed to read certificate chain from PEM. "
+                             "Returning NULL certificate too.");
+                X509_free(x509);
                 BIO_free(bio);
-                return x509;
+                return NULL;
         }
 
         BIO_free(bio);

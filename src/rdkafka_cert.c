@@ -351,6 +351,20 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                             (void *)conf);
                         if (!cert->x509)
                                 goto fail;
+
+                        cert->chain = sk_X509_new_null();
+                        if (rd_kafka_ssl_read_cert_chain_from_BIO(
+                                bio, cert->chain, rd_kafka_conf_ssl_passwd_cb,
+                                (void *)conf) != 0) {
+                                sk_X509_pop_free(cert->chain, X509_free);
+                                cert->chain = NULL;
+                                goto fail;
+                        }
+
+                        if (sk_X509_num(cert->chain) == 0) {
+                                sk_X509_pop_free(cert->chain, X509_free);
+                                cert->chain = NULL;
+                        }
                         break;
 
                 default:

@@ -8344,6 +8344,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         int32_t nodeid;
         uint16_t port;
         int operation_cnt = -1;
+        int32_t i;
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         rd_kafka_buf_read_throttle_time(reply);
@@ -8362,10 +8363,10 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         rd_list_init(&rko_result->rko_u.admin_result.results, cnt,
                      rd_kafka_ConsumerGroupDescription_free);
 
-        for (int i = 0; i < cnt; i++) {
+        for (i = 0; i < cnt; i++) {
                 int16_t error_code;
                 int32_t authorized_operations = -1;
-                int32_t member_cnt;
+                int32_t member_cnt, j;
                 rd_kafkap_str_t GroupId, GroupState, AssignorName, ErrorString;
                 rd_list_t members;
                 rd_kafka_ConsumerGroupDescription_t *grpdesc = NULL;
@@ -8391,7 +8392,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
 
                 rd_list_init(&members, 0, rd_kafka_MemberDescription_free);
 
-                for (int j = 0; j < member_cnt; j++) {
+                for (j = 0; j < member_cnt; j++) {
                         rd_kafkap_str_t MemberId, InstanceId, RackId, ClientId,
                             ClientHost, SubscribedTopicNames,
                             SubscribedTopicRegex;
@@ -8403,7 +8404,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                         rd_kafka_topic_partition_list_t *assignment = NULL,
                                                         *target_assignment =
                                                             NULL;
-                        char **subscribed_topic_names_array   = NULL;
+                        char **subscribed_topic_names_array = NULL;
                         int32_t subscribed_topic_names_array_cnt;
 
                         rd_kafka_buf_read_str(reply, &MemberId);

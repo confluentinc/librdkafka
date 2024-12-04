@@ -522,13 +522,12 @@ struct rd_kafka_MemberAssignment_s {
  *
  */
 struct rd_kafka_MemberDescription_s {
-        char *client_id;                        /**< Client id */
-        char *consumer_id;                      /**< Consumer id */
-        char *group_instance_id;                /**< Group instance id */
-        char *host;                             /**< Group member host */
-        rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
-        rd_kafka_MemberAssignment_t 
-        target_assignment;                      /**< Target assignment */
+        char *client_id;                               /**< Client id */
+        char *consumer_id;                             /**< Consumer id */
+        char *group_instance_id;                       /**< Group instance id */
+        char *host;                                    /**< Group member host */
+        rd_kafka_MemberAssignment_t assignment;        /**< Member assignment */
+        rd_kafka_MemberAssignment_t target_assignment; /**< Target assignment */
 };
 
 /**

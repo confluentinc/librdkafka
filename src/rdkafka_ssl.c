@@ -1600,6 +1600,9 @@ static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
 
 
 
+int rd_kafka_ssl_ctx_config(rd_kafka_t *rk, SSL_CTX *ctx, char *errstr, size_t errstr_size);
+
+
 /**
  * @brief Once per rd_kafka_t handle initialization of OpenSSL
  *
@@ -1659,6 +1662,39 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 rd_snprintf(errstr, errstr_size, "SSL_CTX_new() failed: ");
                 goto fail;
         }
+
+        if (rd_kafka_ssl_ctx_config(rk, ctx, errstr, errstr_size) != 0) {
+                goto fail;
+        }
+
+        rk->rk_conf.ssl.ctx = ctx;
+
+        return 0;
+
+fail:
+        r = (int)strlen(errstr);
+        /* If only the error preamble is provided in errstr and ending with
+         * "....: ", then retrieve the last error from the OpenSSL error stack,
+         * else treat the errstr as complete. */
+        if (r > 2 && !strcmp(&errstr[r - 2], ": "))
+                rd_kafka_ssl_error(rk, NULL, errstr + r,
+                                   (int)errstr_size > r ? (int)errstr_size - r
+                                                        : 0);
+        RD_IF_FREE(ctx, SSL_CTX_free);
+#if WITH_SSL_ENGINE
+        RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
+#endif
+        rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
+
+        return -1;
+}
+
+
+/**
+ * @brief Initialize an SSL context. Used by both main thread and curl
+ */
+int rd_kafka_ssl_ctx_config(rd_kafka_t *rk, SSL_CTX *ctx, char *errstr, size_t errstr_size) {
+        int r;
 
 #ifdef SSL_OP_NO_SSLv3
         /* Disable SSLv3 (unsafe) */
@@ -1734,8 +1770,6 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 
-        rk->rk_conf.ssl.ctx = ctx;
-
         return 0;
 
 fail:
@@ -1747,11 +1781,6 @@ fail:
                 rd_kafka_ssl_error(rk, NULL, errstr + r,
                                    (int)errstr_size > r ? (int)errstr_size - r
                                                         : 0);
-        RD_IF_FREE(ctx, SSL_CTX_free);
-#if WITH_SSL_ENGINE
-        RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
-#endif
-        rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
 
         return -1;
 }

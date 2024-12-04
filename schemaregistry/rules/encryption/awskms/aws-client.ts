@@ -10,12 +10,14 @@ import {AwsCredentialIdentity, AwsCredentialIdentityProvider} from "@smithy/type
 export class AwsKmsClient implements KmsClient {
 
   private kmsClient: KMSClient
+  private keyUri: string
   private keyId: string
 
   constructor(keyUri: string, creds?: AwsCredentialIdentity | AwsCredentialIdentityProvider) {
     if (!keyUri.startsWith(AwsKmsDriver.PREFIX)) {
       throw new Error(`key uri must start with ${AwsKmsDriver.PREFIX}`)
     }
+    this.keyUri = keyUri
     this.keyId = keyUri.substring(AwsKmsDriver.PREFIX.length)
     const tokens = this.keyId.split(':')
     if (tokens.length < 4) {
@@ -29,7 +31,7 @@ export class AwsKmsClient implements KmsClient {
   }
 
   supported(keyUri: string): boolean {
-    return keyUri.startsWith(AwsKmsDriver.PREFIX)
+    return this.keyUri === keyUri
   }
 
   async encrypt(plaintext: Buffer): Promise<Buffer> {

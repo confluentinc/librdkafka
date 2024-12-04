@@ -7,18 +7,20 @@ export class AzureKmsClient implements KmsClient {
   private static ALGORITHM: EncryptionAlgorithm = 'RSA-OAEP-256'
 
   private kmsClient: CryptographyClient
+  private keyUri: string
   private keyId: string
 
   constructor(keyUri: string, creds: TokenCredential) {
     if (!keyUri.startsWith(AzureKmsDriver.PREFIX)) {
       throw new Error(`key uri must start with ${AzureKmsDriver.PREFIX}`)
     }
+    this.keyUri = keyUri
     this.keyId = keyUri.substring(AzureKmsDriver.PREFIX.length)
     this.kmsClient = new CryptographyClient(this.keyId, creds)
   }
 
   supported(keyUri: string): boolean {
-    return keyUri.startsWith(AzureKmsDriver.PREFIX)
+    return this.keyUri === keyUri
   }
 
   async encrypt(plaintext: Buffer): Promise<Buffer> {

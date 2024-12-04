@@ -5,6 +5,7 @@ import NodeVault from "node-vault";
 export class HcVaultClient implements KmsClient {
 
   private kmsClient: NodeVault.client
+  private keyUri: string
   private keyId: string
   private keyName: string
 
@@ -12,6 +13,7 @@ export class HcVaultClient implements KmsClient {
     if (!keyUri.startsWith(HcVaultDriver.PREFIX)) {
       throw new Error(`key uri must start with ${HcVaultDriver.PREFIX}`)
     }
+    this.keyUri = keyUri
     this.keyId = keyUri.substring(HcVaultDriver.PREFIX.length)
     let url = new URL(this.keyId)
     let parts = url.pathname.split('/')
@@ -28,7 +30,7 @@ export class HcVaultClient implements KmsClient {
   }
 
   supported(keyUri: string): boolean {
-    return keyUri.startsWith(HcVaultDriver.PREFIX)
+    return this.keyUri === keyUri
   }
 
   async encrypt(plaintext: Buffer): Promise<Buffer> {

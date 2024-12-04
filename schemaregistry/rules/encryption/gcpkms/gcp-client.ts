@@ -5,12 +5,14 @@ import {KeyManagementServiceClient} from "@google-cloud/kms";
 export class GcpKmsClient implements KmsClient {
 
   private kmsClient: KeyManagementServiceClient
+  private keyUri: string
   private keyId: string
 
   constructor(keyUri: string, creds?: GcpCredentials) {
     if (!keyUri.startsWith(GcpKmsDriver.PREFIX)) {
       throw new Error(`key uri must start with ${GcpKmsDriver.PREFIX}`)
     }
+    this.keyUri = keyUri
     this.keyId = keyUri.substring(GcpKmsDriver.PREFIX.length)
     this.kmsClient = creds != null
       ? new KeyManagementServiceClient({credentials: creds})
@@ -18,7 +20,7 @@ export class GcpKmsClient implements KmsClient {
   }
 
   supported(keyUri: string): boolean {
-    return keyUri.startsWith(GcpKmsDriver.PREFIX)
+    return this.keyUri === keyUri
   }
 
   async encrypt(plaintext: Buffer): Promise<Buffer> {

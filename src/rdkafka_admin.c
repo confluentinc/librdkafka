@@ -8450,8 +8450,6 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                         rd_kafka_topic_partition_list_t *assignment = NULL,
                                                         *target_assignment =
                                                             NULL;
-                        int8_t are_assignments_present        = 0,
-                               are_target_assignments_present = 0;
                         char **subscribed_topic_names_array   = NULL;
                         int32_t subscribed_topic_names_array_cnt;
 

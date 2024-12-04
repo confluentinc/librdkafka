@@ -156,7 +156,7 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
                 "DescribeUserScramCredentialsRequest",
             [RD_KAFKAP_AlterUserScramCredentials] =
                 "AlterUserScramCredentialsRequest",
-            [RD_KAFKAP_ConsumerGroupDescribe] = "ConsumerGroupDescribeRequest",
+            [RD_KAFKAP_ConsumerGroupDescribe]     = "ConsumerGroupDescribeRequest",
             [RD_KAFKAP_Vote]                      = "VoteRequest",
             [RD_KAFKAP_BeginQuorumEpoch]          = "BeginQuorumEpochRequest",
             [RD_KAFKAP_EndQuorumEpoch]            = "EndQuorumEpochRequest",

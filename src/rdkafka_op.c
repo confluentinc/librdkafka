@@ -122,9 +122,8 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:RD_KAFKA_OP_SET_TELEMETRY_BROKER",
             [RD_KAFKA_OP_TERMINATE_TELEMETRY] =
                 "REPLY:RD_KAFKA_OP_TERMINATE_TELEMETRY",
-            [RD_KAFKA_OP_ELECTLEADERS] = "REPLY:ELECTLEADERS",
-            [RD_KAFKA_OP_CONSUMERGROUPDESCRIBE] =
-                "REPLY:CONSUMERGROUPDESCRIBE",
+            [RD_KAFKA_OP_ELECTLEADERS]          = "REPLY:ELECTLEADERS",
+            [RD_KAFKA_OP_CONSUMERGROUPDESCRIBE] = "REPLY:CONSUMERGROUPDESCRIBE",
         };
 
         if (type & RD_KAFKA_OP_REPLY)

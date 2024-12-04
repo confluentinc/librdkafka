@@ -8903,11 +8903,11 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
 
 /**
  * @brief Gets type for the \p grpdesc group.
- * 
+ *
  * @param grpdesc The group description.
- * 
+ *
  * @return A group type.
- * 
+ *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p grpdesc object.
  */
@@ -9029,11 +9029,11 @@ const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
 
 /**
  * @brief Gets target assignment of \p member.
- * 
+ *
  * @param member The group member.
- * 
+ *
  * @return The target assignment.
- * 
+ *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p member object.
  */
@@ -9043,16 +9043,17 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(
 
 /**
  * @brief Gets target assigned partitions of a member \p assignment.
- * 
+ *
  * @param assignment The group member assignment.
- * 
+ *
  * @return The target assigned partitions.
- * 
+ *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p assignment object.
  */
 RD_EXPORT
-const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_target_partitions(
+const rd_kafka_topic_partition_list_t *
+rd_kafka_MemberAssignment_target_partitions(
     const rd_kafka_MemberAssignment_t *assignment);
 
 /**@}*/

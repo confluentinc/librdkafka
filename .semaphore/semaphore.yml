@@ -141,7 +141,7 @@ blocks:
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.4.0 --cmd 'make quick')
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.4.0 --cmd "PATH=\"$PATH\" make quick")
 
 
   - name: 'Linux x64: release artifact docker builds'

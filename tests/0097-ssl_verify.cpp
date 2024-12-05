@@ -129,6 +129,9 @@ class TestEventCb : public RdKafka::EventCb {
 
   void event_cb(RdKafka::Event &event) {
     switch (event.type()) {
+    case RdKafka::Event::EVENT_LOG:
+      Test::Say("Log: " + event.str() + "\n");
+      break;
     case RdKafka::Event::EVENT_ERROR:
       if (should_succeed)
         Test::Fail("Unexpected error event, got: " + event.str());

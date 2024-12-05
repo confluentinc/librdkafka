@@ -91,6 +91,7 @@ blocks:
       jobs:
         - name: 'Generate documentation'
           commands:
+            - sudo apt update
             - sudo apt install -y doxygen graphviz
             - make docs
             - (cd staging-docs && tar cvzf ../artifacts/librdkafka-docs.tgz .)

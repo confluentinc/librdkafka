@@ -1070,6 +1070,7 @@ static int rd_kafka_ssl_cert_issuer_match(STACK_OF(X509_NAME) * ca_dns,
  * `ssl.client.auth=requested`.
  */
 static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
+        rd_kafka_t *rk = arg;
         STACK_OF(X509_NAME) * ca_list;
         STACK_OF(X509) *certs = NULL;
         X509 *cert;
@@ -1113,6 +1114,10 @@ static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
         /* No match is found, which means they would almost certainly be
          * rejected by the peer.
          * We decide to send no certificates. */
+        rd_kafka_log(rk, LOG_WARNING, "SSL",
+                     "No matching issuer found in "
+                     "server trusted certificate authorities, "
+                     "not sending any client certificates");
         SSL_certs_clear(ssl);
         return 1;
 }

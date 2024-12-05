@@ -9,3 +9,6 @@ extfile
 !client.keystore.p12
 !client2.certificate.pem
 !client2.key
+!client.keystore.intermediate.p12
+!client2.certificate.intermediate.pem
+!client2.intermediate.key

@@ -4,6 +4,8 @@ librdkafka v2.6.2 is a maintenance release:
 
 * Client certificate chain is now sent when using `ssl.certificate.pem`
   or `ssl_certificate` or `ssl.keystore.location` (#4894).
+* Avoid sending client certificates whose chain doesn't match with broker
+  trusted root certificates (#4900).
 
 
 ## Fixes

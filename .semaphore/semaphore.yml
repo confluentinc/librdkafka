@@ -77,6 +77,7 @@ blocks:
       jobs:
         - name: 'Style check'
           commands:
+            - sudo apt update
             - sudo apt install -y clang-format-10 python3 python3-pip python3-setuptools
             - python3 -m pip install -r packaging/tools/requirements.txt
             - CLANG_FORMAT=clang-format-10 make style-check

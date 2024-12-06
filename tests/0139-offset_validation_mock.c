@@ -440,7 +440,7 @@ is_offset_for_leader_epoch_request(rd_kafka_mock_request_t *request,
 
 static rd_bool_t is_metadata_request(rd_kafka_mock_request_t *request,
                                      void *opaque) {
-        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Fetch;
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Metadata;
 }
 
 /**

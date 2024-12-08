@@ -838,13 +838,13 @@ struct {								\
     (CIRCLEQ_FIRST(head) == CIRCLEQ_ENDC(head))
 
 #define CIRCLEQ_LOOP_NEXT(head, elm, field)				\
-	(((elm)->field.cqe_next == CIRCLEQ_ENDC(head))			\
-	    ? ((head)->cqh_first)					\
-	    : (elm->field.cqe_next))
+	((CIRCLEQ_NEXT(elm, field) == CIRCLEQ_ENDC(head))		\
+	    ? CIRCLEQ_FIRST(head)					\
+	    : CIRCLEQ_NEXT(elm, field))
 #define CIRCLEQ_LOOP_PREV(head, elm, field)				\
-	(((elm)->field.cqe_prev == CIRCLEQ_ENDC(head))			\
-	    ? ((head)->cqh_last)					\
-	    : (elm->field.cqe_prev))
+	((CIRCLEQ_PREV(elm, field) == CIRCLEQ_ENDC(head))		\
+	    ? CIRCLEQ_LAST(head)					\
+	    : CIRCLEQ_PREV(elm, field))
 #endif /* !_KERNEL */
 
 #endif	/* !_SYS_QUEUE_H_ */

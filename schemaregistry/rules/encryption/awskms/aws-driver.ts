@@ -1,13 +1,14 @@
 import {KmsClient, KmsDriver, registerKmsDriver} from "../kms-registry";
 import {AwsKmsClient} from "./aws-client";
 import {AwsCredentialIdentity, AwsCredentialIdentityProvider} from "@smithy/types";
-import {fromTemporaryCredentials} from '@aws-sdk/credential-providers'
+import {fromIni, fromTemporaryCredentials} from '@aws-sdk/credential-providers'
 
 export class AwsKmsDriver implements KmsDriver {
 
   static PREFIX = 'aws-kms://'
   static ACCESS_KEY_ID = 'access.key.id'
   static SECRET_ACCESS_KEY = 'secret.access.key'
+  static PROFILE = 'profile'
   static ROLE_ARN = 'role.arn'
   static ROLE_SESSION_NAME = 'role.session.name'
   static ROLE_EXTERNAL_ID = 'role.external.id'
@@ -27,6 +28,7 @@ export class AwsKmsDriver implements KmsDriver {
     const uriPrefix = keyUrl != null ? keyUrl : AwsKmsDriver.PREFIX
     const key = config.get(AwsKmsDriver.ACCESS_KEY_ID)
     const secret = config.get(AwsKmsDriver.SECRET_ACCESS_KEY)
+    const profile = config.get(AwsKmsDriver.PROFILE)
     let roleArn = config.get(AwsKmsDriver.ROLE_ARN)
     if (roleArn == null) {
       roleArn = process.env['AWS_ROLE_ARN']
@@ -42,6 +44,8 @@ export class AwsKmsDriver implements KmsDriver {
     let creds: AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
     if (key != null && secret != null) {
       creds = {accessKeyId: key, secretAccessKey: secret}
+    } else if (profile != null) {
+      creds = fromIni({profile})
     }
     if (roleArn != null) {
       let keyId = uriPrefix.substring(AwsKmsDriver.PREFIX.length)

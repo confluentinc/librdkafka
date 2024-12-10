@@ -83,7 +83,8 @@ typedef struct rd_kafka_Produce_result {
         rd_kafka_Produce_result_record_error_t
             *record_errors; /**< Errors for records that caused the batch to be
                                dropped */
-        int32_t record_errors_cnt; /**< record_errors count */
+        int32_t record_errors_cnt;     /**< record_errors count */
+        rd_kafka_resp_err_t errorcode; /**< error code from the response */
 } rd_kafka_Produce_result_t;
 
 typedef struct rd_kafka_msg_s {

@@ -768,6 +768,15 @@ void rd_kafka_broker_conn_closed(rd_kafka_broker_t *rkb,
         rd_kafka_broker_fail(rkb, log_level, err, "%s", errstr);
 }
 
+rd_bool_t buf_contains_toppar(rd_kafka_buf_t *rkbuf, rd_kafka_toppar_t *rktp) {
+        if (!RD_MAP_IS_EMPTY(&rkbuf->rkbuf_u.Produce.batch_map)) {
+                if (RD_MAP_GET(&rkbuf->rkbuf_u.Produce.batch_map,
+                               rd_kafka_topic_partition_new_from_rktp(rktp)))
+                        return rd_true;
+                return rd_false;
+        } else
+                return rkbuf->rkbuf_u.Produce.batch.rktp == rktp;
+}
 
 /**
  * @brief Purge requests in \p rkbq matching request \p ApiKey
@@ -792,7 +801,7 @@ static int rd_kafka_broker_bufq_purge_by_toppar(rd_kafka_broker_t *rkb,
         TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
 
                 if (rkbuf->rkbuf_reqhdr.ApiKey != ApiKey ||
-                    rkbuf->rkbuf_u.Produce.batch.rktp != rktp ||
+                    !buf_contains_toppar(rkbuf, rktp) ||
                     /* Skip partially sent buffers and let them transmit.
                      * The alternative would be to kill the connection here,
                      * which is more drastic and costly. */
@@ -3912,14 +3921,17 @@ rd_kafka_broker_outbufs_space(rd_kafka_broker_t *rkb) {
  * @locks none
  * @locality broker thread
  */
-static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
-                                          rd_kafka_toppar_t *rktp,
-                                          const rd_kafka_pid_t pid,
-                                          rd_ts_t now,
-                                          rd_ts_t *next_wakeup,
-                                          rd_bool_t do_timeout_scan,
-                                          rd_bool_t may_send,
-                                          rd_bool_t flushing) {
+static int
+rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
+                               rd_kafka_toppar_t *rktp,
+                               const rd_kafka_pid_t pid,
+                               rd_ts_t now,
+                               rd_ts_t *next_wakeup,
+                               rd_bool_t do_timeout_scan,
+                               rd_bool_t may_send,
+                               rd_bool_t flushing,
+                               rd_bool_t multi_batch_request,
+                               map_topic_partition_buf_t *map_topic_batch) {
         int cnt = 0;
         int r;
         rd_kafka_msg_t *rkm;
@@ -4168,10 +4180,15 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         /* Send Produce requests for this toppar, honouring the
          * queue backpressure threshold. */
         for (reqcnt = 0; reqcnt < max_requests; reqcnt++) {
-                r = rd_kafka_ProduceRequest(rkb, rktp, pid, epoch_base_msgid);
-                if (likely(r > 0))
+                r = rd_kafka_ProduceRequest(rkb, rktp, pid, epoch_base_msgid,
+                                            multi_batch_request,
+                                            map_topic_batch);
+                if (likely(r > 0)) {
                         cnt += r;
-                else
+                        if (multi_batch_request)
+                                /* One batch fot a toppar in a single request */
+                                break;
+                } else
                         break;
         }
 
@@ -4193,7 +4210,6 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
 }
 
 
-
 /**
  * @brief Produce from all toppars assigned to this broker.
  *
@@ -4212,6 +4228,8 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
         rd_kafka_pid_t pid      = RD_KAFKA_PID_INITIALIZER;
         rd_bool_t may_send      = rd_true;
         rd_bool_t flushing      = rd_false;
+        rd_bool_t multi_batch_request =
+            rd_kafka_is_idempotent(rkb->rkb_rk) ? rd_false : rd_true;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;
@@ -4239,19 +4257,32 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
 
         flushing = may_send && rd_atomic32_get(&rkb->rkb_rk->rk_flushing) > 0;
 
+        // TODO: Fix value destructor
+        map_topic_partition_buf_t map_topic_batch_bufq = RD_MAP_INITIALIZER(
+            rkb->rkb_toppar_cnt, rd_kafka_topic_partition_cmp,
+            rd_kafka_topic_partition_hash,
+            rd_kafka_topic_partition_destroy_free, NULL);
         do {
                 rd_ts_t this_next_wakeup = ret_next_wakeup;
 
                 /* Try producing toppar */
                 cnt += rd_kafka_toppar_producer_serve(
                     rkb, rktp, pid, now, &this_next_wakeup, do_timeout_scan,
-                    may_send, flushing);
+                    may_send, flushing, multi_batch_request,
+                    &map_topic_batch_bufq);
 
                 rd_kafka_set_next_wakeup(&ret_next_wakeup, this_next_wakeup);
 
         } while ((rktp = CIRCLEQ_LOOP_NEXT(&rkb->rkb_active_toppars, rktp,
                                            rktp_activelink)) !=
                  rkb->rkb_active_toppar_next);
+
+        if (multi_batch_request && !RD_MAP_IS_EMPTY(&map_topic_batch_bufq)) {
+                rd_kafka_MultiBatchProduceRequest(rkb, pid,
+                                                  &map_topic_batch_bufq);
+        }
+
+        RD_MAP_DESTROY(&map_topic_batch_bufq);
 
         /* Update next starting toppar to produce in round-robin list. */
         rd_kafka_broker_active_toppar_next(

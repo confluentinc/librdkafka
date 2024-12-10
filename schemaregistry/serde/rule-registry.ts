@@ -1,11 +1,22 @@
 import {RuleAction, RuleExecutor} from "./serde";
 
 /**
+ * RuleOverride represents a rule override
+ */
+export interface RuleOverride {
+  type: string
+  onSuccess?: string
+  onFailure?: string
+  disabled?: boolean
+}
+
+/**
  * RuleRegistry is used to register and fetch rule executors and actions.
  */
 export class RuleRegistry {
   private ruleExecutors: Map<string, RuleExecutor> = new Map<string, RuleExecutor>()
   private ruleActions: Map<string, RuleAction> = new Map<string, RuleAction>()
+  private ruleOverrides: Map<string, RuleOverride> = new Map<string, RuleOverride>()
 
   private static globalInstance: RuleRegistry = new RuleRegistry()
 
@@ -56,11 +67,35 @@ export class RuleRegistry {
   }
 
   /**
+   * registerOverride is used to register a new rule override.
+   * @param ruleOverride - the rule override to register
+   */
+  public registerOverride(ruleOverride: RuleOverride): void {
+    this.ruleOverrides.set(ruleOverride.type, ruleOverride)
+  }
+
+  /**
+   * getOverride fetches a rule override by a given name.
+   * @param name - the name of the rule override to fetch
+   */
+  public getOverride(name: string): RuleOverride | undefined {
+    return this.ruleOverrides.get(name)
+  }
+
+  /**
+   * getOverrides fetches all rule overrides
+   */
+  public getOverrides(): RuleOverride[] {
+    return Array.from(this.ruleOverrides.values())
+  }
+
+  /**
    * clear clears all registered rules
    */
   public clear(): void {
     this.ruleExecutors.clear()
     this.ruleActions.clear()
+    this.ruleOverrides.clear()
   }
 
   /**
@@ -84,5 +119,13 @@ export class RuleRegistry {
    */
   public static registerRuleAction(ruleAction: RuleAction): void {
     RuleRegistry.globalInstance.registerAction(ruleAction)
+  }
+
+  /**
+   * registerRuleOverride is used to register a new rule override globally.
+   * @param ruleOverride - the rule override to register
+   */
+  public static registerRuleOverride(ruleOverride: RuleOverride): void {
+    RuleRegistry.globalInstance.registerOverride(ruleOverride)
   }
 }

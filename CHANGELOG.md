@@ -1,6 +1,20 @@
+# confluent-kafka-javascript v0.6.1
+
+v0.6.1 is a limited availability maintenance release. It is supported for all usage.
+
+## Fixes
+
+### Schema Registry
+
+1. Sync aws-sdk packages to the same versioning.
+
+2. Minor enhancement to allow AWS profile to be specified.
+
+3. Add ability to override disable flag and actions on a rule.
+
 # confluent-kafka-javascript v0.6.0
 
-v0.5.2 is a limited availability maintenance release. It is supported for all usage.
+v0.6.0 is a limited availability maintenance release. It is supported for all usage.
 
 ## Fixes
 

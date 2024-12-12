@@ -44,7 +44,7 @@
               }
             ],
             'cflags_cc' : [
-              '-std=c++17'
+              '-std=c++20'
             ],
             'msvs_settings': {
               'VCLinkerTool': {
@@ -135,7 +135,7 @@
                 'OS=="linux"',
                 {
                   'cflags_cc' : [
-                    '-std=c++17'
+                    '-std=c++20'
                   ],
                   'cflags_cc!': [
                     '-fno-rtti'
@@ -153,7 +153,7 @@
                     ],
                     'OTHER_CPLUSPLUSFLAGS': [
                       '-I/usr/local/opt/openssl/include',
-                      '-std=c++17'
+                      '-std=c++20'
                     ],
                   },
                 }

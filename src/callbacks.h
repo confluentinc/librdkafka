@@ -19,10 +19,6 @@
 #include "rdkafkacpp.h" // NOLINT
 #include "src/common.h"
 
-typedef Nan::Persistent<v8::Function,
-  Nan::CopyablePersistentTraits<v8::Function> > PersistentCopyableFunction;
-typedef std::vector<PersistentCopyableFunction> CopyableFunctionList;
-
 namespace NodeKafka {
 
 class KafkaConsumer;
@@ -43,7 +39,7 @@ class Dispatcher {
   void Deactivate();
 
  protected:
-  std::vector<v8::Persistent<v8::Function, v8::CopyablePersistentTraits<v8::Function> > > callbacks;  // NOLINT
+  std::vector<Nan::Callback*> callbacks;  // NOLINT
 
   uv_mutex_t async_lock;
 

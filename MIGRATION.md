@@ -337,6 +337,8 @@ The admin-client only has support for a limited subset of methods, with more to 
   and `operationTimeout` option.
   * The `fetchTopicMetadata` method is supported with additional `timeout`
   and `includeAuthorizedOperations` option. Fetching for all topics is not advisable.
+  * The `fetchTopicOffsets` method is supported with additional `timeout` 
+  and `isolationLevel` option.
 
 ### Using the Schema Registry
 

@@ -1,3 +1,12 @@
+# confluent-kafka-javascript v1.0.0
+
+v1.0.0 is a feature release. It is supported for all usage.
+
+## Enhancements
+
+1. Add support for an Admin API to fetch topic offsets(#156).
+
+
 # confluent-kafka-javascript v0.6.1
 
 v0.6.1 is a limited availability maintenance release. It is supported for all usage.

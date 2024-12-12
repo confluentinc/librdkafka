@@ -71,6 +71,9 @@ class AdminClient : public Connection {
   Baton DescribeTopics(rd_kafka_TopicCollection_t* topics,
                        bool include_authorized_operations, int timeout_ms,
                        rd_kafka_event_t** event_response);
+  Baton ListOffsets(rd_kafka_topic_partition_list_t* partitions, int timeout_ms,
+                    rd_kafka_IsolationLevel_t isolation_level,
+                    rd_kafka_event_t** event_response);
 
  protected:
   static Nan::Persistent<v8::Function> constructor;
@@ -96,6 +99,7 @@ class AdminClient : public Connection {
   static NAN_METHOD(NodeListConsumerGroupOffsets);
   static NAN_METHOD(NodeDeleteRecords);
   static NAN_METHOD(NodeDescribeTopics);
+  static NAN_METHOD(NodeListOffsets);
 
   static NAN_METHOD(NodeConnect);
   static NAN_METHOD(NodeDisconnect);

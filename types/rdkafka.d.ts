@@ -63,7 +63,7 @@ export interface Metadata {
     brokers: BrokerMetadata[];
 }
 
-export interface WatermarkOffsets{
+export interface WatermarkOffsets {
     lowOffset: number;
     highOffset: number;
 }
@@ -455,6 +455,33 @@ export type TopicDescription = {
     authorizedOperations?: AclOperationTypes[]
 }
 
+export class OffsetSpec {
+    constructor(timestamp: number);
+    static EARLIEST: OffsetSpec;
+    static LATEST: OffsetSpec;
+    static MAX_TIMESTAMP: OffsetSpec;
+}
+
+export type TopicPartitionOffsetSpec = {
+    topic: string
+    partition: number
+    offset: OffsetSpec
+}
+
+export enum IsolationLevel {
+    READ_UNCOMMITTED = 0,
+    READ_COMMITTED = 1,
+}
+
+export interface ListOffsetsResult {
+    topic: string;
+    partition: number;
+    offset: number;
+    error?: LibrdKafkaError;
+    leaderEpoch?: number;
+    timestamp: number;
+}
+
 export interface IAdminClient {
     createTopic(topic: NewTopic, cb?: (err: LibrdKafkaError) => void): void;
     createTopic(topic: NewTopic, timeout?: number, cb?: (err: LibrdKafkaError) => void): void;
@@ -482,17 +509,21 @@ export interface IAdminClient {
         options?: { timeout?: number },
         cb?: (err: LibrdKafkaError, result: DeleteGroupsResult[]) => any): void;
 
-    listConsumerGroupOffsets(listGroupOffsets : ListGroupOffsets[],
+    listConsumerGroupOffsets(listGroupOffsets: ListGroupOffsets[],
         options?: { timeout?: number, requireStableOffsets?: boolean },
         cb?: (err: LibrdKafkaError, result: GroupResults[]) => any): void;
 
     deleteRecords(delRecords: TopicPartitionOffset[],
         options?: { timeout?: number, operationTimeout?: number },
         cb?: (err: LibrdKafkaError, result: DeleteRecordsResult[]) => any): void;
-    
+
     describeTopics(topics: string[],
         options?: { includeAuthorizedOperations?: boolean, timeout?: number },
         cb?: (err: LibrdKafkaError, result: TopicDescription[]) => any): void;
+
+    listOffsets(partitions: TopicPartitionOffsetSpec[],
+        options?: { timeout?: number, isolationLevel?: IsolationLevel },
+        cb?: (err: LibrdKafkaError, result: ListOffsetsResult[]) => any): void;
 
     disconnect(): void;
 }

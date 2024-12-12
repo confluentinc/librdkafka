@@ -729,6 +729,12 @@ NAN_METHOD(Producer::NodeConnect) {
   Nan::Callback *callback = new Nan::Callback(cb);
 
   Producer* producer = ObjectWrap::Unwrap<Producer>(info.This());
+
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  producer->ActivateDispatchers();
+
   Nan::AsyncQueueWorker(new Workers::ProducerConnect(callback, producer));
 
   info.GetReturnValue().Set(Nan::Null());

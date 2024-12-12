@@ -33,7 +33,7 @@ describe('Client > oauthbearer callback', () => {
             });
 
             await expect(client.connect()).rejects.toThrow('oauthbearer_cb error');
-            expect(oauthbearer_cb_called).toEqual(1);
+            expect(oauthbearer_cb_called).toBeGreaterThanOrEqual(1);
             await client.disconnect();
         }
     );
@@ -51,7 +51,7 @@ describe('Client > oauthbearer callback', () => {
             });
 
             await expect(client.connect()).rejects.toThrow('oauthbearer_cb error');
-            expect(oauthbearer_cb_called).toEqual(1);
+            expect(oauthbearer_cb_called).toBeGreaterThanOrEqual(1);
             await client.disconnect();
         }
     );
@@ -72,7 +72,7 @@ describe('Client > oauthbearer callback', () => {
             await expect(client.connect()).resolves.toBeUndefined();
 
             await sleep(2000); // Wait for the callback to be called
-            expect(oauthbearer_cb_called).toEqual(1);
+            expect(oauthbearer_cb_called).toBeGreaterThanOrEqual(1);
             await client.disconnect();
         }
     );

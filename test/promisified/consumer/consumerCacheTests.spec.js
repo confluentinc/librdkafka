@@ -253,6 +253,7 @@ describe.each(cases)('Consumer message cache - isAutoCommit = %s - partitionsCon
         let impatientConsumerMessages = [];
         let consumer1Messages = [];
         let consumer1TryingToJoin = false;
+        let consumer1Joined = false;
 
         impatientConsumer.run({
             partitionsConsumedConcurrently,
@@ -268,9 +269,14 @@ describe.each(cases)('Consumer message cache - isAutoCommit = %s - partitionsCon
                  * This is so the cache remains full.
                  * We should still have a rebalance very soon, since we will expire the cache and
                  * trigger a rebalance before max.poll.interval.ms.
+                 *
+                 * If the consumer is not joining, still keep the consumption pretty slow so we don't
+                 * accidentally consume all the messages before starting the joining initialization.
                  */
                 if (consumer1TryingToJoin) {
                     await sleep(1000);
+                } else if (!consumer1Joined) {
+                    await sleep(1);
                 }
             }
         });
@@ -304,6 +310,7 @@ describe.each(cases)('Consumer message cache - isAutoCommit = %s - partitionsCon
         });
         await waitFor(() => consumer.assignment().length > 0, () => null);
         consumer1TryingToJoin = false;
+        consumer1Joined = true;
 
         /* Now that both consumers have joined, wait for all msgs to be consumed */
         await waitForMessages(messagesConsumed, { number: 1024 * 10 });

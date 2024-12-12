@@ -2,6 +2,7 @@ jest.setTimeout(30000);
 
 const {
     createConsumer,
+    createProducer,
     secureRandom,
     createTopic,
     waitFor,
@@ -11,18 +12,21 @@ const {
 const { ConsumerGroupStates, ErrorCodes, AclOperationTypes } = require('../../../lib').KafkaJS;
 
 describe('Admin > describeGroups', () => {
-    let topicName, groupId, consumer, admin;
+    let topicName, groupId, consumer, admin, groupInstanceId, producer;
 
     beforeEach(async () => {
         topicName = `test-topic-${secureRandom()}`;
         groupId = `consumer-group-id-${secureRandom()}`;
+        groupInstanceId = `consumer-group-instance-id-${secureRandom()}`;
+
+        producer = createProducer({});
 
         consumer = createConsumer({
             groupId,
             fromBeginning: true,
             clientId: 'test-client-id',
         }, {
-            'group.instance.id': 'test-instance-id',
+            'group.instance.id': groupInstanceId,
             'session.timeout.ms': 10000,
             'partition.assignment.strategy': 'roundrobin',
         });
@@ -33,6 +37,7 @@ describe('Admin > describeGroups', () => {
     });
 
     afterEach(async () => {
+        producer && (await producer.disconnect());
         consumer && (await consumer.disconnect());
         admin && (await admin.disconnect());
     });
@@ -61,9 +66,11 @@ describe('Admin > describeGroups', () => {
     });
 
     it('should describe consumer groups', async () => {
+        let messagesConsumed = 0;
+
         await consumer.connect();
         await consumer.subscribe({ topic: topicName });
-        await consumer.run({ eachMessage: async () => { } });
+        await consumer.run({ eachMessage: async () => { messagesConsumed++; } });
 
         await waitFor(() => consumer.assignment().length > 0, () => null, 1000);
 
@@ -92,7 +99,7 @@ describe('Admin > describeGroups', () => {
                         memberId: expect.any(String),
                         memberAssignment: null,
                         memberMetadata: null,
-                        groupInstanceId: 'test-instance-id',
+                        groupInstanceId: groupInstanceId,
                         assignment: {
                             topicPartitions:[
                                 expect.objectContaining({ topic: topicName, partition: 0 }),
@@ -104,12 +111,22 @@ describe('Admin > describeGroups', () => {
             })
         );
 
-        // Disconnect the consumer to make the group EMPTY.
+        // Produce some messages so that the consumer can commit them, and hence
+        // the group doesn't become DEAD.
+        await producer.connect();
+        await producer.send({
+            topic: topicName,
+            messages: [{ key: 'key', value: 'value' }],
+        });
+
+        await waitFor(() => messagesConsumed > 0, () => null, 1000);
+
+        // Disconnect the consumer to make the group EMPTY and commit offsets.
         await consumer.disconnect();
         consumer = null;
 
         // Wait so that session.timeout.ms expires and the group becomes EMPTY.
-        await sleep(12000);
+        await sleep(10500);
 
         // Don't include authorized operations this time.
         describeGroupsResult = await admin.describeGroups([groupId]);
@@ -119,9 +136,9 @@ describe('Admin > describeGroups', () => {
                 groupId,
                 protocol: '',
                 partitionAssignor: '',
-                isSimpleConsumerGroup: false,
-                protocolType: 'consumer',
                 state: ConsumerGroupStates.EMPTY,
+                protocolType: 'consumer',
+                isSimpleConsumerGroup: false,
                 coordinator: expect.objectContaining({
                     id: expect.any(Number),
                     host: expect.any(String),
@@ -130,6 +147,7 @@ describe('Admin > describeGroups', () => {
                 members: [],
             })
         );
+
         expect(describeGroupsResult.groups[0].authorizedOperations).toBeUndefined();
     });
 });

@@ -56,11 +56,6 @@ Baton AdminClient::Connect() {
     return baton;
   }
 
-  // Activate the dispatchers before the connection, as some callbacks may run
-  // on the background thread.
-  // We will deactivate them if the connection fails.
-  ActivateDispatchers();
-
   std::string errstr;
   {
     scoped_shared_write_lock lock(m_connection_lock);
@@ -998,6 +993,14 @@ NAN_METHOD(AdminClient::NodeConnect) {
   Nan::HandleScope scope;
 
   AdminClient* client = ObjectWrap::Unwrap<AdminClient>(info.This());
+
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  // Because the Admin Client connect is synchronous, we can do this within
+  // AdminClient::Connect as well, but we do it here to keep the code similiar to
+  // the Producer and Consumer.
+  client->ActivateDispatchers();
 
   Baton b = client->Connect();
   // Let the JS library throw if we need to so the error can be more rich

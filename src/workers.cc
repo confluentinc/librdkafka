@@ -199,11 +199,6 @@ ProducerConnect::ProducerConnect(Nan::Callback *callback, Producer* producer):
 ProducerConnect::~ProducerConnect() {}
 
 void ProducerConnect::Execute() {
-  // Activate the dispatchers before the connection, as some callbacks may run
-  // on the background thread.
-  // We will deactivate them if the connection fails.
-  producer->ActivateDispatchers();
-
   Baton b = producer->Connect();
 
   if (b.err() != RdKafka::ERR_NO_ERROR) {
@@ -558,11 +553,6 @@ KafkaConsumerConnect::KafkaConsumerConnect(Nan::Callback *callback,
 KafkaConsumerConnect::~KafkaConsumerConnect() {}
 
 void KafkaConsumerConnect::Execute() {
-  // Activate the dispatchers before the connection, as some callbacks may run
-  // on the background thread.
-  // We will deactivate them if the connection fails.
-  consumer->ActivateDispatchers();
-
   Baton b = consumer->Connect();
   // consumer->Wait();
 

@@ -9,6 +9,7 @@ const {
     createConsumer,
     waitForMessages,
     sleep,
+    DeferredPromise,
 } = require('../testhelpers');
 const { Buffer } = require('buffer');
 
@@ -410,20 +411,40 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
             topic: topicName,
             partitions: partitions,
         });
-        await consumer.connect();
+
+        /* Reconfigure producer and consumer in such a way that batches are likely
+         * to be small and we get multiple partitions in the cache at once.
+         * This is to reduce flakiness. */
+        producer = createProducer({}, {
+            'batch.num.messages': 1,
+        });
+
+        consumer = createConsumer({
+            'groupId': groupId,
+        }, {
+            'fetch.message.max.bytes': 1,
+        });
+
         await producer.connect();
+        await consumer.connect();
         await consumer.subscribe({ topic: topicName });
 
         let inProgress = 0;
         let inProgressMaxValue = 0;
         const messagesConsumed = [];
+        const expectedMaxConcurrentWorkers = Math.min(partitionsConsumedConcurrentlyDiff, partitions);
+        const maxConcurrentWorkersReached = new DeferredPromise();
         consumer.run({
             partitionsConsumedConcurrently: partitionsConsumedConcurrentlyDiff,
-            eachMessage: async event => {
+            eachMessage:async event => {
                 inProgress++;
-                await sleep(1);
                 messagesConsumed.push(event);
                 inProgressMaxValue = Math.max(inProgress, inProgressMaxValue);
+                if (inProgressMaxValue >= expectedMaxConcurrentWorkers) {
+                    maxConcurrentWorkersReached.resolve();
+                } else if (messagesConsumed.length > 2048) {
+                    await sleep(1000);
+                }
                 inProgress--;
             },
         });
@@ -438,8 +459,8 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
             });
 
         await producer.send({ topic: topicName, messages });
-        await waitForMessages(messagesConsumed, { number: messages.length });
-        expect(inProgressMaxValue).toBe(Math.min(partitionsConsumedConcurrentlyDiff, partitions));
+        await maxConcurrentWorkersReached;
+        expect(inProgressMaxValue).toBe(expectedMaxConcurrentWorkers);
     });
 
     it('consume GZIP messages', async () => {

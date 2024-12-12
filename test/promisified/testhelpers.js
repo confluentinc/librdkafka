@@ -19,6 +19,8 @@ function makeConfig(config, common) {
     const kafkaJS =  Object.assign(config, clusterInformation.kafkaJS);
     if (debug) {
         common['debug'] = debug;
+    } else { /* Turn off excessive logging unless specifically asked for, otherwise stdout gets very crowded. */
+        common['log_level'] = 5;
     }
 
     return Object.assign(common, { kafkaJS });
@@ -52,6 +54,8 @@ async function createTopic(args) {
             { topic, numPartitions: partitions ?? 1 }
         ]
     });
+    /* Wait for topic to propagate in the metadata. */
+    await sleep(500);
     await admin.disconnect();
 }
 
@@ -136,5 +140,6 @@ module.exports = {
     sleep,
     generateMessages,
     clusterInformation,
-    SequentialPromises
+    SequentialPromises,
+    DeferredPromise,
 };

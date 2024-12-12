@@ -1450,6 +1450,11 @@ NAN_METHOD(KafkaConsumer::NodeConnect) {
 
   KafkaConsumer* consumer = ObjectWrap::Unwrap<KafkaConsumer>(info.This());
 
+  // Activate the dispatchers before the connection, as some callbacks may run
+  // on the background thread.
+  // We will deactivate them if the connection fails.
+  consumer->ActivateDispatchers();
+
   Nan::Callback *callback = new Nan::Callback(info[0].As<v8::Function>());
   Nan::AsyncQueueWorker(new Workers::KafkaConsumerConnect(callback, consumer));
 

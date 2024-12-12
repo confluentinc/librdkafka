@@ -61,7 +61,7 @@ export class RestService {
               maxRetries?: number, retriesWaitMs?: number, retriesMaxWaitMs?: number) {
     this.client = axios.create(axiosDefaults);
     axiosRetry(this.client, {
-      retries: maxRetries ?? 2,
+      retries: maxRetries ?? 3,
       retryDelay: (retryCount) => {
         return fullJitter(retriesWaitMs ?? 1000, retriesMaxWaitMs ?? 20000, retryCount - 1)
       },
@@ -111,7 +111,7 @@ export class RestService {
     }
   }
 
-  handleBearerAuth(maxRetries: number, 
+  handleBearerAuth(maxRetries: number,
     retriesWaitMs: number, retriesMaxWaitMs: number, bearerAuthCredentials?: BearerAuthCredentials): void {
     if (bearerAuthCredentials) {
       delete this.client.defaults.auth;
@@ -150,7 +150,7 @@ export class RestService {
           }
           const issuerEndPointUrl = new URL(bearerAuthCredentials.issuerEndpointUrl!);
           this.oauthClient = new OAuthClient(bearerAuthCredentials.clientId!, bearerAuthCredentials.clientSecret!,
-            issuerEndPointUrl.origin, issuerEndPointUrl.pathname, bearerAuthCredentials.scope!, 
+            issuerEndPointUrl.origin, issuerEndPointUrl.pathname, bearerAuthCredentials.scope!,
             maxRetries, retriesWaitMs, retriesMaxWaitMs);
           break;
         default:

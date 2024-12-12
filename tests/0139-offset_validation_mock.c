@@ -192,14 +192,14 @@ static void do_test_permanent_error_retried(rd_kafka_resp_err_t err) {
         rktpar         = rd_kafka_topic_partition_list_add(rktpars, topic, 0);
         rktpar->offset = 0;
 
-        /* Will validate the offset at start fetching again
+        /* Will validate the offset and start fetching again
          * from offset 0. */
         rd_kafka_topic_partition_set_leader_epoch(rktpar, 0);
         rd_kafka_seek_partitions(c1, rktpars, -1);
         rd_kafka_topic_partition_list_destroy(rktpars);
 
         /* Read all messages after seek to zero.
-         * In case of permanent error instead it reset to latest and
+         * In case of permanent error, instead, it resets to latest and
          * gets an EOF. */
         test_consumer_poll("MSG_ALL", c1, testid, 0, 0, 5, NULL);
 

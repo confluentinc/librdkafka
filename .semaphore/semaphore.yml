@@ -92,7 +92,7 @@ blocks:
       jobs:
         - name: 'Generate documentation'
           commands:
-            - sudo apt install -y doxygen graphviz
+            - NEEDRESTART_MODE=a sudo -E apt install -y doxygen graphviz
             - make docs
             - (cd staging-docs && tar cvzf ../artifacts/librdkafka-docs.tgz .)
             - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/librdkafka-docs.tgz --destination artifacts/librdkafka-docs.tgz'

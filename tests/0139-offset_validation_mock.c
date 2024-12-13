@@ -924,6 +924,79 @@ static void do_test_list_offsets_leader_change(int variation) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that a committed offset is validated before starting to
+ *        fetch messages.
+ */
+static void do_test_offset_validation_on_offset_fetch(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        const char *bootstraps;
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const char *c1_groupid = topic;
+        rd_kafka_t *c1;
+        int msg_count = 5, leader = 2;
+        uint64_t testid = test_id_generate();
+        size_t matching_requests;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_count, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "1", NULL);
+
+        test_conf_init(&conf, NULL, 60);
+
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "enable.auto.offset.store", "true");
+        test_conf_set(conf, "enable.partition.eof", "true");
+
+        c1 = test_create_consumer(c1_groupid, NULL, rd_kafka_conf_dup(conf),
+                                  NULL);
+        test_consumer_subscribe(c1, topic);
+
+        /* 5 messages because of reset to earliest */
+        test_consumer_poll("MSG_ALL", c1, testid, 0, 0, 5, NULL);
+        TEST_CALL_ERR__(rd_kafka_commit(c1, NULL, rd_false));
+        rd_kafka_destroy(c1);
+
+        /* Leader changes to 2 */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        /* Destroy conf this time */
+        c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
+        test_consumer_subscribe(c1, topic);
+
+        /* EOF because of it start from committed offset after validation */
+        test_consumer_poll("MSG_EOF", c1, testid, 1, 0, 0, NULL);
+
+        /* Ensure offset has been validated */
+        matching_requests = test_mock_wait_matching_requests(
+            mcluster, 1, 1000, is_offset_for_leader_epoch_request, &leader);
+        TEST_ASSERT_LATER(matching_requests == 1,
+                          "Expected 1"
+                          " OffsetForLeaderEpoch request"
+                          " to broker 1, got %" PRIusz,
+                          matching_requests);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        rd_kafka_destroy(c1);
+
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+}
+
 int main_0139_offset_validation_mock(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
@@ -945,6 +1018,8 @@ int main_0139_offset_validation_mock(int argc, char **argv) {
 
         do_test_list_offsets_leader_change(0);
         do_test_list_offsets_leader_change(1);
+
+        do_test_offset_validation_on_offset_fetch();
 
         return 0;
 }

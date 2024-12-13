@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, CreateAxiosDef
 import { OAuthClient } from './oauth/oauth-client';
 import { RestError } from './rest-error';
 import axiosRetry from "axios-retry";
-import { fullJitter, isRetriable } from './retry-helper';
+import { fullJitter, isRetriable, isSuccess } from './retry-helper';
 /*
  * Confluent-Schema-Registry-TypeScript - Node.js wrapper for Confluent Schema Registry
  *
@@ -181,7 +181,7 @@ export class RestService {
         })
         return response;
       } catch (error) {
-        if (axios.isAxiosError(error) && error.response && (error.response.status < 200 || error.response.status > 299)) {
+        if (axios.isAxiosError(error) && error.response && !isSuccess(error.response.status)) {
           const data = error.response.data;
           if (data.error_code && data.message) {
             error = new RestError(data.message, error.response.status, data.error_code);

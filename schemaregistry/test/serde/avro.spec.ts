@@ -664,16 +664,16 @@ describe('AvroSerializer', () => {
     registry.registerOverride({type: 'ENCRYPT', disabled: true})
     deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig, registry)
     obj2 = await deser.deserialize(topic, bytes)
-    expect(obj2.stringField).not.toEqual(obj.stringField);
-    expect(obj2.bytesField).not.toEqual(obj.bytesField);
+    expect(obj2.stringField).not.toEqual("hi");
+    expect(obj2.bytesField).not.toEqual(Buffer.from([1, 2]));
 
     clearKmsClients()
     registry = new RuleRegistry()
     registry.registerExecutor(new FieldEncryptionExecutor())
     deser = new AvroDeserializer(client, SerdeType.VALUE, {}, registry)
     obj2 = await deser.deserialize(topic, bytes)
-    expect(obj2.stringField).not.toEqual(obj.stringField);
-    expect(obj2.bytesField).not.toEqual(obj.bytesField);
+    expect(obj2.stringField).not.toEqual("hi");
+    expect(obj2.bytesField).not.toEqual(Buffer.from([1, 2]));
   })
   it('basic encryption with logical type', async () => {
     let conf: ClientConfig = {

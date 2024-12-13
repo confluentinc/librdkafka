@@ -111,7 +111,7 @@ export abstract class Serde {
     }
     for (let i = 0; i < rules.length; i++ ) {
       let rule = rules[i]
-      if (rule.disabled) {
+      if (this.isDisabled(rule)) {
         continue
       }
       let mode = rule.mode

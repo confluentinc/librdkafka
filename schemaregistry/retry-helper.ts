@@ -4,9 +4,13 @@ function fullJitter(baseDelayMs: number, maxDelayMs: number, retriesAttempted: n
   return Math.random() * Math.min(maxDelayMs, baseDelayMs * 2 ** retriesAttempted)
 }
 
+function isSuccess(statusCode: number): boolean {
+  return statusCode >= 200 && statusCode <= 299
+}
+
 function isRetriable(statusCode: number): boolean {
   return statusCode == 408 || statusCode == 429
     || statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504;
 }
 
-export { sleep, fullJitter, isRetriable };
+export { sleep, fullJitter, isSuccess, isRetriable };

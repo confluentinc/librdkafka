@@ -1159,11 +1159,10 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, FETCH, "VALIDATE",
                              "%.*s [%" PRId32
                              "]: unable to perform offset "
-                             "validation: partition leader not available",
+                             "validation: partition leader not available. "
+                             "Retrying when available",
                              RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                              rktp->rktp_partition);
-                rd_kafka_toppar_set_fetch_state(rktp,
-                                                RD_KAFKA_TOPPAR_FETCH_ACTIVE);
                 return;
         }
 

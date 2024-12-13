@@ -34,6 +34,8 @@
 #include "testcpp.h"
 #include "tinycthread.h"
 
+namespace TestSSLVerify {
+
 static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] = {
     /* [RdKafka::CERT_PUBLIC_KEY] = */
     {
@@ -499,6 +501,10 @@ static void do_test_bad_calls() {
 
   Test::Say("Producer creation failed expectedly: " + errstr + "\n");
 }
+
+}  // namespace TestSSLVerify
+
+using namespace TestSSLVerify;
 
 extern "C" {
 

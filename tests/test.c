@@ -216,6 +216,7 @@ _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(0101_fetch_from_follower);
 _TEST_DECL(0102_static_group_rebalance);
+_TEST_DECL(0102_static_group_rebalance_mock);
 _TEST_DECL(0103_transactions_local);
 _TEST_DECL(0103_transactions);
 _TEST_DECL(0104_fetch_from_follower_mock);
@@ -463,6 +464,7 @@ struct test tests[] = {
     _TEST(0100_thread_interceptors, TEST_F_LOCAL),
     _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2, 3, 0, 0)),
+    _TEST(0102_static_group_rebalance_mock, TEST_F_LOCAL),
     _TEST(0103_transactions_local, TEST_F_LOCAL),
     _TEST(0103_transactions,
           0,
@@ -4547,6 +4549,38 @@ int test_needs_auth(void) {
         return strcmp(sec, "plaintext");
 }
 
+/**
+ * @brief Create a topic-partition list with vararg arguments.
+ *
+ * @param cnt Number of topic-partitions.
+ * @param ...vararg is a tuple of:
+ *           const char *topic_name
+ *           int32_t partition
+ *
+ * @return The desired topic-partition list
+ *
+ * @remark The returned pointer ownership is transferred to the caller.
+ */
+rd_kafka_topic_partition_list_t *test_topic_partitions(int cnt, ...) {
+        va_list ap;
+        int i = 0;
+        const char *topic_name;
+
+        rd_kafka_topic_partition_list_t *rktparlist =
+            rd_kafka_topic_partition_list_new(cnt);
+        va_start(ap, cnt);
+        while (i < cnt) {
+                topic_name        = va_arg(ap, const char *);
+                int32_t partition = va_arg(ap, int32_t);
+
+                rd_kafka_topic_partition_list_add(rktparlist, topic_name,
+                                                  partition);
+                i++;
+        }
+        va_end(ap);
+
+        return rktparlist;
+}
 
 void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions) {
@@ -4849,6 +4883,15 @@ void test_create_topic(rd_kafka_t *use_rk,
         else
                 test_admin_create_topic(use_rk, topicname, partition_cnt,
                                         replication_factor, NULL);
+}
+
+void test_create_topic_wait_exists(rd_kafka_t *use_rk,
+                                   const char *topicname,
+                                   int partition_cnt,
+                                   int replication_factor,
+                                   int timeout) {
+        test_create_topic(use_rk, topicname, partition_cnt, replication_factor);
+        test_wait_topic_exists(use_rk, topicname, timeout);
 }
 
 
@@ -7198,6 +7241,75 @@ size_t test_mock_wait_matching_requests(
 }
 
 /**
+ * @brief Sets an assignment for \p member_cnt members in \p mcluster.
+ *        Followed by \p member_cnt pairs of
+ *        (rd_kafka_t *, rd_kafka_topic_partition_list_t *) corresponding to
+ *        a member and its assignment.
+ */
+void test_mock_cluster_member_assignment(rd_kafka_mock_cluster_t *mcluster,
+                                         int member_cnt,
+                                         ...) {
+        int i             = 0;
+        char **member_ids = rd_calloc(member_cnt, sizeof(*member_ids));
+        rd_kafka_topic_partition_list_t **assignment =
+            rd_calloc(member_cnt, sizeof(*assignment));
+        char *group_id = NULL;
+        rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment;
+        va_list ap;
+
+        va_start(ap, member_cnt);
+        for (i = 0; i < member_cnt; i++) {
+                rd_kafka_consumer_group_metadata_t *cgmetadata = NULL;
+                rd_kafka_t *consumer = va_arg(ap, rd_kafka_t *);
+                rd_kafka_topic_partition_list_t *member_assignment =
+                    va_arg(ap, rd_kafka_topic_partition_list_t *);
+
+                const char *member_id       = NULL;
+                const char *member_group_id = NULL;
+                rd_bool_t first_time        = rd_true;
+                /* Await member joins the group and obtains a member id
+                 * to use for setting target assignment. */
+                while (!member_id || *member_id == '\0' || !member_group_id) {
+                        if (!first_time)
+                                rd_usleep(100000, NULL);
+                        cgmetadata = rd_kafka_consumer_group_metadata(consumer);
+                        member_id  = rd_kafka_consumer_group_metadata_member_id(
+                            cgmetadata);
+                        member_group_id =
+                            rd_kafka_consumer_group_metadata_group_id(
+                                cgmetadata);
+                        first_time = rd_false;
+                }
+
+                if (!group_id)
+                        group_id = rd_strdup(member_group_id);
+                else
+                        rd_assert(!strcmp(group_id, member_group_id));
+
+                member_ids[i] = rd_strdup(member_id);
+                assignment[i] =
+                    rd_kafka_topic_partition_list_copy(member_assignment);
+                rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        }
+        va_end(ap);
+
+        target_assignment = rd_kafka_mock_cgrp_consumer_target_assignment_new(
+            member_ids, member_cnt, assignment);
+        rd_kafka_mock_cgrp_consumer_target_assignment(mcluster, group_id,
+                                                      target_assignment);
+        rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
+            target_assignment);
+
+        for (i = 0; i < member_cnt; i++) {
+                rd_free(member_ids[i]);
+                rd_kafka_topic_partition_list_destroy(assignment[i]);
+        }
+        rd_free(member_ids);
+        rd_free(assignment);
+        rd_free(group_id);
+}
+
+/**
  * @name Sub-tests
  */
 
@@ -7307,7 +7419,7 @@ const char *test_consumer_group_protocol() {
         return test_consumer_group_protocol_str;
 }
 
-int test_consumer_group_protocol_generic() {
+int test_consumer_group_protocol_classic() {
         return !test_consumer_group_protocol_str ||
                !strcmp(test_consumer_group_protocol_str, "classic");
 }

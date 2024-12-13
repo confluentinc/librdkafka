@@ -682,6 +682,10 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
 
         rd_kafka_toppar_lock(rktp);
 
+        /* -1 (null) is excluded to allow to switch back to a
+         * leader not supporting KIP-320 still, for example
+         * during a cluster roll for upgrading brokers to
+         * a version supporting that KIP. */
         if (leader_epoch != -1 && leader_epoch < rktp->rktp_leader_epoch) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
                              "%s [%" PRId32

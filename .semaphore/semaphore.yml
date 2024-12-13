@@ -141,7 +141,7 @@ blocks:
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.8.0 --cpversion 7.7.0 --cmd "PATH=\"$PATH\" make quick")
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.8.0 --cpversion 7.7.0 --cmd 'make quick')
         - name: 'Build and integration tests with "consumer" protocol'
           commands:
             - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
@@ -164,13 +164,14 @@ blocks:
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - export TEST_KAFKA_VERSION=4.0.0
+            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             # This commit corresponds to the DescribeConfigs API change for KIP-848
             # KAFKA-14510; Extend DescribeConfigs API to support group configs (#16859)
             # https://github.com/apache/kafka/commit/3a0efa2845e6a0d237772adfe6364579af50ce18
             # TODO: upgrade to 4.0 when released.
             - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version 'trunk@3a0efa2845e6a0d237772adfe6364579af50ce18'
               --cpversion 7.7.0 --conf '["group.coordinator.rebalance.protocols=classic,consumer"]'
-              --cmd "PATH=\"$PATH\" TEST_CONSUMER_GROUP_PROTOCOL=consumer make quick")
+              --cmd 'make quick')
 
 
   - name: 'Linux x64: release artifact docker builds'

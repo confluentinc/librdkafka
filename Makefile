@@ -74,14 +74,7 @@ define release
 endef
 
 docs: node_modules/.dirstamp
-	@rm -rf docs
-	@./node_modules/jsdoc/jsdoc.js --debug --destination docs \
-		--recurse -R ./README.md \
-		-c ./jsdoc.conf \
-		--tutorials examples/ ./lib
-
-gh-pages: node_modules/.dirstamp
-	@./make_docs.sh
+	@./util/generate-docs.sh
 
 release-patch:
 	@$(call release,patch)

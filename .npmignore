@@ -17,3 +17,4 @@ deps/librdkafka/config.h
 /bench
 /ci
 /proto
+/docs

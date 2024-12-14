@@ -87,7 +87,7 @@ blocks:
             - npm run install-from-source
             - make test
 
-  - name: "Linux amd64: Build, test, lint"
+  - name: "Linux amd64: Build, test, lint, docs"
     dependencies: [ ]
     task:
       agent:
@@ -110,6 +110,9 @@ blocks:
         - name: "ESLint"
           commands:
             - npx eslint lib/kafkajs
+        - name: "Docs"
+          commands:
+            - make docs
 
   - name: "Linux amd64: Performance"
     dependencies: [ ]

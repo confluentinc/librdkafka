@@ -143,6 +143,21 @@ class TestEventCb : public RdKafka::EventCb {
             "Expected _SSL or _ALL_BROKERS_DOWN error codes"
             ", got: " +
             RdKafka::err2str(event.err()));
+      else if (event.err() == RdKafka::ERR__SSL) {
+        bool expected = false;
+        Test::Say("SSL error: " + event.str() + "\n");
+        if (event.str().find("alert number 42") != std::string::npos)
+          /* Verify that certificate isn't sent if not trusted
+           * by the broker. We should receive 42 (bad_certificate)
+           * instead of 46 (certificate_unknown). */
+          expected = true;
+        else if (event.str().find("broker certificate could not be verified") !=
+                 std::string::npos)
+          expected = true;
+
+        if (!expected)
+          Test::Fail("Unexpected SSL error message, got: " + event.str());
+      }
       break;
     default:
       break;
@@ -272,6 +287,11 @@ static const std::string load_names[] = {
     "setter",
 };
 
+static bool is_client_auth_required() {
+  const char *C_client_auth = test_getenv("SSL_client_auth", "required");
+  std::string client_auth(C_client_auth);
+  return client_auth == "required";
+}
 
 /**
  * @brief Test SSL certificate verification.
@@ -434,11 +454,13 @@ static void do_test_verify(const int line,
    * this test. */
   std::string cluster = p->clusterid(1000);
 
-  if (!untrusted_client_key && verify_ok == cluster.empty())
+  bool should_client_auth_fail =
+      untrusted_client_key && is_client_auth_required();
+  if (!should_client_auth_fail && verify_ok == cluster.empty())
     Test::Fail("Expected connection to " +
                (std::string)(verify_ok ? "succeed" : "fail") +
                ", but got clusterid '" + cluster + "'");
-  if (untrusted_client_key && !cluster.empty())
+  if (should_client_auth_fail && !cluster.empty())
     Test::Fail(
         "Expected connection to fail"
         ", but got clusterid '" +
@@ -516,7 +538,10 @@ extern "C" {
  *         when trivup is started with "--ssl" only,
  *         or with an intermediate CA signed certificate,
  *         when trivup is started with:
- *         --ssl --conf='{"ssl_intermediate_ca": true}'
+ *         --conf='{"ssl_intermediate_ca": true}'
+ *         or with "ssl.client.auth=requested" when started with:
+ *         --conf='{"ssl_client_auth": "requested"}'
+ *         or a combination of both.
  */
 int main_0097_ssl_verify(int argc, char **argv) {
   int untrusted_client_key, untrusted_client_key_intermediate_ca;

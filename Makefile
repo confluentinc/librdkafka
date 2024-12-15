@@ -38,7 +38,7 @@ cpplint:
 	@$(PYTHON) $(CPPLINT) --filter=$(CPPLINT_FILTER) $(CPPLINT_FILES)
 
 eslint: node_modules/.dirstamp
-	@./node_modules/.bin/eslint .
+	@./node_modules/.bin/eslint lib
 
 lib: node_modules/.dirstamp $(CONFIG_OUTPUTS)
 	@PYTHONHTTPSVERIFY=0 $(NODE-GYP) build $(GYPBUILDARGS)

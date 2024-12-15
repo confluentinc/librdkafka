@@ -107,9 +107,9 @@ blocks:
             - docker compose up -d && sleep 30
             - export NODE_OPTIONS='--max-old-space-size=1536'
             - npx jest --no-colors --ci test/promisified/
-        - name: "ESLint"
+        - name: "Lint"
           commands:
-            - npx eslint lib/kafkajs
+            - make lint
         - name: "Docs"
           commands:
             - make docs

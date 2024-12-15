@@ -12,6 +12,10 @@ import {
   IsolationLevel
 } from './rdkafka'
 
+import {
+  CODES
+} from './errors';
+
 // Admin API related interfaces, types etc; and Error types are common, so
 // just re-export them from here too.
 export {
@@ -24,7 +28,7 @@ export {
   Node,
   AclOperationTypes,
   Uuid,
-  IsolationLevel
+  IsolationLevel,
 } from './rdkafka'
 
 export interface OauthbearerProviderResponse {
@@ -426,4 +430,102 @@ export type Admin = {
       timeout?: number,
       isolationLevel: IsolationLevel
     }): Promise<Array<SeekEntry & { high: string; low: string }>>
+}
+
+
+export function isKafkaJSError(error: Error): boolean;
+
+export const ErrorCodes: typeof CODES.ERRORS;
+
+export class KafkaJSError extends Error {
+  readonly message: Error['message']
+  readonly name: string
+  readonly retriable: boolean
+  readonly fatal: boolean
+  readonly abortable: boolean
+  readonly code: number
+  constructor(e: Error | string, metadata?: KafkaJSErrorMetadata)
+}
+
+export class KafkaJSProtocolError extends KafkaJSError {
+  constructor(e: Error | string)
+}
+
+export class KafkaJSCreateTopicError extends KafkaJSError {
+  readonly topic: string
+  constructor(e: Error | string, topicName: string, metadata?: KafkaJSErrorMetadata)
+}
+
+export class KafkaJSDeleteGroupsError extends KafkaJSError {
+  readonly groups: DeleteGroupsResult[]
+  constructor(e: Error | string, groups?: KafkaJSDeleteGroupsErrorGroups[])
+}
+
+export class KafkaJSDeleteTopicRecordsError extends KafkaJSError {
+  readonly partitions: KafkaJSDeleteTopicRecordsErrorPartition[]
+  constructor(metadata: KafkaJSDeleteTopicRecordsErrorTopic)
+}
+
+export interface KafkaJSDeleteGroupsErrorGroups {
+  groupId: string
+  errorCode: number
+  error: KafkaJSError
+}
+
+export interface KafkaJSDeleteTopicRecordsErrorTopic {
+  topic: string
+  partitions: KafkaJSDeleteTopicRecordsErrorPartition[]
+}
+
+export interface KafkaJSDeleteTopicRecordsErrorPartition {
+  partition: number
+  offset: string
+  error: KafkaJSError
+}
+
+export class KafkaJSAggregateError extends Error {
+  readonly errors: (Error | string)[]
+  constructor(message: Error | string, errors: (Error | string)[])
+}
+
+export class KafkaJSOffsetOutOfRange extends KafkaJSProtocolError {
+  readonly topic: string
+  readonly partition: number
+  constructor(e: Error | string, metadata?: KafkaJSErrorMetadata)
+}
+
+export class KafkaJSConnectionError extends KafkaJSError {
+  constructor(e: Error | string, metadata?: KafkaJSErrorMetadata)
+}
+
+export class KafkaJSRequestTimeoutError extends KafkaJSError {
+  constructor(e: Error | string, metadata?: KafkaJSErrorMetadata)
+}
+
+export class KafkaJSPartialMessageError extends KafkaJSError {
+  constructor()
+}
+
+export class KafkaJSSASLAuthenticationError extends KafkaJSError {
+  constructor()
+}
+
+export class KafkaJSGroupCoordinatorNotFound extends KafkaJSError {
+  constructor()
+}
+
+export class KafkaJSNotImplemented extends KafkaJSError {
+  constructor()
+}
+
+export class KafkaJSTimeout extends KafkaJSError {
+  constructor()
+}
+
+export interface KafkaJSErrorMetadata {
+  retriable?: boolean
+  fatal?: boolean
+  abortable?: boolean
+  stack?: string
+  code?: number
 }

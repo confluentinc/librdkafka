@@ -1,3 +1,48 @@
+# librdkafka v2.6.2
+
+librdkafka v2.6.2 is a maintenance release:
+
+* Socket options are now all set before connection (#4893).
+* Client certificate chain is now sent when using `ssl.certificate.pem`
+  or `ssl_certificate` or `ssl.keystore.location` (#4894).
+* Avoid sending client certificates whose chain doesn't match with broker
+  trusted root certificates (#4900).
+* Fixes to allow to migrate partitions to leaders with same leader epoch,
+  or NULL leader epoch (#4901).
+
+
+## Fixes
+
+### General fixes
+
+* Socket options are now all set before connection, as [documentation](https://man7.org/linux/man-pages/man7/tcp.7.html)
+  says it's needed for socket buffers to take effect, even if in some
+  cases they could have effect even after connection.
+  Happening since v0.9.0 (#4893).
+* Issues: #3225.
+  Client certificate chain is now sent when using `ssl.certificate.pem`
+  or `ssl_certificate` or `ssl.keystore.location`.
+  Without that, broker must explicitly add any intermediate certification
+  authority certificate to its truststore to be able to accept client
+  certificate.
+  Happens since: 1.x (#4894).
+
+### Consumer fixes
+
+* Issues: #4796.
+  Fix to allow to migrate partitions to leaders with NULL leader epoch.
+  NULL leader epoch can happen during a cluster roll with an upgrade to a
+  version supporting KIP-320.
+  Happening since v2.1.0 (#4901).
+* Issues: #4804.
+  Fix to allow to migrate partitions to leaders with same leader epoch.
+  Same leader epoch can happen when partition is
+  temporarily migrated to the internal broker (#4804), or if broker implementation
+  never bumps it, as it's not needed to validate the offsets.
+  Happening since v2.4.0 (#4901).
+
+
+
 # librdkafka v2.6.1
 
 librdkafka v2.6.1 is a maintenance release:
@@ -16,6 +61,8 @@ librdkafka v2.6.1 is a maintenance release:
   zstd 1.5.6, zlib 1.3.1, OpenSSL 3.3.2, CURL 8.10.1 (#4872).
 * SASL/SCRAM authentication fix: avoid concatenating
   client side nonce once more, as it's already prepended in server sent nonce (#4895).
+* Allow retrying for status code 429 ('Too Many Requests') in HTTP requests for
+  OAUTHBEARER OIDC (#4902).
 
 
 ## Fixes

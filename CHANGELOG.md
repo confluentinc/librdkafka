@@ -1,3 +1,38 @@
+# librdkafka v2.2.1
+
+*Note: given this patch version contains only a single fix, it's suggested to upgrade to latest backward compatible release instead, as it contains all the issued fixes.
+Following [semver 2.0](https://semver.org/), all our patch and minor releases are backward compatible and our minor releases may also contain fixes.
+Please note that 2.x versions of librdkafka are also backward compatible with 1.x as the major version release was only for the upgrade to OpenSSL 3.x.*
+
+librdkafka v2.2.1 is a maintenance release backporting:
+
+* Fix for idempotent producer fatal errors, triggered after a possibly persisted message state (#4438).
+* Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
+      [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
+      bugfixes and performance improvements (#4726).
+* Upgrade OpenSSL to v3.0.13 (while building from source) with various security fixes,
+     check the [release notes](https://www.openssl.org/news/cl30.txt)
+     (@janjwerner-confluent, #4690).
+* Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.8.0 (@janjwerner-confluent, #4690).
+* Upgrade Linux dependencies: OpenSSL 3.0.15, CURL 8.10.1 (#4875).
+
+
+
+### Idempotent producer fixes
+
+* After a possibly persisted error, such as a disconnection or a timeout, next expected sequence
+  used to increase, leading to a fatal error if the message wasn't persisted and
+  the second one in queue failed with an `OUT_OF_ORDER_SEQUENCE_NUMBER`.
+  The error could contain the message "sequence desynchronization" with
+  just one possibly persisted error or "rewound sequence number" in case of
+  multiple errored messages.
+  Solved by treating the possible persisted message as _not_ persisted,
+  and expecting a `DUPLICATE_SEQUENCE_NUMBER` error in case it was or
+  `NO_ERROR` in case it wasn't, in both cases the message will be considered
+  delivered (#4438).
+
+
+
 # librdkafka v2.2.0
 
 librdkafka v2.2.0 is a feature release:

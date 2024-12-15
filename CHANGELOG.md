@@ -6,6 +6,7 @@ v1.0.0 is a feature release. It is supported for all usage.
 
 1. Add support for an Admin API to fetch topic offsets (#156).
 2. Add support for Node v23 pre-built binaries (#158).
+3. Add KafkaJS-compatible errors to promisified Admin API (createTopics, deleteGroups, deleteTopicRecords) (#159).
 
 ## Fixes
 

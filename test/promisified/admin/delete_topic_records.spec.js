@@ -1,6 +1,10 @@
 jest.setTimeout(30000);
 
-const { ErrorCodes } = require("../../../lib").KafkaJS;
+const {
+    ErrorCodes,
+    KafkaJSDeleteTopicRecordsError,
+    KafkaJSOffsetOutOfRange,
+    KafkaJSError } = require("../../../lib").KafkaJS;
 const {
     secureRandom,
     createTopic,
@@ -136,5 +140,41 @@ describe("deleteTopicRecords function", () => {
                 lowWatermark: 10
             }
         ]);
+    });
+
+    it("should throw in case of failures", async () => {
+
+        await createTopic({ topic: topicName, partitions: 2 });
+
+        const messages = Array.from({ length: 5 }, (_, i) => ({
+            value: `message${i}`,
+            partition: i % 2,
+        }));
+        await producer.send({ topic: topicName, messages: messages });
+
+        let deleteTopicRecordsErr;
+        await expect(admin.deleteTopicRecords({
+            topic: topicName,
+            partitions: [
+                { partition: 2, offset: "1" }, // partition 2 does not exist
+                { partition: 0, offset: "5000" }, // offset is non-existent
+                { partition: 1, offset: "1" }, // should succeed
+            ],
+        }).catch(e => {
+            deleteTopicRecordsErr = e;
+            throw e;
+        })).rejects.toThrow(KafkaJSDeleteTopicRecordsError);
+
+        expect(deleteTopicRecordsErr.message).toEqual("Error while deleting records");
+        expect(deleteTopicRecordsErr.partitions).toHaveLength(2); // successful partition is not included
+
+        const partition2Error = deleteTopicRecordsErr.partitions.find(p => p.partition === 2);
+        expect(partition2Error.error).not.toBeNull();
+        expect(partition2Error.error).toBeInstanceOf(KafkaJSError);
+        expect(partition2Error.error.code).toEqual(ErrorCodes.ERR__UNKNOWN_PARTITION);
+
+        const partition0Error = deleteTopicRecordsErr.partitions.find(p => p.partition === 0);
+        expect(partition0Error.error).not.toBeNull();
+        expect(partition0Error.error).toBeInstanceOf(KafkaJSOffsetOutOfRange);
     });
 });

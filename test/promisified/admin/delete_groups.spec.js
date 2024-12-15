@@ -7,7 +7,7 @@ const {
     waitFor,
     createAdmin,
 } = require('../testhelpers');
-const { ErrorCodes } = require('../../../lib').KafkaJS;
+const { KafkaJSDeleteGroupsError, ErrorCodes } = require('../../../lib').KafkaJS;
 
 describe('Admin > deleteGroups', () => {
     let topicName, groupId, consumer, admin;
@@ -40,7 +40,7 @@ describe('Admin > deleteGroups', () => {
         );
     });
 
-    it('should delete empty consumer groups', async () => {
+    it('should delete only empty consumer groups', async () => {
         await consumer.connect();
         await consumer.subscribe({ topic: topicName });
         await consumer.run({ eachMessage: async () => {} });
@@ -53,16 +53,24 @@ describe('Admin > deleteGroups', () => {
         expect(listGroupsResult.groups.map(group => group.groupId)).toContain(groupId);
 
         // Delete when the group is not empty - it should fail.
-        let deleteResult = await admin.deleteGroups([groupId]);
-        expect(deleteResult).toEqual([
+        let deleteErr;
+        await expect(
+            admin.deleteGroups([groupId]).catch(e => {
+                deleteErr = e;
+                throw e;
+            })
+        ).rejects.toThrow(KafkaJSDeleteGroupsError);
+
+        expect(deleteErr.groups).toHaveLength(1);
+        expect(deleteErr.groups[0]).toEqual(
             expect.objectContaining({
                 groupId,
                 error: expect.objectContaining({
                     code: ErrorCodes.ERR_NON_EMPTY_GROUP,
                 }),
                 errorCode: ErrorCodes.ERR_NON_EMPTY_GROUP,
-            }),
-        ]);
+            })
+        );
 
         // Disconnect the consumer to make the group EMPTY.
         await consumer.disconnect();
@@ -73,7 +81,7 @@ describe('Admin > deleteGroups', () => {
         expect(listGroupsResult.groups.map(group => group.groupId)).toContain(groupId);
 
         // Delete the empty consumer group.
-        deleteResult = await admin.deleteGroups([groupId]);
+        const deleteResult = await admin.deleteGroups([groupId]);
         expect(deleteResult).toEqual([
             expect.objectContaining({
                 groupId,
@@ -87,17 +95,24 @@ describe('Admin > deleteGroups', () => {
         expect(listGroupsResult.groups.map(group => group.groupId)).not.toContain(groupId);
 
         // Deleting the group again should fail.
-        deleteResult = await admin.deleteGroups([groupId]);
-        expect(deleteResult).toEqual([
+        deleteErr = [];
+        await expect(
+            admin.deleteGroups([groupId]).catch(e => {
+                deleteErr = e;
+                throw e;
+            })
+        ).rejects.toThrow(KafkaJSDeleteGroupsError);
+
+        expect(deleteErr.groups).toHaveLength(1);
+        expect(deleteErr.groups[0]).toEqual(
             expect.objectContaining({
                 groupId,
                 error: expect.objectContaining({
                     code: ErrorCodes.ERR_GROUP_ID_NOT_FOUND,
                 }),
                 errorCode: ErrorCodes.ERR_GROUP_ID_NOT_FOUND,
-            }),
-        ]);
-
+            })
+        );
     });
 });
 

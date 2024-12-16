@@ -1,6 +1,6 @@
-# librdkafka v2.6.2
+# librdkafka v2.6.3
 
-librdkafka v2.6.2 is a maintenance release:
+librdkafka v2.6.3 is a maintenance release:
 
 * Socket options are now all set before connection (#4893).
 * Client certificate chain is now sent when using `ssl.certificate.pem`
@@ -41,6 +41,8 @@ librdkafka v2.6.2 is a maintenance release:
   never bumps it, as it's not needed to validate the offsets.
   Happening since v2.4.0 (#4901).
 
+
+*Note: there was no v2.6.2 librdkafka release*
 
 
 # librdkafka v2.6.1

@@ -4804,6 +4804,7 @@ static void rd_kafka_handle_MultiBatchProduce(rd_kafka_t *rk,
 
         rd_kafka_Produce_result_t **results;
         rd_kafka_msgbatch_t *batch;
+        rd_kafka_topic_partition_t *key;
 
         int i, num_batches = RD_MAP_CNT(&request->rkbuf_u.Produce.batch_map);
         results = rd_calloc(num_batches, sizeof(rd_kafka_Produce_result_t *));
@@ -4817,7 +4818,6 @@ static void rd_kafka_handle_MultiBatchProduce(rd_kafka_t *rk,
                 err = rd_kafka_handle_Produce_parse(rkb, reply, request,
                                                     results, rd_true);
 
-        rd_kafka_topic_partition_t *key;
         i = 0;
         RD_MAP_FOREACH(key, batch, &request->rkbuf_u.Produce.batch_map) {
                 rd_kafka_resp_err_t final_err =
@@ -5087,6 +5087,11 @@ int rd_kafka_MultiBatchProduceRequest(
                             rd_malloc(sizeof(rd_kafka_msgbatch_t));
                         rd_kafka_msgbatch_init(dst, src->rktp, src->pid,
                                                src->epoch_base_msgid);
+
+                        dst->first_msgid = src->first_msgid;
+                        dst->first_seq   = src->first_seq;
+                        dst->last_msgid  = src->last_msgid;
+
                         rd_kafka_msgq_move(&dst->msgq, &src->msgq);
 
                         RD_MAP_SET(&request_rkbuf->rkbuf_u.Produce.batch_map,

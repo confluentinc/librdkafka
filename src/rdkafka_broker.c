@@ -4228,8 +4228,9 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
         rd_kafka_pid_t pid      = RD_KAFKA_PID_INITIALIZER;
         rd_bool_t may_send      = rd_true;
         rd_bool_t flushing      = rd_false;
-        rd_bool_t multi_batch_request =
-            rd_kafka_is_idempotent(rkb->rkb_rk) ? rd_false : rd_true;
+        rd_bool_t multi_batch_request = rd_true;
+        // rd_bool_t multi_batch_request =
+        //     rd_kafka_is_idempotent(rkb->rkb_rk) ? rd_false : rd_true;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;

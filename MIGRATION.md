@@ -332,13 +332,13 @@ The admin-client only has support for a limited subset of methods, with more to 
     A number of additional properties have been added to the returned groups.
   * The `deleteGroups` method is supported with an additional `timeout` option.
   * The `fetchOffsets` method is supported with additional `timeout` and
-  `requireStableOffsets` option but `resolveOffsets` option is not yet supported.
+  `requireStableOffsets` options but `resolveOffsets` option is not yet supported.
   * The `deleteTopicRecords` method is supported with additional `timeout`
-  and `operationTimeout` option.
+  and `operationTimeout` options.
   * The `fetchTopicMetadata` method is supported with additional `timeout`
-  and `includeAuthorizedOperations` option. Fetching for all topics is not advisable.
-  * The `fetchTopicOffsets` method is supported with additional `timeout` 
-  and `isolationLevel` option.
+  and `includeAuthorizedOperations` options. Fetching for all topics is not advisable.
+  * The `fetchTopicOffsets` method is supported with additional `timeout`
+  and `isolationLevel` options.
 
 ### Using the Schema Registry
 
@@ -403,12 +403,18 @@ An example is made available [here](./examples/kafkajs/sr.js).
 
 ## node-rdkafka
 
-Change the import statement, from
+Migration from v2.18.0 and below should only require changing the import statement, from
+
   ```javascript
   const Kafka = require('node-rdkafka');
   ```
+
   to
+
   ```javascript
   const Kafka = require('@confluentinc/kafka-javascript');
   ```
+
 The rest of the functionality should work as usual.
+
+For releases > v2.18.0, the node-rdkafka API diverges from this library. If you encounter any issues migrating, refer to the [INTRODUCTION.md](./INTRODUCTION.md) for a guide to using this library.

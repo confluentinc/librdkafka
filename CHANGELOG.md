@@ -9,6 +9,8 @@ librdkafka v2.6.3 is a maintenance release:
   trusted root certificates (#4900).
 * Fixes to allow to migrate partitions to leaders with same leader epoch,
   or NULL leader epoch (#4901).
+* Commits during a cooperative incremental rebalance aren't causing
+  an assignment lost if the generation id was bumped in between (#4908).
 
 
 ## Fixes
@@ -40,6 +42,13 @@ librdkafka v2.6.3 is a maintenance release:
   temporarily migrated to the internal broker (#4804), or if broker implementation
   never bumps it, as it's not needed to validate the offsets.
   Happening since v2.4.0 (#4901).
+* Issues: #4059
+  Commits during a cooperative incremental rebalance could cause an
+  assignment lost if the generation id was bumped by a second join
+  group request.
+  Solved by not rejoining the group in case an illegal generation error happens
+  during a rebalance.
+  Happening since v1.6.0 (#4908)
 
 
 *Note: there was no v2.6.2 librdkafka release*

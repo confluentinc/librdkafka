@@ -9,6 +9,8 @@ librdkafka v2.6.3 is a maintenance release:
   trusted root certificates (#4900).
 * Fixes to allow to migrate partitions to leaders with same leader epoch,
   or NULL leader epoch (#4901).
+* Support versions of OpenSSL without the ENGINE component (Chris Novakovic, #3535
+  and @remicollet, #4911).
 
 
 ## Fixes
@@ -65,7 +67,6 @@ librdkafka v2.6.1 is a maintenance release:
   client side nonce once more, as it's already prepended in server sent nonce (#4895).
 * Allow retrying for status code 429 ('Too Many Requests') in HTTP requests for
   OAUTHBEARER OIDC (#4902).
-
 
 ## Fixes
 

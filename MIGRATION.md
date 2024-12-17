@@ -339,6 +339,8 @@ The admin-client only has support for a limited subset of methods, with more to 
   and `includeAuthorizedOperations` options. Fetching for all topics is not advisable.
   * The `fetchTopicOffsets` method is supported with additional `timeout`
   and `isolationLevel` options.
+  * The `fetchTopicOffsetsByTimestamp` method is supported with additional `timeout`
+  and `isolationLevel` options.
 
 ### Using the Schema Registry
 

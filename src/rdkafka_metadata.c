@@ -2067,7 +2067,8 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                                 .partitions[part]
                                 .leader_epoch;
 
-                        if (current_leader_epoch >= mdpi->leader_epoch) {
+                        if (mdpi->leader_epoch != -1 &&
+                            current_leader_epoch > mdpi->leader_epoch) {
                                 rd_kafka_broker_destroy(rkb);
                                 rd_kafka_dbg(
                                     rk, METADATA, "METADATAUPDATE",

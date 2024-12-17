@@ -845,6 +845,50 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
         return 1;
 }
 
+/**
+ * Reads max \p dst_size - 1 bytes from text or binary file at \p path
+ * to \p dst . In any case \p dst is NULL terminated.
+ *
+ * @return The number of bytes read, 0 if file was not found.
+ */
+size_t test_read_file(const char *path, char *dst, size_t dst_size) {
+        FILE *fp;
+        char buf[1024];
+        size_t dst_len = 0;
+        size_t read_bytes;
+
+#ifndef _WIN32
+        fp = fopen(path, "rb");
+#else
+        fp    = NULL;
+        errno = fopen_s(&fp, path, "rb");
+#endif
+        if (!fp) {
+                if (errno == ENOENT) {
+                        TEST_SAY("Test file %s not found\n", path);
+                        return 0;
+                } else
+                        TEST_FAIL("Failed to read %s: %s", path,
+                                  strerror(errno));
+        }
+
+        read_bytes = fread(buf, 1, sizeof(buf), fp);
+        while (read_bytes) {
+                if (dst_len + 1 >= dst_size)
+                        break;
+
+                if (dst_len + read_bytes + 1 > dst_size)
+                        read_bytes = dst_size - dst_len - 1;
+                memcpy(dst + dst_len, buf, read_bytes);
+                dst_len += read_bytes;
+                read_bytes = fread(buf, 1, sizeof(buf), fp);
+        }
+        dst[dst_len] = '\0';
+
+        fclose(fp);
+        return dst_len;
+}
+
 static void test_read_conf_file(const char *conf_path,
                                 rd_kafka_conf_t *conf,
                                 rd_kafka_topic_conf_t *topic_conf,

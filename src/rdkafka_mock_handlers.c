@@ -290,13 +290,26 @@ void rd_kafka_mock_Fetch_reply_tags_partition_write(
     rd_kafka_mock_partition_t *mpart) {
         switch (tagtype) {
         case 1: /* CurrentLeader */
+        {
+                int32_t leader_id    = mpart->leader->id,
+                        leader_epoch = mpart->leader_epoch;
+                rd_kafka_mock_partition_leader_t *mpart_leader =
+                    rd_kafka_mock_partition_next_leader_response(mpart);
+                if (mpart_leader) {
+                        leader_id    = mpart_leader->leader_id;
+                        leader_epoch = mpart_leader->leader_epoch;
+                        rd_kafka_mock_partition_leader_destroy(mpart,
+                                                               mpart_leader);
+                }
+
                 /* Leader id */
-                rd_kafka_buf_write_i32(rkbuf, mpart->leader->id);
+                rd_kafka_buf_write_i32(rkbuf, leader_id);
                 /* Leader epoch */
-                rd_kafka_buf_write_i32(rkbuf, mpart->leader_epoch);
+                rd_kafka_buf_write_i32(rkbuf, leader_epoch);
                 /* Field tags */
                 rd_kafka_buf_write_tags_empty(rkbuf);
                 break;
+        }
         default:
                 break;
         }

@@ -35,6 +35,11 @@
 #include "rdmap.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
+
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
+#include <openssl/rand.h>
+#endif
+
 #if WITH_SSL
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 extern int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,

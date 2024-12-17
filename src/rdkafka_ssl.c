@@ -1097,7 +1097,7 @@ static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
                 return 1;
         }
 
-        if (cert != NULL && rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
+        if (rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
                 /* A match is found, use the certificate. */
                 return 1;
         }

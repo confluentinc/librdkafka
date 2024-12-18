@@ -2849,6 +2849,16 @@ rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
         return (const rd_kafka_ConfigEntry_t **)entry->synonyms.rl_elems;
 }
 
+const rd_kafka_ConfigType_t rd_kafka_ConfigEntry_type(
+    const rd_kafka_ConfigEntry_t *entry) {
+        return entry->type;
+}
+
+const char *rd_kafka_ConfigEntry_documentation(
+    const rd_kafka_ConfigEntry_t *entry) {
+        return entry->documentation;
+}
+
 
 /**@}*/
 
@@ -3658,6 +3668,9 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
         rd_kafka_ConfigResource_t *config = NULL;
         rd_kafka_ConfigEntry_t *entry     = NULL;
+        int16_t api_version;
+
+        api_version = rd_kafka_buf_ApiVersion(reply);
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
@@ -3727,8 +3740,10 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_i32(reply, &entry_cnt);
 
                 for (ci = 0; ci < (int)entry_cnt; ci++) {
-                        rd_kafkap_str_t config_name, config_value;
+                        rd_kafkap_str_t config_name, config_value, documentation;
                         int32_t syn_cnt;
+                        int8_t config_type;
+
                         int si;
 
                         rd_kafka_buf_read_str(reply, &config_name);
@@ -3763,7 +3778,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_bool(reply, &entry->a.is_sensitive);
 
 
-                        if (rd_kafka_buf_ApiVersion(reply) == 1) {
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1) {
                                 /* #config_synonyms (ApiVersion 1) */
                                 rd_kafka_buf_read_i32(reply, &syn_cnt);
 
@@ -3796,6 +3811,9 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_kafka_buf_read_str(reply, &syn_name);
                                 rd_kafka_buf_read_str(reply, &syn_value);
                                 rd_kafka_buf_read_i8(reply, &syn_source);
+                                if (api_version >= 4) {
+                                        rd_kafka_buf_skip_tags(reply);
+                                }
 
                                 syn_entry = rd_kafka_ConfigEntry_new0(
                                     syn_name.str, RD_KAFKAP_STR_LEN(&syn_name),
@@ -3821,8 +3839,21 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_list_add(&entry->synonyms, syn_entry);
                         }
 
+                        if(api_version >= 4) {
+                                rd_kafka_buf_read_i8(reply, &config_type);
+                                rd_kafka_buf_read_str(reply, &documentation);
+                                entry->type = config_type;
+                                entry->documentation = RD_KAFKAP_STR_DUP(&documentation);
+                        }
+                        if (api_version >= 4) {
+                                rd_kafka_buf_skip_tags(reply);
+                        }
+
                         rd_kafka_ConfigResource_add_ConfigEntry(config, entry);
                         entry = NULL;
+                }
+                if (api_version >= 4) {
+                        rd_kafka_buf_skip_tags(reply);
                 }
 
                 /* As a convenience to the application we insert result

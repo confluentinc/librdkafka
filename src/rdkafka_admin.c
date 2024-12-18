@@ -3839,7 +3839,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_list_add(&entry->synonyms, syn_entry);
                         }
 
-                        if(api_version >= 4) {
+                        if(api_version >= 3) {
                                 rd_kafka_buf_read_i8(reply, &config_type);
                                 rd_kafka_buf_read_str(reply, &documentation);
                                 entry->type = config_type;

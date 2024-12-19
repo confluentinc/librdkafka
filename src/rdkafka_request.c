@@ -5447,7 +5447,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DescribeConfigs, 0, 4, NULL);
+            rkb, RD_KAFKAP_DescribeConfigs, 0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "DescribeConfigs (KIP-133) not supported "
@@ -5455,7 +5455,6 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
-        printf("ApiVersion: %d\n", ApiVersion);
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_DescribeConfigs, 1,

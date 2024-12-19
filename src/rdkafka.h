@@ -7855,7 +7855,7 @@ rd_kafka_ConfigEntry_is_synonym(const rd_kafka_ConfigEntry_t *entry);
 
 
 /**
- * @enum rd_kafka_ConfigType_t.
+ * @enum rd_kafka_ConfigType_t
  * @brief Apache Kafka config types.
  */
 typedef enum rd_kafka_ConfigType_t {

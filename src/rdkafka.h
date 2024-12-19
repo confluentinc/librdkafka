@@ -8401,7 +8401,7 @@ const rd_kafka_TopicPartitionInfo_t **rd_kafka_TopicDescription_partitions(
  * @return The partition id.
  */
 RD_EXPORT
-const int rd_kafka_TopicPartitionInfo_partition(
+int rd_kafka_TopicPartitionInfo_partition(
     const rd_kafka_TopicPartitionInfo_t *partition);
 
 

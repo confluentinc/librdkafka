@@ -2850,6 +2850,16 @@ rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
         return (const rd_kafka_ConfigEntry_t **)entry->synonyms.rl_elems;
 }
 
+const rd_kafka_ConfigType_t
+rd_kafka_ConfigEntry_type(const rd_kafka_ConfigEntry_t *entry) {
+        return entry->type;
+}
+
+const char *
+rd_kafka_ConfigEntry_documentation(const rd_kafka_ConfigEntry_t *entry) {
+        return entry->documentation;
+}
+
 
 /**@}*/
 
@@ -2909,6 +2919,47 @@ const char *rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype) {
                 return "UNSUPPORTED";
 
         return names[restype];
+}
+
+
+rd_kafka_InternalConfigResourceType_t
+map_to_internal_config_resourcetype(rd_kafka_ResourceType_t resourcetype) {
+        switch (resourcetype) {
+        case RD_KAFKA_RESOURCE_UNKNOWN:
+                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_UNKNOWN;
+        case RD_KAFKA_RESOURCE_ANY:
+                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_ANY;
+        case RD_KAFKA_RESOURCE_TOPIC:
+                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_TOPIC;
+        case RD_KAFKA_RESOURCE_GROUP:
+                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_GROUP;
+        case RD_KAFKA_RESOURCE_BROKER:
+                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_BROKER;
+        case RD_KAFKA_RESOURCE__CNT:
+                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_CNT;
+        default:
+                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_UNKNOWN;
+        }
+}
+
+rd_kafka_ResourceType_t map_from_internal_config_resourcetype(
+    rd_kafka_InternalConfigResourceType_t internal_resourcetype) {
+        switch (internal_resourcetype) {
+        case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_UNKNOWN:
+                return RD_KAFKA_RESOURCE_UNKNOWN;
+        case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_ANY:
+                return RD_KAFKA_RESOURCE_ANY;
+        case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_TOPIC:
+                return RD_KAFKA_RESOURCE_TOPIC;
+        case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_GROUP:
+                return RD_KAFKA_RESOURCE_GROUP;
+        case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_BROKER:
+                return RD_KAFKA_RESOURCE_BROKER;
+        case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_CNT:
+                return RD_KAFKA_RESOURCE__CNT;
+        default:
+                return RD_KAFKA_RESOURCE_UNKNOWN;
+        }
 }
 
 
@@ -3369,6 +3420,7 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 int16_t error_code;
                 rd_kafkap_str_t error_msg;
                 int8_t res_type;
+                int8_t internal_res_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
                 char *this_errstr = NULL;
@@ -3378,10 +3430,13 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
-                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_i8(reply, &internal_res_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                 rd_kafka_buf_skip_tags(reply);
+
+                res_type =
+                    map_from_internal_config_resourcetype(internal_res_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
@@ -3616,6 +3671,9 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
         rd_kafka_ConfigResource_t *config = NULL;
         rd_kafka_ConfigEntry_t *entry     = NULL;
+        int16_t api_version;
+
+        api_version = rd_kafka_buf_ApiVersion(reply);
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
@@ -3639,6 +3697,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         for (i = 0; i < (int)res_cnt; i++) {
                 int16_t error_code;
                 rd_kafkap_str_t error_msg;
+                int8_t internal_res_type;
                 int8_t res_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
@@ -3650,9 +3709,12 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
-                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_i8(reply, &internal_res_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+
+                res_type =
+                    map_from_internal_config_resourcetype(internal_res_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
@@ -3681,8 +3743,10 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_i32(reply, &entry_cnt);
 
                 for (ci = 0; ci < (int)entry_cnt; ci++) {
-                        rd_kafkap_str_t config_name, config_value;
+                        rd_kafkap_str_t config_name, config_value,
+                            documentation;
                         int32_t syn_cnt;
+                        int8_t config_type;
                         int si;
 
                         rd_kafka_buf_read_str(reply, &config_name);
@@ -3717,7 +3781,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_bool(reply, &entry->a.is_sensitive);
 
 
-                        if (rd_kafka_buf_ApiVersion(reply) == 1) {
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1) {
                                 /* #config_synonyms (ApiVersion 1) */
                                 rd_kafka_buf_read_i32(reply, &syn_cnt);
 
@@ -3750,6 +3814,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_kafka_buf_read_str(reply, &syn_name);
                                 rd_kafka_buf_read_str(reply, &syn_value);
                                 rd_kafka_buf_read_i8(reply, &syn_source);
+                                rd_kafka_buf_skip_tags(reply);
 
                                 syn_entry = rd_kafka_ConfigEntry_new0(
                                     syn_name.str, RD_KAFKAP_STR_LEN(&syn_name),
@@ -3775,9 +3840,19 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_list_add(&entry->synonyms, syn_entry);
                         }
 
+                        if (api_version >= 3) {
+                                rd_kafka_buf_read_i8(reply, &config_type);
+                                rd_kafka_buf_read_str(reply, &documentation);
+                                entry->type = config_type;
+                                entry->documentation =
+                                    RD_KAFKAP_STR_DUP(&documentation);
+                        }
+                        rd_kafka_buf_skip_tags(reply);
+
                         rd_kafka_ConfigResource_add_ConfigEntry(config, entry);
                         entry = NULL;
                 }
+                rd_kafka_buf_skip_tags(reply);
 
                 /* As a convenience to the application we insert result
                  * in the same order as they were requested. The broker
@@ -3806,6 +3881,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                             config);
                 config = NULL;
         }
+        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 

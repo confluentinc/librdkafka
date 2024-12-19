@@ -5424,7 +5424,9 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
                 int ei;
 
                 /* ResourceType */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf,
+                    map_to_internal_config_resourcetype(config->restype));
 
                 /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -5498,7 +5500,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DescribeConfigs, 0, 1, NULL);
+            rkb, RD_KAFKAP_DescribeConfigs, 0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "DescribeConfigs (KIP-133) not supported "
@@ -5507,8 +5509,9 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DescribeConfigs, 1,
-                                         rd_list_cnt(configs) * 200);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_DescribeConfigs,
+                                                 1, rd_list_cnt(configs) * 200,
+                                                 ApiVersion >= 4);
 
         /* #resources */
         rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
@@ -5518,7 +5521,9 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 int ei;
 
                 /* resource_type */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf,
+                    map_to_internal_config_resourcetype(config->restype));
 
                 /* resource_name */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -5537,13 +5542,20 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                         /* config_name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                 }
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
 
-        if (ApiVersion == 1) {
+        if (ApiVersion >= 1) {
                 /* include_synonyms */
                 rd_kafka_buf_write_i8(rkbuf, 1);
         }
+
+        if (ApiVersion >= 3) {
+                /* include_documentation */
+                rd_kafka_buf_write_i8(rkbuf, 1);
+        }
+        rd_kafka_buf_write_tags_empty(rkbuf);
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

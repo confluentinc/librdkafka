@@ -1414,7 +1414,7 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
          * Fire off request
          */
         rd_kafka_DescribeConfigs(rk, configs, ci, options, rkqu);
-        
+
         /*
          * Wait for result
          */
@@ -1437,10 +1437,10 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
         TEST_ASSERT((int)rconfig_cnt == ci,
                     "Expected %d result resources, got %" PRIusz "\n", ci,
                     rconfig_cnt);
-        
+
         /*
          * Verify status per resource
-        */
+         */
         for (i = 0; i < (int)rconfig_cnt; i++) {
                 const rd_kafka_ConfigEntry_t **entries;
                 size_t entry_cnt;

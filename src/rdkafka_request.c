@@ -5456,9 +5456,9 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_flexver_request(
-            rkb, RD_KAFKAP_DescribeConfigs, 1,
-            rd_list_cnt(configs) * 200, ApiVersion >= 4);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_DescribeConfigs,
+                                                 1, rd_list_cnt(configs) * 200,
+                                                 ApiVersion >= 4);
 
         /* #resources */
         rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));

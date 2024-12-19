@@ -2849,13 +2849,13 @@ rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
         return (const rd_kafka_ConfigEntry_t **)entry->synonyms.rl_elems;
 }
 
-const rd_kafka_ConfigType_t rd_kafka_ConfigEntry_type(
-    const rd_kafka_ConfigEntry_t *entry) {
+const rd_kafka_ConfigType_t
+rd_kafka_ConfigEntry_type(const rd_kafka_ConfigEntry_t *entry) {
         return entry->type;
 }
 
-const char *rd_kafka_ConfigEntry_documentation(
-    const rd_kafka_ConfigEntry_t *entry) {
+const char *
+rd_kafka_ConfigEntry_documentation(const rd_kafka_ConfigEntry_t *entry) {
         return entry->documentation;
 }
 
@@ -3740,7 +3740,8 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_i32(reply, &entry_cnt);
 
                 for (ci = 0; ci < (int)entry_cnt; ci++) {
-                        rd_kafkap_str_t config_name, config_value, documentation;
+                        rd_kafkap_str_t config_name, config_value,
+                            documentation;
                         int32_t syn_cnt;
                         int8_t config_type;
 
@@ -3837,11 +3838,12 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_list_add(&entry->synonyms, syn_entry);
                         }
 
-                        if(api_version >= 3) {
+                        if (api_version >= 3) {
                                 rd_kafka_buf_read_i8(reply, &config_type);
                                 rd_kafka_buf_read_str(reply, &documentation);
                                 entry->type = config_type;
-                                entry->documentation = RD_KAFKAP_STR_DUP(&documentation);
+                                entry->documentation =
+                                    RD_KAFKAP_STR_DUP(&documentation);
                         }
                         rd_kafka_buf_skip_tags(reply);
 

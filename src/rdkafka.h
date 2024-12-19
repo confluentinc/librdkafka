@@ -7836,16 +7836,21 @@ rd_kafka_ConfigEntry_is_sensitive(const rd_kafka_ConfigEntry_t *entry);
 RD_EXPORT int
 rd_kafka_ConfigEntry_is_synonym(const rd_kafka_ConfigEntry_t *entry);
 
+/**
+ * @enum the config type.
+ *
+ * @brief Apache Kafka config types.
+ */
 typedef enum rd_kafka_ConfigType_t {
-        RD_KAFKA_CONFIG_UNKNOWN = 0,
-        RD_KAFKA_CONFIG_BOOLEAN = 1,
-        RD_KAFKA_CONFIG_STRING = 2,
-        RD_KAFKA_CONFIG_INT = 3,
-        RD_KAFKA_CONFIG_SHORT = 4,
-        RD_KAFKA_CONFIG_LONG = 5,
-        RD_KAFKA_CONFIG_DOUBLE = 6,
-        RD_KAFKA_CONFIG_LIST = 7,
-        RD_KAFKA_CONFIG_CLASS = 8,
+        RD_KAFKA_CONFIG_UNKNOWN  = 0,
+        RD_KAFKA_CONFIG_BOOLEAN  = 1,
+        RD_KAFKA_CONFIG_STRING   = 2,
+        RD_KAFKA_CONFIG_INT      = 3,
+        RD_KAFKA_CONFIG_SHORT    = 4,
+        RD_KAFKA_CONFIG_LONG     = 5,
+        RD_KAFKA_CONFIG_DOUBLE   = 6,
+        RD_KAFKA_CONFIG_LIST     = 7,
+        RD_KAFKA_CONFIG_CLASS    = 8,
         RD_KAFKA_CONFIG_PASSWORD = 9,
         RD_KAFKA_CONFIG__CNT,
 } rd_kafka_ConfigType_t;
@@ -7867,27 +7872,27 @@ rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
 
 /**
  * @returns the config type.
- * 
+ *
  * @param entry Entry to get type for.
- * 
+ *
  * @remark The lifetime of the returned entry is the same as \p conf .
  * @remark Shall only be used on a DescribeConfigs result,
  *         otherwise returns RD_KAFKA_CONFIG_UNKNOWN.
  */
-RD_EXPORT const rd_kafka_ConfigType_t rd_kafka_ConfigEntry_type(
-    const rd_kafka_ConfigEntry_t *entry);
+RD_EXPORT const rd_kafka_ConfigType_t
+rd_kafka_ConfigEntry_type(const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns the config documentation.
- * 
+ *
  * @param entry Entry to get documentation for.
- * 
+ *
  * @remark The lifetime of the returned entry is the same as \p conf .
  * @remark Shall only be used on a DescribeConfigs result,
  *         otherwise returns NULL.
  */
-RD_EXPORT const char *rd_kafka_ConfigEntry_documentation(
-    const rd_kafka_ConfigEntry_t *entry);
+RD_EXPORT const char *
+rd_kafka_ConfigEntry_documentation(const rd_kafka_ConfigEntry_t *entry);
 
 
 

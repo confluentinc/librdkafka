@@ -283,6 +283,9 @@ struct rd_kafka_ConfigResource_result_s {
                               *   but with response error values. */
 };
 
+/**
+ * @brief Resource type specific to config apis.
+ */
 typedef enum rd_kafka_ConfigResourceType_t {
         RD_KAFKA_CONFIG_RESOURCE_GROUP = 32,
 } rd_kafka_ConfigResourceType_t;
@@ -296,7 +299,6 @@ map_from_resource_type_to_config_resource_type(rd_kafka_ResourceType_t restype);
 /**
  * @brief Map from int8_t to rd_kafka_ResourceType_t
  */
-
 rd_kafka_ResourceType_t
 map_from_config_resource_type_to_resource_type(int8_t config_resource_type);
 

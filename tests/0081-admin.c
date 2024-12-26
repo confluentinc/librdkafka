@@ -1061,7 +1061,8 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
             configs[ci], "consumer.session.timeout.ms",
             RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
-        if (!test_consumer_group_protocol_classic()) {
+        if (test_broker_version >= TEST_BRKVER(3, 8, 0, 0) &&
+            !test_consumer_group_protocol_classic()) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
@@ -1398,7 +1399,8 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
          */
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
-        if (!test_consumer_group_protocol_classic()) {
+        if (test_broker_version >= TEST_BRKVER(3, 8, 0, 0) &&
+            !test_consumer_group_protocol_classic()) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;

@@ -291,8 +291,7 @@ typedef enum rd_kafka_ConfigResourceType_t {
  * @brief Map from rd_kafka_ResourceType_t to
  * rd_kafka_ConfigResourceType_t
  */
-rd_kafka_ConfigResourceType_t
-map_from_resource_type_to_internal_config_resource_type(
+rd_kafka_ConfigResourceType_t map_from_resource_type_to_config_resource_type(
     rd_kafka_ResourceType_t resourcetype);
 
 /**
@@ -300,7 +299,7 @@ map_from_resource_type_to_internal_config_resource_type(
  * rd_kafka_ResourceType_t
  */
 
-rd_kafka_ResourceType_t map_from_internal_config_resource_type_to_resource_type(
+rd_kafka_ResourceType_t map_from_config_resource_type_to_resource_type(
     rd_kafka_ConfigResourceType_t internal_resourcetype);
 
 

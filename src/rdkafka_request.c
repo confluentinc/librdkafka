@@ -5425,9 +5425,8 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
 
                 /* ResourceType */
                 rd_kafka_buf_write_i8(
-                    rkbuf,
-                    map_from_resource_type_to_internal_config_resource_type(
-                        config->restype));
+                    rkbuf, map_from_resource_type_to_config_resource_type(
+                               config->restype));
 
                 /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -5522,9 +5521,8 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
 
                 /* resource_type */
                 rd_kafka_buf_write_i8(
-                    rkbuf,
-                    map_from_resource_type_to_internal_config_resource_type(
-                        config->restype));
+                    rkbuf, map_from_resource_type_to_config_resource_type(
+                               config->restype));
 
                 /* resource_name */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);

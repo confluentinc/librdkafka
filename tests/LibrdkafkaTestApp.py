@@ -12,6 +12,7 @@ from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.OauthbearerOIDCApp import OauthbearerOIDCApp
 
+import os
 import json
 
 
@@ -128,8 +129,11 @@ class LibrdkafkaTestApp(App):
         # SSL config
         if getattr(cluster, 'ssl', None) is not None:
             ssl = cluster.ssl
+            ssl_intermediate_ca = cluster.conf.get(
+                'ssl_intermediate_ca', False)
 
-            key = ssl.create_cert('librdkafka%s' % self.appid)
+            key = ssl.create_cert('librdkafka%s' % self.appid,
+                                  through_intermediate=ssl_intermediate_ca)
 
             conf_blob.append('ssl.ca.location=%s' % ssl.ca['pem'])
             conf_blob.append('ssl.certificate.location=%s' % key['pub']['pem'])
@@ -140,6 +144,13 @@ class LibrdkafkaTestApp(App):
             # set up the env vars accordingly.
             for k, v in ssl.ca.items():
                 self.env_add('SSL_ca_{}'.format(k), v)
+
+            for k, v in ssl.unused_ca.items():
+                self.env['SSL_unused_ca_{}'.format(k)] = v
+
+            self.env['SSL_all_cas_pem'] = ssl.all_cas['pem']
+            self.env['SSL_client_auth'] = cluster.conf.get(
+                'ssl_client_auth', 'required')
 
             # Set envs for all generated keys so tests can find them.
             for k, v in key.items():
@@ -181,7 +192,9 @@ class LibrdkafkaTestApp(App):
 
         self.env_add('TEST_SCENARIO', scenario)
         self.env_add('RDKAFKA_TEST_CONF', self.test_conf_file)
-        self.env_add('TEST_KAFKA_VERSION', version)
+        test_kafka_version = version
+        if 'TEST_KAFKA_VERSION' not in os.environ:
+            self.env_add('TEST_KAFKA_VERSION', test_kafka_version, False)
         self.env_add('TRIVUP_ROOT', cluster.instance_path())
 
         if self.test_mode != 'bash':

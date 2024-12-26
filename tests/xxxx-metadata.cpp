@@ -127,7 +127,7 @@ static void test_metadata_cpp(void) {
     TEST_FAIL("ISRS != 0");
   }
 
-  sleep(1);
+  rd_sleep(1);
 
   /* Second request of metadata: It have to success */
   err = producer->metadata(topic != NULL, topic, &metadata, 5000);

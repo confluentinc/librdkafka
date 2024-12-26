@@ -433,6 +433,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
         0x2000 /**< Toppar is part of the consumer                             \
                 *   assignment. */
+#define RD_KAFKA_TOPPAR_F_VALIDATING                                           \
+        0x4000 /**< Toppar is currently requesting validation. */
 
         /*
          * Timers

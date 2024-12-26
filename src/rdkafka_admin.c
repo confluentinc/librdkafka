@@ -2915,6 +2915,11 @@ const char *rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype) {
 rd_kafka_InternalConfigResourceType_t
 map_from_resource_type_to_internal_config_resource_type(
     rd_kafka_ResourceType_t resourcetype) {
+
+        if (resourcetype > RD_KAFKA_RESOURCE__CNT) {
+                rd_assert("Invalid resource type");
+        }
+
         switch (resourcetype) {
         case RD_KAFKA_RESOURCE_UNKNOWN:
                 return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_UNKNOWN;
@@ -2928,13 +2933,17 @@ map_from_resource_type_to_internal_config_resource_type(
                 return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_BROKER;
         case RD_KAFKA_RESOURCE__CNT:
                 return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_CNT;
-        default:
-                return RD_KAFKA_INTERNAL_RESOURCE_CONFIG_UNKNOWN;
         }
 }
 
 rd_kafka_ResourceType_t map_from_internal_config_resource_type_to_resource_type(
     rd_kafka_InternalConfigResourceType_t internal_resourcetype) {
+
+        if (internal_resourcetype != RD_KAFKA_INTERNAL_RESOURCE_CONFIG_GROUP &&
+            internal_resourcetype > RD_KAFKA_INTERNAL_RESOURCE_CONFIG_CNT) {
+                rd_assert("Recieved invalid resource type");
+        }
+
         switch (internal_resourcetype) {
         case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_UNKNOWN:
                 return RD_KAFKA_RESOURCE_UNKNOWN;
@@ -2948,8 +2957,6 @@ rd_kafka_ResourceType_t map_from_internal_config_resource_type_to_resource_type(
                 return RD_KAFKA_RESOURCE_BROKER;
         case RD_KAFKA_INTERNAL_RESOURCE_CONFIG_CNT:
                 return RD_KAFKA_RESOURCE__CNT;
-        default:
-                return RD_KAFKA_RESOURCE_UNKNOWN;
         }
 }
 

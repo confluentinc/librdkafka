@@ -233,9 +233,7 @@ struct rd_kafka_ConfigEntry_s {
                 rd_bool_t is_synonym;   /**< Value is synonym */
         } a;
 
-        rd_list_t synonyms;         /**< Type (rd_kafka_configEntry *) */
-        rd_kafka_ConfigType_t type; /**< Config type */
-        char *documentation;        /**< Config documentation */
+        rd_list_t synonyms; /**< Type (rd_kafka_configEntry *) */
 };
 
 /**
@@ -300,14 +298,15 @@ typedef enum rd_kafka_InternalConfigResourceType_t {
  * rd_kafka_InternalConfigResourceType_t
  */
 rd_kafka_InternalConfigResourceType_t
-map_to_internal_config_resourcetype(rd_kafka_ResourceType_t resourcetype);
+map_from_resource_type_to_internal_config_resource_type(
+    rd_kafka_ResourceType_t resourcetype);
 
 /**
  * @brief Map from rd_kafka_InternalConfigResourceType_t to
  * rd_kafka_ResourceType_t
  */
 
-rd_kafka_ResourceType_t map_from_internal_config_resourcetype(
+rd_kafka_ResourceType_t map_from_internal_config_resource_type_to_resource_type(
     rd_kafka_InternalConfigResourceType_t internal_resourcetype);
 
 

@@ -284,23 +284,21 @@ struct rd_kafka_ConfigResource_result_s {
 };
 
 typedef enum rd_kafka_ConfigResourceType_t {
-        RD_KAFKA_CONFIG_RESOURCE_GROUP = 32,  // Changed value for config APIs
+        RD_KAFKA_CONFIG_RESOURCE_GROUP = 32,
 } rd_kafka_ConfigResourceType_t;
 
 /**
- * @brief Map from rd_kafka_ResourceType_t to
- * rd_kafka_ConfigResourceType_t
+ * @brief Map from rd_kafka_ResourceType_t to int8_t
  */
-rd_kafka_ConfigResourceType_t map_from_resource_type_to_config_resource_type(
-    rd_kafka_ResourceType_t resourcetype);
+int8_t
+map_from_resource_type_to_config_resource_type(rd_kafka_ResourceType_t restype);
 
 /**
- * @brief Map from rd_kafka_ConfigResourceType_t to
- * rd_kafka_ResourceType_t
+ * @brief Map from int8_t to rd_kafka_ResourceType_t
  */
 
-rd_kafka_ResourceType_t map_from_config_resource_type_to_resource_type(
-    rd_kafka_ConfigResourceType_t internal_resourcetype);
+rd_kafka_ResourceType_t
+map_from_config_resource_type_to_resource_type(int8_t config_resource_type);
 
 
 /**@}*/

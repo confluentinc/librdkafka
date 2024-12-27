@@ -948,7 +948,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 const char *confs_delete_subtract_broker[] = {
                     "background.threads", "DELETE",   "",
                     "log.cleanup.policy", "SUBTRACT", "compact"};
-                const char *confs_set_append_group[] = {
+                const char *confs_set_group[] = {
                     "consumer.session.timeout.ms", "SET", "50000"};
                 const char *confs_delete_group[] = {
                     "consumer.session.timeout.ms", "DELETE", ""};
@@ -978,7 +978,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                     "Testing test helper with SET with GROUP resource type\n");
                 test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_GROUP,
                                                     group_id,
-                                                    confs_set_append_group, 1);
+                                                    confs_set_group, 1);
                 TEST_SAY(
                     "Testing test helper with DELETE with GROUP resource "
                     "type\n");
@@ -1484,7 +1484,6 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
                                 rd_kafka_ConfigResource_type(rconfigs[i])),
                             rd_kafka_ConfigResource_name(rconfigs[i]));
                         fails++;
-                        continue;
                 }
         }
 

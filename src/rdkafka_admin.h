@@ -291,13 +291,17 @@ typedef enum rd_kafka_ConfigResourceType_t {
 } rd_kafka_ConfigResourceType_t;
 
 /**
- * @brief Map from rd_kafka_ResourceType_t to int8_t
+ * @brief Maps rd_kafka_ResourceType_t to int8_t for IncrementalAlterConfigs
+ *        and DescribeConfigs. Note that the enum value for GROUP is 32 in
+ *        IncrementalAlterConfigs and DescribeConfigs, but it is 3 for other apis.
  */
 int8_t
 map_from_resource_type_to_config_resource_type(rd_kafka_ResourceType_t restype);
 
 /**
- * @brief Map from int8_t to rd_kafka_ResourceType_t
+ * @brief Maps int8_t to rd_kafka_ResourceType_t for IncrementalAlterConfigs
+ *        and DescribeConfigs. Note that the enum value for GROUP is 32 in
+ *        IncrementalAlterConfigs and DescribeConfigs, but it is 3 for other apis.
  */
 rd_kafka_ResourceType_t
 map_from_config_resource_type_to_resource_type(int8_t config_resource_type);

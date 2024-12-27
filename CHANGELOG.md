@@ -160,6 +160,7 @@ librdkafka v2.10.0 is a feature release:
 
 librdkafka v2.8.0 is a maintenance release:
 
+* Extend Config Apis to support group config (#4939).
 * Socket options are now all set before connection (#4893).
 * Client certificate chain is now sent when using `ssl.certificate.pem`
   or `ssl_certificate` or `ssl.keystore.location` (#4894).

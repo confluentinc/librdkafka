@@ -224,7 +224,7 @@ class DekRegistryClient implements DekClient {
       subject = encodeURIComponent(subject);
 
       const response = await this.restService.handleRequest<Dek>(
-        `/dek-registry/v1/keks/${kekName}/deks/${subject}/versions/${version}?deleted=${deleted}`,
+        `/dek-registry/v1/keks/${kekName}/deks/${subject}/versions/${version}?algorithm=${algorithm}&deleted=${deleted}`,
         'GET');
       this.dekCache.set(cacheKey, response.data);
       return response.data;

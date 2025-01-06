@@ -430,30 +430,38 @@ function getInlineTagsRecursively(ns: string, name: string, schema: any, tags: M
     }
   } else if (typeof schema === 'object') {
     const type = schema['type']
-    if (type === 'record') {
-      let recordNs = schema['namespace']
-      let recordName = schema['name']
-      if (recordNs === undefined) {
-        recordNs = impliedNamespace(name)
-      }
-      if (recordNs == null) {
-        recordNs = ns
-      }
-      if (recordNs !== '' && !recordName.startsWith(recordNs)) {
-        recordName = recordNs + '.' + recordName
-      }
-      const fields = schema['fields']
-      for (const field of fields) {
-        const fieldTags = field['confluent:tags']
-        const fieldName = field['name']
-        if (fieldTags !== undefined && fieldName !== undefined) {
-          tags.set(recordName + '.' + fieldName, new Set(fieldTags))
+    switch (type) {
+      case 'array':
+        getInlineTagsRecursively(ns, name, schema['items'], tags)
+        break;
+      case 'map':
+        getInlineTagsRecursively(ns, name, schema['values'], tags)
+        break;
+      case 'record':
+        let recordNs = schema['namespace']
+        let recordName = schema['name']
+        if (recordNs === undefined) {
+          recordNs = impliedNamespace(name)
         }
-        const fieldType = field['type']
-        if (fieldType !== undefined) {
-          getInlineTagsRecursively(recordNs, recordName, fieldType, tags)
+        if (recordNs == null) {
+          recordNs = ns
         }
-      }
+        if (recordNs !== '' && !recordName.startsWith(recordNs)) {
+          recordName = recordNs + '.' + recordName
+        }
+        const fields = schema['fields']
+        for (const field of fields) {
+          const fieldTags = field['confluent:tags']
+          const fieldName = field['name']
+          if (fieldTags !== undefined && fieldName !== undefined) {
+            tags.set(recordName + '.' + fieldName, new Set(fieldTags))
+          }
+          const fieldType = field['type']
+          if (fieldType !== undefined) {
+            getInlineTagsRecursively(recordNs, recordName, fieldType, tags)
+          }
+        }
+        break;
     }
   }
 }

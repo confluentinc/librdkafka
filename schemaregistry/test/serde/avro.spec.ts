@@ -270,6 +270,44 @@ const unionFieldSchema = `
   "version": "1"
 }`;
 
+const complexNestedSchema = `
+{
+  "type": "record",
+    "name": "UnionTest",
+    "namespace": "test",
+    "fields": [
+    {
+      "name": "emails",
+      "type": [
+        "null",
+        {
+          "type": "array",
+          "items": {
+            "type": "record",
+            "name": "Email",
+            "fields": [
+              {
+                "name": "email",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "doc": "Email address",
+                "default": null,
+                "confluent:tags": [
+                  "PII"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "doc": "Communication Email",
+      "default": null
+    }
+  ]
+}`;
+
 class FakeClock extends Clock {
   fixedNow: number = 0
 
@@ -1357,6 +1395,63 @@ describe('AvroSerializer', () => {
     expect(obj2.arrayField).toEqual([ 'hello' ]);
     expect(obj2.mapField).toEqual({ 'key': 'world' });
     expect(obj2.unionField).toEqual(null);
+  })
+  it('complex nested encryption', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+    let dekClient = fieldEncryptionExecutor.client!
+
+    let encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT',
+      tags: ['PII'],
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,NONE'
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: complexNestedSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      emails: [ {
+        email: "john@acme.com",
+      } ],
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    fieldEncryptionExecutor.client = dekClient
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.emails[0].email).toEqual('john@acme.com');
   })
   it('jsonata fully compatible', async () => {
     let rule1To2 = "$merge([$sift($, function($v, $k) {$k != 'size'}), {'height': $.'size'}])"

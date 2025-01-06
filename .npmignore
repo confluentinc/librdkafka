@@ -18,3 +18,7 @@ deps/librdkafka/config.h
 /ci
 /proto
 /docs
+
+.nyc_output/
+*lcov.info
+**/lcov-report

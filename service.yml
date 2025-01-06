@@ -10,3 +10,13 @@ codeowners:
   enable: true
 semaphore:
   enable: true
+sonarqube:
+  enable: true
+  coverage_reports:
+    - "./coverage/lcov.info"
+  coverage_exclusions:
+    - "**/*.pb.*"
+    - "**/mk-include/**/*"
+    - "examples/**"
+  languages:
+    - javascript

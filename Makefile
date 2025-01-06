@@ -51,7 +51,7 @@ $(CONFIG_OUTPUTS): node_modules/.dirstamp binding.gyp
 	@$(NODE-GYP) configure
 
 test: node_modules/.dirstamp
-	@./node_modules/.bin/mocha --ui exports $(TEST_REPORTER) $(TESTS) $(TEST_OUTPUT)
+	@./node_modules/.bin/nyc --reporter=text --reporter=json --reporter=html --report-dir=coverage/mocha ./node_modules/.bin/mocha --ui exports $(TEST_REPORTER) $(TESTS) $(TEST_OUTPUT)
 
 promisified_test: node_modules/.dirstamp
 	@./node_modules/.bin/jest --ci --runInBand $(PROMISIFIED_TESTS)

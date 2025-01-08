@@ -75,8 +75,8 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_MSGVER1,
         .depends =
             {
-                {RD_KAFKAP_Produce, 2, 2},
-                {RD_KAFKAP_Fetch, 2, 2},
+                {RD_KAFKAP_Produce, 2, INT16_MAX},
+                {RD_KAFKAP_Fetch, 2, INT16_MAX},
                 {-1},
             },
     },
@@ -85,8 +85,8 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_MSGVER2,
         .depends =
             {
-                {RD_KAFKAP_Produce, 3, 3},
-                {RD_KAFKAP_Fetch, 4, 4},
+                {RD_KAFKAP_Produce, 3, INT16_MAX},
+                {RD_KAFKAP_Fetch, 4, INT16_MAX},
                 {-1},
             },
     },
@@ -98,7 +98,7 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_APIVERSION,
         .depends =
             {
-                {RD_KAFKAP_ApiVersion, 0, 0},
+                {RD_KAFKAP_ApiVersion, 0, INT16_MAX},
                 {-1},
             },
     },
@@ -107,7 +107,7 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
         .depends =
             {
-                {RD_KAFKAP_FindCoordinator, 0, 0},
+                {RD_KAFKAP_FindCoordinator, 0, INT16_MAX},
                 {-1},
             },
     },
@@ -142,8 +142,8 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_THROTTLETIME,
         .depends =
             {
-                {RD_KAFKAP_Produce, 1, 2},
-                {RD_KAFKAP_Fetch, 1, 2},
+                {RD_KAFKAP_Produce, 1, INT16_MAX},
+                {RD_KAFKAP_Fetch, 1, INT16_MAX},
                 {-1},
             },
 
@@ -179,7 +179,7 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_SASL_HANDSHAKE,
         .depends =
             {
-                {RD_KAFKAP_SaslHandshake, 0, 0},
+                {RD_KAFKAP_SaslHandshake, 0, INT16_MAX},
                 {-1},
             },
     },
@@ -193,7 +193,7 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_LZ4,
         .depends =
             {
-                {RD_KAFKAP_FindCoordinator, 0, 0},
+                {RD_KAFKAP_FindCoordinator, 0, INT16_MAX},
                 {-1},
             },
     },
@@ -202,14 +202,14 @@ static const struct rd_kafka_feature_map {
      .feature = RD_KAFKA_FEATURE_OFFSET_TIME,
      .depends =
          {
-             {RD_KAFKAP_ListOffsets, 1, 1},
+             {RD_KAFKAP_ListOffsets, 1, INT16_MAX},
              {-1},
          }},
     {/* @brief >=0.11.0.0: Idempotent Producer*/
      .feature = RD_KAFKA_FEATURE_IDEMPOTENT_PRODUCER,
      .depends =
          {
-             {RD_KAFKAP_InitProducerId, 0, 0},
+             {RD_KAFKAP_InitProducerId, 0, INT16_MAX},
              {-1},
          }},
     {
@@ -217,8 +217,8 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_ZSTD,
         .depends =
             {
-                {RD_KAFKAP_Produce, 7, 7},
-                {RD_KAFKAP_Fetch, 10, 10},
+                {RD_KAFKAP_Produce, 7, INT16_MAX},
+                {RD_KAFKAP_Fetch, 10, INT16_MAX},
                 {-1},
             },
     },
@@ -227,8 +227,8 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_SASL_AUTH_REQ,
         .depends =
             {
-                {RD_KAFKAP_SaslHandshake, 1, 1},
-                {RD_KAFKAP_SaslAuthenticate, 0, 1},
+                {RD_KAFKAP_SaslHandshake, 1, INT16_MAX},
+                {RD_KAFKAP_SaslAuthenticate, 0, INT16_MAX},
                 {-1},
             },
     },

@@ -706,6 +706,18 @@ struct rd_kafka_op_s {
                         rd_kafka_broker_t *rkb;
                 } telemetry_broker;
 
+                struct {
+                        /**
+                         * Terminated and freed broker pointer,
+                         * can only be used for pointer comparison.
+                         */
+                        void *rkb;
+
+                        /** Termination callback to trigger
+                         * on the op handler's thread. */
+                        void (*cb)(rd_kafka_t *rk, void *rkb);
+                } terminated;
+
         } rko_u;
 };
 

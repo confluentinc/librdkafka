@@ -138,8 +138,8 @@ set(
     0145-pause_resume_mock.c
     0146-metadata_mock.c
     0149-brokers-same-host-port.c
-    0150-purge-brokers.c
     0150-telemetry_mock.c
+    0151-purge-brokers.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

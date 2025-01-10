@@ -333,7 +333,8 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
 
         if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
                 /* no-op */
-        } else if (state == RD_KAFKA_BROKER_STATE_DOWN &&
+        } else if (rd_kafka_broker_state_is_down(state) &&
+                   rd_kafka_broker_state_is_up(rkb->rkb_state) &&
                    !rkb->rkb_down_reported) {
                 /* Propagate ALL_BROKERS_DOWN event if all brokers are
                  * now down, unless we're terminating.

@@ -44,6 +44,7 @@
 
 
 static int allowed_error;
+static int all_brokers_down_allowed_error;
 
 /**
  * @brief Decide what error_cb's will cause the test to fail.
@@ -54,6 +55,8 @@ error_is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
             /* If transport errors are allowed then it is likely
              * that we'll also see ALL_BROKERS_DOWN. */
             (allowed_error == RD_KAFKA_RESP_ERR__TRANSPORT &&
+             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) ||
+            (all_brokers_down_allowed_error == 1 &&
              err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)) {
                 TEST_SAY("Ignoring allowed error: %s: %s\n",
                          rd_kafka_err2name(err), reason);
@@ -1085,8 +1088,9 @@ static void do_test_txn_endtxn_timeout_inflight(void) {
 
         SUB_TEST();
 
-        allowed_error          = RD_KAFKA_RESP_ERR__TIMED_OUT;
-        test_curr->is_fatal_cb = error_is_fatal_cb;
+        allowed_error                  = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        all_brokers_down_allowed_error = 1;
+        test_curr->is_fatal_cb         = error_is_fatal_cb;
 
         rk = create_txn_producer(&mcluster, txnid, 1, "transaction.timeout.ms",
                                  "5000", NULL);
@@ -1148,8 +1152,9 @@ static void do_test_txn_endtxn_timeout_inflight(void) {
 
         rd_kafka_destroy(rk);
 
-        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
-        test_curr->is_fatal_cb = NULL;
+        allowed_error                  = RD_KAFKA_RESP_ERR_NO_ERROR;
+        all_brokers_down_allowed_error = 0;
+        test_curr->is_fatal_cb         = NULL;
 
         SUB_TEST_PASS();
 }

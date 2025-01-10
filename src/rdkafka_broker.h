@@ -393,10 +393,14 @@ rd_kafka_broker_get_state(rd_kafka_broker_t *rkb) {
 
 
 /**
- * @returns true if the broker state is UP or UPDATE
+ * @returns true if the broker state is UP
  */
 #define rd_kafka_broker_state_is_up(state) ((state) == RD_KAFKA_BROKER_STATE_UP)
 
+/**
+ * @returns true if the broker state is DOWN
+ */
+#define rd_kafka_broker_state_is_down(state) ((state) == RD_KAFKA_BROKER_STATE_DOWN)
 
 /**
  * @returns true if the broker connection is up, else false.

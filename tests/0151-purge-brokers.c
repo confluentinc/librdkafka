@@ -78,7 +78,7 @@ static void fetch_metadata(rd_kafka_t *rk,
  *        verifying that brokers are decommissioned in the client.
  *        Then new ones are added and verified.
  */
-int main_0150_purge_brokers_mock(int argc, char **argv) {
+int main_0151_purge_brokers_mock(int argc, char **argv) {
         rd_kafka_mock_cluster_t *cluster;
         const char *bootstraps;
         rd_kafka_t *rk;

@@ -20,6 +20,7 @@ import {AesSivKey, AesSivKeySchema} from "./tink/proto/aes_siv_pb";
 import {create, fromBinary, toBinary} from "@bufbuild/protobuf";
 import {fromRawKey as aesGcmFromRawKey} from "./tink/aes_gcm";
 import {fromRawKey as aesSivFromRawKey} from "./tink/aes_siv";
+import {deepEqual} from "../../serde/json-util";
 
 // EncryptKekName represents a kek name
 const ENCRYPT_KEK_NAME = 'encrypt.kek.name'
@@ -83,8 +84,28 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
   }
 
   override configure(clientConfig: ClientConfig, config: Map<string, string>) {
-    this.client = DekRegistryClient.newClient(clientConfig)
-    this.config = config
+    if (this.client != null) {
+      if (!deepEqual(this.client.config(), clientConfig)) {
+        throw new RuleError('executor already configured')
+      }
+    } else {
+      this.client = DekRegistryClient.newClient(clientConfig)
+    }
+
+    if (this.config != null) {
+      for (let [key, value] of config) {
+        let v = this.config.get(key)
+        if (v != null) {
+          if (v !== value) {
+            throw new RuleError('rule config key already set: {key}')
+          }
+        } else {
+          this.config.set(key, value)
+        }
+      }
+    } else {
+      this.config = config
+    }
   }
 
   override type(): string {

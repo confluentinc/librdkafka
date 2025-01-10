@@ -570,6 +570,7 @@ function getType(fd: DescField): FieldType {
         case ScalarType.SFIXED64:
           return FieldType.LONG
         case ScalarType.FLOAT:
+          return FieldType.FLOAT
         case ScalarType.DOUBLE:
           return FieldType.DOUBLE
         case ScalarType.BOOL:

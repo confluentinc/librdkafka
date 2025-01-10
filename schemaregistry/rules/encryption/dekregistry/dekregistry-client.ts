@@ -47,6 +47,7 @@ interface Dek {
 }
 
 interface DekClient {
+  config(): ClientConfig;
   registerKek(name: string, kmsType: string, kmsKeyId: string, shared: boolean,
               kmsProps?: { [key: string]: string }, doc?: string): Promise<Kek>;
   getKek(name: string, deleted: boolean): Promise<Kek>;
@@ -57,6 +58,7 @@ interface DekClient {
 }
 
 class DekRegistryClient implements DekClient {
+  private clientConfig: ClientConfig;
   private restService: RestService;
   private kekCache: LRUCache<string, Kek>;
   private dekCache: LRUCache<string, Dek>;
@@ -64,6 +66,7 @@ class DekRegistryClient implements DekClient {
   private dekMutex: Mutex;
 
   constructor(config: ClientConfig) {
+    this.clientConfig = config;
     const cacheOptions = {
       max: config.cacheCapacity !== undefined ? config.cacheCapacity : 1000,
       ...(config.cacheLatestTtlSecs !== undefined && { ttl: config.cacheLatestTtlSecs * 1000 }),
@@ -82,7 +85,7 @@ class DekRegistryClient implements DekClient {
   static newClient(config: ClientConfig): DekClient {
     const url = config.baseURLs[0];
     if (url.startsWith("mock://")) {
-      return new MockDekRegistryClient()
+      return new MockDekRegistryClient(config)
     }
     return new DekRegistryClient(config)
   }
@@ -132,6 +135,10 @@ class DekRegistryClient implements DekClient {
       const str = keyMaterialBytes.toString('base64');
       dek.keyMaterial = str;
     }
+  }
+
+  config(): ClientConfig {
+    return this.clientConfig;
   }
 
   async registerKek(name: string, kmsType: string, kmsKeyId: string, shared: boolean,

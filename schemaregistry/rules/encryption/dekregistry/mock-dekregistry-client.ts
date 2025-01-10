@@ -2,14 +2,21 @@ import { DekClient, Dek, Kek } from "./dekregistry-client";
 import { MOCK_TS } from "./constants";
 import stringify from "json-stringify-deterministic";
 import {RestError} from "../../../rest-error";
+import {ClientConfig} from "../../../rest-service";
 
 class MockDekRegistryClient implements DekClient {
+  private clientConfig?: ClientConfig;
   private kekCache: Map<string, Kek>;
   private dekCache: Map<string, Dek>;
 
-  constructor() {
+  constructor(config?: ClientConfig) {
+    this.clientConfig = config
     this.kekCache = new Map<string, Kek>();
     this.dekCache = new Map<string, Dek>();
+  }
+
+  config(): ClientConfig {
+    return this.clientConfig!;
   }
 
   async registerKek(name: string, kmsType: string, kmsKeyId: string, shared: boolean,

@@ -865,6 +865,7 @@ describe('AvroSerializer', () => {
     expect(obj2.bytesField).toEqual(obj.bytesField);
   })
   it('basic encryption with dek rotation', async () => {
+    const fieldEncryptionExecutor = FieldEncryptionExecutor.registerWithClock(new FakeClock());
     (fieldEncryptionExecutor.clock as FakeClock).fixedNow = Date.now()
     let conf: ClientConfig = {
       baseURLs: [baseURL],
@@ -972,6 +973,7 @@ describe('AvroSerializer', () => {
     expect(3).toEqual(dek.version);
   })
   it('basic encryption with preserialized data', async () => {
+    const fieldEncryptionExecutor = FieldEncryptionExecutor.registerWithClock(new FakeClock());
     let conf: ClientConfig = {
       baseURLs: [baseURL],
       cacheCapacity: 1000
@@ -1024,6 +1026,7 @@ describe('AvroSerializer', () => {
     expect(obj2.f1).toEqual(obj.f1);
   })
   it('deterministic encryption with preserialized data', async () => {
+    const fieldEncryptionExecutor = FieldEncryptionExecutor.registerWithClock(new FakeClock());
     let conf: ClientConfig = {
       baseURLs: [baseURL],
       cacheCapacity: 1000
@@ -1077,6 +1080,7 @@ describe('AvroSerializer', () => {
     expect(obj2.f1).toEqual(obj.f1);
   })
   it('dek rotation encryption with preserialized data', async () => {
+    const fieldEncryptionExecutor = FieldEncryptionExecutor.registerWithClock(new FakeClock());
     let conf: ClientConfig = {
       baseURLs: [baseURL],
       cacheCapacity: 1000

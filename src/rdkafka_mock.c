@@ -2694,15 +2694,15 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
         rd_list_destroy(&mcluster->request_list);
 
+        dummy_rkb_thread = mcluster->dummy_rkb->rkb_thread;
+
         /*
-         * Destroy dummy broker
+         * Destroy dummy broker.
+         * WARNING: This is last time we can read
+         * from dummy_rkb in this thread!
          */
         rd_kafka_q_enq(mcluster->dummy_rkb->rkb_ops,
                        rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
-
-        dummy_rkb_thread = mcluster->dummy_rkb->rkb_thread;
-
-        rd_kafka_broker_destroy(mcluster->dummy_rkb);
 
         if (thrd_join(dummy_rkb_thread, &ret) != thrd_success)
                 rd_assert(!*"failed to join mock dummy broker thread");

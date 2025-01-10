@@ -288,7 +288,7 @@ typedef enum {
         RD_KAFKA_RESP_ERR__BAD_MSG = -199,
         /** Bad/unknown compression */
         RD_KAFKA_RESP_ERR__BAD_COMPRESSION = -198,
-        /** Broker is going away */
+        /** Broker is going away, together with client instance */
         RD_KAFKA_RESP_ERR__DESTROY = -197,
         /** Generic failure */
         RD_KAFKA_RESP_ERR__FAIL = -196,
@@ -412,6 +412,8 @@ typedef enum {
         /** A different record in the batch was invalid
          *  and this message failed persisting. */
         RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD = -138,
+        /** Broker is going away but client isn't terminating */
+        RD_KAFKA_RESP_ERR__DESTROY_BROKER = -137,
 
         /** End internal error codes */
         RD_KAFKA_RESP_ERR__END = -100,

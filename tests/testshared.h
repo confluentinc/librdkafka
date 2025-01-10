@@ -79,6 +79,12 @@ void test_create_topic(rd_kafka_t *use_rk,
                        int partition_cnt,
                        int replication_factor);
 
+void test_create_topic_wait_exists(rd_kafka_t *use_rk,
+                                   const char *topicname,
+                                   int partition_cnt,
+                                   int replication_factor,
+                                   int timeout);
+
 void test_create_partitions(rd_kafka_t *use_rk,
                             const char *topicname,
                             int new_partition_cnt);
@@ -183,6 +189,7 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
 const char *test_getenv(const char *env, const char *def);
+size_t test_read_file(const char *path, char *dst, size_t dst_size);
 
 int test_needs_auth(void);
 
@@ -399,4 +406,12 @@ void test_sub_skip(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
 int test_run_java(const char *cls, const char **argv);
 int test_waitpid(int pid);
+
+const char *test_consumer_group_protocol();
+
+int test_consumer_group_protocol_classic();
+
+int test_consumer_group_protocol_consumer();
+
+
 #endif /* _TESTSHARED_H_ */

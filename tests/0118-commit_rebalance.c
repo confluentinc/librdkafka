@@ -34,6 +34,7 @@
 
 static rd_kafka_t *c1, *c2;
 
+static int rebalances = 0;
 
 static void rebalance_cb(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
@@ -42,7 +43,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 
         TEST_SAY("Rebalance for %s: %s: %d partition(s)\n", rd_kafka_name(rk),
                  rd_kafka_err2name(err), parts->cnt);
-
+        rebalances++;
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
                 TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
 
@@ -101,10 +102,19 @@ int main_0118_commit_rebalance(int argc, char **argv) {
         c2 = test_create_consumer(topic, rebalance_cb, conf, NULL);
 
         test_consumer_subscribe(c1, topic);
+        /* Ensure c1 is first member */
+        rd_sleep(1);
         test_consumer_subscribe(c2, topic);
 
 
         test_consumer_poll("C1.PRE", c1, 0, -1, -1, 10, NULL);
+        if (!test_consumer_group_protocol_classic()) {
+                /* There's no initial eager rebalance with KIP-848
+                 * protocol. It has to wait that the initial partitions
+                 * are revoked. */
+                while (rebalances < 2)
+                        test_consumer_poll("C1.PRE", c1, 0, -1, -1, 1, NULL);
+        }
         test_consumer_poll("C2.PRE", c2, 0, -1, -1, 10, NULL);
 
         /* Trigger rebalance */

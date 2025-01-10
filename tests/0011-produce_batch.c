@@ -90,12 +90,20 @@ static void test_single_partition(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
-
+        char client_id[271];
         SUB_TEST_QUICK();
 
         msgid_next = 0;
 
         test_conf_init(&conf, &topic_conf, 20);
+
+        /* A long client id must not cause a segmentation fault
+         * because of an erased segment when using flexver.
+         * See:
+         * https://github.com/confluentinc/confluent-kafka-dotnet/issues/2084 */
+        memset(client_id, 'c', sizeof(client_id) - 1);
+        client_id[sizeof(client_id) - 1] = '\0';
+        rd_kafka_conf_set(conf, "client.id", client_id, NULL, 0);
 
         /* Set delivery report callback */
         rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
@@ -358,7 +366,8 @@ static void test_per_message_partition_flag(void) {
         TEST_SAY("test_per_message_partition_flag: Created kafka instance %s\n",
                  rd_kafka_name(rk));
         topic_name = test_mk_topic_name("0011_per_message_flag", 1);
-        test_create_topic(rk, topic_name, topic_num_partitions, 1);
+        test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, 1,
+                                      5000);
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)

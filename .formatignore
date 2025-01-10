@@ -18,3 +18,16 @@ src/snappy_compat.h
 src/tinycthread.c
 src/tinycthread.h
 src/regexp.h
+src/nanopb/pb_common.c
+src/nanopb/pb_common.h
+src/nanopb/pb_decode.c
+src/nanopb/pb_decode.h
+src/nanopb/pb_encode.c
+src/nanopb/pb_encode.h
+src/nanopb/pb.h
+src/opentelemetry/common.pb.c
+src/opentelemetry/common.pb.h
+src/opentelemetry/metrics.pb.c
+src/opentelemetry/metrics.pb.h
+src/opentelemetry/resource.pb.c
+src/opentelemetry/resource.pb.h

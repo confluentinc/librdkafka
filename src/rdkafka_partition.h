@@ -433,6 +433,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
         0x2000 /**< Toppar is part of the consumer                             \
                 *   assignment. */
+#define RD_KAFKA_TOPPAR_F_VALIDATING                                           \
+        0x4000 /**< Toppar is currently requesting validation. */
 
         /*
          * Timers
@@ -647,6 +649,8 @@ void rd_kafka_toppar_offset_fetch(rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
                                     rd_kafka_fetch_pos_t query_pos,
                                     int backoff_ms);
+
+void rd_kafka_toppar_purge_internal_fetch_queue_maybe(rd_kafka_toppar_t *rktp);
 
 int rd_kafka_toppar_purge_queues(rd_kafka_toppar_t *rktp,
                                  int purge_flags,

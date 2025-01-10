@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +34,7 @@
 #include "rdkafka_cert.h"
 
 #if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 &&                        \
-    !defined(OPENSSL_IS_BORINGSSL)
+    !defined(OPENSSL_NO_ENGINE)
 #define WITH_SSL_ENGINE 1
 /* Deprecated in OpenSSL 3 */
 #include <openssl/engine.h>
@@ -353,6 +354,7 @@ struct rd_kafka_conf_s {
         /* Client group configuration */
         int coord_query_intvl_ms;
         int max_poll_interval_ms;
+        int enable_metrics_push;
 
         int builtin_features;
         /*

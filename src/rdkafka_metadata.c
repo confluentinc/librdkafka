@@ -464,17 +464,29 @@ rd_kafka_populate_metadata_topic_racks(rd_tmpabuf_t *tbuf,
 /**
  * @brief Decommission brokers that are not in the metadata.
  */
-static void
-rd_kafka_metadata_decommission_unavailable_brokers(rd_kafka_t *rk,
-                                                   rd_kafka_metadata_t *md) {
+static void rd_kafka_metadata_decommission_unavailable_brokers(
+    rd_kafka_t *rk,
+    rd_kafka_metadata_t *md,
+    rd_kafka_broker_t *rkb_current) {
         rd_kafka_broker_t *rkb;
         rd_kafka_broker_t *rkb_next;
         rd_bool_t purge_broker;
+        rd_bool_t has_learned_brokers = rd_false;
         int i;
 
         rd_kafka_wrlock(rk);
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_next) {
-                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                if (rkb->rkb_source == RD_KAFKA_LEARNED)
+                        has_learned_brokers = rd_true;
+        }
+        TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_next) {
+                rd_bool_t remove_configure_broker =
+                    has_learned_brokers &&
+                    rkb->rkb_source == RD_KAFKA_CONFIGURED &&
+                    rkb != rkb_current;
+
+                if (rkb->rkb_source != RD_KAFKA_LEARNED &&
+                    !remove_configure_broker)
                         continue;
 
                 purge_broker = rd_true;
@@ -488,7 +500,9 @@ rd_kafka_metadata_decommission_unavailable_brokers(rd_kafka_t *rk,
                 if (!purge_broker)
                         continue;
 
-                rd_kafka_broker_decommission(rk, rkb, &rk->wait_thrds);
+                rd_kafka_broker_decommission(rk, rkb,
+                                             &rk->wait_decommissioned_thrds);
+                rd_list_add(&rk->wait_decommissioned_brokers, rkb);
         }
         rd_kafka_wrunlock(rk);
 }
@@ -846,7 +860,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                        &md->brokers[i], NULL);
         }
 
-        rd_kafka_metadata_decommission_unavailable_brokers(rk, md);
+        rd_kafka_metadata_decommission_unavailable_brokers(rk, md, rkb);
 
         for (i = 0; i < md->topic_cnt; i++) {
 

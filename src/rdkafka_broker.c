@@ -3445,7 +3445,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                  * This makes sure any eonce dependent on state changes
                  * are triggered. */
                 rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY,
-                                     "Client is terminating");
+                                     "Decommissioning this broker");
 
                 rd_kafka_broker_prepare_destroy(rkb);
                 wakeup = rd_true;
@@ -4456,6 +4456,7 @@ rd_kafka_broker_addresses_exhausted(const rd_kafka_broker_t *rkb) {
 static int rd_kafka_broker_thread_main(void *arg) {
         rd_kafka_broker_t *rkb = arg;
         rd_kafka_t *rk         = rkb->rkb_rk;
+        rd_kafka_op_t *terminate_op;
 
         rd_kafka_set_thread_name("%s", rkb->rkb_name);
         rd_kafka_set_thread_sysname("rdk:broker%" PRId32, rkb->rkb_nodeid);
@@ -4680,6 +4681,11 @@ static int rd_kafka_broker_thread_main(void *arg) {
         while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
                 ;
 
+        terminate_op = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
+        terminate_op->rko_u.terminated.rkb = rkb;
+        terminate_op->rko_u.terminated.cb =
+            rd_kafka_decommissioned_broker_thread_join;
+        rd_kafka_q_enq(rk->rk_ops, terminate_op);
         rd_kafka_broker_destroy(rkb);
 
 #if WITH_SSL

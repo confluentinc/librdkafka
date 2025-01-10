@@ -301,7 +301,11 @@ struct rd_kafka_s {
         /**< Logical brokers currently without an address.
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
         rd_atomic32_t rk_broker_addrless_cnt;
-        rd_list_t wait_thrds; /**< Decommissioned threads to wait */
+
+        /** Decommissioned threads to await */
+        rd_list_t wait_decommissioned_thrds;
+        /** Decommissioned brokers to await */
+        rd_list_t wait_decommissioned_brokers;
 
         mtx_t rk_internal_rkb_lock;
         rd_kafka_broker_t *rk_internal_rkb;
@@ -894,6 +898,9 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
         *curr_msgsp = cnt;
         return cnt == 0;
 }
+
+void rd_kafka_decommissioned_broker_thread_join(rd_kafka_t *rk,
+                                                void *rkb_decommissioned);
 
 void rd_kafka_destroy_final(rd_kafka_t *rk);
 

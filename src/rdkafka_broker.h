@@ -364,8 +364,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         rd_kafka_timer_t rkb_sasl_reauth_tmr;
 
-        /** True if this broker thread is terminating. Protected by rkb_lock */
-        rd_bool_t termination_in_progress;
+        /** > 0 if this broker thread is terminating */
+        rd_atomic32_t termination_in_progress;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -393,10 +393,28 @@ rd_kafka_broker_get_state(rd_kafka_broker_t *rkb) {
 
 
 /**
- * @returns true if the broker state is UP or UPDATE
+ * @returns true if the broker state is UP
  */
 #define rd_kafka_broker_state_is_up(state) ((state) == RD_KAFKA_BROKER_STATE_UP)
 
+/**
+ * @returns true if the broker state is DOWN
+ */
+#define rd_kafka_broker_state_is_down(state)                                   \
+        ((state) == RD_KAFKA_BROKER_STATE_DOWN)
+
+/**
+ * @returns true if the error is a broker destroy error, because of
+ *          termination or because of decommissioning.
+ */
+#define rd_kafka_broker_is_any_err_destroy(err)                                \
+        ((err) == RD_KAFKA_RESP_ERR__DESTROY ||                                \
+         (err) == RD_KAFKA_RESP_ERR__DESTROY_BROKER)
+
+
+#define rd_kafka_broker_or_instance_terminating(rkb)                           \
+        (rd_kafka_broker_termination_in_progress(rkb) ||                       \
+         rd_kafka_terminating((rkb)->rkb_rk))
 
 /**
  * @returns true if the broker connection is up, else false.

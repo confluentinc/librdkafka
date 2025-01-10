@@ -611,6 +611,12 @@ struct rd_kafka_s {
         } rk_curr_msgs;
 
         rd_kafka_timers_t rk_timers;
+
+        /** Metadata refresh timer */
+        rd_kafka_timer_t metadata_refresh_tmr;
+        /** 1s interval timer */
+        rd_kafka_timer_t one_s_tmr;
+
         thrd_t rk_thread;
 
         int rk_initialized; /**< Will be > 0 when the rd_kafka_t

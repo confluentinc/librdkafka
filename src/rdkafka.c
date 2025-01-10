@@ -925,7 +925,29 @@ rd_kafka_resp_err_t rd_kafka_test_fatal_error(rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-
+/**
+ * @brief Called when a broker thread is decommissioned.
+ *        on the main thread to join the corresponding thread
+ *        and remove it from the wait lists.
+ *
+ * @locality main thread
+ */
+void rd_kafka_decommissioned_broker_thread_join(rd_kafka_t *rk,
+                                                void *rkb_decommissioned) {
+        thrd_t *thrd;
+        int i;
+        RD_LIST_FOREACH(thrd, &rk->wait_decommissioned_thrds, i) {
+                void *rkb = rd_list_elem(&rk->wait_decommissioned_brokers, i);
+                if (rkb == rkb_decommissioned) {
+                        rd_list_remove_elem(&rk->wait_decommissioned_thrds, i);
+                        rd_list_remove_elem(&rk->wait_decommissioned_brokers,
+                                            i);
+                        thrd_join(*thrd, NULL);
+                        rd_free(thrd);
+                        i--;
+                }
+        }
+}
 
 /**
  * @brief Final destructor for rd_kafka_t, must only be called with refcnt 0.
@@ -1288,13 +1310,14 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_list_destroy(&wait_thrds);
 
         /* Join previously decommissioned broker threads */
-        RD_LIST_FOREACH(thrd, &rk->wait_thrds, i) {
+        RD_LIST_FOREACH(thrd, &rk->wait_decommissioned_thrds, i) {
                 int res;
                 if (thrd_join(*thrd, &res) != thrd_success)
                         ;
                 rd_free(thrd);
         }
-        rd_list_destroy(&rk->wait_thrds);
+        rd_list_destroy(&rk->wait_decommissioned_brokers);
+        rd_list_destroy(&rk->wait_decommissioned_thrds);
 
         /* Destroy mock cluster */
         if (rk->rk_mock.cluster)
@@ -2293,7 +2316,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_coord_cache_init(&rk->rk_coord_cache,
                                   rk->rk_conf.metadata_max_age_ms);
         rd_kafka_coord_reqs_init(rk);
-        rd_list_init(&rk->wait_thrds, 0, NULL);
+        rd_list_init(&rk->wait_decommissioned_thrds, 0, NULL);
+        rd_list_init(&rk->wait_decommissioned_brokers, 0, NULL);
 
         if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
                 rk->rk_drmode = RD_KAFKA_DR_MODE_CB;
@@ -4078,6 +4102,9 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
         case RD_KAFKA_OP_TERMINATE:
                 /* nop: just a wake-up */
                 res = RD_KAFKA_OP_RES_YIELD;
+                if (rko->rko_u.terminated.cb) {
+                        rko->rko_u.terminated.cb(rk, rko->rko_u.terminated.rkb);
+                }
                 rd_kafka_op_destroy(rko);
                 break;
 

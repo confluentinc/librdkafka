@@ -228,7 +228,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_PARTITION_JOIN]   = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_PARTITION_LEAVE]  = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_REBALANCE]        = sizeof(rko->rko_u.rebalance),
-            [RD_KAFKA_OP_TERMINATE]        = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_TERMINATE]        = sizeof(rko->rko_u.terminated),
             [RD_KAFKA_OP_COORD_QUERY]      = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SUBSCRIBE]        = sizeof(rko->rko_u.subscribe),
             [RD_KAFKA_OP_ASSIGN]           = sizeof(rko->rko_u.assign),

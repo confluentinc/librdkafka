@@ -126,6 +126,27 @@ describe('MessageCache', () => {
         expect(receivedMessages.filter(msg => msg.partition === 1).length).toBe(30);
     });
 
+    it('caches messages and does not return messages from the same partition unless PPC is returned', () => {
+        // Just partition 0 has messages.
+        const msgs = messages.slice(0, 10).filter(msg => msg.partition === 0);
+        cache.addMessages(msgs);
+
+        let next = [null, null];
+        let nextPpc = [null, null];
+
+        // Fetch messages all the way to the end for partition 0 with size = 10 (can also use -1 instead of 10).
+        next[0] = cache.nextN(nextPpc[0], 10);
+        expect(next[0]).not.toBeNull();
+
+        // More messages get added in the meanwhile to the same partition.
+        cache.addMessages(msgs);
+
+        // This call should not return anything - since the partition is still
+        // owned by the first nextN caller, they have not returned it yet.
+        next[1] = cache.nextN(nextPpc[1], -1);
+        expect(next[1]).toBeNull();
+    });
+
     it('does not allow fetching messages more than available partitions at a time', () => {
         const msgs = messages.slice(0, 90);
         cache.addMessages(msgs);

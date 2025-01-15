@@ -812,4 +812,50 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
         expect(lost).toEqual(1);
         expect(errors).toEqual(false);
     }, 60000);
+
+    it('consumes no more than one batch from the same partition at at time', async () => {
+        if (partitionsConsumedConcurrently === 1) {
+            return;
+        }
+
+        await producer.connect();
+
+        const messages = Array(200).fill().map(() => {
+            const value = secureRandom();
+            return { value: `value-${value}` };
+        });
+
+        await producer.send({
+            topic: topicName,
+            messages: messages,
+        });
+
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName });
+
+        const batchesHandled = new Map();
+        for (let i = 0; i < partitions; i++) {
+            batchesHandled.set(i, 0);
+        }
+
+        let messagesConsumed = 0;
+        let batchesCountExceeds1 = false;
+
+        consumer.run({
+            partitionsConsumedConcurrently,
+            eachBatch: async ({ batch }) => {
+                messagesConsumed += batch.messages.length;
+                batchesHandled.set(batch.partition, batchesHandled.get(batch.partition) + 1);
+                if (batchesHandled.get(batch.partition) > 1) {
+                    batchesCountExceeds1 = true;
+                } else {
+                    await sleep(100);
+                }
+                batchesHandled.set(batch.partition, batchesHandled.get(batch.partition) - 1);
+            }
+        });
+
+        await waitFor(() => (messagesConsumed === messages.length || batchesCountExceeds1), () => { }, 100);
+        expect(batchesCountExceeds1).toBe(false);
+    });
 });

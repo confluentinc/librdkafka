@@ -6,6 +6,10 @@ v1.2.0 is a feature release. It is supported for all usage.
 
 1. Add support for an Admin API to fetch topic offsets by timestamp (#206).
 
+## Fixes
+
+1. Fixes an issue where the `eachBatch` callback was being called for the same partition concurrently (#224).
+
 
 # confluent-kafka-javascript v1.1.0
 

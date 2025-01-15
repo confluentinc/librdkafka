@@ -111,6 +111,13 @@ rd_kafka_broker_needs_persistent_connection(rd_kafka_broker_t *rkb) {
                rd_atomic32_get(&rkb->rkb_persistconn.coord);
 }
 
+/**
+ * @returns true if the broker needs a persistent connection
+ * @locality any
+ */
+static rd_bool_t rd_kafka_broker_termination_in_progress(rd_kafka_broker_t *rkb) {
+        return rd_atomic32_get(&rkb->termination_in_progress) > 0;
+}
 
 /**
  * @returns > 0 if a connection to this broker is needed, else 0.
@@ -120,6 +127,7 @@ rd_kafka_broker_needs_persistent_connection(rd_kafka_broker_t *rkb) {
 static RD_INLINE int rd_kafka_broker_needs_connection(rd_kafka_broker_t *rkb) {
         return rkb->rkb_state == RD_KAFKA_BROKER_STATE_INIT &&
                !rd_kafka_terminating(rkb->rkb_rk) &&
+               !rd_kafka_broker_termination_in_progress(rkb) && 
                !rd_kafka_fatal_error_code(rkb->rkb_rk) &&
                (!rkb->rkb_rk->rk_conf.sparse_connections ||
                 rd_kafka_broker_needs_persistent_connection(rkb));
@@ -334,7 +342,6 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
         if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
                 /* no-op */
         } else if (rd_kafka_broker_state_is_down(state) &&
-                   rd_kafka_broker_state_is_up(rkb->rkb_state) &&
                    !rkb->rkb_down_reported) {
                 /* Propagate ALL_BROKERS_DOWN event if all brokers are
                  * now down, unless we're terminating.
@@ -3447,6 +3454,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                      "Decommissioning this broker");
 
                 rd_kafka_broker_prepare_destroy(rkb);
+                /* Release main thread reference here */
+                rd_kafka_broker_destroy(rkb);
                 wakeup = rd_true;
                 break;
 
@@ -4633,7 +4642,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
                         break;
                 }
 
-                if (rd_kafka_terminating(rkb->rkb_rk)) {
+                if (rd_kafka_terminating(rkb->rkb_rk) ||
+                    rd_kafka_broker_termination_in_progress(rkb)) {
                         /* Handle is terminating: fail the send+retry queue
                          * to speed up termination, otherwise we'll
                          * need to wait for request timeouts. */
@@ -4659,17 +4669,24 @@ static int rd_kafka_broker_thread_main(void *arg) {
                 }
         }
 
+        rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY,
+                        "Broker handle is terminating");
+
+        rd_dassert(rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN);
         if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
                 rd_kafka_wrlock(rkb->rkb_rk);
                 TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
                 if (rkb->rkb_nodeid != -1 && !RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         rd_list_remove(&rkb->rkb_rk->rk_broker_by_id, rkb);
-                (void)rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
+
+                if (RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
+                        rd_atomic32_sub(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
+                } else {
+                        rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
+                }
+                rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
                 rd_kafka_wrunlock(rkb->rkb_rk);
         }
-
-        rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY,
-                             "Broker handle is terminating");
 
         /* Disable and drain ops queue.
          * Simply purging the ops queue risks leaving dangling references
@@ -4685,6 +4702,7 @@ static int rd_kafka_broker_thread_main(void *arg) {
         terminate_op->rko_u.terminated.cb =
             rd_kafka_decommissioned_broker_thread_join;
         rd_kafka_q_enq(rk->rk_ops, terminate_op);
+        /* Release broker thread reference here and call destroy final. */
         rd_kafka_broker_destroy(rkb);
 
 #if WITH_SSL
@@ -4902,6 +4920,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
 
         rkb->rkb_reconnect_backoff_ms = rk->rk_conf.reconnect_backoff_ms;
         rd_atomic32_init(&rkb->rkb_persistconn.coord, 0);
+        rd_atomic32_init(&rkb->termination_in_progress, 0);
 
         rd_atomic64_init(&rkb->rkb_c.ts_send, 0);
         rd_atomic64_init(&rkb->rkb_c.ts_recv, 0);
@@ -6099,10 +6118,10 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                                   rd_kafka_broker_t *rkb,
                                   rd_list_t *wait_thrds) {
 
-        if (rkb->termination_in_progress)
+        if (rd_atomic32_get(&rkb->termination_in_progress) > 0)
                 return;
 
-        rkb->termination_in_progress = rd_true;
+        rd_atomic32_add(&rkb->termination_in_progress, 1);
 
         /* Add broker's thread to wait_thrds list for later joining */
         if (wait_thrds) {
@@ -6117,17 +6136,16 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",
                      rd_kafka_broker_name(rkb));
 
-        /* Send op to trigger queue/io wake-up.
-         * The op itself is (likely) ignored by the broker thread. */
-        rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
-
 #ifndef _WIN32
         /* Interrupt IO threads to speed up termination. */
         if (rk->rk_conf.term_sig)
                 pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
 #endif
 
-        rd_kafka_broker_destroy(rkb);
+        /* Send op to trigger queue/io wake-up.
+         * Broker thread will destroy this thread reference.
+         * WARNING: This is last time we can read from rkb in this thread! */
+        rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
         rd_kafka_wrlock(rk);
 }

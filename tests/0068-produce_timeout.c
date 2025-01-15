@@ -33,6 +33,7 @@
 
 #include <stdarg.h>
 
+static rd_bool_t delay_enabled = rd_false;
 /**
  * Force produce requests to timeout to test error handling.
  */
@@ -44,7 +45,8 @@
 static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
 
         /* Let delay be high to trigger the local timeout */
-        sockem_set(skm, "delay", 10000, NULL);
+        if (delay_enabled)
+                sockem_set(skm, "delay", 10000, NULL);
         return 0;
 }
 
@@ -76,10 +78,10 @@ dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
                     rd_kafka_err2str(rkmessage->err));
         else {
                 TEST_ASSERT_LATER(rd_kafka_message_status(rkmessage) ==
-                                      RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED,
+                                      RD_KAFKA_MSG_STATUS_NOT_PERSISTED,
                                   "Message should have status "
-                                  "PossiblyPersisted (%d), not %d",
-                                  RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED,
+                                  "NotPersisted (%d), not %d",
+                                  RD_KAFKA_MSG_STATUS_NOT_PERSISTED,
                                   rd_kafka_message_status(rkmessage));
                 msg_dr_fail_cnt++;
         }
@@ -112,6 +114,7 @@ int main_0068_produce_timeout(int argc, char **argv) {
         TEST_SAY("Auto-creating topic %s\n", topic);
         test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
 
+        delay_enabled = rd_true;
         TEST_SAY("Producing %d messages that should timeout\n", msgcnt);
         test_produce_msgs_nowait(rk, rkt, testid, 0, 0, msgcnt, NULL, 0, 0,
                                  &msgcounter);

@@ -42,9 +42,6 @@ void rd_kafka_buf_destroy_final(rd_kafka_buf_t *rkbuf) {
                         rd_list_destroy(rkbuf->rkbuf_u.Metadata.topic_ids);
                 if (rkbuf->rkbuf_u.Metadata.reason)
                         rd_free(rkbuf->rkbuf_u.Metadata.reason);
-                if (rkbuf->rkbuf_u.Metadata.rko)
-                        rd_kafka_op_reply(rkbuf->rkbuf_u.Metadata.rko,
-                                          RD_KAFKA_RESP_ERR__DESTROY);
                 if (rkbuf->rkbuf_u.Metadata.decr) {
                         /* Decrease metadata cache's full_.._sent state. */
                         mtx_lock(rkbuf->rkbuf_u.Metadata.decr_lock);
@@ -480,7 +477,7 @@ void rd_kafka_buf_callback(rd_kafka_t *rk,
             response ? response->rkbuf_totlen : 0,
             response ? response->rkbuf_ts_sent : -1, err);
 
-        if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
+        if (request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
 
                 rd_kafka_assert(NULL, !request->rkbuf_response);

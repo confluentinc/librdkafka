@@ -97,64 +97,70 @@ rd_kafka_metadata(rd_kafka_t *rk,
         rd_bool_t allow_auto_create_topics =
             rk->rk_conf.allow_auto_create_topics;
 
-        /* Query any broker that is up, and if none are up pick the first one,
-         * if we're lucky it will be up before the timeout */
-        rkb = rd_kafka_broker_any_usable(rk, timeout_ms, RD_DO_LOCK, 0,
-                                         "application metadata request");
-        if (!rkb)
-                return RD_KAFKA_RESP_ERR__TRANSPORT;
+        do {
+                /* Query any broker that is up, and if none are up pick the first one,
+                * if we're lucky it will be up before the timeout */
+                rkb = rd_kafka_broker_any_usable(rk, timeout_ms, RD_DO_LOCK, 0,
+                                                "application metadata request");
+                if (!rkb)
+                        return RD_KAFKA_RESP_ERR__TRANSPORT;
 
-        rkq = rd_kafka_q_new(rk);
+                rkq = rd_kafka_q_new(rk);
 
-        rd_list_init(&topics, 0, rd_free);
-        if (!all_topics) {
-                if (only_rkt)
-                        rd_list_add(&topics,
-                                    rd_strdup(rd_kafka_topic_name(only_rkt)));
-                else {
-                        int cache_cnt;
-                        rd_kafka_local_topics_to_list(rkb->rkb_rk, &topics,
-                                                      &cache_cnt);
-                        /* Don't trigger auto-create for cached topics */
-                        if (rd_list_cnt(&topics) == cache_cnt)
-                                allow_auto_create_topics = rd_true;
+                rd_list_init(&topics, 0, rd_free);
+                if (!all_topics) {
+                        if (only_rkt)
+                                rd_list_add(&topics,
+                                        rd_strdup(rd_kafka_topic_name(only_rkt)));
+                        else {
+                                int cache_cnt;
+                                rd_kafka_local_topics_to_list(rkb->rkb_rk, &topics,
+                                                        &cache_cnt);
+                                /* Don't trigger auto-create for cached topics */
+                                if (rd_list_cnt(&topics) == cache_cnt)
+                                        allow_auto_create_topics = rd_true;
+                        }
                 }
-        }
 
-        /* Async: request metadata */
-        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA);
-        rd_kafka_op_set_replyq(rko, rkq, 0);
-        rko->rko_u.metadata.force = 1; /* Force metadata request regardless
-                                        * of outstanding metadata requests. */
-        rd_kafka_MetadataRequest(rkb, &topics, NULL, "application requested",
-                                 allow_auto_create_topics,
-                                 /* cgrp_update:
-                                  * Only update consumer group state
-                                  * on response if this lists all
-                                  * topics in the cluster, since a
-                                  * partial request may make it seem
-                                  * like some subscribed topics are missing. */
-                                 all_topics ? rd_true : rd_false,
-                                 rd_false /* force_racks */, rko);
+                /* Async: request metadata */
+                rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA);
+                rd_kafka_op_set_replyq(rko, rkq, 0);
+                rko->rko_u.metadata.force = 1; /* Force metadata request regardless
+                                                * of outstanding metadata requests. */
+                rd_kafka_MetadataRequest(rkb, &topics, NULL, "application requested",
+                                        allow_auto_create_topics,
+                                        /* cgrp_update:
+                                        * Only update consumer group state
+                                        * on response if this lists all
+                                        * topics in the cluster, since a
+                                        * partial request may make it seem
+                                        * like some subscribed topics are missing. */
+                                        all_topics ? rd_true : rd_false,
+                                        rd_false /* force_racks */, rko);
 
-        rd_list_destroy(&topics);
-        rd_kafka_broker_destroy(rkb);
+                rd_list_destroy(&topics);
+                rd_kafka_broker_destroy(rkb);
 
-        /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(ts_end), 0);
+                /* Wait for reply (or timeout) */
+                rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(ts_end), 0);
 
-        rd_kafka_q_destroy_owner(rkq);
+                rd_kafka_q_destroy_owner(rkq);
 
-        /* Timeout */
-        if (!rko)
-                return RD_KAFKA_RESP_ERR__TIMED_OUT;
+                /* Timeout */
+                if (!rko)
+                        return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
-        /* Error */
-        if (rko->rko_err) {
-                rd_kafka_resp_err_t err = rko->rko_err;
-                rd_kafka_op_destroy(rko);
-                return err;
-        }
+                /* Error */
+                if (rko->rko_err) {
+                        rd_kafka_resp_err_t err = rko->rko_err;
+                        rd_kafka_op_destroy(rko);
+                        if (rko->rko_err != RD_KAFKA_RESP_ERR__DESTROY)
+                                return err;
+                }
+
+                /* In case selected broker was decommissioned,
+                 * try again with a different broker. */
+        } while(rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY);
 
         /* Reply: pass metadata pointer to application who now owns it*/
         rd_kafka_assert(rk, rko->rko_u.metadata.md);

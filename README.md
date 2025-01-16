@@ -29,10 +29,22 @@ To use **Schema Registry**, use the [@confluentinc/schemaregistry](https://www.n
 
 The following configurations are supported:
 
-* Any supported version of Node.js (The two LTS versions, 18 and 20, and the latest versions, 21, 22 and 23).
-* Linux (x64 and arm64) - both glibc and musl/alpine.
-* macOS - arm64/m1. macOS (Intel) is supported on a best-effort basis.
-* Windows - x64.
+* Linux (x64 and arm64) - we support both musl and glibc based distributions:
+
+| Distribution                              | Supported Node Versions |
+| ----------------------------------------- | ----------------------- |
+| Debian Bullseye/Ubuntu 20.04              | 18, 20, 21, 22, 23      |
+| Debian Bookworm/Ubuntu 22.04              | 18, 20, 21, 22, 23      |
+| Alpine Linux 3.20+                        | 18, 20, 21, 22, 23      |
+| AlmaLinux 9/Rocky Linux 9/CentOS Stream 9 | 18, 20, 21, 22, 23      |
+
+Other distributions will probably work given a modern version of gcc/glibc, but we don't test the pre-built binaries with them.
+
+* macOS - arm64/m1. macOS (Intel) is supported on a best-effort basis. Node versions 18, 20, 21, 22, and 23 are supported.
+* Windows - x64. Node versions 18, 20, 21, 22, and 23 are supported.
+
+> [!WARNING]
+> Pre-built binary support will be dropped after the EOL of the node version or the OS.
 
 Installation on any of these platforms is meant to be seamless, without any C/C++ compilation required.
 

@@ -45,7 +45,7 @@ blocks:
       jobs:
         - name: "Build from source and test for musl"
           commands:
-            - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker.sh
+            - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker-alpine.sh
 
   - name: "Linux arm64 (musl): Build and test"
     dependencies: [ ]
@@ -59,7 +59,7 @@ blocks:
       jobs:
         - name: "Build from source and test for musl"
           commands:
-              - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker.sh
+              - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker-alpine.sh
 
   - name: "Linux arm64: Build and test"
     dependencies: [ ]
@@ -183,10 +183,8 @@ blocks:
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
-            - sem-version node $NODE_VERSION
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - npm ci # node-pre-gyp will fallback to build here, because new tag implies no release yet.
-            - npx node-pre-gyp package
+            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-bullseye /v/.semaphore/build-docker-debian.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 
@@ -221,10 +219,8 @@ blocks:
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
-            - sem-version node $NODE_VERSION
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - npm ci # node-pre-gyp will fallback to build here, because new tag implies no release yet.
-            - npx node-pre-gyp package
+            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-bullseye /v/.semaphore/build-docker-debian.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 
@@ -260,7 +256,7 @@ blocks:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-alpine /v/.semaphore/build-docker.sh
+            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-alpine /v/.semaphore/build-docker-alpine.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 
@@ -296,7 +292,7 @@ blocks:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-alpine /v/.semaphore/build-docker.sh
+            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-alpine /v/.semaphore/build-docker-alpine.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 

@@ -2,6 +2,10 @@ deps/*
 !deps/librdkafka.gyp
 !deps/librdkafka
 !deps/windows-install.*
+deps/librdkafka/tests
+deps/librdkafka/examples
+deps/librdkafka/debian
+deps/librdkafka/packaging
 .gitmodules
 Dockerfile
 deps/librdkafka/config.h

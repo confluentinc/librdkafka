@@ -32,7 +32,7 @@
                   "deps/librdkafka/src/librdkafka.so",
                 ],
                 "action": [
-                  "make", "-j", "-C", "librdkafka", "libs", "install"
+                  "make", "-j", "-C", "librdkafka", "libs", "install-subdirs"
                 ],
                 "conditions": [
                   [

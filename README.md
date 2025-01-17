@@ -111,6 +111,7 @@ For guidelines on contributing please see [CONTRIBUTING.md](CONTRIBUTING.md)
 | confluent-kafka-javascript | librdkafka |
 | -------------------------- | ---------- |
 | 1.0.0                      | 2.6.1      |
+| 1.2.0                      | 2.8.0      |
 
 This mapping is applicable if you're using a pre-built binary. Otherwise, you can check the librdkafka version with the following command:
 

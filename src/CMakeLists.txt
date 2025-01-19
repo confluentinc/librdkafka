@@ -133,6 +133,10 @@ if(NOT HAVE_REGEX)
   list(APPEND sources regexp.c)
 endif()
 
+if(NOT HAVE_RAND_R)
+  list(APPEND sources rdrandr.c)
+endif()
+
 # Define flags with cmake instead of by defining them on win32_config.h
 if(WITHOUT_WIN32_CONFIG)
   list(APPEND rdkafka_compile_definitions WITHOUT_WIN32_CONFIG)

@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,25 +29,10 @@
 
 #include "test.h"
 
-#if WITH_SOCKEM
 #include "rdkafka.h"
+#include "../src/rdkafka_protocol.h"
 
 #include <stdarg.h>
-
-/**
- * Force produce requests to timeout to test error handling.
- */
-
-/**
- * @brief Sockem connect, called from **internal librdkafka thread** through
- *        librdkafka's connect_cb
- */
-static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
-
-        /* Let delay be high to trigger the local timeout */
-        sockem_set(skm, "delay", 10000, NULL);
-        return 0;
-}
 
 static int
 is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
@@ -95,17 +81,23 @@ int main_0068_produce_timeout(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
         int msgcounter = 0;
+        const char *bootstraps;
+
+        rd_kafka_mock_cluster_t *mcluster =
+            test_mock_cluster_new(3, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
 
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 
-        test_socket_enable(conf);
-        test_curr->connect_cb  = connect_cb;
         test_curr->is_fatal_cb = is_fatal_cb;
 
-        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        /* message timeout should be less that rtt */
         rkt = test_create_producer_topic(rk, topic, "message.timeout.ms",
                                          "2000", NULL);
 
@@ -113,9 +105,12 @@ int main_0068_produce_timeout(int argc, char **argv) {
         test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
 
         TEST_SAY("Producing %d messages that should timeout\n", msgcnt);
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_Produce, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            6000);
+
         test_produce_msgs_nowait(rk, rkt, testid, 0, 0, msgcnt, NULL, 0, 0,
                                  &msgcounter);
-
 
         TEST_SAY("Flushing..\n");
         rd_kafka_flush(rk, 10000);
@@ -131,10 +126,9 @@ int main_0068_produce_timeout(int argc, char **argv) {
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
 
+        test_mock_cluster_destroy(mcluster);
+
         TEST_LATER_CHECK();
 
         return 0;
 }
-
-
-#endif

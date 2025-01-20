@@ -477,7 +477,7 @@ void rd_kafka_buf_callback(rd_kafka_t *rk,
             response ? response->rkbuf_totlen : 0,
             response ? response->rkbuf_ts_sent : -1, err);
 
-        if (request->rkbuf_replyq.q) {
+        if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
 
                 rd_kafka_assert(NULL, !request->rkbuf_response);

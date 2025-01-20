@@ -400,7 +400,16 @@ rd_kafka_broker_get_state(rd_kafka_broker_t *rkb) {
 /**
  * @returns true if the broker state is DOWN
  */
-#define rd_kafka_broker_state_is_down(state) ((state) == RD_KAFKA_BROKER_STATE_DOWN)
+#define rd_kafka_broker_state_is_down(state)                                   \
+        ((state) == RD_KAFKA_BROKER_STATE_DOWN)
+
+/**
+ * @returns true if the error is a broker destroy error, because of
+ *          termination or because of decommissioning.
+ */
+#define rd_kafka_broker_is_any_err_destroy(err)                                \
+        ((err) == RD_KAFKA_RESP_ERR__DESTROY ||                                \
+         (err) == RD_KAFKA_RESP_ERR__DESTROY_BROKER)
 
 /**
  * @returns true if the broker connection is up, else false.

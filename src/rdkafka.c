@@ -404,7 +404,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR__BAD_MSG, "Local: Bad message format"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
               "Local: Invalid compressed data"),
-    _ERR_DESC(RD_KAFKA_RESP_ERR__DESTROY, "Local: Broker handle destroyed"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__DESTROY,
+              "Local: Broker handle destroyed "
+              "for termination"),
     _ERR_DESC(
         RD_KAFKA_RESP_ERR__FAIL,
         "Local: Communication failure with broker"),  // FIXME: too specific
@@ -489,6 +491,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD,
               "Local: an invalid record in the same batch caused "
               "the failure of this message too."),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+              "Local: Broker handle destroyed without termination."),
 
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN, "Unknown broker error"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_NO_ERROR, "Success"),
@@ -1191,7 +1195,7 @@ void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
 static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_kafka_topic_t *rkt, *rkt_tmp;
         rd_kafka_broker_t *rkb, *rkb_tmp;
-        rd_list_t wait_thrds;
+        rd_list_t wait_thrds, brokers_to_decommission;
         thrd_t *thrd;
         int i;
 
@@ -1233,10 +1237,20 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                 rd_kafka_wrlock(rk);
         }
 
-        /* Decommission brokers. */
+        /* Decommission brokers.
+         * `rd_kafka_broker_decommission` releases and reacquires
+         * the lock so there could be destroyed brokers in
+         * `rk->rk_brokers` */
+        rd_list_init(&brokers_to_decommission,
+                     rd_atomic32_get(&rk->rk_broker_cnt), NULL);
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
+                rd_list_add(&brokers_to_decommission, rkb);
+        }
+
+        RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {
                 rd_kafka_broker_decommission(rk, rkb, &wait_thrds);
         }
+        rd_list_destroy(&brokers_to_decommission);
 
         if (rk->rk_clusterid) {
                 rd_free(rk->rk_clusterid);
@@ -1282,8 +1296,8 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                              "Decommissioning internal broker");
 
-                thrd                = rd_malloc(sizeof(*thrd));
-                *thrd               = rk->rk_internal_rkb->rkb_thread;
+                thrd  = rd_malloc(sizeof(*thrd));
+                *thrd = rk->rk_internal_rkb->rkb_thread;
 
                 /* Send op to trigger queue wake-up.
                  * WARNING: This is last time we can read

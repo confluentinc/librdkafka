@@ -723,6 +723,8 @@ err:
         actions = rd_kafka_err_action(
             rkb, ErrorCode, request,
 
+            RD_KAFKA_ERR_ACTION_REFRESH, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+
             RD_KAFKA_ERR_ACTION_RETRY | RD_KAFKA_ERR_ACTION_REFRESH,
             RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
 

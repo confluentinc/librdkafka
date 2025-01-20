@@ -2563,8 +2563,15 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
         const rd_list_t *topics           = request->rkbuf_u.Metadata.topics;
         int actions;
 
-        rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
+        rd_kafka_assert(NULL, rd_kafka_broker_is_any_err_destroy(err) ||
                                   thrd_is_current(rk->rk_thread));
+
+        /* Avoid metadata updates when we're terminating. */
+        if (rd_kafka_terminating(rkb->rkb_rk) ||
+            err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Terminating */
+                goto done;
+        }
 
         if (err)
                 goto err;
@@ -2612,14 +2619,14 @@ err:
                         return;
                 /* FALLTHRU */
         } else {
-                int log_level = err == RD_KAFKA_RESP_ERR__DESTROY ?
-                        LOG_DEBUG : LOG_WARNING;
-                rd_rkb_log(rkb, log_level, "METADATA",
-                        "Metadata request failed: %s: %s (%dms): %s",
-                        request->rkbuf_u.Metadata.reason,
-                        rd_kafka_err2str(err),
-                        (int)(request->rkbuf_ts_sent / 1000),
-                        rd_kafka_actions2str(actions));
+                if (err != RD_KAFKA_RESP_ERR__DESTROY_BROKER) {
+                        rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                                   "Metadata request failed: %s: %s (%dms): %s",
+                                   request->rkbuf_u.Metadata.reason,
+                                   rd_kafka_err2str(err),
+                                   (int)(request->rkbuf_ts_sent / 1000),
+                                   rd_kafka_actions2str(actions));
+                }
                 /* Respond back to caller on non-retriable errors */
                 if (rko && rko->rko_replyq.q) {
                         rko->rko_err            = err;

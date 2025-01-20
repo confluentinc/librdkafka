@@ -346,6 +346,8 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
         } else {
                 rd_kafka_topic_partition_list_t *assignment;
                 test_conf_set(conf, "group.id", topic);
+                test_conf_set(conf, "fetch.wait.max.ms", "100");
+                
                 rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
                 assignment = rd_kafka_topic_partition_list_new(1);
@@ -380,7 +382,7 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                 test_consumer_poll_timeout("partition 0", rk, 0, -1, -1, 2,
                                            NULL, 5000);
         }
-        TIMING_ASSERT_LATER(&timing, 0, 2000);
+        TIMING_ASSERT_LATER(&timing, 0, 500);
 
         /* Leader change triggers the metadata update and migration
          * of partition 0 to brokers 3 and with 'second_leader_change' also

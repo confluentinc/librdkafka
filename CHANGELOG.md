@@ -3,6 +3,8 @@
 librdkafka v2.9.0 is a feature release:
 
  * Fix for librdkafka yielding before timeouts had been reached (#)
+ * Removed a 500ms latency when a consumer partition switches to a different
+   leader (#)
 
 
 ## Fixes
@@ -14,6 +16,16 @@ librdkafka v2.9.0 is a feature release:
    without the condition being fulfilled because of spurious wake-ups.
    Solved by verifying with a monotonic clock that the expected point in time
    was reached and calling the function again if needed.
+   Happens since 1.x (#).
+
+### Consumer fixes
+
+ * Issues: #
+   When switching to a different leader a consumer could wait 500ms 
+   (`fetch.error.backoff.ms`) before starting to fetch again. The fetch backoff wasn't reset when joining the new broker.
+   Solved by resetting it, given it's not needed to backoff
+   the first fetch on a different node. This way faster leader switches are
+   possible.
    Happens since 1.x (#).
 
 

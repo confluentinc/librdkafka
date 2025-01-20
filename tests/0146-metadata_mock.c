@@ -138,11 +138,15 @@ static void do_test_fast_metadata_refresh_stops(void) {
 
         /* First call is for getting initial metadata,
          * second one happens after the error,
-         * it should stop refreshing metadata after that. */
+         * it should stop refreshing metadata after that.
+         * A bootstrap broker could be decommissioned,
+         * requesting an additional metadata refresh
+         * for refreshing topic leaders. */
         metadata_requests = test_mock_wait_matching_requests(
-            mcluster, 2, 500, is_metadata_request, NULL);
-        TEST_ASSERT(metadata_requests == 2,
-                    "Expected 2 metadata request, got %d", metadata_requests);
+            mcluster, 2, 1000, is_metadata_request, NULL);
+        TEST_ASSERT(metadata_requests >= 2 && metadata_requests <= 3,
+                    "Expected 2 or 3 metadata request, got %d",
+                    metadata_requests);
         rd_kafka_mock_stop_request_tracking(mcluster);
 
         rd_kafka_destroy(rk);

@@ -1,0 +1,201 @@
+version: v1.0
+name: post-install
+agent:
+  machine:
+    type: s1-prod-ubuntu22-04-amd64-1
+
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+
+auto_cancel:
+  running:
+    when: "branch != 'master'"
+
+execution_time_limit:
+  hours: 3
+
+queue:
+  - when: "branch != 'master'"
+    processing: parallel
+
+blocks:
+  - name: "Debian-based OS (amd64)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu22-04-amd64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: DOCKER_IMAGE
+              values: ["debian:bullseye", "debian:bookworm", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "Debian-based OS (arm64)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu22-04-arm64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: DOCKER_IMAGE
+              values: ["debian:bullseye", "debian:bookworm", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "Alpine-based OS (amd64)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu22-04-amd64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - docker run -v "$(pwd):/v" "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "Alpine-based OS (arm64)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu22-04-arm64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - docker run -v "$(pwd):/v" "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "RHEL-based OS (amd64)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu22-04-amd64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: DOCKER_IMAGE
+              values: ["quay.io/centos/centos:stream9", "almalinux:9", "rockylinux:9"]
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "RHEL-based OS (arm64)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu22-04-arm64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: DOCKER_IMAGE
+              values: ["quay.io/centos/centos:stream9", "almalinux:9", "rockylinux:9"]
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "Mac (Intel)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-macos-13-5-amd64
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - sem-version node $NODE_VERSION
+            - bash ci/post-install/install-mac.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "Mac (M1)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-macos-13-5-arm64
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: NODE_VERSION
+              values: ["18", "20", "21", "22", "23"]
+          commands:
+            - sem-version node $NODE_VERSION
+            - bash ci/post-install/install-mac.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+
+  - name: "Windows (x64)"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-windows
+      prologue:
+        commands:
+          # The semaphore agent already comes with an installed version of node. We, however, need to use a different
+          # version of node for the release (as many as we need to cover all the different ABIs).
+          # The node installer does not allow us to downgrade, so we need to uninstall the current version.
+          # The method below isn't particularly robust (as it depends on the particular format of the URL), but it
+          # works and can be easily fixed if it breaks (the node --version in the below jobs can be checked if there are
+          # any issues in the build).
+          - $env:InstalledMajor = (Get-Command node).Version.Major
+          - $env:InstalledMinor = (Get-Command node).Version.Minor
+          - $env:InstalledBuild = (Get-Command node).Version.Build
+          - $env:InstalledVersion = "v${env:InstalledMajor}.${env:InstalledMinor}.${env:InstalledBuild}"
+          - echo "https://nodejs.org/dist/${env:InstalledVersion}/node-${env:InstalledVersion}-x64.msi"
+          - Invoke-WebRequest "https://nodejs.org/dist/${env:InstalledVersion}/node-${env:InstalledVersion}-x64.msi" -OutFile node_old.msi
+          - msiexec /qn /l* node-old-log.txt /uninstall node_old.msi
+          - cat .\node-old-log.txt
+      jobs:
+        - name: "Install"
+          matrix:
+            - env_var: NODE_VERSION
+              values: ["18.19.0", "20.11.0", "21.6.1", "22.2.0", "23.2.0"]
+          commands:
+            - Invoke-WebRequest "https://nodejs.org/download/release/v${env:NODE_VERSION}/node-v${env:NODE_VERSION}-x64.msi" -OutFile node.msi
+            - msiexec /qn /l* node-log.txt /i node.msi
+            - cat .\node-log.txt
+            - node --version
+            - $env:tempFolderPath = Join-Path $Env:Temp $(New-Guid)
+            - New-Item -Type Directory -Path ${env:tempFolderPath} | Out-Null
+            - cd ${env:tempFolderPath}
+            - npm init -y
+            - npm install --save @confluentinc/kafka-javascript@${env:LIBRARY_VERSION}
+            - node -e "console.log(require('@confluentinc/kafka-javascript').librdkafkaVersion);"

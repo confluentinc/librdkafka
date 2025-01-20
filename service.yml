@@ -10,6 +10,16 @@ codeowners:
   enable: true
 semaphore:
   enable: true
+  tasks:
+  - name: post-install
+    scheduled: false
+    branch: "master"
+    pipeline_file: .semaphore/post_install.yml
+    parameters:
+    - name: LIBRARY_VERSION
+      required: true
+      description: "Which library version to install."
+      default_value: "latest"
 sonarqube:
   enable: true
   coverage_reports:

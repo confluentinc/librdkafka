@@ -82,7 +82,7 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
         rd_ts_t abs_timeout;
         rd_bool_t continue_timedwait = rd_true;
 
-        if (timeout_ms == -1 /* INFINITE*/)
+        if (timeout_ms == RD_POLL_INFINITE)
                 return cnd_wait(cnd, mtx);
 #if defined(_TTHREAD_WIN32_)
         return _cnd_timedwait_win32(cnd, mtx, (DWORD)timeout_ms);
@@ -104,7 +104,7 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
                         ts.tv_nsec -= 1000000000;
                 }
 
-                ret = cnd_timedwait(cnd, mtx, &ts);
+                ret                = cnd_timedwait(cnd, mtx, &ts);
                 continue_timedwait = ret == thrd_timedout;
                 if (continue_timedwait) {
                         timeout_ms = rd_timeout_remains(abs_timeout);
@@ -127,13 +127,22 @@ int cnd_timedwait_msp(cnd_t *cnd, mtx_t *mtx, int *timeout_msp) {
         return r;
 }
 
-int cnd_timedwait_abs(cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec) {
-        if (tspec->tv_sec == RD_POLL_INFINITE)
+int cnd_timedwait_abs(cnd_t *cnd, mtx_t *mtx, rd_ts_t abs_timeout) {
+        int r = thrd_timedout;
+        int timeout_ms;
+        if (abs_timeout == RD_POLL_INFINITE)
                 return cnd_wait(cnd, mtx);
-        else if (tspec->tv_sec == RD_POLL_NOWAIT)
+        else if (abs_timeout == RD_POLL_NOWAIT)
                 return thrd_timedout;
 
-        return cnd_timedwait(cnd, mtx, tspec);
+        do {
+                timeout_ms = rd_timeout_remains(abs_timeout);
+                if (timeout_ms == RD_POLL_NOWAIT)
+                        break;
+                r = cnd_timedwait_ms(cnd, mtx, timeout_ms);
+        } while (r == thrd_timedout);
+
+        return r;
 }
 
 

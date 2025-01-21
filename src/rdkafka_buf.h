@@ -42,6 +42,9 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
                     rd_kafka_msgbatch_t *) map_topic_partition_msgbatch_t;
 typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
                     rd_kafka_buf_t *) map_topic_partition_buf_t;
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafka_Produce_result_t *) map_topic_partition_result_t;
+
 
 
 /**

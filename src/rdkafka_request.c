@@ -3604,14 +3604,16 @@ static void rd_kafkap_Produce_reply_tags_destroy(
 static void
 produce_reply_tags_cleaup(rd_kafkap_Produce_reply_tags_t *reply_level_tags,
                           rd_kafkap_Produce_reply_tags_t *toppar_level_tags,
-                          int num_batches) {
+                          int num_batches, map_topic_partition_produce_reply_tags_t *topic_partition_result) {
         int i;
 
-        for (i = 0; i < num_batches; i++) {
-                rd_kafkap_Produce_reply_tags_destroy(&toppar_level_tags[i]);
+
+        rd_kafka_topic_partition_t *rktp_to_search;
+        RD_MAP_FOREACH_KEY(rktp_to_search, topic_partition_result) {
+                rd_kafkap_Produce_reply_tags_destroy(RD_MAP_GET(topic_partition_result, rktp_to_search));
         }
-        rd_free(toppar_level_tags);
         rd_kafkap_Produce_reply_tags_destroy(reply_level_tags);
+
 }
 
 /**
@@ -3624,7 +3626,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                               rd_kafka_buf_t *rkbuf,
                               rd_kafka_buf_t *request,
                               rd_kafka_Produce_result_t **results,
-                              rd_bool_t multi_batch_request) {
+                              rd_bool_t multi_batch_request, map_topic_partition_result_t *topic_partition_result) {
         int32_t TopicArrayCnt;
         int32_t PartitionArrayCnt;
         struct {
@@ -3636,6 +3638,11 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         int64_t log_start_offset    = -1;
         rd_kafkap_str_t TopicName   = RD_ZERO_INIT;
         rd_kafkap_Produce_reply_tags_t *ProduceTags;
+        map_topic_partition_produce_reply_tags_t ProduceTagsMap =     RD_MAP_INITIALIZER(
+        rkb->rkb_toppar_cnt, rd_kafka_topic_partition_cmp,
+        rd_kafka_topic_partition_hash,
+        rd_kafka_topic_partition_destroy_free, NULL);
+        rd_kafkap_Produce_reply_tags_t *ProduceTagsFromMap;
         rd_kafkap_Produce_reply_tags_t reply_level_tags = RD_ZERO_INIT;
         int i, j, decoded_batch_cnt = 0, pos = 0;
         rd_kafka_Produce_result_t *result;
@@ -3643,6 +3650,11 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         int num_batch = multi_batch_request
                             ? RD_MAP_CNT(&request->rkbuf_u.Produce.batch_map)
                             : 1;
+        rd_kafka_topic_partition_t *key;
+        rd_kafka_topic_partition_t *rktp_to_search;
+        RD_MAP_FOREACH_KEY(key, &request->rkbuf_u.Produce.batch_map) {
+                RD_MAP_SET(&ProduceTagsMap, key, rd_calloc(1, sizeof(rd_kafkap_Produce_reply_tags_t)));
+        }
         ProduceTags =
             rd_calloc(num_batch, sizeof(rd_kafkap_Produce_reply_tags_t));
 
@@ -3671,7 +3683,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                             rd_strndup(TopicName.str, TopicName.len);
                         topic_name_null_terminated[TopicName.len] = '\0';
 
-                        rd_kafka_topic_partition_t *rktp_to_search =
+                        rktp_to_search =
                             rd_kafka_topic_partition_new(
                                 topic_name_null_terminated, hdr.Partition);
 
@@ -3685,9 +3697,15 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                                 goto err;
                         }
 
-                        result = results[pos];
+                        result = multi_batch_request ? RD_MAP_GET(topic_partition_result, rktp_to_search) : results[0];
 
                         result->errorcode = hdr.ErrorCode;
+                        // REMOVE: Only for testing
+                        if (unlikely(rkb->rkb_rk->rk_conf.ut.handle_ProduceResponse != NULL) && hdr.Partition == 0) {
+                                fprintf(stderr, "3709 rk_conf.ut.handle_ProduceResponse coming here\n");
+                                result->errorcode = rkb->rkb_rk->rk_conf.ut.handle_ProduceResponse(
+                                    rkb->rkb_rk, rkb->rkb_nodeid, -1, hdr.ErrorCode);
+                        }
                         result->offset    = hdr.Offset;
 
                         result->timestamp = -1;
@@ -3737,10 +3755,11 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                                         result->errstr =
                                             RD_KAFKAP_STR_DUP(&ErrorMessage);
                         }
+                        ProduceTagsFromMap = RD_MAP_GET(&ProduceTagsMap, rktp_to_search);
 
                         if (request->rkbuf_reqhdr.ApiVersion >= 10) {
                                 rd_kafkap_Produce_reply_tags_Topic_t
-                                    *TopicTags = &ProduceTags[pos].Topic;
+                                    *TopicTags = &ProduceTagsFromMap->Topic;
                                 rd_kafkap_Produce_reply_tags_Partition_t
                                     *PartitionTags = &TopicTags->Partition;
 
@@ -3750,17 +3769,21 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                                 PartitionTags->Partition = hdr.Partition;
                         }
 
+
                         /* Partition tags */
                         rd_kafka_buf_read_tags(
                             rkbuf, rd_kafkap_Produce_reply_tags_partition_parse,
-                            &ProduceTags[pos],
-                            &ProduceTags[pos].Topic.Partition);
+                            ProduceTagsFromMap,
+                            &ProduceTagsFromMap->Topic.Partition);
+
                         decoded_batch_cnt++;
                 }
+
 
                 /* Topic tags */
                 rd_kafka_buf_skip_tags(rkbuf);
         }
+
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1) {
                 int32_t Throttle_Time;
@@ -3777,11 +3800,13 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
         /* ProduceResponse tags */
         rd_kafka_buf_read_tags(rkbuf, rd_kafkap_Produce_reply_tags_parse,
                                &reply_level_tags);
-        for (i = 0; i < num_batch; i++)
-                rd_kafka_handle_Produce_metadata_update(rkb, &reply_level_tags,
-                                                        &ProduceTags[i]);
 
-        produce_reply_tags_cleaup(&reply_level_tags, ProduceTags, num_batch);
+        RD_MAP_FOREACH_KEY(rktp_to_search, &ProduceTagsMap) {
+                rd_kafka_handle_Produce_metadata_update(rkb, &reply_level_tags,
+                                        RD_MAP_GET(&ProduceTagsMap, rktp_to_search));
+        }
+
+        produce_reply_tags_cleaup(&reply_level_tags, ProduceTags, num_batch, &ProduceTagsMap);
 
         if (multi_batch_request) {
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -3789,10 +3814,10 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 return result->errorcode;
         }
 err_parse:
-        produce_reply_tags_cleaup(&reply_level_tags, ProduceTags, num_batch);
+        produce_reply_tags_cleaup(&reply_level_tags, ProduceTags, num_batch, &ProduceTagsMap);
         return rkbuf->rkbuf_err;
 err:
-        produce_reply_tags_cleaup(&reply_level_tags, ProduceTags, num_batch);
+        produce_reply_tags_cleaup(&reply_level_tags, ProduceTags, num_batch, &ProduceTagsMap);
         return RD_KAFKA_RESP_ERR__BAD_MSG;
 }
 
@@ -4786,7 +4811,7 @@ static void rd_kafka_handle_Produce(rd_kafka_t *rk,
         /* Parse Produce reply (unless the request errored) */
         if (!err && reply)
                 err = rd_kafka_handle_Produce_parse(rkb, reply, request,
-                                                    &result, rd_false);
+                                                    &result, rd_false, NULL);
 
         rd_kafka_msgbatch_handle_Produce_result(rkb, batch, err, result,
                                                 request);
@@ -4801,34 +4826,34 @@ static void rd_kafka_handle_MultiBatchProduce(rd_kafka_t *rk,
                                               rd_kafka_buf_t *reply,
                                               rd_kafka_buf_t *request,
                                               void *opaque) {
-
-        rd_kafka_Produce_result_t **results;
         rd_kafka_msgbatch_t *batch;
         rd_kafka_topic_partition_t *key;
+        rd_kafka_Produce_result_t *res;
+        map_topic_partition_result_t map_toppar_result =
+    RD_MAP_INITIALIZER(
+        rkb->rkb_toppar_cnt, rd_kafka_topic_partition_cmp,
+        rd_kafka_topic_partition_hash,
+        rd_kafka_topic_partition_destroy_free, NULL);
+
 
         int i, num_batches = RD_MAP_CNT(&request->rkbuf_u.Produce.batch_map);
-        results = rd_calloc(num_batches, sizeof(rd_kafka_Produce_result_t *));
-
-        for (i = 0; i < num_batches; i++)
-                results[i] =
-                    rd_kafka_Produce_result_new(RD_KAFKA_OFFSET_INVALID, -1);
+        RD_MAP_FOREACH(key, batch, &request->rkbuf_u.Produce.batch_map) {
+                RD_MAP_SET(&map_toppar_result, key, rd_kafka_Produce_result_new(RD_KAFKA_OFFSET_INVALID, -1));
+        }
 
         /* Parse Produce reply (unless the request errored) */
         if (!err && reply)
                 err = rd_kafka_handle_Produce_parse(rkb, reply, request,
-                                                    results, rd_true);
+                                                    NULL, rd_true, &map_toppar_result);
 
-        i = 0;
         RD_MAP_FOREACH(key, batch, &request->rkbuf_u.Produce.batch_map) {
-                rd_kafka_resp_err_t final_err =
-                    err == RD_KAFKA_RESP_ERR_NO_ERROR ? results[i]->errorcode
-                                                      : err;
+                rd_kafka_Produce_result_t *t = RD_MAP_GET(&map_toppar_result, key);
+                rd_kafka_resp_err_t final_err = err == RD_KAFKA_RESP_ERR_NO_ERROR ? t->errorcode
+                                      : err;
                 rd_kafka_msgbatch_handle_Produce_result(rkb, batch, final_err,
-                                                        results[i], request);
-                rd_kafka_Produce_result_destroy(results[i]);
-                i++;
+                                                        t, request);
+                rd_kafka_Produce_result_destroy(t);
         }
-        rd_free(results);
 }
 
 /**

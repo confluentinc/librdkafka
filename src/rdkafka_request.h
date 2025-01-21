@@ -131,6 +131,9 @@ typedef struct rd_kafkap_Produce_reply_tags_s {
         rd_kafkap_Produce_reply_tags_Topic_t Topic;
 } rd_kafkap_Produce_reply_tags_t;
 
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafkap_Produce_reply_tags_t *) map_topic_partition_produce_reply_tags_t;
+
 /**@}*/
 
 /**

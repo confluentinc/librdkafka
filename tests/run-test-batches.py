@@ -76,7 +76,8 @@ def run_tests():
         for j in range(batch_iterations):
             interrupted = False
             TESTS_BATCH = ','.join(TESTS[i:i + batch_size])
-            print(f"Running tests: {TESTS_BATCH}, iteration: {j+1}")
+            print(f"Running tests: {TESTS_BATCH}, iteration: {j+1}",
+                  file=sys.stderr)
             p = subprocess.Popen(['./run-test.sh', '-D'] + args,
                                  env={**os.environ, 'TESTS': TESTS_BATCH},
                                  start_new_session=True)
@@ -92,7 +93,7 @@ def run_tests():
                 return
             finally:
                 if interrupted:
-                    print('Terminating process group...')
+                    print('Terminating process group...', file=sys.stderr)
                     os.killpg(p.pid, signal.SIGTERM)
                     try:
                         p.wait(10)
@@ -102,6 +103,6 @@ def run_tests():
 
 
 run_tests()
-print('End of run-test-batches')
+print('End of run-test-batches', file=sys.stderr)
 if first_error:
     sys.exit(first_error)

@@ -35,6 +35,11 @@
 #include "rdmap.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
+
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
+#include <openssl/rand.h>
+#endif
+
 #if WITH_SSL
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 extern int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
@@ -590,6 +595,29 @@ typedef struct rd_kafka_ClusterDescription_s {
                                      * NULL if operations were not requested */
 
 } rd_kafka_ClusterDescription_t;
+
+/**@}*/
+
+/**
+ * @name ElectLeaders
+ * @{
+ */
+
+/**
+ * @struct ElectLeaders request object
+ */
+struct rd_kafka_ElectLeaders_s {
+        rd_kafka_ElectionType_t election_type; /*Election Type*/
+        rd_kafka_topic_partition_list_t
+            *partitions; /*TopicPartitions for election*/
+};
+
+/**
+ * @struct ElectLeaders result object
+ */
+typedef struct rd_kafka_ElectLeadersResult_s {
+        rd_list_t partitions; /**< Type (rd_kafka_topic_partition_result_t *) */
+} rd_kafka_ElectLeadersResult_t;
 
 /**@}*/
 

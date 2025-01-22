@@ -167,6 +167,14 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields);
 
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions_nullable(
+    rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields,
+    rd_bool_t *parse_err);
+
 int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     const rd_kafka_topic_partition_list_t *parts,
@@ -620,6 +628,16 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_replyq_t replyq,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
+
+rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *elect_leaders /*(rd_kafka_EleactLeaders_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
 
 void rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
     rd_tmpabuf_t *tbuf,

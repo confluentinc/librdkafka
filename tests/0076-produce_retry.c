@@ -128,6 +128,7 @@ static void do_test_produce_retries(const char *topic,
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         /* Create the topic to make sure connections are up and ready. */
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
@@ -277,6 +278,7 @@ static void do_test_produce_retries_disconnect(const char *topic,
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         err = test_produce_sync(rk, rkt, testid, 0);
 

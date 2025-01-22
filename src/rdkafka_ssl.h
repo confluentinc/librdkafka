@@ -61,4 +61,9 @@ int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
                       int itcnt,
                       rd_chariov_t *out);
 
+int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
+                                          STACK_OF(X509) * chainp,
+                                          pem_password_cb *password_cb,
+                                          void *password_cb_opaque);
+
 #endif /* _RDKAFKA_SSL_H_ */

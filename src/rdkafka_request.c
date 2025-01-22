@@ -200,16 +200,15 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
         return actions;
 }
 
-
 /**
  * @brief Read a list of topic+partitions+extra from \p rkbuf.
  *
- * @param rkbuf buffer to read from
+ * @param rkbuf Buffer to read from
  * @param fields An array of fields to read from the buffer and set on
  *               the rktpar object, in the specified order, must end
  *               with RD_KAFKA_TOPIC_PARTITION_FIELD_END.
  *
- * @returns a newly allocated list on success, or NULL on parse error.
+ * @returns A newly allocated list on success, or NULL on parse error.
  */
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
@@ -217,14 +216,44 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_bool_t use_topic_name,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields) {
+        rd_bool_t parse_err;
+        /* Even if NULL it should be treated as a parse error,
+         * as this field isn't nullable. */
+        return rd_kafka_buf_read_topic_partitions_nullable(
+            rkbuf, use_topic_id, use_topic_name, estimated_part_cnt, fields,
+            &parse_err);
+}
+
+/**
+ * @brief Read a nullable list of topic+partitions+extra from \p rkbuf.
+ *
+ * @param rkbuf Buffer to read from
+ * @param fields An array of fields to read from the buffer and set on
+ *               the rktpar object, in the specified order, must end
+ *               with RD_KAFKA_TOPIC_PARTITION_FIELD_END.
+ * @param parse_err Is set to true if a parsing error occurred.
+ *
+ * @returns A newly allocated list, or NULL.
+ */
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions_nullable(
+    rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields,
+    rd_bool_t *parse_err) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         rd_kafka_topic_partition_list_t *parts = NULL;
 
-        /* We assume here that the topic partition list is not NULL.
-         * FIXME: check NULL topic array case, if required in future. */
+        rd_dassert(parse_err);
+        *parse_err = rd_false;
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
+        if (TopicArrayCnt < -1)
+                goto err_parse;
+        else if (TopicArrayCnt == -1)
+                return NULL;
 
         parts = rd_kafka_topic_partition_list_new(
             RD_MAX(TopicArrayCnt * 4, (int)estimated_part_cnt));
@@ -334,6 +363,7 @@ err_parse:
         if (parts)
                 rd_kafka_topic_partition_list_destroy(parts);
 
+        *parse_err = rd_true;
         return NULL;
 }
 
@@ -1289,9 +1319,15 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                                 rktpar->metadata      = NULL;
                                 rktpar->metadata_size = 0;
                         } else {
-                                rktpar->metadata = RD_KAFKAP_STR_DUP(&metadata);
-                                rktpar->metadata_size =
-                                    RD_KAFKAP_STR_LEN(&metadata);
+                                /* It cannot use strndup because
+                                 * it stops at first 0 occurrence. */
+                                size_t len = RD_KAFKAP_STR_LEN(&metadata);
+                                rktpar->metadata_size = len;
+                                unsigned char *metadata_bytes =
+                                    rd_malloc(len + 1);
+                                rktpar->metadata = metadata_bytes;
+                                memcpy(rktpar->metadata, metadata.str, len);
+                                metadata_bytes[len] = '\0';
                         }
 
                         /* Loose ref from get_toppar() */
@@ -5878,6 +5914,95 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Construct and send ElectLeadersRequest to \p rkb
+ *        with the partitions (ElectLeaders_t*) in \p elect_leaders, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *elect_leaders /*(rd_kafka_EleactLeaders_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        const rd_kafka_ElectLeaders_t *elect_leaders_request;
+        int rd_buf_size_estimate;
+        int op_timeout;
+
+        if (rd_list_cnt(elect_leaders) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No partitions specified for leader election");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        elect_leaders_request = rd_list_elem(elect_leaders, 0);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ElectLeaders, 0, 2, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "ElectLeaders Admin API (KIP-460) not supported "
+                            "by broker, requires broker version >= 2.4.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rd_buf_size_estimate =
+            1 /* ElectionType */ + 4 /* #TopicPartitions */ + 4 /* TimeoutMs */;
+        if (elect_leaders_request->partitions)
+                rd_buf_size_estimate +=
+                    (50 + 4) * elect_leaders_request->partitions->cnt;
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_ElectLeaders, 1,
+                                                 rd_buf_size_estimate,
+                                                 ApiVersion >= 2);
+
+        if (ApiVersion >= 1) {
+                /* Election type */
+                rd_kafka_buf_write_i8(rkbuf,
+                                      elect_leaders_request->election_type);
+        }
+
+        /* Write partition list */
+        if (elect_leaders_request->partitions) {
+                const rd_kafka_topic_partition_field_t fields[] = {
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                rd_kafka_buf_write_topic_partitions(
+                    rkbuf, elect_leaders_request->partitions,
+                    rd_false /*don't skip invalid offsets*/,
+                    rd_false /* any offset */,
+                    rd_false /* don't use topic_id */,
+                    rd_true /* use topic_names */, fields);
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 /**
  * @brief Parses and handles an InitProducerId reply.
  *

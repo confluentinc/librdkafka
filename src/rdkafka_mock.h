@@ -483,6 +483,82 @@ rd_kafka_mock_telemetry_set_requested_metrics(rd_kafka_mock_cluster_t *mcluster,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_telemetry_set_push_interval(rd_kafka_mock_cluster_t *mcluster,
                                           int64_t push_interval_ms);
+
+typedef struct rd_kafka_mock_cgrp_consumer_target_assignment_s
+    rd_kafka_mock_cgrp_consumer_target_assignment_t;
+
+/**
+ * @brief Create a new target assignment for \p member_cnt members
+ *        given a member id and a member assignment for each member `i`,
+ *        specified in \p member_ids[i] and \p assignment[i].
+ *
+ * @remark used for mocking target assignment
+ *         in KIP-848 consumer group protocol.
+ *
+ * @param member_ids Array of member ids of size \p member_cnt.
+ * @param member_cnt Number of members.
+ * @param assignment Array of (rd_kafka_topic_partition_list_t *) of size \p
+ * member_cnt.
+ */
+RD_EXPORT rd_kafka_mock_cgrp_consumer_target_assignment_t *
+rd_kafka_mock_cgrp_consumer_target_assignment_new(
+    char **member_ids,
+    int member_cnt,
+    rd_kafka_topic_partition_list_t **assignment);
+
+/**
+ * @brief Destroy target assignment \p target_assignment .
+ */
+RD_EXPORT void rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment);
+
+/**
+ * @brief Sets next target assignment for the group
+ *        identified by \p group_id to the
+ *        target assignment contained in \p target_assignment,
+ *        in the cluster \p mcluster.
+ *
+ * @remark used for mocking target assignment
+ *         in KIP-848 consumer group protocol.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param group_id Group id.
+ * @param target_assignment Target assignment for all the members.
+ */
+RD_EXPORT void rd_kafka_mock_cgrp_consumer_target_assignment(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *group_id,
+    rd_kafka_mock_cgrp_consumer_target_assignment_t *target_assignment);
+
+/**
+ * @brief Sets group.consumer.session.timeout.ms
+ *        for the cluster \p mcluster to \p group_consumer_session_timeout_ms.
+ *
+ * @remark used in KIP-848 consumer group protocol.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param group_consumer_session_timeout_ms Session timeout in milliseconds.
+ */
+RD_EXPORT void rd_kafka_mock_set_group_consumer_session_timeout_ms(
+    rd_kafka_mock_cluster_t *mcluster,
+    int group_consumer_session_timeout_ms);
+
+/**
+ * @brief Sets group.consumer.heartbeat.interval.ms
+ *        for the cluster \p mcluster to \p
+ * group_consumer_heartbeat_interval_ms.
+ *
+ * @remark used in KIP-848 consumer group protocol.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param group_consumer_heartbeat_interval_ms Heartbeat interval in
+ * milliseconds.
+ */
+RD_EXPORT void rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(
+    rd_kafka_mock_cluster_t *mcluster,
+    int group_consumer_heartbeat_interval_ms);
+
+
 /**@}*/
 
 #ifdef __cplusplus

@@ -996,8 +996,8 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
 
         /* Fallback to version 12 if topic id is null which can happen if
          * inter.broker.protocol.version is < 2.8 */
-        ApiVersion =
-            ApiVersion > 12 && can_use_topic_ids(rkb) ? ApiVersion : 12;
+        if (ApiVersion > 12 && !can_use_topic_ids(rkb))
+                ApiVersion = 12;
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_Fetch, 1,

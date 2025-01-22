@@ -5,6 +5,9 @@ librdkafka v2.9.0 is a feature release:
  * Fix for librdkafka yielding before timeouts had been reached (#)
  * Removed a 500ms latency when a consumer partition switches to a different
    leader (#)
+ * The mock cluster implementation removes brokers from Metadata response
+   when they're not available, this simulates better the actual behavior of
+   a cluster that is using KRaft (#).
 
 
 ## Fixes

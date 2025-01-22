@@ -1244,7 +1244,20 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_list_init(&brokers_to_decommission,
                      rd_atomic32_get(&rk->rk_broker_cnt), NULL);
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
-                rd_list_add(&brokers_to_decommission, rkb);
+                void *rkb_decommissioning;
+                /* Don't try to decommission already decommissioning brokers
+                 * otherwise they could be already destroyed when
+                 * `rd_kafka_broker_decommission` is called below. */
+                rd_bool_t do_decommission = rd_true;
+                RD_LIST_FOREACH(rkb_decommissioning,
+                                &rk->wait_decommissioned_brokers, i) {
+                        if (rkb == rkb_decommissioning) {
+                                do_decommission = rd_false;
+                                break;
+                        }
+                }
+                if (do_decommission)
+                        rd_list_add(&brokers_to_decommission, rkb);
         }
 
         RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {

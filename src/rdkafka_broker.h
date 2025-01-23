@@ -427,6 +427,14 @@ rd_kafka_broker_is_up(rd_kafka_broker_t *rkb) {
         return rd_kafka_broker_state_is_up(state);
 }
 
+/**
+ * @returns true if the broker needs a persistent connection
+ * @locality any
+ */
+static RD_UNUSED RD_INLINE rd_bool_t
+rd_kafka_broker_termination_in_progress(rd_kafka_broker_t *rkb) {
+        return rd_atomic32_get(&rkb->termination_in_progress) > 0;
+}
 
 /**
  * @brief Broker comparator

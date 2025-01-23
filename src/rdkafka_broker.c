@@ -112,15 +112,6 @@ rd_kafka_broker_needs_persistent_connection(rd_kafka_broker_t *rkb) {
 }
 
 /**
- * @returns true if the broker needs a persistent connection
- * @locality any
- */
-static rd_bool_t
-rd_kafka_broker_termination_in_progress(rd_kafka_broker_t *rkb) {
-        return rd_atomic32_get(&rkb->termination_in_progress) > 0;
-}
-
-/**
  * @returns > 0 if a connection to this broker is needed, else 0.
  * @locality broker thread
  * @locks none
@@ -700,6 +691,13 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
 
                 if (rktp->rktp_leader_id != rktp->rktp_broker_id) {
                         rd_kafka_toppar_delegate_to_leader(rktp);
+                } else if (rd_kafka_broker_termination_in_progress(rkb)) {
+                        /* Remove `rktp_broker` and `rktp_leader`
+                         * references in `rktp`, even if this broker
+                         * is still the leader, to allow to
+                         * decommission it. */
+                        rd_kafka_toppar_undelegate(rktp);
+                        rd_kafka_toppar_forget_leader(rktp);
                 }
         }
 

@@ -37,7 +37,7 @@ static void fetch_metadata(rd_kafka_t *rk,
         size_t cnt   = 0;
         int32_t *ids = NULL;
         size_t i;
-        int timeout_secs       = 5;
+        int timeout_secs       = 10;
         int64_t abs_timeout_us = test_clock() + timeout_secs * 1000000;
 
         TEST_SAY("Waiting for up to %ds for metadata update\n", timeout_secs);
@@ -45,8 +45,10 @@ static void fetch_metadata(rd_kafka_t *rk,
         /* Trigger Metadata request which will update learned brokers. */
         do {
                 err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(100));
-                if (md)
+                if (md) {
                         rd_kafka_metadata_destroy(md);
+                        md = NULL;
+                }
                 /* Can time out in case the request is sent to
                  * the broker that has been decommissioned. */
                 else if (err != RD_KAFKA_RESP_ERR__TIMED_OUT &&
@@ -74,63 +76,167 @@ static void fetch_metadata(rd_kafka_t *rk,
 }
 
 /**
- * @brief Purge brokers from the mock cluster,
- *        verifying that brokers are decommissioned in the client.
- *        Then new ones are added and verified.
+ * @brief Test adding and removing brokers from the mock cluster.
+ *        Verify that the client is updated with the new broker list.
+ *
+ *        All \p actions are executed in sequence.
+ *
+ *        After each action, the client is expected to have the broker
+ *        ids in \p expected_broker_ids and the count to be
+ *        \p expected_brokers_cnt .
+ *        Brokers are added at the head of the list.
+ *
+ *        @param initial_cluster_size Initial number of brokers in the cluster.
+ *        @param actions Array of actions to perform. Each action is a pair
+ *                       (action,broker id). 0 to remove, 1 to add,
+ *                       2 to set down, 3 to set up.
+ *        @param expected_broker_ids Array of broker ids expected after each
+ *                                   action.
+ *        @param expected_broker_ids_cnt Number of elements in
+ *                                       \p expected_broker_ids .
+ *        @param expected_brokers_cnt Array of expected broker count after each
+ *                                    action.
  */
-int main_0151_purge_brokers_mock(int argc, char **argv) {
+static void do_test_add_remove_brokers(int32_t initial_cluster_size,
+                                       int32_t actions[][2],
+                                       int32_t expected_broker_ids[][5],
+                                       size_t expected_broker_ids_cnt,
+                                       int32_t expected_brokers_cnt[]) {
         rd_kafka_mock_cluster_t *cluster;
         const char *bootstraps;
-        rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
-        const size_t num_brokers       = 3;
-        size_t action                  = 0;
-        int32_t expected_broker_cnt[5] = {3, 2, 1, 2, 3};
+        rd_kafka_t *rk;
+        size_t action = 0;
 
-        /* Brokers are added at the head of the list. */
-        int32_t expected_brokers[5][3] = {
-            {3, 2, 1}, {3, 2}, {3}, {4, 3}, {5, 4, 3}};
+        cluster = test_mock_cluster_new(initial_cluster_size, &bootstraps);
 
-        /* (action,broker id). 0 to remove, 1 to add */
-        int32_t actions[4][2] = {{0, 1}, {0, 2}, {1, 4}, {1, 5}};
+        test_conf_init(&conf, NULL, 10);
+
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* Create a new topic to trigger partition reassignment */
+        rd_kafka_mock_topic_create(cluster, "topic1", 3, initial_cluster_size);
+
+        for (action = 0; action < expected_broker_ids_cnt; action++) {
+                if (action > 0) {
+                        int32_t action_type = actions[action - 1][0];
+                        int32_t broker_id   = actions[action - 1][1];
+                        TEST_SAY("Executing action %zu\n", action);
+                        switch (action_type) {
+                        case 0:
+                                TEST_SAY("Removing broker %" PRId32 "\n",
+                                         broker_id);
+                                TEST_ASSERT(
+                                    rd_kafka_mock_broker_decommission(
+                                        cluster, broker_id) == 0,
+                                    "Failed to remove broker from cluster");
+                                break;
+
+                        case 1:
+                                TEST_SAY("Adding broker %" PRId32 "\n",
+                                         broker_id);
+                                TEST_ASSERT(rd_kafka_mock_broker_add(
+                                                cluster, broker_id) == 0,
+                                            "Failed to add broker to cluster");
+                                break;
+
+                        case 2:
+                                TEST_SAY("Setting down broker %" PRId32 "\n",
+                                         broker_id);
+                                TEST_ASSERT(rd_kafka_mock_broker_set_down(
+                                                cluster, broker_id) == 0,
+                                            "Failed to set broker %" PRId32
+                                            " down",
+                                            broker_id);
+                                break;
+
+                        case 3:
+                                TEST_SAY("Setting up broker %" PRId32 "\n",
+                                         broker_id);
+                                TEST_ASSERT(rd_kafka_mock_broker_set_up(
+                                                cluster, broker_id) == 0,
+                                            "Failed to set broker %" PRId32
+                                            " up",
+                                            broker_id);
+                                break;
+
+                        default:
+                                break;
+                        }
+                }
+
+                fetch_metadata(rk, expected_brokers_cnt[action],
+                               expected_broker_ids[action]);
+        }
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(cluster);
+}
+
+/**
+ * @brief Test replacing the brokers in the mock cluster with new ones.
+ *        At each step a majority of brokers are returned by the Metadata call.
+ *        At the end all brokers from the old cluster are removed.
+ */
+static void do_test_replace_with_new_cluster(void) {
+        SUB_TEST_QUICK();
+
+        int32_t expected_brokers_cnt[] = {3, 2, 3, 2, 3, 2, 3};
+
+        int32_t expected_broker_ids[][5] = {
+            {3, 2, 1}, {3, 2}, {4, 3, 2}, {4, 3}, {5, 4, 3}, {5, 4}, {6, 5, 4}};
+
+        int32_t actions[][2] = {{0, 1}, {1, 4}, {0, 2}, {1, 5}, {0, 3}, {1, 6}};
+
+        do_test_add_remove_brokers(3, actions, expected_broker_ids,
+                                   RD_ARRAY_SIZE(expected_broker_ids),
+                                   expected_brokers_cnt);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test setting down all brokers from the mock cluster,
+ *        simulating a correct cluster roll that never sets down the majority
+ *        of brokers.
+ *
+ *        The effect is similar to decommissioning the brokers. Partition
+ *        reassignment is not triggered in this case but they are not announced
+ *        anymore by the Metadata response.
+ */
+static void do_test_cluster_roll(void) {
+        SUB_TEST_QUICK();
+
+        int32_t expected_brokers_cnt[] = {5, 4, 3, 4, 3, 4, 3, 4, 3, 4, 5};
+
+        int32_t expected_broker_ids[][5] = {
+            {5, 4, 3, 2, 1}, {5, 4, 3, 2}, {5, 4, 3},      {1, 5, 4, 3},
+            {1, 5, 4},       {2, 1, 5, 4}, {2, 1, 5},      {3, 2, 1, 5},
+            {3, 2, 1},       {4, 3, 2, 1}, {5, 4, 3, 2, 1}};
+
+        int32_t actions[][2] = {{2, 1}, {2, 2}, {3, 1}, {2, 3}, {3, 2},
+                                {2, 4}, {3, 3}, {2, 5}, {3, 4}, {3, 5}};
+
+        do_test_add_remove_brokers(5, actions, expected_broker_ids,
+                                   RD_ARRAY_SIZE(expected_broker_ids),
+                                   expected_brokers_cnt);
+
+        SUB_TEST_PASS();
+}
+
+int main_0151_purge_brokers_mock(int argc, char **argv) {
 
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
                 return 0;
         }
 
-        cluster = test_mock_cluster_new(num_brokers, &bootstraps);
+        do_test_replace_with_new_cluster();
 
-        test_conf_init(&conf, NULL, 10);
-
-        test_conf_set(conf, "bootstrap.servers", bootstraps);
-
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-
-        /* Create a new topic to trigger partition reassignment */
-        rd_kafka_mock_topic_create(cluster, "topic1", 3, num_brokers);
-
-        for (action = 0; action < RD_ARRAY_SIZE(expected_brokers); action++) {
-                if (action > 0) {
-                        if (actions[action - 1][0] == 0) {
-                                TEST_ASSERT(
-                                    rd_kafka_mock_broker_decommission(
-                                        cluster, actions[action - 1][1]) == 0,
-                                    "Failed to remove broker from cluster");
-                        } else {
-                                TEST_ASSERT(
-                                    rd_kafka_mock_broker_add(
-                                        cluster, actions[action - 1][1]) == 0,
-                                    "Failed to add broker from cluster");
-                        }
-                }
-
-                fetch_metadata(rk, expected_broker_cnt[action],
-                               expected_brokers[action]);
-        }
-
-        rd_kafka_destroy(rk);
-        test_mock_cluster_destroy(cluster);
+        do_test_cluster_roll();
 
         return 0;
 }

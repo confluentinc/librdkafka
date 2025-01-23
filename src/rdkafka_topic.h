@@ -302,6 +302,10 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
 
 int rd_kafka_toppar_delegate_to_leader(rd_kafka_toppar_t *rktp);
 
+void rd_kafka_toppar_undelegate(rd_kafka_toppar_t *rktp);
+
+void rd_kafka_toppar_forget_leader(rd_kafka_toppar_t *rktp);
+
 rd_kafka_resp_err_t rd_kafka_topics_leader_query_sync(rd_kafka_t *rk,
                                                       int all_topics,
                                                       const rd_list_t *topics,

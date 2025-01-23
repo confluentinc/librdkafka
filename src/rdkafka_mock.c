@@ -426,6 +426,34 @@ int64_t rd_kafka_mock_partition_offset_for_leader_epoch(
         return -1;
 }
 
+static void
+rd_kafka_mock_partition_change_leader(rd_kafka_mock_partition_t *mpart) {
+        int32_t i;
+        rd_kafka_mock_broker_t **replicas_up;
+        int32_t replicas_up_cnt = 0;
+
+        if (mpart->leader && mpart->leader->up) {
+                /* No need to change leader */
+                return;
+        }
+
+        replicas_up = rd_malloc(mpart->replica_cnt * sizeof(*replicas_up));
+        for (i = 0; i < mpart->replica_cnt; i++) {
+                if (mpart->replicas[i]->up) {
+                        replicas_up[replicas_up_cnt++] = mpart->replicas[i];
+                }
+        }
+        if (replicas_up_cnt == 0) {
+                rd_kafka_mock_partition_set_leader0(mpart, NULL);
+                rd_free(replicas_up);
+                return;
+        }
+
+        /* Select a random leader that is up */
+        rd_kafka_mock_partition_set_leader0(
+            mpart, replicas_up[rd_jitter(0, replicas_up_cnt - 1)]);
+        rd_free(replicas_up);
+}
 
 /**
  * @brief Automatically assign replicas for partition
@@ -472,9 +500,8 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
                 mpart->replicas[i++] = mrkb;
         }
 
-        /* Select a random leader */
-        rd_kafka_mock_partition_set_leader0(
-            mpart, mpart->replicas[rd_jitter(0, replica_cnt - 1)]);
+        mpart->leader = NULL;
+        rd_kafka_mock_partition_change_leader(mpart);
 }
 
 /**
@@ -940,6 +967,23 @@ rd_kafka_mock_cluster_reassing_partitions(rd_kafka_mock_cluster_t *mcluster) {
                             &mtopic->partitions[i];
                         rd_kafka_mock_partition_assign_replicas(
                             mpart, mpart->replica_cnt);
+                }
+        }
+}
+
+/**
+ * @brief Reassign partition leaders,
+ *        called after setting a broker down.
+ */
+static void
+rd_kafka_mock_cluster_change_leaders(rd_kafka_mock_cluster_t *mcluster) {
+        rd_kafka_mock_topic_t *mtopic;
+        TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
+                int i;
+                for (i = 0; i < mtopic->partition_cnt; i++) {
+                        rd_kafka_mock_partition_t *mpart =
+                            &mtopic->partitions[i];
+                        rd_kafka_mock_partition_change_leader(mpart);
                 }
         }
 }
@@ -2373,6 +2417,7 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
 
                         rd_kafka_mock_broker_close_all(mrkb, "Broker down");
 
+                        rd_kafka_mock_cluster_change_leaders(mcluster);
                 } else {
                         int r;
                         rd_assert(mrkb->listen_s != -1);
@@ -2699,7 +2744,7 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         /*
          * Destroy dummy broker.
          * WARNING: This is last time we can read
-         * from dummy_rkb in this thread! 
+         * from dummy_rkb in this thread!
          */
         rd_kafka_q_enq(mcluster->dummy_rkb->rkb_ops,
                        rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));

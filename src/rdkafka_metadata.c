@@ -483,6 +483,7 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
         rd_kafka_broker_t *rkb_next;
         rd_bool_t purge_broker;
         rd_bool_t has_learned_brokers = rd_false;
+        rd_list_t brokers_to_decommission;
         int i;
 
         rd_kafka_wrlock(rk);
@@ -490,7 +491,10 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
                 if (rkb->rkb_source == RD_KAFKA_LEARNED)
                         has_learned_brokers = rd_true;
         }
+        rd_list_init(&brokers_to_decommission,
+                     rd_atomic32_get(&rk->rk_broker_cnt), NULL);
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_next) {
+                void *rkb_decommissioning;
                 rd_bool_t remove_configure_broker =
                     has_learned_brokers &&
                     rkb->rkb_source == RD_KAFKA_CONFIGURED &&
@@ -501,8 +505,24 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
                         continue;
 
                 purge_broker = rd_true;
-                for (i = 0; i < md->broker_cnt; i++) {
-                        if (md->brokers[i].id == rkb->rkb_nodeid) {
+                if (rkb->rkb_source == RD_KAFKA_LEARNED) {
+                        for (i = 0; i < md->broker_cnt; i++) {
+                                if (md->brokers[i].id == rkb->rkb_nodeid) {
+                                        purge_broker = rd_false;
+                                        break;
+                                }
+                        }
+                }
+
+                if (!purge_broker)
+                        continue;
+
+                /* Don't try to decommission already decommissioning brokers
+                 * otherwise they could be already destroyed when
+                 * `rd_kafka_broker_decommission` is called below. */
+                RD_LIST_FOREACH(rkb_decommissioning,
+                                &rk->wait_decommissioned_brokers, i) {
+                        if (rkb == rkb_decommissioning) {
                                 purge_broker = rd_false;
                                 break;
                         }
@@ -511,10 +531,14 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
                 if (!purge_broker)
                         continue;
 
+                rd_list_add(&brokers_to_decommission, rkb);
+        }
+        RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {
                 rd_kafka_broker_decommission(rk, rkb,
                                              &rk->wait_decommissioned_thrds);
                 rd_list_add(&rk->wait_decommissioned_brokers, rkb);
         }
+        rd_list_destroy(&brokers_to_decommission);
         rd_kafka_wrunlock(rk);
 }
 

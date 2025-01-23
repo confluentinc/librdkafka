@@ -72,11 +72,11 @@ exit_on_first_error = '-a' in args
 
 def run_tests():
     global first_error
-    for i in range(0, len(TESTS), batch_size):
-        for j in range(batch_iterations):
+    for i in range(batch_iterations):
+        for j in range(0, len(TESTS), batch_size):
             interrupted = False
-            TESTS_BATCH = ','.join(TESTS[i:i + batch_size])
-            print(f"Running tests: {TESTS_BATCH}, iteration: {j+1}",
+            TESTS_BATCH = ','.join(TESTS[j:j + batch_size])
+            print(f"Running tests: {TESTS_BATCH}, iteration: {i+1}",
                   file=sys.stderr)
             p = subprocess.Popen(['./run-test.sh', '-D'] + args,
                                  env={**os.environ, 'TESTS': TESTS_BATCH},

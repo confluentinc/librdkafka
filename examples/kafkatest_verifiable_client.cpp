@@ -257,7 +257,7 @@ static void sigterm(int sig) {
 
 class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
  public:
-  void dr_cb(RdKafka::Message &message) {
+  void dr_cb(RdKafka::Message &message) RD_OVERRIDE {
     if (message.err()) {
       state.producer.numErr++;
       errorString("producer_send_error", message.errstr(), message.topic_name(),
@@ -277,7 +277,7 @@ class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
 
 class ExampleEventCb : public RdKafka::EventCb {
  public:
-  void event_cb(RdKafka::Event &event) {
+  void event_cb(RdKafka::Event &event) RD_OVERRIDE {
     switch (event.type()) {
     case RdKafka::Event::EVENT_ERROR:
       std::cerr << now() << ": ERROR (" << RdKafka::err2str(event.err())
@@ -310,7 +310,7 @@ class MyHashPartitionerCb : public RdKafka::PartitionerCb {
   int32_t partitioner_cb(const RdKafka::Topic *topic,
                          const std::string *key,
                          int32_t partition_cnt,
-                         void *msg_opaque) {
+                         void *msg_opaque) RD_OVERRIDE {
     return djb_hash(key->c_str(), key->size()) % partition_cnt;
   }
 
@@ -366,7 +366,8 @@ static void report_records_consumed(int immediate) {
 class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
  public:
   void offset_commit_cb(RdKafka::ErrorCode err,
-                        std::vector<RdKafka::TopicPartition *> &offsets) {
+                        std::vector<RdKafka::TopicPartition *> &offsets)
+      RD_OVERRIDE {
     std::cerr << now() << ": Propagate offset for " << offsets.size()
               << " partitions, error: " << RdKafka::err2str(err) << std::endl;
 
@@ -514,7 +515,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
 
 class ExampleConsumeCb : public RdKafka::ConsumeCb {
  public:
-  void consume_cb(RdKafka::Message &msg, void *opaque) {
+  void consume_cb(RdKafka::Message &msg, void *opaque) RD_OVERRIDE {
     msg_consume(consumer_, &msg, opaque);
   }
   RdKafka::KafkaConsumer *consumer_;
@@ -535,7 +536,8 @@ class ExampleRebalanceCb : public RdKafka::RebalanceCb {
  public:
   void rebalance_cb(RdKafka::KafkaConsumer *consumer,
                     RdKafka::ErrorCode err,
-                    std::vector<RdKafka::TopicPartition *> &partitions) {
+                    std::vector<RdKafka::TopicPartition *> &partitions)
+      RD_OVERRIDE {
     std::cerr << now() << ": rebalance_cb " << RdKafka::err2str(err) << " for "
               << partitions.size() << " partitions" << std::endl;
     /* Send message report prior to rebalancing event to make sure they

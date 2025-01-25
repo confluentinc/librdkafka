@@ -39,9 +39,14 @@
 
 #ifdef _WIN32
 #include <wincrypt.h>
-#pragma comment(lib, "crypt32.lib")
-#pragma comment(lib, "libcrypto.lib")
-#pragma comment(lib, "libssl.lib")
+#pragma comment (lib, "crypt32.lib")
+#ifdef _DEBUG
+#pragma comment (lib, "libcrypto64MTd.lib")
+#pragma comment (lib, "libssl64MTd.lib")
+#else
+#pragma comment (lib, "libcrypto64MT.lib")
+#pragma comment (lib, "libssl64MT.lib")
+#endif
 #endif
 
 #include <openssl/x509.h>

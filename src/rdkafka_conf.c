@@ -540,7 +540,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
     },
     {_RK_GLOBAL, "socket.nagle.disable", _RK_C_BOOL, _RK(socket_nagle_disable),
-     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 0
+     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 1
 #ifndef TCP_NODELAY
      ,
      .unsupported = "TCP_NODELAY not available at build time"

@@ -15,9 +15,15 @@ int main(int argc, char **argv) {
         printf("librdkafka %s (0x%x, define: 0x%x)\n", rd_kafka_version_str(),
                rd_kafka_version(), RD_KAFKA_VERSION);
 
-        if (argc > 1 && !(argc & 1)) {
-                printf("Usage: %s [config.property config-value ..]\n",
+        if (argc < 2 || (argc > 2 && (argc & 1))) {
+                printf("Usage: %s  <version_string> [config.property config-value ..]\n",
                        argv[0]);
+                return 1;
+        }
+
+        if (!strstr(rd_kafka_version_str(), argv[1])) {
+                printf("ERROR: version string mismatch: expected %s, got %s\n",
+                       argv[1], rd_kafka_version_str());
                 return 1;
         }
 
@@ -46,7 +52,7 @@ int main(int argc, char **argv) {
         printf("all expected features matched: %s\n", expected_features);
 
         /* Apply config from argv key value pairs */
-        for (i = 1; i + 1 < argc; i += 2) {
+        for (i = 2; i + 1 < argc; i += 2) {
                 printf("verifying config %s=%s\n", argv[i], argv[i + 1]);
                 if (rd_kafka_conf_set(conf, argv[i], argv[i + 1], errstr,
                                       sizeof(errstr)) != RD_KAFKA_CONF_OK) {

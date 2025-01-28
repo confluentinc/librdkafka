@@ -2,29 +2,24 @@
 #
 # Verifies RPM and DEB packages from Confluent Platform
 #
-# Multiarch can be used to verify packages for different architectures
-# docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-#
-set -e
 base_url=$1
-multiarch=no
-[[ $2 = "yes" ]] && multiarch=yes
+platform=$2
+version=$3
 
-if [[ -z $base_url ]]; then
-    echo "Usage: $0 <base-url> [ <multiarch> ]"
+if [[ -z $base_url || -z $version ]]; then
+    echo "Usage: $0 <base-url> <platform> <version>"
     echo ""
     echo " <base-url> is the release base bucket URL"
+    echo " <platform> is platform to verify (e.g. linux/amd64)"
+    echo " <version> is the expected version"
     exit 1
 fi
 
 thisdir="$( cd "$(dirname "$0")" ; pwd -P )"
 
 verify_debian() {
-    local arch=$2
-    if [[ $arch != "" ]]; then
-        arch="--platform $arch"
-    fi
-    docker run $arch -v $thisdir:/v $1 /v/verify-deb.sh $base_url
+    local version=$2
+    docker run -v $thisdir:/v $1 /v/verify-deb.sh $base_url $version
     deb_status=$?
     if [[ $deb_status == 0 ]]; then
         echo "SUCCESS: Debian based $1 $2 packages verified"
@@ -35,12 +30,8 @@ verify_debian() {
 }
 
 verify_rpm() {
-    local arch=$2
-    if [[ $arch != "" ]]; then
-        arch="--platform $arch"
-    fi
-
-    docker run $arch -v $thisdir:/v $1 /v/verify-rpm.sh $base_url
+    local version=$2
+    docker run -v $thisdir:/v $1 /v/verify-rpm.sh $base_url $version
     rpm_status=$?
     if [[ $rpm_status == 0 ]]; then
         echo "SUCCESS: RPM $1 $2 packages verified"
@@ -50,39 +41,31 @@ verify_rpm() {
     fi
 }
 
-multiarch_arg1=""
-multiarch_arg1_description="current architecture"
-if [[ $multiarch == "yes" ]]; then
-    multiarch_arg1="linux/amd64"
-    multiarch_arg1_description=$multiarch_arg1
-fi
+verify_rpm_distros() {
+    local platform=$1
+    local version=$2
+    echo "#### Verifying RPM packages for $platform ####"
+    # Last RHEL 8 version is 2.4.0
+    verify_rpm rockylinux:8 "2.4.0"
+    verify_rpm rockylinux:9 $version
+}
 
-echo "#### Verifying RPM packages for $multiarch_arg1_description ####"
-verify_rpm rockylinux:8 ${multiarch_arg1}
-verify_rpm rockylinux:9 ${multiarch_arg1}
+verify_debian_distros() {
+    local platform=$1
+    local version=$2
+    echo "#### Verifying Debian packages for $platform ####"
+    # Last Debian 10 version is 2.5.0
+    verify_debian debian:10 "2.5.0"
+    verify_debian debian:11 $version
+    verify_debian debian:12 $version
+    verify_debian ubuntu:20.04 $version
+    verify_debian ubuntu:22.04 $version
+    verify_debian ubuntu:24.04 $version
+}
 
-echo "#### Verifying Debian packages for $multiarch_arg1_description ####"
-verify_debian debian:10 ${multiarch_arg1}
-verify_debian debian:11 ${multiarch_arg1}
-verify_debian debian:12 ${multiarch_arg1}
-verify_debian ubuntu:20.04 ${multiarch_arg1}
-verify_debian ubuntu:22.04 ${multiarch_arg1}
-verify_debian ubuntu:24.04 ${multiarch_arg1}
+verify_distros() {
+    verify_rpm_distros $1 $2
+    verify_debian_distros $1 $2
+}
 
-if [[ $multiarch == "yes" ]]; then
-
-multiarch_arg2="linux/arm64"
-
-echo "#### Verifying RPM packages for linux/arm64 ####"
-verify_rpm rockylinux:8 ${multiarch_arg2}
-verify_rpm rockylinux:9 ${multiarch_arg2}
-
-echo "#### Verifying Debian packages for linux/arm64 ####"
-verify_debian debian:10 ${multiarch_arg2}
-verify_debian debian:11 ${multiarch_arg2}
-verify_debian debian:12 ${multiarch_arg2}
-verify_debian ubuntu:20.04 ${multiarch_arg2}
-verify_debian ubuntu:22.04 ${multiarch_arg2}
-verify_debian ubuntu:24.04 ${multiarch_arg2}
-
-fi
+verify_distros $platform $version

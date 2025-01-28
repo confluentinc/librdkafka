@@ -4,6 +4,7 @@
 set -e
 
 base_url=$1
+version=$2
 
 if [[ -z $base_url ]]; then
     echo "Usage: $0 <base_url>"
@@ -25,7 +26,7 @@ apt-get install -y librdkafka-dev gcc
 
 gcc /v/check_features.c -o /tmp/check_features -lrdkafka
 
-/tmp/check_features
+/tmp/check_features $version
 
 # FIXME: publish plugins in newer versions
 # apt-get install -y confluent-librdkafka-plugins

@@ -2,47 +2,87 @@
 #
 # Verifies RPM and DEB packages from Confluent Platform
 #
-
-cpver=$1
-base_url=$2
+# Multiarch can be used to verify packages for different architectures
+# docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+#
+set -e
+base_url=$1
+multiarch=no
+[[ $2 = "yes" ]] && multiarch=yes
 
 if [[ -z $base_url ]]; then
-    echo "Usage: $0 <CP-M.m-version> <base-url>"
+    echo "Usage: $0 <base-url> [ <multiarch> ]"
     echo ""
-    echo " <CP-M.m-version> is the Major.minor version of CP, e.g., 5.3"
     echo " <base-url> is the release base bucket URL"
     exit 1
 fi
 
 thisdir="$( cd "$(dirname "$0")" ; pwd -P )"
 
-echo "#### Verifying RPM packages ####"
-docker run -v $thisdir:/v rockylinux:8 /v/verify-rpm.sh $cpver $base_url
-docker run -v $thisdir:/v rockylinux:9 /v/verify-rpm.sh $cpver $base_url
-rpm_status=$?
+verify_debian() {
+    local arch=$2
+    if [[ $arch != "" ]]; then
+        arch="--platform $arch"
+    fi
+    docker run $arch -v $thisdir:/v $1 /v/verify-deb.sh $base_url
+    deb_status=$?
+    if [[ $deb_status == 0 ]]; then
+        echo "SUCCESS: Debian based $1 $2 packages verified"
+    else
+        echo "ERROR: Debian based $1 $2 package verification failed"
+        exit 1
+    fi
+}
 
-echo "#### Verifying Debian packages ####"
-docker run -v $thisdir:/v debian:10 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v debian:11 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v debian:12 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v ubuntu:20.04 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v ubuntu:22.04 /v/verify-deb.sh $cpver $base_url
-deb_status=$?
+verify_rpm() {
+    local arch=$2
+    if [[ $arch != "" ]]; then
+        arch="--platform $arch"
+    fi
 
+    docker run $arch -v $thisdir:/v $1 /v/verify-rpm.sh $base_url
+    rpm_status=$?
+    if [[ $rpm_status == 0 ]]; then
+        echo "SUCCESS: RPM $1 $2 packages verified"
+    else
+        echo "ERROR: RPM $1 $2 package verification failed"
+        exit 1
+    fi
+}
 
-if [[ $rpm_status == 0 ]]; then
-    echo "SUCCESS: RPM packages verified"
-else
-    echo "ERROR: RPM package verification failed"
+multiarch_arg1=""
+multiarch_arg1_description="current architecture"
+if [[ $multiarch == "yes" ]]; then
+    multiarch_arg1="linux/amd64"
+    multiarch_arg1_description=$multiarch_arg1
 fi
 
-if [[ $deb_status == 0 ]]; then
-    echo "SUCCESS: Debian packages verified"
-else
-    echo "ERROR: Debian package verification failed"
-fi
+echo "#### Verifying RPM packages for $multiarch_arg1_description ####"
+verify_rpm rockylinux:8 ${multiarch_arg1}
+verify_rpm rockylinux:9 ${multiarch_arg1}
 
-if [[ $deb_status != 0 || $rpm_status != 0 ]]; then
-    exit 1
-fi
+echo "#### Verifying Debian packages for $multiarch_arg1_description ####"
+verify_debian debian:10 ${multiarch_arg1}
+verify_debian debian:11 ${multiarch_arg1}
+verify_debian debian:12 ${multiarch_arg1}
+verify_debian ubuntu:20.04 ${multiarch_arg1}
+verify_debian ubuntu:22.04 ${multiarch_arg1}
+verify_debian ubuntu:24.04 ${multiarch_arg1}
 
+if [[ $multiarch == "yes" ]]; then
+
+multiarch_arg2="linux/arm64"
+
+echo "#### Verifying RPM packages for linux/arm64 ####"
+verify_rpm rockylinux:8 ${multiarch_arg2}
+verify_rpm rockylinux:9 ${multiarch_arg2}
+
+echo "#### Verifying Debian packages for linux/arm64 ####"
+verify_debian debian:10 ${multiarch_arg2}
+verify_debian debian:11 ${multiarch_arg2}
+verify_debian debian:12 ${multiarch_arg2}
+verify_debian ubuntu:20.04 ${multiarch_arg2}
+verify_debian ubuntu:22.04 ${multiarch_arg2}
+verify_debian ubuntu:24.04 ${multiarch_arg2}
+
+fi

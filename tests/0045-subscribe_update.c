@@ -231,7 +231,7 @@ static void do_test_non_exist_and_partchange(void) {
         await_no_rebalance("#1: empty", rk, queue, 10000);
 
         TEST_SAY("#1: creating topic %s\n", topic_a);
-        test_create_topic(NULL, topic_a, 2, 1);
+        test_create_topic_wait_exists(NULL, topic_a, 2, 1, 5000);
 
         await_assignment("#1: proper", rk, queue, 1, topic_a, 2);
 
@@ -290,8 +290,7 @@ static void do_test_regex(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_b);
-        test_create_topic(NULL, topic_b, 2, 1);
-        rd_sleep(1);  // FIXME: do check&wait loop instead
+        test_create_topic_wait_exists(NULL, topic_b, 2, 1, 5000);
 
         TEST_SAY("Regex: Subscribing to %s & %s & %s\n", topic_b, topic_d,
                  topic_e);
@@ -301,13 +300,13 @@ static void do_test_regex(void) {
                          2);
 
         TEST_SAY("Regex: creating topic %s (not subscribed)\n", topic_c);
-        test_create_topic(NULL, topic_c, 4, 1);
+        test_create_topic_wait_exists(NULL, topic_c, 4, 1, 5000);
 
         /* Should not see a rebalance since no topics are matched. */
         await_no_rebalance("Regex: empty", rk, queue, 10000);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
-        test_create_topic(NULL, topic_d, 1, 1);
+        test_create_topic_wait_exists(NULL, topic_d, 1, 1, 5000);
 
         await_revoke("Regex: rebalance after topic creation", rk, queue);
 
@@ -364,12 +363,10 @@ static void do_test_topic_remove(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
-        test_create_topic(NULL, topic_f, parts_f, 1);
+        test_create_topic_wait_exists(NULL, topic_f, parts_f, 1, 5000);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
-        test_create_topic(NULL, topic_g, parts_g, 1);
-
-        rd_sleep(1);  // FIXME: do check&wait loop instead
+        test_create_topic_wait_exists(NULL, topic_g, parts_g, 1, 5000);
 
         TEST_SAY("Topic removal: Subscribing to %s & %s\n", topic_f, topic_g);
         topics = rd_kafka_topic_partition_list_new(2);
@@ -682,6 +679,12 @@ int main_0045_subscribe_update(int argc, char **argv) {
         if (!test_can_create_topics(1))
                 return 0;
 
+        /* TODO: check again when regexes will be supported by KIP-848 */
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP("Still not supported by KIP-848\n");
+                return 0;
+        }
+
         do_test_regex();
 
         return 0;
@@ -706,6 +709,14 @@ int main_0045_subscribe_update_topic_remove(int argc, char **argv) {
 
 
 int main_0045_subscribe_update_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
+        /* TODO: check again when regexes will be supported by KIP-848 */
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP("Still not supported by KIP-848\n");
+                return 0;
+        }
+
         do_test_regex_many_mock("range", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_true);
@@ -719,6 +730,12 @@ int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
         int use_client_rack  = 0;
 
         TEST_SKIP_MOCK_CLUSTER(0);
+
+        /* KIP 848 Mock broker assignor isn't rack-aware. */
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP("Test meaningful only with classic protocol\n");
+                return 0;
+        }
 
         for (use_replica_rack = 0; use_replica_rack < 2; use_replica_rack++) {
                 for (use_client_rack = 0; use_client_rack < 2;
@@ -737,9 +754,9 @@ int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
                             use_client_rack, use_replica_rack);
                 }
         }
-
-        /* Do not test with range assignor (yet) since it does not do rack aware
-         * assignment properly with the NULL rack, even for the Java client. */
+        /* Do not test with range assignor (yet) since it does not do
+         * rack aware assignment properly with the NULL rack, even for
+         * the Java client. */
         do_test_replica_rack_change_leader_no_rack_mock("cooperative-sticky");
 
         return 0;

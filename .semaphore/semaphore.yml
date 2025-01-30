@@ -77,6 +77,7 @@ blocks:
       jobs:
         - name: 'Style check'
           commands:
+            - sudo apt update
             - sudo apt install -y clang-format-10 python3 python3-pip python3-setuptools
             - python3 -m pip install -r packaging/tools/requirements.txt
             - CLANG_FORMAT=clang-format-10 make style-check
@@ -87,11 +88,11 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu22-04-amd64-2
       jobs:
         - name: 'Generate documentation'
           commands:
-            - sudo apt install -y doxygen graphviz
+            - NEEDRESTART_MODE=a sudo -E apt install -y doxygen graphviz
             - make docs
             - (cd staging-docs && tar cvzf ../artifacts/librdkafka-docs.tgz .)
             - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/librdkafka-docs.tgz --destination artifacts/librdkafka-docs.tgz'
@@ -106,7 +107,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu22-04-amd64-2
       env_vars:
         - name: CFLAGS
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
@@ -120,7 +121,7 @@ blocks:
             - sudo dpkg -i rapidjson-dev.deb
             - python3 -m pip install -U pip
             - ./packaging/tools/build-configurations-checks.sh
-        - name: 'Build and integration tests'
+        - name: 'Build and integration tests with "classic" protocol'
           commands:
             - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
             - sudo dpkg -i rapidjson-dev.deb
@@ -140,7 +141,37 @@ blocks:
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.4.0 --cmd 'make quick')
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.8.0 --cpversion 7.7.0 --cmd 'make quick')
+        - name: 'Build and integration tests with "consumer" protocol'
+          commands:
+            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
+            - sudo dpkg -i rapidjson-dev.deb
+            - python3 -m pip install -U pip
+            - python3 -m pip -V
+            - (cd tests && python3 -m pip install -r requirements.txt)
+            - ./configure --install-deps
+            # split these up
+            - ./packaging/tools/rdutcoverage.sh
+            - make copyright-check
+            - make -j all examples check
+            - echo "Verifying that CONFIGURATION.md does not have manual changes"
+            - git diff --exit-code CONFIGURATION.md
+            - examples/rdkafka_example -X builtin.features
+            - ldd src/librdkafka.so.1
+            - ldd src-cpp/librdkafka++.so.1
+            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
+            - make -j -C tests build
+            - make -C tests run_local_quick
+            - DESTDIR="$PWD/dest" make install
+            - export TEST_KAFKA_VERSION=4.0.0
+            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
+            # This commit corresponds to the DescribeConfigs API change for KIP-848
+            # KAFKA-14510; Extend DescribeConfigs API to support group configs (#16859)
+            # https://github.com/apache/kafka/commit/3a0efa2845e6a0d237772adfe6364579af50ce18
+            # TODO: upgrade to 4.0 when released.
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version 'trunk@3a0efa2845e6a0d237772adfe6364579af50ce18'
+              --cpversion 7.7.0 --conf '["group.coordinator.rebalance.protocols=classic,consumer"]'
+              --cmd 'make quick')
 
 
   - name: 'Linux x64: release artifact docker builds'
@@ -150,7 +181,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu22-04-amd64-2
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
@@ -192,7 +223,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-arm64-1
+          type: s1-prod-ubuntu22-04-arm64-2
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
@@ -275,7 +306,6 @@ blocks:
       prologue:
         commands:
           # install vcpkg in the parent directory.
-          - pwd
           - cd ..
           # Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
@@ -283,12 +313,6 @@ blocks:
           - ..\vcpkg\vcpkg integrate install
           # Install required packages.
           - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
-          - cd ..
-          - pwd
-          - ls vcpkg/
-          - echo $Env:VCPKG_ROOT
-          - pwd
-          - cd librdkafka
       epilogue:
         commands:
           - Get-ChildItem . -include *.dll -recurse
@@ -328,7 +352,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu22-04-amd64-2
       jobs:
         - name: 'Build NuGet and static packages'
           commands:

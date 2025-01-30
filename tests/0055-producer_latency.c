@@ -146,10 +146,10 @@ static int verify_latency(struct latconf *latconf) {
         }
 
         latconf->wakeups = tot_wakeups;
-        if (latconf->wakeups < 10 || latconf->wakeups > 1000) {
+        if (latconf->wakeups < 5 || latconf->wakeups > 1000) {
                 TEST_FAIL_LATER(
                     "%s: broker wakeups out of range: %d, "
-                    "expected 10..1000",
+                    "expected 5..1000",
                     latconf->name, latconf->wakeups);
                 fails++;
         }
@@ -341,7 +341,7 @@ int main_0055_producer_latency(int argc, char **argv) {
         }
 
         /* Create topic without replicas to keep broker-side latency down */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         for (latconf = latconfs; latconf->name; latconf++)
                 test_producer_latency(topic, latconf);

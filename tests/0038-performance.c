@@ -68,6 +68,7 @@ int main_0038_performance(int argc, char **argv) {
         test_conf_set(conf, "linger.ms", "100");
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, "acks", "1", NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         /* First produce one message to create the topic, etc, this might take
          * a while and we dont want this to affect the throughput timing. */

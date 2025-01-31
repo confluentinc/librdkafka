@@ -18,6 +18,9 @@ librdkafka v2.8.3 is a maintenance release:
    response has errors (#4970).
  * Only topic authorization errors in a metadata response are considered
    permanent and are returned to the user (#4970).
+ * The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries (#4970).
 
 
 ## Fixes
@@ -68,6 +71,14 @@ librdkafka v2.8.3 is a maintenance release:
    Solved by resetting it, given it's not needed to backoff
    the first fetch on a different node. This way faster leader switches are
    possible.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries. Similar to the fix done in 2.3.0 in
+   `rd_kafka_query_watermark_offsets`. Additionally, the partition
+   current leader epoch is taken from metadata cache instead of
+   from passed partitions.
    Happens since 1.x (#4970).
 
 

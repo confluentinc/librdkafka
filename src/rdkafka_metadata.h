@@ -307,12 +307,16 @@ int rd_kafka_metadata_cache_hint_rktparlist(
     rd_list_t *dst,
     int replace);
 
-const rd_kafka_metadata_topic_t *
-rd_kafka_metadata_cache_topic_get(rd_kafka_t *rk, const char *topic, int valid);
+const rd_kafka_metadata_topic_t *rd_kafka_metadata_cache_topic_get(
+    rd_kafka_t *rk,
+    const char *topic,
+    const rd_kafka_metadata_topic_internal_t **mdtip,
+    int valid);
 int rd_kafka_metadata_cache_topic_partition_get(
     rd_kafka_t *rk,
     const rd_kafka_metadata_topic_t **mtopicp,
     const rd_kafka_metadata_partition_t **mpartp,
+    const rd_kafka_metadata_partition_internal_t **mdpip,
     const char *topic,
     int32_t partition,
     int valid);

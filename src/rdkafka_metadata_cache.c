@@ -810,20 +810,27 @@ void rd_kafka_metadata_cache_propagate_changes(rd_kafka_t *rk) {
 }
 
 /**
+ * @param mdtip If non NULL, it's set to a pointer to internal topic metadata,
+ *              or to NULL if not found in cache.
  * @returns the shared metadata for a topic, or NULL if not found in
  *          cache.
  *
  * @locks rd_kafka_*lock()
  */
-const rd_kafka_metadata_topic_t *
-rd_kafka_metadata_cache_topic_get(rd_kafka_t *rk,
-                                  const char *topic,
-                                  int valid) {
+const rd_kafka_metadata_topic_t *rd_kafka_metadata_cache_topic_get(
+    rd_kafka_t *rk,
+    const char *topic,
+    const rd_kafka_metadata_topic_internal_t **mdtip,
+    int valid) {
         struct rd_kafka_metadata_cache_entry *rkmce;
 
-        if (!(rkmce = rd_kafka_metadata_cache_find(rk, topic, valid)))
+        if (!(rkmce = rd_kafka_metadata_cache_find(rk, topic, valid))) {
+                if (mdtip)
+                        *mdtip = NULL;
                 return NULL;
-
+        }
+        if (mdtip)
+                *mdtip = &rkmce->rkmce_metadata_internal_topic;
         return &rkmce->rkmce_mtopic;
 }
 
@@ -837,6 +844,7 @@ rd_kafka_metadata_cache_topic_get(rd_kafka_t *rk,
  *
  * @param mtopicp: pointer to topic metadata
  * @param mpartp: pointer to partition metadata
+ * @param mdpip: pointer to internal partition metadata
  * @param valid: only return valid entries (no hints)
  *
  * @returns -1 if topic was not found in cache, 0 if topic was found
@@ -848,18 +856,22 @@ int rd_kafka_metadata_cache_topic_partition_get(
     rd_kafka_t *rk,
     const rd_kafka_metadata_topic_t **mtopicp,
     const rd_kafka_metadata_partition_t **mpartp,
+    const rd_kafka_metadata_partition_internal_t **mdpip,
     const char *topic,
     int32_t partition,
     int valid) {
 
         const rd_kafka_metadata_topic_t *mtopic;
+        const rd_kafka_metadata_topic_internal_t *mdti;
         const rd_kafka_metadata_partition_t *mpart;
         rd_kafka_metadata_partition_t skel = {.id = partition};
 
         *mtopicp = NULL;
         *mpartp  = NULL;
+        *mdpip   = NULL;
 
-        if (!(mtopic = rd_kafka_metadata_cache_topic_get(rk, topic, valid)))
+        if (!(mtopic =
+                  rd_kafka_metadata_cache_topic_get(rk, topic, &mdti, valid)))
                 return -1;
 
         *mtopicp = mtopic;
@@ -876,6 +888,8 @@ int rd_kafka_metadata_cache_topic_partition_get(
                 return 0;
 
         *mpartp = mpart;
+        if (mdpip)
+                *mdpip = &mdti->partitions[mpart->id];
 
         return 1;
 }

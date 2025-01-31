@@ -3674,11 +3674,12 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                 struct rd_kafka_partition_leader *leader;
                 const rd_kafka_metadata_topic_t *mtopic;
                 const rd_kafka_metadata_partition_t *mpart;
+                const rd_kafka_metadata_partition_internal_t *mdpi;
                 rd_bool_t topic_wait_cache;
 
                 rd_kafka_metadata_cache_topic_partition_get(
-                    rk, &mtopic, &mpart, rktpar->topic, rktpar->partition,
-                    0 /*negative entries too*/);
+                    rk, &mtopic, &mpart, &mdpi, rktpar->topic,
+                    rktpar->partition, 0 /*negative entries too*/);
 
                 topic_wait_cache =
                     !mtopic ||
@@ -3746,9 +3747,11 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                         rd_kafka_topic_partition_update(rktpar2, rktpar);
                 } else {
                         /* Make a copy of rktpar and add to partitions list */
-                        rd_kafka_topic_partition_list_add_copy(
+                        rktpar2 = rd_kafka_topic_partition_list_add_copy(
                             leader->partitions, rktpar);
                 }
+                rd_kafka_topic_partition_set_current_leader_epoch(
+                    rktpar2, mdpi->leader_epoch);
 
                 rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
 

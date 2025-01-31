@@ -3799,6 +3799,7 @@ static void rd_kafka_get_offsets_for_times_resp_cb(rd_kafka_t *rk,
                                                    rd_kafka_buf_t *request,
                                                    void *opaque) {
         struct _get_offsets_for_times *state;
+        int actions = 0;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* 'state' has gone out of scope when offsets_for_times()
@@ -3809,9 +3810,21 @@ static void rd_kafka_get_offsets_for_times_resp_cb(rd_kafka_t *rk,
         state = opaque;
 
         err = rd_kafka_handle_ListOffsets(rk, rkb, err, rkbuf, request,
-                                          state->results, NULL);
+                                          state->results, &actions);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                 return; /* Retrying */
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                rd_kafka_topic_partition_t *rktpar;
+                /* Remove its cache in case the topic isn't a known topic. */
+                rd_kafka_wrlock(rk);
+                RD_KAFKA_TPLIST_FOREACH(rktpar, state->results) {
+                        if (rktpar->err)
+                                rd_kafka_metadata_cache_delete_by_name(
+                                    rk, rktpar->topic);
+                }
+                rd_kafka_wrunlock(rk);
+        }
 
         /* Retry if no broker connection is available yet. */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT && rkb &&

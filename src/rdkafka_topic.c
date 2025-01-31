@@ -1638,8 +1638,8 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
 
                 /* Check if metadata information has timed out. */
                 if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
-                    !rd_kafka_metadata_cache_topic_get(rk, rkt->rkt_topic->str,
-                                                       1 /*only valid*/)) {
+                    !rd_kafka_metadata_cache_topic_get(
+                        rk, rkt->rkt_topic->str, NULL, 1 /*only valid*/)) {
                         rd_kafka_dbg(rk, TOPIC, "NOINFO",
                                      "Topic %s metadata information timed out "
                                      "(%" PRId64 "ms old)",

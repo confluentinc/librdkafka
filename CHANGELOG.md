@@ -12,6 +12,8 @@ librdkafka v2.8.3 is a maintenance release:
    a cluster that is using KRaft (#4970).
  * Doesn't remove topics from cache on temporary Metadata errors but only
    on metadata cache expiry (#4970).
+ * Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still (@marcin-krystianc, #4970).
 
 
 ## Fixes
@@ -29,6 +31,12 @@ librdkafka v2.8.3 is a maintenance release:
    on metadata cache expiry. It allows the client to continue working
    in case of temporary problems to the Kafka metadata plane.
    Happens since 1.x (#4970).
+ * Issues: #4970
+   Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still. It achieves
+   this property expected effect even if a different broker had
+   previously reported the topic as existent.
+   Happens since 1.x (@marcin-krystianc, #4970).
 
 ### Consumer fixes
 

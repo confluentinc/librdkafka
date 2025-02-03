@@ -1364,47 +1364,51 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                  * Issue #1985. */
                 if (old_state == RD_KAFKA_TOPIC_S_UNKNOWN)
                         upd++;
-        }
 
-        /* Update leader for each partition */
-        for (j = 0; j < mdt->partition_cnt; j++) {
-                int r = 0;
-                rd_kafka_broker_t *leader;
-                int32_t leader_epoch = mdit->partitions[j].leader_epoch;
-                rd_kafka_toppar_t *rktp =
-                    rd_kafka_toppar_get(rkt, mdt->partitions[j].id, 0);
+                /* Update leader for each partition
+                 * only when topic response has no errors. */
+                for (j = 0; j < mdt->partition_cnt; j++) {
+                        int r = 0;
+                        rd_kafka_broker_t *leader;
+                        int32_t leader_epoch = mdit->partitions[j].leader_epoch;
+                        rd_kafka_toppar_t *rktp =
+                            rd_kafka_toppar_get(rkt, mdt->partitions[j].id, 0);
 
-                rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
-                             "Topic %s [%" PRId32 "] Leader %" PRId32
-                             " Epoch %" PRId32,
-                             rkt->rkt_topic->str, mdt->partitions[j].id,
-                             mdt->partitions[j].leader, leader_epoch);
+                        rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA,
+                                     "METADATA",
+                                     "Topic %s [%" PRId32 "] Leader %" PRId32
+                                     " Epoch %" PRId32,
+                                     rkt->rkt_topic->str, mdt->partitions[j].id,
+                                     mdt->partitions[j].leader, leader_epoch);
 
-                leader         = partbrokers[j];
-                partbrokers[j] = NULL;
+                        leader         = partbrokers[j];
+                        partbrokers[j] = NULL;
 
-                /* If broker does not support leaderEpoch(KIP 320) then it is
-                 * set to -1, we assume that metadata is not stale. */
-                if (leader_epoch == -1)
-                        partition_exists_with_no_leader_epoch = rd_true;
-                else if (leader_epoch < rktp->rktp_leader_epoch)
-                        partition_exists_with_stale_leader_epoch = rd_true;
+                        /* If broker does not support leaderEpoch(KIP 320) then
+                         * it is set to -1, we assume that metadata is not
+                         * stale. */
+                        if (leader_epoch == -1)
+                                partition_exists_with_no_leader_epoch = rd_true;
+                        else if (rktp && leader_epoch < rktp->rktp_leader_epoch)
+                                partition_exists_with_stale_leader_epoch =
+                                    rd_true;
 
 
-                /* Update leader for partition */
-                r = rd_kafka_toppar_leader_update(rkt, mdt->partitions[j].id,
-                                                  mdt->partitions[j].leader,
-                                                  leader, leader_epoch);
+                        /* Update leader for partition */
+                        r = rd_kafka_toppar_leader_update(
+                            rkt, mdt->partitions[j].id,
+                            mdt->partitions[j].leader, leader, leader_epoch);
 
-                upd += (r != 0 ? 1 : 0);
+                        upd += (r != 0 ? 1 : 0);
 
-                if (leader) {
-                        if (r != -1)
-                                leader_cnt++;
-                        /* Drop reference to broker (from find()) */
-                        rd_kafka_broker_destroy(leader);
+                        if (leader) {
+                                if (r != -1)
+                                        leader_cnt++;
+                                /* Drop reference to broker (from find()) */
+                                rd_kafka_broker_destroy(leader);
+                        }
+                        RD_IF_FREE(rktp, rd_kafka_toppar_destroy);
                 }
-                RD_IF_FREE(rktp, rd_kafka_toppar_destroy);
         }
 
         /* If all partitions have leaders, and this metadata update was not

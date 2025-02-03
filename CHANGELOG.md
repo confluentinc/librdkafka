@@ -12,6 +12,8 @@ librdkafka v2.9.0 is a feature release:
    on metadata cache expiry (#).
  * Doesn't mark the topic as unknown if it had been marked as existent earlier
    and `topic.metadata.propagation.max.ms` hasn't passed still (#).
+ * Doesn't update partition leaders if the topic in metadata
+   response has errors (#).
 
 
 ## Fixes
@@ -34,6 +36,11 @@ librdkafka v2.9.0 is a feature release:
    and `topic.metadata.propagation.max.ms` hasn't passed still. It achieves
    this property expected effect even if a different broker had
    previously reported the topic as existent.
+   Happens since 1.x (#).
+ * Issues: #
+   Doesn't update partition leaders if the topic in metadata
+   response has errors. It's in line with what Java client does and allows
+   to avoid segmentation faults for unknown partitions.
    Happens since 1.x (#).
 
 ### Consumer fixes

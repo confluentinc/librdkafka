@@ -278,9 +278,18 @@ static ssize_t rd_kafka_transport_socket_recvmsg(rd_kafka_transport_t *rktrans,
         if (unlikely(r <= 0)) {
                 if (r == -1 && rd_socket_errno == EAGAIN)
                         return 0;
-                else if (r == 0 || (r == -1 && rd_socket_errno == ECONNRESET)) {
+                else if (r == 0) {
                         /* Receive 0 after POLLIN event means
                          * connection closed. */
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection closed by "
+                                   "peer");
+                        rd_snprintf(errstr, errstr_size, "Disconnected");
+                        return -1;
+                } else if (r == -1 && rd_socket_errno == ECONNRESET) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection "
+                                   "reset by peer");
                         rd_snprintf(errstr, errstr_size, "Disconnected");
                         return -1;
                 } else if (r == -1) {
@@ -335,6 +344,9 @@ static ssize_t rd_kafka_transport_socket_recv0(rd_kafka_transport_t *rktrans,
                 } else if (unlikely(r == 0)) {
                         /* Receive 0 after POLLIN event means
                          * connection closed. */
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection closed by "
+                                   "peer");
                         rd_snprintf(errstr, errstr_size, "Disconnected");
                         return -1;
                 }
@@ -705,6 +717,9 @@ static void rd_kafka_transport_io_event(rd_kafka_transport_t *rktrans,
 
                 if (r == 0 /* handshake still in progress */ &&
                     (events & POLLHUP)) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: during "
+                                   "SSL connection handshake");
                         rd_kafka_broker_conn_closed(
                             rkb, RD_KAFKA_RESP_ERR__TRANSPORT, "Disconnected");
                         return;
@@ -728,6 +743,9 @@ static void rd_kafka_transport_io_event(rd_kafka_transport_t *rktrans,
                 }
 
                 if (events & POLLHUP) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: hung up from peer in "
+                                   "state AUTH_LEGACY");
                         rd_kafka_broker_fail(rkb, LOG_ERR,
                                              RD_KAFKA_RESP_ERR__AUTHENTICATION,
                                              "Disconnected");
@@ -754,6 +772,9 @@ static void rd_kafka_transport_io_event(rd_kafka_transport_t *rktrans,
                 }
 
                 if (events & POLLHUP) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection closed by "
+                                   "peer");
                         rd_kafka_broker_conn_closed(
                             rkb, RD_KAFKA_RESP_ERR__TRANSPORT, "Disconnected");
                         return;

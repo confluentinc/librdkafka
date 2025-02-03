@@ -225,15 +225,24 @@ rd_kafka_transport_ssl_io_update(rd_kafka_transport_t *rktrans,
                 if (serr2)
                         rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb, errstr,
                                            errstr_size);
-                else if (!rd_socket_errno || rd_socket_errno == ECONNRESET)
+                else if (!rd_socket_errno) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection closed by "
+                                   "peer");
                         rd_snprintf(errstr, errstr_size, "Disconnected");
-                else
+                } else if (rd_socket_errno == ECONNRESET) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection reset by peer");
+                        rd_snprintf(errstr, errstr_size, "Disconnected");
+                } else
                         rd_snprintf(errstr, errstr_size,
                                     "SSL transport error: %s",
                                     rd_strerror(rd_socket_errno));
                 return -1;
 
         case SSL_ERROR_ZERO_RETURN:
+                rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                           "Disconnected: SSL connection closed by peer");
                 rd_snprintf(errstr, errstr_size, "Disconnected");
                 return -1;
 

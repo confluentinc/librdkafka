@@ -4258,7 +4258,7 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
 
         flushing = may_send && rd_atomic32_get(&rkb->rkb_rk->rk_flushing) > 0;
 
-        // TODO: Fix value destructor
+        /* Bufs are being freed separately */
         map_topic_partition_buf_t map_topic_batch_bufq = RD_MAP_INITIALIZER(
             rkb->rkb_toppar_cnt, rd_kafka_topic_partition_cmp,
             rd_kafka_topic_partition_hash,

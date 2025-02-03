@@ -28,5 +28,7 @@ sonarqube:
     - "**/*.pb.*"
     - "**/mk-include/**/*"
     - "examples/**"
+    - "schemaregistry-examples/**"
   languages:
-    - javascript
+    - "javascript"
+    - "typescript"

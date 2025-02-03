@@ -8,6 +8,8 @@ librdkafka v2.9.0 is a feature release:
  * The mock cluster implementation removes brokers from Metadata response
    when they're not available, this simulates better the actual behavior of
    a cluster that is using KRaft (#).
+ * Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry (#).
 
 
 ## Fixes
@@ -19,6 +21,11 @@ librdkafka v2.9.0 is a feature release:
    without the condition being fulfilled because of spurious wake-ups.
    Solved by verifying with a monotonic clock that the expected point in time
    was reached and calling the function again if needed.
+   Happens since 1.x (#).
+ * Issues: #
+   Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry. It allows the client to continue working
+   in case of temporary problems to the Kafka metadata plane.
    Happens since 1.x (#).
 
 ### Consumer fixes

@@ -478,7 +478,7 @@ int rd_kafka_metadata_cache_topic_update(
         struct rd_kafka_metadata_cache_entry *rkmce = NULL;
         rd_ts_t now                                 = rd_clock();
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
-        int changed        = 1;
+        int changed        = 0;
         if (only_existing) {
                 if (likely(mdt->topic != NULL)) {
                         rkmce = rd_kafka_metadata_cache_find(rk, mdt->topic, 0);
@@ -498,13 +498,12 @@ int rd_kafka_metadata_cache_topic_update(
 
                 if (!mdt->err ||
                     mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED ||
-                    mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                    mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
                         rd_kafka_metadata_cache_insert(
                             rk, mdt, mdit, now, ts_expires, include_racks,
                             brokers, broker_cnt);
-                else
-                        changed = rd_kafka_metadata_cache_delete_by_name(
-                            rk, mdt->topic);
+                        changed = 1;
+                }
         } else {
                 /* Cache entry found but no topic name:
                  * delete it. */

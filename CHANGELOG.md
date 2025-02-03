@@ -10,6 +10,8 @@ librdkafka v2.9.0 is a feature release:
    a cluster that is using KRaft (#).
  * Doesn't remove topics from cache on temporary Metadata errors but only
    on metadata cache expiry (#).
+ * Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still (#).
 
 
 ## Fixes
@@ -26,6 +28,12 @@ librdkafka v2.9.0 is a feature release:
    Doesn't remove topics from cache on temporary Metadata errors but only
    on metadata cache expiry. It allows the client to continue working
    in case of temporary problems to the Kafka metadata plane.
+   Happens since 1.x (#).
+ * Issues: #
+   Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still. It achieves
+   this property expected effect even if a different broker had
+   previously reported the topic as existent.
    Happens since 1.x (#).
 
 ### Consumer fixes

@@ -1190,7 +1190,9 @@ rd_bool_t rd_kafka_topic_set_notexists(rd_kafka_topic_t *rkt,
              (rkt->rkt_rk->rk_conf.metadata_propagation_max_ms * 1000)) -
             rkt->rkt_ts_metadata;
 
-        if (!permanent && rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN &&
+        if (!permanent &&
+            (rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN ||
+             rkt->rkt_state == RD_KAFKA_TOPIC_S_EXISTS) &&
             remains_us > 0) {
                 /* Still allowing topic metadata to propagate. */
                 rd_kafka_dbg(
@@ -1412,21 +1414,6 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
              !partition_exists_with_stale_leader_epoch))
                 rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
-        if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR && rkt->rkt_partition_cnt) {
-                /* (Possibly intermittent) topic-wide error:
-                 * remove leaders for partitions */
-
-                for (j = 0; j < rkt->rkt_partition_cnt; j++) {
-                        rd_kafka_toppar_t *rktp;
-                        if (!rkt->rkt_p[j])
-                                continue;
-
-                        rktp = rkt->rkt_p[j];
-                        rd_kafka_toppar_lock(rktp);
-                        rd_kafka_toppar_broker_delegate(rktp, NULL);
-                        rd_kafka_toppar_unlock(rktp);
-                }
-        }
 
         /* If there was an update to the partitions try to assign
          * unassigned messages to new partitions, or fail them */

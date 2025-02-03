@@ -14,6 +14,8 @@ librdkafka v2.8.3 is a maintenance release:
    on metadata cache expiry (#4970).
  * Doesn't mark the topic as unknown if it had been marked as existent earlier
    and `topic.metadata.propagation.max.ms` hasn't passed still (@marcin-krystianc, #4970).
+ * Doesn't update partition leaders if the topic in metadata
+   response has errors (#4970).
 
 
 ## Fixes
@@ -37,6 +39,12 @@ librdkafka v2.8.3 is a maintenance release:
    this property expected effect even if a different broker had
    previously reported the topic as existent.
    Happens since 1.x (@marcin-krystianc, #4970).
+ * Issues: #4907
+   Doesn't update partition leaders if the topic in metadata
+   response has errors. It's in line with what Java client does and allows
+   to avoid segmentation faults for unknown partitions.
+   Happens since 1.x (#4970).
+
 
 ### Consumer fixes
 

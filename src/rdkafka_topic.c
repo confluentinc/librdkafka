@@ -1329,7 +1329,9 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                 rd_kafka_topic_set_notexists(rkt, mdt->err);
         else if (mdt->partition_cnt > 0)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
-        else if (mdt->err)
+        else if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
+                /* Only set an error when it's permanent and it needs
+                 * to be surfaced to the application. */
                 rd_kafka_topic_set_error(rkt, mdt->err);
 
         /* Update number of partitions, but not if there are

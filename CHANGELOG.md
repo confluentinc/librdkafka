@@ -14,6 +14,8 @@ librdkafka v2.9.0 is a feature release:
    and `topic.metadata.propagation.max.ms` hasn't passed still (#).
  * Doesn't update partition leaders if the topic in metadata
    response has errors (#).
+ * Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user (#).
 
 
 ## Fixes
@@ -41,6 +43,12 @@ librdkafka v2.9.0 is a feature release:
    Doesn't update partition leaders if the topic in metadata
    response has errors. It's in line with what Java client does and allows
    to avoid segmentation faults for unknown partitions.
+   Happens since 1.x (#).
+ * Issues: #
+   Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user. It's in line with what Java client
+   does and avoids returning to the user an error that wasn't meant to be
+   permanent.
    Happens since 1.x (#).
 
 ### Consumer fixes

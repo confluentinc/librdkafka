@@ -5861,6 +5861,14 @@ void test_wait_metadata_update(rd_kafka_t *rk,
         test_timing_t t_md;
         rd_kafka_t *our_rk = NULL;
 
+        /* Wait an additional second for the topic to propagate in
+         * the cluster. This is not perfect but a cheap workaround for
+         * the asynchronous nature of topic creations in Kafka.
+         * Sleeping comes before the full metadata requests because otherwise
+         * those requests can trigger rejoins in case of
+         * regex subscriptions. */
+        rd_sleep(1);
+
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
@@ -5901,11 +5909,6 @@ void test_wait_topic_exists(rd_kafka_t *rk, const char *topic, int tmout) {
         rd_kafka_metadata_topic_t topics = {.topic = (char *)topic};
 
         test_wait_metadata_update(rk, &topics, 1, NULL, 0, tmout);
-
-        /* Wait an additional second for the topic to propagate in
-         * the cluster. This is not perfect but a cheap workaround for
-         * the asynchronous nature of topic creations in Kafka. */
-        rd_sleep(1);
 }
 
 

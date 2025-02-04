@@ -120,6 +120,11 @@ int main_0016_client_swname(int argc, char **argv) {
         const char *jmx_port;
         const char *reason = NULL;
 
+        if (test_needs_auth()) {
+                TEST_SKIP("Cannot run this test with SSL/SASL\n");
+                return 0;
+        }
+
         /* If available, use the Kafka JmxTool to query software name
          * in broker JMX metrics */
         if (!(broker = test_getenv("BROKER_ADDRESS_2", NULL)))

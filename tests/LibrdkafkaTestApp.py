@@ -48,10 +48,6 @@ class LibrdkafkaTestApp(App):
         if version.startswith('0.9') or version.startswith('0.8'):
             conf_blob.append('api.version.request=false')
             conf_blob.append('broker.version.fallback=%s' % version)
-        else:
-            # any broker version with ApiVersion support
-            conf_blob.append('broker.version.fallback=0.10.0.0')
-            conf_blob.append('api.version.fallback.ms=0')
 
         # SASL (only one mechanism supported at a time)
         mech = self.conf.get('sasl_mechanisms', '').split(',')[0]

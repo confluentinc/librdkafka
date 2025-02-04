@@ -199,6 +199,8 @@ static void do_test_consumer_close(bool do_subscribe,
 
 extern "C" {
 int main_0116_kafkaconsumer_close(int argc, char **argv) {
+  TEST_SKIP_MOCK_CLUSTER(0);
+
   /* Parameters:
    *  subscribe, unsubscribe, close, with_queue */
   for (int i = 0; i < 1 << 4; i++) {

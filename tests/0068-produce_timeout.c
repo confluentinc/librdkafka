@@ -83,6 +83,8 @@ int main_0068_produce_timeout(int argc, char **argv) {
         int msgcounter = 0;
         const char *bootstraps;
 
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         rd_kafka_mock_cluster_t *mcluster =
             test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 3);

@@ -46,8 +46,8 @@ using namespace std;
 /** Topic+Partition helper class */
 class Toppar {
  public:
-  Toppar(const string &topic, int32_t partition) : partition(partition) {
-    this->topic.append(topic);
+  Toppar(const string &topic, int32_t partition) :
+      topic(topic), partition(partition) {
   }
 
   Toppar(const RdKafka::TopicPartition *tp) :
@@ -59,9 +59,11 @@ class Toppar {
   }
 
   friend bool operator<(const Toppar &a, const Toppar &b) {
-    if (a.partition < b.partition)
+    if (a.topic < b.topic)
       return true;
-    return a.topic < b.topic;
+    if (a.topic > b.topic)
+      return false;
+    return a.partition < b.partition;
   }
 
   string str() const {

@@ -384,6 +384,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_bool_t all_topics;  /**< Full/All topics requested */
                         rd_bool_t cgrp_update; /**< Update cgrp with topic
                                                 *   status from response. */
+                        int32_t cgrp_subscription_version;
+                        /**< Consumer group subscription version, to
+                         *   check before updating cgrp state. */
                         rd_bool_t force_racks; /**< Force the returned metadata
                                                 *   to contain partition to
                                                 *   rack mapping. */

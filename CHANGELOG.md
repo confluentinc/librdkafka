@@ -24,6 +24,8 @@ librdkafka v2.9.0 is a feature release:
  * When consumer is closed before destroying the client, the operations queue
    isn't purged anymore as it contains operations
    unrelated to the consumer group (#).
+ * When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription but weren't in previous one (#).
 
 
 ## Fixes
@@ -80,6 +82,12 @@ librdkafka v2.9.0 is a feature release:
    When consumer is closed before destroying the client, the operations queue
    isn't purged anymore as it contains operations
    unrelated to the consumer group.
+   Happens since 1.x (#).
+ * Issues: #
+   When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription
+   but weren't in previous one. This was due to the metadata request relative
+   to previous subscription.
    Happens since 1.x (#).
 
 

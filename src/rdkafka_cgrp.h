@@ -333,6 +333,8 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_atomic32_t rkcg_terminated; /**< Consumer has been closed */
 
+        rd_atomic32_t rkcg_subscription_version; /**< Subscription version */
+
         /* Protected by rd_kafka_*lock() */
         struct {
                 rd_ts_t ts_rebalance;       /* Timestamp of
@@ -403,6 +405,12 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
                                          rd_bool_t do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
+#define rd_kafka_cgrp_same_subscription_version(rk_cgrp,                       \
+                                                cgrp_subscription_version)     \
+        ((rk_cgrp) &&                                                          \
+         (cgrp_subscription_version == -1 ||                                   \
+          rd_atomic32_get(&(rk_cgrp)->rkcg_subscription_version) ==            \
+              cgrp_subscription_version))
 
 void rd_kafka_cgrp_assigned_offsets_commit(
     rd_kafka_cgrp_t *rkcg,

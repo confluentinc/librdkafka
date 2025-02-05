@@ -1757,7 +1757,8 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
                                                       * info exists*/
                     ,
                     rk->rk_conf.allow_auto_create_topics,
-                    rd_false /*!cgrp_update*/, "refresh unavailable topics");
+                    rd_false /*!cgrp_update*/, -1,
+                    "refresh unavailable topics");
         rd_list_destroy(&query_topics);
 }
 
@@ -2004,7 +2005,7 @@ void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
 
         rd_kafka_metadata_refresh_topics(
             rk, NULL, &topics, force, rk->rk_conf.allow_auto_create_topics,
-            rd_false /*!cgrp_update*/, "leader query");
+            rd_false /*!cgrp_update*/, -1, "leader query");
 
         rd_list_destroy(&topics);
 }

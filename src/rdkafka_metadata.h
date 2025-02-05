@@ -147,6 +147,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                                  rd_bool_t force,
                                  rd_bool_t allow_auto_create,
                                  rd_bool_t cgrp_update,
+                                 int32_t cgrp_subscription_version,
                                  const char *reason);
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_known_topics(rd_kafka_t *rk,
@@ -170,6 +171,7 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
                           const rd_list_t *topics,
                           rd_bool_t allow_auto_create_topics,
                           rd_bool_t cgrp_update,
+                          int32_t cgrp_subscription_version,
                           const char *reason,
                           rd_kafka_op_t *rko);
 

@@ -25,8 +25,8 @@
     "skipLibCheck": true
   },
   "include": [
-    "**/*",
-    "../test/**/*"
+    "test/**/*",
+    "e2e/**/*"
   ],
   "exclude": [
     "dist"

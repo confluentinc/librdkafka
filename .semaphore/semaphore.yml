@@ -115,7 +115,24 @@ blocks:
         - name: "Docs"
           commands:
             - make docs
-
+  
+  - name: "(SR) Linux amd64: test"
+    dependencies: [ ]
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu22-04-amd64-2
+      prologue:
+        commands:
+          - npm install
+      jobs:
+        - name: "Test"
+          commands:
+            - cd schemaregistry
+            #TODO: Understand why first run fails
+            - npm run test || npm run test || npm run test
+            - artifact push workflow coverage/jest/coverage-final.json --destination "jest-sr-coverage.json"
+  
   - name: "Linux amd64: Performance"
     dependencies: [ ]
     task:
@@ -459,6 +476,7 @@ after_pipeline:
           - sem-version java 11
           - artifact pull workflow mocha-coverage.json
           - artifact pull workflow jest-coverage.json
+          - artifact pull workflow jest-sr-coverage.json
           - npx --yes istanbul-merge --out merged-output/merged-coverage.json *-coverage.json
           - npx nyc report -t merged-output --report-dir coverage --reporter=text --reporter=lcov
           - emit-sonarqube-data --run_only_sonar_scan

@@ -29,6 +29,7 @@ sonarqube:
     - "**/mk-include/**/*"
     - "examples/**"
     - "schemaregistry-examples/**"
+    - "schemaregistry/e2e/**"
   languages:
     - "javascript"
     - "typescript"

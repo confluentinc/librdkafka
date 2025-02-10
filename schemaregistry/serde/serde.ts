@@ -272,7 +272,7 @@ export abstract class Serializer extends Serde {
   async getId(topic: string, msg: any, info?: SchemaInfo, format?: string): Promise<[number, SchemaInfo]> {
     let autoRegister = this.config().autoRegisterSchemas
     let useSchemaId = this.config().useSchemaId
-    let useLatestWithMetadata = this.conf.useLatestWithMetadata
+    let useLatestWithMetadata = this.config().useLatestWithMetadata
     let useLatest = this.config().useLatestVersion
     let normalizeSchema = this.config().normalizeSchemas
 

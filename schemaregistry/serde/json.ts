@@ -190,13 +190,6 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
     }
 
     const info = await this.getSchema(topic, payload)
-    if ((this.conf as JsonSerdeConfig).validate) {
-      const validate = await this.toValidateFunction(info)
-      if (validate != null && !validate(JSON.parse(payload.subarray(5).toString()))) {
-        throw new SerializationError('Invalid message')
-      }
-
-    }
     const subject = this.subjectName(topic, info)
     const readerMeta = await this.getReaderSchema(subject)
     let migrations: Migration[] = []
@@ -215,6 +208,12 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
       target = info
     }
     msg = this.executeRules(subject, topic, RuleMode.READ, null, target, msg, null)
+    if ((this.conf as JsonSerdeConfig).validate) {
+      const validate = await this.toValidateFunction(info)
+      if (validate != null && !validate(JSON.parse(msg))) {
+        throw new SerializationError('Invalid message')
+      }
+    }
     return msg
   }
 

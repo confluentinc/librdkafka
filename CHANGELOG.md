@@ -21,6 +21,9 @@ librdkafka v2.9.0 is a feature release:
    subsequent manual retries (#).
  * Deprecated `api.version.request`, `api.version.fallback.ms` and
    `broker.version.fallback` configuration properties (#).
+ * When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group (#).
 
 
 ## Fixes
@@ -72,6 +75,11 @@ librdkafka v2.9.0 is a feature release:
    `rd_kafka_query_watermark_offsets`. Additionally, the partition
    current leader epoch is taken from metadata cache instead of
    from passed partitions.
+   Happens since 1.x (#).
+ * Issues: #
+   When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group.
    Happens since 1.x (#).
 
 

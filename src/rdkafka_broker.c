@@ -2344,6 +2344,7 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
         if (rd_kafka_broker_ApiVersion_supported(
                 rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
                 -1 &&
+            rkb->rkb_source == RD_KAFKA_LEARNED &&
             rkb->rkb_rk->rk_conf.enable_metrics_push) {
                 rd_kafka_t *rk = rkb->rkb_rk;
                 rd_kafka_op_t *rko =

@@ -3331,13 +3331,15 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_q_purge(rkcg->rkcg_wait_coord_q);
 
-        /* Disable and empty ops queue since there will be no
+        /* Disable ops queue since there will be no
          * (broker) thread serving it anymore after the unassign_broker
          * below.
-         * This prevents hang on destroy where responses are enqueued on
-         * rkcg_ops without anything serving the queue. */
+         * As queue is forwarded to rk_ops, it cannot be purged,
+         * so consumer group operation need to be served with a no-op
+         * when `rkcg_terminated` is true. */
+
+        rd_atomic32_set(&rkcg->rkcg_terminated, rd_true);
         rd_kafka_q_disable(rkcg->rkcg_ops);
-        rd_kafka_q_purge(rkcg->rkcg_ops);
 
         if (rkcg->rkcg_curr_coord)
                 rd_kafka_cgrp_coord_clear_broker(rkcg);
@@ -3346,8 +3348,6 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_broker_destroy(rkcg->rkcg_coord);
                 rkcg->rkcg_coord = NULL;
         }
-
-        rd_atomic32_set(&rkcg->rkcg_terminated, rd_true);
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
                      "Consumer group sub-system terminated%s",
@@ -6363,6 +6363,12 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
         rd_kafka_toppar_t *rktp;
         rd_kafka_resp_err_t err;
         const int silent_op = rko->rko_type == RD_KAFKA_OP_RECV_BUF;
+        if (unlikely(rd_atomic32_get(&rkcg->rkcg_terminated) == rd_true)) {
+                if (rko)
+                        rd_kafka_op_destroy(rko);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
 
         rktp = rko->rko_rktp;
 

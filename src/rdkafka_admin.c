@@ -7767,9 +7767,6 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
         if (target_assignment)
                 member->target_assignment.partitions =
                     rd_kafka_topic_partition_list_copy(target_assignment);
-        else
-                member->target_assignment.partitions =
-                    rd_kafka_topic_partition_list_new(0);
         return member;
 }
 
@@ -7857,6 +7854,8 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(
 const rd_kafka_topic_partition_list_t *
 rd_kafka_MemberAssignment_target_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
+        if (assignment == NULL)
+                return NULL;
         return assignment->partitions;
 }
 
@@ -8100,6 +8099,58 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
 }
 
 /**
+ * @brief Construct and send ConsumerGroupDescribeRequest to \p rkb
+ *        with the groups (char *) in \p groups, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+static rd_kafka_resp_err_t rd_kafka_admin_ConsumerGroupDescribeRequest(
+        rd_kafka_broker_t *rkb,
+        const rd_list_t *groups /*(char*)*/,
+        rd_kafka_AdminOptions_t *options,
+        char *errstr,
+        size_t errstr_size,
+        rd_kafka_replyq_t replyq,
+        rd_kafka_resp_cb_t *resp_cb,
+        void *opaque) {
+        
+        int i, include_authorized_operations;
+        char *group;
+        rd_kafka_resp_err_t err;
+        int groups_cnt = rd_list_cnt(groups);
+        rd_kafka_error_t *error = NULL;
+        char **groups_arr       = rd_calloc(groups_cnt, sizeof(*groups_arr));
+
+        RD_LIST_FOREACH(group, groups, i) {
+                groups_arr[i] = rd_list_elem(groups, i);
+        }
+
+        include_authorized_operations =
+            rd_kafka_confval_get_int(&options->include_authorized_operations);
+
+        error = rd_kafka_GroupsDescribeRequest(rkb, groups_arr, groups_cnt,
+                                               include_authorized_operations,
+                                               replyq, resp_cb, opaque);
+        rd_free(groups_arr);
+
+        if (error) {
+                rd_snprintf(errstr, errstr_size, "%s",
+                            rd_kafka_error_string(error));
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
+                return err;
+        }
+        
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+}
+/**
  * @brief Parse DescribeConsumerGroupsResponse and create ADMIN_RESULT op.
  */
 static rd_kafka_resp_err_t
@@ -8324,6 +8375,9 @@ err_parse:
         return reply->rkbuf_err;
 }
 
+/**
+ * @brief Parse ConsumerGroupDescriberesponse and create ADMIN_RESULT op.
+ */
 static rd_kafka_resp_err_t
 rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                                             rd_kafka_op_t **rko_resultp,
@@ -8596,6 +8650,8 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
                 rd_list_add(&rko->rko_u.admin_request.args, rd_strdup(grp));
 
                 rd_kafka_q_enq(rko_fanout->rko_rk->rk_ops, rko);
+
+                rd_kafka_ConsumerGroupDescription_destroy(newgroupres);
         } else {
                 /* As a convenience to the application we insert group result
                  * in the same order as they were requested. */
@@ -8683,7 +8739,7 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
          *        coordinator into one op. */
         for (i = 0; i < groups_cnt; i++) {
                 static const struct rd_kafka_admin_worker_cbs cbs = {
-                    rd_kafka_ConsumerGroupDescribeRequest,
+                    rd_kafka_admin_ConsumerGroupDescribeRequest,
                     rd_kafka_ConsumerGroupDescribeResponseParse,
                 };
                 char *grp =

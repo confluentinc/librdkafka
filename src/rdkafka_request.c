@@ -6064,7 +6064,7 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
 }
 
 /**
- * @brief Construct and send ConsumerGroupDescribe requests 
+ * @brief Construct and send ConsumerGroupDescribe requests
  *        to \p rkb with the groups (const char *) in \p groups.
  *        Uses \p max_ApiVersion as maximum API version, pass -1
  *        to use the maximum available version.
@@ -6090,7 +6090,7 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
         int i;
         char *group;
 
-        int16_t ApiVersion    = rd_kafka_broker_ApiVersion_supported(
+        int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);
 
         if (ApiVersion == -1) {
@@ -6102,14 +6102,14 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 1,
             4 /* rd_kafka_buf_write_arraycnt_pos */ +
-            1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
-            32 * group_cnt /* Groups */,
+                1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
+                32 * group_cnt /* Groups */,
             rd_true /* flexver */);
 
         ofGroupsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
         rd_kafka_buf_finalize_arraycnt(rkbuf, ofGroupsArrayCnt, group_cnt);
 
-        while(group_cnt-- > 0) {
+        while (group_cnt-- > 0) {
                 rd_kafka_buf_write_str(rkbuf, groups[group_cnt], -1);
         }
 

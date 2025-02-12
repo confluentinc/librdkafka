@@ -7276,8 +7276,14 @@ size_t test_mock_wait_matching_requests(
         while (matching_request_cnt < expected_cnt) {
                 matching_request_cnt =
                     test_mock_get_matching_request_cnt(mcluster, match, opaque);
-                if (matching_request_cnt < expected_cnt)
+                if (matching_request_cnt < expected_cnt) {
+                        TEST_SAYL(3,
+                                  "Still waiting to see %" PRIusz
+                                  " requests"
+                                  ", got %" PRIusz " \n",
+                                  expected_cnt, matching_request_cnt);
                         rd_usleep(100 * 1000, 0);
+                }
         }
 
         rd_usleep(confidence_interval_ms * 1000, 0);

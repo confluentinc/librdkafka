@@ -6087,7 +6087,6 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
                                void *opaque) {
         rd_kafka_buf_t *rkbuf;
         size_t ofGroupsArrayCnt;
-        int grp_ids_cnt = rd_list_cnt(groups);
         int i;
         char *group;
 
@@ -6104,11 +6103,11 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 1,
             4 /* rd_kafka_buf_write_arraycnt_pos */ +
             1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
-            32 * grp_ids_cnt /* Groups */,
+            32 * group_cnt /* Groups */,
             rd_true /* flexver */);
 
         ofGroupsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-        rd_kafka_buf_finalize_arraycnt(rkbuf, ofGroupsArrayCnt, grp_ids_cnt);
+        rd_kafka_buf_finalize_arraycnt(rkbuf, ofGroupsArrayCnt, group_cnt);
 
         while(group_cnt-- > 0) {
                 rd_kafka_buf_write_str(rkbuf, groups[group_cnt], -1);

@@ -8157,20 +8157,20 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
  *          transmission, otherwise an error code and errstr will be
  *          updated with a human readable error string.
  */
-static rd_kafka_resp_err_t rd_kafka_admin_ConsumerGroupDescribeRequest(
-        rd_kafka_broker_t *rkb,
-        const rd_list_t *groups /*(char*)*/,
-        rd_kafka_AdminOptions_t *options,
-        char *errstr,
-        size_t errstr_size,
-        rd_kafka_replyq_t replyq,
-        rd_kafka_resp_cb_t *resp_cb,
-        void *opaque) {
-        
+static rd_kafka_resp_err_t
+rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                            const rd_list_t *groups /*(char*)*/,
+                                            rd_kafka_AdminOptions_t *options,
+                                            char *errstr,
+                                            size_t errstr_size,
+                                            rd_kafka_replyq_t replyq,
+                                            rd_kafka_resp_cb_t *resp_cb,
+                                            void *opaque) {
+
         int i, include_authorized_operations;
         char *group;
         rd_kafka_resp_err_t err;
-        int groups_cnt = rd_list_cnt(groups);
+        int groups_cnt          = rd_list_cnt(groups);
         rd_kafka_error_t *error = NULL;
         char **groups_arr       = rd_calloc(groups_cnt, sizeof(*groups_arr));
 
@@ -8193,9 +8193,8 @@ static rd_kafka_resp_err_t rd_kafka_admin_ConsumerGroupDescribeRequest(
                 rd_kafka_error_destroy(error);
                 return err;
         }
-        
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
 
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 /**
  * @brief Parse DescribeConsumerGroupsResponse and create ADMIN_RESULT op.

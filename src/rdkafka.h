@@ -9034,7 +9034,7 @@ const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
  *
  * @param member The group member.
  *
- * @return The target assignment.
+ * @return The target assignment. It returns NULL for CLASSIC GROUPS.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p member object.
@@ -9048,7 +9048,7 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(
  *
  * @param assignment The group member assignment.
  *
- * @return The target assigned partitions.
+ * @return The target assigned partitions. It returns NULL for CLASSIC GROUPS.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p assignment object.

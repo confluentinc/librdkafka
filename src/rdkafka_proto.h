@@ -174,7 +174,7 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
             [RD_KAFKAP_ConsumerGroupHeartbeat]    = "ConsumerGroupHeartbeat",
             [RD_KAFKAP_GetTelemetrySubscriptions] = "GetTelemetrySubscriptions",
             [RD_KAFKAP_PushTelemetry]             = "PushTelemetry",
-            [RD_KAFKAP_ConsumerGroupDescribe]     = "ConsumerGroupDescribeRequest",
+            [RD_KAFKAP_ConsumerGroupDescribe] = "ConsumerGroupDescribeRequest",
 
         };
         static RD_TLS char ret[64];

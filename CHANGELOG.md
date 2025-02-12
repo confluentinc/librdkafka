@@ -2,21 +2,31 @@
 
 librdkafka v2.8.3 is a maintenance release:
 
-* Commits during a cooperative incremental rebalance aren't causing
-  an assignment lost if the generation id was bumped in between (#4908).
+ * Commits during a cooperative incremental rebalance aren't causing
+   an assignment lost if the generation id was bumped in between (#4908).
+ * Fix for librdkafka yielding before timeouts had been reached (#4970)
 
 
 ## Fixes
 
+### General fixes
+
+ * Issues: #4970
+   librdkafka code using `cnd_timedwait` was yielding before a timeout occurred
+   without the condition being fulfilled because of spurious wake-ups.
+   Solved by verifying with a monotonic clock that the expected point in time
+   was reached and calling the function again if needed.
+   Happens since 1.x (#4970).
+
 ### Consumer fixes
 
-* Issues: #4059
-  Commits during a cooperative incremental rebalance could cause an
-  assignment lost if the generation id was bumped by a second join
-  group request.
-  Solved by not rejoining the group in case an illegal generation error happens
-  during a rebalance.
-  Happening since v1.6.0 (#4908)
+ * Issues: #4059
+   Commits during a cooperative incremental rebalance could cause an
+   assignment lost if the generation id was bumped by a second join
+   group request.
+   Solved by not rejoining the group in case an illegal generation error happens
+   during a rebalance.
+   Happening since v1.6.0 (#4908)
 
 
 

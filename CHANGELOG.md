@@ -1,3 +1,23 @@
+# librdkafka v2.9.0
+
+librdkafka v2.9.0 is a feature release:
+
+ * Fix for librdkafka yielding before timeouts had been reached (#)
+
+
+## Fixes
+
+### General fixes
+
+ * Issues: #
+   librdkafka code using `cnd_timedwait` was yielding before a timeout occurred
+   without the condition being fulfilled because of spurious wake-ups.
+   Solved by verifying with a monotonic clock that the expected point in time
+   was reached and calling the function again if needed.
+   Happens since 1.x (#).
+
+
+
 # librdkafka v2.8.0
 
 librdkafka v2.8.0 is a maintenance release:

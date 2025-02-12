@@ -2082,15 +2082,15 @@ static void rd_kafka_metadata_refresh_cb(rd_kafka_timers_t *rkts, void *arg) {
  * @locks none
  */
 static int rd_kafka_init_wait(rd_kafka_t *rk, int timeout_ms) {
-        struct timespec tspec;
         int ret;
+        rd_ts_t abs_timeout;
 
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_init_lock);
         while (rk->rk_init_wait_cnt > 0 &&
-               cnd_timedwait_abs(&rk->rk_init_cnd, &rk->rk_init_lock, &tspec) ==
-                   thrd_success)
+               cnd_timedwait_abs(&rk->rk_init_cnd, &rk->rk_init_lock,
+                                 abs_timeout) == thrd_success)
                 ;
         ret = rk->rk_init_wait_cnt;
         mtx_unlock(&rk->rk_init_lock);

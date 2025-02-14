@@ -39,18 +39,33 @@ static std::string topic;
 
 class StatsCb : public RdKafka::EventCb {
  public:
-  int64_t calc_lag;  // calculated lag
-  int lag_valid;     // number of times lag has been valid
+  int64_t calc_lag;          // calculated lag
+  int lag_valid;             // number of times lag has been valid
+  bool partitions_assigned;  // partitions were assigned
+  bool skip_first;           // skip first event after assignment
 
   StatsCb() {
-    calc_lag  = -1;
-    lag_valid = 0;
+    calc_lag            = -1;
+    lag_valid           = 0;
+    partitions_assigned = false;
+    skip_first          = true;
   }
 
   /**
    * @brief Event callback
    */
   void event_cb(RdKafka::Event &event) {
+    if (!partitions_assigned) {
+      /* It means we won't find the topic in the stats JSON. */
+      return;
+    }
+
+    if (skip_first) {
+      skip_first = false;
+      /* First JSON after assignment could be created before the assignment. */
+      return;
+    }
+
     if (event.type() == RdKafka::Event::EVENT_LOG) {
       Test::Say(tostr() << "LOG-" << event.severity() << "-" << event.fac()
                         << ": " << event.str() << "\n");
@@ -200,12 +215,15 @@ static void do_test_consumer_lag(bool with_txns) {
   Test::conf_set(conf, "group.id", topic);
   Test::conf_set(conf, "enable.auto.commit", "false");
   Test::conf_set(conf, "auto.offset.reset", "earliest");
-  Test::conf_set(conf, "statistics.interval.ms", "100");
+  Test::conf_set(conf, "statistics.interval.ms", "500");
 
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)
     Test::Fail("Failed to create KafkaConsumer: " + errstr);
   delete conf;
+
+  /* Execute callbacks for statistics enqueued before assignment. */
+  c->poll(0);
 
   /* Assign partitions */
   std::vector<RdKafka::TopicPartition *> parts;
@@ -213,6 +231,7 @@ static void do_test_consumer_lag(bool with_txns) {
   if ((err = c->assign(parts)))
     Test::Fail("assign failed: " + RdKafka::err2str(err));
   RdKafka::TopicPartition::destroy(parts);
+  stats.partitions_assigned = true;
 
   /* Start consuming */
   Test::Say("Consuming topic " + topic + "\n");

@@ -7780,9 +7780,16 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
  */
 static rd_kafka_MemberDescription_t *
 rd_kafka_MemberDescription_copy(const rd_kafka_MemberDescription_t *src) {
-        return rd_kafka_MemberDescription_new(
-            src->client_id, src->consumer_id, src->group_instance_id, src->host,
-            src->assignment.partitions, src->target_assignment.partitions);
+        if (src->target_assignment) {
+                return rd_kafka_MemberDescription_new(
+                    src->client_id, src->consumer_id, src->group_instance_id,
+                    src->host, src->assignment.partitions,
+                    src->target_assignment.partitions);
+        } else {
+                return rd_kafka_MemberDescription_new(
+                    src->client_id, src->consumer_id, src->group_instance_id,
+                    src->host, src->assignment.partitions, NULL);
+        }
 }
 
 /**
@@ -7806,7 +7813,7 @@ rd_kafka_MemberDescription_destroy(rd_kafka_MemberDescription_t *member) {
         if (member->assignment.partitions)
                 rd_kafka_topic_partition_list_destroy(
                     member->assignment.partitions);
-        if (member->target_assignment.partitions)
+        if (member->target_assignment && member->target_assignment.partitions)
                 rd_kafka_topic_partition_list_destroy(
                     member->target_assignment.partitions);
         rd_free(member);
@@ -8125,11 +8132,7 @@ rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
         rd_kafka_resp_err_t err;
         int groups_cnt          = rd_list_cnt(groups);
         rd_kafka_error_t *error = NULL;
-        char **groups_arr       = rd_calloc(groups_cnt, sizeof(*groups_arr));
-
-        RD_LIST_FOREACH(group, groups, i) {
-                groups_arr[i] = rd_list_elem(groups, i);
-        }
+        char **groups_arr       = (char **)groups->rl_elems;
 
         include_authorized_operations =
             rd_kafka_confval_get_int(&options->include_authorized_operations);

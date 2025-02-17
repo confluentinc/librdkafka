@@ -16,8 +16,10 @@ int main(int argc, char **argv) {
                rd_kafka_version(), RD_KAFKA_VERSION);
 
         if (argc < 2 || (argc > 2 && (argc & 1))) {
-                printf("Usage: %s  <version_string> [config.property config-value ..]\n",
-                       argv[0]);
+                printf(
+                    "Usage: %s  <version_string> [config.property config-value "
+                    "..]\n",
+                    argv[0]);
                 return 1;
         }
 

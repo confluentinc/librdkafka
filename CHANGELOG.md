@@ -160,7 +160,7 @@ librdkafka v2.10.0 is a feature release:
 
 librdkafka v2.8.0 is a maintenance release:
 
-* DescribeConsumerGroup now supports new consumer protocol groups (#4922).
+* DescribeConsumerGroup now supports new consumer protocol groups. Two field type and target assignment has also been added. Target Assignment is only valid for the new Consumer protocol and its default value is NULL. (#4922).
 * Socket options are now all set before connection (#4893).
 * Client certificate chain is now sent when using `ssl.certificate.pem`
   or `ssl_certificate` or `ssl.keystore.location` (#4894).

@@ -5062,6 +5062,9 @@ rd_kafka_list_groups(rd_kafka_t *rk,
         /* Query each broker for its list of groups */
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_kafka_broker_or_instance_terminating(rkb))
+                        continue;
+
                 rd_kafka_error_t *error;
                 rd_kafka_broker_lock(rkb);
                 if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {

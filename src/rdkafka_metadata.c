@@ -135,6 +135,7 @@ rd_kafka_metadata(rd_kafka_t *rk,
                                   * partial request may make it seem
                                   * like some subscribed topics are missing. */
                                  all_topics ? rd_true : rd_false,
+                                 -1 /* same subscription version */,
                                  rd_false /* force_racks */, rko);
 
         rd_list_destroy(&topics);
@@ -516,12 +517,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_bool_t cgrp_update                = rd_false;
         rd_bool_t has_reliable_leader_epochs =
             rd_kafka_has_reliable_leader_epochs(rkb);
-        int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
-        rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
-        int32_t controller_id      = -1;
-        rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
-        int broker_changes         = 0;
-        int cache_changes          = 0;
+        int ApiVersion                = rkbuf->rkbuf_reqhdr.ApiVersion;
+        rd_kafkap_str_t cluster_id    = RD_ZERO_INIT;
+        int32_t controller_id         = -1;
+        rd_kafka_resp_err_t err       = RD_KAFKA_RESP_ERR_NO_ERROR;
+        int broker_changes            = 0;
+        int cache_changes             = 0;
+        int cgrp_subscription_version = -1;
 
         /* If client rack is present, the metadata cache (topic or full) needs
          * to contain the partition to rack map. */
@@ -536,6 +538,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 cgrp_update =
                     request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp;
                 compute_racks |= request->rkbuf_u.Metadata.force_racks;
+                cgrp_subscription_version =
+                    request->rkbuf_u.Metadata.cgrp_subscription_version;
         }
 
         /* If there's reason is NULL, set it to a human-readable string. */
@@ -1065,9 +1069,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
          * the effective subscription of available topics) as to not
          * propagate non-included topics as non-existent. */
         if (cgrp_update &&
-            (requested_topics || requested_topic_ids || all_topics))
+            (all_topics ||
+             ((requested_topics || requested_topic_ids) &&
+              rd_kafka_cgrp_same_subscription_version(
+                  rkb->rkb_rk->rk_cgrp, cgrp_subscription_version)))) {
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
+        }
 
         /* Try to acquire a Producer ID from this broker if we
          * don't have one. */
@@ -1381,6 +1389,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                                  rd_bool_t force,
                                  rd_bool_t allow_auto_create,
                                  rd_bool_t cgrp_update,
+                                 int32_t cgrp_subscription_version,
                                  const char *reason) {
         rd_list_t q_topics;
         int destroy_rkb = 0;
@@ -1447,9 +1456,9 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                      "Requesting metadata for %d/%d topics: %s",
                      rd_list_cnt(&q_topics), rd_list_cnt(topics), reason);
 
-        rd_kafka_MetadataRequest(rkb, &q_topics, NULL, reason,
-                                 allow_auto_create, cgrp_update,
-                                 rd_false /* force_racks */, NULL);
+        rd_kafka_MetadataRequest(
+            rkb, &q_topics, NULL, reason, allow_auto_create, cgrp_update,
+            cgrp_subscription_version, rd_false /* force_racks */, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -1498,7 +1507,7 @@ rd_kafka_metadata_refresh_known_topics(rd_kafka_t *rk,
         else
                 err = rd_kafka_metadata_refresh_topics(
                     rk, rkb, &topics, force, allow_auto_create_topics,
-                    rd_false /*!cgrp_update*/, reason);
+                    rd_false /*!cgrp_update*/, -1, reason);
 
         rd_list_destroy(&topics);
 
@@ -1564,7 +1573,8 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
         else
                 err = rd_kafka_metadata_refresh_topics(
                     rk, rkb, &topics, rd_true /*force*/,
-                    allow_auto_create_topics, rd_true /*cgrp_update*/, reason);
+                    allow_auto_create_topics, rd_true /*cgrp_update*/,
+                    rd_atomic32_get(&rkcg->rkcg_subscription_version), reason);
 
         rd_list_destroy(&topics);
 
@@ -1591,8 +1601,9 @@ rd_kafka_resp_err_t rd_kafka_metadata_refresh_brokers(rd_kafka_t *rk,
                                                       const char *reason) {
         return rd_kafka_metadata_request(rk, rkb, NULL /*brokers only*/,
                                          rd_false /*!allow auto create topics*/,
-                                         rd_false /*no cgrp update */, reason,
-                                         NULL);
+                                         rd_false /*no cgrp update */,
+                                         -1 /* same subscription version */,
+                                         reason, NULL);
 }
 
 
@@ -1626,7 +1637,8 @@ rd_kafka_resp_err_t rd_kafka_metadata_refresh_all(rd_kafka_t *rk,
         rd_list_init(&topics, 0, NULL); /* empty list = all topics */
         rd_kafka_MetadataRequest(
             rkb, &topics, NULL, reason, rd_false /*no auto create*/,
-            rd_true /*cgrp update*/, rd_false /* force_rack */, NULL);
+            rd_true /*cgrp update*/, -1 /* same subscription version */,
+            rd_false /* force_rack */, NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -1652,6 +1664,7 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
                           const rd_list_t *topics,
                           rd_bool_t allow_auto_create_topics,
                           rd_bool_t cgrp_update,
+                          int32_t cgrp_subscription_version,
                           const char *reason,
                           rd_kafka_op_t *rko) {
         int destroy_rkb = 0;
@@ -1663,9 +1676,9 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
                 destroy_rkb = 1;
         }
 
-        rd_kafka_MetadataRequest(rkb, topics, NULL, reason,
-                                 allow_auto_create_topics, cgrp_update,
-                                 rd_false /* force racks */, rko);
+        rd_kafka_MetadataRequest(
+            rkb, topics, NULL, reason, allow_auto_create_topics, cgrp_update,
+            cgrp_subscription_version, rd_false /* force racks */, rko);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);
@@ -1729,7 +1742,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
                 rd_kafka_metadata_refresh_topics(
                     rk, NULL, &topics, rd_true /*force*/,
                     rk->rk_conf.allow_auto_create_topics,
-                    rd_false /*!cgrp_update*/, "partition leader query");
+                    rd_false /*!cgrp_update*/, -1, "partition leader query");
 
                 /* Back off next query exponentially till we reach
                  * the retry backoff max ms */

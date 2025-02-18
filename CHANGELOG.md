@@ -1,9 +1,33 @@
-# librdkafka v2.8.1
+# librdkafka v2.9.0
 
-librdkafka v2.8.1 is a maintenance release:
+librdkafka v2.9.0 is a feature release:
 
  * Identify brokers only by broker id (#4557, @mfleming)
  * Remove unavailable brokers and their thread (#4557, @mfleming)
+ * Fix for librdkafka yielding before timeouts had been reached (#)
+ * Removed a 500ms latency when a consumer partition switches to a different
+   leader (#)
+ * The mock cluster implementation removes brokers from Metadata response
+   when they're not available, this simulates better the actual behavior of
+   a cluster that is using KRaft (#).
+ * Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry (#).
+ * Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still (#).
+ * Doesn't update partition leaders if the topic in metadata
+   response has errors (#).
+ * Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user (#).
+ * The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries (#).
+ * Deprecated `api.version.request`, `api.version.fallback.ms` and
+   `broker.version.fallback` configuration properties (#).
+ * When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group (#).
+ * When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription but weren't in previous one (#).
 
 
 ## Fixes
@@ -22,6 +46,63 @@ librdkafka v2.8.1 is a maintenance release:
    temporarily or permanently so we always remove it and it'll be added back when
    it becomes available again.
    Happens since 1.x (#4557, @mfleming).
+ * Issues: #
+   librdkafka code using `cnd_timedwait` was yielding before a timeout occurred
+   without the condition being fulfilled because of spurious wake-ups.
+   Solved by verifying with a monotonic clock that the expected point in time
+   was reached and calling the function again if needed.
+   Happens since 1.x (#).
+ * Issues: #
+   Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry. It allows the client to continue working
+   in case of temporary problems to the Kafka metadata plane.
+   Happens since 1.x (#).
+ * Issues: #
+   Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still. It achieves
+   this property expected effect even if a different broker had
+   previously reported the topic as existent.
+   Happens since 1.x (#).
+ * Issues: #
+   Doesn't update partition leaders if the topic in metadata
+   response has errors. It's in line with what Java client does and allows
+   to avoid segmentation faults for unknown partitions.
+   Happens since 1.x (#).
+ * Issues: #
+   Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user. It's in line with what Java client
+   does and avoids returning to the user an error that wasn't meant to be
+   permanent.
+   Happens since 1.x (#).
+
+### Consumer fixes
+
+ * Issues: #
+   When switching to a different leader a consumer could wait 500ms 
+   (`fetch.error.backoff.ms`) before starting to fetch again. The fetch backoff wasn't reset when joining the new broker.
+   Solved by resetting it, given it's not needed to backoff
+   the first fetch on a different node. This way faster leader switches are
+   possible.
+   Happens since 1.x (#).
+ * Issues: #
+   The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries. Similar to the fix done in 2.3.0 in
+   `rd_kafka_query_watermark_offsets`. Additionally, the partition
+   current leader epoch is taken from metadata cache instead of
+   from passed partitions.
+   Happens since 1.x (#).
+ * Issues: #
+   When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group.
+   Happens since 1.x (#).
+ * Issues: #
+   When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription
+   but weren't in previous one. This was due to the metadata request relative
+   to previous subscription.
+   Happens since 1.x (#).
 
 
 

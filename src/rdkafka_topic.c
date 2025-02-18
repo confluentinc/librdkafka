@@ -1190,7 +1190,9 @@ rd_bool_t rd_kafka_topic_set_notexists(rd_kafka_topic_t *rkt,
              (rkt->rkt_rk->rk_conf.metadata_propagation_max_ms * 1000)) -
             rkt->rkt_ts_metadata;
 
-        if (!permanent && rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN &&
+        if (!permanent &&
+            (rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN ||
+             rkt->rkt_state == RD_KAFKA_TOPIC_S_EXISTS) &&
             remains_us > 0) {
                 /* Still allowing topic metadata to propagate. */
                 rd_kafka_dbg(
@@ -1327,7 +1329,9 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                 rd_kafka_topic_set_notexists(rkt, mdt->err);
         else if (mdt->partition_cnt > 0)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
-        else if (mdt->err)
+        else if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
+                /* Only set an error when it's permanent and it needs
+                 * to be surfaced to the application. */
                 rd_kafka_topic_set_error(rkt, mdt->err);
 
         /* Update number of partitions, but not if there are
@@ -1362,47 +1366,51 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                  * Issue #1985. */
                 if (old_state == RD_KAFKA_TOPIC_S_UNKNOWN)
                         upd++;
-        }
 
-        /* Update leader for each partition */
-        for (j = 0; j < mdt->partition_cnt; j++) {
-                int r = 0;
-                rd_kafka_broker_t *leader;
-                int32_t leader_epoch = mdit->partitions[j].leader_epoch;
-                rd_kafka_toppar_t *rktp =
-                    rd_kafka_toppar_get(rkt, mdt->partitions[j].id, 0);
+                /* Update leader for each partition
+                 * only when topic response has no errors. */
+                for (j = 0; j < mdt->partition_cnt; j++) {
+                        int r = 0;
+                        rd_kafka_broker_t *leader;
+                        int32_t leader_epoch = mdit->partitions[j].leader_epoch;
+                        rd_kafka_toppar_t *rktp =
+                            rd_kafka_toppar_get(rkt, mdt->partitions[j].id, 0);
 
-                rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
-                             "Topic %s [%" PRId32 "] Leader %" PRId32
-                             " Epoch %" PRId32,
-                             rkt->rkt_topic->str, mdt->partitions[j].id,
-                             mdt->partitions[j].leader, leader_epoch);
+                        rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA,
+                                     "METADATA",
+                                     "Topic %s [%" PRId32 "] Leader %" PRId32
+                                     " Epoch %" PRId32,
+                                     rkt->rkt_topic->str, mdt->partitions[j].id,
+                                     mdt->partitions[j].leader, leader_epoch);
 
-                leader         = partbrokers[j];
-                partbrokers[j] = NULL;
+                        leader         = partbrokers[j];
+                        partbrokers[j] = NULL;
 
-                /* If broker does not support leaderEpoch(KIP 320) then it is
-                 * set to -1, we assume that metadata is not stale. */
-                if (leader_epoch == -1)
-                        partition_exists_with_no_leader_epoch = rd_true;
-                else if (leader_epoch < rktp->rktp_leader_epoch)
-                        partition_exists_with_stale_leader_epoch = rd_true;
+                        /* If broker does not support leaderEpoch(KIP 320) then
+                         * it is set to -1, we assume that metadata is not
+                         * stale. */
+                        if (leader_epoch == -1)
+                                partition_exists_with_no_leader_epoch = rd_true;
+                        else if (rktp && leader_epoch < rktp->rktp_leader_epoch)
+                                partition_exists_with_stale_leader_epoch =
+                                    rd_true;
 
 
-                /* Update leader for partition */
-                r = rd_kafka_toppar_leader_update(rkt, mdt->partitions[j].id,
-                                                  mdt->partitions[j].leader,
-                                                  leader, leader_epoch);
+                        /* Update leader for partition */
+                        r = rd_kafka_toppar_leader_update(
+                            rkt, mdt->partitions[j].id,
+                            mdt->partitions[j].leader, leader, leader_epoch);
 
-                upd += (r != 0 ? 1 : 0);
+                        upd += (r != 0 ? 1 : 0);
 
-                if (leader) {
-                        if (r != -1)
-                                leader_cnt++;
-                        /* Drop reference to broker (from find()) */
-                        rd_kafka_broker_destroy(leader);
+                        if (leader) {
+                                if (r != -1)
+                                        leader_cnt++;
+                                /* Drop reference to broker (from find()) */
+                                rd_kafka_broker_destroy(leader);
+                        }
+                        RD_IF_FREE(rktp, rd_kafka_toppar_destroy);
                 }
-                RD_IF_FREE(rktp, rd_kafka_toppar_destroy);
         }
 
         /* If all partitions have leaders, and this metadata update was not
@@ -1412,21 +1420,6 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
              !partition_exists_with_stale_leader_epoch))
                 rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
-        if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR && rkt->rkt_partition_cnt) {
-                /* (Possibly intermittent) topic-wide error:
-                 * remove leaders for partitions */
-
-                for (j = 0; j < rkt->rkt_partition_cnt; j++) {
-                        rd_kafka_toppar_t *rktp;
-                        if (!rkt->rkt_p[j])
-                                continue;
-
-                        rktp = rkt->rkt_p[j];
-                        rd_kafka_toppar_lock(rktp);
-                        rd_kafka_toppar_broker_delegate(rktp, NULL);
-                        rd_kafka_toppar_unlock(rktp);
-                }
-        }
 
         /* If there was an update to the partitions try to assign
          * unassigned messages to new partitions, or fail them */
@@ -1645,8 +1638,8 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
 
                 /* Check if metadata information has timed out. */
                 if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
-                    !rd_kafka_metadata_cache_topic_get(rk, rkt->rkt_topic->str,
-                                                       1 /*only valid*/)) {
+                    !rd_kafka_metadata_cache_topic_get(
+                        rk, rkt->rkt_topic->str, NULL, 1 /*only valid*/)) {
                         rd_kafka_dbg(rk, TOPIC, "NOINFO",
                                      "Topic %s metadata information timed out "
                                      "(%" PRId64 "ms old)",
@@ -1764,7 +1757,8 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
                                                       * info exists*/
                     ,
                     rk->rk_conf.allow_auto_create_topics,
-                    rd_false /*!cgrp_update*/, "refresh unavailable topics");
+                    rd_false /*!cgrp_update*/, -1,
+                    "refresh unavailable topics");
         rd_list_destroy(&query_topics);
 }
 
@@ -2011,7 +2005,7 @@ void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
 
         rd_kafka_metadata_refresh_topics(
             rk, NULL, &topics, force, rk->rk_conf.allow_auto_create_topics,
-            rd_false /*!cgrp_update*/, "leader query");
+            rd_false /*!cgrp_update*/, -1, "leader query");
 
         rd_list_destroy(&topics);
 }

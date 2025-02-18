@@ -28,6 +28,9 @@
 
 #include <iostream>
 #include "testcpp.h"
+extern "C" {
+#include "../src/rdtime.h"
+}
 
 /**
  * binary search by timestamp: excercices KafkaConsumer's seek() API.
@@ -114,6 +117,7 @@ static void do_test_bsearch(void) {
   std::string errstr;
   RdKafka::ErrorCode err;
   MyDeliveryReportCb my_dr;
+  struct timespec tspec;
 
   topic = Test::mk_topic_name("0059-bsearch", 1);
   Test::conf_init(&conf, &tconf, 0);
@@ -128,7 +132,10 @@ static void do_test_bsearch(void) {
   delete conf;
   delete tconf;
 
-  timestamp = 1000;
+  /* Start with now() - 1h */
+  rd_timespec_get(&tspec);
+  timestamp = tspec.tv_sec * 1000LL - 3600LL * 1000LL;
+
   for (int i = 0; i < msgcnt; i++) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
                      (void *)topic.c_str(), topic.size(), NULL, 0, timestamp,

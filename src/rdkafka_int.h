@@ -878,15 +878,13 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
                              int timeout_ms,
                              unsigned int *curr_msgsp) {
         unsigned int cnt;
-        struct timespec tspec;
-
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
                 if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
                                       &rk->rk_curr_msgs.lock,
-                                      &tspec) == thrd_timedout)
+                                      abs_timeout) == thrd_timedout)
                         break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);

@@ -1410,6 +1410,8 @@ rd_kafka_broker_t *rd_kafka_broker_random0(const char *func,
         int fcnt = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_kafka_broker_or_instance_terminating(rkb))
+                        continue;
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         continue;
 
@@ -1466,6 +1468,8 @@ rd_kafka_broker_weighted(rd_kafka_t *rk,
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 int weight;
+                if (rd_kafka_broker_or_instance_terminating(rkb))
+                        continue;
 
                 rd_kafka_broker_lock(rkb);
                 if (features && (rkb->rkb_features & features) != features)
@@ -1747,6 +1751,9 @@ rd_list_t *rd_kafka_brokers_get_nodeids_async(rd_kafka_t *rk,
                 }
                 i = 0;
                 TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                        if (rd_kafka_broker_or_instance_terminating(rkb))
+                                continue;
+
                         rd_kafka_broker_lock(rkb);
                         if (rkb->rkb_nodeid != -1 &&
                             !RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
@@ -5242,12 +5249,13 @@ static rd_kafka_broker_t *rd_kafka_broker_find(rd_kafka_t *rk,
         rd_kafka_mk_nodename(nodename, sizeof(nodename), name, port);
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_kafka_broker_or_instance_terminating(rkb))
+                        continue;
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         continue;
 
                 rd_kafka_broker_lock(rkb);
-                if (!rd_kafka_broker_or_instance_terminating(rkb) &&
-                    rkb->rkb_proto == proto &&
+                if (rkb->rkb_proto == proto &&
                     !strcmp(rkb->rkb_nodename, nodename)) {
                         rd_kafka_broker_keep(rkb);
                         rd_kafka_broker_unlock(rkb);

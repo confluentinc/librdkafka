@@ -3871,7 +3871,7 @@ rd_kafka_handle_idempotent_Produce_error(rd_kafka_broker_t *rkb,
                          * reason about the state of messages and thus
                          * not guarantee ordering or once-ness for R1,
                          * nor give the user a chance to opt out of sending
-                         * R2 to R4 which would be retried automatically. */
+                         * R2 to R5 which would be retried automatically. */
 
                         rd_kafka_idemp_set_fatal_error(
                             rk, perr->err,

@@ -1017,8 +1017,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         cnd_destroy(&rk->rk_init_cnd);
         mtx_destroy(&rk->rk_init_lock);
 
-        if (rk->rk_full_metadata)
-                rd_kafka_metadata_destroy(&rk->rk_full_metadata->metadata);
+
         rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
         rd_kafkap_str_destroy(rk->rk_eos.transactional_id);

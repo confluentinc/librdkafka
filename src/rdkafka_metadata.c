@@ -858,19 +858,15 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                  * for all topics or cache entry
                  * already exists. */
                 rd_kafka_wrlock(rk);
-                cache_changes +=
-                rd_kafka_metadata_cache_topic_update(
-                        rk, &md->topics[i], &mdi->topics[i],
-                        rd_false /*propagate later*/,
-                        /* use has_client_rack rather than
-                        compute_racks. We need cached rack ids
-                        only in case we need to rejoin the group
-                        if they change and client.rack is set
-                        (KIP-881). */
-                        has_client_rack, mdi->brokers,
-                        md->broker_cnt,
-                        all_topics /*cache entry needs to exist
-                                    *if all_topics*/);
+                cache_changes += rd_kafka_metadata_cache_topic_update(
+                    rk, &md->topics[i], &mdi->topics[i],
+                    rd_false /*propagate later*/,
+                    /* use has_client_rack rather than
+                    compute_racks. We need cached rack ids
+                    only in case we need to rejoin the group
+                    if they change and client.rack is set
+                    (KIP-881). */
+                    has_client_rack, rd_kafka_has_reliable_leader_epochs(rkb));
                 rd_kafka_wrunlock(rk);
         }
 
@@ -899,7 +895,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                  * Mark the topic as non-existent */
                                 rd_kafka_topic_wrlock(rkt);
                                 rd_kafka_topic_set_notexists(
-                                    rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                                    rkt,
+                                    /* Just rely on metadata
+                                     * propagation check */
+                                    rkt->rkt_topic_id,
+                                    RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
                                 rd_kafka_topic_wrunlock(rkt);
 
                                 rd_kafka_topic_destroy0(rkt);
@@ -935,7 +935,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                  * Mark the topic as non-existent */
                                 rd_kafka_topic_wrlock(rkt);
                                 rd_kafka_topic_set_notexists(
-                                    rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                                    rkt,
+                                    /* Just rely on metadata
+                                     * propagation check */
+                                    rkt->rkt_topic_id,
+                                    RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
                                 rd_kafka_topic_wrunlock(rkt);
 
                                 rd_kafka_topic_destroy0(rkt);
@@ -984,29 +988,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         }
 
         if (all_topics) {
-                /* All hints have been replaced by the corresponding entry.
-                 * Rest of hints can be removed as topics aren't present
-                 * in full metadata. */
-                rd_kafka_metadata_cache_purge_all_hints(rkb->rkb_rk);
-                if (rkb->rkb_rk->rk_full_metadata)
-                        rd_kafka_metadata_destroy(
-                            &rkb->rkb_rk->rk_full_metadata->metadata);
-
-                /* use has_client_rack rather than compute_racks. We need cached
-                 * rack ids only in case we need to rejoin the group if they
-                 * change and client.rack is set (KIP-881). */
-                if (has_client_rack)
-                        rkb->rkb_rk->rk_full_metadata =
-                            rd_kafka_metadata_copy_add_racks(mdi, tbuf.of);
-                else
-                        rkb->rkb_rk->rk_full_metadata =
-                            rd_kafka_metadata_copy(mdi, tbuf.of);
-
                 rkb->rkb_rk->rk_ts_full_metadata = rkb->rkb_rk->rk_ts_metadata;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "Caching full metadata with "
-                           "%d broker(s) and %d topic(s): %s",
-                           md->broker_cnt, md->topic_cnt, reason);
+                           "Cached full metadata with "
+                           " %d topic(s): %s",
+                           md->topic_cnt, reason);
         }
         /* Remove cache hints for the originally requested topics. */
         if (requested_topics)
@@ -1167,19 +1153,11 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                               rd_kafka_topic_partition_list_t *errored) {
         int ti, i;
         size_t cnt = 0;
-        rd_kafka_metadata_internal_t *mdi;
-        struct rd_kafka_metadata *metadata;
         rd_kafka_topic_partition_list_t *unmatched;
+        rd_list_t cached_topics;
+        const char *topic;
 
         rd_kafka_rdlock(rk);
-        mdi      = rk->rk_full_metadata;
-        metadata = &mdi->metadata;
-
-        if (!mdi) {
-                rd_kafka_rdunlock(rk);
-                return 0;
-        }
-
         /* To keep track of which patterns and topics in `match` that
          * did not match any topic (or matched an errored topic), we
          * create a set of all topics to match in `unmatched` and then
@@ -1190,8 +1168,15 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
 
         /* For each topic in the cluster, scan through the match list
          * to find matching topic. */
-        for (ti = 0; ti < metadata->topic_cnt; ti++) {
-                const char *topic = metadata->topics[ti].topic;
+        rd_list_init(&cached_topics, rk->rk_metadata_cache.rkmc_cnt, rd_free);
+        rd_kafka_metadata_cache_topics_to_list(rk, &cached_topics, rd_false);
+        RD_LIST_FOREACH(topic, &cached_topics, ti) {
+                const rd_kafka_metadata_topic_internal_t *mdti;
+                const rd_kafka_metadata_topic_t *mdt =
+                    rd_kafka_metadata_cache_topic_get(rk, topic, &mdti,
+                                                      rd_true /* valid */);
+                if (!mdt)
+                        continue;
 
                 /* Ignore topics in blacklist */
                 if (rk->rk_conf.topic_blacklist &&
@@ -1209,18 +1194,16 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                             unmatched, match->elems[i].topic,
                             RD_KAFKA_PARTITION_UA);
 
-                        if (metadata->topics[ti].err) {
+                        if (mdt->err) {
                                 rd_kafka_topic_partition_list_add(
                                     errored, topic, RD_KAFKA_PARTITION_UA)
-                                    ->err = metadata->topics[ti].err;
+                                    ->err = mdt->err;
                                 continue; /* Skip errored topics */
                         }
 
-                        rd_list_add(tinfos,
-                                    rd_kafka_topic_info_new_with_rack(
-                                        topic,
-                                        metadata->topics[ti].partition_cnt,
-                                        mdi->topics[ti].partitions));
+                        rd_list_add(tinfos, rd_kafka_topic_info_new_with_rack(
+                                                topic, mdt->partition_cnt,
+                                                mdti->partitions));
 
                         cnt++;
                 }
@@ -1238,6 +1221,7 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
         }
 
         rd_kafka_topic_partition_list_destroy(unmatched);
+        rd_list_destroy(&cached_topics);
 
         return cnt;
 }
@@ -1374,8 +1358,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                          * these topics so that they will be included in
                          * a future all known_topics query. */
                         rd_kafka_metadata_cache_hint(rk, topics, NULL,
-                                                     RD_KAFKA_RESP_ERR__NOENT,
-                                                     0 /*dont replace*/);
+                                                     RD_KAFKA_RESP_ERR__NOENT);
 
                         rd_kafka_wrunlock(rk);
                         rd_kafka_dbg(rk, METADATA, "METADATA",
@@ -1396,8 +1379,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                  * out any topics that are already being requested.
                  * q_topics will contain remaining topics to query. */
                 rd_kafka_metadata_cache_hint(rk, topics, &q_topics,
-                                             RD_KAFKA_RESP_ERR__WAIT_CACHE,
-                                             rd_false /*dont replace*/);
+                                             RD_KAFKA_RESP_ERR__WAIT_CACHE);
                 rd_kafka_wrunlock(rk);
 
                 if (rd_list_cnt(&q_topics) == 0) {

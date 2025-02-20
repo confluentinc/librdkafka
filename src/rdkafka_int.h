@@ -409,9 +409,9 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        rd_kafka_metadata_internal_t
-            *rk_full_metadata;       /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
+        rd_ts_t rk_ts_full_metadata;                      /* Timestamp of most
+                                                           * recent full
+                                                           * metadata */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */

@@ -2369,8 +2369,8 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
         rd_list_init(&topics, 8, rd_free);
 
         /* Insert all non-wildcard topics in cache. */
-        rd_kafka_metadata_cache_hint_rktparlist(
-            rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL, 0 /*dont replace*/);
+        rd_kafka_metadata_cache_hint_rktparlist(rkcg->rkcg_rk,
+                                                rkcg->rkcg_subscription, NULL);
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) {
                 /* For wildcard subscriptions make sure the
@@ -5168,8 +5168,7 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                  * not cache the hinted topic and return an
                  * UNKNOWN_TOPIC_OR_PART error to the user. See #4589. */
                 rd_kafka_metadata_cache_hint_rktparlist(
-                    rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL,
-                    0 /*dont replace*/);
+                    rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL);
         }
         return new_subscription_version;
 }

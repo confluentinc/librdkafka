@@ -4422,6 +4422,82 @@ int rd_kafka_topic_partition_list_regex_cnt(
 
 
 /**
+ * TODO: Add docs.
+ */
+void rd_kafka_topic_partition_list_remove_regex(
+    rd_kafka_topic_partition_list_t **rktparlist) {
+        rd_kafka_topic_partition_list_t *non_regex_rktparlist;
+        int i;
+        int regex_cnt = rd_kafka_topic_partition_list_regex_cnt(*rktparlist);
+        int non_regex_cnt = (*rktparlist)->cnt - regex_cnt;
+
+        non_regex_rktparlist = rd_kafka_topic_partition_list_new(non_regex_cnt);
+
+        for (i = 0; i < (*rktparlist)->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &((*rktparlist)->elems[i]);
+                if (*rktpar->topic != '^')
+                        rd_kafka_topic_partition_list_add_copy(
+                            non_regex_rktparlist, rktpar);
+        }
+
+        rd_kafka_topic_partition_list_destroy(*rktparlist);
+        *rktparlist = non_regex_rktparlist;
+}
+
+
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regex(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
+        int i;
+        int combined_regex_len = 1; /* 1 for null-terminator */
+        int regex_cnt          = 0;
+        int j                  = 1;
+        char *combined_regex_str;
+        rd_kafkap_str_t *combined_regex_kstr;
+
+        // Count the number of characters needed for the combined regex string
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                if (*rktpar->topic == '^') {
+                        combined_regex_len += strlen(rktpar->topic);
+                        regex_cnt++;
+                }
+        }
+
+        if (regex_cnt == 0)
+                return NULL;
+
+        combined_regex_len += regex_cnt - 1; /* 1 for each '|' separator */
+        combined_regex_len += 2;             /* 2 for enclosing brackets */
+
+        // memory allocation for the combined regex string
+        combined_regex_str = rd_malloc(combined_regex_len);
+
+        // Construct the combined regex string
+        combined_regex_str[0] = '(';
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                char *topic = rktpar->topic;
+                if (*topic == '^') {
+                        while (*topic) {
+                                combined_regex_str[j++] = *topic;
+                                topic++;
+                        }
+                }
+        }
+        combined_regex_str[j++] = ')';
+        combined_regex_str[j]   = '\0';
+
+        combined_regex_kstr =
+            rd_kafkap_str_new(combined_regex_str, combined_regex_len - 1);
+        rd_free(combined_regex_str);
+        return combined_regex_kstr;
+}
+
+
+/**
  * @brief Reset base sequence for this toppar.
  *
  * See rd_kafka_toppar_pid_change() below.

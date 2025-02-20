@@ -2766,7 +2766,8 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                         *existing_assignment = NULL,
                                         *next_assignment     = NULL;
         rd_kafka_topic_partition_t *rktpar;
-        rd_kafkap_str_t GroupId, MemberId, InstanceId, RackId, ServerAssignor;
+        rd_kafkap_str_t GroupId, MemberId, InstanceId, RackId, ServerAssignor,
+            SubscribedTopicRegex;
         rd_kafkap_str_t *SubscribedTopicNames = NULL;
         int32_t MemberEpoch, RebalanceTimeoutMs, SubscribedTopicNamesCnt;
         int32_t i;
@@ -2809,6 +2810,9 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_read_str(rkbuf, &SubscribedTopicNames[i]);
                 }
         }
+
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_str(rkbuf, &SubscribedTopicRegex);
 
         /* ServerAssignor */
         rd_kafka_buf_read_str(rkbuf, &ServerAssignor);
@@ -2870,7 +2874,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
 
                 member = rd_kafka_mock_cgrp_consumer_member_add(
                     mcgrp, mconn, &MemberId, &InstanceId, SubscribedTopicNames,
-                    SubscribedTopicNamesCnt);
+                    SubscribedTopicNamesCnt, &SubscribedTopicRegex);
 
                 if (member) {
                         if (MemberEpoch >= 0) {
@@ -3007,7 +3011,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
-            {0, 0, 0, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
+            {0, 1, 0, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_GetTelemetrySubscriptions] =
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
         [RD_KAFKAP_PushTelemetry] = {0, 0, 0,

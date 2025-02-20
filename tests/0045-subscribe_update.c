@@ -308,7 +308,9 @@ static void do_test_regex(void) {
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
         test_create_topic_wait_exists(NULL, topic_d, 1, 1, 5000);
 
-        await_revoke("Regex: rebalance after topic creation", rk, queue);
+        if (!test_consumer_group_protocol_consumer())
+                await_revoke("Regex: rebalance after topic creation", rk,
+                             queue);
 
         await_assignment("Regex: two topics exist", rk, queue, 2, topic_b, 2,
                          topic_d, 1);
@@ -679,12 +681,6 @@ int main_0045_subscribe_update(int argc, char **argv) {
         if (!test_can_create_topics(1))
                 return 0;
 
-        /* TODO: check again when regexes will be supported by KIP-848 */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Still not supported by KIP-848\n");
-                return 0;
-        }
-
         do_test_regex();
 
         return 0;
@@ -710,12 +706,6 @@ int main_0045_subscribe_update_topic_remove(int argc, char **argv) {
 
 int main_0045_subscribe_update_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
-
-        /* TODO: check again when regexes will be supported by KIP-848 */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Still not supported by KIP-848\n");
-                return 0;
-        }
 
         do_test_regex_many_mock("range", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_false);

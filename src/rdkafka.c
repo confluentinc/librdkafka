@@ -5261,6 +5261,11 @@ rd_kafka_Uuid_t rd_kafka_Uuid_random() {
         return ret;
 }
 
+char *rd_kafka_Uuid_random_str() {
+        rd_kafka_Uuid_t uuid = rd_kafka_Uuid_random();
+        return rd_strdup(rd_kafka_Uuid_base64str(&uuid));
+}
+
 /**
  * @brief Destroy the provided uuid.
  *

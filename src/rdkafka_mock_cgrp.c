@@ -1402,19 +1402,63 @@ rd_kafka_mock_cgrp_consumer_member_find_by_instance_id(
 static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
     rd_kafka_mock_cgrp_consumer_member_t *member,
     rd_kafkap_str_t *SubscribedTopicNames,
-    int32_t SubscribedTopicNamesCnt) {
-        rd_bool_t changed = rd_false;
-        if (!SubscribedTopicNames)
+    int32_t SubscribedTopicNamesCnt,
+    const rd_kafkap_str_t *SubscribedTopicRegex) {
+        rd_bool_t changed           = rd_false;
+        rd_list_t *new_subscription = NULL;
+        int32_t i;
+
+        if (!SubscribedTopicNames &&
+            RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex) &&
+            !member->subscribed_topic_regex)
                 /* When client is sending NULL,
                  * its subscription didn't change */
                 return changed;
 
-        int32_t i;
-        rd_list_t *new_subscription = rd_list_new(
-            SubscribedTopicNamesCnt > 0 ? SubscribedTopicNamesCnt : 1, rd_free);
-        for (i = 0; i < SubscribedTopicNamesCnt; i++) {
-                rd_list_add(new_subscription,
+        if (!RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex)) {
+                char *regex = RD_KAFKAP_STR_DUP(SubscribedTopicRegex);
+                if (member->subscribed_topic_regex)
+                        rd_free(member->subscribed_topic_regex);
+                member->subscribed_topic_regex = rd_kafkap_str_new(regex, -1);
+                rd_free(regex);
+        }
+
+        if (member->subscribed_topic_regex) {
+                rd_kafka_mock_cluster_t *mcluster = member->mcgrp->cluster;
+                rd_kafka_mock_topic_t *mtopic;
+                char errstr[1];
+                rd_regex_t *re =
+                    rd_regex_comp(member->subscribed_topic_regex->str, errstr,
+                                  sizeof(errstr));
+
+                TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
+                        if (rd_regex_exec(re, mtopic->name)) {
+                                rd_kafkap_str_t *topic_name =
+                                    rd_kafkap_str_new(mtopic->name, -1);
+                                if (!new_subscription)
+                                        new_subscription =
+                                            rd_list_new(1, rd_free);
+                                rd_list_add(new_subscription,
+                                            RD_KAFKAP_STR_DUP(topic_name));
+                                rd_kafkap_str_destroy(topic_name);
+                        }
+                }
+
+                rd_regex_destroy(re);
+        }
+
+        if (SubscribedTopicNames) {
+                if (!new_subscription)
+                        new_subscription =
+                            rd_list_new(SubscribedTopicNamesCnt > 0
+                                            ? SubscribedTopicNamesCnt
+                                            : 1,
+                                        rd_free);
+                for (i = 0; i < SubscribedTopicNamesCnt; i++) {
+                        rd_list_add(
+                            new_subscription,
                             RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
+                }
         }
         rd_list_deduplicate(&new_subscription, rd_strcmp2);
 
@@ -1444,18 +1488,20 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
  * @param SubscribedTopicNames Array of subscribed topics.
  *                             Mandatory if the member is a new one.
  * @param SubscribedTopicNamesCnt Number of elements in \p SubscribedTopicNames.
+ * @param SubscribedTopicRegex Subscribed topic regex.
  *
  * @return New or existing member, NULL if the member cannot be added.
  *
  * @locks mcluster->lock MUST be held.
  */
-rd_kafka_mock_cgrp_consumer_member_t *
-rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
-                                       struct rd_kafka_mock_connection_s *conn,
-                                       const rd_kafkap_str_t *MemberId,
-                                       const rd_kafkap_str_t *InstanceId,
-                                       rd_kafkap_str_t *SubscribedTopicNames,
-                                       int32_t SubscribedTopicNamesCnt) {
+rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    struct rd_kafka_mock_connection_s *conn,
+    const rd_kafkap_str_t *MemberId,
+    const rd_kafkap_str_t *InstanceId,
+    rd_kafkap_str_t *SubscribedTopicNames,
+    int32_t SubscribedTopicNamesCnt,
+    const rd_kafkap_str_t *SubscribedTopicRegex) {
         rd_kafka_mock_cgrp_consumer_member_t *member = NULL;
         rd_bool_t changed                            = rd_false;
 
@@ -1478,7 +1524,8 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
         }
 
         if (!member) {
-                if (SubscribedTopicNamesCnt < 1)
+                if (SubscribedTopicNamesCnt < 1 &&
+                    RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex))
                         return NULL;
 
                 /* Not found, add member */
@@ -1504,7 +1551,8 @@ rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
 
         changed |=
             rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
-                member, SubscribedTopicNames, SubscribedTopicNamesCnt);
+                member, SubscribedTopicNames, SubscribedTopicNamesCnt,
+                SubscribedTopicRegex);
 
         mcgrp->session_timeout_ms =
             mcgrp->cluster->defaults.group_consumer_session_timeout_ms;
@@ -1551,6 +1599,8 @@ static void rd_kafka_mock_cgrp_consumer_member_destroy(
         RD_IF_FREE(member->returned_assignment,
                    rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(member->subscribed_topics, rd_list_destroy_free);
+
+        RD_IF_FREE(member->subscribed_topic_regex, rd_kafkap_str_destroy);
 
         rd_free(member);
 }

@@ -231,8 +231,22 @@ typedef struct rd_kafka_cgrp_s {
         /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be postponed until after the rebalance
          *  completes. The waiting subscription is stored here.
-         *  Mutually exclusive with rkcg_next_subscription. */
+         *  Mutually exclusive with rkcg_next_subscription.
+         *
+         *  For the consumer protocol, this field doesn't include regex
+         *  subscriptions. For that please refer `rkcg_subscription_regex` */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
+
+        /**
+         * Subscription regex pattern. All the provided regex patterns are
+         * stored as a single string with each pattern separated by '|'.
+         *
+         * Only applicable for the consumer protocol introduced in KIP-848.
+         *
+         * TODO: Improve doc.
+         */
+        rd_kafkap_str_t *rkcg_subscription_regex;
+
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe

@@ -217,6 +217,217 @@ static void rd_kafka_oidc_build_post_fields(const char *scope,
         }
 }
 
+/*
+ * Helper: Base64Url encode.
+ * This implementation uses OpenSSL's Base64 encoder and then replaces characters as needed.
+ */
+char *base64url_encode(const unsigned char *input, int length) {
+    BIO *bmem = NULL, *b64 = NULL;
+    BUF_MEM *bptr = NULL;
+    char *buff, *p;
+    int i;
+
+    b64 = BIO_new(BIO_f_base64());
+    /* Do not use '\n' in encoded data */
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    bmem = BIO_new(BIO_s_mem());
+    b64 = BIO_push(b64, bmem);
+
+    BIO_write(b64, input, length);
+    BIO_flush(b64);
+    BIO_get_mem_ptr(b64, &bptr);
+
+    buff = (char *)malloc(bptr->length + 1);
+    if (!buff) {
+        BIO_free_all(b64);
+        return NULL;
+    }
+    memcpy(buff, bptr->data, bptr->length);
+    buff[bptr->length] = '\0';
+
+    BIO_free_all(b64);
+
+    /* Convert to Base64Url by replacing '+' with '-', '/' with '_' and removing '=' */
+    for (p = buff; *p; p++) {
+        if (*p == '+') *p = '-';
+        else if (*p == '/') *p = '_';
+    }
+    /* Remove padding '=' characters */
+    int newlen = strlen(buff);
+    while(newlen > 0 && buff[newlen-1] == '=') {
+        buff[newlen-1] = '\0';
+        newlen--;
+    }
+
+    return buff;
+}
+
+/*
+ * Create JWT assertion. Caller must free the returned string.
+ *
+ * Parameters:
+ *   key_id         : Key identifier.
+ *   private_key_pem: PEM formatted RSA private key string.
+ *   issuer         : iss claim.
+ *   subject        : sub claim.
+ *   audience       : aud claim.
+ *   lifetime_sec   : Lifetime in seconds to compute exp.
+ */
+char *rd_kafka_create_jwt_assertion(const char *key_id,
+                                    const char *private_key_pem,
+                                    const char *issuer,
+                                    const char *subject,
+                                    const char *audience,
+                                    int lifetime_sec)
+{
+    char *jwt = NULL;
+    char *encoded_header = NULL;
+    char *encoded_payload = NULL;
+    char *encoded_signature = NULL;
+    char *unsigned_token = NULL;
+    char *result = NULL;
+    int ret = -1;
+
+    /* Timestamps: current time and expiration */
+    time_t now = time(NULL);
+    time_t exp = now + lifetime_sec;
+
+    /*
+     * 1. Build the JWT header in JSON:
+     *    {"alg":"RS256","kid":"<key_id>"}
+     */
+    char header_json[256];
+    snprintf(header_json, sizeof(header_json),
+             "{\"alg\":\"RS256\",\"kid\":\"%s\"}", key_id);
+
+    /*
+     * 2. Build the JWT payload: Include standard claims.
+     *    {"iss": "...", "sub": "...", "aud": "...", "iat": now, "exp": exp}
+     */
+    char payload_json[512];
+    snprintf(payload_json, sizeof(payload_json),
+             "{\"iss\":\"%s\",\"sub\":\"%s\",\"aud\":\"%s\",\"iat\":%ld,\"exp\":%ld}",
+             issuer, subject, audience, (long)now, (long)exp);
+
+    /* 3. Base64Url-encode header and payload */
+    encoded_header = base64url_encode((unsigned char *)header_json, strlen(header_json));
+    encoded_payload = base64url_encode((unsigned char *)payload_json, strlen(payload_json));
+    if (!encoded_header || !encoded_payload)
+        goto cleanup;
+
+    /*
+     * 4. Create the unsigned token: header.payload
+     */
+    int unsigned_token_len = snprintf(NULL, 0, "%s.%s", encoded_header, encoded_payload) + 1;
+    unsigned_token = malloc(unsigned_token_len);
+    if (!unsigned_token)
+        goto cleanup;
+    snprintf(unsigned_token, unsigned_token_len, "%s.%s", encoded_header, encoded_payload);
+
+    /*
+     * 5. Load the RSA private key (using OpenSSL PEM_read_bio_PrivateKey)
+     */
+    BIO *bio = BIO_new_mem_buf((void *)private_key_pem, -1);
+    if (!bio) goto cleanup;
+    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+    BIO_free(bio);
+    if (!pkey) goto cleanup;
+
+    /*
+     * 6. Sign the unsigned token using RS256. RS256 uses SHA256.
+     */
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+        EVP_PKEY_free(pkey);
+        goto cleanup;
+    }
+    if (EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, pkey) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        goto cleanup;
+    }
+    if (EVP_DigestSignUpdate(mdctx, unsigned_token, strlen(unsigned_token)) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        goto cleanup;
+    }
+
+    size_t siglen = 0;
+    if (EVP_DigestSignFinal(mdctx, NULL, &siglen) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        goto cleanup;
+    }
+    unsigned char *sig = malloc(siglen);
+    if (!sig) {
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        goto cleanup;
+    }
+    if (EVP_DigestSignFinal(mdctx, sig, &siglen) != 1) {
+        free(sig);
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        goto cleanup;
+    }
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(pkey);
+
+    /* 7. Base64Url-encode the signature */
+    encoded_signature = base64url_encode(sig, siglen);
+    free(sig);
+    if (!encoded_signature)
+        goto cleanup;
+
+    /*
+     * 8. Combine header, payload, and signature into the final JWT:
+     *    <header>.<payload>.<signature>
+     */
+    int jwt_len = snprintf(NULL, 0, "%s.%s.%s", encoded_header, encoded_payload, encoded_signature) + 1;
+    jwt = malloc(jwt_len);
+    if (!jwt)
+        goto cleanup;
+    snprintf(jwt, jwt_len, "%s.%s.%s", encoded_header, encoded_payload, encoded_signature);
+
+    /* Return jwt; caller is responsible for freeing the memory later. */
+    result = jwt;
+    jwt = NULL; /* Prevent cleanup from freeing our result */
+    ret = 0;
+
+cleanup:
+    free(encoded_header);
+    free(encoded_payload);
+    free(encoded_signature);
+    free(unsigned_token);
+    if (jwt) free(jwt);
+    if (ret != 0)
+        return NULL;
+    return result;
+}
+
+/*
+ * build_jwt_request_body:
+ *   Given a JWT assertion, creates a URL-encoded body for the OAuth JWT bearer grant.
+ *
+ * Returns a newly allocated string with the body. Caller should free() it.
+ */
+char *build_jwt_request_body(const char *jwt_assertion) {
+        const char *grant_type = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+        const char *client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+
+        // Calculate needed length
+        int len = snprintf(NULL, 0,
+                           "grant_type=%s&client_assertion_type=%s&client_assertion=%s",
+                           grant_type, client_assertion_type, jwt_assertion);
+        char *body = malloc(len + 1);
+        if (!body)
+                return NULL;
+        snprintf(body, len + 1,
+                 "grant_type=%s&client_assertion_type=%s&client_assertion=%s",
+                 grant_type, client_assertion_type, jwt_assertion);
+        return body;
+}
+
 
 /**
  * @brief Implementation of Oauth/OIDC token refresh callback function,

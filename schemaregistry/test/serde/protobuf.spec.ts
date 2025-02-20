@@ -208,13 +208,18 @@ describe('ProtobufSerializer', () => {
       name: 'Kafka',
       id: 123,
       picture: Buffer.from([1, 2]),
-      works: ['The Castle', 'The Trial']
+      works: ['The Castle', 'The Trial'],
+      piiOneof: {
+        case: 'oneofString',
+        value: 'oneof'
+      }
     })
     let bytes = await ser.serialize(topic, obj)
 
     // reset encrypted field
     obj.name = 'Kafka'
     obj.picture = Buffer.from([1, 2])
+    obj.piiOneof = { case: 'oneofString', value: 'oneof' }
 
     let deserConfig: ProtobufDeserializerConfig = {
       ruleConfig: {

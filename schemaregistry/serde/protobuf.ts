@@ -525,14 +525,29 @@ async function transformField(ctx: RuleContext, fd: DescField, desc: DescMessage
       getType(fd),
       getInlineTags(fd)
     )
-    const value = msg[fd.name]
+    let value = null;
+    if (fd.oneof != null) {
+      let oneof = msg[fd.oneof.localName]
+      if (oneof != null && oneof.case === fd.localName) {
+        value = oneof.value
+      } else {
+        // skip oneof fields that are not set
+        return
+      }
+    } else {
+      value = msg[fd.localName]
+    }
     const newValue = await transform(ctx, desc, value, fieldTransform)
     if (ctx.rule.kind === 'CONDITION') {
       if (newValue === false) {
         throw new RuleConditionError(ctx.rule)
       }
     } else {
-      msg[fd.name] = newValue
+      if (fd.oneof != null) {
+        msg[fd.oneof.localName] = { case: fd.localName, value: newValue }
+      } else {
+        msg[fd.localName] = newValue
+      }
     }
   } finally {
     ctx.leaveField()

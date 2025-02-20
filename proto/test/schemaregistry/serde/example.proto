@@ -14,6 +14,10 @@ message Author {
     (confluent.field_meta).tags = "PII"
   ];
   repeated string works = 4;
+  oneof pii_oneof {
+    Pizza oneof_message = 5;
+    string oneof_string = 6 [(.confluent.field_meta).tags = "PII"];
+  }
 }
 
 message Pizza {

@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2017-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -415,6 +416,7 @@ static int unittest_rdclock(void) {
 
 extern int unittest_string(void);
 extern int unittest_cgrp(void);
+extern int unittest_mock_cluster(void);
 #if WITH_SASL_SCRAM
 extern int unittest_scram(void);
 #endif
@@ -426,6 +428,7 @@ extern int unittest_http(void);
 #if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
+extern int unittest_telemetry_decode(void);
 
 int rd_unittest(void) {
         int fails = 0;
@@ -442,6 +445,7 @@ int rd_unittest(void) {
                 {"msg", unittest_msg},
                 {"murmurhash", unittest_murmur2},
                 {"fnv1a", unittest_fnv1a},
+                {"mock", unittest_mock_cluster},
 #if WITH_HDRHISTOGRAM
                 {"rdhdrhistogram", unittest_rdhdrhistogram},
 #endif
@@ -466,6 +470,7 @@ int rd_unittest(void) {
 #if WITH_OAUTHBEARER_OIDC
                 {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
 #endif
+                {"telemetry", unittest_telemetry_decode},
                 {NULL}
         };
         int i;

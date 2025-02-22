@@ -269,6 +269,7 @@ static rd_bool_t rd_http_is_failure_temporary(int error_code) {
         switch (error_code) {
         case 408: /**< Request timeout */
         case 425: /**< Too early */
+        case 429: /**< Too many requests */
         case 500: /**< Internal server error */
         case 502: /**< Bad gateway */
         case 503: /**< Service unavailable */

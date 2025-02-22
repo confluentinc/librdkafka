@@ -53,6 +53,15 @@ set(
     rdkafka_mock_cgrp.c
     rdkafka_error.c
     rdkafka_fetcher.c
+    rdkafka_telemetry.c
+    rdkafka_telemetry_decode.c
+    rdkafka_telemetry_encode.c
+    nanopb/pb_encode.c
+    nanopb/pb_decode.c
+    nanopb/pb_common.c
+    opentelemetry/metrics.pb.c
+    opentelemetry/common.pb.c
+    opentelemetry/resource.pb.c
     rdlist.c
     rdlog.c
     rdmurmur2.c

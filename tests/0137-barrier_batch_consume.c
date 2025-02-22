@@ -47,7 +47,7 @@ typedef struct consumer_s {
 static int consumer_batch_queue(void *arg) {
         consumer_t *arguments = arg;
         int msg_cnt           = 0;
-        int i;
+        int i, err_cnt = 0;
         test_timing_t t_cons;
 
         rd_kafka_queue_t *rkq     = arguments->rkq;
@@ -72,19 +72,29 @@ static int consumer_batch_queue(void *arg) {
                                                     consume_msg_cnt);
         TIMING_STOP(&t_cons);
 
-        TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
-                 msg_cnt, arguments->consume_msg_cnt,
-                 arguments->expected_msg_cnt);
-        TEST_ASSERT(msg_cnt == arguments->expected_msg_cnt,
-                    "consumed %d messages, expected %d", msg_cnt,
-                    arguments->expected_msg_cnt);
-
         for (i = 0; i < msg_cnt; i++) {
-                if (test_msgver_add_msg(rk, arguments->mv, rkmessage[i]) == 0)
+                rd_kafka_message_t *rkm = rkmessage[i];
+                if (rkm->err) {
+                        TEST_WARN("Consumer error: %s: %s\n",
+                                  rd_kafka_err2name(rkm->err),
+                                  rd_kafka_message_errstr(rkm));
+                        err_cnt++;
+                } else if (test_msgver_add_msg(rk, arguments->mv,
+                                               rkmessage[i]) == 0) {
                         TEST_FAIL(
                             "The message is not from testid "
                             "%" PRId64,
                             testid);
+                }
+        }
+        TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
+                 msg_cnt, arguments->consume_msg_cnt,
+                 arguments->expected_msg_cnt);
+        TEST_ASSERT((msg_cnt - err_cnt) == arguments->expected_msg_cnt,
+                    "consumed %d messages, %d errors, expected %d", msg_cnt,
+                    err_cnt, arguments->expected_msg_cnt);
+
+        for (i = 0; i < msg_cnt; i++) {
                 rd_kafka_message_destroy(rkmessage[i]);
         }
 

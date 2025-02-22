@@ -384,3 +384,25 @@ blocks:
             # Upload all packages to project artifact store
             - artifact push project packages --destination librdkafka-packages-${SEMAPHORE_GIT_TAG_NAME}-${SEMAPHORE_WORKFLOW_ID}
             - echo Thank you
+
+promotions:
+  - name: Run all tests on master commits
+    pipeline_file: run-all-tests.yml
+    parameters:
+      env_vars:
+        - required: true
+          name: TEST_KAFKA_GIT_REF
+          default_value: 3.8.0
+        - required: true
+          name: TEST_TYPE
+          default_value: plaintext,ssl
+        - required: true
+          name: TEST_ARCHES
+          default_value: x86_64,aarch64
+        - required: true
+          name: TEST_PARALLEL
+          default_value: "1"
+    auto_promote_on:
+      - result: passed
+        branch:
+        - "master"

@@ -402,9 +402,7 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                 const rd_bool_t can_q_contain_fetched_msgs =
                     rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
 
-                struct timespec timeout_tspec;
-
-                rd_timeout_init_timespec_us(&timeout_tspec, timeout_us);
+                rd_ts_t abs_timeout = rd_timeout_init_us(timeout_us);
 
                 if (can_q_contain_fetched_msgs)
                         rd_kafka_app_poll_start(rkq->rkq_rk, 0, timeout_us);
@@ -471,7 +469,7 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                                 mtx_lock(&rkq->rkq_lock);
 
                         if (cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
-                                              &timeout_tspec) != thrd_success) {
+                                              abs_timeout) != thrd_success) {
                                 mtx_unlock(&rkq->rkq_lock);
                                 if (can_q_contain_fetched_msgs)
                                         rd_kafka_app_polled(rkq->rkq_rk);
@@ -519,7 +517,7 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         rd_kafka_q_t localq;
         rd_kafka_q_t *fwdq;
         int cnt = 0;
-        struct timespec timeout_tspec;
+        rd_ts_t abs_timeout;
         const rd_bool_t can_q_contain_fetched_msgs =
             rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
 
@@ -540,7 +538,7 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         }
 
 
-        rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
+        abs_timeout = rd_timeout_init(timeout_ms);
 
         if (can_q_contain_fetched_msgs)
                 rd_kafka_app_poll_start(rk, 0, timeout_ms);
@@ -548,8 +546,8 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         /* Wait for op */
         while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
                !rd_kafka_q_check_yield(rkq) &&
-               cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
-                                 &timeout_tspec) == thrd_success)
+               cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock, abs_timeout) ==
+                   thrd_success)
                 ;
 
         rd_kafka_q_mark_served(rkq);
@@ -665,7 +663,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         rd_kafka_op_t *rko, *next;
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
-        struct timespec timeout_tspec;
+        rd_ts_t abs_timeout;
         int i;
 
         mtx_lock(&rkq->rkq_lock);
@@ -681,7 +679,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
         mtx_unlock(&rkq->rkq_lock);
 
-        rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
+        abs_timeout = rd_timeout_init(timeout_ms);
 
         rd_kafka_app_poll_start(rk, 0, timeout_ms);
 
@@ -694,7 +692,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
                        !rd_kafka_q_check_yield(rkq) &&
                        cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
-                                         &timeout_tspec) == thrd_success)
+                                         abs_timeout) == thrd_success)
                         ;
 
                 rd_kafka_q_mark_served(rkq);

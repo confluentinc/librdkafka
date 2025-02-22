@@ -2619,7 +2619,12 @@ err:
                                       RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                if (rd_kafka_buf_retry(rkb, request))
+                /* In case it's a brokers full refresh call,
+                 * avoid retrying it on this same broker.
+                 * This is to prevent client is hung
+                 * until it can connect to this broker again. */
+                if (!request->rkbuf_u.Metadata.decr &&
+                    rd_kafka_buf_retry(rkb, request))
                         return;
                 /* FALLTHRU */
         } else {

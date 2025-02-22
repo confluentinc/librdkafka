@@ -26,7 +26,9 @@ librdkafka v2.9.0 is a feature release:
    unrelated to the consumer group (#).
  * When making multiple changes to the consumer subscription in a short time,
    no unknown topic error is returned for topics that are in the new subscription but weren't in previous one (#).
-
+ * Fix for the case where a metadata refresh enqueued on an unreachable broker
+   prevents refreshing the controller or the coordinator until that broker
+   becomes reachable again (#).
 
 ## Fixes
 
@@ -59,6 +61,17 @@ librdkafka v2.9.0 is a feature release:
    permanent and are returned to the user. It's in line with what Java client
    does and avoids returning to the user an error that wasn't meant to be
    permanent.
+   Happens since 1.x (#).
+ * Issues: #
+   Fix for the case where a metadata refresh enqueued on an unreachable broker
+   prevents refreshing the controller or the coordinator until that broker
+   becomes reachable again. Given the request continues to be retried on that
+   broker, the counter for refreshing complete broker metadata doesn't reach
+   zero and prevents the client from obtaining the new controller or group or transactional coordinator.
+   It causes a series of debug messages like:
+   "Skipping metadata request: ... full request already in-transit", until
+   the broker the request is enqueued on is up again.
+   Solved by not retrying these kinds of metadata requests.
    Happens since 1.x (#).
 
 ### Consumer fixes

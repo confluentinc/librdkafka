@@ -63,7 +63,7 @@ static void test_producer_partition_cnt_change(void) {
         test_create_topic_wait_exists(rk, topic, partition_cnt / 2, 1, 5000);
 
         rkt =
-            test_create_topic_object(rk, __FUNCTION__, "message.timeout.ms",
+            test_create_topic_object(rk, topic, "message.timeout.ms",
                                      tsprintf("%d", tmout_multip(10000)), NULL);
 
         test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,

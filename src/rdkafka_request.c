@@ -2619,27 +2619,32 @@ err:
                                       RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                if (rd_kafka_buf_retry(rkb, request))
+                /* In case it's a brokers full refresh call,
+                 * avoid retrying it on this same broker.
+                 * This is to prevent client is hung
+                 * until it can connect to this broker again.
+                 * No need to acquire the lock here but
+                 * when decrementing the integer pointed
+                 * by `decr`. */
+                if (!request->rkbuf_u.Metadata.decr &&
+                    rd_kafka_buf_retry(rkb, request))
                         return;
                 /* FALLTHRU */
-        } else {
-                rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-                           "Metadata request failed: %s: %s (%dms): %s",
-                           request->rkbuf_u.Metadata.reason,
-                           rd_kafka_err2str(err),
-                           (int)(request->rkbuf_ts_sent / 1000),
-                           rd_kafka_actions2str(actions));
-                /* Respond back to caller on non-retriable errors */
-                if (rko && rko->rko_replyq.q) {
-                        rko->rko_err            = err;
-                        rko->rko_u.metadata.md  = NULL;
-                        rko->rko_u.metadata.mdi = NULL;
-                        rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
-                        rko = NULL;
-                }
         }
 
-
+        rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                   "Metadata request failed: %s: %s (%dms): %s",
+                   request->rkbuf_u.Metadata.reason, rd_kafka_err2str(err),
+                   (int)(request->rkbuf_ts_sent / 1000),
+                   rd_kafka_actions2str(actions));
+        /* Respond back to caller on non-retriable errors */
+        if (rko && rko->rko_replyq.q) {
+                rko->rko_err            = err;
+                rko->rko_u.metadata.md  = NULL;
+                rko->rko_u.metadata.mdi = NULL;
+                rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
+                rko = NULL;
+        }
 
         /* FALLTHRU */
 

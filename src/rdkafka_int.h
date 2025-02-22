@@ -302,6 +302,11 @@ struct rd_kafka_s {
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
         rd_atomic32_t rk_broker_addrless_cnt;
 
+        /** Decommissioned threads to await */
+        rd_list_t wait_decommissioned_thrds;
+        /** Decommissioned brokers to await */
+        rd_list_t wait_decommissioned_brokers;
+
         mtx_t rk_internal_rkb_lock;
         rd_kafka_broker_t *rk_internal_rkb;
 
@@ -409,9 +414,7 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        rd_kafka_metadata_internal_t
-            *rk_full_metadata;       /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
+        rd_ts_t rk_ts_full_metadata;                      /* Timestamp of .. */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */
@@ -608,6 +611,12 @@ struct rd_kafka_s {
         } rk_curr_msgs;
 
         rd_kafka_timers_t rk_timers;
+
+        /** Metadata refresh timer */
+        rd_kafka_timer_t metadata_refresh_tmr;
+        /** 1s interval timer */
+        rd_kafka_timer_t one_s_tmr;
+
         thrd_t rk_thread;
 
         int rk_initialized; /**< Will be > 0 when the rd_kafka_t
@@ -877,15 +886,13 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
                              int timeout_ms,
                              unsigned int *curr_msgsp) {
         unsigned int cnt;
-        struct timespec tspec;
-
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
                 if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
                                       &rk->rk_curr_msgs.lock,
-                                      &tspec) == thrd_timedout)
+                                      abs_timeout) == thrd_timedout)
                         break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);
@@ -893,6 +900,9 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
         *curr_msgsp = cnt;
         return cnt == 0;
 }
+
+void rd_kafka_decommissioned_broker_thread_join(rd_kafka_t *rk,
+                                                void *rkb_decommissioned);
 
 void rd_kafka_destroy_final(rd_kafka_t *rk);
 

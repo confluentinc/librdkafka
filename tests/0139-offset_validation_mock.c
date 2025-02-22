@@ -758,6 +758,170 @@ static void do_test_leader_change_from_internal_broker(int variation) {
         test_curr->is_fatal_cb = NULL;
 }
 
+/**
+ * @brief Opaque for do_test_list_offsets_leader_change.
+ */
+typedef struct do_test_list_offsets_leader_change_s {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic;
+        int msg_cnt;
+        int variation;
+} do_test_list_offsets_leader_change_t;
+
+/**
+ * @brief Rebalance callback for do_test_list_offsets_leader_change.
+ */
+static void do_test_list_offsets_leader_change_rebalance_cb(
+    rd_kafka_t *rk,
+    rd_kafka_resp_err_t err,
+    rd_kafka_topic_partition_list_t *partitions,
+    void *opaque) {
+        TEST_SAY("Rebalance callback: %s with %d partition(s)\n",
+                 rd_kafka_err2str(err), partitions->cnt);
+        do_test_list_offsets_leader_change_t *test = opaque;
+        switch (err) {
+        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS: {
+                int retries = 0;
+                int64_t low, high;
+                rd_kafka_resp_err_t list_offsets_err =
+                    RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                TEST_ASSERT(partitions->cnt == 1,
+                            "Expected 1 assigned partition, got %d",
+                            partitions->cnt);
+
+                /* Change leader to 2 */
+                rd_kafka_mock_partition_set_leader(test->mcluster, test->topic,
+                                                   0, 2);
+
+                do {
+                        /* Set a wrong leader epoch that should not be used
+                         * for listing offsets. */
+                        rd_kafka_topic_partition_set_leader_epoch(
+                            &partitions->elems[0], 1234);
+
+                        if (test->variation == 0) {
+                                partitions->elems[0].offset = 1;
+                                list_offsets_err = rd_kafka_offsets_for_times(
+                                    rk, partitions, 1000);
+                        } else {
+                                list_offsets_err =
+                                    rd_kafka_query_watermark_offsets(
+                                        rk, partitions->elems[0].topic,
+                                        partitions->elems[0].partition, &low,
+                                        &high, 1000);
+                        }
+                        retries++;
+                        if (retries == 1) {
+                                TEST_ASSERT(
+                                    list_offsets_err ==
+                                        RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+                                    "Expected NOT_LEADER_FOR_PARTITION, got %s",
+                                    rd_kafka_err2str(list_offsets_err));
+                        }
+                        if (retries > 2)
+                                TEST_FAIL(
+                                    "Offsets for times failed %d times "
+                                    " during the rebalance callback",
+                                    retries);
+                } while (list_offsets_err != RD_KAFKA_RESP_ERR_NO_ERROR);
+
+                TEST_ASSERT(retries == 2,
+                            "There must be exactly 2 retries, "
+                            "got %d",
+                            retries);
+
+
+                if (test->variation == 0) {
+                        /* Mock handler currently returns
+                         * RD_KAFKA_OFFSET_SPEC_LATEST
+                         * in the offsets for times case */
+                        TEST_ASSERT(partitions->elems[0].offset ==
+                                        RD_KAFKA_OFFSET_SPEC_LATEST,
+                                    "Expected offset for times LATEST,"
+                                    " got %" PRId64,
+                                    partitions->elems[0].offset);
+                } else {
+                        TEST_ASSERT(0 == low,
+                                    "Expected low offset 0"
+                                    ", got %" PRId64,
+                                    low);
+                        TEST_ASSERT(10 == high,
+                                    "Expected high offset 10"
+                                    ", got %" PRId64,
+                                    high);
+                        partitions->elems[0].offset = high;
+                }
+
+                rd_kafka_assign(rk, partitions);
+
+                break;
+        }
+        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+                rd_kafka_assign(rk, NULL);
+                break;
+        default:
+                break;
+        }
+}
+
+/**
+ * @brief Test that listing offsets during a leader change works as expected.
+ *        by returning a NOT_LEADER_FOR_PARTITION error and clearing the cache.
+ *
+ *        There are two variations:
+ *        - variation 0: uses rd_kafka_offsets_for_times
+ *        - variation 1: uses rd_kafka_query_watermark_offsets
+ */
+static void do_test_list_offsets_leader_change(int variation) {
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const char *c1_groupid = topic;
+        rd_kafka_t *c1;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        int msg_cnt     = 10;
+        uint64_t testid = test_id_generate();
+        rd_kafka_conf_t *conf;
+        do_test_list_offsets_leader_change_t opaque;
+
+        SUB_TEST_QUICK("%s", variation == 0 ? "offsets_for_times"
+                                            : "query_watermark_offsets");
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_cnt, 10,
+                                 "bootstrap.servers", bootstraps, NULL);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        rd_kafka_conf_set_rebalance_cb(
+            conf, do_test_list_offsets_leader_change_rebalance_cb);
+        opaque.mcluster  = mcluster;
+        opaque.topic     = topic;
+        opaque.msg_cnt   = msg_cnt;
+        opaque.variation = variation;
+        rd_kafka_conf_set_opaque(conf, &opaque);
+
+        c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
+        test_consumer_subscribe(c1, topic);
+
+        /* Consumes no messages if assignment starts from
+         * latest as set in the rebalance callback,
+         * otherwise it's configured as earliest. */
+        test_consumer_poll_no_msgs("MSG_INIT", c1, testid, 5000);
+
+        rd_kafka_destroy(c1);
+
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+}
+
 int main_0139_offset_validation_mock(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
@@ -776,6 +940,9 @@ int main_0139_offset_validation_mock(int argc, char **argv) {
 
         do_test_leader_change_from_internal_broker(0);
         do_test_leader_change_from_internal_broker(1);
+
+        do_test_list_offsets_leader_change(0);
+        do_test_list_offsets_leader_change(1);
 
         return 0;
 }

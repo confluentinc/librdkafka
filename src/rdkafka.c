@@ -718,6 +718,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE,
               "Broker: Client sent a push telemetry request larger than the "
               "maximum size the broker will accept"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED,
+              "Broker: Client metadata is stale, "
+              "client should rebootstrap to obtain new metadata."),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -2862,6 +2865,18 @@ void rd_kafka_rebootstrap(rd_kafka_t *rk) {
                                      rd_kafka_rebootstrap_tmr_cb, NULL);
 }
 
+/**
+ * Restarts rebootstrap timer with the configured interval.
+ *
+ * @locks none
+ * @locality any
+ */
+void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk) {
+        rd_kafka_timer_start_oneshot(
+            &rk->rk_timers, &rk->rebootstrap_tmr, rd_true /*restart*/,
+            rk->rk_conf.metadata_recovery_rebootstrap_trigger_ms * 1000LL,
+            rd_kafka_rebootstrap_tmr_cb, NULL);
+}
 
 /**
  * Counts usage of the legacy/simple consumer (rd_kafka_consume_start() with

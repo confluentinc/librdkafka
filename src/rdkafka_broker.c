@@ -344,6 +344,7 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                             rd_atomic32_get(
                                 &rkb->rkb_rk->rk_logical_broker_cnt) &&
                     !rd_kafka_terminating(rkb->rkb_rk)) {
+                        rd_kafka_rebootstrap(rkb->rkb_rk);
                         rd_kafka_op_err(
                             rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
                             "%i/%i brokers are down",
@@ -5493,6 +5494,9 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk,
 
 
 int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist) {
+        rd_kafka_wrlock(rk);
+        rd_list_add(&rk->additional_brokerlists, rd_strdup(brokerlist));
+        rd_kafka_wrlock(rk);
         return rd_kafka_brokers_add0(rk, brokerlist, rd_false);
 }
 

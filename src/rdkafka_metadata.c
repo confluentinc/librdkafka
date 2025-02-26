@@ -572,6 +572,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         int broker_changes            = 0;
         int cache_changes             = 0;
         int cgrp_subscription_version = -1;
+        int16_t ErrorCode             = 0;
 
         /* If client rack is present, the metadata cache (topic or full) needs
          * to contain the partition to rack map. */
@@ -872,6 +873,10 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                     ClusterAuthorizedOperations;
         }
 
+        if (ApiVersion >= 13) {
+                rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        }
+
         rd_kafka_buf_skip_tags(rkbuf);
 
         /* Entire Metadata response now parsed without errors:
@@ -881,6 +886,14 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "No brokers or topics in metadata: should retry");
                 err = RD_KAFKA_RESP_ERR__PARTIAL;
+                goto err;
+        }
+
+        if (ErrorCode) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Received top level error code: %" PRId16,
+                           ErrorCode);
+                err = ErrorCode;
                 goto err;
         }
 
@@ -1025,6 +1038,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rkb->rkb_rk);
 
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
+        rd_kafka_rebootstrap_tmr_restart(rkb->rkb_rk);
 
         /* Update cached cluster id. */
         if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&

@@ -1241,5 +1241,6 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
 
 void rd_kafka_rebootstrap(rd_kafka_t *rk);
 
+void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_INT_H_ */

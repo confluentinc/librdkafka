@@ -2638,12 +2638,18 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
         goto done;
 
 err:
-        actions = rd_kafka_err_action(rkb, err, request,
+        actions = rd_kafka_err_action(
+            rkb, err, request,
 
-                                      RD_KAFKA_ERR_ACTION_RETRY,
-                                      RD_KAFKA_RESP_ERR__PARTIAL,
+            RD_KAFKA_ERR_ACTION_SPECIAL, RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED,
 
-                                      RD_KAFKA_ERR_ACTION_END);
+            RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR__PARTIAL,
+
+            RD_KAFKA_ERR_ACTION_END);
+
+        if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {
+                rd_kafka_rebootstrap(rk);
+        }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 /* In case it's a brokers full refresh call,
@@ -2765,7 +2771,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         int *full_incr                 = NULL;
         void *handler_arg              = NULL;
         rd_kafka_resp_cb_t *handler_cb = rd_kafka_handle_Metadata;
-        int16_t metadata_max_version   = 12;
+        int16_t metadata_max_version   = 13;
         rd_kafka_replyq_t use_replyq   = replyq;
 
         /* In case we want cluster authorized operations in the Metadata

@@ -656,6 +656,9 @@ typedef enum {
         /** Client sent a push telemetry request larger than the maximum size
          *  the broker will accept. */
         RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE = 118,
+        /** Client metadata is stale,
+         *  client should rebootstrap to obtain new metadata. */
+        RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED = 129,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 

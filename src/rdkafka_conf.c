@@ -452,6 +452,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .s2i = {{RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE, "none"},
              {RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP, "rebootstrap"},
              {0, NULL}}},
+    {_RK_GLOBAL, "metadata.recovery.rebootstrap.trigger.ms", _RK_C_INT,
+     _RK(metadata_recovery_rebootstrap_trigger_ms),
+     "If a client configured to rebootstrap using "
+     "`metadata.recovery.strategy=rebootstrap` "
+     "is unable to obtain metadata from any "
+     "of the brokers for this interval, "
+     "client repeats the bootstrap process using "
+     "`bootstrap.servers` configuration "
+     "and brokers added through "
+     "`rd_kafka_brokers_add()`.",
+     0, INT_MAX, 300000},
     {_RK_GLOBAL | _RK_DEPRECATED | _RK_HIDDEN, "metadata.request.timeout.ms",
      _RK_C_INT, _RK(metadata_request_timeout_ms), "Not used.", 10, 900 * 1000,
      10},

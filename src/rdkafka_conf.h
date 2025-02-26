@@ -207,6 +207,7 @@ struct rd_kafka_conf_s {
         int msg_copy_max_size;
         int recv_max_msg_size;
         int max_inflight;
+        int metadata_recovery_rebootstrap_trigger_ms;
         int metadata_request_timeout_ms;
         int metadata_refresh_interval_ms;
         int metadata_refresh_fast_cnt;

@@ -290,17 +290,18 @@ struct rd_kafka_s {
         TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
         rd_list_t rk_broker_by_id; /* Fast id lookups. */
         rd_atomic32_t rk_broker_cnt;
-        /**< Number of brokers in state >= UP */
+        /**  Logical brokers count.
+         *   Used for calculating ERR__ALL_BROKERS_DOWN. */
+        rd_atomic32_t rk_logical_broker_cnt;
+        /**  Number of brokers in state >= UP */
         rd_atomic32_t rk_broker_up_cnt;
-        /**< Number of logical brokers in state >= UP, this is a sub-set
+        /**  Number of logical brokers in state >= UP, this is a sub-set
          *   of rk_broker_up_cnt. */
         rd_atomic32_t rk_logical_broker_up_cnt;
-        /**< Number of brokers that are down, only includes brokers
-         *   that have had at least one connection attempt. */
+        /**  Number of brokers that are down, only includes brokers
+         *   that have had at least one connection attempt
+         *   and are not internal or logical. */
         rd_atomic32_t rk_broker_down_cnt;
-        /**< Logical brokers currently without an address.
-         *   Used for calculating ERR__ALL_BROKERS_DOWN. */
-        rd_atomic32_t rk_broker_addrless_cnt;
 
         /** Decommissioned threads to await */
         rd_list_t wait_decommissioned_thrds;

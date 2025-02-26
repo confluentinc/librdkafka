@@ -2058,6 +2058,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 3.7.0 (EA)                  | Early Access                                                                                  |
 | KIP-899 - Allow producer and consumer clients to rebootstrap             | 3.8.0                       | Supported                                                                                     |
 | KIP-951 - Leader discovery optimisations for the client                  | 3.7.0                       | Supported                                                                                     |
+| KIP-1102 - Enable clients to rebootstrap based on timeout or error code  | 4.0.0                       | Supported                                                                                     |
 
 
 
@@ -2074,7 +2075,7 @@ release of librdkafka.
 | 0       | Produce                       | 10         | 10             |
 | 1       | Fetch                         | 16         | 16             |
 | 2       | ListOffsets                   | 8          | 7              |
-| 3       | Metadata                      | 12         | 12             |
+| 3       | Metadata                      | 13         | 13             |
 | 8       | OffsetCommit                  | 9          | 9              |
 | 9       | OffsetFetch                   | 9          | 9              |
 | 10      | FindCoordinator               | 4          | 2              |

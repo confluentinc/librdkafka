@@ -303,6 +303,8 @@ struct rd_kafka_s {
          *   and are not internal or logical. */
         rd_atomic32_t rk_broker_down_cnt;
 
+        /**< Additional bootstrap servers list. */
+        rd_list_t additional_brokerlists;
         /** Decommissioned threads to await */
         rd_list_t wait_decommissioned_thrds;
         /** Decommissioned brokers to await */
@@ -617,6 +619,10 @@ struct rd_kafka_s {
         rd_kafka_timer_t metadata_refresh_tmr;
         /** 1s interval timer */
         rd_kafka_timer_t one_s_tmr;
+        /** Rebootstrap timer.
+         *  Will add bootstrap brokers again
+         *  when it's fired. */
+        rd_kafka_timer_t rebootstrap_tmr;
 
         thrd_t rk_thread;
 
@@ -1228,6 +1234,8 @@ int rd_kafka_background_thread_main(void *arg);
 rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);
+
+void rd_kafka_rebootstrap(rd_kafka_t *rk);
 
 
 #endif /* _RDKAFKA_INT_H_ */

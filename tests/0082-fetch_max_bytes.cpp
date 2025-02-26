@@ -87,6 +87,9 @@ static void do_test_fetch_max_bytes(void) {
     Test::Fail("Failed to create KafkaConsumer: " + errstr);
   delete conf;
 
+  /* For next consumer */
+  test_wait_topic_exists(c->c_ptr(), topic.c_str(), 5000);
+
   /* Subscribe */
   std::vector<std::string> topics;
   topics.push_back(topic);

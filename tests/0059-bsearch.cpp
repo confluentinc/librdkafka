@@ -27,6 +27,7 @@
  */
 
 #include <iostream>
+#include <ctime>
 #include "testcpp.h"
 
 /**
@@ -110,7 +111,7 @@ class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
 static void do_test_bsearch(void) {
   RdKafka::Conf *conf, *tconf;
   int msgcnt = 1000;
-  int64_t timestamp;
+  int64_t timestamp_ms;
   std::string errstr;
   RdKafka::ErrorCode err;
   MyDeliveryReportCb my_dr;
@@ -128,14 +129,16 @@ static void do_test_bsearch(void) {
   delete conf;
   delete tconf;
 
-  timestamp = 1000;
+  /* Start with now() - 1h */
+  timestamp_ms = std::time(0) * 1000LL - 3600LL * 1000LL;
+
   for (int i = 0; i < msgcnt; i++) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
-                     (void *)topic.c_str(), topic.size(), NULL, 0, timestamp,
+                     (void *)topic.c_str(), topic.size(), NULL, 0, timestamp_ms,
                      i == 357 ? (void *)1 /*golden*/ : NULL);
     if (err != RdKafka::ERR_NO_ERROR)
       Test::Fail("Produce failed: " + RdKafka::err2str(err));
-    timestamp += 100 + (timestamp % 9);
+    timestamp_ms += 100 + (i % 10);
   }
 
   if (p->flush(tmout_multip(5000)) != 0)

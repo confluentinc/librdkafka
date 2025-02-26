@@ -162,6 +162,8 @@ static void do_test_destroy_flags(const char *topic,
                  destroy_flags, args->client_type, args->produce_cnt,
                  args->consumer_subscribe, args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
+
+        TEST_LATER_CHECK();
 }
 
 

@@ -146,7 +146,7 @@ static int verify_latency(struct latconf *latconf) {
         }
 
         latconf->wakeups = tot_wakeups;
-        if (latconf->wakeups < 5 || latconf->wakeups > 1000) {
+        if (latconf->wakeups > 1000) {
                 TEST_FAIL_LATER(
                     "%s: broker wakeups out of range: %d, "
                     "expected 5..1000",

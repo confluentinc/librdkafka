@@ -217,217 +217,439 @@ static void rd_kafka_oidc_build_post_fields(const char *scope,
         }
 }
 
-/*
- * Helper: Base64Url encode.
- * This implementation uses OpenSSL's Base64 encoder and then replaces characters as needed.
+/**
+ * @brief Base64Url encode input data.
+ *        This implementation uses OpenSSL's Base64 encoder and then
+ *        replaces characters as needed for Base64Url format.
+ *
+ * @param input The data to encode
+ * @param length Length of the input data
+ *
+ * @returns Newly allocated Base64Url encoded string, caller must free.
+ *
+ * @locality Any thread.
  */
-char *base64url_encode(const unsigned char *input, int length) {
-    BIO *bmem = NULL, *b64 = NULL;
-    BUF_MEM *bptr = NULL;
-    char *buff, *p;
-    int i;
+static char *rd_base64url_encode(const unsigned char *input, int length) {
+        BIO *bmem = NULL, *b64 = NULL;
+        BUF_MEM *bptr = NULL;
+        char *buff, *p;
 
-    b64 = BIO_new(BIO_f_base64());
-    /* Do not use '\n' in encoded data */
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-    bmem = BIO_new(BIO_s_mem());
-    b64 = BIO_push(b64, bmem);
+        b64 = BIO_new(BIO_f_base64());
+        /* Do not use '\n' in encoded data */
+        BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+        bmem = BIO_new(BIO_s_mem());
+        b64 = BIO_push(b64, bmem);
 
-    BIO_write(b64, input, length);
-    BIO_flush(b64);
-    BIO_get_mem_ptr(b64, &bptr);
+        BIO_write(b64, input, length);
+        BIO_flush(b64);
+        BIO_get_mem_ptr(b64, &bptr);
 
-    buff = (char *)malloc(bptr->length + 1);
-    if (!buff) {
+        buff = rd_malloc(bptr->length + 1);
+        if (!buff) {
+                BIO_free_all(b64);
+                return NULL;
+        }
+        memcpy(buff, bptr->data, bptr->length);
+        buff[bptr->length] = '\0';
+
         BIO_free_all(b64);
-        return NULL;
-    }
-    memcpy(buff, bptr->data, bptr->length);
-    buff[bptr->length] = '\0';
 
-    BIO_free_all(b64);
+        /* Convert to Base64Url by replacing '+' with '-', '/' with '_' */
+        for (p = buff; *p; p++) {
+                if (*p == '+')
+                        *p = '-';
+                else if (*p == '/')
+                        *p = '_';
+        }
 
-    /* Convert to Base64Url by replacing '+' with '-', '/' with '_' and removing '=' */
-    for (p = buff; *p; p++) {
-        if (*p == '+') *p = '-';
-        else if (*p == '/') *p = '_';
-    }
-    /* Remove padding '=' characters */
-    int newlen = strlen(buff);
-    while(newlen > 0 && buff[newlen-1] == '=') {
-        buff[newlen-1] = '\0';
-        newlen--;
-    }
+        /* Remove padding '=' characters */
+        int newlen = strlen(buff);
+        while (newlen > 0 && buff[newlen - 1] == '=') {
+                buff[newlen - 1] = '\0';
+                newlen--;
+        }
 
-    return buff;
+        return buff;
 }
 
-/*
- * Create JWT assertion. Caller must free the returned string.
+/**
+ * @brief Create JWT assertion.
  *
- * Parameters:
- *   key_id         : Key identifier.
- *   private_key_pem: PEM formatted RSA private key string.
- *   issuer         : iss claim.
- *   subject        : sub claim.
- *   audience       : aud claim.
- *   lifetime_sec   : Lifetime in seconds to compute exp.
+ * @param key_id Key identifier for the JWT header.
+ * @param private_key_pem PEM formatted RSA private key string.
+ * @param token_signing_algo Algorithm to use for signing (e.g., "RS256").
+ * @param issuer The issuer claim (iss).
+ * @param subject The subject claim (sub).
+ * @param audience The audience claim (aud).
+ * @param target_audience The target audience claim.
+ *
+ * @returns Newly allocated JWT string, caller must free. NULL on error.
+ *
+ * @locality Any thread.
  */
-char *rd_kafka_create_jwt_assertion(const char *key_id,
-                                    const char *private_key_pem,
-                                    const char *issuer,
-                                    const char *subject,
-                                    const char *audience,
-                                    int lifetime_sec)
-{
-    char *jwt = NULL;
-    char *encoded_header = NULL;
-    char *encoded_payload = NULL;
-    char *encoded_signature = NULL;
-    char *unsigned_token = NULL;
-    char *result = NULL;
-    int ret = -1;
+static char *rd_kafka_create_jwt_assertion(const char *key_id,
+                                          const char *private_key_pem,
+                                          const char *token_signing_algo,
+                                          const char *issuer,
+                                          const char *subject,
+                                          const char *audience,
+                                          const char *target_audience) {
+        char *jwt = NULL;
+        char *encoded_header = NULL;
+        char *encoded_payload = NULL;
+        char *encoded_signature = NULL;
+        char *unsigned_token = NULL;
+        char *result = NULL;
+        int ret = -1;
 
-    /* Timestamps: current time and expiration */
-    time_t now = time(NULL);
-    time_t exp = now + lifetime_sec;
+        /* Timestamps: current time and expiration (60 minutes from now) */
+        int64_t now_ms = rd_uclock() / 1000;
+        time_t now = now_ms / 1000;
+        time_t exp = now + (60 * 60); /* 60 minutes */
 
-    /*
-     * 1. Build the JWT header in JSON:
-     *    {"alg":"RS256","kid":"<key_id>"}
-     */
-    char header_json[256];
-    snprintf(header_json, sizeof(header_json),
-             "{\"alg\":\"RS256\",\"kid\":\"%s\"}", key_id);
+        /*
+         * 1. Build the JWT header in JSON:
+         *    {"alg":"<algo>","typ":"JWT","kid":"<key_id>"}
+         */
+        char header_json[256];
+        rd_snprintf(header_json, sizeof(header_json),
+                   "{\"alg\":\"%s\",\"typ\":\"JWT\",\"kid\":\"%s\"}",
+                   token_signing_algo, key_id);
 
-    /*
-     * 2. Build the JWT payload: Include standard claims.
-     *    {"iss": "...", "sub": "...", "aud": "...", "iat": now, "exp": exp}
-     */
-    char payload_json[512];
-    snprintf(payload_json, sizeof(payload_json),
-             "{\"iss\":\"%s\",\"sub\":\"%s\",\"aud\":\"%s\",\"iat\":%ld,\"exp\":%ld}",
-             issuer, subject, audience, (long)now, (long)exp);
+        /*
+         * 2. Build the JWT payload with additional claims
+         */
+        char payload_json[1024];
+        rd_snprintf(payload_json, sizeof(payload_json),
+                   "{\"iss\":\"%s\",\"sub\":\"%s\",\"aud\":\"%s\","
+                   "\"iat\":%ld,\"exp\":%ld,\"target_audience\":\"%s\"}",
+                   issuer, subject, audience, (long)now, (long)exp,
+                   target_audience);
 
-    /* 3. Base64Url-encode header and payload */
-    encoded_header = base64url_encode((unsigned char *)header_json, strlen(header_json));
-    encoded_payload = base64url_encode((unsigned char *)payload_json, strlen(payload_json));
-    if (!encoded_header || !encoded_payload)
-        goto cleanup;
+        /* 3. Base64Url-encode header and payload */
+        encoded_header = rd_base64url_encode((unsigned char *)header_json,
+                                            strlen(header_json));
+        encoded_payload = rd_base64url_encode((unsigned char *)payload_json,
+                                             strlen(payload_json));
+        if (!encoded_header || !encoded_payload)
+                goto cleanup;
 
-    /*
-     * 4. Create the unsigned token: header.payload
-     */
-    int unsigned_token_len = snprintf(NULL, 0, "%s.%s", encoded_header, encoded_payload) + 1;
-    unsigned_token = malloc(unsigned_token_len);
-    if (!unsigned_token)
-        goto cleanup;
-    snprintf(unsigned_token, unsigned_token_len, "%s.%s", encoded_header, encoded_payload);
+        /* 4. Create the unsigned token */
+        size_t unsigned_token_len = strlen(encoded_header) +
+                                   strlen(encoded_payload) + 2;
+        unsigned_token = rd_malloc(unsigned_token_len);
+        if (!unsigned_token)
+                goto cleanup;
+        rd_snprintf(unsigned_token, unsigned_token_len, "%s.%s",
+                   encoded_header, encoded_payload);
 
-    /*
-     * 5. Load the RSA private key (using OpenSSL PEM_read_bio_PrivateKey)
-     */
-    BIO *bio = BIO_new_mem_buf((void *)private_key_pem, -1);
-    if (!bio) goto cleanup;
-    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
-    BIO_free(bio);
-    if (!pkey) goto cleanup;
+        /* 5. Load the private key */
+        BIO *bio = BIO_new_mem_buf((void *)private_key_pem, -1);
+        if (!bio)
+                goto cleanup;
+        EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+        BIO_free(bio);
+        if (!pkey)
+                goto cleanup;
 
-    /*
-     * 6. Sign the unsigned token using RS256. RS256 uses SHA256.
-     */
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    if (!mdctx) {
-        EVP_PKEY_free(pkey);
-        goto cleanup;
-    }
-    if (EVP_DigestSignInit(mdctx, NULL, EVP_sha256(), NULL, pkey) != 1) {
+        /* 6. Sign the token based on algorithm */
+        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+        if (!mdctx) {
+                EVP_PKEY_free(pkey);
+                goto cleanup;
+        }
+
+        const EVP_MD *md;
+        if (!strcmp(token_signing_algo, "RS256")) {
+                md = EVP_sha256();
+        } else if (!strcmp(token_signing_algo, "ES256")) {
+                md = EVP_sha256();
+        } else {
+                EVP_MD_CTX_free(mdctx);
+                EVP_PKEY_free(pkey);
+                goto cleanup;
+        }
+
+        if (EVP_DigestSignInit(mdctx, NULL, md, NULL, pkey) != 1) {
+                EVP_MD_CTX_free(mdctx);
+                EVP_PKEY_free(pkey);
+                goto cleanup;
+        }
+
+        if (EVP_DigestSignUpdate(mdctx, unsigned_token,
+                                strlen(unsigned_token)) != 1) {
+                EVP_MD_CTX_free(mdctx);
+                EVP_PKEY_free(pkey);
+                goto cleanup;
+        }
+
+        size_t siglen = 0;
+        if (EVP_DigestSignFinal(mdctx, NULL, &siglen) != 1) {
+                EVP_MD_CTX_free(mdctx);
+                EVP_PKEY_free(pkey);
+                goto cleanup;
+        }
+
+        unsigned char *sig = rd_malloc(siglen);
+        if (!sig) {
+                EVP_MD_CTX_free(mdctx);
+                EVP_PKEY_free(pkey);
+                goto cleanup;
+        }
+
+        if (EVP_DigestSignFinal(mdctx, sig, &siglen) != 1) {
+                rd_free(sig);
+                EVP_MD_CTX_free(mdctx);
+                EVP_PKEY_free(pkey);
+                goto cleanup;
+        }
+
         EVP_MD_CTX_free(mdctx);
         EVP_PKEY_free(pkey);
-        goto cleanup;
-    }
-    if (EVP_DigestSignUpdate(mdctx, unsigned_token, strlen(unsigned_token)) != 1) {
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        goto cleanup;
-    }
 
-    size_t siglen = 0;
-    if (EVP_DigestSignFinal(mdctx, NULL, &siglen) != 1) {
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        goto cleanup;
-    }
-    unsigned char *sig = malloc(siglen);
-    if (!sig) {
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        goto cleanup;
-    }
-    if (EVP_DigestSignFinal(mdctx, sig, &siglen) != 1) {
-        free(sig);
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        goto cleanup;
-    }
-    EVP_MD_CTX_free(mdctx);
-    EVP_PKEY_free(pkey);
+        /* 7. Base64Url-encode the signature */
+        encoded_signature = rd_base64url_encode(sig, siglen);
+        rd_free(sig);
+        if (!encoded_signature)
+                goto cleanup;
 
-    /* 7. Base64Url-encode the signature */
-    encoded_signature = base64url_encode(sig, siglen);
-    free(sig);
-    if (!encoded_signature)
-        goto cleanup;
+        /* 8. Create final JWT */
+        size_t jwt_len = strlen(encoded_header) + strlen(encoded_payload) +
+                        strlen(encoded_signature) + 3;
+        jwt = rd_malloc(jwt_len);
+        if (!jwt)
+                goto cleanup;
+        rd_snprintf(jwt, jwt_len, "%s.%s.%s", encoded_header, encoded_payload,
+                   encoded_signature);
 
-    /*
-     * 8. Combine header, payload, and signature into the final JWT:
-     *    <header>.<payload>.<signature>
-     */
-    int jwt_len = snprintf(NULL, 0, "%s.%s.%s", encoded_header, encoded_payload, encoded_signature) + 1;
-    jwt = malloc(jwt_len);
-    if (!jwt)
-        goto cleanup;
-    snprintf(jwt, jwt_len, "%s.%s.%s", encoded_header, encoded_payload, encoded_signature);
-
-    /* Return jwt; caller is responsible for freeing the memory later. */
-    result = jwt;
-    jwt = NULL; /* Prevent cleanup from freeing our result */
-    ret = 0;
+        result = jwt;
+        jwt = NULL;
+        ret = 0;
 
 cleanup:
-    free(encoded_header);
-    free(encoded_payload);
-    free(encoded_signature);
-    free(unsigned_token);
-    if (jwt) free(jwt);
-    if (ret != 0)
-        return NULL;
-    return result;
+        RD_IF_FREE(encoded_header, rd_free);
+        RD_IF_FREE(encoded_payload, rd_free);
+        RD_IF_FREE(encoded_signature, rd_free);
+        RD_IF_FREE(unsigned_token, rd_free);
+        RD_IF_FREE(jwt, rd_free);
+
+        if (ret != 0)
+                return NULL;
+        return result;
 }
 
-/*
- * build_jwt_request_body:
- *   Given a JWT assertion, creates a URL-encoded body for the OAuth JWT bearer grant.
+/**
+ * @brief Build request body for JWT bearer token request.
  *
- * Returns a newly allocated string with the body. Caller should free() it.
+ * @param assertion The JWT assertion to include in the request.
+ * @param client_id The client ID to include in the request.
+ * @param scope The requested scope (optional).
+ *
+ * @returns Newly allocated string with the URL-encoded request body.
+ *          Caller must free.
+ *
+ * @locality Any thread.
  */
-char *build_jwt_request_body(const char *jwt_assertion) {
+static char *rd_kafka_jwt_build_request_body(const char *assertion,
+                                            const char *client_id,
+                                            const char *scope) {
         const char *grant_type = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-        const char *client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+        size_t body_size;
+        char *body;
 
-        // Calculate needed length
-        int len = snprintf(NULL, 0,
-                           "grant_type=%s&client_assertion_type=%s&client_assertion=%s",
-                           grant_type, client_assertion_type, jwt_assertion);
-        char *body = malloc(len + 1);
-        if (!body)
-                return NULL;
-        snprintf(body, len + 1,
-                 "grant_type=%s&client_assertion_type=%s&client_assertion=%s",
-                 grant_type, client_assertion_type, jwt_assertion);
+        /* Calculate needed length including client_id and scope */
+        if (!scope || !*scope) {
+                body_size = strlen("grant_type=") + strlen(grant_type) +
+                           strlen("&assertion=") + strlen(assertion) +
+                           strlen("&client_id=") + strlen(client_id) + 1;
+
+                body = rd_malloc(body_size);
+                if (!body)
+                        return NULL;
+
+                rd_snprintf(body, body_size,
+                           "grant_type=%s&assertion=%s&client_id=%s",
+                           grant_type, assertion, client_id);
+        } else {
+                body_size = strlen("grant_type=") + strlen(grant_type) +
+                           strlen("&assertion=") + strlen(assertion) +
+                           strlen("&client_id=") + strlen(client_id) +
+                           strlen("&scope=") + strlen(scope) + 1;
+
+                body = rd_malloc(body_size);
+                if (!body)
+                        return NULL;
+
+                rd_snprintf(body, body_size,
+                           "grant_type=%s&assertion=%s&client_id=%s&scope=%s",
+                           grant_type, assertion, client_id, scope);
+        }
+
         return body;
 }
 
+/**
+ * @brief Implementation of JWT token refresh callback function.
+ *        Creates a JWT assertion, exchanges it for an access token,
+ *        and sets the token for SASL OAUTHBEARER authentication.
+ *
+ * @param rk The rd_kafka_t instance.
+ * @param oauthbearer_config The OAUTHBEARER configuration.
+ * @param opaque Opaque pointer passed to the callback.
+ *
+ * @locality rdkafka main thread
+ */
+void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
+                            const char *oauthbearer_config,
+                            void *opaque) {
+        const int timeout_s = 20;
+        const int retry = 4;
+        const int retry_ms = 5 * 1000;
+
+        char *jwt_assertion = NULL;
+        char *request_body = NULL;
+        struct curl_slist *headers = NULL;
+        rd_http_error_t *herr = NULL;
+        cJSON *json = NULL;
+        cJSON *payloads = NULL;
+        cJSON *parsed_token = NULL, *jwt_exp = NULL, *jwt_sub = NULL;
+        char *jwt_token = NULL;
+        char *decoded_payloads = NULL;
+        const char *sub = NULL;
+        const char *errstr = NULL;
+        double exp = 0;
+        char set_token_errstr[512];
+        char decode_payload_errstr[512];
+
+        if (rd_kafka_terminating(rk))
+                return;
+
+        /* Create JWT assertion */
+        jwt_assertion = rd_kafka_create_jwt_assertion(
+            rk->rk_conf.sasl.oauthbearer.private_key_id,
+            rk->rk_conf.sasl.oauthbearer.private_key_secret,
+            rk->rk_conf.sasl.oauthbearer.token_signing_algorithm,
+            rk->rk_conf.sasl.oauthbearer.token_issuer,
+            rk->rk_conf.sasl.oauthbearer.token_subject,
+            rk->rk_conf.sasl.oauthbearer.token_audience,
+            rk->rk_conf.sasl.oauthbearer.token_target_audience);
+
+        if (!jwt_assertion) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Failed to create JWT assertion");
+                goto done;
+        }
+
+        /* Build request body */
+        request_body = rd_kafka_jwt_build_request_body(
+            jwt_assertion,
+            rk->rk_conf.sasl.oauthbearer.token_issuer,
+            rk->rk_conf.sasl.oauthbearer.scope);
+
+        if (!request_body) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Failed to build JWT request body");
+                goto done;
+        }
+
+        /* Build headers */
+        headers = curl_slist_append(headers,
+                                   "Content-Type: application/x-www-form-urlencoded");
+        headers = curl_slist_append(headers, "Accept: application/json");
+
+        /* Make HTTP request to token endpoint */
+        herr = rd_http_post_expect_json(
+            rk, rk->rk_conf.sasl.oauthbearer.token_endpoint_url,
+            headers, request_body, strlen(request_body),
+            timeout_s, retry, retry_ms, &json);
+
+        if (unlikely(herr != NULL)) {
+                rd_kafka_log(rk, LOG_ERR, "JWT",
+                            "Failed to retrieve JWT token from \"%s\": %s (%d)",
+                            rk->rk_conf.sasl.oauthbearer.token_endpoint_url,
+                            herr->errstr, herr->code);
+                rd_kafka_oauthbearer_set_token_failure(rk, herr->errstr);
+                goto done;
+        }
+
+        /* Extract access token from response */
+        parsed_token = cJSON_GetObjectItem(json, "access_token");
+        if (!parsed_token) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Expected JSON JWT response with \"access_token\" field");
+                goto done;
+        }
+
+        jwt_token = cJSON_GetStringValue(parsed_token);
+        if (!jwt_token) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Expected JSON response as a value string");
+                goto done;
+        }
+
+        /* Decode JWT payload */
+        errstr = rd_kafka_jwt_b64_decode_payload(jwt_token, &decoded_payloads);
+        if (errstr) {
+                rd_snprintf(decode_payload_errstr, sizeof(decode_payload_errstr),
+                           "Failed to decode JWT payload: %s", errstr);
+                rd_kafka_oauthbearer_set_token_failure(rk, decode_payload_errstr);
+                goto done;
+        }
+
+        /* Parse JWT payload */
+        payloads = cJSON_Parse(decoded_payloads);
+        if (!payloads) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Failed to parse JSON JWT payload");
+                goto done;
+        }
+
+        /* Extract expiration time */
+        jwt_exp = cJSON_GetObjectItem(payloads, "exp");
+        if (!jwt_exp) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Expected JSON JWT response with \"exp\" field");
+                goto done;
+        }
+
+        exp = cJSON_GetNumberValue(jwt_exp);
+        if (exp <= 0) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Expected JSON JWT response with valid \"exp\" field");
+                goto done;
+        }
+
+        /* Extract subject */
+        jwt_sub = cJSON_GetObjectItem(payloads, "sub");
+        if (!jwt_sub) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Expected JSON JWT response with \"sub\" field");
+                goto done;
+        }
+
+        sub = cJSON_GetStringValue(jwt_sub);
+        if (!sub) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Expected JSON JWT response with valid \"sub\" field");
+                goto done;
+        }
+
+        /* Set the token for SASL OAUTHBEARER authentication */
+        if (rd_kafka_oauthbearer_set_token(
+                rk, jwt_token, (int64_t)exp * 1000, sub,
+                NULL, 0, set_token_errstr, sizeof(set_token_errstr))
+                != RD_KAFKA_RESP_ERR_NO_ERROR) {
+                rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
+        }
+
+done:
+        RD_IF_FREE(jwt_assertion, rd_free);
+        RD_IF_FREE(request_body, rd_free);
+        RD_IF_FREE(headers, curl_slist_free_all);
+        RD_IF_FREE(json, cJSON_Delete);
+        RD_IF_FREE(decoded_payloads, rd_free);
+        RD_IF_FREE(payloads, cJSON_Delete);
+}
 
 /**
  * @brief Implementation of Oauth/OIDC token refresh callback function,
@@ -798,3 +1020,189 @@ int unittest_sasl_oauthbearer_oidc(void) {
         fails += ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope();
         return fails;
 }
+
+// /**
+//  * @brief Test the Base64Url encoding functionality.
+//  *        Verifies that the encoding correctly handles special characters
+//  *        and padding removal.
+//  */
+// static int ut_sasl_jwt_base64url_encode(void) {
+//         /* Test cases with expected inputs and outputs */
+//         static const struct {
+//                 const char *input;
+//                 const char *expected_output;
+//         } test_cases[] = {
+//                 /* Regular case */
+//                 {"Hello, world!", "SGVsbG8sIHdvcmxkIQ"},
+//                 /* Case with padding characters that should be removed */
+//                 {"test", "dGVzdA"},
+//                 /* Case with special characters that should be replaced */
+//                 {"\x00\xFF\x88", "AP-I"}
+//         };
+//         unsigned int i;
+//
+//         RD_UT_BEGIN();
+//
+//         for (i = 0; i < RD_ARRAYSIZE(test_cases); i++) {
+//                 char *output = rd_base64url_encode(
+//                     (const unsigned char *)test_cases[i].input,
+//                     strlen(test_cases[i].input));
+//
+//                 RD_UT_ASSERT(output != NULL,
+//                              "Expected non-NULL output for input: %s",
+//                              test_cases[i].input);
+//
+//                 RD_UT_ASSERT(!strcmp(output, test_cases[i].expected_output),
+//                              "Base64Url encoding failed: expected %s, got %s",
+//                              test_cases[i].expected_output, output);
+//
+//                 rd_free(output);
+//         }
+//
+//         RD_UT_PASS();
+// }
+//
+// /**
+//  * @brief Test JWT assertion creation.
+//  *        Verifies that the JWT has the correct format and contains
+//  *        the expected header, payload, and signature sections.
+//  */
+// static int ut_sasl_jwt_create_assertion(void) {
+//         /* Sample RSA private key in PEM format (test key only) */
+//         static const char *test_private_key =
+//
+//         const char *key_id = "test-key-id";
+//         const char *token_signing_algo = "RS256";
+//         const char *issuer = "test-issuer";
+//         const char *subject = "test-subject";
+//         const char *audience = "test-audience";
+//         const char *target_audience = "test-target";
+//
+//         char *jwt;
+//         char *parts[3] = {NULL, NULL, NULL};
+//         int part_count = 0;
+//         char *token_copy, *saveptr, *part;
+//
+//         RD_UT_BEGIN();
+//
+//         jwt = rd_kafka_create_jwt_assertion(
+//             key_id, test_private_key, token_signing_algo,
+//             issuer, subject, audience, target_audience);
+//
+//         /* For testing purposes, we'll just verify the JWT format rather than
+//            the actual signature, since signature verification would require
+//            the public key and more complex validation logic */
+//
+//         RD_UT_ASSERT(jwt != NULL, "Expected non-NULL JWT assertion");
+//
+//         /* Verify JWT format: should be header.payload.signature */
+//         token_copy = rd_strdup(jwt);
+//         part = rd_strtok_r(token_copy, ".", &saveptr);
+//
+//         while (part != NULL && part_count < 3) {
+//                 parts[part_count++] = part;
+//                 part = rd_strtok_r(NULL, ".", &saveptr);
+//         }
+//
+//         RD_UT_ASSERT(part_count == 3,
+//                      "JWT should have exactly 3 parts, got %d", part_count);
+//
+//         /* Verify each part is non-empty */
+//         RD_UT_ASSERT(strlen(parts[0]) > 0, "JWT header should not be empty");
+//         RD_UT_ASSERT(strlen(parts[1]) > 0, "JWT payload should not be empty");
+//         RD_UT_ASSERT(strlen(parts[2]) > 0, "JWT signature should not be empty");
+//
+//         rd_free(token_copy);
+//         rd_free(jwt);
+//
+//         RD_UT_PASS();
+// }
+//
+// /**
+//  * @brief Test JWT request body building.
+//  *        Verifies that the request body is correctly formatted with
+//  *        all required parameters.
+//  */
+// static int ut_sasl_jwt_build_request_body(void) {
+//         const char *assertion = "test.jwt.assertion";
+//         const char *client_id = "test-client";
+//         const char *scope = "test-scope";
+//         const char *expected_with_scope =
+//             "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer"
+//             "&assertion=test.jwt.assertion&client_id=test-client"
+//             "&scope=test-scope";
+//         const char *expected_without_scope =
+//             "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer"
+//             "&assertion=test.jwt.assertion&client_id=test-client";
+//
+//         char *body_with_scope, *body_without_scope;
+//
+//         RD_UT_BEGIN();
+//
+//         /* Test with scope */
+//         body_with_scope = rd_kafka_jwt_build_request_body(
+//             assertion, client_id, scope);
+//
+//         RD_UT_ASSERT(body_with_scope != NULL,
+//                      "Expected non-NULL request body with scope");
+//
+//         RD_UT_ASSERT(!strcmp(body_with_scope, expected_with_scope),
+//                      "Request body with scope incorrect: expected %s, got %s",
+//                      expected_with_scope, body_with_scope);
+//
+//         /* Test without scope */
+//         body_without_scope = rd_kafka_jwt_build_request_body(
+//             assertion, client_id, NULL);
+//
+//         RD_UT_ASSERT(body_without_scope != NULL,
+//                      "Expected non-NULL request body without scope");
+//
+//         RD_UT_ASSERT(!strcmp(body_without_scope, expected_without_scope),
+//                      "Request body without scope incorrect: expected %s, got %s",
+//                      expected_without_scope, body_without_scope);
+//
+//         rd_free(body_with_scope);
+//         rd_free(body_without_scope);
+//
+//         RD_UT_PASS();
+// }
+//
+// /**
+//  * @brief Test JWT token refresh callback with a mock HTTP response.
+//  *        This test mocks the HTTP response to simulate a successful
+//  *        token exchange.
+//  */
+// static int ut_sasl_jwt_token_refresh_cb(void) {
+//         /* This test would require mocking rd_http_post_expect_json and
+//            other external dependencies, which is complex in a unit test.
+//            Instead, we'll focus on testing the request preparation and
+//            response handling logic separately. */
+//
+//         RD_UT_BEGIN();
+//
+//         /* For a complete test, we would need to:
+//            1. Create a mock rd_kafka_t instance
+//            2. Set up the necessary configuration
+//            3. Mock the HTTP response
+//            4. Call rd_kafka_jwt_refresh_cb
+//            5. Verify the token was correctly set
+//
+//            Since this requires extensive mocking, we'll consider this
+//            a placeholder for a more comprehensive integration test. */
+//
+//         RD_UT_PASS();
+// }
+//
+// /**
+//  * @brief Run all JWT-related unit tests.
+//  */
+// int unittest_sasl_jwt(void) {
+//         int fails = 0;
+//
+//         fails += ut_sasl_jwt_base64url_encode();
+//         fails += ut_sasl_jwt_create_assertion();
+//         fails += ut_sasl_jwt_build_request_body();
+//         fails += ut_sasl_jwt_token_refresh_cb();
+//
+//         return fails;
+// }

@@ -330,7 +330,8 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                      rd_kafka_broker_state_names[rkb->rkb_state],
                      rd_kafka_broker_state_names[state]);
 
-        if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
+        if (rkb->rkb_source == RD_KAFKA_INTERNAL ||
+            RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                 /* no-op */
         } else if (rd_kafka_broker_state_is_down(state) &&
                    !rkb->rkb_down_reported) {
@@ -341,16 +342,16 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                 if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
                         rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                             rd_atomic32_get(
-                                &rkb->rkb_rk->rk_broker_addrless_cnt) &&
-                    !rd_kafka_broker_is_addrless(rkb) &&
-                    !rd_kafka_terminating(rkb->rkb_rk))
+                                &rkb->rkb_rk->rk_logical_broker_cnt) &&
+                    !rd_kafka_terminating(rkb->rkb_rk)) {
                         rd_kafka_op_err(
                             rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
                             "%i/%i brokers are down",
                             rd_atomic32_get(&rkb->rkb_rk->rk_broker_down_cnt),
                             rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                                 rd_atomic32_get(
-                                    &rkb->rkb_rk->rk_broker_addrless_cnt));
+                                    &rkb->rkb_rk->rk_logical_broker_cnt));
+                }
                 rkb->rkb_down_reported = 1;
 
         } else if (rd_kafka_broker_state_is_up(state) &&
@@ -4697,9 +4698,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
                         rd_list_remove(&rkb->rkb_rk->rk_broker_by_id, rkb);
 
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
-                        rd_atomic32_sub(&rkb->rkb_rk->rk_broker_addrless_cnt,
-                                        1);
-                } else {
+                        rd_atomic32_sub(&rkb->rkb_rk->rk_logical_broker_cnt, 1);
+                } else if (rkb->rkb_down_reported) {
                         rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
                 }
                 rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
@@ -5107,7 +5107,7 @@ rd_kafka_broker_t *rd_kafka_broker_add_logical(rd_kafka_t *rk,
         rd_assert(rkb && *"failed to create broker thread");
         rd_kafka_wrunlock(rk);
 
-        rd_atomic32_add(&rk->rk_broker_addrless_cnt, 1);
+        rd_atomic32_add(&rk->rk_logical_broker_cnt, 1);
 
         rd_dassert(RD_KAFKA_BROKER_IS_LOGICAL(rkb));
         rd_kafka_broker_keep(rkb);
@@ -5177,11 +5177,6 @@ void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
 
         if (!changed)
                 return;
-
-        if (!rd_kafka_broker_is_addrless(rkb))
-                rd_atomic32_sub(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
-        else
-                rd_atomic32_add(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
 
         /* Trigger a disconnect & reconnect */
         rd_kafka_broker_schedule_connection(rkb);
@@ -5684,7 +5679,7 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
                     rd_atomic32_get(&rk->rk_logical_broker_up_cnt) >
                 0 ||
             rd_atomic32_get(&rk->rk_broker_cnt) -
-                    rd_atomic32_get(&rk->rk_broker_addrless_cnt) ==
+                    rd_atomic32_get(&rk->rk_logical_broker_cnt) ==
                 0)
                 return;
 

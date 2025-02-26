@@ -151,7 +151,8 @@ typedef enum {
 
 typedef enum {
         RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
-        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC
+        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC,
+        RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT,
 } rd_kafka_oauthbearer_method_t;
 
 typedef enum {
@@ -321,6 +322,13 @@ struct rd_kafka_conf_s {
                         char *client_id;
                         char *client_secret;
                         char *scope;
+                        char *private_key_id;
+                        char *private_key_secret;
+                        char *token_signing_algorithm;
+                        char *token_subject;
+                        char *token_issuer;
+                        char *token_audience;
+                        char *token_target_audience;
                         char *extensions_str;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,

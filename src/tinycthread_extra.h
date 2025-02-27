@@ -43,6 +43,10 @@
 
 #include "rdtypes.h"
 
+#ifdef __FreeBSD__
+#include <pthread_np.h> /* for pthread_set_name_np */
+#endif
+
 /**
  * @brief Set thread system name if platform supports it (pthreads)
  * @return thrd_success or thrd_error

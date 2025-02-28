@@ -1045,7 +1045,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .vdef = RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
      .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT, "default"},
              {RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc"},
-                {RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT, "jwt"}},
+             {RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT, "jwt"}},
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.client.id", _RK_C_STR,
      _RK(sasl.oauthbearer.client_id),
@@ -1079,6 +1079,43 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.private.key.id", _RK_C_STR,
+     _RK(sasl.oauthbearer.private_key_id),
+     "Private key id. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.private.key.secret", _RK_C_STR,
+     _RK(sasl.oauthbearer.private_key_secret),
+     "Private key id. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token.signing.algorithm", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_signing_algorithm),
+     "token_signing_algorithm. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token.subject", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_subject),
+     "token_signing_algorithm. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token.issuer", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_issuer),
+     "token_issuer. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token_audience", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_audience),
+     "token_audience. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token_target_audience", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_target_audience),
+     "token_target_audience. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+
+
 
     /* Plugins */
     {_RK_GLOBAL, "plugin.library.paths", _RK_C_STR, _RK(plugin_paths),
@@ -2294,6 +2331,9 @@ static void rd_kafka_defaultconf_set(int scope, void *conf) {
 
 rd_kafka_conf_t *rd_kafka_conf_new(void) {
         rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
+        fprintf(stderr,
+                "sizeof(*conf) = %lu RD_KAFKA_CONF_PROPS_IDX_MAX = %d\n",
+                sizeof(*conf), RD_KAFKA_CONF_PROPS_IDX_MAX);
         rd_assert(RD_KAFKA_CONF_PROPS_IDX_MAX > sizeof(*conf) &&
                   *"Increase RD_KAFKA_CONF_PROPS_IDX_MAX");
         rd_kafka_defaultconf_set(_RK_GLOBAL, conf);
@@ -3850,7 +3890,9 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                "`sasl.oauthbearer.method=oidc` are "
                                "mutually exclusive";
 
-                if (conf->sasl.enable_oauthbearer_unsecure_jwt && conf->sasl.oauthbearer.method == RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT)
+                if (conf->sasl.enable_oauthbearer_unsecure_jwt &&
+                    conf->sasl.oauthbearer.method ==
+                        RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT)
                         return "`enable.sasl.oauthbearer.unsecure.jwt` and "
                                "`sasl.oauthbearer.method=jwt` are "
                                "mutually exclusive";
@@ -3875,39 +3917,46 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         }
                 }
 
-                if (conf->sasl.oauthbearer.method == RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT) {
+                if (conf->sasl.oauthbearer.method ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT) {
                         if (!conf->sasl.oauthbearer.private_key_id)
-                                return "`sasl.oauthbearer.jwt.private.key.id` is "
+                                return "`sasl.oauthbearer.jwt.private.key.id` "
+                                       "is "
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=jwt` is set";
 
                         if (!conf->sasl.oauthbearer.private_key_secret)
-                                return  "`sasl.oauthbearer.jwt.private.key.secret` is "
+                                return "`sasl.oauthbearer.jwt.private.key."
+                                       "secret` is "
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=jwt` is set";
 
                         if (!conf->sasl.oauthbearer.token_signing_algorithm)
-                                return  "`sasl.oauthbearer.jwt.token.signing.algorithm` is "
+                                return "`sasl.oauthbearer.jwt.token.signing."
+                                       "algorithm` is "
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=jwt` is set";
 
                         if (!conf->sasl.oauthbearer.token_subject)
-                                return  "`sasl.oauthbearer.jwt.token.subject` is "
+                                return "`sasl.oauthbearer.jwt.token.subject` "
+                                       "is "
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=jwt` is set";
 
                         if (!conf->sasl.oauthbearer.token_issuer)
-                                return  "`sasl.oauthbearer.jwt.token.issuer` is "
+                                return "`sasl.oauthbearer.jwt.token.issuer` is "
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=jwt` is set";
 
                         if (!conf->sasl.oauthbearer.token_audience)
-                                return  "`sasl.oauthbearer.jwt.token.audience` is "
+                                return "`sasl.oauthbearer.jwt.token.audience` "
+                                       "is "
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=jwt` is set";
 
                         if (!conf->sasl.oauthbearer.token_target_audience)
-                                return  "`sasl.oauthbearer.jwt.token.target.audience` is "
+                                return "`sasl.oauthbearer.jwt.token.target."
+                                       "audience` is "
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=jwt` is set";
                 }

@@ -2937,17 +2937,17 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         rd_kafka_buf_read_str(rkbuf, &member_id);
-        rd_kafka_buf_read_i32(rkbuf, &member_epoch);
-        rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
-
-        int8_t are_assignments_present;
-        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
         /**
          * TODO: Check if this is required with KIP-1082
          */
         if (!RD_KAFKAP_STR_IS_NULL(&member_id)) {
                 rd_kafka_cgrp_set_member_id(rkcg, member_id.str);
         }
+        rd_kafka_buf_read_i32(rkbuf, &member_epoch);
+        rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
+
+        int8_t are_assignments_present;
+        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
         rkcg->rkcg_generation_id = member_epoch;
         if (heartbeat_interval_ms > 0) {
                 rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;

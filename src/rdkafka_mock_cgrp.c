@@ -1510,16 +1510,13 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
         if (!member) {
                 member = rd_kafka_mock_cgrp_consumer_member_find_by_instance_id(
                     mcgrp, InstanceId);
-                if (member && RD_KAFKAP_STR_LEN(MemberId) > 0 &&
-                    rd_kafkap_str_cmp_str(MemberId, member->id) != 0) {
-                        /* Either member is a new instance and is rejoining
-                         * with same InstanceId, so MemberId is NULL,
-                         * or it's rejoining after unsubscribing,
-                         * then it must have the same MemberId as before,
-                         * as it lasts for member lifetime.
-                         * It both don't hold, we cannot add the member
-                         * to the group. */
-                        return NULL;
+                if (member && RD_KAFKAP_STR_LEN(MemberId) > 0) {
+                        /**
+                         * If the member is found by instance id and the
+                         * member id is provided, we update the member id.
+                         */
+                        rd_kafkap_str_destroy(member->id);
+                        member->id = RD_KAFKAP_STR_DUP(MemberId);
                 }
         }
 

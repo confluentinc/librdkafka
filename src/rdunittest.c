@@ -428,6 +428,7 @@ extern int unittest_http(void);
 #endif
 #if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
+extern int unittest_sasl_jwt(void);
 #endif
 extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
@@ -470,7 +471,8 @@ int rd_unittest(void) {
             {"http", unittest_http},
 #endif
 #if WITH_OAUTHBEARER_OIDC
-            {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
+                {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
+                {"sasl_jwt", unittest_sasl_jwt},
 #endif
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},

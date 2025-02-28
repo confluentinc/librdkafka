@@ -114,6 +114,7 @@ blocks:
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+          - sem-version java 17
       jobs:
         - name: 'Build configuration checks'
           commands:
@@ -159,17 +160,12 @@ blocks:
             - examples/rdkafka_example -X builtin.features
             - ldd src/librdkafka.so.1
             - ldd src-cpp/librdkafka++.so.1
-            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - export TEST_KAFKA_VERSION=4.0.0
             - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
-            # This commit corresponds to the DescribeConfigs API change for KIP-848
-            # KAFKA-14510; Extend DescribeConfigs API to support group configs (#16859)
-            # https://github.com/apache/kafka/commit/3a0efa2845e6a0d237772adfe6364579af50ce18
-            # TODO: upgrade to 4.0 when released.
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version 'trunk@3a0efa2845e6a0d237772adfe6364579af50ce18'
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version '4.0.0-rc0'
               --cpversion 7.7.0 --conf '["group.coordinator.rebalance.protocols=classic,consumer"]'
               --cmd 'make quick')
 

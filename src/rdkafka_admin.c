@@ -2868,6 +2868,8 @@ const char *rd_kafka_ConfigSource_name(rd_kafka_ConfigSource_t confsource) {
             "UNKNOWN_CONFIG",        "DYNAMIC_TOPIC_CONFIG",
             "DYNAMIC_BROKER_CONFIG", "DYNAMIC_DEFAULT_BROKER_CONFIG",
             "STATIC_BROKER_CONFIG",  "DEFAULT_CONFIG",
+            "UNSUPPORTED",           "UNSUPPORTED",
+            "GROUP_CONFIG",
         };
 
         if ((unsigned int)confsource >=

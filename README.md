@@ -193,7 +193,7 @@ Questions and discussions are welcome on the [Discussions](https://github.com/co
   * Rust: [rust-rdkafka](https://github.com/fede1024/rust-rdkafka)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
   * Shell: [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka command line tool
-  * Swift: [Perfect-Kafka](https://github.com/PerfectlySoft/Perfect-Kafka)
+  * Swift: [swift-kafka-client](https://github.com/swift-server/swift-kafka-client)
 
 
 See [Powered by librdkafka](https://github.com/confluentinc/librdkafka/wiki/Powered-by-librdkafka) for an incomplete list of librdkafka users.

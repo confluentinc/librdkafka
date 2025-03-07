@@ -152,7 +152,6 @@ typedef enum {
 typedef enum {
         RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
         RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC,
-        RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT,
 } rd_kafka_oauthbearer_method_t;
 
 typedef enum {

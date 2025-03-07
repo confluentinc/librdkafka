@@ -488,6 +488,7 @@ static char *rd_kafka_jwt_build_request_body(const char *assertion,
         return body;
 }
 
+
 /**
  * @brief Implementation of JWT token refresh callback function.
  *        Creates a JWT assertion, exchanges it for an access token,
@@ -511,15 +512,13 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
         struct curl_slist *headers = NULL;
         rd_http_error_t *herr      = NULL;
         cJSON *json                = NULL;
-        cJSON *payloads            = NULL;
-        cJSON *parsed_token = NULL, *jwt_exp = NULL, *jwt_sub = NULL;
-        char *jwt_token        = NULL;
-        char *decoded_payloads = NULL;
-        const char *sub        = NULL;
-        const char *errstr     = NULL;
-        double exp             = 0;
+        cJSON *access_token_json   = NULL;
+        cJSON *exp_json            = NULL;
+        char *access_token         = NULL;
+        char *formatted_token      = NULL;
         char set_token_errstr[512];
-        char decode_payload_errstr[512];
+        double exp                 = 0;
+        const char *principal_name = NULL;
 
         if (rd_kafka_terminating(rk))
                 return;
@@ -542,7 +541,7 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
 
         /* Build request body */
         request_body = rd_kafka_jwt_build_request_body(
-            jwt_assertion, rk->rk_conf.sasl.oauthbearer.token_issuer,
+            jwt_assertion, rk->rk_conf.sasl.oauthbearer.client_id,
             rk->rk_conf.sasl.oauthbearer.scope);
 
         if (!request_body) {
@@ -569,79 +568,72 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                     rk->rk_conf.sasl.oauthbearer.token_endpoint_url,
                     herr->errstr, herr->code);
                 rd_kafka_oauthbearer_set_token_failure(rk, herr->errstr);
+                rd_http_error_destroy(herr);
                 goto done;
         }
 
+        /* TODO: Should we directly use id_token? */
         /* Extract access token from response */
-        parsed_token = cJSON_GetObjectItem(json, "access_token");
-        if (!parsed_token) {
-                rd_kafka_oauthbearer_set_token_failure(
-                    rk,
-                    "Expected JSON JWT response with \"access_token\" field");
-                goto done;
+        access_token_json = cJSON_GetObjectItem(json, "access_token");
+        if (!access_token_json) {
+                /* Try id_token if access_token is not present */
+                access_token_json = cJSON_GetObjectItem(json, "id_token");
+                if (!access_token_json) {
+                        rd_kafka_oauthbearer_set_token_failure(
+                            rk,
+                            "Expected JSON response with \"access_token\" or "
+                            "\"id_token\" field");
+                        goto done;
+                }
         }
 
-        jwt_token = cJSON_GetStringValue(parsed_token);
-        if (!jwt_token) {
+        access_token = cJSON_GetStringValue(access_token_json);
+        if (!access_token) {
                 rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Expected JSON response as a value string");
-                goto done;
-        }
-
-        /* Decode JWT payload */
-        errstr = rd_kafka_jwt_b64_decode_payload(jwt_token, &decoded_payloads);
-        if (errstr) {
-                rd_snprintf(decode_payload_errstr,
-                            sizeof(decode_payload_errstr),
-                            "Failed to decode JWT payload: %s", errstr);
-                rd_kafka_oauthbearer_set_token_failure(rk,
-                                                       decode_payload_errstr);
-                goto done;
-        }
-
-        /* Parse JWT payload */
-        payloads = cJSON_Parse(decoded_payloads);
-        if (!payloads) {
-                rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Failed to parse JSON JWT payload");
+                    rk, "Expected token as a string value");
                 goto done;
         }
 
         /* Extract expiration time */
-        jwt_exp = cJSON_GetObjectItem(payloads, "exp");
-        if (!jwt_exp) {
-                rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Expected JSON JWT response with \"exp\" field");
-                goto done;
+        exp_json = cJSON_GetObjectItem(json, "exp");
+        if (exp_json) {
+                /* Calculate expiration time from expires_in */
+                time_t now = time(NULL);
+                exp        = now + cJSON_GetNumberValue(exp_json);
+        } else {
+                /* Default expiration: 1 hour from now */
+                exp = time(NULL) + 3600;
         }
 
-        exp = cJSON_GetNumberValue(jwt_exp);
-        if (exp <= 0) {
-                rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Expected JSON JWT response with valid \"exp\" field");
-                goto done;
+        /* Use the subject from configuration as principal name */
+        principal_name = rk->rk_conf.sasl.oauthbearer.token_subject;
+        if (!principal_name || !*principal_name) {
+                /* Fallback to a default if not configured */
+                principal_name = "kafka-client";
         }
 
-        /* Extract subject */
-        jwt_sub = cJSON_GetObjectItem(payloads, "sub");
-        if (!jwt_sub) {
-                rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Expected JSON JWT response with \"sub\" field");
-                goto done;
-        }
+        char **extensions              = NULL;
+        char **extension_key_value     = NULL;
+        size_t extension_key_value_cnt = 0;
+        size_t extension_cnt;
 
-        sub = cJSON_GetStringValue(jwt_sub);
-        if (!sub) {
-                rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Expected JSON JWT response with valid \"sub\" field");
-                goto done;
+
+        if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
+                extensions =
+                    rd_string_split(rk->rk_conf.sasl.oauthbearer.extensions_str,
+                                    ',', rd_true, &extension_cnt);
+
+                extension_key_value = rd_kafka_conf_kv_split(
+                    (const char **)extensions, extension_cnt,
+                    &extension_key_value_cnt);
         }
 
         /* Set the token for SASL OAUTHBEARER authentication */
-        if (rd_kafka_oauthbearer_set_token(rk, jwt_token, (int64_t)exp * 1000,
-                                           sub, NULL, 0, set_token_errstr,
-                                           sizeof(set_token_errstr)) !=
-            RD_KAFKA_RESP_ERR_NO_ERROR) {
+        if (rd_kafka_oauthbearer_set_token(
+                rk, access_token, (int64_t)exp * 1000, principal_name,
+                (const char **)extension_key_value, extension_key_value_cnt,
+                set_token_errstr,
+                sizeof(set_token_errstr)) != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
         }
 
@@ -650,8 +642,7 @@ done:
         RD_IF_FREE(request_body, rd_free);
         RD_IF_FREE(headers, curl_slist_free_all);
         RD_IF_FREE(json, cJSON_Delete);
-        RD_IF_FREE(decoded_payloads, rd_free);
-        RD_IF_FREE(payloads, cJSON_Delete);
+        RD_IF_FREE(formatted_token, rd_free);
 }
 
 /**
@@ -820,7 +811,6 @@ done:
         RD_IF_FREE(extension_key_value, rd_free);
         RD_IF_FREE(payloads, cJSON_Delete);
 }
-
 
 /**
  * @brief Make sure the jwt is able to be extracted from HTTP(S) response.

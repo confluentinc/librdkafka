@@ -144,7 +144,7 @@ blocks:
             - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.8.0 --cpversion 7.7.0 --cmd 'make quick')
         - name: 'Build and integration tests with "consumer" protocol'
           commands:
-            - sem-version java 17.0.7
+            - sem-version java 17
             - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
             - sudo dpkg -i rapidjson-dev.deb
             - python3 -m pip install -U pip

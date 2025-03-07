@@ -11,6 +11,8 @@ librdkafka v2.8.0 is a maintenance release:
   or NULL leader epoch (#4901).
 * Support versions of OpenSSL without the ENGINE component (Chris Novakovic, #3535
   and @remicollet, #4911).
+* Fix the Nagle algorithm (TCP_NODELAY) on broker sockets to not be enabled by
+  default (#).
 
 
 ## Fixes
@@ -28,6 +30,12 @@ librdkafka v2.8.0 is a maintenance release:
   authority certificate to its truststore to be able to accept client
   certificate.
   Happens since: 1.x (#4894).
+* The Nagle algorithm (TCP_NODELAY) is now disabled by default. It caused a large
+  increase in latency for some use cases, for example, when using an SSL connection.
+  For efficient batching, the application should use `linger.ms`, `batch.size`
+  etc.
+  Happens since: 0.x (#).
+
 
 ### Consumer fixes
 

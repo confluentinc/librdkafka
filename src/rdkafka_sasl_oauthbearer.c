@@ -1332,15 +1332,10 @@ static int rd_kafka_sasl_oauthbearer_init(rd_kafka_t *rk,
 #if WITH_OAUTHBEARER_OIDC
         if (rk->rk_conf.sasl.oauthbearer.method ==
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
-            rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
-                rd_kafka_oidc_token_refresh_cb) {
-                handle->internal_refresh = rd_true;
-                rd_kafka_sasl_background_callbacks_enable(rk);
-        }
-        if (rk->rk_conf.sasl.oauthbearer.method ==
-                RD_KAFKA_SASL_OAUTHBEARER_METHOD_JWT &&
-            rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
-                rd_kafka_jwt_refresh_cb) {
+            (rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
+                 rd_kafka_jwt_refresh_cb ||
+             rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
+                 rd_kafka_oidc_token_refresh_cb)) {
                 handle->internal_refresh = rd_true;
                 rd_kafka_sasl_background_callbacks_enable(rk);
         }

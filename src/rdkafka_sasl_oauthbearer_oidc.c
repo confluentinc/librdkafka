@@ -517,8 +517,12 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
         char *access_token         = NULL;
         char *formatted_token      = NULL;
         char set_token_errstr[512];
-        double exp                 = 0;
-        const char *principal_name = NULL;
+        double exp                     = 0;
+        const char *principal_name     = NULL;
+        char **extensions              = NULL;
+        char **extension_key_value     = NULL;
+        size_t extension_key_value_cnt = 0;
+        size_t extension_cnt;
 
         if (rd_kafka_terminating(rk))
                 return;
@@ -541,7 +545,7 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
 
         /* Build request body */
         request_body = rd_kafka_jwt_build_request_body(
-            jwt_assertion, rk->rk_conf.sasl.oauthbearer.client_id,
+            jwt_assertion, rk->rk_conf.sasl.oauthbearer.token_subject,
             rk->rk_conf.sasl.oauthbearer.scope);
 
         if (!request_body) {
@@ -572,19 +576,11 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                 goto done;
         }
 
-        /* TODO: Should we directly use id_token? */
-        /* Extract access token from response */
-        access_token_json = cJSON_GetObjectItem(json, "access_token");
+        access_token_json = cJSON_GetObjectItem(json, "id_token");
         if (!access_token_json) {
-                /* Try id_token if access_token is not present */
-                access_token_json = cJSON_GetObjectItem(json, "id_token");
-                if (!access_token_json) {
-                        rd_kafka_oauthbearer_set_token_failure(
-                            rk,
-                            "Expected JSON response with \"access_token\" or "
-                            "\"id_token\" field");
-                        goto done;
-                }
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "Expected JSON response with \"id_token\" field");
+                goto done;
         }
 
         access_token = cJSON_GetStringValue(access_token_json);
@@ -594,29 +590,14 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                 goto done;
         }
 
-        /* Extract expiration time */
         exp_json = cJSON_GetObjectItem(json, "exp");
         if (exp_json) {
-                /* Calculate expiration time from expires_in */
                 time_t now = time(NULL);
                 exp        = now + cJSON_GetNumberValue(exp_json);
         } else {
                 /* Default expiration: 1 hour from now */
                 exp = time(NULL) + 3600;
         }
-
-        /* Use the subject from configuration as principal name */
-        principal_name = rk->rk_conf.sasl.oauthbearer.token_subject;
-        if (!principal_name || !*principal_name) {
-                /* Fallback to a default if not configured */
-                principal_name = "kafka-client";
-        }
-
-        char **extensions              = NULL;
-        char **extension_key_value     = NULL;
-        size_t extension_key_value_cnt = 0;
-        size_t extension_cnt;
-
 
         if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
                 extensions =
@@ -628,9 +609,9 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                     &extension_key_value_cnt);
         }
 
-        /* Set the token for SASL OAUTHBEARER authentication */
         if (rd_kafka_oauthbearer_set_token(
-                rk, access_token, (int64_t)exp * 1000, principal_name,
+                rk, access_token, (int64_t)exp * 1000,
+                rk->rk_conf.sasl.oauthbearer.token_subject,
                 (const char **)extension_key_value, extension_key_value_cnt,
                 set_token_errstr,
                 sizeof(set_token_errstr)) != RD_KAFKA_RESP_ERR_NO_ERROR) {
@@ -1142,6 +1123,9 @@ static int ut_sasl_jwt_create_assertion(void) {
         RD_UT_PASS();
 }
 
+/**
+ * @brief Run SASL JWT unit tests.
+ */
 
 int unittest_sasl_jwt(void) {
         int fails = 0;
@@ -1149,6 +1133,7 @@ int unittest_sasl_jwt(void) {
         fails += ut_sasl_jwt_base64url_encode();
         fails += ut_sasl_jwt_build_request_body();
         fails += ut_sasl_jwt_create_assertion();
+
 
         return fails;
 }

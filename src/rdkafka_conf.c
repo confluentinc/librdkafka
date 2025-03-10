@@ -1078,13 +1078,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.private.key.id", _RK_C_STR,
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.private.key.id", _RK_C_STR,
      _RK(sasl.oauthbearer.private_key_id),
      "Private key id. "
      "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
      _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.private.key.secret", _RK_C_STR,
-     _RK(sasl.oauthbearer.private_key_secret),
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.private.key.secret",
+     _RK_C_STR, _RK(sasl.oauthbearer.private_key_secret),
      "Private key id. "
      "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
      _UNSUPPORTED_OIDC},

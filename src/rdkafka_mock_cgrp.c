@@ -1515,7 +1515,7 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
                          * If the member is found by instance id and the
                          * member id is provided, we update the member id.
                          */
-                        rd_kafkap_str_destroy(member->id);
+                        rd_free(member->id);
                         member->id = RD_KAFKAP_STR_DUP(MemberId);
                 }
         }

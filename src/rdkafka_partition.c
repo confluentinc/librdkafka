@@ -4422,7 +4422,8 @@ int rd_kafka_topic_partition_list_regex_cnt(
 
 
 /**
- * TODO: Add docs.
+ * @brief Removes reges from the list and returns the list without any regex in
+ * it.
  */
 void rd_kafka_topic_partition_list_remove_regex(
     rd_kafka_topic_partition_list_t **rktparlist) {
@@ -4446,6 +4447,9 @@ void rd_kafka_topic_partition_list_remove_regex(
 }
 
 
+/**
+ * @brief Combine regex present in the list into a single regex.
+ */
 rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regex(
     const rd_kafka_topic_partition_list_t *rktparlist) {
         int i;

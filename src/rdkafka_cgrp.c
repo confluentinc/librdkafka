@@ -2937,12 +2937,10 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         rd_kafka_buf_read_str(rkbuf, &member_id);
-        /**
-         * TODO: Check if this is required with KIP-1082
-         */
         if (!RD_KAFKAP_STR_IS_NULL(&member_id)) {
                 rd_kafka_cgrp_set_member_id(rkcg, member_id.str);
         }
+
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
 
@@ -5821,9 +5819,7 @@ static void rd_kafka_cgrp_join_state_serve(rd_kafka_cgrp_t *rkcg) {
         }
 }
 
-/**
- * TODO: Add regex changes for KIP-848
- */
+
 void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                                             rd_bool_t full_request,
                                             rd_bool_t send_ack) {
@@ -6071,8 +6067,6 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
 /**
  * @brief Call when all incremental unassign operations are done to transition
  *        to the next state.
- *
- * TODO: Check regex subscription changes for KIP-848
  */
 static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
 
@@ -6654,8 +6648,6 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
  *
  * @locks none
  * @locality rdkafka main thread
- *
- * TODO: Check regex subscription changes for KIP-848
  */
 void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
                                          rd_bool_t do_join) {

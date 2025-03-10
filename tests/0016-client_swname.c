@@ -141,9 +141,11 @@ int main_0016_client_swname(int argc, char **argv) {
                 reason =
                     "Env var BROKER_JMX_PORT_2 missing "
                     "(not running in trivup or trivup too old?)";
-        else
+        else {
+                rd_bool_t apache_kafka_4 =
+                    test_broker_version >= TEST_BRKVER(4, 0, 0, 0);
                 rd_snprintf(jmx_cmd, sizeof(jmx_cmd),
-                            "%s/bin/kafka-run-class.sh kafka.tools.JmxTool "
+                            "%s/bin/kafka-run-class.sh %s "
                             "--jmx-url "
                             "service:jmx:rmi:///jndi/rmi://:%s/jmxrmi "
                             " --object-name '*:"
@@ -151,7 +153,11 @@ int main_0016_client_swname(int argc, char **argv) {
                             "clientSoftwareVersion=*,*' "
                             " --one-time true | "
                             "grep clientSoftware",
-                            kafka_path, jmx_port);
+                            kafka_path,
+                            apache_kafka_4 ? "org.apache.kafka.tools.JmxTool"
+                                           : "kafka.tools.JmxTool",
+                            jmx_port);
+        }
 
         if (reason)
                 TEST_WARN("Will not be able to verify JMX metrics: %s\n",

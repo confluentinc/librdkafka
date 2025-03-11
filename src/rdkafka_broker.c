@@ -4100,8 +4100,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
 
                 /* Limit the number of in-flight requests (per partition)
                  * to the broker's sequence de-duplication window. */
-                max_requests = RD_MIN(max_requests,
-                                      RD_KAFKA_IDEMP_MAX_INFLIGHT - inflight);
+                max_requests = rkb->rkb_rk->rk_conf.max_inflight - rd_kafka_bufq_cnt(&rkb->rkb_waitresps);
         }
 
 

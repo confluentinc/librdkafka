@@ -97,6 +97,53 @@ class MockDekRegistryClient implements DekClient {
     throw new RestError(`Dek not found: ${subject}`, 404, 40400);
   }
 
+  async getDekEncryptedKeyMaterialBytes(dek: Dek): Promise<Buffer | null> {
+    if (!dek.encryptedKeyMaterial) {
+      return null;
+    }
+
+    if (!dek.encryptedKeyMaterialBytes) {
+      try {
+        const bytes = Buffer.from(dek.encryptedKeyMaterial!, 'base64');
+        dek.encryptedKeyMaterialBytes = bytes;
+      } catch (err) {
+        if (err instanceof Error) {
+          throw new Error(`Failed to decode base64 string: ${err.message}`);
+        }
+        throw new Error(`Unknown error: ${err}`);
+      }
+    }
+
+    return dek.encryptedKeyMaterialBytes!;
+  }
+
+  async getDekKeyMaterialBytes(dek: Dek): Promise<Buffer | null> {
+    if (!dek.keyMaterial) {
+      return null;
+    }
+
+    if (!dek.keyMaterialBytes) {
+      try {
+        const bytes = Buffer.from(dek.keyMaterial!, 'base64');
+        dek.keyMaterialBytes = bytes;
+      } catch (err) {
+        if (err instanceof Error) {
+          throw new Error(`Failed to decode base64 string: ${err.message}`);
+        }
+        throw new Error(`Unknown error: ${err}`);
+      }
+    }
+
+    return dek.keyMaterialBytes!;
+  }
+
+  async setDekKeyMaterial(dek: Dek, keyMaterialBytes: Buffer): Promise<void> {
+    if (keyMaterialBytes) {
+      const str = keyMaterialBytes.toString('base64');
+      dek.keyMaterial = str;
+    }
+  }
+
   async close() {
     return;
   }

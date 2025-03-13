@@ -4713,14 +4713,6 @@ static int rd_kafka_broker_thread_main(void *arg) {
         while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
                 ;
 
-        terminate_op = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
-        terminate_op->rko_u.terminated.rkb = rkb;
-        terminate_op->rko_u.terminated.cb =
-            rd_kafka_decommissioned_broker_thread_join;
-        rd_kafka_q_enq(rk->rk_ops, terminate_op);
-        /* Release broker thread reference here and call destroy final. */
-        rd_kafka_broker_destroy(rkb);
-
 #if WITH_SSL
         /* Remove OpenSSL per-thread error state to avoid memory leaks */
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
@@ -4734,6 +4726,15 @@ static int rd_kafka_broker_thread_main(void *arg) {
         rd_kafka_interceptors_on_thread_exit(rk, RD_KAFKA_THREAD_BROKER);
 
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
+
+        terminate_op = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
+        terminate_op->rko_u.terminated.rkb = rkb;
+        terminate_op->rko_u.terminated.cb =
+            rd_kafka_decommissioned_broker_thread_join;
+        rd_kafka_q_enq(rk->rk_ops, terminate_op);
+
+        /* Release broker thread reference here and call destroy final. */
+        rd_kafka_broker_destroy(rkb);
 
         return 0;
 }

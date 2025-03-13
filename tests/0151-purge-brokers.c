@@ -28,51 +28,100 @@
 
 #include "test.h"
 
+static const char *test_debug;
+static rd_atomic32_t do_test_remove_then_add_received_terminate;
+static rd_atomic32_t verification_complete;
+
+static int int32_cmp(const void *a, const void *b) {
+        int *int_a = (int *)a;
+        int *int_b = (int *)b;
+        return *int_a - *int_b;
+}
+
+/** @brief Verify that \p expected_broker_ids
+ *         and \p actual_broker_ids correspond in
+ *         count and value. Sorts \p actual_broker_ids .
+ */
+static rd_bool_t fetch_metadata_verify_brokers(int32_t *expected_broker_ids,
+                                               size_t expected_broker_id_cnt,
+                                               int32_t *actual_broker_ids,
+                                               size_t actual_broker_id_cnt) {
+        size_t i;
+        if (actual_broker_id_cnt != expected_broker_id_cnt)
+                return rd_false;
+
+        qsort(actual_broker_ids, actual_broker_id_cnt,
+              sizeof(*actual_broker_ids), int32_cmp);
+        for (i = 0; i < actual_broker_id_cnt; i++) {
+                if (actual_broker_ids[i] != expected_broker_ids[i])
+                        return rd_false;
+        }
+        return rd_true;
+}
 
 static void fetch_metadata(rd_kafka_t *rk,
-                           size_t expected_broker_cnt,
-                           int32_t *expected_brokers) {
+                           int32_t *expected_broker_ids,
+                           size_t expected_broker_id_cnt,
+                           rd_bool_t await_verification,
+                           rd_bool_t (*await_after_action_cb)(int action),
+                           int action) {
         const rd_kafka_metadata_t *md = NULL;
         rd_kafka_resp_err_t err;
-        size_t cnt   = 0;
-        int32_t *ids = NULL;
+        size_t actual_broker_id_cnt = 0;
+        int32_t *actual_broker_ids  = NULL;
         size_t i;
-        int timeout_secs       = 10;
-        int64_t abs_timeout_us = test_clock() + timeout_secs * 1000000;
+        int timeout_usecs                      = 10000000;
+        int64_t abs_timeout_us                 = test_clock() + timeout_usecs;
+        rd_bool_t continue_requesting_metadata = rd_true;
 
-        TEST_SAY("Waiting for up to %ds for metadata update\n", timeout_secs);
+        TEST_SAY("Waiting for up to 10s for metadata update\n");
 
         /* Trigger Metadata request which will update learned brokers. */
         do {
-                err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(100));
+                err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(10000));
                 if (md) {
                         rd_kafka_metadata_destroy(md);
                         md = NULL;
-                }
-                /* Can time out in case the request is sent to
-                 * the broker that has been decommissioned. */
-                else if (err != RD_KAFKA_RESP_ERR__TIMED_OUT &&
-                         err != RD_KAFKA_RESP_ERR__TRANSPORT)
+                } else
                         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 rd_usleep(100 * 1000, 0);
-                RD_IF_FREE(ids, rd_free);
-                ids = rd_kafka_brokers_learned_ids(rk, &cnt);
-        } while (test_clock() < abs_timeout_us && cnt != expected_broker_cnt);
 
-        TEST_ASSERT(cnt == expected_broker_cnt,
-                    "expected %" PRIusz " brokers in cache, not %" PRIusz,
-                    expected_broker_cnt, cnt);
+                if (await_verification) {
+                        RD_IF_FREE(actual_broker_ids, rd_free);
+                        actual_broker_ids = rd_kafka_brokers_learned_ids(
+                            rk, &actual_broker_id_cnt);
+                }
+                continue_requesting_metadata = test_clock() <= abs_timeout_us;
 
-        for (i = 0; i < cnt; i++) {
-                TEST_ASSERT(ids[i] == expected_brokers[i],
+                if (await_verification)
+                        continue_requesting_metadata &=
+                            !fetch_metadata_verify_brokers(
+                                expected_broker_ids, expected_broker_id_cnt,
+                                actual_broker_ids, actual_broker_id_cnt);
+                if (await_after_action_cb)
+                        continue_requesting_metadata &=
+                            await_after_action_cb(action);
+                else if (!await_verification)
+                        continue_requesting_metadata = rd_false;
+        } while (continue_requesting_metadata);
+
+        if (await_verification) {
+                TEST_ASSERT(actual_broker_id_cnt == expected_broker_id_cnt,
+                            "expected %" PRIusz
+                            " brokers in cache, got %" PRIusz,
+                            expected_broker_id_cnt, actual_broker_id_cnt);
+
+                for (i = 0; i < actual_broker_id_cnt; i++) {
+                        TEST_ASSERT(
+                            actual_broker_ids[i] == expected_broker_ids[i],
                             "expected broker id[%" PRIusz
                             "] to be "
                             "%" PRId32 ", got %" PRId32,
-                            i, expected_brokers[i], ids[i]);
+                            i, expected_broker_ids[i], actual_broker_ids[i]);
+                }
+                RD_IF_FREE(actual_broker_ids, rd_free);
         }
-
-        RD_IF_FREE(ids, rd_free);
 }
 
 /**
@@ -96,12 +145,22 @@ static void fetch_metadata(rd_kafka_t *rk,
  *                                       \p expected_broker_ids .
  *        @param expected_brokers_cnt Array of expected broker count after each
  *                                    action.
+ *        @param await_verification If `rd_false`, the verification is
+ *                                  done only after last action.
  */
-static void do_test_add_remove_brokers(int32_t initial_cluster_size,
-                                       int32_t actions[][2],
-                                       int32_t expected_broker_ids[][5],
-                                       size_t expected_broker_ids_cnt,
-                                       int32_t expected_brokers_cnt[]) {
+#define TEST_ACTION_REMOVE_BROKER   0
+#define TEST_ACTION_ADD_BROKER      1
+#define TEST_ACTION_SET_DOWN_BROKER 2
+#define TEST_ACTION_SET_UP_BROKER   3
+static void
+do_test_add_remove_brokers(int32_t initial_cluster_size,
+                           int32_t actions[][2],
+                           int32_t expected_broker_ids[][5],
+                           size_t expected_broker_ids_cnt,
+                           int32_t expected_brokers_cnt[],
+                           rd_bool_t await_verification,
+                           void (*edit_configuration_cb)(rd_kafka_conf_t *conf),
+                           rd_bool_t (*await_after_action_cb)(int action)) {
         rd_kafka_mock_cluster_t *cluster;
         const char *bootstraps;
         rd_kafka_conf_t *conf;
@@ -110,12 +169,17 @@ static void do_test_add_remove_brokers(int32_t initial_cluster_size,
 
         cluster = test_mock_cluster_new(initial_cluster_size, &bootstraps);
 
-        test_conf_init(&conf, NULL, 10);
+        test_conf_init(&conf, NULL, 100);
 
         test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", "topic1");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
+        if (edit_configuration_cb) {
+                edit_configuration_cb(conf);
+        }
 
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        test_consumer_subscribe(rk, "topic1");
 
         /* Create a new topic to trigger partition reassignment */
         rd_kafka_mock_topic_create(cluster, "topic1", 3, initial_cluster_size);
@@ -126,7 +190,7 @@ static void do_test_add_remove_brokers(int32_t initial_cluster_size,
                         int32_t broker_id   = actions[action - 1][1];
                         TEST_SAY("Executing action %zu\n", action);
                         switch (action_type) {
-                        case 0:
+                        case TEST_ACTION_REMOVE_BROKER:
                                 TEST_SAY("Removing broker %" PRId32 "\n",
                                          broker_id);
                                 TEST_ASSERT(
@@ -135,7 +199,7 @@ static void do_test_add_remove_brokers(int32_t initial_cluster_size,
                                     "Failed to remove broker from cluster");
                                 break;
 
-                        case 1:
+                        case TEST_ACTION_ADD_BROKER:
                                 TEST_SAY("Adding broker %" PRId32 "\n",
                                          broker_id);
                                 TEST_ASSERT(rd_kafka_mock_broker_add(
@@ -143,7 +207,7 @@ static void do_test_add_remove_brokers(int32_t initial_cluster_size,
                                             "Failed to add broker to cluster");
                                 break;
 
-                        case 2:
+                        case TEST_ACTION_SET_DOWN_BROKER:
                                 TEST_SAY("Setting down broker %" PRId32 "\n",
                                          broker_id);
                                 TEST_ASSERT(rd_kafka_mock_broker_set_down(
@@ -153,7 +217,7 @@ static void do_test_add_remove_brokers(int32_t initial_cluster_size,
                                             broker_id);
                                 break;
 
-                        case 3:
+                        case TEST_ACTION_SET_UP_BROKER:
                                 TEST_SAY("Setting up broker %" PRId32 "\n",
                                          broker_id);
                                 TEST_ASSERT(rd_kafka_mock_broker_set_up(
@@ -168,9 +232,16 @@ static void do_test_add_remove_brokers(int32_t initial_cluster_size,
                         }
                 }
 
-                fetch_metadata(rk, expected_brokers_cnt[action],
-                               expected_broker_ids[action]);
+                fetch_metadata(rk, expected_broker_ids[action],
+                               expected_brokers_cnt[action],
+                               /* Await verification at each action or only
+                                * after last action. */
+                               await_verification ||
+                                   action == expected_broker_ids_cnt - 1,
+                               await_after_action_cb, action);
         }
+        TEST_SAY("Test verification complete\n");
+        rd_atomic32_set(&verification_complete, 1);
 
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(cluster);
@@ -187,13 +258,20 @@ static void do_test_replace_with_new_cluster(void) {
         int32_t expected_brokers_cnt[] = {3, 2, 3, 2, 3, 2, 3};
 
         int32_t expected_broker_ids[][5] = {
-            {3, 2, 1}, {3, 2}, {4, 3, 2}, {4, 3}, {5, 4, 3}, {5, 4}, {6, 5, 4}};
+            {1, 2, 3}, {2, 3}, {2, 3, 4}, {3, 4}, {3, 4, 5}, {4, 5}, {4, 5, 6}};
 
-        int32_t actions[][2] = {{0, 1}, {1, 4}, {0, 2}, {1, 5}, {0, 3}, {1, 6}};
+        int32_t actions[][2] = {
+            {TEST_ACTION_REMOVE_BROKER, 1}, {TEST_ACTION_ADD_BROKER, 4},
+            {TEST_ACTION_REMOVE_BROKER, 2}, {TEST_ACTION_ADD_BROKER, 5},
+            {TEST_ACTION_REMOVE_BROKER, 3}, {TEST_ACTION_ADD_BROKER, 6},
+        };
 
-        do_test_add_remove_brokers(3, actions, expected_broker_ids,
-                                   RD_ARRAY_SIZE(expected_broker_ids),
-                                   expected_brokers_cnt);
+        do_test_add_remove_brokers(
+            3, actions, expected_broker_ids, RD_ARRAY_SIZE(expected_broker_ids),
+            expected_brokers_cnt, rd_true /* await verification after
+                                  each action */
+            ,
+            NULL, NULL);
 
         SUB_TEST_PASS();
 }
@@ -213,16 +291,123 @@ static void do_test_cluster_roll(void) {
         int32_t expected_brokers_cnt[] = {5, 4, 3, 4, 3, 4, 3, 4, 3, 4, 5};
 
         int32_t expected_broker_ids[][5] = {
-            {5, 4, 3, 2, 1}, {5, 4, 3, 2}, {5, 4, 3},      {1, 5, 4, 3},
-            {1, 5, 4},       {2, 1, 5, 4}, {2, 1, 5},      {3, 2, 1, 5},
-            {3, 2, 1},       {4, 3, 2, 1}, {5, 4, 3, 2, 1}};
+            {1, 2, 3, 4, 5}, {2, 3, 4, 5}, {3, 4, 5},      {1, 3, 4, 5},
+            {1, 4, 5},       {1, 2, 4, 5}, {1, 2, 5},      {1, 2, 3, 5},
+            {1, 2, 3},       {1, 2, 3, 4}, {1, 2, 3, 4, 5}};
 
-        int32_t actions[][2] = {{2, 1}, {2, 2}, {3, 1}, {2, 3}, {3, 2},
-                                {2, 4}, {3, 3}, {2, 5}, {3, 4}, {3, 5}};
+        int32_t actions[][2] = {
+            {TEST_ACTION_SET_DOWN_BROKER, 1}, {TEST_ACTION_SET_DOWN_BROKER, 2},
+            {TEST_ACTION_SET_UP_BROKER, 1},   {TEST_ACTION_SET_DOWN_BROKER, 3},
+            {TEST_ACTION_SET_UP_BROKER, 2},   {TEST_ACTION_SET_DOWN_BROKER, 4},
+            {TEST_ACTION_SET_UP_BROKER, 3},   {TEST_ACTION_SET_DOWN_BROKER, 5},
+            {TEST_ACTION_SET_UP_BROKER, 4},   {TEST_ACTION_SET_UP_BROKER, 5},
+        };
 
         do_test_add_remove_brokers(5, actions, expected_broker_ids,
                                    RD_ARRAY_SIZE(expected_broker_ids),
-                                   expected_brokers_cnt);
+                                   expected_brokers_cnt,
+                                   rd_true
+                                   /* await verification after each action */,
+                                   NULL, NULL);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Log callback that waits for the TERMINATE op to be received
+ */
+static void do_test_remove_then_add_log_cb(const rd_kafka_t *rk,
+                                           int level,
+                                           const char *fac,
+                                           const char *buf) {
+        int secs, msecs;
+        struct timeval tv;
+        if (!rd_atomic32_get(&do_test_remove_then_add_received_terminate) &&
+            strstr(buf, "/1: Handle terminates in state") > 0) {
+                rd_atomic32_set(&do_test_remove_then_add_received_terminate, 1);
+                while (!rd_atomic32_get(&verification_complete))
+                        rd_usleep(100 * 1000, 0);
+        }
+
+        if (test_debug) {
+                rd_gettimeofday(&tv, NULL);
+                secs  = (int)tv.tv_sec;
+                msecs = (int)(tv.tv_usec / 1000);
+                fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n", level, secs, msecs,
+                        fac, rk ? rd_kafka_name(rk) : "", buf);
+        }
+}
+
+/**
+ * @brief Await for the TERMINATE op to be received after the first action
+ *        that removes the broker then proceed with action 2 to
+ *        add the broker again.
+ */
+static rd_bool_t do_test_remove_then_add_await_after_action_cb(int action) {
+        if (action == 1) {
+                /* Wait until TERMINATE is received */
+                return !rd_atomic32_get(
+                    &do_test_remove_then_add_received_terminate);
+        } else if (action == 2)
+                /* Wait until final verification */
+                return rd_true;
+        return rd_false;
+}
+
+/**
+ * @brief Disable sparse connections to increase likely of problems
+ *        when the decommisioned broker is re-connecting.
+ *        Add a pause after receiving the TERMINATE op to allow to
+ *        proceed with adding it again before it's decommissioned.
+ */
+static void
+do_test_remove_then_add_edit_configuration_cb(rd_kafka_conf_t *conf) {
+        /* This timeout verifies that the correct brokers are returned
+         * without duplicates as soon as possible. */
+        test_timeout_set(6);
+        /* Hidden property the forces connections to all brokers,
+         * increasing likelyhood of wrong behaviour if the decommissioned broker
+         * starts re-connecting. */
+        test_conf_set(conf, "enable.sparse.connections", "false");
+        if (!test_debug ||
+            (!strstr(test_debug, "broker") && !strstr(test_debug, "all"))) {
+                char debug_with_broker[512];
+                rd_snprintf(debug_with_broker, sizeof(debug_with_broker),
+                            "%s%s%s", test_debug ? test_debug : "",
+                            test_debug ? "," : "", "broker");
+                test_conf_set(conf, "debug", debug_with_broker);
+        }
+        rd_kafka_conf_set_log_cb(conf, do_test_remove_then_add_log_cb);
+}
+
+/**
+ * @brief Test setting down one broker and then adding it again
+ *        while it's still being decommissioned.
+ *
+ *        This should not leave dangling references that prevent broker
+ *        destruction.
+ */
+static void do_test_remove_then_add(void) {
+        SUB_TEST_QUICK();
+        rd_atomic32_init(&do_test_remove_then_add_received_terminate, 0);
+        rd_atomic32_init(&verification_complete, 0);
+
+        int32_t expected_brokers_cnt[] = {3, 2, 3};
+
+        int32_t expected_broker_ids[][5] = {{1, 2, 3}, {2, 3}, {1, 2, 3}};
+
+        int32_t actions[][2] = {
+            {TEST_ACTION_REMOVE_BROKER, 1},
+            {TEST_ACTION_ADD_BROKER, 1},
+        };
+
+        do_test_add_remove_brokers(
+            3, actions, expected_broker_ids, RD_ARRAY_SIZE(expected_broker_ids),
+            expected_brokers_cnt, rd_false /* await verification
+                                            * only after last action. */
+            ,
+            do_test_remove_then_add_edit_configuration_cb,
+            do_test_remove_then_add_await_after_action_cb);
 
         SUB_TEST_PASS();
 }
@@ -233,10 +418,14 @@ int main_0151_purge_brokers_mock(int argc, char **argv) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
                 return 0;
         }
+        test_debug = test_getenv("TEST_DEBUG", NULL);
+
 
         do_test_replace_with_new_cluster();
 
         do_test_cluster_roll();
+
+        do_test_remove_then_add();
 
         return 0;
 }

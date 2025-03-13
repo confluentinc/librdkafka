@@ -402,6 +402,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
+                                             int32_t cgrp_subscription_version,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko);
 
@@ -414,6 +415,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_bool_t include_cluster_authorized_operations,
     rd_bool_t include_topic_authorized_operations,
     rd_bool_t cgrp_update,
+    int32_t cgrp_subscription_version,
     rd_bool_t force_racks,
     rd_kafka_resp_cb_t *resp_cb,
     rd_kafka_replyq_t replyq,

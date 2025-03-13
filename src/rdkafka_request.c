@@ -2562,6 +2562,8 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
         rd_kafka_op_t *rko                = opaque; /* Possibly NULL */
         rd_kafka_metadata_internal_t *mdi = NULL;
         const rd_list_t *topics           = request->rkbuf_u.Metadata.topics;
+        const int32_t cgrp_subscription_version =
+            request->rkbuf_u.Metadata.cgrp_subscription_version;
         int actions;
 
         rd_kafka_assert(NULL, rd_kafka_broker_is_any_err_destroy(err) ||
@@ -2598,6 +2600,8 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                 rko->rko_err            = err;
                 rko->rko_u.metadata.md  = &mdi->metadata;
                 rko->rko_u.metadata.mdi = mdi;
+                rko->rko_u.metadata.subscription_version =
+                    cgrp_subscription_version;
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                 rko = NULL;
         } else {
@@ -2616,39 +2620,42 @@ err:
                                       RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                if (rd_kafka_buf_retry(rkb, request))
+                /* In case it's a brokers full refresh call,
+                 * avoid retrying it on this same broker.
+                 * This is to prevent client is hung
+                 * until it can connect to this broker again. */
+                if (!request->rkbuf_u.Metadata.decr &&
+                    rd_kafka_buf_retry(rkb, request))
                         return;
                 /* FALLTHRU */
-        } else {
-                if (actions & RD_KAFKA_ERR_ACTION_REFRESH &&
-                    strcmp(request->rkbuf_u.Metadata.reason,
-                           "application requested") != 0) {
-                        /* If not application requested,
-                         * expedite metadata refresh to try
-                         * again. */
-                        rd_kafka_timer_override_once(&rk->rk_timers,
-                                                     &rk->metadata_refresh_tmr,
-                                                     0 /* immediate */);
-                } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
-                        rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-                                   "Metadata request failed: %s: %s (%dms): %s",
-                                   request->rkbuf_u.Metadata.reason,
-                                   rd_kafka_err2str(err),
-                                   (int)(request->rkbuf_ts_sent / 1000),
-                                   rd_kafka_actions2str(actions));
-                }
-
-                /* Respond back to caller on non-retriable errors */
-                if (rko && rko->rko_replyq.q) {
-                        rko->rko_err            = err;
-                        rko->rko_u.metadata.md  = NULL;
-                        rko->rko_u.metadata.mdi = NULL;
-                        rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
-                        rko = NULL;
-                }
         }
 
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH &&
+            strcmp(request->rkbuf_u.Metadata.reason, "application requested") !=
+                0) {
+                /* If not application requested,
+                 * expedite metadata refresh to try
+                 * again. */
+                rd_kafka_timer_override_once(&rk->rk_timers,
+                                             &rk->metadata_refresh_tmr,
+                                             0 /* immediate */);
+        } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
+                rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                           "Metadata request failed: %s: %s (%dms): %s",
+                           request->rkbuf_u.Metadata.reason,
+                           rd_kafka_err2str(err),
+                           (int)(request->rkbuf_ts_sent / 1000),
+                           rd_kafka_actions2str(actions));
+        }
 
+        /* Respond back to caller on non-retriable errors */
+        if (rko && rko->rko_replyq.q) {
+                rko->rko_err            = err;
+                rko->rko_u.metadata.md  = NULL;
+                rko->rko_u.metadata.mdi = NULL;
+                rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
+                rko = NULL;
+        }
 
         /* FALLTHRU */
 
@@ -2721,6 +2728,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                           rd_bool_t include_cluster_authorized_operations,
                           rd_bool_t include_topic_authorized_operations,
                           rd_bool_t cgrp_update,
+                          int32_t cgrp_subscription_version,
                           rd_bool_t force_racks,
                           rd_kafka_op_t *rko,
                           rd_kafka_resp_cb_t *resp_cb,
@@ -2764,9 +2772,10 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         if (!reason)
                 reason = "";
 
-        rkbuf->rkbuf_u.Metadata.reason      = rd_strdup(reason);
-        rkbuf->rkbuf_u.Metadata.cgrp_update = cgrp_update;
-        rkbuf->rkbuf_u.Metadata.force_racks = force_racks;
+        rkbuf->rkbuf_u.Metadata.reason                    = rd_strdup(reason);
+        rkbuf->rkbuf_u.Metadata.cgrp_update               = cgrp_update;
+        rkbuf->rkbuf_u.Metadata.force_racks               = force_racks;
+        rkbuf->rkbuf_u.Metadata.cgrp_subscription_version = -1;
 
         /* TopicArrayCnt */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
@@ -2941,6 +2950,13 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         if (!use_replyq.q)
                 use_replyq = RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0);
 
+        if (cgrp_update && rkb->rkb_rk->rk_cgrp && total_topic_cnt > 0) {
+                rkbuf->rkbuf_u.Metadata.cgrp_subscription_version =
+                    cgrp_subscription_version >= 0
+                        ? cgrp_subscription_version
+                        : rd_atomic32_get(
+                              &rkb->rkb_rk->rk_cgrp->rkcg_subscription_version);
+        }
         rd_kafka_broker_buf_enq_replyq(
             rkb, rkbuf, use_replyq,
             /* The default response handler is rd_kafka_handle_Metadata, but we
@@ -2967,6 +2983,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
  *                                   This is best-effort, depending on broker
  *                                   config and version.
  * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param subscription_version - Consumer group subscription version.
  * @param force_racks - Force partition to rack mapping computation in
  *                      parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
@@ -2989,13 +3006,14 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
+                                             int32_t cgrp_subscription_version,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko) {
         return rd_kafka_MetadataRequest0(
             rkb, topics, topic_ids, reason, allow_auto_create_topics,
             rd_false /*don't include cluster authorized operations*/,
             rd_false /*don't include topic authorized operations*/, cgrp_update,
-            force_racks, rko,
+            cgrp_subscription_version, force_racks, rko,
             /* We use the default rd_kafka_handle_Metadata rather than a custom
                resp_cb */
             NULL,
@@ -3054,6 +3072,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_bool_t include_cluster_authorized_operations,
     rd_bool_t include_topic_authorized_operations,
     rd_bool_t cgrp_update,
+    int32_t cgrp_subscription_version,
     rd_bool_t force_racks,
     rd_kafka_resp_cb_t *resp_cb,
     rd_kafka_replyq_t replyq,
@@ -3062,7 +3081,8 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
         return rd_kafka_MetadataRequest0(
             rkb, topics, topics_ids, reason, allow_auto_create_topics,
             include_cluster_authorized_operations,
-            include_topic_authorized_operations, cgrp_update, force_racks,
+            include_topic_authorized_operations, cgrp_update,
+            cgrp_subscription_version, force_racks,
             NULL /* No op - using custom resp_cb. */, resp_cb, replyq, force,
             opaque);
 }

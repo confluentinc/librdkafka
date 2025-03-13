@@ -6103,7 +6103,8 @@ int32_t *rd_kafka_brokers_learned_ids(rd_kafka_t *rk, size_t *cntp) {
         *cntp = 0;
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                if (rkb->rkb_source != RD_KAFKA_LEARNED ||
+                    rd_kafka_broker_termination_in_progress(rkb))
                         continue;
 
                 *p++ = rkb->rkb_nodeid;

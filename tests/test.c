@@ -262,7 +262,9 @@ _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
+_TEST_DECL(0149_broker_same_host_port_mock);
 _TEST_DECL(0150_telemetry_mock);
+_TEST_DECL(0151_purge_brokers_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -521,7 +523,9 @@ struct test tests[] = {
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
+    _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
+    _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */
@@ -5551,7 +5555,8 @@ void test_headers_dump(const char *what,
 
 
 /**
- * @brief Retrieve and return the list of broker ids in the cluster.
+ * @brief Retrieve and return the list of broker ids in the cluster by
+ *        sending a Metadata request.
  *
  * @param rk Optional instance to use.
  * @param cntp Will be updated to the number of brokers returned.
@@ -5861,6 +5866,14 @@ void test_wait_metadata_update(rd_kafka_t *rk,
         test_timing_t t_md;
         rd_kafka_t *our_rk = NULL;
 
+        /* Wait an additional second for the topic to propagate in
+         * the cluster. This is not perfect but a cheap workaround for
+         * the asynchronous nature of topic creations in Kafka.
+         * Sleeping comes before the full metadata requests because otherwise
+         * those requests can trigger rejoins in case of
+         * regex subscriptions. */
+        rd_sleep(1);
+
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
@@ -5901,11 +5914,6 @@ void test_wait_topic_exists(rd_kafka_t *rk, const char *topic, int tmout) {
         rd_kafka_metadata_topic_t topics = {.topic = (char *)topic};
 
         test_wait_metadata_update(rk, &topics, 1, NULL, 0, tmout);
-
-        /* Wait an additional second for the topic to propagate in
-         * the cluster. This is not perfect but a cheap workaround for
-         * the asynchronous nature of topic creations in Kafka. */
-        rd_sleep(1);
 }
 
 
@@ -7276,8 +7284,14 @@ size_t test_mock_wait_matching_requests(
         while (matching_request_cnt < expected_cnt) {
                 matching_request_cnt =
                     test_mock_get_matching_request_cnt(mcluster, match, opaque);
-                if (matching_request_cnt < expected_cnt)
+                if (matching_request_cnt < expected_cnt) {
+                        TEST_SAYL(3,
+                                  "Still waiting to see %" PRIusz
+                                  " requests"
+                                  ", got %" PRIusz " \n",
+                                  expected_cnt, matching_request_cnt);
                         rd_usleep(100 * 1000, 0);
+                }
         }
 
         rd_usleep(confidence_interval_ms * 1000, 0);

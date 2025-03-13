@@ -437,16 +437,22 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
         int replica_cnt = RD_MIN(replication_factor, mcluster->broker_cnt);
         rd_kafka_mock_broker_t *mrkb;
         int i = 0;
-        int first_replica =
-            (mpart->id * replication_factor) % mcluster->broker_cnt;
+        int first_replica;
         int skipped = 0;
 
         if (mpart->replicas)
                 rd_free(mpart->replicas);
 
-        mpart->replicas    = rd_calloc(replica_cnt, sizeof(*mpart->replicas));
+        mpart->replicas = replica_cnt
+                              ? rd_calloc(replica_cnt, sizeof(*mpart->replicas))
+                              : NULL;
         mpart->replica_cnt = replica_cnt;
+        if (replica_cnt == 0) {
+                rd_kafka_mock_partition_set_leader0(mpart, NULL);
+                return;
+        }
 
+        first_replica = (mpart->id * replication_factor) % mcluster->broker_cnt;
 
         /* Use a predictable, determininistic order on a per-topic basis.
          *
@@ -920,6 +926,23 @@ static void rd_kafka_mock_cluster_io_add(rd_kafka_mock_cluster_t *mcluster,
         mcluster->fd_cnt++;
 }
 
+/**
+ * @brief Reassign partition replicas to broker, after deleting or
+ *        adding a new one.
+ */
+static void
+rd_kafka_mock_cluster_reassing_partitions(rd_kafka_mock_cluster_t *mcluster) {
+        rd_kafka_mock_topic_t *mtopic;
+        TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
+                int i;
+                for (i = 0; i < mtopic->partition_cnt; i++) {
+                        rd_kafka_mock_partition_t *mpart =
+                            &mtopic->partitions[i];
+                        rd_kafka_mock_partition_assign_replicas(
+                            mpart, mpart->replica_cnt);
+                }
+        }
+}
 
 static void rd_kafka_mock_connection_close(rd_kafka_mock_connection_t *mconn,
                                            const char *reason) {
@@ -1573,6 +1596,30 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *mcluster,
+                                  int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
+                                             int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_ADD;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+
 /**
  * @brief Starts listening on the mock broker socket.
  *
@@ -2207,6 +2254,30 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+void rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *cluster,
+                                        int32_t broker_id,
+                                        const char *host,
+                                        int port) {
+        rd_kafka_mock_broker_t *mrkb;
+
+        mtx_lock(&cluster->lock);
+        TAILQ_FOREACH(mrkb, &cluster->brokers, link) {
+                if (mrkb->id == broker_id) {
+                        rd_kafka_dbg(
+                            cluster->rk, MOCK, "MOCK",
+                            "Broker %" PRId32
+                            ": Setting advertised listener from %s:%d to %s:%d",
+                            broker_id, mrkb->advertised_listener, mrkb->port,
+                            host, port);
+                        rd_snprintf(mrkb->advertised_listener,
+                                    sizeof(mrkb->advertised_listener), "%s",
+                                    host);
+                        mrkb->port = port;
+                }
+        }
+        mtx_unlock(&cluster->lock);
+}
+
 rd_kafka_resp_err_t
 rd_kafka_mock_coordinator_set(rd_kafka_mock_cluster_t *mcluster,
                               const char *key_type,
@@ -2326,6 +2397,11 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mrkb->rack = rd_strdup(rko->rko_u.mock.name);
                 else
                         mrkb->rack = NULL;
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
+                rd_kafka_mock_broker_destroy(mrkb);
+                rd_kafka_mock_cluster_reassing_partitions(mcluster);
                 break;
 
         default:
@@ -2492,7 +2568,13 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
+
+        case RD_KAFKA_MOCK_CMD_BROKER_ADD:
+                rd_kafka_mock_broker_new(mcluster, rko->rko_u.mock.broker_id);
+                rd_kafka_mock_cluster_reassing_partitions(mcluster);
+                break;
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:
                 if (!rd_kafka_mock_coord_set(mcluster, rko->rko_u.mock.name,
@@ -2612,15 +2694,15 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
         rd_list_destroy(&mcluster->request_list);
 
+        dummy_rkb_thread = mcluster->dummy_rkb->rkb_thread;
+
         /*
-         * Destroy dummy broker
+         * Destroy dummy broker.
+         * WARNING: This is last time we can read
+         * from dummy_rkb in this thread!
          */
         rd_kafka_q_enq(mcluster->dummy_rkb->rkb_ops,
                        rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
-
-        dummy_rkb_thread = mcluster->dummy_rkb->rkb_thread;
-
-        rd_kafka_broker_destroy(mcluster->dummy_rkb);
 
         if (thrd_join(dummy_rkb_thread, &ret) != thrd_success)
                 rd_assert(!*"failed to join mock dummy broker thread");

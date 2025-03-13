@@ -1076,6 +1076,15 @@ static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
         X509 *cert;
         int i;
 
+        /* Get client cert from SSL connection */
+        cert = SSL_get_certificate(ssl);
+        if (cert == NULL) {
+                /* If there's no client certificate,
+                 * skip certificate issuer verification and
+                 * avoid logging a warning. */
+                return 1;
+        }
+
         /* Get the accepted client CA list from the SSL connection, this
          * comes from the `certificate_authorities` field. */
         ca_list = SSL_get_client_CA_list(ssl);
@@ -1088,10 +1097,7 @@ static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
                 return 1;
         }
 
-        /* Get client cert from SSL connection */
-        cert = SSL_get_certificate(ssl);
-
-        if (cert != NULL && rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
+        if (rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
                 /* A match is found, use the certificate. */
                 return 1;
         }

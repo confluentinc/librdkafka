@@ -1,6 +1,6 @@
-# librdkafka v2.6.2
+# librdkafka v2.8.0
 
-librdkafka v2.6.2 is a maintenance release:
+librdkafka v2.8.0 is a maintenance release:
 
 * Socket options are now all set before connection (#4893).
 * Client certificate chain is now sent when using `ssl.certificate.pem`
@@ -9,6 +9,8 @@ librdkafka v2.6.2 is a maintenance release:
   trusted root certificates (#4900).
 * Fixes to allow to migrate partitions to leaders with same leader epoch,
   or NULL leader epoch (#4901).
+* Support versions of OpenSSL without the ENGINE component (Chris Novakovic, #3535
+  and @remicollet, #4911).
 
 
 ## Fixes
@@ -42,6 +44,8 @@ librdkafka v2.6.2 is a maintenance release:
   Happening since v2.4.0 (#4901).
 
 
+*Note: there was no v2.7.0 librdkafka release*
+
 
 # librdkafka v2.6.1
 
@@ -63,7 +67,6 @@ librdkafka v2.6.1 is a maintenance release:
   client side nonce once more, as it's already prepended in server sent nonce (#4895).
 * Allow retrying for status code 429 ('Too Many Requests') in HTTP requests for
   OAUTHBEARER OIDC (#4902).
-
 
 ## Fixes
 

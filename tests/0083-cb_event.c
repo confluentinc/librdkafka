@@ -153,13 +153,16 @@ int main_0083_cb_event(int argc, char **argv) {
                                                     "expecting message\n");
                                         if (rd_kafka_event_error(rkev) ==
                                             RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                                                rd_kafka_assign(
-                                                    rk_c,
+                                                test_consumer_assign_by_rebalance_protocol(
+                                                    "rebalance", rk_c,
                                                     rd_kafka_event_topic_partition_list(
                                                         rkev));
                                                 expecting_io = _NOPE;
                                         } else
-                                                rd_kafka_assign(rk_c, NULL);
+                                                test_consumer_unassign_by_rebalance_protocol(
+                                                    "rebalance", rk_c,
+                                                    rd_kafka_event_topic_partition_list(
+                                                        rkev));
                                         break;
 
                                 case RD_KAFKA_EVENT_FETCH:

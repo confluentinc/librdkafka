@@ -2670,6 +2670,31 @@ void test_rebalance_cb(rd_kafka_t *rk,
 }
 
 
+void test_consumer_assign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts) {
+        TEST_SAY("Assign: %d partition(s)\n", parts->cnt);
+        if (!strcmp(rd_kafka_rebalance_protocol(rk), "EAGER"))
+                test_consumer_assign(what, rk, parts);
+        else
+                test_consumer_incremental_assign(what, rk, parts);
+}
+
+
+void test_consumer_unassign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts) {
+        if (!strcmp(rd_kafka_rebalance_protocol(rk), "EAGER")) {
+                TEST_SAY("Unassign all partition(s)\n");
+                test_consumer_unassign(what, rk);
+        } else {
+                TEST_SAY("Unassign: %d partition(s)\n", parts->cnt);
+                test_consumer_incremental_unassign(what, rk, parts);
+        }
+}
+
 
 rd_kafka_t *test_create_consumer(
     const char *group_id,

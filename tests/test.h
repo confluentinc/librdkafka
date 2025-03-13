@@ -887,6 +887,16 @@ int test_consumer_group_protocol_classic();
 
 int test_consumer_group_protocol_consumer();
 
+void test_consumer_assign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
+
+void test_consumer_unassign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
+
 /**
  * @brief Calls rdkafka function (with arguments)
  *        and checks its return value (must be rd_kafka_resp_err_t) for

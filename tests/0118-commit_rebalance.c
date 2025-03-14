@@ -45,14 +45,22 @@ static void rebalance_cb(rd_kafka_t *rk,
                  rd_kafka_err2name(err), parts->cnt);
         rebalances++;
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+                if (test_consumer_group_protocol_classic())
+                        TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+                else
+                        TEST_CALL_ERROR__(
+                            rd_kafka_incremental_assign(rk, parts));
 
         } else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS) {
                 rd_kafka_resp_err_t commit_err;
 
                 TEST_CALL_ERR__(rd_kafka_position(rk, parts));
 
-                TEST_CALL_ERR__(rd_kafka_assign(rk, NULL));
+                if (test_consumer_group_protocol_classic())
+                        TEST_CALL_ERR__(rd_kafka_assign(rk, NULL));
+                else
+                        TEST_CALL_ERROR__(
+                            rd_kafka_incremental_unassign(rk, parts));
 
                 if (rk == c1)
                         return;
@@ -87,7 +95,9 @@ static void rebalance_cb(rd_kafka_t *rk,
 int main_0118_commit_rebalance(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
-        const int msgcnt = 1000;
+        const int msgcnt          = 1000;
+        const int exp_msg_cnt_pre = 10;
+        int exp_msg_cnt_post      = msgcnt;
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
@@ -105,25 +115,26 @@ int main_0118_commit_rebalance(int argc, char **argv) {
         /* Ensure c1 is first member */
         rd_sleep(1);
         test_consumer_subscribe(c2, topic);
+        rd_sleep(1);
 
 
-        test_consumer_poll("C1.PRE", c1, 0, -1, -1, 10, NULL);
-        if (!test_consumer_group_protocol_classic()) {
-                /* There's no initial eager rebalance with KIP-848
-                 * protocol. It has to wait that the initial partitions
-                 * are revoked. */
-                while (rebalances < 2)
-                        test_consumer_poll("C1.PRE", c1, 0, -1, -1, 1, NULL);
-        }
-        test_consumer_poll("C2.PRE", c2, 0, -1, -1, 10, NULL);
+        test_consumer_poll("C1.PRE", c1, 0, -1, -1, exp_msg_cnt_pre, NULL);
+        test_consumer_poll("C2.PRE", c2, 0, -1, -1, exp_msg_cnt_pre, NULL);
 
         /* Trigger rebalance */
         test_consumer_close(c2);
         rd_kafka_destroy(c2);
 
+        /* Since all the assignors in the `consumer` protocol are COOPERATIVE
+         * only the new partitions are assigned to the consumer. All the
+         * previously assigned partitions will start consuming from the last
+         * offset. */
+        if (test_consumer_group_protocol_consumer())
+                exp_msg_cnt_post = msgcnt - exp_msg_cnt_pre;
+
         /* Since no offsets were successfully committed the remaining consumer
          * should be able to receive all messages. */
-        test_consumer_poll("C1.POST", c1, 0, -1, -1, msgcnt, NULL);
+        test_consumer_poll("C1.POST", c1, 0, -1, -1, exp_msg_cnt_post, NULL);
 
         rd_kafka_destroy(c1);
 

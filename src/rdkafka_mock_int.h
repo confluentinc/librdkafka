@@ -166,6 +166,9 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
 
         rd_list_t *subscribed_topics; /**< Subscribed topics */
 
+        rd_bool_t left_static_membership; /**< Member has left the group
+                                           *   with static membership. */
+
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL
                                                   *   if there is no ongoing
                                                   *   request. */
@@ -671,7 +674,8 @@ rd_kafka_mock_cgrp_consumer_get(rd_kafka_mock_cluster_t *mcluster,
 
 void rd_kafka_mock_cgrp_consumer_member_leave(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,
-    rd_kafka_mock_cgrp_consumer_member_t *member);
+    rd_kafka_mock_cgrp_consumer_member_t *member,
+    rd_bool_t static_leave);
 
 void rd_kafka_mock_cgrp_consumer_member_fenced(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,

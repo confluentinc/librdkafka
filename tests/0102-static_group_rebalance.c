@@ -153,6 +153,11 @@ static void do_test_static_group_rebalance(void) {
             test_mk_topic_name("0102_static_group_rebalance", 1);
         char *topics = rd_strdup(tsprintf("^%s.*", topic));
         test_timing_t t_close;
+        /* FIXME: change this group `group.consumer.session.timeout.ms`
+         * in order to match the classic group configuration
+         * when the IncrementalAlterConfigs changes for 848 are merged. */
+        int session_timeout_ms =
+            test_consumer_group_protocol_classic() ? 6000 : 45000;
 
         SUB_TEST();
 
@@ -254,9 +259,11 @@ static void do_test_static_group_rebalance(void) {
 
         /*
          * New topics matching the subscription pattern should cause
-         * group rebalance
+         * group rebalance. Partition count >= 2 as with KIP 848
+         * only the members receiving the new partitions will have
+         * rebalance callbacks triggered.
          */
-        test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 1, 1,
+        test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 4, 1,
                                       5000);
 
         /* Await revocation */
@@ -267,6 +274,13 @@ static void do_test_static_group_rebalance(void) {
                                              &c[0].revoked_at, 1000)) {
                 c[1].curr_line = __LINE__;
                 test_consumer_poll_once(c[1].rk, &mv, 0);
+                if (!test_consumer_group_protocol_classic() &&
+                    c[1].revoked_at >= rebalance_start)
+                        /* With KIP 848 members are independent
+                         * from each other so consumer 2
+                         * can continue with the assignment */
+                        c[1].expected_rb_event =
+                            RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         }
 
         static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
@@ -348,6 +362,13 @@ static void do_test_static_group_rebalance(void) {
                                              &c[0].revoked_at, 1000)) {
                 c[1].curr_line = __LINE__;
                 test_consumer_poll_once(c[1].rk, &mv, 0);
+                if (!test_consumer_group_protocol_classic() &&
+                    c[1].revoked_at >= rebalance_start)
+                        /* With KIP 848 members are independent
+                         * from each other so consumer 2
+                         * can continue with the assignment */
+                        c[1].expected_rb_event =
+                            RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         }
 
         static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
@@ -375,7 +396,7 @@ static void do_test_static_group_rebalance(void) {
 
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
-                                       2 * 7000);
+                                       session_timeout_ms + 4000);
 
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         static_member_expect_rebalance(&c[1], rebalance_start,
@@ -386,7 +407,14 @@ static void do_test_static_group_rebalance(void) {
          * the last Heartbeat or SyncGroup request was sent we need to
          * allow some leeway on the minimum side (4s), and also some on
          * the maximum side (1s) for slow runtimes. */
-        TIMING_ASSERT(&t_close, 6000 - 4000, 9000 + 1000);
+        if (session_timeout_ms >= 9000) {
+                /* FIXME: remove this difference once
+                 * the IncrementalAlterConfigs changes for 848 are merged. */
+                TIMING_ASSERT(&t_close, session_timeout_ms - 4000,
+                              session_timeout_ms + 1000);
+        } else {
+                TIMING_ASSERT(&t_close, session_timeout_ms - 4000, 9000 + 1000);
+        }
 
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         test_consumer_close(c[1].rk);
@@ -394,7 +422,7 @@ static void do_test_static_group_rebalance(void) {
 
         test_msgver_verify("final.validation", &mv, TEST_MSGVER_ALL, 0, msgcnt);
         test_msgver_clear(&mv);
-        free(topics);
+        rd_free(topics);
 
         SUB_TEST_PASS();
 }
@@ -661,27 +689,56 @@ static rd_bool_t is_api_key(rd_kafka_mock_request_t *request, void *opaque) {
 }
 
 /**
+ * Copy partition list \p orig without references to the corresponding
+ * internal topic partition.
+ */
+static rd_kafka_topic_partition_list_t *
+copy_topic_partition_list_no_references(rd_kafka_topic_partition_list_t *orig) {
+        int i;
+        rd_kafka_topic_partition_list_t *copy =
+            rd_kafka_topic_partition_list_new(orig->cnt);
+        for (i = 0; i < orig->cnt; i++) {
+                rd_kafka_topic_partition_t *orig_rktpar = &orig->elems[i];
+                rd_kafka_topic_partition_t *copied_rktpar =
+                    rd_kafka_topic_partition_list_add(copy, orig_rktpar->topic,
+                                                      orig_rktpar->partition);
+                copied_rktpar->offset = orig_rktpar->offset;
+                rd_kafka_topic_partition_set_leader_epoch(
+                    copied_rktpar,
+                    rd_kafka_topic_partition_get_leader_epoch(orig_rktpar));
+        }
+        return copy;
+}
+
+/**
  * @brief Static group membership tests with the mock cluster.
  *        Checks that consumer returns the same assignment
  *        and generation id after re-joining.
  *
- *        variation 1) consumer 1 leaves and rejoins the group.
- *        variation 2) consumer 1 leaves and a new consumer with same
+ *        variation 1) consumer 1 unsubscribes and subscribes again.
+ *                     Should cause a rebalance.
+ *        variation 2) consumer 1 is closed and a new consumer with same
  *                     group.instance.id joins the group.
+ *                     No rebalance should be triggered.
+ *        variation 3) consumer 1 is destroyed and a new consumer with same
+ *                     group.instance.id joins the group.
+ *                     No rebalance should be triggered.
  */
 static void do_test_static_membership_mock(int variation) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         int32_t api_key   = RD_KAFKAP_ConsumerGroupHeartbeat;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-        rd_kafka_t *consumer1, *consumer2, *consumer_1_to_destroy = NULL;
+        rd_kafka_t *consumer1, *consumer2;
         int32_t prev_generation_id1, next_generation_id1, prev_generation_id2,
             next_generation_id2;
         rd_kafka_topic_partition_list_t *prev_assignment1, *prev_assignment2,
-            *next_assignment1, *next_assignment2;
+            *next_assignment1, *next_assignment2, *tmp;
 
-        SUB_TEST_QUICK("%s", variation == 1 ? "with unsubscribe"
-                                            : "with new instance");
+        SUB_TEST_QUICK("%s", variation == 1
+                                 ? "with unsubscribe"
+                                 : variation == 2 ? "with close and destroy"
+                                                  : "with destroy only");
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 2, 3);
@@ -709,18 +766,34 @@ static void do_test_static_membership_mock(int variation) {
                     "Expected assignment for consumer 1 before the change");
         TEST_ASSERT(prev_assignment2 != NULL,
                     "Expected assignment for consumer 2 before the change");
+        prev_assignment1 =
+            (tmp = copy_topic_partition_list_no_references(prev_assignment1),
+             rd_kafka_topic_partition_list_destroy(prev_assignment1), tmp);
+        prev_assignment2 =
+            (tmp = copy_topic_partition_list_no_references(prev_assignment2),
+             rd_kafka_topic_partition_list_destroy(prev_assignment2), tmp);
 
-        TEST_SAY("Unsubscribing consumer 1\n");
-        rd_kafka_mock_start_request_tracking(mcluster);
-        TEST_CALL_ERR__(rd_kafka_unsubscribe(consumer1));
-        test_mock_wait_matching_requests(mcluster, 1, 1000, is_api_key,
-                                         &api_key);
-        rd_kafka_mock_stop_request_tracking(mcluster);
+        if (variation == 1) {
+                TEST_SAY("Unsubscribing consumer 1\n");
+                rd_kafka_mock_start_request_tracking(mcluster);
+                TEST_CALL_ERR__(rd_kafka_unsubscribe(consumer1));
+                test_mock_wait_matching_requests(mcluster, 1, 1000, is_api_key,
+                                                 &api_key);
+                rd_kafka_mock_stop_request_tracking(mcluster);
+        }
 
         if (variation == 2) {
-                /* Don't destroy it immediately because the
-                 * topic partition lists still hold a reference. */
-                consumer_1_to_destroy = consumer1;
+                TEST_SAY("Closing consumer 1\n");
+                rd_kafka_mock_start_request_tracking(mcluster);
+                TEST_CALL_ERR__(rd_kafka_consumer_close(consumer1));
+                test_mock_wait_matching_requests(mcluster, 1, 1000, is_api_key,
+                                                 &api_key);
+                rd_kafka_mock_stop_request_tracking(mcluster);
+        }
+
+        if (variation == 2 || variation == 3) {
+                TEST_SAY("Destroying consumer 1\n");
+                rd_kafka_destroy(consumer1);
 
                 TEST_SAY("Re-creating consumer 1\n");
                 /* Re-create the consumer with same group and instance id. */
@@ -733,35 +806,47 @@ static void do_test_static_membership_mock(int variation) {
 
         next_generation_id1 = consumer_generation_id(consumer1);
         next_generation_id2 = consumer_generation_id(consumer2);
-
-        TEST_ASSERT(next_generation_id1 == prev_generation_id1,
-                    "Expected same generation id for consumer 1, "
-                    "got %d != %d",
-                    prev_generation_id1, next_generation_id1);
-        TEST_ASSERT(next_generation_id2 == prev_generation_id2,
-                    "Expected same generation id for consumer 2, "
-                    "got %d != %d",
-                    prev_generation_id2, next_generation_id2);
-
         TEST_CALL_ERR__(rd_kafka_assignment(consumer1, &next_assignment1));
         TEST_CALL_ERR__(rd_kafka_assignment(consumer2, &next_assignment2));
+
         TEST_ASSERT(next_assignment1 != NULL,
                     "Expected assignment for consumer 1 after the change");
         TEST_ASSERT(next_assignment2 != NULL,
                     "Expected assignment for consumer 2 after the change");
-        TEST_ASSERT(!test_partition_list_and_offsets_cmp(prev_assignment1,
+
+        if (variation == 1) {
+                TEST_ASSERT(next_generation_id1 == prev_generation_id1 + 2,
+                            "Expected generation id + 2 for consumer 1, "
+                            "got %d != %d",
+                            next_generation_id1, prev_generation_id1 + 2);
+                TEST_ASSERT(next_generation_id2 == prev_generation_id2 + 2,
+                            "Expected generation id + 2 for consumer 2, "
+                            "got %d != %d",
+                            next_generation_id2, prev_generation_id2 + 2);
+        } else {
+                TEST_ASSERT(next_generation_id1 == prev_generation_id1,
+                            "Expected same generation id for consumer 1, "
+                            "got %d != %d",
+                            prev_generation_id1, next_generation_id1);
+                TEST_ASSERT(next_generation_id2 == prev_generation_id2,
+                            "Expected same generation id for consumer 2, "
+                            "got %d != %d",
+                            prev_generation_id2, next_generation_id2);
+                TEST_ASSERT(
+                    !test_partition_list_and_offsets_cmp(prev_assignment1,
                                                          next_assignment1),
                     "Expected same assignment for consumer 1 after the change");
-        TEST_ASSERT(!test_partition_list_and_offsets_cmp(prev_assignment2,
+                TEST_ASSERT(
+                    !test_partition_list_and_offsets_cmp(prev_assignment2,
                                                          next_assignment2),
                     "Expected same assignment for consumer 2 after the change");
+        }
 
         rd_kafka_topic_partition_list_destroy(prev_assignment1);
         rd_kafka_topic_partition_list_destroy(prev_assignment2);
         rd_kafka_topic_partition_list_destroy(next_assignment1);
         rd_kafka_topic_partition_list_destroy(next_assignment2);
 
-        RD_IF_FREE(consumer_1_to_destroy, rd_kafka_destroy);
         rd_kafka_destroy(consumer1);
         rd_kafka_destroy(consumer2);
         test_mock_cluster_destroy(mcluster);
@@ -770,11 +855,7 @@ static void do_test_static_membership_mock(int variation) {
 }
 
 int main_0102_static_group_rebalance(int argc, char **argv) {
-        /* TODO: check again when regexes
-         * will be supported by KIP-848 */
-        if (test_consumer_group_protocol_classic()) {
-                do_test_static_group_rebalance();
-        }
+        do_test_static_group_rebalance();
 
         if (test_consumer_group_protocol_classic()) {
                 do_test_fenced_member_classic();
@@ -797,5 +878,6 @@ int main_0102_static_group_rebalance_mock(int argc, char **argv) {
 
         do_test_static_membership_mock(1);
         do_test_static_membership_mock(2);
+        do_test_static_membership_mock(3);
         return 0;
 }

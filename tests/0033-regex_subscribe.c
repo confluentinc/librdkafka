@@ -434,11 +434,6 @@ static int do_test(const char *assignor) {
 
 
 int main_0033_regex_subscribe(int argc, char **argv) {
-        /* TODO: check again when regexes will be supported by KIP-848 */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Still not supported by KIP-848\n");
-                return 0;
-        }
 
         do_test("range");
         do_test("roundrobin");
@@ -458,12 +453,6 @@ int main_0033_regex_subscribe_local(int argc, char **argv) {
         rd_kafka_resp_err_t err;
         char errstr[256];
         int i;
-
-        /* TODO: check again when regexes will be supported by KIP-848 */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Still not supported by KIP-848\n");
-                return 0;
-        }
 
         valids   = rd_kafka_topic_partition_list_new(0);
         invalids = rd_kafka_topic_partition_list_new(100);

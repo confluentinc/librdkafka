@@ -981,7 +981,8 @@ err_parse:
         goto err;
 }
 
-static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
+static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg,
+                                         rd_bool_t static_leave) {
         int32_t member_epoch = -1;
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE) {
@@ -999,7 +1000,7 @@ static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
 
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_LEAVE;
-        if (RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg)) {
+        if (static_leave && RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg)) {
                 member_epoch = -2;
         }
 
@@ -1078,7 +1079,8 @@ static rd_bool_t rd_kafka_cgrp_leave_maybe(rd_kafka_cgrp_t *rkcg) {
                 return rd_false;
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                rd_kafka_cgrp_consumer_leave(rkcg);
+                rd_kafka_cgrp_consumer_leave(
+                    rkcg, rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE);
         } else {
                 /* KIP-345: Static group members must not send a
                  * LeaveGroupRequest on termination. */
@@ -1386,7 +1388,6 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
                 rd_kafka_cgrp_leave_maybe(rkcg);
         }
 
-        rd_kafka_cgrp_consumer_reset(rkcg);
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
         rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg, "rejoining");
 }
@@ -3096,6 +3097,7 @@ err:
                              "ConsumerGroupHeartbeat failed due to: %s: "
                              "will rejoin the group",
                              rd_kafka_err2str(err));
+                rd_kafka_cgrp_consumer_reset(rkcg);
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
                 return;
@@ -4963,7 +4965,7 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb(rd_kafka_timers_t *rkts,
                             1 /*lock*/);
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                rd_kafka_cgrp_consumer_leave(rkcg);
+                rd_kafka_cgrp_consumer_leave(rkcg, rd_false);
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(

@@ -1043,6 +1043,43 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.private.key.id", _RK_C_STR,
+     _RK(sasl.oauthbearer.private_key_id),
+     "Private key id. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.private.key.secret",
+     _RK_C_STR, _RK(sasl.oauthbearer.private_key_secret),
+     "Private key id. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token.signing.algorithm", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_signing_algorithm),
+     "token_signing_algorithm. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token.subject", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_subject),
+     "token_signing_algorithm. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token.issuer", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_issuer),
+     "token_issuer. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token_audience", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_audience),
+     "token_audience. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.token_target_audience", _RK_C_STR,
+     _RK(sasl.oauthbearer.token_target_audience),
+     "token_target_audience. "
+     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     _UNSUPPORTED_OIDC},
+
+
 
     /* Plugins */
     {_RK_GLOBAL, "plugin.library.paths", _RK_C_STR, _RK(plugin_paths),
@@ -2242,6 +2279,9 @@ static void rd_kafka_defaultconf_set(int scope, void *conf) {
 
 rd_kafka_conf_t *rd_kafka_conf_new(void) {
         rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
+        fprintf(stderr,
+                "sizeof(*conf) = %lu RD_KAFKA_CONF_PROPS_IDX_MAX = %d\n",
+                sizeof(*conf), RD_KAFKA_CONF_PROPS_IDX_MAX);
         rd_assert(RD_KAFKA_CONF_PROPS_IDX_MAX > sizeof(*conf) &&
                   *"Increase RD_KAFKA_CONF_PROPS_IDX_MAX");
         rd_kafka_defaultconf_set(_RK_GLOBAL, conf);
@@ -3800,23 +3840,40 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
                 if (conf->sasl.oauthbearer.method ==
                     RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC) {
-                        if (!conf->sasl.oauthbearer.client_id)
-                                return "`sasl.oauthbearer.client.id` is "
-                                       "mandatory when "
-                                       "`sasl.oauthbearer.method=oidc` is set";
-
-                        if (!conf->sasl.oauthbearer.client_secret) {
-                                return "`sasl.oauthbearer.client.secret` is "
-                                       "mandatory when "
-                                       "`sasl.oauthbearer.method=oidc` is set";
-                        }
-
-                        if (!conf->sasl.oauthbearer.token_endpoint_url) {
-                                return "`sasl.oauthbearer.token.endpoint.url` "
-                                       "is mandatory when "
-                                       "`sasl.oauthbearer.method=oidc` is set";
-                        }
+                        rd_bool_t has_client_credentials =
+                            conf->sasl.oauthbearer.client_id &&
+                            conf->sasl.oauthbearer.client_secret &&
+                            conf->sasl.oauthbearer.token_endpoint_url;
+                        rd_bool_t has_jwt_credentials =
+                            conf->sasl.oauthbearer.private_key_id &&
+                            conf->sasl.oauthbearer.private_key_secret &&
+                            conf->sasl.oauthbearer.token_signing_algorithm &&
+                            conf->sasl.oauthbearer.token_subject &&
+                            conf->sasl.oauthbearer.token_issuer &&
+                            conf->sasl.oauthbearer.token_audience &&
+                            conf->sasl.oauthbearer.token_target_audience;
+                        if (!has_client_credentials && !has_jwt_credentials)
+                                return "When `sasl.oauthbearer.method=oidc` is "
+                                       "set, either "
+                                       "(`sasl.oauthbearer.client.id`, "
+                                       "`sasl.oauthbearer.client.secret`, "
+                                       "`sasl.oauthbearer.token.endpoint.url`) "
+                                       "OR "
+                                       "(`sasl.oauthbearer.jwt.private.key.id`,"
+                                       " "
+                                       "`sasl.oauthbearer.jwt.private.key."
+                                       "secret`, "
+                                       "`sasl.oauthbearer.jwt.token.signing."
+                                       "algorithm`, "
+                                       "`sasl.oauthbearer.jwt.token.subject`, "
+                                       "`sasl.oauthbearer.jwt.token.issuer`, "
+                                       "`sasl.oauthbearer.jwt.token.audience`, "
+                                       "`sasl.oauthbearer.jwt.token.target."
+                                       "audience`) "
+                                       "must be set";
                 }
+
+
 
                 /* Enable background thread for the builtin OIDC handler,
                  * unless a refresh callback has been set. */

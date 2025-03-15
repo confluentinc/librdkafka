@@ -702,8 +702,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The application should mask this signal as an internal "
      "signal handler is installed.",
      0, 128, 0},
-    {_RK_GLOBAL | _RK_HIGH, "api.version.request", _RK_C_BOOL,
+    {_RK_GLOBAL | _RK_HIGH | _RK_DEPRECATED, "api.version.request", _RK_C_BOOL,
      _RK(api_version_request),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Request broker's supported API versions to adjust functionality to "
      "available protocol features. If set to false, or the "
      "ApiVersionRequest fails, the fallback version "
@@ -715,16 +717,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "api.version.request.timeout.ms", _RK_C_INT,
      _RK(api_version_request_timeout_ms),
      "Timeout for broker API version requests.", 1, 5 * 60 * 1000, 10 * 1000},
-    {_RK_GLOBAL | _RK_MED, "api.version.fallback.ms", _RK_C_INT,
-     _RK(api_version_fallback_ms),
+    {_RK_GLOBAL | _RK_MED | _RK_DEPRECATED, "api.version.fallback.ms",
+     _RK_C_INT, _RK(api_version_fallback_ms),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Dictates how long the `broker.version.fallback` fallback is used "
      "in the case the ApiVersionRequest fails. "
      "**NOTE**: The ApiVersionRequest is only issued when a new connection "
      "to the broker is made (such as after an upgrade).",
      0, 86400 * 7 * 1000, 0},
 
-    {_RK_GLOBAL | _RK_MED, "broker.version.fallback", _RK_C_STR,
-     _RK(broker_version_fallback),
+    {_RK_GLOBAL | _RK_MED | _RK_DEPRECATED, "broker.version.fallback",
+     _RK_C_STR, _RK(broker_version_fallback),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Older broker versions (before 0.10.0) provide no way for a client to "
      "query "
      "for supported protocol features "

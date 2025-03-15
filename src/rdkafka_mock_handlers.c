@@ -1297,6 +1297,8 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         rd_bool_t list_all_topics                         = rd_false;
         int32_t TopicsCnt;
         int i;
+        size_t of_Brokers_cnt;
+        int32_t response_Brokers_cnt = 0;
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
@@ -1304,9 +1306,11 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         }
 
         /* Response: #Brokers */
-        rd_kafka_buf_write_arraycnt(resp, mcluster->broker_cnt);
+        of_Brokers_cnt = rd_kafka_buf_write_arraycnt_pos(resp);
 
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                if (!mrkb->up)
+                        continue;
                 /* Response: Brokers.Nodeid */
                 rd_kafka_buf_write_i32(resp, mrkb->id);
                 /* Response: Brokers.Host */
@@ -1318,7 +1322,10 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_str(resp, mrkb->rack, -1);
                 }
                 rd_kafka_buf_write_tags_empty(resp);
+                response_Brokers_cnt++;
         }
+        rd_kafka_buf_finalize_arraycnt(resp, of_Brokers_cnt,
+                                       response_Brokers_cnt);
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
                 /* Response: ClusterId */

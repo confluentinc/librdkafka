@@ -1046,37 +1046,44 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.private.key.id", _RK_C_STR,
      _RK(sasl.oauthbearer.private_key_id),
      "Private key id. "
-     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "grant type is needed.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.private.key.secret",
      _RK_C_STR, _RK(sasl.oauthbearer.private_key_secret),
      "Private key id. "
-     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "grant type is needed.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.token.signing.algorithm", _RK_C_STR,
      _RK(sasl.oauthbearer.token_signing_algorithm),
      "token_signing_algorithm. "
-     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "grant type is needed.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.token.subject", _RK_C_STR,
      _RK(sasl.oauthbearer.token_subject),
      "token_signing_algorithm. "
-     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "grant type is needed.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.token.issuer", _RK_C_STR,
      _RK(sasl.oauthbearer.token_issuer),
      "token_issuer. "
-     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "grant type is needed.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.token_audience", _RK_C_STR,
      _RK(sasl.oauthbearer.token_audience),
      "token_audience. "
-     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "grant type is needed.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.token_target_audience", _RK_C_STR,
      _RK(sasl.oauthbearer.token_target_audience),
      "token_target_audience. "
-     "Only used when `sasl.oauthbearer.method` is set to \"jwt\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "grant type is needed.",
      _UNSUPPORTED_OIDC},
 
 

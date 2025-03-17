@@ -16,3 +16,12 @@ semaphore:
   - /semaphore.*/
   - /dev_.*/
   - /feature\/.*/
+  tasks:
+  - name: verify-linux-packages
+    branch: master
+    scheduled: false
+    pipeline_file: .semaphore/verify-linux-packages.yml
+    parameters:
+      - name: LIBRDKAFKA_VERSION
+        required: true
+        description: librdkafka version to verify

@@ -380,7 +380,7 @@ static struct rd_kafka_metadata_cache_entry *rd_kafka_metadata_cache_insert(
                 old_by_id = RD_AVL_INSERT(&rk->rk_metadata_cache.rkmc_avl_by_id,
                                           rkmce, rkmce_avlnode_by_id);
         } 
-        if (old && !RD_KAFKA_UUID_IS_ZERO(
+        if (old && old != old_by_id && !RD_KAFKA_UUID_IS_ZERO(
                               old->rkmce_metadata_internal_topic.topic_id)) {
                 /* If it had a topic id, remove it from the tree */
                 RD_AVL_REMOVE_ELM(&rk->rk_metadata_cache.rkmc_avl_by_id, old);

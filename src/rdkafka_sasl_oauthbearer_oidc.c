@@ -327,10 +327,9 @@ static char *rd_kafka_create_jwt_assertion(const char *key_id,
                     target_audience);
 
         /* 3. Base64Url-encode header and payload */
-        encoded_header  = rd_base64url_encode((unsigned char *)header_json,
-                                             strlen(header_json));
-        encoded_payload = rd_base64url_encode((unsigned char *)payload_json,
-                                              strlen(payload_json));
+        encoded_header = rd_base64url_encode(header_json, strlen(header_json));
+        encoded_payload =
+            rd_base64url_encode(payload_json, strlen(payload_json));
         if (!encoded_header || !encoded_payload)
                 goto cleanup;
 
@@ -518,7 +517,6 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
         char *formatted_token      = NULL;
         char set_token_errstr[512];
         double exp                     = 0;
-        const char *principal_name     = NULL;
         char **extensions              = NULL;
         char **extension_key_value     = NULL;
         size_t extension_key_value_cnt = 0;

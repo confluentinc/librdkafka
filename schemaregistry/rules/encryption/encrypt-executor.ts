@@ -388,21 +388,14 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
         encryptedDek = await kmsClient.encrypt(rawDek)
       }
       const newVersion = isExpired ? dek!.version! + 1 : null
-      const newDekId: DekId = {
-        kekName: this.kekName,
-        subject: ctx.subject,
-        version: newVersion,
-        algorithm: this.cryptor.dekFormat,
-        deleted: isRead,
-      }
-      // encryptedDek may be passed as null if kek is shared
-      dek = await this.storeDekToRegistry(newDekId, encryptedDek)
-      if (dek == null) {
-        // handle conflicts (409)
-        dek = await this.retrieveDekFromRegistry(dekId)
-      }
-      if (dek == null) {
-        throw new RuleError(`no dek found for ${this.kekName} during produce`)
+      try {
+        dek = await this.createDek(dekId, newVersion, encryptedDek)
+      } catch (err) {
+        if (dek == null) {
+          throw err;
+        }
+        console.warn("failed to create dek for %s, subject %s, version %d, using existing dek",
+          this.kekName, ctx.subject, newVersion)
       }
     }
 
@@ -414,6 +407,27 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
       const encryptedKeyMaterialBytes = await this.executor.client!.getDekEncryptedKeyMaterialBytes(dek)
       const rawDek = await kmsClient.decrypt(encryptedKeyMaterialBytes!)
       await this.executor.client!.setDekKeyMaterial(dek, rawDek)
+    }
+
+    return dek
+  }
+
+  async createDek(dekId: DekId, newVersion: number | null, encryptedDek: Buffer | null): Promise<Dek> {
+    const newDekId: DekId = {
+      kekName: dekId.kekName,
+      subject: dekId.subject,
+      version: newVersion,
+      algorithm: dekId.algorithm,
+      deleted: dekId.deleted,
+    }
+    // encryptedDek may be passed as null if kek is shared
+    let dek = await this.storeDekToRegistry(newDekId, encryptedDek)
+    if (dek == null) {
+      // handle conflicts (409)
+      dek = await this.retrieveDekFromRegistry(dekId)
+    }
+    if (dek == null) {
+      throw new RuleError(`no dek found for ${dekId.kekName} during produce`)
     }
 
     return dek

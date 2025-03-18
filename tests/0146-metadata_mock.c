@@ -104,19 +104,41 @@ static void do_test_metadata_persists_in_cache(const char *assignor) {
 }
 
 /**
- * @brief No loop of metadata requests should be started
- *        when a metadata request is made without leader epoch change.
- *        See issue #4577
+ * @brief Tests about the fast metadata refresh feature.
+ *
+ * - variation 0: no loop of metadata requests should be started
+ *   when a metadata request is made without leader epoch change.
+ *   It's expected it stops after the first request.
+ *   See issue #4577
+ *
+ * - variation 1: an error is returned on subsequent metadata response too,
+ *   metadata refreshes continue every second until the error is cleared.
+ *
+ * It's expected that the temporary error doesn't remove the topic from cache,
+ * produce requests aren't blocked from metadata errors and no error is
+ * to be surfaced to the application.
  */
-static void do_test_fast_metadata_refresh_stops(void) {
+static void do_test_fast_metadata_refresh(int variation) {
         rd_kafka_t *rk;
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
         int metadata_requests;
+        int expected_metadata_requests;
+        switch (variation) {
+        case 0:
+                expected_metadata_requests = 2;
+                break;
+        case 1:
+                expected_metadata_requests = 7;
+                break;
+        default:
+                expected_metadata_requests = 0;
+                break;
+        }
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("%s", variation == 0 ? "stops" : "retries");
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
@@ -127,22 +149,52 @@ static void do_test_fast_metadata_refresh_stops(void) {
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
+
+        if (variation == 1) {
+                /* Produce some messages to the topic
+                 * and keep metadata in cache. */
+                test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);
+        }
+
         /* This error triggers a metadata refresh but no leader change
          * happened */
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_Produce, 1,
             RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
 
+        if (variation == 1) {
+                rd_kafka_mock_topic_set_error(
+                    mcluster, topic, RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
+        }
+
         rd_kafka_mock_start_request_tracking(mcluster);
-        test_produce_msgs2(rk, topic, 0, 0, 0, 1, NULL, 5);
+
+        test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);
+
+        /* Wait some time for seeing the retries */
+        rd_sleep(3);
+
+        if (variation == 1) {
+                /* Clear topic error to stop the retries */
+                rd_kafka_mock_topic_set_error(mcluster, topic,
+                                              RD_KAFKA_RESP_ERR_NO_ERROR);
+        }
 
         /* First call is for getting initial metadata,
          * second one happens after the error,
-         * it should stop refreshing metadata after that. */
+         * it should stop refreshing metadata after that.
+         *
+         * There can be an additional metadata request originating from
+         * the 1s timer when the partition is being delegated or
+         * the broker is connecting but still not up. */
         metadata_requests = test_mock_wait_matching_requests(
-            mcluster, 2, 500, is_metadata_request, NULL);
-        TEST_ASSERT(metadata_requests == 2,
-                    "Expected 2 metadata request, got %d", metadata_requests);
+            mcluster, expected_metadata_requests, 500, is_metadata_request,
+            NULL);
+        TEST_ASSERT(expected_metadata_requests <= metadata_requests &&
+                        metadata_requests <= expected_metadata_requests + 1,
+                    "Expected %d or %d metadata request, got %d",
+                    expected_metadata_requests, expected_metadata_requests + 1,
+                    metadata_requests);
         rd_kafka_mock_stop_request_tracking(mcluster);
 
         rd_kafka_destroy(rk);
@@ -346,6 +398,8 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
         } else {
                 rd_kafka_topic_partition_list_t *assignment;
                 test_conf_set(conf, "group.id", topic);
+                test_conf_set(conf, "fetch.wait.max.ms", "100");
+
                 rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
                 assignment = rd_kafka_topic_partition_list_new(1);
@@ -380,7 +434,7 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                 test_consumer_poll_timeout("partition 0", rk, 0, -1, -1, 2,
                                            NULL, 5000);
         }
-        TIMING_ASSERT_LATER(&timing, 0, 2000);
+        TIMING_ASSERT_LATER(&timing, 0, 500);
 
         /* Leader change triggers the metadata update and migration
          * of partition 0 to brokers 3 and with 'second_leader_change' also
@@ -429,7 +483,8 @@ int main_0146_metadata_mock(int argc, char **argv) {
 
         do_test_metadata_call_before_join();
 
-        do_test_fast_metadata_refresh_stops();
+        do_test_fast_metadata_refresh(0);
+        do_test_fast_metadata_refresh(1);
 
         do_test_stale_metadata_doesnt_migrate_partition();
 

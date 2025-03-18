@@ -111,7 +111,6 @@ rd_kafka_broker_needs_persistent_connection(rd_kafka_broker_t *rkb) {
                rd_atomic32_get(&rkb->rkb_persistconn.coord);
 }
 
-
 /**
  * @returns > 0 if a connection to this broker is needed, else 0.
  * @locality broker thread
@@ -119,7 +118,7 @@ rd_kafka_broker_needs_persistent_connection(rd_kafka_broker_t *rkb) {
  */
 static RD_INLINE int rd_kafka_broker_needs_connection(rd_kafka_broker_t *rkb) {
         return rkb->rkb_state == RD_KAFKA_BROKER_STATE_INIT &&
-               !rd_kafka_terminating(rkb->rkb_rk) &&
+               !rd_kafka_broker_or_instance_terminating(rkb) &&
                !rd_kafka_fatal_error_code(rkb->rkb_rk) &&
                (!rkb->rkb_rk->rk_conf.sparse_connections ||
                 rd_kafka_broker_needs_persistent_connection(rkb));
@@ -331,9 +330,10 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                      rd_kafka_broker_state_names[rkb->rkb_state],
                      rd_kafka_broker_state_names[state]);
 
-        if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
+        if (rkb->rkb_source == RD_KAFKA_INTERNAL ||
+            RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                 /* no-op */
-        } else if (state == RD_KAFKA_BROKER_STATE_DOWN &&
+        } else if (rd_kafka_broker_state_is_down(state) &&
                    !rkb->rkb_down_reported) {
                 /* Propagate ALL_BROKERS_DOWN event if all brokers are
                  * now down, unless we're terminating.
@@ -342,16 +342,16 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                 if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
                         rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                             rd_atomic32_get(
-                                &rkb->rkb_rk->rk_broker_addrless_cnt) &&
-                    !rd_kafka_broker_is_addrless(rkb) &&
-                    !rd_kafka_terminating(rkb->rkb_rk))
+                                &rkb->rkb_rk->rk_logical_broker_cnt) &&
+                    !rd_kafka_terminating(rkb->rkb_rk)) {
                         rd_kafka_op_err(
                             rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
                             "%i/%i brokers are down",
                             rd_atomic32_get(&rkb->rkb_rk->rk_broker_down_cnt),
                             rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                                 rd_atomic32_get(
-                                    &rkb->rkb_rk->rk_broker_addrless_cnt));
+                                    &rkb->rkb_rk->rk_logical_broker_cnt));
+                }
                 rkb->rkb_down_reported = 1;
 
         } else if (rd_kafka_broker_state_is_up(state) &&
@@ -692,6 +692,13 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
 
                 if (rktp->rktp_leader_id != rktp->rktp_broker_id) {
                         rd_kafka_toppar_delegate_to_leader(rktp);
+                } else if (rd_kafka_broker_termination_in_progress(rkb)) {
+                        /* Remove `rktp_broker` and `rktp_leader`
+                         * references in `rktp`, even if this broker
+                         * is still the leader, to allow to
+                         * decommission it. */
+                        rd_kafka_toppar_undelegate(rktp);
+                        rd_kafka_toppar_forget_leader(rktp);
                 }
         }
 
@@ -710,6 +717,7 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
 
         /* Query for topic leaders to quickly pick up on failover. */
         if (err != RD_KAFKA_RESP_ERR__DESTROY &&
+            err != RD_KAFKA_RESP_ERR__DESTROY_BROKER &&
             old_state >= RD_KAFKA_BROKER_STATE_UP)
                 rd_kafka_metadata_refresh_known_topics(
                     rkb->rkb_rk, NULL, rd_true /*force*/, "broker down");
@@ -1403,6 +1411,8 @@ rd_kafka_broker_t *rd_kafka_broker_random0(const char *func,
         int fcnt = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_kafka_broker_or_instance_terminating(rkb))
+                        continue;
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         continue;
 
@@ -1459,6 +1469,8 @@ rd_kafka_broker_weighted(rd_kafka_t *rk,
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 int weight;
+                if (rd_kafka_broker_or_instance_terminating(rkb))
+                        continue;
 
                 rd_kafka_broker_lock(rkb);
                 if (features && (rkb->rkb_features & features) != features)
@@ -1740,6 +1752,9 @@ rd_list_t *rd_kafka_brokers_get_nodeids_async(rd_kafka_t *rk,
                 }
                 i = 0;
                 TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                        if (rd_kafka_broker_or_instance_terminating(rkb))
+                                continue;
+
                         rd_kafka_broker_lock(rkb);
                         if (rkb->rkb_nodeid != -1 &&
                             !RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
@@ -2337,6 +2352,7 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
         if (rd_kafka_broker_ApiVersion_supported(
                 rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, &features) !=
                 -1 &&
+            rkb->rkb_source == RD_KAFKA_LEARNED &&
             rkb->rkb_rk->rk_conf.enable_metrics_push) {
                 rd_kafka_t *rk = rkb->rkb_rk;
                 rd_kafka_op_t *rko =
@@ -2370,7 +2386,7 @@ static void rd_kafka_broker_handle_SaslHandshake(rd_kafka_t *rk,
         char *mechs = "(n/a)";
         size_t msz, mof = 0;
 
-        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+        if (rd_kafka_broker_is_any_err_destroy(err))
                 return;
 
         if (err)
@@ -2549,7 +2565,7 @@ static void rd_kafka_broker_handle_ApiVersion(rd_kafka_t *rk,
         size_t api_cnt                   = 0;
         int16_t retry_ApiVersion         = -1;
 
-        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+        if (rd_kafka_broker_is_any_err_destroy(err))
                 return;
 
         err = rd_kafka_handle_ApiVersion(rk, rkb, err, rkbuf, request, &apis,
@@ -3101,53 +3117,6 @@ void rd_kafka_dr_implicit_ack(rd_kafka_broker_t *rkb,
         rd_kafka_dr_msgq(rktp->rktp_rkt, &acked, RD_KAFKA_RESP_ERR_NO_ERROR);
 }
 
-
-
-/**
- * @brief Map existing partitions to this broker using the
- *        toppar's leader_id. Only undelegated partitions
- *        matching this broker are mapped.
- *
- * @locks none
- * @locality any
- */
-static void rd_kafka_broker_map_partitions(rd_kafka_broker_t *rkb) {
-        rd_kafka_t *rk = rkb->rkb_rk;
-        rd_kafka_topic_t *rkt;
-        int cnt = 0;
-
-        if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                return;
-
-        rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-                int i;
-
-                rd_kafka_topic_wrlock(rkt);
-                for (i = 0; i < rkt->rkt_partition_cnt; i++) {
-                        rd_kafka_toppar_t *rktp = rkt->rkt_p[i];
-
-                        /* Only map undelegated partitions matching this
-                         * broker*/
-                        rd_kafka_toppar_lock(rktp);
-                        if (rktp->rktp_leader_id == rkb->rkb_nodeid &&
-                            !(rktp->rktp_broker && rktp->rktp_next_broker)) {
-                                rd_kafka_toppar_broker_update(
-                                    rktp, rktp->rktp_leader_id, rkb,
-                                    "broker node information updated");
-                                cnt++;
-                        }
-                        rd_kafka_toppar_unlock(rktp);
-                }
-                rd_kafka_topic_wrunlock(rkt);
-        }
-        rd_kafka_rdunlock(rk);
-
-        rd_rkb_dbg(rkb, TOPIC | RD_KAFKA_DBG_BROKER, "LEADER",
-                   "Mapped %d partition(s) to broker", cnt);
-}
-
-
 /**
  * @brief Broker id comparator
  */
@@ -3188,6 +3157,10 @@ static void rd_kafka_broker_prepare_destroy(rd_kafka_broker_t *rkb) {
         rd_kafka_broker_monitor_del(&rkb->rkb_coord_monitor);
 }
 
+static rd_kafka_resp_err_t rd_kafka_broker_destroy_error(rd_kafka_t *rk) {
+        return rd_kafka_terminating(rk) ? RD_KAFKA_RESP_ERR__DESTROY
+                                        : RD_KAFKA_RESP_ERR__DESTROY_BROKER;
+}
 
 /**
  * @brief Serve a broker op (an op posted by another thread to be handled by
@@ -3207,7 +3180,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
         switch (rko->rko_type) {
         case RD_KAFKA_OP_NODE_UPDATE: {
-                enum { _UPD_NAME = 0x1, _UPD_ID = 0x2 } updated = 0;
+                rd_bool_t updated = rd_false;
                 char brokername[RD_KAFKA_NODENAME_SIZE];
 
                 /* Need kafka_wrlock for updating rk_broker_by_id */
@@ -3221,31 +3194,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_strlcpy(rkb->rkb_nodename, rko->rko_u.node.nodename,
                                    sizeof(rkb->rkb_nodename));
                         rkb->rkb_nodename_epoch++;
-                        updated |= _UPD_NAME;
-                }
-
-                if (rko->rko_u.node.nodeid != -1 &&
-                    !RD_KAFKA_BROKER_IS_LOGICAL(rkb) &&
-                    rko->rko_u.node.nodeid != rkb->rkb_nodeid) {
-                        int32_t old_nodeid = rkb->rkb_nodeid;
-                        rd_rkb_dbg(rkb, BROKER, "UPDATE",
-                                   "NodeId changed from %" PRId32
-                                   " to %" PRId32,
-                                   rkb->rkb_nodeid, rko->rko_u.node.nodeid);
-
-                        rkb->rkb_nodeid = rko->rko_u.node.nodeid;
-
-                        /* Update system thread name */
-                        rd_kafka_set_thread_sysname("rdk:broker%" PRId32,
-                                                    rkb->rkb_nodeid);
-
-                        /* Update broker_by_id sorted list */
-                        if (old_nodeid == -1)
-                                rd_list_add(&rkb->rkb_rk->rk_broker_by_id, rkb);
-                        rd_list_sort(&rkb->rkb_rk->rk_broker_by_id,
-                                     rd_kafka_broker_cmp_by_id);
-
-                        updated |= _UPD_ID;
+                        updated = rd_true;
                 }
 
                 rd_kafka_mk_brokername(brokername, sizeof(brokername),
@@ -3264,22 +3213,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_wrunlock(rkb->rkb_rk);
 
-                if (updated & _UPD_NAME)
+                if (updated) {
                         rd_kafka_broker_fail(rkb, LOG_DEBUG,
                                              RD_KAFKA_RESP_ERR__TRANSPORT,
                                              "Broker hostname updated");
-                else if (updated & _UPD_ID) {
-                        /* Map existing partitions to this broker. */
-                        rd_kafka_broker_map_partitions(rkb);
-
-                        /* If broker is currently in state up we need
-                         * to trigger a state change so it exits its
-                         * state&type based .._serve() loop. */
-                        rd_kafka_broker_lock(rkb);
-                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP)
-                                rd_kafka_broker_set_state(
-                                    rkb, RD_KAFKA_BROKER_STATE_UPDATE);
-                        rd_kafka_broker_unlock(rkb);
                 }
 
                 rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
@@ -3308,17 +3245,20 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_toppar_lock(rktp);
 
                 /* Abort join if instance is terminating */
-                if (rd_kafka_terminating(rkb->rkb_rk) ||
+                if (rd_kafka_broker_or_instance_terminating(rkb) ||
                     (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE)) {
-                        rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
-                                   "Topic %s [%" PRId32
-                                   "]: not joining broker: "
-                                   "%s",
-                                   rktp->rktp_rkt->rkt_topic->str,
-                                   rktp->rktp_partition,
-                                   rd_kafka_terminating(rkb->rkb_rk)
-                                       ? "instance is terminating"
-                                       : "partition removed");
+                        rd_rkb_dbg(
+                            rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
+                            "Topic %s [%" PRId32
+                            "]: not joining broker: "
+                            "%s",
+                            rktp->rktp_rkt->rkt_topic->str,
+                            rktp->rktp_partition,
+                            rd_kafka_terminating(rkb->rkb_rk)
+                                ? "instance is terminating"
+                                : rd_kafka_broker_termination_in_progress(rkb)
+                                      ? "broker is terminating"
+                                      : "partition removed");
 
                         rd_kafka_broker_destroy(rktp->rktp_next_broker);
                         rktp->rktp_next_broker = NULL;
@@ -3386,6 +3326,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                     "finish before producing to "
                                     "new leader");
                         }
+                } else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
+                        rktp->rktp_ts_fetch_backoff = 0;
                 }
 
                 rd_kafka_broker_destroy(rktp->rktp_next_broker);
@@ -3525,10 +3467,13 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                  * and trigger a state change.
                  * This makes sure any eonce dependent on state changes
                  * are triggered. */
-                rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY,
-                                     "Client is terminating");
+                rd_kafka_broker_fail(rkb, LOG_DEBUG,
+                                     rd_kafka_broker_destroy_error(rkb->rkb_rk),
+                                     "Decommissioning this broker");
 
                 rd_kafka_broker_prepare_destroy(rkb);
+                /* Release main thread reference here */
+                rd_kafka_broker_destroy(rkb);
                 wakeup = rd_true;
                 break;
 
@@ -3646,7 +3591,7 @@ rd_kafka_broker_ops_io_serve(rd_kafka_broker_t *rkb, rd_ts_t abs_timeout) {
         rd_ts_t now;
         rd_bool_t wakeup;
 
-        if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
+        if (unlikely(rd_kafka_broker_or_instance_terminating(rkb)))
                 abs_timeout = rd_clock() + 1000;
         else if (unlikely(rd_kafka_broker_needs_connection(rkb)))
                 abs_timeout = RD_POLL_NOWAIT;
@@ -4485,7 +4430,7 @@ static RD_INLINE void rd_kafka_broker_idle_check(rd_kafka_broker_t *rkb) {
 static void rd_kafka_broker_serve(rd_kafka_broker_t *rkb, int timeout_ms) {
         rd_ts_t abs_timeout;
 
-        if (unlikely(rd_kafka_terminating(rkb->rkb_rk) ||
+        if (unlikely(rd_kafka_broker_or_instance_terminating(rkb) ||
                      timeout_ms == RD_POLL_NOWAIT))
                 timeout_ms = 1;
         else if (timeout_ms == RD_POLL_INFINITE)
@@ -4537,6 +4482,7 @@ rd_kafka_broker_addresses_exhausted(const rd_kafka_broker_t *rkb) {
 static int rd_kafka_broker_thread_main(void *arg) {
         rd_kafka_broker_t *rkb = arg;
         rd_kafka_t *rk         = rkb->rkb_rk;
+        rd_kafka_op_t *terminate_op;
 
         rd_kafka_set_thread_name("%s", rkb->rkb_name);
         rd_kafka_set_thread_sysname("rdk:broker%" PRId32, rkb->rkb_nodeid);
@@ -4603,8 +4549,11 @@ static int rd_kafka_broker_thread_main(void *arg) {
                                 break;
                         }
 
-                        if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
+                        if (unlikely(
+                                rd_kafka_broker_or_instance_terminating(rkb))) {
                                 rd_kafka_broker_serve(rkb, 1000);
+                                break;
+                        }
 
                         if (!rd_kafka_sasl_ready(rkb->rkb_rk)) {
                                 /* SASL provider not yet ready. */
@@ -4709,30 +4658,21 @@ static int rd_kafka_broker_thread_main(void *arg) {
                         rd_kafka_broker_connect_auth(rkb);
                         break;
 
-                case RD_KAFKA_BROKER_STATE_UPDATE:
-                        /* FALLTHRU */
                 case RD_KAFKA_BROKER_STATE_UP:
                         rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
-
-                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UPDATE) {
-                                rd_kafka_broker_lock(rkb);
-                                rd_kafka_broker_set_state(
-                                    rkb, RD_KAFKA_BROKER_STATE_UP);
-                                rd_kafka_broker_unlock(rkb);
-                        }
                         break;
                 }
 
-                if (rd_kafka_terminating(rkb->rkb_rk)) {
+                if (rd_kafka_broker_or_instance_terminating(rkb)) {
                         /* Handle is terminating: fail the send+retry queue
                          * to speed up termination, otherwise we'll
                          * need to wait for request timeouts. */
                         r = rd_kafka_broker_bufq_timeout_scan(
                             rkb, 0, &rkb->rkb_outbufs, NULL, -1,
-                            RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
+                            rd_kafka_broker_destroy_error(rk), 0, NULL, 0);
                         r += rd_kafka_broker_bufq_timeout_scan(
                             rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
-                            RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
+                            rd_kafka_broker_destroy_error(rk), 0, NULL, 0);
                         rd_rkb_dbg(
                             rkb, BROKER, "TERMINATE",
                             "Handle is terminating in state %s: "
@@ -4749,28 +4689,47 @@ static int rd_kafka_broker_thread_main(void *arg) {
                 }
         }
 
+        /* Disable and drain ops queue.
+         * Simply purging the ops queue risks leaving dangling references
+         * for ops such as PARTITION_JOIN/PARTITION_LEAVE where the broker
+         * reference is not maintained in the rko (but in rktp_next_leader).
+         * #1596.
+         * Do this before failing the broker to make sure no buffers
+         * are enqueued after that. */
+        rd_kafka_q_disable(rkb->rkb_ops);
+        while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
+                ;
+
+        rd_kafka_broker_fail(rkb, LOG_DEBUG, rd_kafka_broker_destroy_error(rk),
+                             "Broker handle is terminating");
+
+        rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                   "Handle terminates in state %s: "
+                   "%d refcnts (%p), %d toppar(s), "
+                   "%d active toppar(s), "
+                   "%d outbufs, %d waitresps, %d retrybufs",
+                   rd_kafka_broker_state_names[rkb->rkb_state],
+                   rd_refcnt_get(&rkb->rkb_refcnt), &rkb->rkb_refcnt,
+                   rkb->rkb_toppar_cnt, rkb->rkb_active_toppar_cnt,
+                   (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+                   (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
+                   (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs));
+
+        rd_dassert(rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN);
         if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
                 rd_kafka_wrlock(rkb->rkb_rk);
                 TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
                 if (rkb->rkb_nodeid != -1 && !RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         rd_list_remove(&rkb->rkb_rk->rk_broker_by_id, rkb);
-                (void)rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
+
+                if (RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
+                        rd_atomic32_sub(&rkb->rkb_rk->rk_logical_broker_cnt, 1);
+                } else if (rkb->rkb_down_reported) {
+                        rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
+                }
+                rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
                 rd_kafka_wrunlock(rkb->rkb_rk);
         }
-
-        rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY,
-                             "Broker handle is terminating");
-
-        /* Disable and drain ops queue.
-         * Simply purging the ops queue risks leaving dangling references
-         * for ops such as PARTITION_JOIN/PARTITION_LEAVE where the broker
-         * reference is not maintained in the rko (but in rktp_next_leader).
-         * #1596 */
-        rd_kafka_q_disable(rkb->rkb_ops);
-        while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
-                ;
-
-        rd_kafka_broker_destroy(rkb);
 
 #if WITH_SSL
         /* Remove OpenSSL per-thread error state to avoid memory leaks */
@@ -4785,6 +4744,15 @@ static int rd_kafka_broker_thread_main(void *arg) {
         rd_kafka_interceptors_on_thread_exit(rk, RD_KAFKA_THREAD_BROKER);
 
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
+
+        terminate_op = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
+        terminate_op->rko_u.terminated.rkb = rkb;
+        terminate_op->rko_u.terminated.cb =
+            rd_kafka_decommissioned_broker_thread_join;
+        rd_kafka_q_enq(rk->rk_ops, terminate_op);
+
+        /* Release broker thread reference here and call destroy final. */
+        rd_kafka_broker_destroy(rkb);
 
         return 0;
 }
@@ -4987,6 +4955,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
 
         rkb->rkb_reconnect_backoff_ms = rk->rk_conf.reconnect_backoff_ms;
         rd_atomic32_init(&rkb->rkb_persistconn.coord, 0);
+        rd_atomic32_init(&rkb->termination_in_progress, 0);
 
         rd_atomic64_init(&rkb->rkb_c.ts_send, 0);
         rd_atomic64_init(&rkb->rkb_c.ts_recv, 0);
@@ -5155,7 +5124,7 @@ rd_kafka_broker_t *rd_kafka_broker_add_logical(rd_kafka_t *rk,
         rd_assert(rkb && *"failed to create broker thread");
         rd_kafka_wrunlock(rk);
 
-        rd_atomic32_add(&rk->rk_broker_addrless_cnt, 1);
+        rd_atomic32_add(&rk->rk_logical_broker_cnt, 1);
 
         rd_dassert(RD_KAFKA_BROKER_IS_LOGICAL(rkb));
         rd_kafka_broker_keep(rkb);
@@ -5214,14 +5183,6 @@ void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
                 rkb->rkb_nodename_epoch++;
                 changed = rd_true;
         }
-
-        if (rkb->rkb_nodeid != nodeid) {
-                rd_rkb_dbg(rkb, BROKER, "NODEID",
-                           "Broker nodeid changed from %" PRId32 " to %" PRId32,
-                           rkb->rkb_nodeid, nodeid);
-                rkb->rkb_nodeid = nodeid;
-        }
-
         rd_kafka_broker_unlock(rkb);
 
         /* Update the log name to include (or exclude) the nodeid.
@@ -5233,11 +5194,6 @@ void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
 
         if (!changed)
                 return;
-
-        if (!rd_kafka_broker_is_addrless(rkb))
-                rd_atomic32_sub(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
-        else
-                rd_atomic32_add(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
 
         /* Trigger a disconnect & reconnect */
         rd_kafka_broker_schedule_connection(rkb);
@@ -5269,7 +5225,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
         rkb = rd_list_find(&rk->rk_broker_by_id, &skel,
                            rd_kafka_broker_cmp_by_id);
 
-        if (!rkb)
+        if (!rkb || rd_kafka_broker_termination_in_progress(rkb))
                 return NULL;
 
         if (state != -1) {
@@ -5305,11 +5261,13 @@ static rd_kafka_broker_t *rd_kafka_broker_find(rd_kafka_t *rk,
         rd_kafka_mk_nodename(nodename, sizeof(nodename), name, port);
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_kafka_broker_or_instance_terminating(rkb))
+                        continue;
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         continue;
 
                 rd_kafka_broker_lock(rkb);
-                if (!rd_kafka_terminating(rk) && rkb->rkb_proto == proto &&
+                if (rkb->rkb_proto == proto &&
                     !strcmp(rkb->rkb_nodename, nodename)) {
                         rd_kafka_broker_keep(rkb);
                         rd_kafka_broker_unlock(rkb);
@@ -5590,12 +5548,6 @@ void rd_kafka_broker_update(rd_kafka_t *rk,
                  * the hostname. */
                 if (strcmp(rkb->rkb_nodename, nodename))
                         needs_update = 1;
-        } else if ((rkb = rd_kafka_broker_find(rk, proto, mdb->host,
-                                               mdb->port))) {
-                /* Broker matched by hostname (but not by nodeid),
-                 * update the nodeid. */
-                needs_update = 1;
-
         } else if ((rkb = rd_kafka_broker_add(rk, RD_KAFKA_LEARNED, proto,
                                               mdb->host, mdb->port, mdb->id))) {
                 rd_kafka_broker_keep(rkb);
@@ -5631,24 +5583,12 @@ void rd_kafka_broker_update(rd_kafka_t *rk,
  * @returns the broker id, or RD_KAFKA_NODEID_UA if \p rkb is NULL.
  *
  * @locality any
- * @locks_required none
- * @locks_acquired rkb_lock
  */
 int32_t rd_kafka_broker_id(rd_kafka_broker_t *rkb) {
-        int32_t broker_id;
-
         if (unlikely(!rkb))
                 return RD_KAFKA_NODEID_UA;
 
-        /* Avoid locking if already on the broker thread */
-        if (thrd_is_current(rkb->rkb_thread))
-                return rkb->rkb_nodeid;
-
-        rd_kafka_broker_lock(rkb);
-        broker_id = rkb->rkb_nodeid;
-        rd_kafka_broker_unlock(rkb);
-
-        return broker_id;
+        return rkb->rkb_nodeid;
 }
 
 
@@ -5756,7 +5696,7 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
                     rd_atomic32_get(&rk->rk_logical_broker_up_cnt) >
                 0 ||
             rd_atomic32_get(&rk->rk_broker_cnt) -
-                    rd_atomic32_get(&rk->rk_broker_addrless_cnt) ==
+                    rd_atomic32_get(&rk->rk_logical_broker_cnt) ==
                 0)
                 return;
 
@@ -6168,6 +6108,86 @@ void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
         rd_dassert(rkb);
         rko = rd_kafka_op_new(RD_KAFKA_OP_SASL_REAUTH);
         rd_kafka_q_enq(rkb->rkb_ops, rko);
+}
+
+int32_t *rd_kafka_brokers_learned_ids(rd_kafka_t *rk, size_t *cntp) {
+        rd_kafka_broker_t *rkb;
+
+        size_t all_broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+        /* This over-allocates but simplifies the code. */
+        int32_t *ids = malloc(sizeof(*ids) * all_broker_cnt);
+        int32_t *p   = ids;
+
+        *cntp = 0;
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source != RD_KAFKA_LEARNED ||
+                    rd_kafka_broker_termination_in_progress(rkb))
+                        continue;
+
+                *p++ = rkb->rkb_nodeid;
+                (*cntp)++;
+        }
+        rd_kafka_rdunlock(rk);
+
+        return ids;
+}
+
+/**
+ * @brief Decommission a broker.
+ *
+ * @param rk Client instance.
+ * @param rkb Broker to decommission.
+ * @param wait_thrds Add the broker's thread to this list if not NULL.
+ *
+ * @locks rd_kafka_wrlock() is dropped and reacquired.
+ *
+ * Broker threads hold a refcount and detect when it reaches 1 and then
+ * decommissions itself. Callers can wait for this to happen by calling
+ * thrd_join() on elements of \p wait_thrds. Callers are responsible for
+ * managing the creation and destruction of \p wait_thrds which can be NULL.
+ */
+void rd_kafka_broker_decommission(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_list_t *wait_thrds) {
+
+        if (rd_atomic32_get(&rkb->termination_in_progress) > 0)
+                return;
+
+        rd_atomic32_add(&rkb->termination_in_progress, 1);
+
+        /* Add broker's thread to wait_thrds list for later joining */
+        if (wait_thrds) {
+                thrd_t *thrd = rd_malloc(sizeof(*thrd));
+                *thrd        = rkb->rkb_thread;
+
+                rd_list_add(wait_thrds, thrd);
+        }
+
+        rd_kafka_wrunlock(rk);
+
+        rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",
+                     rd_kafka_broker_name(rkb));
+
+#ifndef _WIN32
+        /* Interrupt IO threads to speed up termination. */
+        if (rk->rk_conf.term_sig)
+                pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+#endif
+
+        if (rk->rk_cgrp && rk->rk_cgrp->rkcg_curr_coord &&
+            rk->rk_cgrp->rkcg_curr_coord == rkb)
+                /* If we're decommissioning current coordinator handle,
+                 * mark it as dead and decrease its reference count. */
+                rd_kafka_cgrp_coord_dead(rk->rk_cgrp,
+                                         RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+                                         "Group coordinator decommissioned");
+        /* Send op to trigger queue/io wake-up.
+         * Broker thread will destroy this thread reference.
+         * WARNING: This is last time we can read from rkb in this thread! */
+        rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
+
+        rd_kafka_wrlock(rk);
 }
 
 /**

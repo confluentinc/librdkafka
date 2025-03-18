@@ -629,6 +629,9 @@ static int rd_kafka_cgrp_coord_update(rd_kafka_cgrp_t *rkcg, int32_t coord_id) {
 
                         return 1;
                 } else {
+                        if (rkb)
+                                rd_kafka_broker_destroy(
+                                    rkb); /* from find_by_nodeid() */
                         /* Coordinator is known but no corresponding
                          * broker handle. */
                         return rd_kafka_cgrp_set_state(

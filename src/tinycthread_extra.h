@@ -40,6 +40,9 @@
 #include <pthread.h> /* needed for rwlock_t */
 #endif
 
+#ifdef __FreeBSD__
+#include <pthread_np.h> /* for pthread_set_name_np */
+#endif
 
 /**
  * @brief Set thread system name if platform supports it (pthreads)

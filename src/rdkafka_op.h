@@ -400,6 +400,8 @@ struct rd_kafka_op_s {
                 struct {
                         rd_kafka_metadata_t *md;
                         rd_kafka_metadata_internal_t *mdi;
+                        /* subscription version for this call */
+                        int32_t subscription_version;
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
                 } metadata;

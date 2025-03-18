@@ -33,6 +33,7 @@
 static RdKafka::Producer *producer;
 static RdKafka::KafkaConsumer *consumer;
 static std::string topic;
+static bool first_produce = true;
 
 static void assert_all_headers_match(RdKafka::Headers *actual,
                                      const RdKafka::Headers *expected) {
@@ -86,6 +87,10 @@ static void test_headers(RdKafka::Headers *produce_headers,
     Test::Fail("produce() failed: " + RdKafka::err2str(err));
 
   producer->flush(tmout_multip(10 * 1000));
+  if (first_produce) {
+    test_wait_topic_exists(producer->c_ptr(), topic.c_str(), 5000);
+    first_produce = false;
+  }
 
   if (producer->outq_len() > 0)
     Test::Fail(tostr() << "Expected producer to be flushed, "

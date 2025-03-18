@@ -54,6 +54,11 @@ int main_0092_mixed_msgver(int argc, char **argv) {
                 return 0;
         }
 
+        if (test_broker_version >= TEST_BRKVER(4, 0, 0, 0)) {
+                TEST_SKIP("MsgVersion 1 was removed in Apache Kafka 4.0\n");
+                return 0;
+        }
+
         testid = test_id_generate();
 
         rk = test_create_producer();

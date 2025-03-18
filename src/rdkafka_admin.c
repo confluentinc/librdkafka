@@ -1511,8 +1511,9 @@ rd_kafka_admin_MetadataRequest(rd_kafka_broker_t *rkb,
             rd_false /* No admin operation requires topic creation. */,
             include_cluster_authorized_operations,
             include_topic_authorized_operations,
-            rd_false /* No admin operation should update cgrp. */, force_racks,
-            resp_cb, replyq,
+            rd_false /* No admin operation should update cgrp. */,
+            -1 /* No subscription version is used */, force_racks, resp_cb,
+            replyq,
             rd_true /* Admin operation metadata requests are always forced. */,
             opaque);
 }

@@ -141,8 +141,8 @@ rd_kafka_metadata(rd_kafka_t *rk,
                      * topics in the cluster, since a
                      * partial request may make it seem
                      * like some subscribed topics are missing. */
-                    all_topics ? rd_true : rd_false,
-                    rd_false /* force_racks */, rko);
+                    all_topics ? rd_true : rd_false, rd_false /* force_racks */,
+                    rko);
 
                 rd_list_destroy(&topics);
                 rd_kafka_broker_destroy(rkb);

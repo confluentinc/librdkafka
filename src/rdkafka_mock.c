@@ -49,6 +49,8 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster);
 static rd_kafka_mock_request_t *
 rd_kafka_mock_request_new(int32_t id, int16_t api_key, int64_t timestamp_us);
 static void rd_kafka_mock_request_free(void *element);
+static void rd_kafka_mock_coord_remove(rd_kafka_mock_cluster_t *mcluster,
+                                       int32_t broker_id);
 
 static rd_kafka_mock_broker_t *
 rd_kafka_mock_broker_find(const rd_kafka_mock_cluster_t *mcluster,
@@ -1589,6 +1591,8 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
         if (mrkb->rack)
                 rd_free(mrkb->rack);
 
+        rd_kafka_mock_coord_remove(mrkb->cluster, mrkb->id);
+
         TAILQ_REMOVE(&mrkb->cluster->brokers, mrkb, link);
         mrkb->cluster->broker_cnt--;
 
@@ -1853,6 +1857,20 @@ rd_kafka_mock_coord_set(rd_kafka_mock_cluster_t *mcluster,
         TAILQ_INSERT_TAIL(&mcluster->coords, mcoord, link);
 
         return mcoord;
+}
+
+/**
+ * @brief Remove coordinator by broker id.
+ */
+void rd_kafka_mock_coord_remove(rd_kafka_mock_cluster_t *mcluster,
+                                int32_t broker_id) {
+        rd_kafka_mock_coord_t *mcoord, *tmp;
+
+        TAILQ_FOREACH_SAFE(mcoord, &mcluster->coords, link, tmp) {
+                if (mcoord->broker_id == broker_id) {
+                        rd_kafka_mock_coord_destroy(mcluster, mcoord);
+                }
+        }
 }
 
 

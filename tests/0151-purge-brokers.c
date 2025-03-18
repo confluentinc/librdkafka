@@ -78,11 +78,11 @@ static void fetch_metadata(rd_kafka_t *rk,
 
         /* Trigger Metadata request which will update learned brokers. */
         do {
-                err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(10000));
+                err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(5000));
                 if (md) {
                         rd_kafka_metadata_destroy(md);
                         md = NULL;
-                } else
+                } else if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
                         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
                 rd_usleep(100 * 1000, 0);
@@ -148,10 +148,12 @@ static void fetch_metadata(rd_kafka_t *rk,
  *        @param await_verification If `rd_false`, the verification is
  *                                  done only after last action.
  */
-#define TEST_ACTION_REMOVE_BROKER   0
-#define TEST_ACTION_ADD_BROKER      1
-#define TEST_ACTION_SET_DOWN_BROKER 2
-#define TEST_ACTION_SET_UP_BROKER   3
+#define TEST_ACTION_REMOVE_BROKER         0
+#define TEST_ACTION_ADD_BROKER            1
+#define TEST_ACTION_SET_DOWN_BROKER       2
+#define TEST_ACTION_SET_UP_BROKER         3
+#define TEST_ACTION_SET_GROUP_COORDINATOR 4
+#define TEST_GROUP                        "topic1"
 static void
 do_test_add_remove_brokers(int32_t initial_cluster_size,
                            int32_t actions[][2],
@@ -172,17 +174,18 @@ do_test_add_remove_brokers(int32_t initial_cluster_size,
         test_conf_init(&conf, NULL, 100);
 
         test_conf_set(conf, "bootstrap.servers", bootstraps);
-        test_conf_set(conf, "group.id", "topic1");
+        test_conf_set(conf, "group.id", TEST_GROUP);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
         if (edit_configuration_cb) {
                 edit_configuration_cb(conf);
         }
 
         rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
-        test_consumer_subscribe(rk, "topic1");
+        test_consumer_subscribe(rk, TEST_GROUP);
 
         /* Create a new topic to trigger partition reassignment */
-        rd_kafka_mock_topic_create(cluster, "topic1", 3, initial_cluster_size);
+        rd_kafka_mock_topic_create(cluster, TEST_GROUP, 3,
+                                   initial_cluster_size);
 
         for (action = 0; action < expected_broker_ids_cnt; action++) {
                 if (action > 0) {
@@ -226,7 +229,14 @@ do_test_add_remove_brokers(int32_t initial_cluster_size,
                                             " up",
                                             broker_id);
                                 break;
-
+                        case TEST_ACTION_SET_GROUP_COORDINATOR:
+                                TEST_ASSERT(rd_kafka_mock_coordinator_set(
+                                                cluster, "group", TEST_GROUP,
+                                                broker_id) == 0,
+                                            "Failed to set group coordinator "
+                                            "to %" PRId32,
+                                            broker_id);
+                                break;
                         default:
                                 break;
                         }
@@ -255,15 +265,21 @@ do_test_add_remove_brokers(int32_t initial_cluster_size,
 static void do_test_replace_with_new_cluster(void) {
         SUB_TEST_QUICK();
 
-        int32_t expected_brokers_cnt[] = {3, 2, 3, 2, 3, 2, 3};
+        int32_t expected_brokers_cnt[] = {3, 3, 2, 3, 2, 3, 3, 2, 3};
 
-        int32_t expected_broker_ids[][5] = {
-            {1, 2, 3}, {2, 3}, {2, 3, 4}, {3, 4}, {3, 4, 5}, {4, 5}, {4, 5, 6}};
+        int32_t expected_broker_ids[][5] = {{1, 2, 3}, {1, 2, 3}, {2, 3},
+                                            {2, 3, 4}, {3, 4},    {3, 4, 5},
+                                            {3, 4, 5}, {4, 5},    {4, 5, 6}};
 
         int32_t actions[][2] = {
-            {TEST_ACTION_REMOVE_BROKER, 1}, {TEST_ACTION_ADD_BROKER, 4},
-            {TEST_ACTION_REMOVE_BROKER, 2}, {TEST_ACTION_ADD_BROKER, 5},
-            {TEST_ACTION_REMOVE_BROKER, 3}, {TEST_ACTION_ADD_BROKER, 6},
+            {TEST_ACTION_SET_GROUP_COORDINATOR, 3},
+            {TEST_ACTION_REMOVE_BROKER, 1},
+            {TEST_ACTION_ADD_BROKER, 4},
+            {TEST_ACTION_REMOVE_BROKER, 2},
+            {TEST_ACTION_ADD_BROKER, 5},
+            {TEST_ACTION_SET_GROUP_COORDINATOR, 5},
+            {TEST_ACTION_REMOVE_BROKER, 3},
+            {TEST_ACTION_ADD_BROKER, 6},
         };
 
         do_test_add_remove_brokers(
@@ -288,19 +304,28 @@ static void do_test_replace_with_new_cluster(void) {
 static void do_test_cluster_roll(void) {
         SUB_TEST_QUICK();
 
-        int32_t expected_brokers_cnt[] = {5, 4, 3, 4, 3, 4, 3, 4, 3, 4, 5};
+        int32_t expected_brokers_cnt[] = {5, 5, 4, 3, 4, 3, 4,
+                                          3, 4, 4, 3, 4, 5};
 
         int32_t expected_broker_ids[][5] = {
-            {1, 2, 3, 4, 5}, {2, 3, 4, 5}, {3, 4, 5},      {1, 3, 4, 5},
-            {1, 4, 5},       {1, 2, 4, 5}, {1, 2, 5},      {1, 2, 3, 5},
-            {1, 2, 3},       {1, 2, 3, 4}, {1, 2, 3, 4, 5}};
+            {1, 2, 3, 4, 5}, {1, 2, 3, 4, 5}, {2, 3, 4, 5}, {3, 4, 5},
+            {1, 3, 4, 5},    {1, 4, 5},       {1, 2, 4, 5}, {1, 2, 5},
+            {1, 2, 3, 5},    {1, 2, 3, 5},    {1, 2, 3},    {1, 2, 3, 4},
+            {1, 2, 3, 4, 5}};
 
         int32_t actions[][2] = {
-            {TEST_ACTION_SET_DOWN_BROKER, 1}, {TEST_ACTION_SET_DOWN_BROKER, 2},
-            {TEST_ACTION_SET_UP_BROKER, 1},   {TEST_ACTION_SET_DOWN_BROKER, 3},
-            {TEST_ACTION_SET_UP_BROKER, 2},   {TEST_ACTION_SET_DOWN_BROKER, 4},
-            {TEST_ACTION_SET_UP_BROKER, 3},   {TEST_ACTION_SET_DOWN_BROKER, 5},
-            {TEST_ACTION_SET_UP_BROKER, 4},   {TEST_ACTION_SET_UP_BROKER, 5},
+            {TEST_ACTION_SET_GROUP_COORDINATOR, 5},
+            {TEST_ACTION_SET_DOWN_BROKER, 1},
+            {TEST_ACTION_SET_DOWN_BROKER, 2},
+            {TEST_ACTION_SET_UP_BROKER, 1},
+            {TEST_ACTION_SET_DOWN_BROKER, 3},
+            {TEST_ACTION_SET_UP_BROKER, 2},
+            {TEST_ACTION_SET_DOWN_BROKER, 4},
+            {TEST_ACTION_SET_UP_BROKER, 3},
+            {TEST_ACTION_SET_GROUP_COORDINATOR, 1},
+            {TEST_ACTION_SET_DOWN_BROKER, 5},
+            {TEST_ACTION_SET_UP_BROKER, 4},
+            {TEST_ACTION_SET_UP_BROKER, 5},
         };
 
         do_test_add_remove_brokers(5, actions, expected_broker_ids,
@@ -344,11 +369,11 @@ static void do_test_remove_then_add_log_cb(const rd_kafka_t *rk,
  *        add the broker again.
  */
 static rd_bool_t do_test_remove_then_add_await_after_action_cb(int action) {
-        if (action == 1) {
+        if (action == 2) {
                 /* Wait until TERMINATE is received */
                 return !rd_atomic32_get(
                     &do_test_remove_then_add_received_terminate);
-        } else if (action == 2)
+        } else if (action == 3)
                 /* Wait until final verification */
                 return rd_true;
         return rd_false;
@@ -392,11 +417,13 @@ static void do_test_remove_then_add(void) {
         rd_atomic32_init(&do_test_remove_then_add_received_terminate, 0);
         rd_atomic32_init(&verification_complete, 0);
 
-        int32_t expected_brokers_cnt[] = {3, 2, 3};
+        int32_t expected_brokers_cnt[] = {3, 3, 2, 3};
 
-        int32_t expected_broker_ids[][5] = {{1, 2, 3}, {2, 3}, {1, 2, 3}};
+        int32_t expected_broker_ids[][5] = {
+            {1, 2, 3}, {1, 2, 3}, {2, 3}, {1, 2, 3}};
 
         int32_t actions[][2] = {
+            {TEST_ACTION_SET_GROUP_COORDINATOR, 3},
             {TEST_ACTION_REMOVE_BROKER, 1},
             {TEST_ACTION_ADD_BROKER, 1},
         };

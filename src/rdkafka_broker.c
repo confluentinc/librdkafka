@@ -6157,6 +6157,13 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                 pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
 #endif
 
+        if (rk->rk_cgrp && rk->rk_cgrp->rkcg_curr_coord &&
+            rk->rk_cgrp->rkcg_curr_coord == rkb)
+                /* If we're decommissioning current coordinator handle,
+                 * mark it as dead and decrease its reference count. */
+                rd_kafka_cgrp_coord_dead(rk->rk_cgrp,
+                                         RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+                                         "Group coordinator decommissioned");
         /* Send op to trigger queue/io wake-up.
          * Broker thread will destroy this thread reference.
          * WARNING: This is last time we can read from rkb in this thread! */

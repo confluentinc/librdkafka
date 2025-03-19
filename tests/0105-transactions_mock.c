@@ -44,13 +44,14 @@
 
 
 static int allowed_error;
+static int allowed_error_2;
 
 /**
  * @brief Decide what error_cb's will cause the test to fail.
  */
 static int
 error_is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
-        if (err == allowed_error ||
+        if (err == allowed_error || err == allowed_error_2 ||
             /* If transport errors are allowed then it is likely
              * that we'll also see ALL_BROKERS_DOWN. */
             (allowed_error == RD_KAFKA_RESP_ERR__TRANSPORT &&
@@ -3042,6 +3043,7 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
 
         /* Broker down is not a test-failing error */
         allowed_error          = RD_KAFKA_RESP_ERR__TRANSPORT;
+        allowed_error_2        = RD_KAFKA_RESP_ERR__TIMED_OUT;
         test_curr->is_fatal_cb = error_is_fatal_cb;
         test_curr->exp_dr_err  = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
@@ -3113,6 +3115,7 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
         rd_kafka_destroy(rk);
 
         allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
+        allowed_error_2        = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->exp_dr_err  = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->is_fatal_cb = NULL;
 

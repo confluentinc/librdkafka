@@ -1524,12 +1524,11 @@ rd_kafka_broker_weighted(rd_kafka_t *rk,
 static int rd_kafka_broker_weight_usable(rd_kafka_broker_t *rkb) {
         int weight = 0;
 
-        if (!rd_kafka_broker_state_is_up(rkb->rkb_state))
+        if (!rd_kafka_broker_state_is_up(rkb->rkb_state) ||
+            RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                 return 0;
 
-        weight +=
-            2000 * (rkb->rkb_nodeid != -1 && !RD_KAFKA_BROKER_IS_LOGICAL(rkb));
-        weight += 10 * !RD_KAFKA_BROKER_IS_LOGICAL(rkb);
+        weight += 2000;
 
         if (likely(!rd_atomic32_get(&rkb->rkb_blocking_request_cnt))) {
                 rd_ts_t tx_last = rd_atomic64_get(&rkb->rkb_c.ts_send);

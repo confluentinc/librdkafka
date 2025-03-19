@@ -794,7 +794,12 @@ int rd_kafka_toppar_delegate_to_leader(rd_kafka_toppar_t *rktp) {
         rd_kafka_rdlock(rktp->rktp_rkt->rkt_rk);
         rd_kafka_toppar_lock(rktp);
 
-        rd_assert(rktp->rktp_leader_id != rktp->rktp_broker_id);
+        if (rktp->rktp_leader_id == rktp->rktp_broker_id) {
+                /* Given lock was released we need to check again */
+                rd_kafka_toppar_unlock(rktp);
+                rd_kafka_rdunlock(rktp->rktp_rkt->rkt_rk);
+                return 0;
+        }
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
                      "Topic %s [%" PRId32

@@ -4692,8 +4692,6 @@ static int rd_kafka_broker_thread_main(void *arg) {
         if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
                 rd_kafka_wrlock(rkb->rkb_rk);
                 TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
-                if (rkb->rkb_nodeid != -1 && !RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                        rd_list_remove(&rkb->rkb_rk->rk_broker_by_id, rkb);
 
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                         rd_atomic32_sub(&rkb->rkb_rk->rk_logical_broker_cnt, 1);
@@ -5207,7 +5205,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
         rkb = rd_list_find(&rk->rk_broker_by_id, &skel,
                            rd_kafka_broker_cmp_by_id);
 
-        if (!rkb || rd_kafka_broker_termination_in_progress(rkb))
+        if (!rkb)
                 return NULL;
 
         if (state != -1) {
@@ -6146,6 +6144,7 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                 rd_list_add(wait_thrds, thrd);
         }
 
+        rd_list_remove(&rk->rk_broker_by_id, rkb);
         rd_kafka_wrunlock(rk);
 
         rd_kafka_dbg(rk, BROKER, "DESTROY", "Sending TERMINATE to %s",

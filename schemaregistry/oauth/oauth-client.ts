@@ -48,6 +48,7 @@ export class OAuthClient {
       try {
         const token = await this.client.getToken(this.tokenParams);
         this.token = token;
+        return;
       } catch (error: any) {
         if (isBoom(error) && i < this.maxRetries) {
           const statusCode = error.output.statusCode;

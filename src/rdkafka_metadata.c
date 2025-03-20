@@ -480,28 +480,30 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
     rd_kafka_metadata_t *md,
     rd_kafka_broker_t *rkb_current) {
         rd_kafka_broker_t *rkb;
-        rd_kafka_broker_t *rkb_next;
-        rd_bool_t purge_broker;
         rd_bool_t has_learned_brokers = rd_false;
         rd_list_t brokers_to_decommission;
         int i;
 
         rd_kafka_wrlock(rk);
-        TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_next) {
-                if (rkb->rkb_source == RD_KAFKA_LEARNED)
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source == RD_KAFKA_LEARNED) {
                         has_learned_brokers = rd_true;
+                        break;
+                }
         }
+        if (!has_learned_brokers) {
+                rd_kafka_wrunlock(rk);
+                return;
+        }
+
         rd_list_init(&brokers_to_decommission,
                      rd_atomic32_get(&rk->rk_broker_cnt), NULL);
-        TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_next) {
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_bool_t purge_broker;
                 void *rkb_decommissioning;
-                rd_bool_t remove_configure_broker =
-                    has_learned_brokers &&
-                    rkb->rkb_source == RD_KAFKA_CONFIGURED &&
-                    rkb != rkb_current;
 
                 if (rkb->rkb_source != RD_KAFKA_LEARNED &&
-                    !remove_configure_broker)
+                    rkb->rkb_source != RD_KAFKA_CONFIGURED)
                         continue;
 
                 purge_broker = rd_true;
@@ -528,10 +530,8 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
                         }
                 }
 
-                if (!purge_broker)
-                        continue;
-
-                rd_list_add(&brokers_to_decommission, rkb);
+                if (purge_broker)
+                        rd_list_add(&brokers_to_decommission, rkb);
         }
         RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {
                 rd_kafka_broker_decommission(rk, rkb,
@@ -1118,6 +1118,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
             (requested_topics || requested_topic_ids || all_topics))
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
+        if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
+            rk->rk_cgrp->rkcg_group_protocol ==
+                RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
+                rd_interval_reset(&rk->rk_cgrp->rkcg_join_intvl);
+        }
 
         /* Try to acquire a Producer ID from this broker if we
          * don't have one. */

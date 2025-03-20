@@ -302,6 +302,9 @@ struct rd_kafka_s {
          *   that have had at least one connection attempt
          *   and are not internal or logical. */
         rd_atomic32_t rk_broker_down_cnt;
+        /* Number of sparse connections requested
+         * but still not executed. */
+        rd_atomic32_t rk_scheduled_connections_cnt;
 
         /** Decommissioned threads to await */
         rd_list_t wait_decommissioned_thrds;

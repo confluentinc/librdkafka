@@ -1418,7 +1418,7 @@ rd_kafka_broker_t *rd_kafka_broker_random0(const char *func,
 
                 rd_kafka_broker_lock(rkb);
                 if ((is_up && rd_kafka_broker_state_is_up(rkb->rkb_state)) ||
-                    (!is_up && (int)rkb->rkb_state == state)) {
+                    (!is_up && (state == -1 || (int)rkb->rkb_state == state))) {
                         if (filter && filter(rkb, opaque)) {
                                 /* Filtered out */
                                 fcnt++;
@@ -1537,6 +1537,9 @@ static int rd_kafka_broker_weight_usable(rd_kafka_broker_t *rkb) {
                                  1000000);
 
                 weight += 1; /* is not blocking */
+                if (rkb->rkb_source == RD_KAFKA_LEARNED)
+                        /* Prefer learned brokers */
+                        weight += 1000;
 
                 /* Prefer least idle broker (based on last 10 minutes use) */
                 if (idle < 0)
@@ -3484,6 +3487,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_CONNECT:
+                rd_atomic32_add(&rkb->rkb_rk->rk_scheduled_connections_cnt, -1);
                 /* Sparse connections: connection requested, transition
                  * to TRY_CONNECT state to trigger new connection. */
                 if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_INIT) {
@@ -5652,6 +5656,14 @@ static int rd_kafka_broker_filter_never_connected(rd_kafka_broker_t *rkb,
         return rd_atomic32_get(&rkb->rkb_c.connects);
 }
 
+/**
+ * @brief Filter out brokers that aren't connecting.
+ */
+static int rd_kafka_broker_filter_not_connecting(rd_kafka_broker_t *rkb,
+                                                 void *opaque) {
+        return rkb->rkb_state <= RD_KAFKA_BROKER_STATE_DOWN;
+}
+
 
 /**
  * @brief Sparse connections:
@@ -5666,6 +5678,8 @@ static int rd_kafka_broker_filter_never_connected(rd_kafka_broker_t *rkb,
 void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
         rd_kafka_broker_t *rkb;
         rd_ts_t suppr;
+        rd_bool_t any_connecting = rd_true;
+        int scheduled_connections;
 
         /* Don't count connections to logical brokers since they serve
          * a specific purpose (group coordinator) and their connections
@@ -5680,16 +5694,33 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
                 return;
 
         mtx_lock(&rk->rk_suppress.sparse_connect_lock);
+        rkb = rd_kafka_broker_random(
+            rk, -1 /*any state*/, rd_kafka_broker_filter_not_connecting, NULL);
+        if (rkb)
+                rd_kafka_broker_destroy(
+                    rkb); /* refcnt from ..broker_random() */
+        else
+                any_connecting = rd_false;
+
+        scheduled_connections =
+            rd_atomic32_get(&rk->rk_scheduled_connections_cnt);
+
+        if (!any_connecting && scheduled_connections == 0)
+                /* Skip interval */
+                rd_interval_reset(&rk->rk_suppress.sparse_connect_random);
         suppr = rd_interval(&rk->rk_suppress.sparse_connect_random,
                             rk->rk_conf.sparse_connect_intvl * 1000, 0);
-        mtx_unlock(&rk->rk_suppress.sparse_connect_lock);
 
         if (suppr <= 0) {
                 rd_kafka_dbg(rk, BROKER | RD_KAFKA_DBG_GENERIC, "CONNECT",
                              "Not selecting any broker for cluster connection: "
-                             "still suppressed for %" PRId64 "ms: %s",
-                             -suppr / 1000, reason);
-                return;
+                             "still suppressed for %" PRId64
+                             "ms, "
+                             "any broker connecting: %s, "
+                             "scheduled connections %d: %s",
+                             -suppr / 1000, RD_STR_ToF(any_connecting),
+                             scheduled_connections, reason);
+                goto done;
         }
 
         /* First pass:  only match brokers never connected to,
@@ -5705,13 +5736,13 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
 
         if (!rkb) {
                 /* No brokers matched:
-                 * this happens if there are brokers in > INIT state,
+                 * this happens if all brokers are in > INIT state,
                  * in which case they're already connecting. */
 
                 rd_kafka_dbg(rk, BROKER | RD_KAFKA_DBG_GENERIC, "CONNECT",
                              "Cluster connection already in progress: %s",
                              reason);
-                return;
+                goto done;
         }
 
         rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_GENERIC, "CONNECT",
@@ -5722,6 +5753,8 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
         rd_kafka_broker_schedule_connection(rkb);
 
         rd_kafka_broker_destroy(rkb); /* refcnt from ..broker_random() */
+done:
+        mtx_unlock(&rk->rk_suppress.sparse_connect_lock);
 }
 
 
@@ -5911,10 +5944,11 @@ void rd_kafka_broker_active_toppar_del(rd_kafka_broker_t *rkb,
  */
 void rd_kafka_broker_schedule_connection(rd_kafka_broker_t *rkb) {
         rd_kafka_op_t *rko;
-
+        rd_atomic32_add(&rkb->rkb_rk->rk_scheduled_connections_cnt, 1);
         rko = rd_kafka_op_new(RD_KAFKA_OP_CONNECT);
         rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
-        rd_kafka_q_enq(rkb->rkb_ops, rko);
+        if (!rd_kafka_q_enq(rkb->rkb_ops, rko))
+                rd_atomic32_add(&rkb->rkb_rk->rk_scheduled_connections_cnt, -1);
 }
 
 

@@ -1,7 +1,21 @@
 #!/bin/bash
 set -e
-export TEST_KAFKA_GIT_REF=${TEST_KAFKA_GIT_REF:-3.8.0}
-export TEST_CP_VERSION=${TEST_CP_VERSION:-7.7.0}
+
+
+# Helper script to run all tests through the CI
+# Converts the environment variables to the test arguments
+# with the following defaults:
+#
+# - plaintext connection
+# - no authentication
+# - KRaft enabled
+# - all tests
+# - default parallelism
+# - no assertions
+# - following AK and CP versions
+
+export TEST_KAFKA_GIT_REF=${TEST_KAFKA_GIT_REF:-4.0.0}
+export TEST_CP_VERSION=${TEST_CP_VERSION:-7.9.0}
 
 TEST_SSL_ARG=""
 TEST_SSL_INTERMEDIATE_CA_ARG=""

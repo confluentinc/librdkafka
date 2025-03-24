@@ -7,6 +7,27 @@ import signal
 curr_dir = os.path.dirname(os.path.realpath(__file__))
 os.chdir(curr_dir)
 
+# This test script accepts the same arguments as run-test.sh, and
+# the same environment variables as well. Additionally, it reads the following
+# environment variables and can run tests in batches and for a certain
+# number of iterations, especially useful when running tests with valgrind or
+# to debug infrequent errors.
+#
+# TESTS: A comma-separated list of test numbers or test names. In case
+#        they're numeric there's no need to pad them with zeros. There can be
+#        ranges of tests, open ranges and they're sorted and deduplicated.
+#        If not set, it defaults to all tests in the current directory.
+#        Example: TESTS=1,2,3-5,2-,11
+#
+# TESTS_BATCH_SIZE: The number of tests to run in each batch. If not set, it
+#                   defaults to the number of tests in TESTS.
+#
+# TEST_ITERATIONS: The number of iterations to run the tests. If not set, it
+#                  defaults to 1. It continues iterating only if there are no
+#                  errors. When "-a" is set it stops after the first error
+#                  in any batch, when it isn't set it stops after the
+#                  first error in any iteration.
+
 # Max number of tests
 max_automatic_tests = 1000
 # Higher test number

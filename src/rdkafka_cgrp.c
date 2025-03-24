@@ -2432,6 +2432,11 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
             rkcg->rkcg_rk, NULL, &topics, rd_false /*!allow auto create */,
             rd_true /*cgrp_update*/, cgrp_subscription_version, reason, rko);
         if (err) {
+                /* Hint cache that something is interested in
+                 * these topics so that they will be included in
+                 * a future all known_topics query. */
+                rd_kafka_metadata_cache_hint(rk, &topics, NULL,
+                                             RD_KAFKA_RESP_ERR__NOENT);
                 rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_METADATA, "CGRPMETADATA",
                              "%s: need to refresh metadata (%dms old) "
                              "but no usable brokers available: %s",
@@ -2448,7 +2453,7 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
 
 static void rd_kafka_cgrp_join(rd_kafka_cgrp_t *rkcg,
                                int32_t cgrp_subscription_version) {
-        int metadata_age;
+        int metadata_age, metadata_refresh_outcome;
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP ||
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_INIT ||
@@ -2482,9 +2487,9 @@ static void rd_kafka_cgrp_join(rd_kafka_cgrp_t *rkcg,
          */
         /* We need up-to-date full metadata to continue,
          * refresh metadata if necessary. */
-        if (rd_kafka_cgrp_metadata_refresh(rkcg, &metadata_age,
-                                           cgrp_subscription_version,
-                                           "consumer join") == 1) {
+        metadata_refresh_outcome = rd_kafka_cgrp_metadata_refresh(
+            rkcg, &metadata_age, cgrp_subscription_version, "consumer join");
+        if (metadata_refresh_outcome == 1) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP | RD_KAFKA_DBG_CONSUMER,
                              "JOIN",
                              "Group \"%.*s\": "
@@ -2500,6 +2505,14 @@ static void rd_kafka_cgrp_join(rd_kafka_cgrp_t *rkcg,
                 rd_kafka_cgrp_set_join_state(
                     rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA);
 
+                return; /* ^ async call */
+        } else if (metadata_refresh_outcome == -1) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP | RD_KAFKA_DBG_CONSUMER,
+                             "JOIN",
+                             "Group \"%.*s\": "
+                             "postponing join until up-to-date "
+                             "metadata can be requested",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
                 return; /* ^ async call */
         }
 
@@ -5162,14 +5175,6 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
         int32_t new_subscription_version =
             rd_atomic32_add(&rkcg->rkcg_subscription_version, 1);
         rkcg->rkcg_subscription = rktparlist;
-        if (rkcg->rkcg_subscription) {
-                /* Insert all non-wildcard topics in cache immediately.
-                 * Otherwise a manual full metadata request could
-                 * not cache the hinted topic and return an
-                 * UNKNOWN_TOPIC_OR_PART error to the user. See #4589. */
-                rd_kafka_metadata_cache_hint_rktparlist(
-                    rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL);
-        }
         return new_subscription_version;
 }
 

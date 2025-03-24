@@ -418,7 +418,6 @@ static void do_test_static_group_rebalance_consumer(void) {
         const char *topic =
             test_mk_topic_name("0102_static_group_rebalance", 1);
         char *topics = rd_strdup(tsprintf("^%s.*", topic));
-        test_timing_t t_close;
 
         SUB_TEST();
 

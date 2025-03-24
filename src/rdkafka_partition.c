@@ -4422,26 +4422,23 @@ int rd_kafka_topic_partition_list_regex_cnt(
 
 
 /**
- * @brief Removes reges from the list and returns the list without any regex in
- * it.
+ * @brief Match function that returns true if topic is non regex.
  */
-void rd_kafka_topic_partition_list_remove_regex(
+static RD_UNUSED int rd_kafka_topic_partition_not_regex(const void *elem,
+                                                        const void *opaque) {
+        const rd_kafka_topic_partition_t *rktpar = elem;
+        return *rktpar->topic != '^';
+}
+
+/**
+ * @brief Removes regexes from the list and returns the list without any regex
+ * in it.
+ */
+void rd_kafka_topic_partition_list_remove_regexes(
     rd_kafka_topic_partition_list_t **rktparlist) {
-        rd_kafka_topic_partition_list_t *non_regex_rktparlist;
-        int i;
-        int regex_cnt = rd_kafka_topic_partition_list_regex_cnt(*rktparlist);
-        int non_regex_cnt = (*rktparlist)->cnt - regex_cnt;
-
-        non_regex_rktparlist = rd_kafka_topic_partition_list_new(non_regex_cnt);
-
-        for (i = 0; i < (*rktparlist)->cnt; i++) {
-                const rd_kafka_topic_partition_t *rktpar =
-                    &((*rktparlist)->elems[i]);
-                if (*rktpar->topic != '^')
-                        rd_kafka_topic_partition_list_add_copy(
-                            non_regex_rktparlist, rktpar);
-        }
-
+        rd_kafka_topic_partition_list_t *non_regex_rktparlist =
+            rd_kafka_topic_partition_list_match(
+                *rktparlist, rd_kafka_topic_partition_not_regex, NULL);
         rd_kafka_topic_partition_list_destroy(*rktparlist);
         *rktparlist = non_regex_rktparlist;
 }
@@ -4450,12 +4447,13 @@ void rd_kafka_topic_partition_list_remove_regex(
 /**
  * @brief Combine regex present in the list into a single regex.
  */
-rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regex(
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
     const rd_kafka_topic_partition_list_t *rktparlist) {
         int i;
-        int combined_regex_len = 1; /* 1 for null-terminator */
-        int regex_cnt          = 0;
-        int j                  = 1;
+        int combined_regex_len   = 1; /* 1 for null-terminator */
+        int regex_cnt            = 0;
+        int j                    = 1;
+        rd_bool_t is_first_regex = rd_true;
         char *combined_regex_str;
         rd_kafkap_str_t *combined_regex_kstr;
 
@@ -4472,8 +4470,9 @@ rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regex(
         if (regex_cnt == 0)
                 return NULL;
 
-        combined_regex_len += regex_cnt - 1; /* 1 for each '|' separator */
-        combined_regex_len += 2;             /* 2 for enclosing brackets */
+        combined_regex_len +=
+            3 * (regex_cnt - 1); /* 1 for each ')|(' separator */
+        combined_regex_len += 2; /* 2 for enclosing brackets */
 
         // memory allocation for the combined regex string
         combined_regex_str = rd_malloc(combined_regex_len);
@@ -4485,10 +4484,16 @@ rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regex(
                     &(rktparlist->elems[i]);
                 char *topic = rktpar->topic;
                 if (*topic == '^') {
+                        if (!is_first_regex) {
+                                combined_regex_str[j++] = ')';
+                                combined_regex_str[j++] = '|';
+                                combined_regex_str[j++] = '(';
+                        }
                         while (*topic) {
                                 combined_regex_str[j++] = *topic;
                                 topic++;
                         }
+                        is_first_regex = rd_false;
                 }
         }
         combined_regex_str[j++] = ')';

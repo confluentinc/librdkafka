@@ -267,8 +267,11 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
  * @returns true if consumer has joined the group and thus requires a leave.
  */
 #define RD_KAFKA_CGRP_HAS_JOINED(rkcg)                                         \
-        (rkcg->rkcg_member_id != NULL &&                                       \
-         RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0)
+        ((rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&      \
+          rkcg->rkcg_member_id != NULL &&                                      \
+          RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0) ||                    \
+         (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&     \
+          rkcg->rkcg_generation_id > 0))
 
 
 /**
@@ -385,13 +388,15 @@ void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
 
 void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription);
-        rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription_regex);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.members);
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_current_assignment);
         RD_IF_FREE(rkcg->rkcg_target_assignment,
                    rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
+                   rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(rkcg->rkcg_subscription_regex, rd_kafkap_str_destroy);
+        RD_IF_FREE(rkcg->rkcg_subscription_topics,
                    rd_kafka_topic_partition_list_destroy);
         if (rkcg->rkcg_group_instance_id)
                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
@@ -465,15 +470,16 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         else
                 rkcg->rkcg_client_rack =
                     rd_kafkap_str_copy(rkcg->rkcg_rk->rk_conf.client_rack);
-        rkcg->rkcg_next_subscription  = NULL;
-        rkcg->rkcg_subscription_regex = NULL;
+        rkcg->rkcg_next_subscription   = NULL;
+        rkcg->rkcg_subscription_regex  = NULL;
+        rkcg->rkcg_subscription_topics = NULL;
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                char *uuid           = rd_kafka_Uuid_random_str();
-                rkcg->rkcg_member_id = rd_kafkap_str_new(uuid, -1);
-                rd_free(uuid);
+                rd_kafka_Uuid_t uuid = rd_kafka_Uuid_random();
+                rd_kafka_cgrp_set_member_id(rkcg,
+                                            rd_kafka_Uuid_base64str(&uuid));
         } else {
                 rd_kafka_cgrp_set_member_id(rkcg, "");
         }
@@ -1020,7 +1026,7 @@ static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
                     rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
                     member_epoch, rkcg->rkcg_group_instance_id,
                     NULL /* no rack */, -1 /* no rebalance_timeout_ms */,
-                    NULL /* no subscription */,
+                    NULL /* no subscription topics */,
                     NULL /* no regex subscription */,
                     NULL /* no remote assignor */,
                     NULL /* no current assignment */,
@@ -1351,11 +1357,6 @@ done:
                 rd_kafka_cgrp_group_assignment_set(rkcg, NULL);
 }
 
-static rd_bool_t rd_kafka_cgrp_is_subscription_present(rd_kafka_cgrp_t *rkcg) {
-        return rkcg->rkcg_subscription || rkcg->rkcg_subscription_regex;
-}
-
-
 /**
  * @brief Rejoin the group.
  *
@@ -1380,8 +1381,7 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
         else
                 rd_snprintf(astr, sizeof(astr), " without an assignment");
 
-        if (rd_kafka_cgrp_is_subscription_present(rkcg) ||
-            rkcg->rkcg_next_subscription) {
+        if (rkcg->rkcg_subscription || rkcg->rkcg_next_subscription) {
                 rd_kafka_dbg(
                     rkcg->rkcg_rk, CONSUMER | RD_KAFKA_DBG_CGRP, "REJOIN",
                     "Group \"%s\": %s group%s: %s", rkcg->rkcg_group_id->str,
@@ -4112,7 +4112,7 @@ static void rd_kafka_cgrp_offset_commit_tmr_cb(rd_kafka_timers_t *rkts,
 
         /* Don't attempt auto commit when rebalancing or initializing since
          * the rkcg_generation_id is most likely in flux. */
-        if (rd_kafka_cgrp_is_subscription_present(rkcg) &&
+        if (rkcg->rkcg_subscription &&
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
                 return;
 
@@ -4176,7 +4176,7 @@ rd_kafka_cgrp_incremental_assign(rd_kafka_cgrp_t *rkcg,
                                            "incremental assign called");
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_STEADY);
-                if (rd_kafka_cgrp_is_subscription_present(rkcg)) {
+                if (rkcg->rkcg_subscription) {
                         rd_kafka_cgrp_start_max_poll_interval_timer(rkcg);
                 }
         }
@@ -4434,7 +4434,7 @@ rd_kafka_cgrp_assign(rd_kafka_cgrp_t *rkcg,
                 rd_kafka_assignment_resume(rkcg->rkcg_rk, "assign called");
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_STEADY);
-                if (rd_kafka_cgrp_is_subscription_present(rkcg)) {
+                if (rkcg->rkcg_subscription) {
                         rd_kafka_cgrp_start_max_poll_interval_timer(rkcg);
                 }
         }
@@ -5170,8 +5170,25 @@ rd_kafka_cgrp_calculate_subscribe_revoking_partitions(
 static void
 rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                                rd_kafka_topic_partition_list_t *rktparlist) {
+
+        int is_wildcard_subscription_present = 0;
+
+        rkcg->rkcg_flags &= ~(RD_KAFKA_CGRP_F_SUBSCRIPTION |
+                              RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION);
+        if (rkcg->rkcg_subscription)
+                rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
+
         rkcg->rkcg_subscription = rktparlist;
+
         if (rkcg->rkcg_subscription) {
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
+                is_wildcard_subscription_present =
+                    rd_kafka_topic_partition_list_regex_cnt(
+                        rkcg->rkcg_subscription) > 0;
+                if (is_wildcard_subscription_present)
+                        rkcg->rkcg_flags |=
+                            RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
+
                 /* Insert all non-wildcard topics in cache immediately.
                  * Otherwise a manual full metadata request could
                  * not cache the hinted topic and return an
@@ -5180,16 +5197,38 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                     rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL,
                     0 /*dont replace*/);
         }
-}
 
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                RD_IF_FREE(rkcg->rkcg_subscription_topics,
+                           rd_kafka_topic_partition_list_destroy);
+                RD_IF_FREE(rkcg->rkcg_subscription_regex,
+                           rd_kafkap_str_destroy);
 
-static void rd_kafka_cgrp_subscription_unset(rd_kafka_cgrp_t *rkcg) {
-        if (rkcg->rkcg_subscription)
-                rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
+                if (rkcg->rkcg_subscription) {
+                        rkcg->rkcg_subscription_topics =
+                            rd_kafka_topic_partition_list_copy(
+                                rkcg->rkcg_subscription);
 
-        if (rkcg->rkcg_subscription_regex) {
-                rd_kafkap_str_destroy(rkcg->rkcg_subscription_regex);
-                rkcg->rkcg_subscription_regex = NULL;
+                        if (is_wildcard_subscription_present) {
+                                rkcg->rkcg_subscription_regex =
+                                    rd_kafka_topic_partition_list_combine_regexes(
+                                        rkcg->rkcg_subscription);
+                                rd_kafka_topic_partition_list_remove_regexes(
+                                    &rkcg->rkcg_subscription_topics);
+                        } else {
+                                rkcg->rkcg_subscription_regex =
+                                    rd_kafkap_str_new("", 0);
+                        }
+
+                        rkcg->rkcg_consumer_flags |=
+                            RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
+                            RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
+                } else {
+                        rkcg->rkcg_subscription_regex =
+                            rd_kafkap_str_new("", 0);
+                        rkcg->rkcg_subscription_topics =
+                            rd_kafka_topic_partition_list_new(0);
+                }
         }
 }
 
@@ -5210,11 +5249,6 @@ rd_kafka_cgrp_modify_subscription(rd_kafka_cgrp_t *rkcg,
         int metadata_age;
         int old_cnt = rkcg->rkcg_subscription->cnt;
 
-        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
-
-        if (rd_kafka_topic_partition_list_regex_cnt(rktparlist) > 0)
-                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
-
         /* Topics in rkcg_subscribed_topics that don't match any pattern in
            the new subscription. */
         unsubscribing_topics =
@@ -5224,7 +5258,6 @@ rd_kafka_cgrp_modify_subscription(rd_kafka_cgrp_t *rkcg,
         revoking = rd_kafka_cgrp_calculate_subscribe_revoking_partitions(
             rkcg, unsubscribing_topics);
 
-        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
         rd_kafka_cgrp_subscription_set(rkcg, rktparlist);
 
         if (rd_kafka_cgrp_metadata_refresh(rkcg, &metadata_age,
@@ -5335,8 +5368,6 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_max_poll_interval_tmr, 1 /*lock*/);
 
-        rd_kafka_cgrp_subscription_unset(rkcg);
-
         rd_kafka_cgrp_subscription_set(rkcg, NULL);
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
@@ -5355,9 +5386,6 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
                 rd_kafka_cgrp_revoke_all_rejoin(rkcg, rd_false /*not lost*/,
                                                 rd_true /*initiating*/,
                                                 "unsubscribe");
-
-        rkcg->rkcg_flags &= ~(RD_KAFKA_CGRP_F_SUBSCRIPTION |
-                              RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -5428,11 +5456,6 @@ rd_kafka_cgrp_subscribe(rd_kafka_cgrp_t *rkcg,
 
         if (!rktparlist)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
-
-        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
-
-        if (rd_kafka_topic_partition_list_regex_cnt(rktparlist) > 0)
-                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
 
         rd_kafka_cgrp_subscription_set(rkcg, rktparlist);
 
@@ -5824,13 +5847,13 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                                             rd_bool_t full_request,
                                             rd_bool_t send_ack) {
 
-        rd_kafkap_str_t *rkcg_group_instance_id                = NULL;
-        rd_kafkap_str_t *rkcg_client_rack                      = NULL;
-        int max_poll_interval_ms                               = -1;
-        rd_kafka_topic_partition_list_t *rkcg_subscription     = NULL;
-        rd_kafkap_str_t *rkcg_subscription_regex               = NULL;
-        rd_kafkap_str_t *rkcg_group_remote_assignor            = NULL;
-        rd_kafka_topic_partition_list_t *rkcg_group_assignment = NULL;
+        rd_kafkap_str_t *rkcg_group_instance_id                   = NULL;
+        rd_kafkap_str_t *rkcg_client_rack                         = NULL;
+        int max_poll_interval_ms                                  = -1;
+        rd_kafka_topic_partition_list_t *rkcg_subscription_topics = NULL;
+        rd_kafkap_str_t *rkcg_subscription_regex                  = NULL;
+        rd_kafkap_str_t *rkcg_group_remote_assignor               = NULL;
+        rd_kafka_topic_partition_list_t *rkcg_group_assignment    = NULL;
         int32_t member_epoch = rkcg->rkcg_generation_id;
         if (member_epoch < 0)
                 member_epoch = 0;
@@ -5844,7 +5867,7 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                 rkcg_client_rack       = rkcg->rkcg_client_rack;
                 max_poll_interval_ms =
                     rkcg->rkcg_rk->rk_conf.max_poll_interval_ms;
-                rkcg_subscription          = rkcg->rkcg_subscription;
+                rkcg_subscription_topics   = rkcg->rkcg_subscription_topics;
                 rkcg_subscription_regex    = rkcg->rkcg_subscription_regex;
                 rkcg_group_remote_assignor = rkcg->rkcg_group_remote_assignor;
         }
@@ -5881,15 +5904,15 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                     (rkcg->rkcg_consumer_flags &
                      ~RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION) |
                     RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION;
-                rkcg_subscription       = rkcg->rkcg_subscription;
-                rkcg_subscription_regex = rkcg->rkcg_subscription_regex;
+                rkcg_subscription_topics = rkcg->rkcg_subscription_topics;
+                rkcg_subscription_regex  = rkcg->rkcg_subscription_regex;
 
                 if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
                         char rkcg_new_subscription_str[512] = "NULL";
 
-                        if (rkcg_subscription) {
+                        if (rkcg->rkcg_subscription) {
                                 rd_kafka_topic_partition_list_str(
-                                    rkcg_subscription,
+                                    rkcg->rkcg_subscription,
                                     rkcg_new_subscription_str,
                                     sizeof(rkcg_new_subscription_str), 0);
                         }
@@ -5904,9 +5927,9 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
         rd_kafka_ConsumerGroupHeartbeatRequest(
             rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
             member_epoch, rkcg_group_instance_id, rkcg_client_rack,
-            max_poll_interval_ms, rkcg_subscription, rkcg_subscription_regex,
-            rkcg_group_remote_assignor, rkcg_group_assignment,
-            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+            max_poll_interval_ms, rkcg_subscription_topics,
+            rkcg_subscription_regex, rkcg_group_remote_assignor,
+            rkcg_group_assignment, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
             rd_kafka_cgrp_handle_ConsumerGroupHeartbeat, NULL);
 }
 
@@ -6028,32 +6051,13 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
         /* If the consumer has raised a fatal error treat all subscribes as
            unsubscribe */
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
-                if (rkcg->rkcg_subscription || rkcg->rkcg_subscription_regex)
+                if (rkcg->rkcg_subscription)
                         rd_kafka_cgrp_unsubscribe(rkcg,
                                                   rd_true /*leave group*/);
                 return RD_KAFKA_RESP_ERR__FATAL;
         }
 
-        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
         if (rktparlist) {
-
-                rd_kafka_cgrp_subscription_unset(rkcg);
-
-                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
-
-                if (rd_kafka_topic_partition_list_regex_cnt(rktparlist) > 0) {
-                        rkcg->rkcg_flags |=
-                            RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
-                        rkcg->rkcg_subscription_regex =
-                            rd_kafka_topic_partition_list_combine_regex(
-                                rktparlist);
-                        rd_kafka_topic_partition_list_remove_regex(&rktparlist);
-                }
-
-                rkcg->rkcg_consumer_flags |=
-                    RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
-                    RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
-
                 rd_kafka_cgrp_subscription_set(rkcg, rktparlist);
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                     rkcg, "subscription changed");
@@ -6120,7 +6124,7 @@ static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
                  * a steady state. */
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_STEADY);
-                if (rkcg->rkcg_subscription || rkcg->rkcg_subscription_regex) {
+                if (rkcg->rkcg_subscription) {
                         rd_kafka_cgrp_start_max_poll_interval_timer(rkcg);
                 }
         }

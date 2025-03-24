@@ -166,11 +166,7 @@ blocks:
             - DESTDIR="$PWD/dest" make install
             - export TEST_KAFKA_VERSION=4.0.0
             - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
-            # This commit corresponds to the DescribeConfigs API change for KIP-848
-            # KAFKA-14510; Extend DescribeConfigs API to support group configs (#16859)
-            # https://github.com/apache/kafka/commit/3a0efa2845e6a0d237772adfe6364579af50ce18
-            # TODO: upgrade to 4.0 when released.
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version 'trunk@9494bebee61eafef4f76572e9c42749dcb1e54b1'
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version '4.0.0'
               --cpversion 7.7.0 --conf '["group.coordinator.rebalance.protocols=classic,consumer"]'
               --cmd 'make quick')
 

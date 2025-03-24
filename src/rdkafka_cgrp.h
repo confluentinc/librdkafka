@@ -243,9 +243,20 @@ typedef struct rd_kafka_cgrp_s {
          *
          * Only applicable for the consumer protocol introduced in KIP-848.
          *
-         * TODO: Improve doc.
+         * rkcg_subscription = rkcg_subscription_topics +
+         * rkcg_subscription_regex
          */
         rd_kafkap_str_t *rkcg_subscription_regex;
+
+        /**
+         * Full topic names extracted out from the rkcg_subscription.
+         *
+         * Only applicable for the consumer protocol introduced in KIP-848.
+         *
+         * rkcg_subscription = rkcg_subscription_topics +
+         * rkcg_subscription_regex
+         */
+        rd_kafka_topic_partition_list_t *rkcg_subscription_topics;
 
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance

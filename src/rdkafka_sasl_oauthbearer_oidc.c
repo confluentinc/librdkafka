@@ -360,8 +360,8 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
 
         if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
                 extensions =
-                    rd_string_split(rk->rk_conf.sasl.oauthbearer.extensions_str,
-                                    ',', rd_true, &extension_cnt);
+                    rd_string_split_csv(rk->rk_conf.sasl.oauthbearer.extensions_str,
+                                        ',', rd_true, &extension_cnt);
 
                 extension_key_value = rd_kafka_conf_kv_split(
                     (const char **)extensions, extension_cnt,

@@ -3275,12 +3275,12 @@ static rd_kafka_op_res_t rd_kafka_consume_callback0(
         struct consume_ctx ctx = {.consume_cb = consume_cb, .opaque = opaque};
         rd_kafka_op_res_t res;
 
-        rd_kafka_app_poll_start(rkq->rkq_rk, 0, timeout_ms);
+        rd_kafka_app_poll_start(rkq->rkq_rk, rkq, 0, timeout_ms);
 
         res = rd_kafka_q_serve(rkq, timeout_ms, max_cnt, RD_KAFKA_Q_CB_RETURN,
                                rd_kafka_consume_cb, &ctx);
 
-        rd_kafka_app_polled(rkq->rkq_rk);
+        rd_kafka_app_polled(rkq->rkq_rk, rkq);
 
         return res;
 }
@@ -3346,7 +3346,7 @@ rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
         rd_ts_t now                   = rd_clock();
         rd_ts_t abs_timeout           = rd_timeout_init0(now, timeout_ms);
 
-        rd_kafka_app_poll_start(rk, now, timeout_ms);
+        rd_kafka_app_poll_start(rk, rkq, now, timeout_ms);
 
         rd_kafka_yield_thread = 0;
         while ((
@@ -3363,7 +3363,7 @@ rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
                         /* Callback called rd_kafka_yield(), we must
                          * stop dispatching the queue and return. */
                         rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INTR, EINTR);
-                        rd_kafka_app_polled(rk);
+                        rd_kafka_app_polled(rk, rkq);
                         return NULL;
                 }
 
@@ -3375,7 +3375,7 @@ rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
                 /* Timeout reached with no op returned. */
                 rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__TIMED_OUT,
                                         ETIMEDOUT);
-                rd_kafka_app_polled(rk);
+                rd_kafka_app_polled(rk, rkq);
                 return NULL;
         }
 
@@ -3390,7 +3390,7 @@ rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
 
         rd_kafka_set_last_error(0, 0);
 
-        rd_kafka_app_polled(rk);
+        rd_kafka_app_polled(rk, rkq);
 
         return rkmessage;
 }
@@ -4037,8 +4037,8 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                     cb_type == RD_KAFKA_Q_CB_FORCE_RETURN)
                         return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
                 else {
-                        rk->rk_ts_last_poll_end = rd_clock();
-                        struct consume_ctx ctx  = {.consume_cb =
+                        rkq->rkq_ts_last_poll_end = rd_clock();
+                        struct consume_ctx ctx    = {.consume_cb =
                                                       rk->rk_conf.consume_cb,
                                                   .opaque = rk->rk_conf.opaque};
 
@@ -4270,8 +4270,9 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
         int r;
 
-        r = rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0, RD_KAFKA_Q_CB_CALLBACK,
-                             rd_kafka_poll_cb, NULL);
+        r = rd_kafka_q_consume_serve(rk->rk_rep, timeout_ms, 0,
+                                     RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb,
+                                     NULL);
         return r;
 }
 
@@ -4279,8 +4280,9 @@ int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
 rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, rd_timeout_us(timeout_ms), 0,
-                                   RD_KAFKA_Q_CB_EVENT, rd_kafka_poll_cb, NULL);
+        rko = rd_kafka_q_consume_pop_serve(
+            rkqu->rkqu_q, rd_timeout_us(timeout_ms), 0, RD_KAFKA_Q_CB_EVENT,
+            rd_kafka_poll_cb, NULL);
 
 
         if (!rko)
@@ -4292,8 +4294,9 @@ rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
 int rd_kafka_queue_poll_callback(rd_kafka_queue_t *rkqu, int timeout_ms) {
         int r;
 
-        r = rd_kafka_q_serve(rkqu->rkqu_q, timeout_ms, 0,
-                             RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
+        r = rd_kafka_q_consume_serve(rkqu->rkqu_q, timeout_ms, 0,
+                                     RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb,
+                                     NULL);
         return r;
 }
 

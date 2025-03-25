@@ -25,7 +25,7 @@ socket.blocking.max.ms                   |  *  | 1 .. 60000      |          1000
 socket.send.buffer.bytes                 |  *  | 0 .. 100000000  |             0 | low        | Broker socket send buffer size. System default is used if 0. <br>*Type: integer*
 socket.receive.buffer.bytes              |  *  | 0 .. 100000000  |             0 | low        | Broker socket receive buffer size. System default is used if 0. <br>*Type: integer*
 socket.keepalive.enable                  |  *  | true, false     |         false | low        | Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets <br>*Type: boolean*
-socket.nagle.disable                     |  *  | true, false     |         false | low        | Disable the Nagle algorithm (TCP_NODELAY) on broker sockets. <br>*Type: boolean*
+socket.nagle.disable                     |  *  | true, false     |          true | low        | Disable the Nagle algorithm (TCP_NODELAY) on broker sockets. <br>*Type: boolean*
 socket.max.fails                         |  *  | 0 .. 1000000    |             1 | low        | Disconnect from broker when this number of send failures (e.g., timed out requests) is reached. Disable with 0. WARNING: It is highly recommended to leave this setting at its default value of 1 to avoid the client and broker to become desynchronized in case of request timeouts. NOTE: The connection is automatically re-established. <br>*Type: integer*
 broker.address.ttl                       |  *  | 0 .. 86400000   |          1000 | low        | How long to cache the broker address resolving results (milliseconds). <br>*Type: integer*
 broker.address.family                    |  *  | any, v4, v6     |           any | low        | Allowed broker IP address families: any, v4, v6 <br>*Type: enum value*

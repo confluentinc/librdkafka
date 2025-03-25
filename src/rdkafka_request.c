@@ -2619,36 +2619,25 @@ err:
                 if (rd_kafka_buf_retry(rkb, request))
                         return;
                 /* FALLTHRU */
-        } else {
-                if (actions & RD_KAFKA_ERR_ACTION_REFRESH &&
-                    strcmp(request->rkbuf_u.Metadata.reason,
-                           "application requested") != 0) {
-                        /* If not application requested,
-                         * expedite metadata refresh to try
-                         * again. */
-                        rd_kafka_timer_override_once(&rk->rk_timers,
-                                                     &rk->metadata_refresh_tmr,
-                                                     0 /* immediate */);
-                } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
-                        rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-                                   "Metadata request failed: %s: %s (%dms): %s",
-                                   request->rkbuf_u.Metadata.reason,
-                                   rd_kafka_err2str(err),
-                                   (int)(request->rkbuf_ts_sent / 1000),
-                                   rd_kafka_actions2str(actions));
-                }
-
-                /* Respond back to caller on non-retriable errors */
-                if (rko && rko->rko_replyq.q) {
-                        rko->rko_err            = err;
-                        rko->rko_u.metadata.md  = NULL;
-                        rko->rko_u.metadata.mdi = NULL;
-                        rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
-                        rko = NULL;
-                }
         }
 
+        if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
+                rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                           "Metadata request failed: %s: %s (%dms): %s",
+                           request->rkbuf_u.Metadata.reason,
+                           rd_kafka_err2str(err),
+                           (int)(request->rkbuf_ts_sent / 1000),
+                           rd_kafka_actions2str(actions));
+        }
 
+        /* Respond back to caller on non-retriable errors */
+        if (rko && rko->rko_replyq.q) {
+                rko->rko_err            = err;
+                rko->rko_u.metadata.md  = NULL;
+                rko->rko_u.metadata.mdi = NULL;
+                rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
+                rko = NULL;
+        }
 
         /* FALLTHRU */
 

@@ -581,6 +581,7 @@ void rd_kafka_transport_post_connect_setup(rd_kafka_transport_t *rktrans) {
  * Locality: broker thread
  */
 static void rd_kafka_transport_connected(rd_kafka_transport_t *rktrans) {
+        
         // If the domain name is an FQDN, remove the trailing dot
         char* dot = strrchr(rktrans->rktrans_rkb->rkb_nodename, '.');
         if (dot != NULL && (dot[1] == ':' || dot[1] == '\0'))

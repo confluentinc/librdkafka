@@ -1416,11 +1416,12 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                 return changed;
 
         if (!RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex)) {
-                char *regex = RD_KAFKAP_STR_DUP(SubscribedTopicRegex);
-                if (member->subscribed_topic_regex)
-                        rd_free(member->subscribed_topic_regex);
-                member->subscribed_topic_regex = rd_kafkap_str_new(regex, -1);
-                rd_free(regex);
+                if (member->subscribed_topic_regex) {
+                        rd_kafkap_str_destroy(member->subscribed_topic_regex);
+                        member->subscribed_topic_regex = NULL;
+                }
+                if(SubscribedTopicRegex->len > 0)
+                        member->subscribed_topic_regex = rd_kafkap_str_copy(SubscribedTopicRegex);
         }
 
         if (member->subscribed_topic_regex) {

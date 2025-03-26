@@ -620,8 +620,6 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
 
 rd_kafka_Uuid_t rd_kafka_Uuid_random();
 
-char *rd_kafka_Uuid_random_str();
-
 const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
 
 unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid);

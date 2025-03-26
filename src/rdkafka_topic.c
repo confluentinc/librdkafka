@@ -1632,6 +1632,7 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
         rd_kafka_topic_t *rkt;
         rd_kafka_toppar_t *rktp;
         rd_list_t query_topics;
+        rd_bool_t ignore_notexists = rk->rk_conf.metadata_skip_notexists_topics;
 
         rd_list_init(&query_topics, 0, rd_free);
 
@@ -1642,6 +1643,12 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
                 rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
 
                 rd_kafka_topic_wrlock(rkt);
+
+                if (ignore_notexists &&
+                    rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS) {
+                        rd_kafka_topic_wrunlock(rkt);
+                        continue;
+                }
 
                 /* Check if metadata information has timed out. */
                 if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
@@ -2032,11 +2039,22 @@ void rd_kafka_local_topics_to_list(rd_kafka_t *rk,
                                    int *cache_cntp) {
         rd_kafka_topic_t *rkt;
         int cache_cnt;
+        rd_bool_t skip_notexists = rk->rk_conf.metadata_skip_notexists_topics;
 
         rd_kafka_rdlock(rk);
         rd_list_grow(topics, rk->rk_topic_cnt);
-        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link)
-        rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+                if (skip_notexists) {
+                        rd_kafka_topic_rdlock(rkt);
+                        rd_bool_t notexists = rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS;
+                        rd_kafka_topic_rdunlock(rkt);
+
+                        if (notexists) {
+                                continue;
+                        }
+                }
+                rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
+        }
         cache_cnt = rd_kafka_metadata_cache_topics_to_list(rk, topics);
         if (cache_cntp)
                 *cache_cntp = cache_cnt;

@@ -396,9 +396,15 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                 test_produce_msgs2(rk, topic, 0, 1, 0, 1, NULL, 0);
                 rd_kafka_flush(rk, 1000);
         } else {
+                test_produce_msgs_easy_v(topic, 0, 0, 0, 1, 0,
+                                         "bootstrap.servers", bootstraps, NULL);
+                test_produce_msgs_easy_v(topic, 0, 1, 0, 1, 0,
+                                         "bootstrap.servers", bootstraps, NULL);
+
                 rd_kafka_topic_partition_list_t *assignment;
                 test_conf_set(conf, "group.id", topic);
                 test_conf_set(conf, "fetch.wait.max.ms", "100");
+                test_conf_set(conf, "auto.offset.reset", "earliest");
 
                 rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
@@ -409,7 +415,8 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                 rd_kafka_topic_partition_list_destroy(assignment);
 
                 /* Start consuming from leader 1 and 2 */
-                test_consumer_poll_no_msgs("no errors", rk, 0, 1000);
+                test_consumer_poll_timeout("initial leaders", rk, 0, -1, -1, 2,
+                                           NULL, 5000);
         }
 
         TIMING_START(&timing, "Metadata update and partition migration");
@@ -431,7 +438,7 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                                          "bootstrap.servers", bootstraps, NULL);
                 test_produce_msgs_easy_v(topic, 0, 1, 0, 1, 0,
                                          "bootstrap.servers", bootstraps, NULL);
-                test_consumer_poll_timeout("partition 0", rk, 0, -1, -1, 2,
+                test_consumer_poll_timeout("changed leaders", rk, 0, -1, -1, 2,
                                            NULL, 5000);
         }
         TIMING_ASSERT_LATER(&timing, 0, 500);

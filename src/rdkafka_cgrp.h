@@ -230,11 +230,7 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_topic_partition_list_t *rkcg_errored_topics;
         /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be postponed until after the rebalance
-         *  completes. The waiting subscription is stored here.
-         *  Mutually exclusive with rkcg_next_subscription.
-         *
-         *  For the consumer protocol, this field doesn't include regex
-         *  subscriptions. For that please refer `rkcg_subscription_regex` */
+         *  completes. The waiting subscription is stored here. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
 
         /**
@@ -252,6 +248,9 @@ typedef struct rd_kafka_cgrp_s {
          * Full topic names extracted out from the rkcg_subscription.
          *
          * Only applicable for the consumer protocol introduced in KIP-848.
+         *
+         *  For the consumer protocol, this field doesn't include regex
+         *  subscriptions. For that please refer `rkcg_subscription_regex`
          *
          * rkcg_subscription = rkcg_subscription_topics +
          * rkcg_subscription_regex

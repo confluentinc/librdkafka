@@ -2959,14 +2959,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                 assigned_topic_partitions = rd_kafka_buf_read_topic_partitions(
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
-                char assigned_topic_partitions_str[512] = "NULL";
-
-                if (assigned_topic_partitions) {
-                        rd_kafka_topic_partition_list_str(
-                            assigned_topic_partitions,
-                            assigned_topic_partitions_str,
-                            sizeof(assigned_topic_partitions_str), 0);
-                }
 
                 if (rd_kafka_is_dbg(rk, CGRP)) {
                         char assigned_topic_partitions_str[512] = "NULL";
@@ -5350,9 +5342,6 @@ rd_kafka_cgrp_modify_subscription(rd_kafka_cgrp_t *rkcg,
 static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
                                                      rd_bool_t leave_group) {
 
-        /**
-         * TODO: Update debug with Regex changes for KIP-848
-         */
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNSUBSCRIBE",
                      "Group \"%.*s\": unsubscribe from current %ssubscription "
                      "of size %d (leave group=%s, has joined=%s, %s, "
@@ -6542,9 +6531,6 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
                 rko = NULL;
                 break;
 
-        /**
-         * TODO: Check regex for KIP-848
-         */
         case RD_KAFKA_OP_GET_SUBSCRIPTION:
                 if (rkcg->rkcg_next_subscription)
                         rko->rko_u.subscribe.topics =

@@ -2288,7 +2288,15 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
             subscribed_topic_regex;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 1, &features);
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1, 1, &features);
+
+        if (ApiVersion == -1) {
+                rd_kafka_cgrp_coord_dead(rkb->rkb_rk->rk_cgrp,
+                                         RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                                         "ConsumerGroupHeartbeatRequest not "
+                                         "supported by broker");
+                return;
+        }
 
         if (rd_rkb_is_dbg(rkb, CGRP)) {
                 char current_assignments_str[512]              = "NULL";

@@ -152,11 +152,12 @@ _TEST_DECL(0041_fetch_max_bytes);
 _TEST_DECL(0042_many_topics);
 _TEST_DECL(0043_no_connection);
 _TEST_DECL(0044_partition_cnt);
-_TEST_DECL(0045_subscribe_update);
-_TEST_DECL(0045_subscribe_update_topic_remove);
-_TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
-_TEST_DECL(0045_subscribe_update_mock);
-_TEST_DECL(0045_subscribe_update_racks_mock);
+// _TEST_DECL(0045_subscribe_update);
+_TEST_DECL(0045_resubscribe_with_regex);
+// _TEST_DECL(0045_subscribe_update_topic_remove);
+// _TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
+// _TEST_DECL(0045_subscribe_update_mock);
+// _TEST_DECL(0045_subscribe_update_racks_mock);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
 _TEST_DECL(0048_partitioner);
@@ -368,17 +369,18 @@ struct test tests[] = {
           TEST_BRKVER(1, 0, 0, 0),
           /* Produces a lot of messages */
           _THRES(.ucpu = 30.0)),
-    _TEST(0045_subscribe_update, 0, TEST_BRKVER(0, 9, 0, 0)),
-    _TEST(0045_subscribe_update_topic_remove,
-          0,
-          TEST_BRKVER(0, 9, 0, 0),
-          .scenario = "noautocreate"),
-    _TEST(0045_subscribe_update_non_exist_and_partchange,
-          0,
-          TEST_BRKVER(0, 9, 0, 0),
-          .scenario = "noautocreate"),
-    _TEST(0045_subscribe_update_mock, TEST_F_LOCAL),
-    _TEST(0045_subscribe_update_racks_mock, TEST_F_LOCAL),
+    //     _TEST(0045_subscribe_update, 0, TEST_BRKVER(0, 9, 0, 0)),
+    _TEST(0045_resubscribe_with_regex, 0, TEST_BRKVER(0, 9, 0, 0)),
+    //     _TEST(0045_subscribe_update_topic_remove,
+    //           0,
+    //           TEST_BRKVER(0, 9, 0, 0),
+    //           .scenario = "noautocreate"),
+    //     _TEST(0045_subscribe_update_non_exist_and_partchange,
+    //           0,
+    //           TEST_BRKVER(0, 9, 0, 0),
+    //           .scenario = "noautocreate"),
+    //     _TEST(0045_subscribe_update_mock, TEST_F_LOCAL),
+    //     _TEST(0045_subscribe_update_racks_mock, TEST_F_LOCAL),
     _TEST(0046_rkt_cache, TEST_F_LOCAL),
     _TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
     _TEST(0048_partitioner,

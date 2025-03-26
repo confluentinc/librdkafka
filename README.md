@@ -98,6 +98,18 @@ $ vcpkg install librdkafka
 The librdkafka package in vcpkg is kept up to date by Microsoft team members and community contributors.
 If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
 
+## Installing librdkafka using Conan
+
+You can install pre-built binaries for librdkafka or build it from source using [Conan](https://conan.io/). Use the following command:
+
+```
+conan install --requires="librdkafka/[*]" --build=missing
+```
+
+For detailed instructions on how to use Conan, please refer to the [Conan documentation](https://docs.conan.io/2/).
+
+The librdkafka package in Conan Center is kept up to date by Conan team members and Conan community contributors.
+If the version is out of date, please [create an issue or pull request](https://github.com/conan-io/conan-center-index) on the conan repository.
 
 ## Build from source
 

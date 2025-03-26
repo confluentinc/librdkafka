@@ -376,14 +376,24 @@ void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state) {
 
         rktp->rktp_fetch_state = fetch_state;
 
-        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
+        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
+                rktp->rktp_ts_fetch_backoff = 0;
+
+                /* Wake-up broker thread which might be idling on IO */
+                if (rktp->rktp_broker)
+                        rd_kafka_broker_wakeup(rktp->rktp_broker,
+                                               "fetch start");
+
                 rd_kafka_dbg(
                     rktp->rktp_rkt->rkt_rk, CONSUMER | RD_KAFKA_DBG_TOPIC,
                     "FETCH",
                     "Partition %.*s [%" PRId32 "] start fetching at %s",
                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                     rktp->rktp_partition,
-                    rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start));
+                    rd_kafka_fetch_pos2str(
+                        rd_kafka_toppar_fetch_decide_next_fetch_start_pos(
+                            rktp)));
+        }
 }
 
 
@@ -1359,10 +1369,6 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_set_next_fetch_position(rktp, next_pos);
 
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-        /* Wake-up broker thread which might be idling on IO */
-        if (rktp->rktp_broker)
-                rd_kafka_broker_wakeup(rktp->rktp_broker, "ready to fetch");
 }
 
 
@@ -1746,11 +1752,6 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
 
                 rd_kafka_toppar_set_fetch_state(rktp,
                                                 RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-                /* Wake-up broker thread which might be idling on IO */
-                if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker,
-                                               "fetch start");
         }
 
         rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;

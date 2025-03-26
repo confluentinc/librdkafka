@@ -758,14 +758,9 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                 /* Set offset validation position,
                  * depending it if should continue with current position or
                  * with next fetch start position. */
-                if (rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
-                        rktp)) {
-                        rd_kafka_toppar_set_offset_validation_position(
-                            rktp, rktp->rktp_next_fetch_start);
-                } else {
-                        rd_kafka_toppar_set_offset_validation_position(
-                            rktp, rktp->rktp_offsets.fetch_pos);
-                }
+                rd_kafka_toppar_set_offset_validation_position(
+                    rktp,
+                    rd_kafka_toppar_fetch_decide_next_fetch_start_pos(rktp));
                 rd_kafka_offset_validate(rktp, "epoch updated from metadata");
         }
 

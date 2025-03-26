@@ -33,6 +33,9 @@ librdkafka v2.9.0 is a feature release:
  * Fix for the case where a metadata refresh enqueued on an unreachable broker
    prevents refreshing the controller or the coordinator until that broker
    becomes reachable again (#4970).
+ * Remove a one second wait after a partition fetch is restarted following a
+   leader change and offset validation (#4970).
+
 
 ## Fixes
 
@@ -118,6 +121,11 @@ librdkafka v2.9.0 is a feature release:
    but weren't in previous one. This was due to the metadata request relative
    to previous subscription.
    Happens since 1.x (#4970).
+ * Issues: #4970
+   Remove a one second wait after a partition fetch is restarted following a
+   leader change and offset validation. This is done by resetting the fetch
+   error backoff and waking up the delegated broker if present.
+   Happens since 2.1.0 (#4970).
 
 
 

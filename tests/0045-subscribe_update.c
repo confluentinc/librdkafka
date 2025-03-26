@@ -686,7 +686,7 @@ static void do_test_resubscribe_with_regex() {
         rd_kafka_queue_t *queue;
         uint64_t testid = test_id_generate();
 
-        SUB_TEST("Subscribe, Unsubscribe, Resubscribe with Regex");
+        SUB_TEST("Resubscribe with Regex");
 
         TEST_SAY("Creating topic %s and producing messages\n", topic1);
         test_produce_msgs_easy(topic1, testid, 0, 10);

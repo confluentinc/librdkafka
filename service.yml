@@ -146,7 +146,7 @@ semaphore:
       - name: TEST_CONF
         required: false
         description: "Additional broker configuration as a JSON array. Example: 
-          [\"group.coordinator.rebalance.protocols=classic,consumer\"]"
+          [group.coordinator.rebalance.protocols=classic,consumer]"
 
       - name: TEST_TRIVUP_PARAMETERS
         required: false

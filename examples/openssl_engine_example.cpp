@@ -73,7 +73,7 @@ class PrintingSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
                           int depth,
                           const char *buf,
                           size_t size,
-                          std::string &errstr) {
+                          std::string &errstr) RD_OVERRIDE {
     std::cout << "ssl_cert_verify_cb :"
               << ": broker_name=" << broker_name << ", broker_id=" << broker_id
               << ", x509_error=" << *x509_error << ", depth=" << depth

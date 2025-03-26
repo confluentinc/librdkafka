@@ -47,11 +47,7 @@
 #include <getopt.h>
 #endif
 
-/*
- * Typically include path in a real application would be
- * #include <librdkafka/rdkafkacpp.h>
- */
-#include "rdkafkacpp.h"
+#include <librdkafka/rdkafkacpp.h>
 
 
 static void metadata_print(const std::string &topic,

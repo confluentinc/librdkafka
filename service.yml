@@ -37,7 +37,7 @@ semaphore:
       - name: TEST_KAFKA_GIT_REF
         required: true
         default_value: ""
-        description: "Kafka version to test against. If it's a version, the corresponding 
+        description: "Kafka version to test against. When a valid version, the corresponding 
           package is downloaded. [<username>/]<git_ref>[@<commit_hash>] is also supported 
           to clone from GitHub and build from source."
 
@@ -48,7 +48,7 @@ semaphore:
       - name: TEST_KAFKA_VERSION
         required: false
         description: "Kafka version to assume in this branch. If empty (default) 
-          uses TEST_KAFKA_GIT_REF if it's a version, otherwise 9.9.9."
+          uses TEST_KAFKA_GIT_REF when a valid version, otherwise 9.9.9."
 
       - name: TEST_KRAFT
         required: true

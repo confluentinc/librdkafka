@@ -2291,11 +2291,11 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
             rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 1, &features);
 
         if (rd_rkb_is_dbg(rkb, CGRP)) {
-                char current_assignments_str[512] = "NULL";
-                char subscribe_topics_str[512]    = "NULL";
-                const char *member_id_str         = "NULL";
-                const char *group_instance_id_str = "NULL";
-                const char *remote_assignor_str   = "NULL";
+                char current_assignments_str[512]              = "NULL";
+                char subscribe_topics_str[512]                 = "NULL";
+                const char *member_id_str                      = "NULL";
+                const char *group_instance_id_str              = "NULL";
+                const char *remote_assignor_str                = "NULL";
                 const char *subscribed_topic_regex_to_send_str = "NULL";
 
                 if (current_assignments) {
@@ -2329,7 +2329,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                            ", remote assignor \"%s\"",
                            member_id_str, group_id->str, member_epoch,
                            group_instance_id_str, current_assignments_str,
-                           subscribe_topics_str, subscribed_topic_regex_to_send_str,
+                           subscribe_topics_str,
+                           subscribed_topic_regex_to_send_str,
                            remote_assignor_str);
         }
 

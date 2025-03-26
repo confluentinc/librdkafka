@@ -1420,8 +1420,9 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                         rd_kafkap_str_destroy(member->subscribed_topic_regex);
                         member->subscribed_topic_regex = NULL;
                 }
-                if(SubscribedTopicRegex->len > 0)
-                        member->subscribed_topic_regex = rd_kafkap_str_copy(SubscribedTopicRegex);
+                if (SubscribedTopicRegex->len > 0)
+                        member->subscribed_topic_regex =
+                            rd_kafkap_str_copy(SubscribedTopicRegex);
         }
 
         if (member->subscribed_topic_regex) {

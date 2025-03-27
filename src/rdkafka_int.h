@@ -303,8 +303,11 @@ struct rd_kafka_s {
          * but still not executed. */
         rd_atomic32_t rk_scheduled_connections_cnt;
 
-        /**< Additional bootstrap servers list. */
+        /**< Additional bootstrap servers list.
+         *   contains all brokers added through rd_kafka_brokers_add().
+         *   Doesn't contain the initially configured bootstrap brokers. */
         rd_list_t additional_brokerlists;
+
         /** Decommissioned threads to await */
         rd_list_t wait_decommissioned_thrds;
         /** Decommissioned brokers to await */

@@ -308,7 +308,9 @@ static void do_test_regex(void) {
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
         test_create_topic_wait_exists(NULL, topic_d, 1, 1, 5000);
 
-        await_revoke("Regex: rebalance after topic creation", rk, queue);
+        if (!test_consumer_group_protocol_consumer())
+                await_revoke("Regex: rebalance after topic creation", rk,
+                             queue);
 
         await_assignment("Regex: two topics exist", rk, queue, 2, topic_b, 2,
                          topic_d, 1);
@@ -674,16 +676,89 @@ static void do_test_replica_rack_change_leader_no_rack_mock(
         SUB_TEST_PASS();
 }
 
+static void do_test_resubscribe_with_regex() {
+        char *topic1 = rd_strdup(test_mk_topic_name("topic_regex1", 1));
+        char *topic2 = rd_strdup(test_mk_topic_name("topic_regex2", 1));
+        char *group  = rd_strdup(
+            tsprintf("group_test_sub_regex_%s", test_str_id_generate_tmp()));
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *queue;
+        uint64_t testid = test_id_generate();
+
+        SUB_TEST("Resubscribe with Regex");
+
+        TEST_SAY("Creating topic %s and producing messages\n", topic1);
+        test_produce_msgs_easy(topic1, testid, 0, 10);
+
+        TEST_SAY("Creating topic %s and producing messages\n", topic2);
+        test_produce_msgs_easy(topic2, testid, 0, 5);
+
+        test_conf_init(&conf, NULL, 60);
+
+        rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
+        rk    = test_create_consumer(group, NULL, conf, NULL);
+        queue = rd_kafka_queue_get_consumer(rk);
+
+        /* Subscribe to topic1 */
+        TEST_SAY("Subscribing to %s\n", topic1);
+        test_consumer_subscribe(rk, topic1);
+        /* Wait for assignment */
+        await_assignment("Assignment for topic1", rk, queue, 1, topic1, 4);
+
+        /* Unsubscribe from topic1 */
+        TEST_SAY("Unsubscribing from %s\n", topic1);
+        rd_kafka_unsubscribe(rk);
+        /* Wait for revocation */
+        await_revoke("Revocation after unsubscribing", rk, queue);
+
+        /* Subscribe to topic2 */
+        TEST_SAY("Subscribing to %s\n", topic2);
+        test_consumer_subscribe(rk, topic2);
+        /* Wait for assignment */
+        await_assignment("Assignment for topic2", rk, queue, 1, topic2, 4);
+
+        /* Unsubscribe from topic2 */
+        TEST_SAY("Unsubscribing from %s\n", topic2);
+        rd_kafka_unsubscribe(rk);
+        /* Wait for revocation */
+        await_revoke("Revocation after unsubscribing", rk, queue);
+
+        rd_sleep(1);
+
+        /* Subscribe to regex ^.*topic_regex.* */
+        TEST_SAY("Subscribing to regex ^.*topic_regex.*\n");
+        test_consumer_subscribe(rk, "^.*topic_regex.*");
+        /* Wait for assignment */
+        await_assignment("Assignment for topic1 and topic2", rk, queue, 2,
+                         topic1, 4, topic2, 4);
+
+        /* Unsubscribe from regex ^.*topic_regex.* */
+        TEST_SAY("Unsubscribing from regex ^.*topic_regex.*\n");
+        rd_kafka_unsubscribe(rk);
+        /* Wait for revocation */
+        await_revoke("Revocation after unsubscribing", rk, queue);
+
+        /* Cleanup */
+        test_delete_topic(rk, topic1);
+        test_delete_topic(rk, topic2);
+
+        test_consumer_close(rk);
+        rd_kafka_queue_destroy(queue);
+
+        rd_kafka_destroy(rk);
+
+        rd_free(topic1);
+        rd_free(topic2);
+        rd_free(group);
+
+        SUB_TEST_PASS();
+}
+
 int main_0045_subscribe_update(int argc, char **argv) {
 
         if (!test_can_create_topics(1))
                 return 0;
-
-        /* TODO: check again when regexes will be supported by KIP-848 */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Still not supported by KIP-848\n");
-                return 0;
-        }
 
         do_test_regex();
 
@@ -711,12 +786,6 @@ int main_0045_subscribe_update_topic_remove(int argc, char **argv) {
 int main_0045_subscribe_update_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
-        /* TODO: check again when regexes will be supported by KIP-848 */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Still not supported by KIP-848\n");
-                return 0;
-        }
-
         do_test_regex_many_mock("range", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_true);
@@ -724,6 +793,10 @@ int main_0045_subscribe_update_mock(int argc, char **argv) {
         return 0;
 }
 
+int main_0045_resubscribe_with_regex(int argc, char **argv) {
+        do_test_resubscribe_with_regex();
+        return 0;
+}
 
 int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
         int use_replica_rack = 0;

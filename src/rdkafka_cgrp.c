@@ -3065,7 +3065,8 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         rkcg->rkcg_consumer_flags &=
             ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION &
             ~RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST &
-            ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK;
+            ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK &
+            ~RD_KAFKA_CGRP_CONSUMER_F_ERROR_SENT;
         rkcg->rkcg_last_heartbeat_err         = RD_KAFKA_RESP_ERR_NO_ERROR;
         rkcg->rkcg_expedite_heartbeat_retries = 0;
 
@@ -3133,8 +3134,13 @@ err:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
         default:
-                actions = rd_kafka_err_action(rkb, err, request,
-                                              RD_KAFKA_ERR_ACTION_END);
+                actions = rd_kafka_err_action(
+                    rkb, err, request,
+
+                    RD_KAFKA_ERR_ACTION_SPECIAL,
+                    RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+
+                    RD_KAFKA_ERR_ACTION_END);
                 break;
         }
 
@@ -3166,6 +3172,16 @@ err:
                     rkcg, "coordinator query");
         }
 
+        if (actions & RD_KAFKA_ERR_ACTION_SPECIAL &&
+            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
+            !(rkcg->rkcg_consumer_flags &
+              RD_KAFKA_CGRP_CONSUMER_F_ERROR_SENT)) {
+                rkcg->rkcg_consumer_flags |=
+                    RD_KAFKA_CGRP_CONSUMER_F_ERROR_SENT;
+                rd_kafka_consumer_err(
+                    rkcg->rkcg_q, rd_kafka_broker_id(rkb), err, 0, NULL, NULL,
+                    err, "Subscription failed: %s", rd_kafka_err2str(err));
+        }
         if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
             rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
             rd_kafka_buf_retry(rkb, request)) {

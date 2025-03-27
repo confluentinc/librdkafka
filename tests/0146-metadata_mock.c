@@ -149,6 +149,7 @@ static void do_test_fast_metadata_refresh(int variation) {
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
+        rd_kafka_mock_start_request_tracking(mcluster);
 
         if (variation == 1) {
                 /* Produce some messages to the topic
@@ -166,8 +167,6 @@ static void do_test_fast_metadata_refresh(int variation) {
                 rd_kafka_mock_topic_set_error(
                     mcluster, topic, RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
         }
-
-        rd_kafka_mock_start_request_tracking(mcluster);
 
         test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);
 

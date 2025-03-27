@@ -293,14 +293,11 @@ struct rd_kafka_s {
         /**  Logical brokers count.
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
         rd_atomic32_t rk_logical_broker_cnt;
-        /**  Number of brokers in state >= UP */
+        /**  Number of configured or learned brokers in state >= UP */
         rd_atomic32_t rk_broker_up_cnt;
-        /**  Number of logical brokers in state >= UP, this is a sub-set
-         *   of rk_broker_up_cnt. */
-        rd_atomic32_t rk_logical_broker_up_cnt;
         /**  Number of brokers that are down, only includes brokers
          *   that have had at least one connection attempt
-         *   and are not internal or logical. */
+         *   and are configured or learned. */
         rd_atomic32_t rk_broker_down_cnt;
         /* Number of sparse connections requested
          * but still not executed. */

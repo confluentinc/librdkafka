@@ -364,24 +364,20 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                 if (rd_kafka_broker_state_is_up(state) &&
                     !rd_kafka_broker_state_is_up(rkb->rkb_state)) {
                         /* Up -> Down */
-                        rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt, 1);
+                        if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                                rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
+                                                1);
 
                         trigger_monitors = rd_true;
-
-                        if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                                rd_atomic32_add(
-                                    &rkb->rkb_rk->rk_logical_broker_up_cnt, 1);
 
                 } else if (rd_kafka_broker_state_is_up(rkb->rkb_state) &&
                            !rd_kafka_broker_state_is_up(state)) {
                         /* ~Down(!Up) -> Up */
-                        rd_atomic32_sub(&rkb->rkb_rk->rk_broker_up_cnt, 1);
+                        if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                                rd_atomic32_sub(&rkb->rkb_rk->rk_broker_up_cnt,
+                                                1);
 
                         trigger_monitors = rd_true;
-
-                        if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                                rd_atomic32_sub(
-                                    &rkb->rkb_rk->rk_logical_broker_up_cnt, 1);
                 }
 
                 /* If the connection or connection attempt failed and there
@@ -5685,9 +5681,7 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
          * a specific purpose (group coordinator) and their connections
          * should not be reused for other purposes.
          * rd_kafka_broker_random() will not return LOGICAL brokers. */
-        if (rd_atomic32_get(&rk->rk_broker_up_cnt) -
-                    rd_atomic32_get(&rk->rk_logical_broker_up_cnt) >
-                0 ||
+        if (rd_atomic32_get(&rk->rk_broker_up_cnt) > 0 ||
             rd_atomic32_get(&rk->rk_broker_cnt) -
                     rd_atomic32_get(&rk->rk_logical_broker_cnt) ==
                 0)

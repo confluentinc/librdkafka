@@ -2326,7 +2326,6 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_atomic32_init(&rk->rk_broker_cnt, 0);
         rd_atomic32_init(&rk->rk_logical_broker_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_up_cnt, 0);
-        rd_atomic32_init(&rk->rk_logical_broker_up_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_down_cnt, 0);
         rd_atomic32_init(&rk->rk_scheduled_connections_cnt, 0);
 

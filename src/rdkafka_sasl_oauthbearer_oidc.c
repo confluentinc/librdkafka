@@ -256,6 +256,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         char set_token_errstr[512];
         char decode_payload_errstr[512];
 
+        int parse_err;
         char **extensions          = NULL;
         char **extension_key_value = NULL;
 
@@ -359,9 +360,15 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         }
 
         if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
-                extensions = rd_string_split_csv(
+                parse_err = rd_string_split_csv(
                     rk->rk_conf.sasl.oauthbearer.extensions_str, ',', rd_true,
-                    &extension_cnt);
+                    extensions, &extension_cnt);
+
+                if (parse_err != 0) {
+                        rd_kafka_oauthbearer_set_token_failure(
+                            rk, "Failed to parse extensions");
+                        goto done;
+                }
 
                 extension_key_value = rd_kafka_conf_kv_split(
                     (const char **)extensions, extension_cnt,

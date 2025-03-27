@@ -2064,7 +2064,9 @@ static void do_test_txn_coord_req_destroy(void) {
 
                 rd_kafka_mock_push_request_errors(
                     mcluster, RD_KAFKAP_AddOffsetsToTxn,
-                    1, /* first request + number of internal retries */
+                    3, /* first request + number of internal retries */
+                    RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                    RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
                     RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
 
                 err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("mytopic"),
@@ -2127,6 +2129,7 @@ static void do_test_txn_coord_req_destroy(void) {
                 TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
         }
 
+        TEST_SAY("Got %d errors\n", errcnt);
         TEST_ASSERT(errcnt > 0,
                     "Expected at least one send_offets_to_transaction() "
                     "failure");

@@ -5380,6 +5380,8 @@ int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist);
  * @param cntp Will be updated to the number of brokers returned.
  *
  * @returns a malloc:ed list of int32_t broker ids.
+ *
+ * @remark The returned pointer must be freed.
  */
 RD_EXPORT
 int32_t *rd_kafka_brokers_learned_ids(rd_kafka_t *rk, size_t *cntp);

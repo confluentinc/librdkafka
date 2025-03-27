@@ -667,10 +667,6 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
         rd_bool_t fetching_from_follower;
         int r = 0;
 
-        if (leader && rd_kafka_broker_termination_in_progress(leader)) {
-                return 0;
-        }
-
         rktp = rd_kafka_toppar_get(rkt, partition, 0);
         if (unlikely(!rktp)) {
                 /* Have only seen this in issue #132.

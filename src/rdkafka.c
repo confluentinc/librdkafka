@@ -1194,7 +1194,7 @@ void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
  */
 static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_kafka_topic_t *rkt, *rkt_tmp;
-        rd_kafka_broker_t *rkb, *rkb_tmp;
+        rd_kafka_broker_t *rkb;
         rd_list_t wait_thrds, brokers_to_decommission;
         thrd_t *thrd;
         int i;
@@ -1243,20 +1243,12 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
          * `rk->rk_brokers` */
         rd_list_init(&brokers_to_decommission,
                      rd_atomic32_get(&rk->rk_broker_cnt), NULL);
-        TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
-                void *rkb_decommissioning;
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 /* Don't try to decommission already decommissioning brokers
                  * otherwise they could be already destroyed when
                  * `rd_kafka_broker_decommission` is called below. */
-                rd_bool_t do_decommission = rd_true;
-                RD_LIST_FOREACH(rkb_decommissioning,
-                                &rk->wait_decommissioned_brokers, i) {
-                        if (rkb == rkb_decommissioning) {
-                                do_decommission = rd_false;
-                                break;
-                        }
-                }
-                if (do_decommission)
+                if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
+                                 rd_list_cmp_ptr) == NULL)
                         rd_list_add(&brokers_to_decommission, rkb);
         }
 

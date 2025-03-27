@@ -100,7 +100,10 @@ rd_kafka_metadata(rd_kafka_t *rk,
 
         do {
                 /* Query any broker that is up, and if none are up pick the
-                 * first one, if we're lucky it will be up before the timeout */
+                 * first one, if we're lucky it will be up before the timeout.
+                 * Previous decommissioning brokers won't be returned by the
+                 * function after receiving the _DESTROY_BROKER error
+                 * below. */
                 rkb =
                     rd_kafka_broker_any_usable(rk, timeout_ms, RD_DO_LOCK, 0,
                                                "application metadata request");
@@ -500,7 +503,6 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
                      rd_atomic32_get(&rk->rk_broker_cnt), NULL);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_bool_t purge_broker;
-                void *rkb_decommissioning;
 
                 if (rkb->rkb_source != RD_KAFKA_LEARNED &&
                     rkb->rkb_source != RD_KAFKA_CONFIGURED)
@@ -508,6 +510,8 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
 
                 purge_broker = rd_true;
                 if (rkb->rkb_source == RD_KAFKA_LEARNED) {
+                        /* Don't purge the broker if it's available in
+                         * metadata. */
                         for (i = 0; i < md->broker_cnt; i++) {
                                 if (md->brokers[i].id == rkb->rkb_nodeid) {
                                         purge_broker = rd_false;
@@ -522,16 +526,11 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
                 /* Don't try to decommission already decommissioning brokers
                  * otherwise they could be already destroyed when
                  * `rd_kafka_broker_decommission` is called below. */
-                RD_LIST_FOREACH(rkb_decommissioning,
-                                &rk->wait_decommissioned_brokers, i) {
-                        if (rkb == rkb_decommissioning) {
-                                purge_broker = rd_false;
-                                break;
-                        }
-                }
+                if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
+                                 rd_list_cmp_ptr) != NULL)
+                        break;
 
-                if (purge_broker)
-                        rd_list_add(&brokers_to_decommission, rkb);
+                rd_list_add(&brokers_to_decommission, rkb);
         }
         RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {
                 rd_kafka_broker_decommission(rk, rkb,

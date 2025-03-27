@@ -5240,9 +5240,8 @@ static rd_kafka_broker_t *rd_kafka_broker_find(rd_kafka_t *rk,
         rd_kafka_mk_nodename(nodename, sizeof(nodename), name, port);
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rd_kafka_broker_or_instance_terminating(rkb))
-                        continue;
-                if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                if (rd_kafka_broker_or_instance_terminating(rkb) ||
+                    RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         continue;
 
                 rd_kafka_broker_lock(rkb);

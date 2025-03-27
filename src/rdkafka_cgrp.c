@@ -622,16 +622,13 @@ static int rd_kafka_cgrp_coord_update(rd_kafka_cgrp_t *rkcg, int32_t coord_id) {
                  * querying metadata and querying for the coordinator
                  * until a match is found. */
 
-                if (rkb && rkb->rkb_source == RD_KAFKA_LEARNED) {
+                if (rkb) {
                         /* Coordinator is known and broker handle exists */
                         rd_kafka_cgrp_coord_set_broker(rkcg, rkb);
                         rd_kafka_broker_destroy(rkb); /*from find_by_nodeid()*/
 
                         return 1;
                 } else {
-                        if (rkb)
-                                rd_kafka_broker_destroy(
-                                    rkb); /* from find_by_nodeid() */
                         /* Coordinator is known but no corresponding
                          * broker handle. */
                         return rd_kafka_cgrp_set_state(

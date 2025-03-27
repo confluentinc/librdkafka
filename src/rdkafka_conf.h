@@ -155,6 +155,16 @@ typedef enum {
 } rd_kafka_oauthbearer_method_t;
 
 typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_OIDC,
+        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER,
+} rd_kafka_oauthbearer_grant_type_t;
+
+typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256,
+        RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_ES256,
+} rd_kafka_oauthbearer_assertion_algorithm_t;
+
+typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_NONE,
         RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, /**< RFC2818 */
 } rd_kafka_ssl_endpoint_id_t;
@@ -310,17 +320,20 @@ struct rd_kafka_conf_s {
                 int enable_callback_queue;
                 struct {
                         rd_kafka_oauthbearer_method_t method;
+                        rd_kafka_oauthbearer_grant_type_t grant_type;
                         char *token_endpoint_url;
                         char *client_id;
                         char *client_secret;
                         char *scope;
-                        char *private_key_id;
-                        char *private_key_secret;
-                        char *token_signing_algorithm;
-                        char *token_subject;
-                        char *token_issuer;
-                        char *token_audience;
-                        char *token_target_audience;
+                        char *assertion_private_key_file;
+                        char *assertion_private_key_passphrase;
+                        char *assertion_file;
+                        char *assertion_jwt_template_file;
+                        char *assertion_private_key_pem;
+                        rd_kafka_oauthbearer_assertion_algorithm_t
+                            assertion_signing_algorithm;
+                        int assertion_expiration;
+                        int assertion_issued_at;
                         char *extensions_str;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,

@@ -529,7 +529,7 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
                  * `rd_kafka_broker_decommission` is called below. */
                 if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
                                  rd_list_cmp_ptr) != NULL)
-                        break;
+                        continue;
 
                 rd_list_add(&brokers_to_decommission, rkb);
         }

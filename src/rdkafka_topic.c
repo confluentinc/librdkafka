@@ -645,6 +645,7 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
  * @remark If a toppar is currently delegated to a preferred replica,
  *         it will not be delegated to the leader broker unless there
  *         has been a leader change.
+ * @remark The new leader, if present, should not be terminating.
  *
  * @param leader_id The id of the new leader broker.
  * @param leader A reference to the leader broker or NULL if the
@@ -822,6 +823,45 @@ int rd_kafka_toppar_delegate_to_leader(rd_kafka_toppar_t *rktp) {
 }
 
 
+/**
+ * @brief Forgets current rktp leader, to reduce reference count
+ *        and allow the broker to be destroyed.
+ *
+ * @locks none
+ * @locks_acquired rk rdlock, rktp
+ * @locality any
+ */
+void rd_kafka_toppar_forget_leader(rd_kafka_toppar_t *rktp) {
+        rd_kafka_rdlock(rktp->rktp_rkt->rkt_rk);
+        rd_kafka_toppar_lock(rktp);
+
+        if (rktp->rktp_leader) {
+                rd_kafka_broker_destroy(rktp->rktp_leader);
+                rktp->rktp_leader       = NULL;
+                rktp->rktp_leader_id    = -1;
+                rktp->rktp_leader_epoch = -1;
+        }
+
+        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_rdunlock(rktp->rktp_rkt->rkt_rk);
+}
+
+/**
+ * @brief Revert the topic+partition delegation to the internal broker.
+ *
+ * @locks none
+ * @locks_acquired rk rdlock, rktp
+ * @locality any
+ */
+void rd_kafka_toppar_undelegate(rd_kafka_toppar_t *rktp) {
+        rd_kafka_rdlock(rktp->rktp_rkt->rkt_rk);
+        rd_kafka_toppar_lock(rktp);
+
+        rd_kafka_toppar_broker_delegate(rktp, NULL);
+
+        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_rdunlock(rktp->rktp_rkt->rkt_rk);
+}
 
 /**
  * @brief Save idempotent producer state for a partition that is about to

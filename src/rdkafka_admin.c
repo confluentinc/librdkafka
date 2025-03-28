@@ -8147,10 +8147,10 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_init(&rko_result->rko_u.admin_result.results, cnt,
                      rd_kafka_ConsumerGroupDescription_free);
 
-        rd_kafka_broker_lock(rkb);
         nodeid = rkb->rkb_nodeid;
-        host   = rd_strdup(rkb->rkb_origname);
-        port   = rkb->rkb_port;
+        rd_kafka_broker_lock(rkb);
+        host = rd_strdup(rkb->rkb_origname);
+        port = rkb->rkb_port;
         rd_kafka_broker_unlock(rkb);
 
         node = rd_kafka_Node_new(nodeid, host, port, NULL);

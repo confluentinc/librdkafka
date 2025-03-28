@@ -619,6 +619,7 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
                 return;
         }
 
+        mtx_lock(&rk->rk_telemetry.lock);
         rko         = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE_TELEMETRY);
         rko->rko_rk = rk;
         rd_kafka_q_enq(rk->rk_ops, rko);
@@ -626,12 +627,8 @@ void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
         /* Await termination sequence completion. */
         rd_kafka_dbg(rk, TELEMETRY, "TERM",
                      "Awaiting termination of telemetry.");
-        mtx_lock(&rk->rk_telemetry.lock);
         cnd_timedwait_ms(&rk->rk_telemetry.termination_cnd,
                          &rk->rk_telemetry.lock,
-                         /* TODO(milind): Evaluate this timeout after completion
-                            of all metrics push, is it too much, or too less if
-                            we include serialization? */
                          1000 /* timeout for waiting */);
         mtx_unlock(&rk->rk_telemetry.lock);
         rd_kafka_dbg(rk, TELEMETRY, "TERM",

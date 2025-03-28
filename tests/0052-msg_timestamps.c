@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -181,6 +182,7 @@ static void test_timestamps(const char *broker_tstype,
 
 
 int main_0052_msg_timestamps(int argc, char **argv) {
+        rd_bool_t test_with_apache_kafka_since_4_0 = rd_false;
 
         if (!test_can_create_topics(1))
                 return 0;
@@ -188,6 +190,13 @@ int main_0052_msg_timestamps(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Test cluster requires authentication/SSL\n");
                 return 0;
+        }
+
+        if (test_broker_version >= TEST_BRKVER(4, 0, 0, 0)) {
+                /* Code using `broker.version.fallback` and
+                 * `api.version.request=false` won't work
+                 * against Apache Kafka 4.0 */
+                test_with_apache_kafka_since_4_0 = rd_true;
         }
 
         /* Broker version limits the producer's feature set,
@@ -208,13 +217,21 @@ int main_0052_msg_timestamps(int argc, char **argv) {
 
         test_timestamps("CreateTime", "0.10.1.0", "none", &my_timestamp);
         test_timestamps("LogAppendTime", "0.10.1.0", "none", &broker_timestamp);
-        test_timestamps("CreateTime", "0.9.0.0", "none", &invalid_timestamp);
-        test_timestamps("LogAppendTime", "0.9.0.0", "none", &broker_timestamp);
+        if (!test_with_apache_kafka_since_4_0) {
+                test_timestamps("CreateTime", "0.9.0.0", "none",
+                                &invalid_timestamp);
+                test_timestamps("LogAppendTime", "0.9.0.0", "none",
+                                &broker_timestamp);
+        }
 #if WITH_ZLIB
         test_timestamps("CreateTime", "0.10.1.0", "gzip", &my_timestamp);
         test_timestamps("LogAppendTime", "0.10.1.0", "gzip", &broker_timestamp);
-        test_timestamps("CreateTime", "0.9.0.0", "gzip", &invalid_timestamp);
-        test_timestamps("LogAppendTime", "0.9.0.0", "gzip", &broker_timestamp);
+        if (!test_with_apache_kafka_since_4_0) {
+                test_timestamps("CreateTime", "0.9.0.0", "gzip",
+                                &invalid_timestamp);
+                test_timestamps("LogAppendTime", "0.9.0.0", "gzip",
+                                &broker_timestamp);
+        }
 #endif
 
         return 0;

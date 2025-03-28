@@ -114,6 +114,7 @@ blocks:
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+          - sem-version java 17
       jobs:
         - name: 'Build configuration checks'
           commands:
@@ -141,7 +142,7 @@ blocks:
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.8.0 --cpversion 7.7.0 --cmd 'make quick')
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.9.0 --cpversion 7.9.0 --cmd 'make quick')
         - name: 'Build and integration tests with "consumer" protocol'
           commands:
             - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
@@ -159,18 +160,13 @@ blocks:
             - examples/rdkafka_example -X builtin.features
             - ldd src/librdkafka.so.1
             - ldd src-cpp/librdkafka++.so.1
-            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - export TEST_KAFKA_VERSION=4.0.0
             - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
-            # This commit corresponds to the DescribeConfigs API change for KIP-848
-            # KAFKA-14510; Extend DescribeConfigs API to support group configs (#16859)
-            # https://github.com/apache/kafka/commit/3a0efa2845e6a0d237772adfe6364579af50ce18
-            # TODO: upgrade to 4.0 when released.
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version 'trunk@3a0efa2845e6a0d237772adfe6364579af50ce18'
-              --cpversion 7.7.0 --conf '["group.coordinator.rebalance.protocols=classic,consumer"]'
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version '4.0.0-rc4'
+              --cpversion 7.9.0
               --cmd 'make quick')
 
 
@@ -384,3 +380,25 @@ blocks:
             # Upload all packages to project artifact store
             - artifact push project packages --destination librdkafka-packages-${SEMAPHORE_GIT_TAG_NAME}-${SEMAPHORE_WORKFLOW_ID}
             - echo Thank you
+
+promotions:
+  - name: Run all tests on master commits
+    pipeline_file: run-all-tests.yml
+    parameters:
+      env_vars:
+        - required: true
+          name: TEST_KAFKA_GIT_REF
+          default_value: 3.8.0
+        - required: true
+          name: TEST_TYPE
+          default_value: plaintext,ssl
+        - required: true
+          name: TEST_ARCHES
+          default_value: x86_64,aarch64
+        - required: true
+          name: TEST_PARALLEL
+          default_value: "1"
+    auto_promote_on:
+      - result: passed
+        branch:
+        - "master"

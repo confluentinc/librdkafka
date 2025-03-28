@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -167,7 +168,10 @@ static void do_test_static_group_rebalance(void) {
         test_conf_set(conf, "max.poll.interval.ms", "9000");
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
-        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        /* Keep this interval higher than cluster metadata propagation
+         * time to make sure no additional rebalances are triggered
+         * when refreshing the full metadata with a regex subscription. */
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "2000");
         test_conf_set(conf, "metadata.max.age.ms", "5000");
         test_conf_set(conf, "enable.partition.eof", "true");
         test_conf_set(conf, "group.instance.id", "consumer1");
@@ -330,16 +334,25 @@ static void do_test_static_group_rebalance(void) {
         /* max.poll.interval.ms should still be enforced by the consumer */
 
         /*
-         * Block long enough for consumer 2 to be evicted from the group
-         * `max.poll.interval.ms` + `session.timeout.ms`
+         * Stop polling consumer 2 until we reach
+         * `max.poll.interval.ms` and is evicted from the group.
          */
         rebalance_start        = test_clock();
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         c[0].curr_line         = __LINE__;
-        test_consumer_poll_no_msgs("wait.max.poll", c[0].rk, testid,
-                                   6000 + 9000);
-        c[1].curr_line = __LINE__;
+        /* consumer 2 will time out and all partitions will be assigned to
+         * consumer 1. */
+        static_member_expect_rebalance(&c[0], rebalance_start, &c[0].revoked_at,
+                                       -1);
+        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+        static_member_expect_rebalance(&c[0], rebalance_start,
+                                       &c[0].assigned_at, -1);
+
+        /* consumer 2 restarts polling and re-joins the group */
+        rebalance_start        = test_clock();
+        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+        c[1].curr_line         = __LINE__;
         test_consumer_poll_expect_err(c[1].rk, testid, 1000,
                                       RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED);
 
@@ -568,7 +581,7 @@ static void do_test_fenced_member_consumer(void) {
         await_assignment_multi("Awaiting initial assignments", &c[1], 2);
 
         /* Create conflicting consumer */
-        TEST_SAY("Creating conflicting consumer2 instance\n");
+        TEST_SAY("Creating conflicting consumer 2 instance\n");
         test_conf_set(conf, "group.instance.id", "consumer2");
         test_conf_set(conf, "client.id", "consumer2b");
         c[0] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);

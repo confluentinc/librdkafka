@@ -46,8 +46,8 @@ using namespace std;
 /** Topic+Partition helper class */
 class Toppar {
  public:
-  Toppar(const string &topic, int32_t partition) : partition(partition) {
-    this->topic.append(topic);
+  Toppar(const string &topic, int32_t partition) :
+      topic(topic), partition(partition) {
   }
 
   Toppar(const RdKafka::TopicPartition *tp) :
@@ -59,9 +59,11 @@ class Toppar {
   }
 
   friend bool operator<(const Toppar &a, const Toppar &b) {
-    if (a.partition < b.partition)
+    if (a.topic < b.topic)
       return true;
-    return a.topic < b.topic;
+    if (a.topic > b.topic)
+      return false;
+    return a.partition < b.partition;
   }
 
   string str() const {
@@ -3171,8 +3173,11 @@ static void v_rebalance_cb(rd_kafka_t *rk,
   if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
     test_consumer_incremental_assign("assign", rk, parts);
   } else {
-    test_consumer_incremental_unassign("unassign", rk, parts);
-
+    TEST_ASSERT(!rd_kafka_assignment_lost(rk),
+                "Assignment must not be lost, "
+                " that is a sign that an ILLEGAL_GENERATION error, "
+                " during a commit happening during a rebalance is "
+                "causing the assignment to be lost.");
     if (!*auto_commitp) {
       rd_kafka_resp_err_t commit_err;
 
@@ -3181,10 +3186,14 @@ static void v_rebalance_cb(rd_kafka_t *rk,
       rd_sleep(2);
       commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/);
       TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
-                      commit_err == RD_KAFKA_RESP_ERR__DESTROY,
+                      commit_err == RD_KAFKA_RESP_ERR__DESTROY ||
+                      commit_err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
                   "%s: manual commit failed: %s", rd_kafka_name(rk),
                   rd_kafka_err2str(commit_err));
     }
+
+    /* Unassign must be done after manual commit. */
+    test_consumer_incremental_unassign("unassign", rk, parts);
   }
 }
 
@@ -3198,11 +3207,23 @@ static void v_commit_cb(rd_kafka_t *rk,
   TEST_SAY("%s offset commit for %d offsets: %s\n", rd_kafka_name(rk),
            offsets ? offsets->cnt : -1, rd_kafka_err2name(err));
   TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
+                  err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION ||
                   err == RD_KAFKA_RESP_ERR__DESTROY /* consumer was closed */,
               "%s offset commit failed: %s", rd_kafka_name(rk),
               rd_kafka_err2str(err));
 }
 
+/**
+ * @brief Log callback for the v_.. test.
+ */
+static void v_log_cb(const rd_kafka_t *rk,
+                     int level,
+                     const char *fac,
+                     const char *buf) {
+  /* Slow down logging to make ILLEGAL_GENERATION errors caused by
+   * manual commit more likely. */
+  rd_usleep(1000, 0);
+}
 
 static void v_commit_during_rebalance(bool with_rebalance_cb,
                                       bool auto_commit) {
@@ -3240,8 +3261,13 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
 
 
   test_conf_set(conf, "auto.offset.reset", "earliest");
+  test_conf_set(conf, "debug", "consumer,cgrp,topic,fetch");
   test_conf_set(conf, "enable.auto.commit", auto_commit ? "true" : "false");
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+  if (!auto_commit)
+    /* Slowing down logging is necessary only to make assignment lost
+     * errors more evident. */
+    rd_kafka_conf_set_log_cb(conf, v_log_cb);
   rd_kafka_conf_set_offset_commit_cb(conf, v_commit_cb);
   rd_kafka_conf_set_opaque(conf, (void *)&auto_commit);
 
@@ -3266,8 +3292,20 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
 
   /* Poll both consumers */
   for (i = 0; i < 10; i++) {
-    test_consumer_poll_once(c1, NULL, 1000);
-    test_consumer_poll_once(c2, NULL, 1000);
+    int poll_result1, poll_result2;
+    do {
+      poll_result1 = test_consumer_poll_once(c1, NULL, 1000);
+      poll_result2 = test_consumer_poll_once(c2, NULL, 1000);
+
+      if (poll_result1 == 1 && !auto_commit) {
+        rd_kafka_resp_err_t err;
+        TEST_SAY("Attempting manual commit after poll\n");
+        err = rd_kafka_commit(c1, NULL, 0);
+        TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                    "Expected not error or ILLEGAL_GENERATION, got: %s",
+                    rd_kafka_err2str(err));
+      }
+    } while (poll_result1 == 0 || poll_result2 == 0);
   }
 
   TEST_SAY("Closing consumers\n");

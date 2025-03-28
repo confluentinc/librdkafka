@@ -1516,7 +1516,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 2, NULL);
 
         /* Wait for ACL propagation. */
-        rd_sleep(1);
+        rd_sleep(tmout_multip(2));
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -1931,7 +1931,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 3, NULL);
 
         /* Wait for ACL propagation. */
-        rd_sleep(1);
+        rd_sleep(tmout_multip(2));
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -1953,7 +1953,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        rd_sleep(1);
+        rd_sleep(tmout_multip(2));
 
         /*
          * Wait for result
@@ -2266,8 +2266,6 @@ static void do_test_DeleteRecords(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        rd_sleep(1); /* Additional wait time for cluster propagation */
-
         /* Produce 100 msgs / partition */
         for (i = 0; i < MY_DEL_RECORDS_CNT; i++) {
                 int32_t partition;
@@ -2540,8 +2538,6 @@ static void do_test_DeleteGroups(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
 
-        rd_sleep(1); /* Additional wait time for cluster propagation */
-
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
@@ -2715,8 +2711,6 @@ static void do_test_ListConsumerGroups(const char *what,
 
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
-
-        rd_sleep(1); /* Additional wait time for cluster propagation */
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
@@ -3381,6 +3375,9 @@ static void do_test_DescribeTopics(const char *what,
             test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL));
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
+
         /* Call DescribeTopics. */
         options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
@@ -3440,18 +3437,20 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_event_destroy(rkev);
 
         /*
-         * Allow RD_KAFKA_ACL_OPERATION_DELETE to allow deletion
-         * of the created topic as currently our principal only has read
-         * and describe.
+         * Remove create ACLs to allow deletion
+         * of the created topic.
          */
         acl_bindings[0] = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
-            RD_KAFKA_ACL_OPERATION_DELETE, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
+            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
         TEST_CALL_ERR__(
-            test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL));
+            test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL));
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
+
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
 
 done:
         test_DeleteTopics_simple(rk, NULL, topic_names, 1, NULL);
@@ -3603,6 +3602,9 @@ static void do_test_DescribeCluster(const char *what,
         test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
+
         /* Call DescribeCluster. */
         options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER);
@@ -3663,6 +3665,9 @@ static void do_test_DescribeCluster(const char *what,
             NULL, 0);
         test_DeleteAcls_simple(rk, NULL, &acl_bindings_delete, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings_delete);
+
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
 
 done:
         TEST_LATER_CHECK();
@@ -3770,16 +3775,27 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                     rd_kafka_error_string(error));
 
         {
-                const rd_kafka_AclOperation_t expected[] = {
+                const rd_kafka_AclOperation_t expected_ak3[] = {
                     RD_KAFKA_ACL_OPERATION_DELETE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE,
                     RD_KAFKA_ACL_OPERATION_READ};
+                const rd_kafka_AclOperation_t expected_ak4[] = {
+                    RD_KAFKA_ACL_OPERATION_DELETE,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                    RD_KAFKA_ACL_OPERATION_READ,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
+                    RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS};
                 authorized_operations =
                     rd_kafka_ConsumerGroupDescription_authorized_operations(
                         results[0], &authorized_operations_cnt);
-                test_match_authorized_operations(expected, 3,
-                                                 authorized_operations,
-                                                 authorized_operations_cnt);
+                if (test_broker_version < TEST_BRKVER(4, 0, 0, 0))
+                        test_match_authorized_operations(
+                            expected_ak3, 3, authorized_operations,
+                            authorized_operations_cnt);
+                else
+                        test_match_authorized_operations(
+                            expected_ak4, 5, authorized_operations,
+                            authorized_operations_cnt);
         }
 
         rd_kafka_event_destroy(rkev);
@@ -3853,13 +3869,12 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         acl_bindings[0] = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_GROUP, group_id,
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
-            RD_KAFKA_ACL_OPERATION_DELETE, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
+            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
-        test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL);
+        test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
-        /* It seems to be taking some time on the cluster for the ACLs to
-         * propagate for a group.*/
+        /* Wait for ACL propagation. */
         rd_sleep(tmout_multip(2));
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
@@ -3955,8 +3970,6 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
-
-        rd_sleep(1); /* Additional wait time for cluster propagation */
 
         consumer = test_create_consumer(groupid, NULL, NULL, NULL);
 
@@ -4232,8 +4245,6 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 /* Verify that topics are reported by metadata */
                 test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt,
                                           NULL, 0, 15 * 1000);
-
-                rd_sleep(1); /* Additional wait time for cluster propagation */
 
                 consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -4516,8 +4527,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
-
-        rd_sleep(1); /* Additional wait time for cluster propagation */
 
         consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -4819,8 +4828,8 @@ static void do_test_UserScramCredentials(const char *what,
         rd_kafka_event_destroy(event);
 #endif
 
-        /* Wait propagation. */
-        rd_sleep(1);
+        /* Wait for user propagation. */
+        rd_sleep(tmout_multip(2));
 
         /* Credential should be retrieved */
         options = rd_kafka_AdminOptions_new(
@@ -4934,8 +4943,8 @@ static void do_test_UserScramCredentials(const char *what,
 final_checks:
 #endif
 
-        /* Wait propagation. */
-        rd_sleep(1);
+        /* Wait for user propagation. */
+        rd_sleep(tmout_multip(2));
 
         /* Credential doesn't exist anymore for this user */
 

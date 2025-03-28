@@ -926,6 +926,48 @@ rd_kafka_resp_err_t rd_kafka_test_fatal_error(rd_kafka_t *rk,
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_test_idemp_set_pid(rd_kafka_t *rk, int64_t id, int16_t epoch) {
+        rd_kafka_pid_t pid = {id, epoch};
+
+        if (!rd_kafka_is_idempotent(rk)) {
+                return RD_KAFKA_RESP_ERR__NOT_CONFIGURED;
+        }
+
+        if (!rd_kafka_pid_valid(pid)) {
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        rd_kafka_log(rk, LOG_WARNING, "TESTPID",
+                     "Forcibly overwriting idempotency PID");
+
+        rd_kafka_wrlock(rk);
+        rk->rk_eos.pid = pid;
+        rd_kafka_wrunlock(rk);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_test_idemp_get_pid(rd_kafka_t *rk, int64_t *id, int16_t *epoch) {
+        rd_kafka_pid_t pid;
+
+        if (!rd_kafka_is_idempotent(rk)) {
+                return RD_KAFKA_RESP_ERR__NOT_CONFIGURED;
+        }
+
+        pid = rd_kafka_idemp_get_pid(rk);
+        if (!rd_kafka_pid_valid(pid)) {
+                return RD_KAFKA_RESP_ERR__STATE;
+        }
+
+        *id    = pid.id;
+        *epoch = pid.epoch;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 
 /**
  * @brief Final destructor for rd_kafka_t, must only be called with refcnt 0.

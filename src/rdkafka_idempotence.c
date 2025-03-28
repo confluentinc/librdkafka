@@ -521,7 +521,8 @@ void rd_kafka_idemp_pid_update(rd_kafka_broker_t *rkb,
 
 /**
  * @brief Call when all partition request queues
- *        are drained to reset and re-request a new PID.
+ *        are drained and bump epoch if possible,
+ *        otherwise reset and re-request a new PID.
  *
  * @locality any
  * @locks none
@@ -539,7 +540,8 @@ static void rd_kafka_idemp_drain_done(rd_kafka_t *rk) {
         } else if (rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_DRAIN_BUMP &&
                    rd_kafka_pid_valid(rk->rk_eos.pid)) {
 
-                if (rd_kafka_is_transactional(rk)) {
+                if (rd_kafka_is_transactional(rk) ||
+                    rd_kafka_pid_epoch_exhausted(rk->rk_eos.pid)) {
                         /* The epoch bump needs to be performed by the
                          * coordinator by sending it an InitPid request. */
                         rd_kafka_dbg(rk, EOS, "DRAIN",

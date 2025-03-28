@@ -824,6 +824,40 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_test_fatal_error(rd_kafka_t *rk,
 
 
 /**
+ * @brief Sets the idempotent producer PID and epoch for testing purposes.
+ *
+ * @param rk Client instance.
+ * @param id The producer ID.
+ * @param epoch The producer ID epoch.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success.
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if idempotence have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if the \p id is not PID.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_test_idemp_set_pid(rd_kafka_t *rk, int64_t id, int16_t epoch);
+
+
+/**
+ * @brief Gets the current assigned PID
+ *
+ * @param rk Client instance.
+ * @param id The returned value of producer ID.
+ * @param epoch The returned value of producer ID epoch.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success.
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if idempotence have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if the \p id is not PID.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_test_idemp_get_pid(rd_kafka_t *rk, int64_t *id, int16_t *epoch);
+
+
+/**
  * @returns the error code for \p error or RD_KAFKA_RESP_ERR_NO_ERROR if
  *          \p error is NULL.
  */

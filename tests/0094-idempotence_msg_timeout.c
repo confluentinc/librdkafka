@@ -29,6 +29,8 @@
 #include "test.h"
 #include "rdkafka.h"
 
+#include "rdkafka_proto.h"
+
 #if WITH_SOCKEM
 /**
  * @name Test handling of message timeouts with the idempotent producer.
@@ -214,6 +216,101 @@ static void do_test_produce_timeout(const char *topic, const int msgrate) {
                  msgrate);
 }
 
+
+static void do_test_epoch_exhaustion(const char *topic) {
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_conf_t *conf;
+        rd_kafka_pid_t pid, new_pid;
+        rd_kafka_resp_err_t err;
+        sockem_ctrl_t ctrl;
+        uint64_t testid;
+        char buf[1024];
+        char key[128];
+        int i               = 0;
+        int msgcnt          = 20;
+        const int partition = RD_KAFKA_PARTITION_UA;
+
+        SUB_TEST("Test idempotent producer epoch exhaustion");
+
+        testid = test_id_generate();
+
+        test_conf_init(&conf, NULL, 60);
+        sockem_ctrl_init(&ctrl);
+
+        test_conf_set(conf, "enable.idempotence", "true");
+        test_conf_set(conf, "batch.size", "1");
+        test_conf_set(conf, "linger.ms", "1");
+        test_conf_set(conf, "retries", "1");
+
+        rd_kafka_conf_set_dr_msg_cb(conf, my_dr_msg_cb);
+
+        test_socket_enable(conf);
+        test_curr->is_fatal_cb = is_fatal_cb;
+
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt = test_create_producer_topic(rk, topic, "message.timeout.ms", "100",
+                                         NULL);
+
+        /* Create the topic to make sure connections are up and ready. */
+        err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
+        TEST_ASSERT(!err, "topic creation failed: %s", rd_kafka_err2str(err));
+
+        /* We need to wait for PID assignment from the broker. */
+        rd_usleep(1000, NULL);
+
+        /* Get current producer ID received from broker */
+        TEST_CALL_ERR__(rd_kafka_test_idemp_get_pid(rk, &pid.id, &pid.epoch));
+        /* Mock epoch near exhaustion point to make overflow faster */
+        TEST_CALL_ERR__(rd_kafka_test_idemp_set_pid(rk, pid.id, INT16_MAX));
+
+        /* Add delay to socket to create message timeouts */
+        sockem_ctrl_set_delay(&ctrl, 500, 3 * 100);
+
+        for (i = 0; i < msgcnt; i++) {
+                test_prepare_msg(testid, partition, i, buf, sizeof(buf), key,
+                                 sizeof(key));
+                err = rd_kafka_produce(rkt, partition, 0, buf, sizeof(buf), key,
+                                       sizeof(key), NULL);
+                TEST_ASSERT(!err, "produce() failed at msg #%d/%d: %s", i,
+                            msgcnt, rd_kafka_err2str(err));
+
+                rd_usleep(100 * 1000, NULL);
+        }
+
+        /*  Remove delay. */
+        sockem_ctrl_set_delay(&ctrl, 0, 0);
+
+        test_flush(rk, 1000);
+
+        /* Check if we got some timeouted messages */
+        TEST_CALL_ERR__(
+            rd_kafka_test_idemp_get_pid(rk, &new_pid.id, &new_pid.epoch));
+
+        /* We should have a new PID at this point */
+        TEST_ASSERT(new_pid.id != pid.id && new_pid.epoch != pid.epoch,
+                    "Producer should have requested new PID");
+
+        /* Validate that broker accepts new PID and it does not fail,
+         * especially with RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID or
+         * RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH */
+        test_prepare_msg(testid, partition, ++msgcnt, buf, sizeof(buf), key,
+                         sizeof(key));
+        err = rd_kafka_produce(rkt, partition, 0, buf, sizeof(buf), key,
+                               sizeof(key), NULL);
+        TEST_ASSERT(!err, "produce() failed after PID epoch exhaustion %s",
+                    rd_kafka_err2str(err));
+
+        /* Clean up */
+        test_flush(rk, 1000);
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
+        sockem_ctrl_term(&ctrl);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0094_idempotence_msg_timeout(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
@@ -225,6 +322,8 @@ int main_0094_idempotence_msg_timeout(int argc, char **argv) {
         }
 
         do_test_produce_timeout(topic, 100);
+
+        do_test_epoch_exhaustion(topic);
 
         return 0;
 }

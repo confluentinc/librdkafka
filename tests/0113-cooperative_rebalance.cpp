@@ -3443,7 +3443,10 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   e_change_subscription_remove_topic(true /*close consumer*/);
   e_change_subscription_remove_topic(false /*don't close consumer*/);
   f_assign_call_cooperative();
-  g_incremental_assign_call_eager();
+  /* KIP-848 doesn't support EAGER protocol*/
+  if (test_consumer_group_protocol_classic()) {
+    g_incremental_assign_call_eager();
+  }
   h_delete_topic();
   i_delete_topic_2();
   j_delete_topic_no_rb_callback();

@@ -384,8 +384,8 @@ rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *cluster,
  *
  * @returns Error value or 0 if no error occurred
  */
-rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
-                                             int32_t broker_id);
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id);
 
 
 /**

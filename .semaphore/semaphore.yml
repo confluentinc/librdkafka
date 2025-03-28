@@ -165,7 +165,7 @@ blocks:
             - DESTDIR="$PWD/dest" make install
             - export TEST_KAFKA_VERSION=4.0.0
             - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version '4.0.0-rc4'
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version '4.0.0'
               --cpversion 7.9.0
               --cmd 'make quick')
 

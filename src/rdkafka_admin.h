@@ -283,6 +283,35 @@ struct rd_kafka_ConfigResource_result_s {
                               *   but with response error values. */
 };
 
+/**
+ * @brief Resource type specific to config apis.
+ */
+typedef enum rd_kafka_ConfigResourceType_t {
+        RD_KAFKA_CONFIG_RESOURCE_GROUP = 32,
+} rd_kafka_ConfigResourceType_t;
+
+/**
+ * @brief Maps rd_kafka_ResourceType_t to int8_t(rd_kafka_ConfigResourceType_t)
+ *        for Config Apis. We are incorrectly using rd_kafka_ResourceType_t in
+ *        both Config Apis and ACL Apis. So, we need this function to map the
+ *        resource type internally to rd_kafka_ConfigResourceType_t. Like the
+ *        enum value for GROUP is 32 in Config Apis, but it is 3 for ACL Apis.
+ */
+int8_t
+map_from_resource_type_to_config_resource_type(rd_kafka_ResourceType_t restype);
+
+/**
+ * @brief Maps int8_t(rd_kafka_ConfigResourceType_t) to rd_kafka_ResourceType_t
+ *        for Config Apis. We are incorrectly using rd_kafka_ResourceType_t in
+ *        both Config Apis and ACL Apis. So, we need this function to map the
+ *        int8_t(rd_kafka_ConfigResourceType_t) internally to
+ *        rd_kafka_ResourceType_t. Like the enum value for GROUP is 32 in Config
+ *        Apis, but it is 3 for ACL Apis.
+ */
+rd_kafka_ResourceType_t
+map_from_config_resource_type_to_resource_type(int8_t config_resource_type);
+
+
 /**@}*/
 
 

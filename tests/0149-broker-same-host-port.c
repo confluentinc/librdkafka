@@ -71,8 +71,7 @@ int main_0149_broker_same_host_port_mock(int argc, char **argv) {
                     num_brokers, cnt);
 
         for (i = 0; i < cnt; i++) {
-                /* Brokers are added at the head of the list. */
-                int32_t expected_id = cnt - i;
+                int32_t expected_id = i + 1;
 
                 TEST_ASSERT(ids[i] == expected_id,
                             "expected broker %d in cache, not %d", expected_id,

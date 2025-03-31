@@ -28,7 +28,6 @@
 
 #include "test.h"
 
-static const char *test_debug;
 static rd_atomic32_t do_test_remove_then_add_received_terminate;
 static rd_atomic32_t verification_complete;
 
@@ -317,21 +316,11 @@ static void do_test_remove_then_add_log_cb(const rd_kafka_t *rk,
                                            int level,
                                            const char *fac,
                                            const char *buf) {
-        int secs, msecs;
-        struct timeval tv;
         if (!rd_atomic32_get(&do_test_remove_then_add_received_terminate) &&
             strstr(buf, "/1: Handle terminates in state") > 0) {
                 rd_atomic32_set(&do_test_remove_then_add_received_terminate, 1);
                 while (!rd_atomic32_get(&verification_complete))
                         rd_usleep(100 * 1000, 0);
-        }
-
-        if (test_debug) {
-                rd_gettimeofday(&tv, NULL);
-                secs  = (int)tv.tv_sec;
-                msecs = (int)(tv.tv_usec / 1000);
-                fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n", level, secs, msecs,
-                        fac, rk ? rd_kafka_name(rk) : "", buf);
         }
 }
 
@@ -355,8 +344,11 @@ static rd_bool_t do_test_remove_then_add_await_after_action_cb(int action) {
  *        Add a pause after receiving the TERMINATE op to allow to
  *        proceed with adding it again before it's decommissioned.
  */
+static test_conf_log_interceptor_t *log_interceptor;
 static void
 do_test_remove_then_add_edit_configuration_cb(rd_kafka_conf_t *conf) {
+        const char *debug_contexts[2] = {"broker", NULL};
+
         /* This timeout verifies that the correct brokers are returned
          * without duplicates as soon as possible. */
         test_timeout_set(6);
@@ -364,15 +356,8 @@ do_test_remove_then_add_edit_configuration_cb(rd_kafka_conf_t *conf) {
          * increasing likelyhood of wrong behaviour if the decommissioned broker
          * starts re-connecting. */
         test_conf_set(conf, "enable.sparse.connections", "false");
-        if (!test_debug ||
-            (!strstr(test_debug, "broker") && !strstr(test_debug, "all"))) {
-                char debug_with_broker[512];
-                rd_snprintf(debug_with_broker, sizeof(debug_with_broker),
-                            "%s%s%s", test_debug ? test_debug : "",
-                            test_debug ? "," : "", "broker");
-                test_conf_set(conf, "debug", debug_with_broker);
-        }
-        rd_kafka_conf_set_log_cb(conf, do_test_remove_then_add_log_cb);
+        log_interceptor = test_conf_set_log_interceptor(
+            conf, do_test_remove_then_add_log_cb, debug_contexts);
 }
 
 /**
@@ -403,6 +388,8 @@ static void do_test_remove_then_add(void) {
             expected_brokers_cnt, do_test_remove_then_add_edit_configuration_cb,
             do_test_remove_then_add_await_after_action_cb);
 
+        rd_free(log_interceptor);
+        log_interceptor = NULL;
         SUB_TEST_PASS();
 }
 
@@ -412,8 +399,6 @@ int main_0151_purge_brokers_mock(int argc, char **argv) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
                 return 0;
         }
-        test_debug = test_getenv("TEST_DEBUG", NULL);
-
 
         do_test_replace_with_new_cluster();
 

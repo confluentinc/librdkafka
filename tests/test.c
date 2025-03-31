@@ -968,6 +968,16 @@ static void test_read_conf_file(const char *conf_path,
 }
 
 /**
+ * @brief Log interceptor opaque holding the registered log callback.
+ */
+typedef struct test_conf_log_interceptor_s {
+        void (*log_cb)(const rd_kafka_t *rk,
+                       int level,
+                       const char *fac,
+                       const char *buf);
+} test_conf_log_interceptor_t;
+
+/**
  * @brief Get path to test config file
  */
 const char *test_conf_get_path(void) {
@@ -1039,6 +1049,71 @@ void test_conf_init(rd_kafka_conf_t **conf,
         test_conf_common_init(conf ? *conf : NULL, timeout);
 }
 
+/**
+ * @brief Log callback calls the
+ *        interceptor and  logs the message, if needed.
+ */
+static void test_conf_log_interceptor_log_cb(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf) {
+        int secs, msecs;
+        struct timeval tv;
+        test_conf_log_interceptor_t *interceptor = rd_kafka_opaque(rk);
+        interceptor->log_cb(rk, level, fac, buf);
+        const char *test_debug = test_getenv("TEST_DEBUG", NULL);
+
+        if (test_debug) {
+                rd_gettimeofday(&tv, NULL);
+                secs  = (int)tv.tv_sec;
+                msecs = (int)(tv.tv_usec / 1000);
+                fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n", level, secs, msecs,
+                        fac, rk ? rd_kafka_name(rk) : "", buf);
+        }
+}
+
+/**
+ * @brief Set test log interceptor with NULL terminated `debug_contexts`
+ *        string array.
+ *
+ * @remark The returned interceptor structure set as opaque must be destroyed
+ * after destroying the client instance.
+ */
+test_conf_log_interceptor_t *
+test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
+                              void (*log_cb)(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf),
+                              const char **debug_contexts) {
+        const char *test_debug = test_getenv("TEST_DEBUG", NULL);
+        test_conf_log_interceptor_t *interceptor =
+            rd_calloc(1, sizeof(*interceptor));
+        interceptor->log_cb = log_cb;
+        rd_kafka_conf_set_opaque(conf, interceptor);
+        rd_kafka_conf_set_log_cb(conf, test_conf_log_interceptor_log_cb);
+
+        if (!test_debug || !strstr(test_debug, "all")) {
+                char debug_with_contexts[512];
+                rd_snprintf(debug_with_contexts, sizeof(debug_with_contexts),
+                            "%s", test_debug ? test_debug : "");
+                /* Add all debug contexts and set debug configuration */
+                while (*debug_contexts) {
+                        if (!strstr(debug_with_contexts, *debug_contexts)) {
+                                rd_snprintf(debug_with_contexts,
+                                            sizeof(debug_with_contexts),
+                                            "%.*s%s%s",
+                                            (int)strlen(debug_with_contexts),
+                                            debug_with_contexts,
+                                            debug_with_contexts[0] ? "," : "",
+                                            *debug_contexts);
+                        }
+                        debug_contexts++;
+                }
+                test_conf_set(conf, "debug", debug_with_contexts);
+        }
+        return interceptor;
+}
 
 static RD_INLINE unsigned int test_rand(void) {
         unsigned int r;

@@ -32,12 +32,6 @@ static const char *test_debug;
 static rd_atomic32_t do_test_remove_then_add_received_terminate;
 static rd_atomic32_t verification_complete;
 
-static int int32_cmp(const void *a, const void *b) {
-        int *int_a = (int *)a;
-        int *int_b = (int *)b;
-        return *int_a - *int_b;
-}
-
 /** @brief Verify that \p expected_broker_ids
  *         and \p actual_broker_ids correspond in
  *         count and value. Sorts \p actual_broker_ids .
@@ -50,8 +44,6 @@ static rd_bool_t fetch_metadata_verify_brokers(int32_t *expected_broker_ids,
         if (actual_broker_id_cnt != expected_broker_id_cnt)
                 return rd_false;
 
-        qsort(actual_broker_ids, actual_broker_id_cnt,
-              sizeof(*actual_broker_ids), int32_cmp);
         for (i = 0; i < actual_broker_id_cnt; i++) {
                 if (actual_broker_ids[i] != expected_broker_ids[i])
                         return rd_false;

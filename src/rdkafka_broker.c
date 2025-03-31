@@ -6116,19 +6116,14 @@ void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
 
 int32_t *rd_kafka_brokers_learned_ids(rd_kafka_t *rk, size_t *cntp) {
         rd_kafka_broker_t *rkb;
-
-        size_t all_broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
-        /* This over-allocates but simplifies the code. */
-        int32_t *ids = malloc(sizeof(*ids) * all_broker_cnt);
-        int32_t *p   = ids;
+        int32_t *ids, *p;
+        int32_t i;
 
         *cntp = 0;
         rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rkb->rkb_source != RD_KAFKA_LEARNED ||
-                    rd_kafka_broker_termination_in_progress(rkb))
-                        continue;
-
+        ids = malloc(sizeof(*ids) * rd_list_cnt(&rk->rk_broker_by_id));
+        p   = ids;
+        RD_LIST_FOREACH(rkb, &rk->rk_broker_by_id, i) {
                 *p++ = rkb->rkb_nodeid;
                 (*cntp)++;
         }

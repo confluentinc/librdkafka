@@ -2072,6 +2072,10 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_list_t additional_brokerlists;
 
         rd_dassert(thrd_is_current(rk->rk_thread));
+        if (rd_kafka_terminating(rk))
+                /* Avoid re-bootstrapping while terminating */
+                return;
+
         if (rk->rk_conf.metadata_recovery_strategy ==
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE) {
                 rd_kafka_set_fatal_error(
@@ -2081,6 +2085,8 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
                     "is disabled");
                 return;
         }
+
+        rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
 
         rd_kafka_brokers_add0(
             rk, rk->rk_conf.brokerlist, rd_true

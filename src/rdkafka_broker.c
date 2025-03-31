@@ -82,9 +82,9 @@
 static const int rd_kafka_max_block_ms = 1000;
 
 const char *rd_kafka_broker_state_names[] = {
-    "INIT",        "DOWN",  "TRY_CONNECT", "CONNECT",          "SSL_HANDSHAKE",
-    "AUTH_LEGACY", "UP",    "UPDATE",      "APIVERSION_QUERY", "AUTH_HANDSHAKE",
-    "AUTH_REQ",    "REAUTH"};
+    "INIT",           "DOWN",        "TRY_CONNECT", "CONNECT",
+    "SSL_HANDSHAKE",  "AUTH_LEGACY", "UP",          "APIVERSION_QUERY",
+    "AUTH_HANDSHAKE", "AUTH_REQ",    "REAUTH"};
 
 const char *rd_kafka_secproto_names[] = {
     [RD_KAFKA_PROTO_PLAINTEXT]      = "plaintext",

@@ -1407,9 +1407,8 @@ rd_kafka_broker_t *rd_kafka_broker_random0(const char *func,
         int fcnt = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rd_kafka_broker_or_instance_terminating(rkb))
-                        continue;
-                if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                if (rd_kafka_broker_or_instance_terminating(rkb) ||
+                    RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         continue;
 
                 rd_kafka_broker_lock(rkb);
@@ -3485,7 +3484,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_CONNECT:
-                rd_atomic32_add(&rkb->rkb_rk->rk_scheduled_connections_cnt, -1);
+                rd_atomic32_sub(&rkb->rkb_rk->rk_scheduled_connections_cnt, 1);
                 /* Sparse connections: connection requested, transition
                  * to TRY_CONNECT state to trigger new connection. */
                 if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_INIT) {
@@ -5958,7 +5957,7 @@ void rd_kafka_broker_schedule_connection(rd_kafka_broker_t *rkb) {
         rko = rd_kafka_op_new(RD_KAFKA_OP_CONNECT);
         rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
         if (!rd_kafka_q_enq(rkb->rkb_ops, rko))
-                rd_atomic32_add(&rkb->rkb_rk->rk_scheduled_connections_cnt, -1);
+                rd_atomic32_sub(&rkb->rkb_rk->rk_scheduled_connections_cnt, 1);
 }
 
 

@@ -415,7 +415,6 @@ struct rd_kafka_op_s {
                 } dr;
 
                 struct {
-                        int32_t nodeid;
                         char nodename[RD_KAFKA_NODENAME_SIZE];
                 } node;
 

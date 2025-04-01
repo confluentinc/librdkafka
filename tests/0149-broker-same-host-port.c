@@ -127,9 +127,11 @@ int main_0149_broker_same_host_port_mock(int argc, char **argv) {
         /* Trigger Metadata request which will get initial changed hostnames. */
         broker_same_host_port_mock_verify_broker_ids(rk);
 
+        TEST_SAY("Verifying all brokers changed nodename\n");
         while (!(broker1_changed && broker2_changed && broker3_changed))
                 rd_usleep(100000, 0);
 
+        TEST_SAY("Verification complete\n");
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(cluster);
         rd_free(log_interceptor);

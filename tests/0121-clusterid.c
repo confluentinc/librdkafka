@@ -2,7 +2,6 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
- *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -89,7 +88,7 @@ int main_0121_clusterid(int argc, char **argv) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 
-        while (cnt < 6) {
+        while (rd_atomic32_get(&log_cnt) == 0) {
                 const rd_kafka_metadata_t *md;
 
                 /* After 3 seconds bring down cluster a and bring up
@@ -100,21 +99,13 @@ int main_0121_clusterid(int argc, char **argv) {
                         rd_kafka_mock_broker_set_up(cluster_b, 1);
                 }
 
-                if (!rd_kafka_metadata(rk, 1, NULL, &md, 1000)) {
-                        TEST_ASSERT(md->broker_cnt == 1,
-                                    "Expected 1 broker, not %d",
-                                    md->broker_cnt);
+                if (!rd_kafka_metadata(rk, 1, NULL, &md, 1000))
                         rd_kafka_metadata_destroy(md);
-                }
                 rd_sleep(1);
 
                 cnt++;
         }
 
-        /* Bootstrap brokers are removed and only
-         * brokers from first cluster are left. */
-        TEST_ASSERT(rd_atomic32_get(&log_cnt) == 0,
-                    "Expected no warning messages");
 
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(cluster_a);

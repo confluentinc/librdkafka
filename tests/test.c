@@ -1051,7 +1051,13 @@ void test_conf_init(rd_kafka_conf_t **conf,
 
 /**
  * @brief Log callback calls the
- *        interceptor and  logs the message, if needed.
+ *        interceptor and logs the message if the TEST_DEBUG environment
+ *        was set, allowing to see the debug messages when requested.
+ *
+ * @remark The interceptor shouldn't log the message again but do test related
+ *         actions such as checking if string is present, adding a sleep or
+ *         signaling a condition variable to continue with the next step of
+ *         the test.
  */
 static void test_conf_log_interceptor_log_cb(const rd_kafka_t *rk,
                                              int level,
@@ -1075,6 +1081,10 @@ static void test_conf_log_interceptor_log_cb(const rd_kafka_t *rk,
 /**
  * @brief Set test log interceptor with NULL terminated `debug_contexts`
  *        string array.
+ *        When debug log doesn't contain `all` and the debug contexts aren't
+ *        included, they are added to the debug configuration.
+ *        The interceptor is set as opaque in `rk` so the generic test log
+ *        callback can call the provided \p log_cb .
  *
  * @remark The returned interceptor structure set as opaque must be destroyed
  * after destroying the client instance.

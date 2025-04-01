@@ -251,6 +251,15 @@ void test_conf_init(rd_kafka_conf_t **conf,
                     int timeout);
 
 
+typedef struct test_conf_log_interceptor_s test_conf_log_interceptor_t;
+
+test_conf_log_interceptor_t *
+test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
+                              void (*log_cb)(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf),
+                              const char **debug_contexts);
 
 void test_msg_fmt(char *dest,
                   size_t dest_size,

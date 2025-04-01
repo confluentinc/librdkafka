@@ -58,6 +58,8 @@ static struct {
 
         } next;
         int term;
+        /* Number of created sockets */
+        int num_sockets;
 } ctrl;
 
 static int ctrl_thrd_main(void *arg) {
@@ -107,8 +109,16 @@ static int ctrl_thrd_main(void *arg) {
 static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
 
         mtx_lock(&ctrl.lock);
+        if (ctrl.num_sockets < 1) {
+                /* Since librdkafka is decommissioning brokers,
+                 * first connection is with a bootstrap broker,
+                 * next one is with a learned one. */
+                ctrl.num_sockets++;
+                mtx_unlock(&ctrl.lock);
+                return 0;
+        }
         if (ctrl.skm) {
-                /* Reject all but the first connect */
+                /* Reject all but the first two connects */
                 mtx_unlock(&ctrl.lock);
                 return ECONNREFUSED;
         }

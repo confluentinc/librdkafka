@@ -2,6 +2,8 @@
 
 librdkafka v2.9.0 is a feature release:
 
+ * Identify brokers only by broker id (#4557, @mfleming)
+ * Remove unavailable brokers and their thread (#4557, @mfleming)
  * Commits during a cooperative incremental rebalance aren't causing
    an assignment lost if the generation id was bumped in between (#4908).
  * Fix for librdkafka yielding before timeouts had been reached (#4970)
@@ -41,6 +43,18 @@ librdkafka v2.9.0 is a feature release:
 
 ### General fixes
 
+ * Issues: #4212
+   Identify brokers only by broker id, as happens in Java,
+   avoid to find the broker with same hostname and use the same thread
+   and connection.
+   Happens since 1.x (#4557, @mfleming).
+ * Issues: #4557
+   Remove brokers not reported in a metadata call, along with their thread.
+   Avoids that unavailable brokers are selected for a new connection when
+   there's no one available. We cannot tell if a broker was removed
+   temporarily or permanently so we always remove it and it'll be added back when
+   it becomes available again.
+   Happens since 1.x (#4557, @mfleming).
  * Issues: #4970
    librdkafka code using `cnd_timedwait` was yielding before a timeout occurred
    without the condition being fulfilled because of spurious wake-ups.

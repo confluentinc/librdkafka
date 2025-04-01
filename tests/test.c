@@ -262,7 +262,9 @@ _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
+_TEST_DECL(0149_broker_same_host_port_mock);
 _TEST_DECL(0150_telemetry_mock);
+_TEST_DECL(0151_purge_brokers_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -521,7 +523,9 @@ struct test tests[] = {
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
+    _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
+    _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */
@@ -964,6 +968,16 @@ static void test_read_conf_file(const char *conf_path,
 }
 
 /**
+ * @brief Log interceptor opaque holding the registered log callback.
+ */
+typedef struct test_conf_log_interceptor_s {
+        void (*log_cb)(const rd_kafka_t *rk,
+                       int level,
+                       const char *fac,
+                       const char *buf);
+} test_conf_log_interceptor_t;
+
+/**
  * @brief Get path to test config file
  */
 const char *test_conf_get_path(void) {
@@ -1035,6 +1049,81 @@ void test_conf_init(rd_kafka_conf_t **conf,
         test_conf_common_init(conf ? *conf : NULL, timeout);
 }
 
+/**
+ * @brief Log callback calls the
+ *        interceptor and logs the message if the TEST_DEBUG environment
+ *        was set, allowing to see the debug messages when requested.
+ *
+ * @remark The interceptor shouldn't log the message again but do test related
+ *         actions such as checking if string is present, adding a sleep or
+ *         signaling a condition variable to continue with the next step of
+ *         the test.
+ */
+static void test_conf_log_interceptor_log_cb(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf) {
+        int secs, msecs;
+        struct timeval tv;
+        test_conf_log_interceptor_t *interceptor = rd_kafka_opaque(rk);
+        interceptor->log_cb(rk, level, fac, buf);
+        const char *test_debug = test_getenv("TEST_DEBUG", NULL);
+
+        if (test_debug) {
+                rd_gettimeofday(&tv, NULL);
+                secs  = (int)tv.tv_sec;
+                msecs = (int)(tv.tv_usec / 1000);
+                fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n", level, secs, msecs,
+                        fac, rk ? rd_kafka_name(rk) : "", buf);
+        }
+}
+
+/**
+ * @brief Set test log interceptor with NULL terminated `debug_contexts`
+ *        string array.
+ *        When debug log doesn't contain `all` and the debug contexts aren't
+ *        included, they are added to the debug configuration.
+ *        The interceptor is set as opaque in `rk` so the generic test log
+ *        callback can call the provided \p log_cb .
+ *
+ * @remark The returned interceptor structure set as opaque must be destroyed
+ * after destroying the client instance.
+ */
+test_conf_log_interceptor_t *
+test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
+                              void (*log_cb)(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf),
+                              const char **debug_contexts) {
+        const char *test_debug = test_getenv("TEST_DEBUG", NULL);
+        test_conf_log_interceptor_t *interceptor =
+            rd_calloc(1, sizeof(*interceptor));
+        interceptor->log_cb = log_cb;
+        rd_kafka_conf_set_opaque(conf, interceptor);
+        rd_kafka_conf_set_log_cb(conf, test_conf_log_interceptor_log_cb);
+
+        if (!test_debug || !strstr(test_debug, "all")) {
+                char debug_with_contexts[512];
+                rd_snprintf(debug_with_contexts, sizeof(debug_with_contexts),
+                            "%s", test_debug ? test_debug : "");
+                /* Add all debug contexts and set debug configuration */
+                while (*debug_contexts) {
+                        if (!strstr(debug_with_contexts, *debug_contexts)) {
+                                rd_snprintf(debug_with_contexts,
+                                            sizeof(debug_with_contexts),
+                                            "%.*s%s%s",
+                                            (int)strlen(debug_with_contexts),
+                                            debug_with_contexts,
+                                            debug_with_contexts[0] ? "," : "",
+                                            *debug_contexts);
+                        }
+                        debug_contexts++;
+                }
+                test_conf_set(conf, "debug", debug_with_contexts);
+        }
+        return interceptor;
+}
 
 static RD_INLINE unsigned int test_rand(void) {
         unsigned int r;
@@ -5551,7 +5640,8 @@ void test_headers_dump(const char *what,
 
 
 /**
- * @brief Retrieve and return the list of broker ids in the cluster.
+ * @brief Retrieve and return the list of broker ids in the cluster by
+ *        sending a Metadata request.
  *
  * @param rk Optional instance to use.
  * @param cntp Will be updated to the number of brokers returned.

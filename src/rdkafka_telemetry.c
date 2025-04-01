@@ -388,7 +388,7 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
  * @brief Progress the telemetry state machine.
  *
  * @locks none
- * @locks_acquired none
+ * @locks_acquired rd_kafka_rdlock()
  * @locality main thread
  */
 static void rd_kafka_telemetry_fsm(rd_kafka_t *rk) {
@@ -464,7 +464,7 @@ void rd_kafka_telemetry_fsm_tmr_cb(rd_kafka_timers_t *rkts, void *rk) {
  * @brief Handles parsed GetTelemetrySubscriptions response.
  *
  * @locks none
- * @locks_acquired none
+ * @locks_acquired rd_kafka_rdlock()
  * @locality main thread
  */
 void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
@@ -501,10 +501,12 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
                 if (rk->rk_telemetry.rk_historic_c.ts_start == 0) {
                         rk->rk_telemetry.rk_historic_c.ts_start = now_ns;
                         rk->rk_telemetry.rk_historic_c.ts_last  = now_ns;
+                        rd_kafka_rdlock(rk);
                         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                                 rkb->rkb_telemetry.rkb_historic_c.connects =
                                     rd_atomic32_get(&rkb->rkb_c.connects);
                         }
+                        rd_kafka_rdunlock(rk);
                 }
 
         } else {

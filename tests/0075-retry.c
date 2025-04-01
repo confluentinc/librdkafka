@@ -118,7 +118,7 @@ static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
                 return 0;
         }
         if (ctrl.skm) {
-                /* Reject all but the first connect */
+                /* Reject all but the first two connects */
                 mtx_unlock(&ctrl.lock);
                 return ECONNREFUSED;
         }

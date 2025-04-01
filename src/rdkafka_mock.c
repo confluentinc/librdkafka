@@ -933,7 +933,7 @@ static void rd_kafka_mock_cluster_io_add(rd_kafka_mock_cluster_t *mcluster,
  *        adding a new one.
  */
 static void
-rd_kafka_mock_cluster_reassing_partitions(rd_kafka_mock_cluster_t *mcluster) {
+rd_kafka_mock_cluster_reassign_partitions(rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_topic_t *mtopic;
         TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
                 int i;
@@ -1717,16 +1717,28 @@ static int rd_kafka_mock_broker_new_listener(rd_kafka_mock_cluster_t *mcluster,
 
 
 static rd_kafka_mock_broker_t *
-rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
+rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster,
+                         int32_t broker_id,
+                         rd_kafka_resp_err_t *err) {
         rd_kafka_mock_broker_t *mrkb;
         rd_socket_t listen_s;
         struct sockaddr_in sin = {
             .sin_family = AF_INET,
             .sin_addr   = {.s_addr = htonl(INADDR_LOOPBACK)}};
 
-        listen_s = rd_kafka_mock_broker_new_listener(mcluster, &sin);
-        if (listen_s == -1)
+        if (rd_kafka_mock_broker_find(mcluster, broker_id)) {
+                if (err)
+                        *err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                /* A broker with this id already exists. */
                 return NULL;
+        }
+
+        listen_s = rd_kafka_mock_broker_new_listener(mcluster, &sin);
+        if (listen_s == -1) {
+                if (err)
+                        *err = RD_KAFKA_RESP_ERR__TRANSPORT;
+                return NULL;
+        }
 
         /*
          * Create mock broker object
@@ -1751,6 +1763,8 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
 
         if (rd_kafka_mock_broker_start_listener(mrkb) == -1) {
                 rd_kafka_mock_broker_destroy(mrkb);
+                if (err)
+                        *err = RD_KAFKA_RESP_ERR__TRANSPORT;
                 return NULL;
         }
 
@@ -2291,6 +2305,7 @@ void rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *cluster,
                                     sizeof(mrkb->advertised_listener), "%s",
                                     host);
                         mrkb->port = port;
+                        break;
                 }
         }
         mtx_unlock(&cluster->lock);
@@ -2419,7 +2434,7 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
 
         case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 rd_kafka_mock_broker_destroy(mrkb);
-                rd_kafka_mock_cluster_reassing_partitions(mcluster);
+                rd_kafka_mock_cluster_reassign_partitions(mcluster);
                 break;
 
         default:
@@ -2590,8 +2605,12 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_BROKER_ADD:
-                rd_kafka_mock_broker_new(mcluster, rko->rko_u.mock.broker_id);
-                rd_kafka_mock_cluster_reassing_partitions(mcluster);
+                rd_kafka_resp_err_t err;
+                if (!rd_kafka_mock_broker_new(mcluster,
+                                              rko->rko_u.mock.broker_id, &err))
+                        return err;
+
+                rd_kafka_mock_cluster_reassign_partitions(mcluster);
                 break;
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:
@@ -2794,7 +2813,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->brokers);
 
         for (i = 1; i <= broker_cnt; i++) {
-                if (!(mrkb = rd_kafka_mock_broker_new(mcluster, i))) {
+                if (!(mrkb = rd_kafka_mock_broker_new(mcluster, i, NULL))) {
                         rd_kafka_mock_cluster_destroy(mcluster);
                         return NULL;
                 }

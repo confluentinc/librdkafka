@@ -2488,9 +2488,6 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 goto fail;
         }
 
-        if (rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
-                rk->rk_conf.partition_assignors_cooperative = rd_true;
-
         /* Create Mock cluster */
         rd_atomic32_init(&rk->rk_mock.cluster_cnt, 0);
         if (rk->rk_conf.mock.broker_cnt > 0) {

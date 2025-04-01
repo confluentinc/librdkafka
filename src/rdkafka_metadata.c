@@ -92,70 +92,85 @@ rd_kafka_metadata(rd_kafka_t *rk,
         rd_kafka_q_t *rkq;
         rd_kafka_broker_t *rkb;
         rd_kafka_op_t *rko;
+        rd_kafka_resp_err_t err;
         rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         rd_list_t topics;
         rd_bool_t allow_auto_create_topics =
             rk->rk_conf.allow_auto_create_topics;
 
-        /* Query any broker that is up, and if none are up pick the first one,
-         * if we're lucky it will be up before the timeout */
-        rkb = rd_kafka_broker_any_usable(rk, timeout_ms, RD_DO_LOCK, 0,
-                                         "application metadata request");
-        if (!rkb)
-                return RD_KAFKA_RESP_ERR__TRANSPORT;
+        do {
+                /* Query any broker that is up, and if none are up pick the
+                 * first one, if we're lucky it will be up before the timeout.
+                 * Previous decommissioning brokers won't be returned by the
+                 * function after receiving the _DESTROY_BROKER error
+                 * below. */
+                rkb =
+                    rd_kafka_broker_any_usable(rk, timeout_ms, RD_DO_LOCK, 0,
+                                               "application metadata request");
+                if (!rkb)
+                        return RD_KAFKA_RESP_ERR__TRANSPORT;
 
-        rkq = rd_kafka_q_new(rk);
+                rkq = rd_kafka_q_new(rk);
 
-        rd_list_init(&topics, 0, rd_free);
-        if (!all_topics) {
-                if (only_rkt)
-                        rd_list_add(&topics,
+                rd_list_init(&topics, 0, rd_free);
+                if (!all_topics) {
+                        if (only_rkt)
+                                rd_list_add(
+                                    &topics,
                                     rd_strdup(rd_kafka_topic_name(only_rkt)));
-                else {
-                        int cache_cnt;
-                        rd_kafka_local_topics_to_list(rkb->rkb_rk, &topics,
-                                                      &cache_cnt);
-                        /* Don't trigger auto-create for cached topics */
-                        if (rd_list_cnt(&topics) == cache_cnt)
-                                allow_auto_create_topics = rd_true;
+                        else {
+                                int cache_cnt;
+                                rd_kafka_local_topics_to_list(
+                                    rkb->rkb_rk, &topics, &cache_cnt);
+                                /* Don't trigger auto-create
+                                 * for cached topics */
+                                if (rd_list_cnt(&topics) == cache_cnt)
+                                        allow_auto_create_topics = rd_true;
+                        }
                 }
-        }
 
-        /* Async: request metadata */
-        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA);
-        rd_kafka_op_set_replyq(rko, rkq, 0);
-        rko->rko_u.metadata.force = 1; /* Force metadata request regardless
-                                        * of outstanding metadata requests. */
-        rd_kafka_MetadataRequest(rkb, &topics, NULL, "application requested",
-                                 allow_auto_create_topics,
-                                 /* cgrp_update:
-                                  * Only update consumer group state
-                                  * on response if this lists all
-                                  * topics in the cluster, since a
-                                  * partial request may make it seem
-                                  * like some subscribed topics are missing. */
-                                 all_topics ? rd_true : rd_false,
-                                 -1 /* same subscription version */,
-                                 rd_false /* force_racks */, rko);
+                /* Async: request metadata */
+                rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA);
+                rd_kafka_op_set_replyq(rko, rkq, 0);
+                rko->rko_u.metadata.force =
+                    1; /* Force metadata request regardless
+                        * of outstanding metadata requests. */
+                rd_kafka_MetadataRequest(
+                    rkb, &topics, NULL, "application requested",
+                    allow_auto_create_topics,
+                    /* cgrp_update:
+                     * Only update consumer group state
+                     * on response if this lists all
+                     * topics in the cluster, since a
+                     * partial request may make it seem
+                     * like some subscribed topics are missing. */
+                    all_topics ? rd_true : rd_false,
+                    -1 /* same subscription version */,
+                    rd_false /* force_racks */, rko);
 
-        rd_list_destroy(&topics);
-        rd_kafka_broker_destroy(rkb);
+                rd_list_destroy(&topics);
+                rd_kafka_broker_destroy(rkb);
 
-        /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(ts_end), 0);
+                /* Wait for reply (or timeout) */
+                rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(ts_end), 0);
 
-        rd_kafka_q_destroy_owner(rkq);
+                rd_kafka_q_destroy_owner(rkq);
 
-        /* Timeout */
-        if (!rko)
-                return RD_KAFKA_RESP_ERR__TIMED_OUT;
+                /* Timeout */
+                if (!rko)
+                        return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
-        /* Error */
-        if (rko->rko_err) {
-                rd_kafka_resp_err_t err = rko->rko_err;
-                rd_kafka_op_destroy(rko);
-                return err;
-        }
+                /* Error */
+                err = rko->rko_err;
+                if (err) {
+                        rd_kafka_op_destroy(rko);
+                        if (err != RD_KAFKA_RESP_ERR__DESTROY_BROKER)
+                                return err;
+                }
+
+                /* In case selected broker was decommissioned,
+                 * try again with a different broker. */
+        } while (err == RD_KAFKA_RESP_ERR__DESTROY_BROKER);
 
         /* Reply: pass metadata pointer to application who now owns it*/
         rd_kafka_assert(rk, rko->rko_u.metadata.md);
@@ -459,6 +474,71 @@ rd_kafka_populate_metadata_topic_racks(rd_tmpabuf_t *tbuf,
                 }
                 rd_list_destroy(curr_list);
         }
+}
+
+/**
+ * @brief Decommission brokers that are not in the metadata.
+ */
+static void rd_kafka_metadata_decommission_unavailable_brokers(
+    rd_kafka_t *rk,
+    rd_kafka_metadata_t *md,
+    rd_kafka_broker_t *rkb_current) {
+        rd_kafka_broker_t *rkb;
+        rd_bool_t has_learned_brokers = rd_false;
+        rd_list_t brokers_to_decommission;
+        int i;
+
+        rd_kafka_wrlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source == RD_KAFKA_LEARNED) {
+                        has_learned_brokers = rd_true;
+                        break;
+                }
+        }
+        if (!has_learned_brokers) {
+                rd_kafka_wrunlock(rk);
+                return;
+        }
+
+        rd_list_init(&brokers_to_decommission,
+                     rd_atomic32_get(&rk->rk_broker_cnt), NULL);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_bool_t purge_broker;
+
+                if (rkb->rkb_source == RD_KAFKA_LOGICAL)
+                        continue;
+
+                purge_broker = rd_true;
+                if (rkb->rkb_source == RD_KAFKA_LEARNED) {
+                        /* Don't purge the broker if it's available in
+                         * metadata. */
+                        for (i = 0; i < md->broker_cnt; i++) {
+                                if (md->brokers[i].id == rkb->rkb_nodeid) {
+                                        purge_broker = rd_false;
+                                        break;
+                                }
+                        }
+                }
+
+                if (!purge_broker)
+                        continue;
+
+                /* Don't try to decommission already decommissioning brokers
+                 * otherwise they could be already destroyed when
+                 * `rd_kafka_broker_decommission` is called below. */
+                if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
+                                 rd_list_cmp_ptr) != NULL)
+                        continue;
+
+                rd_list_add(&brokers_to_decommission, rkb);
+        }
+        RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {
+                rd_kafka_broker_decommission(rk, rkb,
+                                             &rk->wait_decommissioned_thrds);
+                rd_list_add(&rk->wait_decommissioned_brokers, rkb);
+        }
+        rd_list_destroy(&brokers_to_decommission);
+        rd_kafka_wrunlock(rk);
 }
 
 /* Internal implementation for parsing Metadata. */
@@ -814,6 +894,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                        &md->brokers[i], NULL);
         }
 
+        rd_kafka_metadata_decommission_unavailable_brokers(rk, md, rkb);
+
         for (i = 0; i < md->topic_cnt; i++) {
 
                 /* Ignore topics in blacklist */
@@ -1024,10 +1106,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
             (all_topics ||
              ((requested_topics || requested_topic_ids) &&
               rd_kafka_cgrp_same_subscription_version(
-                  rkb->rkb_rk->rk_cgrp, cgrp_subscription_version)))) {
+                  rkb->rkb_rk->rk_cgrp, cgrp_subscription_version))))
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
-        }
+
+        if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
+            rk->rk_cgrp->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
+                rd_interval_reset(&rk->rk_cgrp->rkcg_join_intvl);
 
         /* Try to acquire a Producer ID from this broker if we
          * don't have one. */

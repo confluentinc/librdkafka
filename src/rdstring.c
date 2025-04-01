@@ -591,8 +591,7 @@ int rd_string_split_csv(const char *input,
         size_t elen         = 0;
         rd_bool_t in_quotes = rd_false;
 
-        *cntp   = 0;
-        *result = NULL;
+        *cntp = 0;
 
         // Count approximate field count (ignore sep inside quotes)
         for (s = input; *s; s++) {

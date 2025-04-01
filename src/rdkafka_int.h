@@ -415,9 +415,9 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        rd_kafka_metadata_internal_t
-            *rk_full_metadata;       /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
+        rd_ts_t rk_ts_full_metadata;                      /* Timestamp of most
+                                                           * recent full
+                                                           * metadata */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */
@@ -889,15 +889,13 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
                              int timeout_ms,
                              unsigned int *curr_msgsp) {
         unsigned int cnt;
-        struct timespec tspec;
-
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
                 if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
                                       &rk->rk_curr_msgs.lock,
-                                      &tspec) == thrd_timedout)
+                                      abs_timeout) == thrd_timedout)
                         break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);

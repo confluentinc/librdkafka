@@ -212,6 +212,12 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
 extern "C" {
 int main_0109_auto_create_topics(int argc, char **argv) {
+  if (!test_consumer_group_protocol_classic()) {
+    Test::Skip(
+        "Test disabled, to be enabled again when TOPIC_AUTHORIZATION_FAILED "
+        "error is handled by KIP-848 implementation.\n");
+    return 0;
+  }
   /* Parameters:
    *  allow auto create, with wildcards */
   do_test_consumer(true, false);

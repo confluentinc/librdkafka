@@ -1043,8 +1043,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         cnd_destroy(&rk->rk_init_cnd);
         mtx_destroy(&rk->rk_init_lock);
 
-        if (rk->rk_full_metadata)
-                rd_kafka_metadata_destroy(&rk->rk_full_metadata->metadata);
+
         rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
         rd_kafkap_str_destroy(rk->rk_eos.transactional_id);
@@ -2109,15 +2108,15 @@ static void rd_kafka_metadata_refresh_cb(rd_kafka_timers_t *rkts, void *arg) {
  * @locks none
  */
 static int rd_kafka_init_wait(rd_kafka_t *rk, int timeout_ms) {
-        struct timespec tspec;
         int ret;
+        rd_ts_t abs_timeout;
 
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_init_lock);
         while (rk->rk_init_wait_cnt > 0 &&
-               cnd_timedwait_abs(&rk->rk_init_cnd, &rk->rk_init_lock, &tspec) ==
-                   thrd_success)
+               cnd_timedwait_abs(&rk->rk_init_cnd, &rk->rk_init_lock,
+                                 abs_timeout) == thrd_success)
                 ;
         ret = rk->rk_init_wait_cnt;
         mtx_unlock(&rk->rk_init_lock);
@@ -3831,6 +3830,7 @@ static void rd_kafka_get_offsets_for_times_resp_cb(rd_kafka_t *rk,
                                                    rd_kafka_buf_t *request,
                                                    void *opaque) {
         struct _get_offsets_for_times *state;
+        int actions = 0;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* 'state' has gone out of scope when offsets_for_times()
@@ -3841,9 +3841,21 @@ static void rd_kafka_get_offsets_for_times_resp_cb(rd_kafka_t *rk,
         state = opaque;
 
         err = rd_kafka_handle_ListOffsets(rk, rkb, err, rkbuf, request,
-                                          state->results, NULL);
+                                          state->results, &actions);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                 return; /* Retrying */
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                rd_kafka_topic_partition_t *rktpar;
+                /* Remove its cache in case the topic isn't a known topic. */
+                rd_kafka_wrlock(rk);
+                RD_KAFKA_TPLIST_FOREACH(rktpar, state->results) {
+                        if (rktpar->err)
+                                rd_kafka_metadata_cache_delete_by_name(
+                                    rk, rktpar->topic);
+                }
+                rd_kafka_wrunlock(rk);
+        }
 
         /* Retry if no broker connection is available yet. */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT && rkb &&

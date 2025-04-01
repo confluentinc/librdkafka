@@ -3323,6 +3323,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                     "finish before producing to "
                                     "new leader");
                         }
+                } else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
+                        rktp->rktp_ts_fetch_backoff = 0;
                 }
 
                 rd_kafka_broker_destroy(rktp->rktp_next_broker);
@@ -4546,8 +4548,10 @@ static int rd_kafka_broker_thread_main(void *arg) {
                         }
 
                         if (unlikely(
-                                rd_kafka_broker_or_instance_terminating(rkb)))
+                                rd_kafka_broker_or_instance_terminating(rkb))) {
                                 rd_kafka_broker_serve(rkb, 1000);
+                                break;
+                        }
 
                         if (!rd_kafka_sasl_ready(rkb->rkb_rk)) {
                                 /* SASL provider not yet ready. */
@@ -4683,8 +4687,31 @@ static int rd_kafka_broker_thread_main(void *arg) {
                 }
         }
 
+        /* Disable and drain ops queue.
+         * Simply purging the ops queue risks leaving dangling references
+         * for ops such as PARTITION_JOIN/PARTITION_LEAVE where the broker
+         * reference is not maintained in the rko (but in rktp_next_leader).
+         * #1596.
+         * Do this before failing the broker to make sure no buffers
+         * are enqueued after that. */
+        rd_kafka_q_disable(rkb->rkb_ops);
+        while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
+                ;
+
         rd_kafka_broker_fail(rkb, LOG_DEBUG, rd_kafka_broker_destroy_error(rk),
                              "Broker handle is terminating");
+
+        rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                   "Handle terminates in state %s: "
+                   "%d refcnts (%p), %d toppar(s), "
+                   "%d active toppar(s), "
+                   "%d outbufs, %d waitresps, %d retrybufs",
+                   rd_kafka_broker_state_names[rkb->rkb_state],
+                   rd_refcnt_get(&rkb->rkb_refcnt), &rkb->rkb_refcnt,
+                   rkb->rkb_toppar_cnt, rkb->rkb_active_toppar_cnt,
+                   (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+                   (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
+                   (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs));
 
         rd_dassert(rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN);
         if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
@@ -4699,15 +4726,6 @@ static int rd_kafka_broker_thread_main(void *arg) {
                 rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
                 rd_kafka_wrunlock(rkb->rkb_rk);
         }
-
-        /* Disable and drain ops queue.
-         * Simply purging the ops queue risks leaving dangling references
-         * for ops such as PARTITION_JOIN/PARTITION_LEAVE where the broker
-         * reference is not maintained in the rko (but in rktp_next_leader).
-         * #1596 */
-        rd_kafka_q_disable(rkb->rkb_ops);
-        while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
-                ;
 
 #if WITH_SSL
         /* Remove OpenSSL per-thread error state to avoid memory leaks */

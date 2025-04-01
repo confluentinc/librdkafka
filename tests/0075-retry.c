@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -254,6 +255,14 @@ static void do_test_low_socket_timeout(const char *topic) {
 
 int main_0075_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0075_retry", 1);
+
+        if (test_needs_auth()) {
+                /* When authentication is involved there's the need
+                 * for additional SASL calls. These are delayed too and
+                 * it changes test timing. */
+                TEST_SKIP("Cannot run this test with SSL/SASL\n");
+                return 0;
+        }
 
         do_test_low_socket_timeout(topic);
 

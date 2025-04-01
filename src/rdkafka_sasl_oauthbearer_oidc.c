@@ -362,7 +362,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
                 parse_err = rd_string_split_csv(
                     rk->rk_conf.sasl.oauthbearer.extensions_str, ',', rd_true,
-                    extensions, &extension_cnt);
+                    &extensions, &extension_cnt);
 
                 if (parse_err != 0) {
                         rd_kafka_oauthbearer_set_token_failure(

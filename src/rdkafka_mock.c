@@ -2491,6 +2491,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_partition_t *mpart;
         rd_kafka_mock_broker_t *mrkb;
         size_t i;
+        rd_kafka_resp_err_t err;
 
         switch (rko->rko_u.mock.cmd) {
         case RD_KAFKA_MOCK_CMD_TOPIC_CREATE:
@@ -2605,14 +2606,12 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_BROKER_ADD:
-                rd_kafka_resp_err_t err;
                 if (!rd_kafka_mock_broker_new(mcluster,
                                               rko->rko_u.mock.broker_id, &err))
                         return err;
 
                 rd_kafka_mock_cluster_reassign_partitions(mcluster);
                 break;
-
         case RD_KAFKA_MOCK_CMD_COORD_SET:
                 if (!rd_kafka_mock_coord_set(mcluster, rko->rko_u.mock.name,
                                              rko->rko_u.mock.str,

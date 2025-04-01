@@ -718,6 +718,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE,
               "Broker: Client sent a push telemetry request larger than the "
               "maximum size the broker will accept"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED,
+              "Broker: Client metadata is stale, "
+              "client should rebootstrap to obtain new metadata."),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -1335,6 +1338,7 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                         ;
                 rd_free(thrd);
         }
+        rd_list_destroy(&rk->additional_brokerlists);
         rd_list_destroy(&rk->wait_decommissioned_brokers);
         rd_list_destroy(&rk->wait_decommissioned_thrds);
 
@@ -2055,6 +2059,59 @@ static void rd_kafka_1s_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_coord_cache_expire(&rk->rk_coord_cache);
 }
 
+/**
+ * @brief Re-bootstrap timer callback.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
+        int i;
+        char *brokerlist;
+        rd_kafka_t *rk = rkts->rkts_rk;
+        rd_list_t additional_brokerlists;
+
+        rd_dassert(thrd_is_current(rk->rk_thread));
+        if (rd_kafka_terminating(rk))
+                /* Avoid re-bootstrapping while terminating */
+                return;
+
+        if (rk->rk_conf.metadata_recovery_strategy ==
+            RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE) {
+                rd_kafka_set_fatal_error(
+                    rk, RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED, "%s",
+                    "Lost connection to broker(s) "
+                    "and metadata recovery with re-bootstrap "
+                    "is disabled");
+                return;
+        }
+
+        rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
+
+        rd_kafka_brokers_add0(
+            rk, rk->rk_conf.brokerlist, rd_true
+            /*resolve canonical bootstrap server list names if requested*/);
+
+        rd_kafka_rdlock(rk);
+        if (rd_list_cnt(&rk->additional_brokerlists) == 0) {
+                rd_kafka_rdunlock(rk);
+                return;
+        }
+
+        rd_list_init_copy(&additional_brokerlists, &rk->additional_brokerlists);
+        rd_list_copy_to(&additional_brokerlists, &rk->additional_brokerlists,
+                        rd_list_string_copy, NULL);
+        rd_kafka_rdunlock(rk);
+
+        RD_LIST_FOREACH(brokerlist, &additional_brokerlists, i) {
+                rd_kafka_brokers_add0(rk, brokerlist,
+                        rd_false
+                        /* don't resolve canonical bootstrap server list
+                         * names even if requested */);
+        }
+        rd_list_destroy(&additional_brokerlists);
+}
+
 static void rd_kafka_stats_emit_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
         rd_kafka_stats_emit_all(rk);
@@ -2331,6 +2388,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 rk->rk_logq->rkq_opaque = rk;
         }
 
+        rd_list_init(&rk->additional_brokerlists, 0, rd_free);
         TAILQ_INIT(&rk->rk_brokers);
         TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk, rk->rk_ops);
@@ -2796,6 +2854,14 @@ fail:
         return NULL;
 }
 
+/**
+ * Schedules a rebootstrap of the cluster immediately.
+ */
+void rd_kafka_rebootstrap(rd_kafka_t *rk) {
+        rd_kafka_timer_start_oneshot(&rk->rk_timers, &rk->rebootstrap_tmr,
+                                     rd_true /*restart*/, 0,
+                                     rd_kafka_rebootstrap_tmr_cb, NULL);
+}
 
 
 /**

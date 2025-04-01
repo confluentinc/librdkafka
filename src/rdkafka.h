@@ -167,7 +167,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION 0x020800ff
+#define RD_KAFKA_VERSION 0x020900ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -656,6 +656,9 @@ typedef enum {
         /** Client sent a push telemetry request larger than the maximum size
          *  the broker will accept. */
         RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE = 118,
+        /** Client metadata is stale,
+         *  client should rebootstrap to obtain new metadata. */
+        RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED = 129,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 

@@ -37,6 +37,8 @@ librdkafka v2.9.0 is a feature release:
    becomes reachable again (#4970).
  * Remove a one second wait after a partition fetch is restarted following a
    leader change and offset validation (#4970).
+ * Fix the Nagle algorithm (TCP_NODELAY) on broker sockets to not be enabled
+   by default (#4986).
 
 
 ## Fixes
@@ -99,6 +101,12 @@ librdkafka v2.9.0 is a feature release:
    the broker the request is enqueued on is up again.
    Solved by not retrying these kinds of metadata requests.
    Happens since 1.x (#4970).
+ * The Nagle algorithm (TCP_NODELAY) is now disabled by default. It caused a
+   large increase in latency for some use cases, for example, when using an
+   SSL connection.
+   For efficient batching, the application should use `linger.ms`,
+   `batch.size` etc.
+   Happens since: 0.x (#4986).
 
 ### Consumer fixes
 

@@ -455,7 +455,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_q                        = rd_kafka_consume_q_new(rk);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
-
         rkcg->rkcg_group_remote_assignor =
             rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
 
@@ -6047,9 +6046,6 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
  */
 static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
 
-        /* Leave group, if desired. */
-        rd_kafka_cgrp_leave_maybe(rkcg);
-
         /* If this action was underway when a terminate was initiated, it will
          * be left to complete. Now that's done, unassign all partitions */
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
@@ -6058,6 +6054,9 @@ static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
                              "unassign",
                              rkcg->rkcg_group_id->str);
                 rd_kafka_cgrp_unassign(rkcg);
+
+                /* Leave group, if desired. */
+                rd_kafka_cgrp_leave_maybe(rkcg);
                 return;
         }
 

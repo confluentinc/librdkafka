@@ -55,6 +55,7 @@
 #include "rdkafka_txnmgr.h"
 
 rd_bool_t rd_unittest_assert_on_failure = rd_false;
+rd_bool_t rd_unittest_with_valgrind     = rd_false;
 rd_bool_t rd_unittest_on_ci             = rd_false;
 rd_bool_t rd_unittest_slow              = rd_false;
 
@@ -484,7 +485,13 @@ int rd_unittest(void) {
                 rd_unittest_on_ci = rd_true;
         }
 
-        if (rd_unittest_on_ci || (ENABLE_DEVEL + 0)) {
+        if (rd_strcmp(rd_getenv("TEST_MODE", NULL), "valgrind") == 0) {
+                RD_UT_SAY("Unittests running with valgrind");
+                rd_unittest_with_valgrind = rd_true;
+        }
+
+        if (rd_unittest_on_ci || rd_unittest_with_valgrind ||
+            (ENABLE_DEVEL + 0)) {
                 RD_UT_SAY("Unittests will not error out on slow CPUs");
                 rd_unittest_slow = rd_true;
         }

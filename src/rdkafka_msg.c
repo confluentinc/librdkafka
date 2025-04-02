@@ -2528,22 +2528,28 @@ int unittest_msg(void) {
                                            {10, 10},
                                            {33692865, 33692865},
                                            {0, 0}});
-        fails += unittest_msgq_insert_sort(
-            "many messages", insert_baseline, NULL,
-            (const struct ut_msg_range[]) {{100000, 200000},
-                                           {400000, 450000},
-                                           {900000, 920000},
-                                           {33692864, 33751992},
-                                           {33906868, 33993690},
-                                           {40000000, 44000000},
-                                           {0, 0}},
-            (const struct ut_msg_range[]) {{1, 199},
-                                           {350000, 360000},
-                                           {500000, 500010},
-                                           {1000000, 1000200},
-                                           {33751993, 33906867},
-                                           {50000001, 50000001},
-                                           {0, 0}});
+        if (rd_unittest_with_valgrind) {
+                RD_UT_WARN(
+                    "Skipping large message range test "
+                    "when using Valgrind");
+        } else {
+                fails += unittest_msgq_insert_sort(
+                    "many messages", insert_baseline, NULL,
+                    (const struct ut_msg_range[]) {{100000, 200000},
+                                                   {400000, 450000},
+                                                   {900000, 920000},
+                                                   {33692864, 33751992},
+                                                   {33906868, 33993690},
+                                                   {40000000, 44000000},
+                                                   {0, 0}},
+                    (const struct ut_msg_range[]) {{1, 199},
+                                                   {350000, 360000},
+                                                   {500000, 500010},
+                                                   {1000000, 1000200},
+                                                   {33751993, 33906867},
+                                                   {50000001, 50000001},
+                                                   {0, 0}});
+        }
         fails += unittest_msgq_insert_sort(
             "issue #2508", insert_baseline, NULL,
             (const struct ut_msg_range[]) {

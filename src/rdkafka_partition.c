@@ -376,14 +376,24 @@ void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state) {
 
         rktp->rktp_fetch_state = fetch_state;
 
-        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
+        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
+                rktp->rktp_ts_fetch_backoff = 0;
+
+                /* Wake-up broker thread which might be idling on IO */
+                if (rktp->rktp_broker)
+                        rd_kafka_broker_wakeup(rktp->rktp_broker,
+                                               "fetch start");
+
                 rd_kafka_dbg(
                     rktp->rktp_rkt->rkt_rk, CONSUMER | RD_KAFKA_DBG_TOPIC,
                     "FETCH",
                     "Partition %.*s [%" PRId32 "] start fetching at %s",
                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                     rktp->rktp_partition,
-                    rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start));
+                    rd_kafka_fetch_pos2str(
+                        rd_kafka_toppar_fetch_decide_next_fetch_start_pos(
+                            rktp)));
+        }
 }
 
 
@@ -1225,7 +1235,8 @@ void rd_kafka_toppar_broker_delegate(rd_kafka_toppar_t *rktp,
 
         /* Undelegated toppars are delgated to the internal
          * broker for bookkeeping. */
-        if (!rkb && !rd_kafka_terminating(rk)) {
+        if (!rd_kafka_terminating(rk) &&
+            (!rkb || rd_kafka_broker_termination_in_progress(rkb))) {
                 rkb               = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }
@@ -1359,10 +1370,6 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_set_next_fetch_position(rktp, next_pos);
 
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-        /* Wake-up broker thread which might be idling on IO */
-        if (rktp->rktp_broker)
-                rd_kafka_broker_wakeup(rktp->rktp_broker, "ready to fetch");
 }
 
 
@@ -1746,11 +1753,6 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
 
                 rd_kafka_toppar_set_fetch_state(rktp,
                                                 RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-                /* Wake-up broker thread which might be idling on IO */
-                if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker,
-                                               "fetch start");
         }
 
         rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;
@@ -3674,11 +3676,12 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                 struct rd_kafka_partition_leader *leader;
                 const rd_kafka_metadata_topic_t *mtopic;
                 const rd_kafka_metadata_partition_t *mpart;
+                const rd_kafka_metadata_partition_internal_t *mdpi;
                 rd_bool_t topic_wait_cache;
 
                 rd_kafka_metadata_cache_topic_partition_get(
-                    rk, &mtopic, &mpart, rktpar->topic, rktpar->partition,
-                    0 /*negative entries too*/);
+                    rk, &mtopic, &mpart, &mdpi, rktpar->topic,
+                    rktpar->partition, 0 /*negative entries too*/);
 
                 topic_wait_cache =
                     !mtopic ||
@@ -3746,9 +3749,11 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                         rd_kafka_topic_partition_update(rktpar2, rktpar);
                 } else {
                         /* Make a copy of rktpar and add to partitions list */
-                        rd_kafka_topic_partition_list_add_copy(
+                        rktpar2 = rd_kafka_topic_partition_list_add_copy(
                             leader->partitions, rktpar);
                 }
+                rd_kafka_topic_partition_set_current_leader_epoch(
+                    rktpar2, mdpi->leader_epoch);
 
                 rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -3872,7 +3877,7 @@ rd_kafka_topic_partition_list_query_leaders_async_worker(rd_kafka_op_t *rko) {
                 rd_kafka_metadata_refresh_topics(
                     rk, NULL, &query_topics, rd_true /*force*/,
                     rd_false /*!allow_auto_create*/, rd_false /*!cgrp_update*/,
-                    "query partition leaders");
+                    -1, "query partition leaders");
         }
 
         rd_list_destroy(leaders);
@@ -4061,7 +4066,7 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
                         rd_kafka_metadata_refresh_topics(
                             rk, NULL, &query_topics, rd_true /*force*/,
                             rd_false /*!allow_auto_create*/,
-                            rd_false /*!cgrp_update*/,
+                            rd_false /*!cgrp_update*/, -1,
                             "query partition leaders");
                         ts_query = now;
                         query_cnt++;

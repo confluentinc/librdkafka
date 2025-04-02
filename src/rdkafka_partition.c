@@ -1349,7 +1349,7 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         if (rktp->rktp_query_pos.offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
                 int64_t orig_offset = next_pos.offset;
                 int64_t tail_cnt    = llabs(rktp->rktp_query_pos.offset -
-                                         RD_KAFKA_OFFSET_TAIL_BASE);
+                                            RD_KAFKA_OFFSET_TAIL_BASE);
 
                 if (tail_cnt > next_pos.offset)
                         next_pos.offset = 0;
@@ -3150,6 +3150,46 @@ int rd_kafka_topic_partition_list_cmp(const void *_a,
         return 0;
 }
 
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    void *) map_toppar_void_t;
+
+/**
+ * @brief Compare two topic partition lists using a hashmap for efficiency.
+
+ */
+int rd_kafka_topic_partition_list_cmp_with_hash(
+    const void *_a,
+    const void *_b,
+    int (*cmp)(const void *, const void *),
+    unsigned int (*hash)(const void *)) {
+        const rd_kafka_topic_partition_list_t *a = _a, *b = _b;
+        int r;
+        int i;
+
+        r = a->cnt - b->cnt;
+        if (r || a->cnt == 0) {
+                return r;
+        }
+        map_toppar_void_t hashmap =
+            RD_MAP_INITIALIZER(a->cnt, cmp, hash, NULL, NULL);
+
+
+        for (i = 0; i < a->cnt; i++) {
+                rd_kafka_topic_partition_t *tp =
+                    rd_kafka_topic_partition_copy(&a->elems[i]);
+                RD_MAP_SET(&hashmap, tp, (void *)1);
+        }
+
+        for (i = 0; i < b->cnt; i++) {
+                if (!RD_MAP_GET(&hashmap, &b->elems[i])) {
+                        RD_MAP_DESTROY(&hashmap);
+                        return 1;
+                }
+        }
+
+        RD_MAP_DESTROY(&hashmap);
+        return 0;
+}
 
 /**
  * @brief Ensures the \p rktpar has a toppar set in _private.
@@ -4646,9 +4686,6 @@ const char *rd_kafka_fetch_pos2str(const rd_kafka_fetch_pos_t fetchpos) {
 
         return ret[idx];
 }
-
-typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
-                    void *) map_toppar_void_t;
 
 /**
  * @brief Calculates \p a ∩ \p b using \p cmp and \p hash .

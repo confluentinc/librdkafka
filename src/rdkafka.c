@@ -2286,7 +2286,6 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int ret_errno               = 0;
         const char *conf_err;
-        char *group_remote_assignor_override = NULL;
 #ifndef _WIN32
         sigset_t newset, oldset;
 #endif
@@ -2487,64 +2486,6 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 ret_err   = RD_KAFKA_RESP_ERR__INVALID_ARG;
                 ret_errno = EINVAL;
                 goto fail;
-        }
-
-        if (!rk->rk_conf.group_remote_assignor) {
-                rd_kafka_assignor_t *cooperative_assignor;
-
-                /* Detect if chosen assignor is cooperative
-                 * FIXME: remove this compatibility altogether
-                 * and apply the breaking changes that will be required
-                 * in next major version. */
-
-                cooperative_assignor =
-                    rd_kafka_assignor_find(rk, "cooperative-sticky");
-                rk->rk_conf.partition_assignors_cooperative =
-                    !rk->rk_conf.partition_assignors.rl_cnt ||
-                    (cooperative_assignor &&
-                     cooperative_assignor->rkas_enabled);
-
-                if (rk->rk_conf.group_protocol ==
-                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                        /* Default remote assignor to the chosen local one. */
-                        if (rk->rk_conf.partition_assignors_cooperative) {
-                                group_remote_assignor_override =
-                                    rd_strdup("uniform");
-                                rk->rk_conf.group_remote_assignor =
-                                    group_remote_assignor_override;
-                        } else {
-                                rd_kafka_assignor_t *range_assignor =
-                                    rd_kafka_assignor_find(rk, "range");
-                                if (range_assignor &&
-                                    range_assignor->rkas_enabled) {
-                                        rd_kafka_log(
-                                            rk, LOG_WARNING, "ASSIGNOR",
-                                            "\"range\" assignor is sticky "
-                                            "with group protocol CONSUMER");
-                                        group_remote_assignor_override =
-                                            rd_strdup("range");
-                                        rk->rk_conf.group_remote_assignor =
-                                            group_remote_assignor_override;
-                                } else {
-                                        rd_kafka_log(
-                                            rk, LOG_WARNING, "ASSIGNOR",
-                                            "roundrobin assignor isn't "
-                                            "available "
-                                            "with group protocol CONSUMER, "
-                                            "using the \"uniform\" one. "
-                                            "It's similar, "
-                                            "but it's also sticky");
-                                        group_remote_assignor_override =
-                                            rd_strdup("uniform");
-                                        rk->rk_conf.group_remote_assignor =
-                                            group_remote_assignor_override;
-                                }
-                        }
-                }
-        } else {
-                /* When users starts setting properties of the new protocol,
-                 * they can only use incremental_assign/unassign. */
-                rk->rk_conf.partition_assignors_cooperative = rd_true;
         }
 
         /* Create Mock cluster */
@@ -2839,8 +2780,6 @@ fail:
          * that belong to rk_conf and thus needs to be cleaned up.
          * Legacy APIs, sigh.. */
         if (app_conf) {
-                if (group_remote_assignor_override)
-                        rd_free(group_remote_assignor_override);
                 rd_kafka_assignors_term(rk);
                 rd_kafka_interceptors_destroy(&rk->rk_conf);
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));

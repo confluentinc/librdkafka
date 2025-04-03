@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,14 +46,16 @@ static void rebalance_cb(rd_kafka_t *rk,
                  rd_kafka_err2name(err), parts->cnt);
         rebalances++;
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           parts);
 
         } else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS) {
                 rd_kafka_resp_err_t commit_err;
 
                 TEST_CALL_ERR__(rd_kafka_position(rk, parts));
 
-                TEST_CALL_ERR__(rd_kafka_assign(rk, NULL));
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             parts);
 
                 if (rk == c1)
                         return;
@@ -87,7 +90,11 @@ static void rebalance_cb(rd_kafka_t *rk,
 int main_0118_commit_rebalance(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
-        const int msgcnt = 1000;
+        const int msgcnt          = 1000;
+        const int exp_msg_cnt_pre = 10;
+        int exp_msg_cnt_post      = msgcnt;
+        int exp_msg_cnt_c1_pre    = exp_msg_cnt_pre;
+        int exp_msg_cnt_c2_pre    = exp_msg_cnt_pre;
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
@@ -102,28 +109,44 @@ int main_0118_commit_rebalance(int argc, char **argv) {
         c2 = test_create_consumer(topic, rebalance_cb, conf, NULL);
 
         test_consumer_subscribe(c1, topic);
-        /* Ensure c1 is first member */
-        rd_sleep(1);
         test_consumer_subscribe(c2, topic);
 
-
-        test_consumer_poll("C1.PRE", c1, 0, -1, -1, 10, NULL);
-        if (!test_consumer_group_protocol_classic()) {
-                /* There's no initial eager rebalance with KIP-848
-                 * protocol. It has to wait that the initial partitions
-                 * are revoked. */
-                while (rebalances < 2)
-                        test_consumer_poll("C1.PRE", c1, 0, -1, -1, 1, NULL);
+        while (exp_msg_cnt_c1_pre > 0 || exp_msg_cnt_c2_pre > 0) {
+                if (exp_msg_cnt_c1_pre > 0 ||
+                    exp_msg_cnt_c2_pre == exp_msg_cnt_pre) {
+                        exp_msg_cnt_c1_pre -=
+                            test_consumer_poll_once(c1, NULL, 100);
+                        if (exp_msg_cnt_c2_pre == exp_msg_cnt_pre)
+                                /* Slow down consumption until both have
+                                 * partitions assigned. */
+                                rd_usleep(100 * 1000, 0);
+                }
+                if (exp_msg_cnt_c2_pre > 0 ||
+                    exp_msg_cnt_c1_pre == exp_msg_cnt_pre) {
+                        exp_msg_cnt_c2_pre -=
+                            test_consumer_poll_once(c2, NULL, 100);
+                        if (exp_msg_cnt_c1_pre == exp_msg_cnt_pre)
+                                /* Slow down consumption until both have
+                                 * partitions assigned. */
+                                rd_usleep(100 * 1000, 0);
+                }
         }
-        test_consumer_poll("C2.PRE", c2, 0, -1, -1, 10, NULL);
 
         /* Trigger rebalance */
         test_consumer_close(c2);
         rd_kafka_destroy(c2);
 
+        /* Since all the assignors in the `consumer` protocol are COOPERATIVE
+         * only the new partitions are assigned to the consumer. All the
+         * previously assigned partitions will start consuming from the last
+         * offset. */
+        if (!test_consumer_group_protocol_classic())
+                exp_msg_cnt_post =
+                    msgcnt - exp_msg_cnt_pre + exp_msg_cnt_c1_pre;
+
         /* Since no offsets were successfully committed the remaining consumer
          * should be able to receive all messages. */
-        test_consumer_poll("C1.POST", c1, 0, -1, -1, msgcnt, NULL);
+        test_consumer_poll("C1.POST", c1, 0, -1, -1, exp_msg_cnt_post, NULL);
 
         rd_kafka_destroy(c1);
 

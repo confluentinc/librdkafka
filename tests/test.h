@@ -674,6 +674,7 @@ void test_consumer_verify_assignment0(const char *func,
         test_consumer_verify_assignment0(__FUNCTION__, __LINE__, rk,           \
                                          fail_immediately, __VA_ARGS__)
 
+
 void test_consumer_assign(const char *what,
                           rd_kafka_t *rk,
                           rd_kafka_topic_partition_list_t *parts);
@@ -684,6 +685,14 @@ void test_consumer_unassign(const char *what, rd_kafka_t *rk);
 void test_consumer_incremental_unassign(const char *what,
                                         rd_kafka_t *rk,
                                         rd_kafka_topic_partition_list_t *parts);
+void test_consumer_assign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
+void test_consumer_unassign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
 void test_consumer_assign_partition(const char *what,
                                     rd_kafka_t *rk,
                                     const char *topic,

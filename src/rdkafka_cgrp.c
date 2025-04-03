@@ -177,9 +177,7 @@ rd_kafka_cgrp_rebalance_protocol(rd_kafka_cgrp_t *rkcg) {
                       RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE))
                         return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
 
-                return rkcg->rkcg_rk->rk_conf.partition_assignors_cooperative
-                           ? RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE
-                           : RD_KAFKA_REBALANCE_PROTOCOL_EAGER;
+                return RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE;
         }
 
         if (!rkcg->rkcg_assignor)
@@ -459,6 +457,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
         rkcg->rkcg_group_remote_assignor =
             rd_kafkap_str_new(rk->rk_conf.group_remote_assignor, -1);
+
         if (!RD_KAFKAP_STR_LEN(rkcg->rkcg_rk->rk_conf.client_rack))
                 rkcg->rkcg_client_rack = rd_kafkap_str_new(NULL, -1);
         else
@@ -6055,6 +6054,9 @@ static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
                              "unassign",
                              rkcg->rkcg_group_id->str);
                 rd_kafka_cgrp_unassign(rkcg);
+
+                /* Leave group, if desired. */
+                rd_kafka_cgrp_leave_maybe(rkcg);
                 return;
         }
 

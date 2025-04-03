@@ -2670,7 +2670,6 @@ void test_rebalance_cb(rd_kafka_t *rk,
 }
 
 
-
 rd_kafka_t *test_create_consumer(
     const char *group_id,
     void (*rebalance_cb)(rd_kafka_t *rk,
@@ -3187,6 +3186,44 @@ void test_consumer_incremental_unassign(
         } else
                 TEST_SAY("%s: incremental unassign of %d partition(s) done\n",
                          what, partitions->cnt);
+}
+
+
+void test_consumer_assign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts) {
+        const char *protocol = rd_kafka_rebalance_protocol(rk);
+        if (!strcmp(protocol, "NONE")) {
+                TEST_FAIL(
+                    "Assign not supported with "
+                    "rebalance protocol NONE\n");
+        } else if (!strcmp(protocol, "EAGER")) {
+                TEST_SAY("Assign: %d partition(s)\n", parts->cnt);
+                test_consumer_assign(what, rk, parts);
+        } else {
+                TEST_SAY("Assign: %d partition(s)\n", parts->cnt);
+                test_consumer_incremental_assign(what, rk, parts);
+        }
+}
+
+
+void test_consumer_unassign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts) {
+        const char *protocol = rd_kafka_rebalance_protocol(rk);
+        if (!strcmp(protocol, "NONE")) {
+                TEST_FAIL(
+                    "Unassign not supported with "
+                    "rebalance protocol NONE\n");
+        } else if (!strcmp(protocol, "EAGER")) {
+                TEST_SAY("Unassign all partition(s)\n");
+                test_consumer_unassign(what, rk);
+        } else {
+                TEST_SAY("Unassign: %d partition(s)\n", parts->cnt);
+                test_consumer_incremental_unassign(what, rk, parts);
+        }
 }
 
 

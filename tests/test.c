@@ -1104,14 +1104,18 @@ test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
         rd_kafka_conf_set_log_cb(conf, test_conf_log_interceptor_log_cb);
 
         if (!test_debug || !strstr(test_debug, "all")) {
-                char debug_with_contexts[512];
-                size_t i = rd_snprintf(debug_with_contexts,
+                char debug_with_contexts[256] = {0};
+                size_t i                      = rd_snprintf(debug_with_contexts,
                                        sizeof(debug_with_contexts), "%s",
                                        test_debug ? test_debug : "");
                 /* Add all debug contexts and set debug configuration */
-                while (*debug_contexts && i < sizeof(debug_with_contexts) - 2) {
+                while (
+                    *debug_contexts &&
+                    i + strlen(*debug_contexts) +
+                            (i > 0 ? 2 : 1) /* 1 for the comma + 1 for the \0 */
+                        <= sizeof(debug_with_contexts)) {
                         if (!strstr(debug_with_contexts, *debug_contexts)) {
-                                if (debug_with_contexts[0])
+                                if (i > 0)
                                         debug_with_contexts[i++] = ',';
                                 i +=
                                     rd_snprintf(&debug_with_contexts[i],

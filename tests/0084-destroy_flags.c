@@ -42,10 +42,6 @@ static void destroy_flags_rebalance_cb(rd_kafka_t *rk,
                                        rd_kafka_topic_partition_list_t *parts,
                                        void *opaque) {
         rebalance_cnt++;
-
-        TEST_SAY("rebalance_cb: %s with %d partition(s)\n",
-                 rd_kafka_err2str(err), parts->cnt);
-
         test_rebalance_cb(rk, err, parts, opaque);
 }
 

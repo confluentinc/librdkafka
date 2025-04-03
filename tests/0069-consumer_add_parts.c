@@ -58,12 +58,7 @@ static void rebalance_cb(rd_kafka_t *rk,
                  rd_kafka_err2str(err));
         test_print_partition_list(parts);
 
-        if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
-                                                           parts);
-        else
-                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
-                                                             parts);
+        test_rebalance_cb(rk, err, parts, opaque);
 
         *statep = err;
 }

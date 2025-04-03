@@ -170,13 +170,13 @@ int main_0040_io_event(int argc, char **argv) {
                                         if (rd_kafka_event_error(rkev) ==
                                             RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
                                                 test_consumer_assign_by_rebalance_protocol(
-                                                    "rebalance", rk_c,
+                                                    "rebalance event", rk_c,
                                                     rd_kafka_event_topic_partition_list(
                                                         rkev));
                                                 expecting_io = _NOPE;
                                         } else {
                                                 test_consumer_unassign_by_rebalance_protocol(
-                                                    "rebalance", rk_c,
+                                                    "rebalance event", rk_c,
                                                     rd_kafka_event_topic_partition_list(
                                                         rkev));
                                         }

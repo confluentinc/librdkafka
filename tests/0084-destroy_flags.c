@@ -204,7 +204,7 @@ static void destroy_flags(int local_mode) {
 
 int main_0084_destroy_flags_local(int argc, char **argv) {
         /* FIXME: fix the test with subscribe/unsubscribe PR. */
-        if (test_consumer_group_protocol_consumer()) {
+        if (!test_consumer_group_protocol_classic()) {
                 TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
                 return 0;
         }
@@ -214,7 +214,7 @@ int main_0084_destroy_flags_local(int argc, char **argv) {
 
 int main_0084_destroy_flags(int argc, char **argv) {
         /* FIXME: fix the test with subscribe/unsubscribe PR. */
-        if (test_consumer_group_protocol_consumer()) {
+        if (!test_consumer_group_protocol_classic()) {
                 TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
                 return 0;
         }

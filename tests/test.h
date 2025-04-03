@@ -674,6 +674,15 @@ void test_consumer_verify_assignment0(const char *func,
         test_consumer_verify_assignment0(__FUNCTION__, __LINE__, rk,           \
                                          fail_immediately, __VA_ARGS__)
 
+
+void test_consumer_assign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
+void test_consumer_unassign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
 void test_consumer_assign(const char *what,
                           rd_kafka_t *rk,
                           rd_kafka_topic_partition_list_t *parts);
@@ -886,16 +895,6 @@ const char *test_consumer_group_protocol();
 int test_consumer_group_protocol_classic();
 
 int test_consumer_group_protocol_consumer();
-
-void test_consumer_assign_by_rebalance_protocol(
-    const char *what,
-    rd_kafka_t *rk,
-    rd_kafka_topic_partition_list_t *parts);
-
-void test_consumer_unassign_by_rebalance_protocol(
-    const char *what,
-    rd_kafka_t *rk,
-    rd_kafka_topic_partition_list_t *parts);
 
 /**
  * @brief Calls rdkafka function (with arguments)

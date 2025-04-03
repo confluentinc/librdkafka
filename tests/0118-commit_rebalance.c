@@ -45,22 +45,16 @@ static void rebalance_cb(rd_kafka_t *rk,
                  rd_kafka_err2name(err), parts->cnt);
         rebalances++;
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                if (test_consumer_group_protocol_classic())
-                        TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
-                else
-                        TEST_CALL_ERROR__(
-                            rd_kafka_incremental_assign(rk, parts));
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           parts);
 
         } else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS) {
                 rd_kafka_resp_err_t commit_err;
 
                 TEST_CALL_ERR__(rd_kafka_position(rk, parts));
 
-                if (test_consumer_group_protocol_classic())
-                        TEST_CALL_ERR__(rd_kafka_assign(rk, NULL));
-                else
-                        TEST_CALL_ERROR__(
-                            rd_kafka_incremental_unassign(rk, parts));
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             parts);
 
                 if (rk == c1)
                         return;
@@ -129,7 +123,7 @@ int main_0118_commit_rebalance(int argc, char **argv) {
          * only the new partitions are assigned to the consumer. All the
          * previously assigned partitions will start consuming from the last
          * offset. */
-        if (test_consumer_group_protocol_consumer())
+        if (!test_consumer_group_protocol_classic())
                 exp_msg_cnt_post = msgcnt - exp_msg_cnt_pre;
 
         /* Since no offsets were successfully committed the remaining consumer

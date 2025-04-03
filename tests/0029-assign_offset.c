@@ -89,19 +89,13 @@ static void rebalance_cb(rd_kafka_t *rk,
                 }
                 TEST_SAY("Use these offsets:\n");
                 test_print_partition_list(parts);
-                if (test_consumer_group_protocol_classic())
-                        test_consumer_assign("HL.REBALANCE", rk, parts);
-                else
-                        test_consumer_incremental_assign("HL.REBALANCE", rk,
-                                                         parts);
+                test_consumer_assign_by_rebalance_protocol("HL.REBALANCE", rk,
+                                                           parts);
                 break;
 
         case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                if (test_consumer_group_protocol_classic())
-                        test_consumer_unassign("HL.REBALANCE", rk);
-                else
-                        test_consumer_incremental_unassign("HL.REBALANCE", rk,
-                                                           parts);
+                test_consumer_unassign_by_rebalance_protocol("HL.REBALANCE", rk,
+                                                             parts);
                 break;
 
         default:

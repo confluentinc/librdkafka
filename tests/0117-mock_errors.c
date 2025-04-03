@@ -167,11 +167,11 @@ static void do_test_offset_commit_error_during_rebalance(void) {
          * only the new partitions are assigned to the consumer. All the
          * previously assigned partitions will start consuming from the last
          * offset. */
-        if (test_consumer_group_protocol_consumer())
+        if (!test_consumer_group_protocol_classic())
                 exp_msg_cnt_final = msgcnt - exp_msg_cnt_intial;
 
         /* Wait for new assignment and able to read all messages */
-        test_consumer_poll("C1.PRE", c1, 0, -1, -1, exp_msg_cnt_final, NULL);
+        test_consumer_poll("C1.POST", c1, 0, -1, -1, exp_msg_cnt_final, NULL);
 
         rd_kafka_destroy(c1);
 

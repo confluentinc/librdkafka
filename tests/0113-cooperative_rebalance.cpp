@@ -1411,6 +1411,13 @@ class GTestRebalanceCb : public RdKafka::RebalanceCb {
 static void g_incremental_assign_call_eager() {
   SUB_TEST();
 
+  /* Only classic consumer group protocol supports EAGER protocol*/
+  if (!test_consumer_group_protocol_classic()) {
+    SUB_TEST_SKIP(
+        "Skipping incremental assign call eager test as EAGER protocol is only "
+        "supported in `classic` consumer group protocol");
+  }
+
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
 
@@ -3443,10 +3450,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   e_change_subscription_remove_topic(true /*close consumer*/);
   e_change_subscription_remove_topic(false /*don't close consumer*/);
   f_assign_call_cooperative();
-  /* KIP-848 doesn't support EAGER protocol*/
-  if (test_consumer_group_protocol_classic()) {
-    g_incremental_assign_call_eager();
-  }
+  g_incremental_assign_call_eager();
   h_delete_topic();
   i_delete_topic_2();
   j_delete_topic_no_rb_callback();

@@ -3458,10 +3458,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   l_unsubscribe();
   m_unsubscribe_2();
 
-  /* TODO: check again when regexes will be supported by KIP-848 */
-  if (test_consumer_group_protocol_classic()) {
-    n_wildcard();
-  }
+  n_wildcard();
   o_java_interop();
   for (i = 1; i <= 6; i++) /* iterate over 6 different test variations */
     s_subscribe_when_rebalancing(i);

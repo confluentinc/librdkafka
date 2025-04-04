@@ -267,9 +267,9 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
  * `rkcg_member_id` is sufficient to know this with "classic" group protocol.
  */
 #define RD_KAFKA_CGRP_HAS_JOINED_CLASSIC(rkcg)                                 \
-        ((rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&      \
+        (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&      \
           rkcg->rkcg_member_id != NULL &&                                      \
-          RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0))
+          RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0)
 
 /**
  * @returns true if consumer has joined the group and thus requires a leave.
@@ -278,8 +278,8 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
  * as it's client generated.
  */
 #define RD_KAFKA_CGRP_HAS_JOINED_CONSUMER(rkcg)                                \
-        ((rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&     \
-          rkcg->rkcg_generation_id > 0))
+        (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&     \
+          rkcg->rkcg_generation_id > 0)
 
 #define RD_KAFKA_CGRP_HAS_JOINED(rkcg)                                         \
         (RD_KAFKA_CGRP_HAS_JOINED_CLASSIC(rkcg) ||                             \
@@ -5200,13 +5200,12 @@ rd_kafka_cgrp_calculate_subscribe_revoking_partitions(
 static int32_t
 rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                                rd_kafka_topic_partition_list_t *rktparlist) {
-        int32_t new_subscription_version =
-            rd_atomic32_add(&rkcg->rkcg_subscription_version, 1);
 
         rkcg->rkcg_flags &= ~(RD_KAFKA_CGRP_F_SUBSCRIPTION |
                               RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION);
-        if (rkcg->rkcg_subscription)
-                rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
+
+        RD_IF_FREE(rkcg->rkcg_subscription,
+                   rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(rkcg->rkcg_subscription_topics,
                    rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(rkcg->rkcg_subscription_regex, rd_kafkap_str_destroy);
@@ -5237,7 +5236,7 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                 rkcg->rkcg_subscription_topics = NULL;
         }
 
-        return new_subscription_version;
+        return rd_atomic32_add(&rkcg->rkcg_subscription_version, 1);
 }
 
 

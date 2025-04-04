@@ -97,9 +97,9 @@ int main(int argc, char **argv) {
 
         brokers        = argv[1];
         groupid        = argv[2];
+        group_protocol = argv[3];
         topics         = &argv[4];
         topic_cnt      = argc - 4;
-        group_protocol = argv[3];
 
 
         /*

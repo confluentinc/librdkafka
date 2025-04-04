@@ -4442,10 +4442,8 @@ static int rd_kafka_topic_partition_not_regex(const void *elem,
  */
 rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
     const rd_kafka_topic_partition_list_t *rktparlist) {
-        rd_kafka_topic_partition_list_t *non_regex_rktparlist =
-            rd_kafka_topic_partition_list_match(
+        return rd_kafka_topic_partition_list_match(
                 rktparlist, rd_kafka_topic_partition_not_regex, NULL);
-        return non_regex_rktparlist;
 }
 
 

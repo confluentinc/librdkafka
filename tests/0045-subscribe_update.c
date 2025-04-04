@@ -101,7 +101,7 @@ static void await_assignment(const char *pfx,
         if (fails > 0)
                 TEST_FAIL("%s: assignment mismatch: see above", pfx);
 
-        rd_kafka_assign(rk, tps);
+        test_consumer_assign_by_rebalance_protocol("rebalance event", rk, tps);
         rd_kafka_event_destroy(rkev);
 }
 
@@ -112,6 +112,7 @@ static void await_assignment(const char *pfx,
 static void
 await_revoke(const char *pfx, rd_kafka_t *rk, rd_kafka_queue_t *queue) {
         rd_kafka_event_t *rkev;
+        rd_kafka_topic_partition_list_t *tps;
 
         TEST_SAY("%s: waiting for revoke\n", pfx);
         rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 30000);
@@ -121,7 +122,16 @@ await_revoke(const char *pfx, rd_kafka_t *rk, rd_kafka_queue_t *queue) {
                         RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
                     "expected REVOKE, got %s",
                     rd_kafka_err2str(rd_kafka_event_error(rkev)));
-        rd_kafka_assign(rk, NULL);
+        tps = rd_kafka_event_topic_partition_list(rkev);
+
+        TEST_SAY("%s: revocation:\n", pfx);
+        if(tps) {
+                test_print_partition_list(tps);
+        } else {
+                TEST_SAY("%s: revocation: all partitions\n", pfx);
+        }
+
+        test_consumer_unassign_by_rebalance_protocol("rebalance event", rk, tps);
         rd_kafka_event_destroy(rkev);
 }
 
@@ -266,6 +276,7 @@ static void do_test_regex(void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_queue_t *queue;
+        const char *rebalance_protocol;
 
         /**
          * Regex test:
@@ -311,9 +322,14 @@ static void do_test_regex(void) {
         if (!test_consumer_group_protocol_consumer())
                 await_revoke("Regex: rebalance after topic creation", rk,
                              queue);
-
-        await_assignment("Regex: two topics exist", rk, queue, 2, topic_b, 2,
-                         topic_d, 1);
+        
+        rebalance_protocol = rd_kafka_rebalance_protocol(rk);
+        if(!strcmp(rebalance_protocol, "COOPERATIVE")) {
+                await_assignment("Regex: two topics exist", rk, queue, 1, topic_d, 1);
+        } else {
+                await_assignment("Regex: two topics exist", rk, queue, 2, topic_b, 2,
+                                 topic_d, 1);
+        }
 
         test_consumer_close(rk);
         rd_kafka_queue_destroy(queue);

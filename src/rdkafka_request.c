@@ -2333,8 +2333,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                            "generation id %" PRId32
                            ", group instance id \"%s\""
                            ", current assignment \"%s\""
-                           ", subscribe topics \"%s\""
-                           ", subscribe topic regex \"%s\""
+                           ", subscribed topics \"%s\""
+                           ", subscribed topic regex \"%s\""
                            ", remote assignor \"%s\"",
                            member_id_str, group_id->str, member_epoch,
                            group_instance_id_str, current_assignments_str,

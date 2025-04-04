@@ -265,13 +265,27 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
 
 /**
  * @returns true if consumer has joined the group and thus requires a leave.
+ *
+ * `rkcg_member_id` is sufficient to know this with "classic" group protocol.
  */
-#define RD_KAFKA_CGRP_HAS_JOINED(rkcg)                                         \
+#define RD_KAFKA_CGRP_HAS_JOINED_CLASSIC(rkcg)                                 \
         ((rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&      \
           rkcg->rkcg_member_id != NULL &&                                      \
-          RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0) ||                    \
-         (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&     \
+          RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0))
+
+/**
+ * @returns true if consumer has joined the group and thus requires a leave.
+ *
+ * With "consumer" group protocol we cannot rely on the `rkcg_member_id`
+ * as it's client generated.
+ */
+#define RD_KAFKA_CGRP_HAS_JOINED_CONSUMER(rkcg)                                \
+        ((rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&     \
           rkcg->rkcg_generation_id > 0))
+
+#define RD_KAFKA_CGRP_HAS_JOINED(rkcg)                                         \
+        (RD_KAFKA_CGRP_HAS_JOINED_CLASSIC(rkcg) ||                             \
+         RD_KAFKA_CGRP_HAS_JOINED_CONSUMER(rkcg))
 
 
 /**
@@ -389,14 +403,13 @@ void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
 void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.members);
+        rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription_topics);
+        rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription_regex);
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_current_assignment);
         RD_IF_FREE(rkcg->rkcg_target_assignment,
                    rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(rkcg->rkcg_next_target_assignment,
-                   rd_kafka_topic_partition_list_destroy);
-        RD_IF_FREE(rkcg->rkcg_subscription_regex, rd_kafkap_str_destroy);
-        RD_IF_FREE(rkcg->rkcg_subscription_topics,
                    rd_kafka_topic_partition_list_destroy);
         if (rkcg->rkcg_group_instance_id)
                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
@@ -470,9 +483,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         else
                 rkcg->rkcg_client_rack =
                     rd_kafkap_str_copy(rkcg->rkcg_rk->rk_conf.client_rack);
-        rkcg->rkcg_next_subscription   = NULL;
-        rkcg->rkcg_subscription_regex  = NULL;
-        rkcg->rkcg_subscription_topics = NULL;
+        rkcg->rkcg_next_subscription = NULL;
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
 
@@ -5163,23 +5174,35 @@ static void
 rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                                rd_kafka_topic_partition_list_t *rktparlist) {
 
-        int is_wildcard_subscription_present = 0;
-
         rkcg->rkcg_flags &= ~(RD_KAFKA_CGRP_F_SUBSCRIPTION |
                               RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION);
         if (rkcg->rkcg_subscription)
                 rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
+        RD_IF_FREE(rkcg->rkcg_subscription_topics,
+                   rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(rkcg->rkcg_subscription_regex, rd_kafkap_str_destroy);
 
         rkcg->rkcg_subscription = rktparlist;
 
         if (rkcg->rkcg_subscription) {
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
-                is_wildcard_subscription_present =
-                    rd_kafka_topic_partition_list_regex_cnt(
-                        rkcg->rkcg_subscription) > 0;
-                if (is_wildcard_subscription_present)
+                if (rd_kafka_topic_partition_list_regex_cnt(
+                        rkcg->rkcg_subscription) > 0)
                         rkcg->rkcg_flags |=
                             RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
+
+                if (rkcg->rkcg_group_protocol ==
+                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                        rkcg->rkcg_subscription_regex =
+                            rd_kafka_topic_partition_list_combine_regexes(
+                                rkcg->rkcg_subscription);
+                        rkcg->rkcg_subscription_topics =
+                            rd_kafka_topic_partition_list_remove_regexes(
+                                rkcg->rkcg_subscription);
+                        rkcg->rkcg_consumer_flags |=
+                            RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
+                            RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
+                }
 
                 /* Insert all non-wildcard topics in cache immediately.
                  * Otherwise a manual full metadata request could
@@ -5188,39 +5211,9 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                 rd_kafka_metadata_cache_hint_rktparlist(
                     rkcg->rkcg_rk, rkcg->rkcg_subscription, NULL,
                     0 /*dont replace*/);
-        }
-
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                RD_IF_FREE(rkcg->rkcg_subscription_topics,
-                           rd_kafka_topic_partition_list_destroy);
-                RD_IF_FREE(rkcg->rkcg_subscription_regex,
-                           rd_kafkap_str_destroy);
-
-                if (rkcg->rkcg_subscription) {
-                        rkcg->rkcg_subscription_topics =
-                            rd_kafka_topic_partition_list_copy(
-                                rkcg->rkcg_subscription);
-
-                        if (is_wildcard_subscription_present) {
-                                rkcg->rkcg_subscription_regex =
-                                    rd_kafka_topic_partition_list_combine_regexes(
-                                        rkcg->rkcg_subscription);
-                                rd_kafka_topic_partition_list_remove_regexes(
-                                    &rkcg->rkcg_subscription_topics);
-                        } else {
-                                rkcg->rkcg_subscription_regex =
-                                    rd_kafkap_str_new("", 0);
-                        }
-
-                        rkcg->rkcg_consumer_flags |=
-                            RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
-                            RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
-                } else {
-                        rkcg->rkcg_subscription_regex =
-                            rd_kafkap_str_new("", 0);
-                        rkcg->rkcg_subscription_topics =
-                            rd_kafka_topic_partition_list_new(0);
-                }
+        } else {
+                rkcg->rkcg_subscription_regex  = NULL;
+                rkcg->rkcg_subscription_topics = NULL;
         }
 }
 

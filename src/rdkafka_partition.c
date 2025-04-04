@@ -4422,30 +4422,30 @@ int rd_kafka_topic_partition_list_regex_cnt(
 
 
 /**
- * @brief Match function that returns true if topic is non regex.
+ * @brief Match function that returns true if topic is not a regex.
  */
-static RD_UNUSED int rd_kafka_topic_partition_not_regex(const void *elem,
-                                                        const void *opaque) {
+static int rd_kafka_topic_partition_not_regex(const void *elem,
+                                              const void *opaque) {
         const rd_kafka_topic_partition_t *rktpar = elem;
         return *rktpar->topic != '^';
 }
 
 /**
- * @brief Removes regexes from the list and returns the list without any regex
- * in it.
+ * @brief Return a new list with all regex topics removed.
+ *
+ * @remark The caller is responsible for freeing the returned list.
  */
-void rd_kafka_topic_partition_list_remove_regexes(
-    rd_kafka_topic_partition_list_t **rktparlist) {
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
         rd_kafka_topic_partition_list_t *non_regex_rktparlist =
             rd_kafka_topic_partition_list_match(
-                *rktparlist, rd_kafka_topic_partition_not_regex, NULL);
-        rd_kafka_topic_partition_list_destroy(*rktparlist);
-        *rktparlist = non_regex_rktparlist;
+                rktparlist, rd_kafka_topic_partition_not_regex, NULL);
+        return non_regex_rktparlist;
 }
 
 
 /**
- * @brief Combine regex present in the list into a single regex.
+ * @brief Combine regexes present in the list into a single regex.
  */
 rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
     const rd_kafka_topic_partition_list_t *rktparlist) {
@@ -4468,7 +4468,7 @@ rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
         }
 
         if (regex_cnt == 0)
-                return NULL;
+                return rd_kafkap_str_new("", 0);
 
         combined_regex_len +=
             3 * (regex_cnt - 1); /* 1 for each ')|(' separator */

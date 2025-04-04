@@ -2300,7 +2300,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
 
         if (rd_rkb_is_dbg(rkb, CGRP)) {
                 char current_assignments_str[512]              = "NULL";
-                char subscribe_topics_str[512]                 = "NULL";
+                char subscribed_topics_str[512]                = "NULL";
                 const char *member_id_str                      = "NULL";
                 const char *group_instance_id_str              = "NULL";
                 const char *remote_assignor_str                = "NULL";
@@ -2313,8 +2313,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                 }
                 if (subscribed_topics) {
                         rd_kafka_topic_partition_list_str(
-                            subscribed_topics, subscribe_topics_str,
-                            sizeof(subscribe_topics_str), 0);
+                            subscribed_topics, subscribed_topics_str,
+                            sizeof(subscribed_topics_str), 0);
                 }
                 if (member_id)
                         member_id_str = member_id->str;
@@ -2337,7 +2337,7 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                            ", remote assignor \"%s\"",
                            member_id_str, group_id->str, member_epoch,
                            group_instance_id_str, current_assignments_str,
-                           subscribe_topics_str,
+                           subscribed_topics_str,
                            subscribed_topic_regex_to_send_str,
                            remote_assignor_str);
         }
@@ -2383,13 +2383,10 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
 
         if (subscribed_topics) {
-                size_t of_TopicsArrayCnt;
                 int topics_cnt = subscribed_topics->cnt;
 
                 /* write Topics */
-                of_TopicsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicsArrayCnt,
-                                               topics_cnt);
+                rd_kafka_buf_write_arraycnt(rkbuf, topics_cnt);
                 while (--topics_cnt >= 0)
                         rd_kafka_buf_write_str(
                             rkbuf, subscribed_topics->elems[topics_cnt].topic,

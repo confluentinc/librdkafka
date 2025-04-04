@@ -153,6 +153,7 @@ _TEST_DECL(0042_many_topics);
 _TEST_DECL(0043_no_connection);
 _TEST_DECL(0044_partition_cnt);
 _TEST_DECL(0045_subscribe_update);
+_TEST_DECL(0045_resubscribe_with_regex);
 _TEST_DECL(0045_subscribe_update_topic_remove);
 _TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
 _TEST_DECL(0045_subscribe_update_mock);
@@ -371,6 +372,7 @@ struct test tests[] = {
           /* Produces a lot of messages */
           _THRES(.ucpu = 30.0)),
     _TEST(0045_subscribe_update, 0, TEST_BRKVER(0, 9, 0, 0)),
+    _TEST(0045_resubscribe_with_regex, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0045_subscribe_update_topic_remove,
           0,
           TEST_BRKVER(0, 9, 0, 0),

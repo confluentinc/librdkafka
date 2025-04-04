@@ -2273,7 +2273,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
     const rd_kafkap_str_t *group_instance_id,
     const rd_kafkap_str_t *rack_id,
     int32_t rebalance_timeout_ms,
-    const rd_kafka_topic_partition_list_t *subscribe_topics,
+    const rd_kafka_topic_partition_list_t *subscribed_topics,
+    rd_kafkap_str_t *subscribed_topic_regex,
     const rd_kafkap_str_t *remote_assignor,
     const rd_kafka_topic_partition_list_t *current_assignments,
     rd_kafka_replyq_t replyq,
@@ -2284,26 +2285,37 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         int16_t ApiVersion = 0;
         int features;
         size_t rkbuf_size = 0;
+        rd_kafkap_str_t *subscribed_topic_regex_to_send =
+            subscribed_topic_regex;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 0, 0, &features);
+            rkb, RD_KAFKAP_ConsumerGroupHeartbeat, 1, 1, &features);
+
+        if (ApiVersion == -1) {
+                rd_kafka_cgrp_coord_dead(rkb->rkb_rk->rk_cgrp,
+                                         RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                                         "ConsumerGroupHeartbeatRequest not "
+                                         "supported by broker");
+                return;
+        }
 
         if (rd_rkb_is_dbg(rkb, CGRP)) {
-                char current_assignments_str[512] = "NULL";
-                char subscribe_topics_str[512]    = "NULL";
-                const char *member_id_str         = "NULL";
-                const char *group_instance_id_str = "NULL";
-                const char *remote_assignor_str   = "NULL";
+                char current_assignments_str[512]              = "NULL";
+                char subscribed_topics_str[512]                = "NULL";
+                const char *member_id_str                      = "NULL";
+                const char *group_instance_id_str              = "NULL";
+                const char *remote_assignor_str                = "NULL";
+                const char *subscribed_topic_regex_to_send_str = "NULL";
 
                 if (current_assignments) {
                         rd_kafka_topic_partition_list_str(
                             current_assignments, current_assignments_str,
                             sizeof(current_assignments_str), 0);
                 }
-                if (subscribe_topics) {
+                if (subscribed_topics) {
                         rd_kafka_topic_partition_list_str(
-                            subscribe_topics, subscribe_topics_str,
-                            sizeof(subscribe_topics_str), 0);
+                            subscribed_topics, subscribed_topics_str,
+                            sizeof(subscribed_topics_str), 0);
                 }
                 if (member_id)
                         member_id_str = member_id->str;
@@ -2311,6 +2323,9 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                         group_instance_id_str = group_instance_id->str;
                 if (remote_assignor)
                         remote_assignor_str = remote_assignor->str;
+                if (subscribed_topic_regex_to_send)
+                        subscribed_topic_regex_to_send_str =
+                            subscribed_topic_regex_to_send->str;
 
                 rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
                            "ConsumerGroupHeartbeat of member id \"%s\", group "
@@ -2319,18 +2334,26 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                            ", group instance id \"%s\""
                            ", current assignment \"%s\""
                            ", subscribe topics \"%s\""
+                           ", subscribe topic regex \"%s\""
                            ", remote assignor \"%s\"",
                            member_id_str, group_id->str, member_epoch,
                            group_instance_id_str, current_assignments_str,
-                           subscribe_topics_str, remote_assignor_str);
+                           subscribed_topics_str,
+                           subscribed_topic_regex_to_send_str,
+                           remote_assignor_str);
         }
 
         size_t next_subscription_size = 0;
 
-        if (subscribe_topics) {
+        if (!subscribed_topic_regex_to_send)
+                subscribed_topic_regex_to_send = rd_kafkap_str_new(NULL, -1);
+
+        if (subscribed_topics) {
                 next_subscription_size =
-                    ((subscribe_topics->cnt * (4 + 50)) + 4);
+                    ((subscribed_topics->cnt * (4 + 50)) + 4);
         }
+        next_subscription_size +=
+            RD_KAFKAP_STR_SIZE(subscribed_topic_regex_to_send);
 
         if (group_id)
                 rkbuf_size += RD_KAFKAP_STR_SIZE(group_id);
@@ -2360,22 +2383,22 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         rd_kafka_buf_write_kstr(rkbuf, rack_id);
         rd_kafka_buf_write_i32(rkbuf, rebalance_timeout_ms);
 
-        if (subscribe_topics) {
-                size_t of_TopicsArrayCnt;
-                int topics_cnt = subscribe_topics->cnt;
+        if (subscribed_topics) {
+                int topics_cnt = subscribed_topics->cnt;
 
                 /* write Topics */
-                of_TopicsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicsArrayCnt,
-                                               topics_cnt);
+                rd_kafka_buf_write_arraycnt(rkbuf, topics_cnt);
                 while (--topics_cnt >= 0)
                         rd_kafka_buf_write_str(
-                            rkbuf, subscribe_topics->elems[topics_cnt].topic,
+                            rkbuf, subscribed_topics->elems[topics_cnt].topic,
                             -1);
 
         } else {
                 rd_kafka_buf_write_arraycnt(rkbuf, -1);
         }
+
+        if (ApiVersion >= 1)
+                rd_kafka_buf_write_kstr(rkbuf, subscribed_topic_regex_to_send);
 
         rd_kafka_buf_write_kstr(rkbuf, remote_assignor);
 
@@ -2410,6 +2433,9 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
         }
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        if (!subscribed_topic_regex)
+                rd_kafkap_str_destroy(subscribed_topic_regex_to_send);
 }
 
 

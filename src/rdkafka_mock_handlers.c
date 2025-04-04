@@ -2818,8 +2818,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 }
         }
 
-        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1)
-                rd_kafka_buf_read_str(rkbuf, &SubscribedTopicRegex);
+        rd_kafka_buf_read_str(rkbuf, &SubscribedTopicRegex);
 
         /* ServerAssignor */
         rd_kafka_buf_read_str(rkbuf, &ServerAssignor);
@@ -3018,7 +3017,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
-            {0, 1, 0, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
+            {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_GetTelemetrySubscriptions] =
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
         [RD_KAFKAP_PushTelemetry] = {0, 0, 0,

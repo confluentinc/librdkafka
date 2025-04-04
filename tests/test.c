@@ -7605,8 +7605,3 @@ int test_consumer_group_protocol_classic() {
         return !test_consumer_group_protocol_str ||
                !strcmp(test_consumer_group_protocol_str, "classic");
 }
-
-int test_consumer_group_protocol_consumer() {
-        return test_consumer_group_protocol_str &&
-               !strcmp(test_consumer_group_protocol_str, "consumer");
-}

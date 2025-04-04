@@ -320,7 +320,7 @@ static void do_test_regex(void) {
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
         test_create_topic_wait_exists(NULL, topic_d, 1, 1, 5000);
 
-        if (!test_consumer_group_protocol_consumer())
+        if (test_consumer_group_protocol_classic())
                 await_revoke("Regex: rebalance after topic creation", rk,
                              queue);
 

@@ -1404,8 +1404,8 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
     rd_kafkap_str_t *SubscribedTopicNames,
     int32_t SubscribedTopicNamesCnt,
     const rd_kafkap_str_t *SubscribedTopicRegex) {
-        rd_bool_t changed           = rd_false;
-        rd_list_t *new_subscription = NULL;
+        rd_bool_t changed = rd_false;
+        rd_list_t *new_subscription;
         int32_t i;
 
         if (!SubscribedTopicNames &&
@@ -1415,14 +1415,37 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                  * its subscription didn't change */
                 return changed;
 
+        new_subscription = rd_list_new(
+            SubscribedTopicNamesCnt > 0 ? SubscribedTopicNamesCnt : 1, rd_free);
+
         if (!RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex)) {
                 if (member->subscribed_topic_regex) {
                         rd_kafkap_str_destroy(member->subscribed_topic_regex);
                         member->subscribed_topic_regex = NULL;
                 }
-                if (SubscribedTopicRegex->len > 0)
+                if (RD_KAFKAP_STR_LEN(SubscribedTopicRegex) > 0)
                         member->subscribed_topic_regex =
                             rd_kafkap_str_copy(SubscribedTopicRegex);
+        }
+
+        if (!SubscribedTopicNames) {
+                if (member->subscribed_topic_names) {
+                        rd_list_copy_to(new_subscription,
+                                        member->subscribed_topic_names,
+                                        rd_list_string_copy, NULL);
+                }
+        } else {
+                RD_IF_FREE(member->subscribed_topic_names, rd_list_destroy);
+                member->subscribed_topic_names =
+                    rd_list_new(SubscribedTopicNamesCnt, rd_free);
+                for (i = 0; i < SubscribedTopicNamesCnt; i++) {
+                        rd_list_add(
+                            new_subscription,
+                            RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
+                        rd_list_add(
+                            member->subscribed_topic_names,
+                            RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
+                }
         }
 
         if (member->subscribed_topic_regex) {
@@ -1437,9 +1460,6 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                         if (rd_regex_exec(re, mtopic->name)) {
                                 rd_kafkap_str_t *topic_name =
                                     rd_kafkap_str_new(mtopic->name, -1);
-                                if (!new_subscription)
-                                        new_subscription =
-                                            rd_list_new(1, rd_free);
                                 rd_list_add(new_subscription,
                                             RD_KAFKAP_STR_DUP(topic_name));
                                 rd_kafkap_str_destroy(topic_name);
@@ -1449,19 +1469,6 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                 rd_regex_destroy(re);
         }
 
-        if (SubscribedTopicNames) {
-                if (!new_subscription)
-                        new_subscription =
-                            rd_list_new(SubscribedTopicNamesCnt > 0
-                                            ? SubscribedTopicNamesCnt
-                                            : 1,
-                                        rd_free);
-                for (i = 0; i < SubscribedTopicNamesCnt; i++) {
-                        rd_list_add(
-                            new_subscription,
-                            RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
-                }
-        }
         rd_list_deduplicate(&new_subscription, rd_strcmp2);
 
         if (!member->subscribed_topics ||
@@ -1523,21 +1530,15 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
         }
 
         if (!member) {
-                if (SubscribedTopicNamesCnt < 1 &&
-                    RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex))
-                        return NULL;
+                rd_assert(SubscribedTopicNamesCnt > 0 ||
+                          (!RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex) &&
+                           RD_KAFKAP_STR_LEN(SubscribedTopicRegex)));
 
                 /* Not found, add member */
                 member        = rd_calloc(1, sizeof(*member));
                 member->mcgrp = mcgrp;
 
-                if (RD_KAFKAP_STR_LEN(MemberId) == 0) {
-                        /* Generate a member id */
-                        rd_kafka_Uuid_t member_id = rd_kafka_Uuid_random();
-                        member->id =
-                            rd_strdup(rd_kafka_Uuid_base64str(&member_id));
-                } else
-                        member->id = RD_KAFKAP_STR_DUP(MemberId);
+                member->id = RD_KAFKAP_STR_DUP(MemberId);
 
                 if (!RD_KAFKAP_STR_IS_NULL(InstanceId))
                         member->instance_id = RD_KAFKAP_STR_DUP(InstanceId);
@@ -1598,6 +1599,8 @@ static void rd_kafka_mock_cgrp_consumer_member_destroy(
         RD_IF_FREE(member->returned_assignment,
                    rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(member->subscribed_topics, rd_list_destroy_free);
+
+        RD_IF_FREE(member->subscribed_topic_names, rd_list_destroy_free);
 
         RD_IF_FREE(member->subscribed_topic_regex, rd_kafkap_str_destroy);
 

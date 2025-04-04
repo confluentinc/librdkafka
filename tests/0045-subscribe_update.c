@@ -125,13 +125,14 @@ await_revoke(const char *pfx, rd_kafka_t *rk, rd_kafka_queue_t *queue) {
         tps = rd_kafka_event_topic_partition_list(rkev);
 
         TEST_SAY("%s: revocation:\n", pfx);
-        if(tps) {
+        if (tps) {
                 test_print_partition_list(tps);
         } else {
                 TEST_SAY("%s: revocation: all partitions\n", pfx);
         }
 
-        test_consumer_unassign_by_rebalance_protocol("rebalance event", rk, tps);
+        test_consumer_unassign_by_rebalance_protocol("rebalance event", rk,
+                                                     tps);
         rd_kafka_event_destroy(rkev);
 }
 
@@ -322,13 +323,14 @@ static void do_test_regex(void) {
         if (!test_consumer_group_protocol_consumer())
                 await_revoke("Regex: rebalance after topic creation", rk,
                              queue);
-        
+
         rebalance_protocol = rd_kafka_rebalance_protocol(rk);
-        if(!strcmp(rebalance_protocol, "COOPERATIVE")) {
-                await_assignment("Regex: two topics exist", rk, queue, 1, topic_d, 1);
-        } else {
-                await_assignment("Regex: two topics exist", rk, queue, 2, topic_b, 2,
+        if (!strcmp(rebalance_protocol, "COOPERATIVE")) {
+                await_assignment("Regex: two topics exist", rk, queue, 1,
                                  topic_d, 1);
+        } else {
+                await_assignment("Regex: two topics exist", rk, queue, 2,
+                                 topic_b, 2, topic_d, 1);
         }
 
         test_consumer_close(rk);

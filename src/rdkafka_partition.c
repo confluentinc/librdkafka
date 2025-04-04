@@ -4443,7 +4443,7 @@ static int rd_kafka_topic_partition_not_regex(const void *elem,
 rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
     const rd_kafka_topic_partition_list_t *rktparlist) {
         return rd_kafka_topic_partition_list_match(
-                rktparlist, rd_kafka_topic_partition_not_regex, NULL);
+            rktparlist, rd_kafka_topic_partition_not_regex, NULL);
 }
 
 

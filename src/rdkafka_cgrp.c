@@ -267,9 +267,9 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
  * `rkcg_member_id` is sufficient to know this with "classic" group protocol.
  */
 #define RD_KAFKA_CGRP_HAS_JOINED_CLASSIC(rkcg)                                 \
-        (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&      \
-          rkcg->rkcg_member_id != NULL &&                                      \
-          RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0)
+        (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&       \
+         rkcg->rkcg_member_id != NULL &&                                       \
+         RD_KAFKAP_STR_LEN((rkcg)->rkcg_member_id) > 0)
 
 /**
  * @returns true if consumer has joined the group and thus requires a leave.
@@ -278,8 +278,8 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
  * as it's client generated.
  */
 #define RD_KAFKA_CGRP_HAS_JOINED_CONSUMER(rkcg)                                \
-        (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&     \
-          rkcg->rkcg_generation_id > 0)
+        (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&      \
+         rkcg->rkcg_generation_id > 0)
 
 #define RD_KAFKA_CGRP_HAS_JOINED(rkcg)                                         \
         (RD_KAFKA_CGRP_HAS_JOINED_CLASSIC(rkcg) ||                             \

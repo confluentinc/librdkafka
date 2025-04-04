@@ -1010,6 +1010,12 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_get_err(
 int rd_kafka_topic_partition_list_regex_cnt(
     const rd_kafka_topic_partition_list_t *rktparlist);
 
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist);
+
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist);
+
 void *rd_kafka_topic_partition_list_copy_opaque(const void *src, void *opaque);
 
 /**

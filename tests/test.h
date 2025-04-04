@@ -894,8 +894,6 @@ const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
 
-int test_consumer_group_protocol_consumer();
-
 /**
  * @brief Calls rdkafka function (with arguments)
  *        and checks its return value (must be rd_kafka_resp_err_t) for

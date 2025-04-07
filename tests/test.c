@@ -263,7 +263,7 @@ _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
 _TEST_DECL(0150_telemetry_mock);
-_TEST_DECL(0151_topic_recreate_mock);
+_TEST_DECL(0152_topic_recreate_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -522,7 +522,7 @@ struct test tests[] = {
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
-    _TEST(0151_topic_recreate_mock, TEST_F_LOCAL),
+    _TEST(0152_topic_recreate_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

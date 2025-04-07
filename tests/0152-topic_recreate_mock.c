@@ -236,7 +236,7 @@ static void do_test_topic_recreated_transactional_producer() {
         SUB_TEST_PASS();
 }
 
-int main_0151_topic_recreate_mock(int argc, char **argv) {
+int main_0152_topic_recreate_mock(int argc, char **argv) {
         do_test_topic_recreated_producer(rd_false, rd_false);
         do_test_topic_recreated_producer(rd_false, rd_true);
         do_test_topic_recreated_producer(rd_true, rd_false);

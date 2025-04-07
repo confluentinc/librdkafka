@@ -1,3 +1,23 @@
+# librdkafka v2.9.1
+
+librdkafka v2.9.1 is a maintenance release:
+
+ * Fix producer being unable to resume production after topic recreation
+   followed by leader change (#5022).
+
+## Fixes
+
+### Producer fixes
+
+* Issues: #4898
+  When a topic is recreated, the producer may be unable to produce in cases of
+  a leader change, because the stored leader epoch may exceed the epoch of the
+  recreated topic. Solved by resetting the leader epoch if the topic is
+  recreated. Additionally, for idempotent producers, the queues are drained and
+  the epoch is bumped.
+  Happens since v2.1.0 (#5022).
+
+
 # librdkafka v2.9.0
 
 librdkafka v2.9.0 is a feature release:

@@ -248,6 +248,18 @@ rd_kafka_mock_topic_create(rd_kafka_mock_cluster_t *mcluster,
                            int partition_cnt,
                            int replication_factor);
 
+/**
+ * @brief Delete a topic.
+ *
+ * This is an alternative to automatic topic deletion as performed by
+ * the client itself.
+ *
+ * @remark The Topic Admin API (DeleteTopics) is not supported by the
+ *         mock broker.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_topic_delete(rd_kafka_mock_cluster_t *mcluster,
+                           const char *topic);
 
 /**
  * @brief Sets the partition leader.

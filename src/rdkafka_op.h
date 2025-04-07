@@ -585,6 +585,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
                                RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET,
                                RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET,
+                               RD_KAFKA_MOCK_CMD_TOPIC_DELETE,
                         } cmd;
 
                         rd_kafka_resp_err_t err; /**< Error for:

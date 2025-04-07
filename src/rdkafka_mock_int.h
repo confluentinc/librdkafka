@@ -164,8 +164,11 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
         rd_kafka_topic_partition_list_t
             *returned_assignment; /**< Returned assignment */
 
-        rd_list_t *subscribed_topics; /**< Subscribed topics */
-
+        rd_list_t *subscribed_topics; /**< Final list of Subscribed topics after
+                                         considering regex as well*/
+        rd_list_t *subscribed_topic_names; /**< Subscribed topic names received
+                                              in the heartbeat */
+        rd_kafkap_str_t *subscribed_topic_regex; /**< Subscribed regex */
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL
                                                   *   if there is no ongoing
                                                   *   request. */
@@ -681,13 +684,14 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
     const rd_kafka_mock_cgrp_consumer_t *mcgrp,
     const rd_kafkap_str_t *MemberId);
 
-rd_kafka_mock_cgrp_consumer_member_t *
-rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
-                                       struct rd_kafka_mock_connection_s *conn,
-                                       const rd_kafkap_str_t *MemberId,
-                                       const rd_kafkap_str_t *InstanceId,
-                                       rd_kafkap_str_t *SubscribedTopicNames,
-                                       int32_t SubscribedTopicNamesCnt);
+rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    struct rd_kafka_mock_connection_s *conn,
+    const rd_kafkap_str_t *MemberId,
+    const rd_kafkap_str_t *InstanceId,
+    rd_kafkap_str_t *SubscribedTopicNames,
+    int32_t SubscribedTopicNamesCnt,
+    const rd_kafkap_str_t *SubscribedTopicRegex);
 
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);

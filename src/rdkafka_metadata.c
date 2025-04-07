@@ -1580,7 +1580,8 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
         rkcg = rk->rk_cgrp;
         rd_assert(rkcg != NULL);
 
-        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) {
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&
+            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) {
                 /* If there is a wildcard subscription we need to request
                  * all topics in the cluster so that we can perform
                  * regexp matching. */

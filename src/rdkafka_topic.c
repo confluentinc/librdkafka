@@ -2,7 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
- *               2023, Confluent Inc.
+ *               2023-2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,6 +34,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_broker.h"
 #include "rdkafka_cgrp.h"
+#include "rdkafka_idempotence.h"
 #include "rdkafka_metadata.h"
 #include "rdkafka_offset.h"
 #include "rdlog.h"
@@ -55,7 +56,8 @@ static int
 rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                                const struct rd_kafka_metadata_topic *mdt,
                                const rd_kafka_metadata_topic_internal_t *mdit,
-                               rd_ts_t ts_age);
+                               rd_ts_t ts_age,
+                               rd_bool_t *update_epoch_bump);
 
 
 /**
@@ -494,13 +496,15 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
         /* Populate from metadata cache. */
         if ((rkmce = rd_kafka_metadata_cache_find(rk, topic, 1 /*valid*/)) &&
             !rkmce->rkmce_mtopic.err) {
+                rd_bool_t update_epoch_bump =
+                    rd_false; /* ignored for new topic anyway. */
                 if (existing)
                         *existing = 1;
 
                 rd_kafka_topic_metadata_update(
                     rkt, &rkmce->rkmce_mtopic,
                     &rkmce->rkmce_metadata_internal_topic,
-                    rkmce->rkmce_ts_insert);
+                    rkmce->rkmce_ts_insert, &update_epoch_bump);
         }
 
         if (do_lock)
@@ -887,7 +891,8 @@ static void rd_kafka_toppar_idemp_msgid_restore(rd_kafka_topic_t *rkt,
  * @locks rd_kafka_topic_wrlock(rkt) MUST be held.
  */
 static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
-                                               int32_t partition_cnt) {
+                                               int32_t partition_cnt,
+                                               rd_bool_t topic_id_change) {
         rd_kafka_t *rk = rkt->rkt_rk;
         rd_kafka_toppar_t **rktps;
         rd_kafka_toppar_t *rktp;
@@ -996,8 +1001,14 @@ static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
                  * topic as non-existent, triggering the removal of partitions
                  * on the producer client. When metadata is eventually correct
                  * again and the topic is "re-created" on the producer, it
-                 * must continue with the next msgid/baseseq. */
-                if (is_idempodent && rd_kafka_pid_valid(rktp->rktp_eos.pid))
+                 * must continue with the next msgid/baseseq.
+                 *
+                 * This isn't applicable if the topic id changes (because it's
+                 * a new topic entirely). This is just to avoid saving, we will
+                 * still need to call rd_kafka_topic_recreated_partition_reset
+                 * on this topic. */
+                if (is_idempodent && rd_kafka_pid_valid(rktp->rktp_eos.pid) &&
+                    !topic_id_change)
                         rd_kafka_toppar_idemp_msgid_save(rkt, rktp);
 
                 rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
@@ -1045,7 +1056,44 @@ static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
         return 1;
 }
 
+/**
+ * @brief Update partitions of a topic after it has been recreated.
+ *
+ * @param rkt The topic to update.
+ * @param mdt The metadata of the topic.
+ * @param mdit The internal metadata of the topic.
+ */
+static void rd_kafka_topic_recreated_partition_reset(
+    rd_kafka_topic_t *rkt,
+    const struct rd_kafka_metadata_topic *mdt,
+    const rd_kafka_metadata_topic_internal_t *mdit) {
+        rd_kafka_t *rk = rkt->rkt_rk;
+        rd_kafka_toppar_t *rktp;
+        int32_t i;
 
+        /* Common */
+        for (i = 0; i < rkt->rkt_partition_cnt; i++) {
+                rktp = rkt->rkt_p[i];
+                rd_kafka_toppar_lock(rktp);
+                /* By setting partition's leader epoch to -1, we make sure to
+                 * always pick up whatever is in the metadata. Even if the
+                 * metadata is stale, it's better than what we have because the
+                 * topic has been recreated. We don't need to set any other
+                 * field, because (suppose) the leader is the same, then we can
+                 * just continue, and if we're fetching from a follower, we'll
+                 * just get a not follower error if applicable. */
+                rktp->rktp_leader_epoch = -1;
+                rd_kafka_toppar_unlock(rktp);
+        }
+        if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                /* No op - we bump epoch and drain on rk-level for an idempotent
+                 * producer. */
+        } else if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                /* Consumer */
+                /* We need to reset offsets to be invalid. */
+                /* TODO. */
+        }
+}
 
 /**
  * Topic 'rkt' does not exist: propagate to interested parties.
@@ -1215,7 +1263,8 @@ rd_bool_t rd_kafka_topic_set_notexists(rd_kafka_topic_t *rkt,
         rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
         /* Update number of partitions */
-        rd_kafka_topic_partition_cnt_update(rkt, 0);
+        rd_kafka_topic_partition_cnt_update(rkt, 0,
+                                            rd_false /* topic_id_change */);
 
         /* Purge messages with forced partition */
         rd_kafka_topic_assign_uas(rkt, err);
@@ -1300,7 +1349,8 @@ rd_bool_t rd_kafka_topic_set_error(rd_kafka_topic_t *rkt,
         rkt->rkt_err = err;
 
         /* Update number of partitions */
-        rd_kafka_topic_partition_cnt_update(rkt, 0);
+        rd_kafka_topic_partition_cnt_update(rkt, 0,
+                                            rd_false /* topic_id_change */);
 
         /* Purge messages with forced partition */
         rd_kafka_topic_assign_uas(rkt, err);
@@ -1316,6 +1366,9 @@ rd_bool_t rd_kafka_topic_set_error(rd_kafka_topic_t *rkt,
  * @param mdt Topic metadata.
  * @param mdit Topic internal metadata.
  * @param ts_age absolute age (timestamp) of metadata.
+ * @param update_epoch_bump this is set as an out parameter. If set to true,
+ * caller should run rd_kafka_idemp_drain_epoch_bump().
+ *
  * @returns 1 if the number of partitions changed, 0 if not, and -1 if the
  *          topic is unknown.
 
@@ -1326,7 +1379,8 @@ static int
 rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                                const struct rd_kafka_metadata_topic *mdt,
                                const rd_kafka_metadata_topic_internal_t *mdit,
-                               rd_ts_t ts_age) {
+                               rd_ts_t ts_age,
+                               rd_bool_t *update_epoch_bump) {
         rd_kafka_t *rk = rkt->rkt_rk;
         int upd        = 0;
         int j;
@@ -1335,6 +1389,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         int old_state;
         rd_bool_t partition_exists_with_no_leader_epoch    = rd_false;
         rd_bool_t partition_exists_with_stale_leader_epoch = rd_false;
+        rd_bool_t different_topic_id                       = rd_false;
 
         if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR)
                 rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_METADATA, "METADATA",
@@ -1385,12 +1440,17 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         /* Update number of partitions, but not if there are
          * (possibly intermittent) errors (e.g., "Leader not available"). */
         if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
-                rd_bool_t different_topic_id =
+                /* Avoids those id changes where we're creating the topic or
+                 * deleting it during termination. */
+                rd_bool_t both_topic_ids_non_zero =
+                    !RD_KAFKA_UUID_IS_ZERO(mdit->topic_id) &&
+                    !RD_KAFKA_UUID_IS_ZERO(rkt->rkt_topic_id);
+                different_topic_id =
                     rd_kafka_Uuid_cmp(mdit->topic_id, rkt->rkt_topic_id) != 0;
                 if (different_topic_id ||
                     mdt->partition_cnt > rkt->rkt_partition_cnt)
                         upd += rd_kafka_topic_partition_cnt_update(
-                            rkt, mdt->partition_cnt);
+                            rkt, mdt->partition_cnt, different_topic_id);
                 if (different_topic_id) {
                         /* FIXME: an offset reset must be triggered.
                          * when rkt_topic_id wasn't zero.
@@ -1406,7 +1466,16 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                             rkt->rkt_topic->str,
                             rd_kafka_Uuid_base64str(&rkt->rkt_topic_id),
                             rd_kafka_Uuid_base64str(&mdit->topic_id));
+
                         rkt->rkt_topic_id = mdit->topic_id;
+
+                        rd_kafka_topic_recreated_partition_reset(rkt, mdt,
+                                                                 mdit);
+
+                        if (rd_kafka_is_idempotent(rk) &&
+                            both_topic_ids_non_zero) {
+                                *update_epoch_bump = rd_true;
+                        }
                 }
                 /* If the metadata times out for a topic (because all brokers
                  * are down) the state will transition to S_UNKNOWN.
@@ -1505,6 +1574,7 @@ int rd_kafka_topic_metadata_update2(
     const rd_kafka_metadata_topic_internal_t *mdit) {
         rd_kafka_topic_t *rkt;
         int r;
+        rd_bool_t update_epoch_bump = rd_false;
 
         rd_kafka_wrlock(rkb->rkb_rk);
 
@@ -1520,9 +1590,27 @@ int rd_kafka_topic_metadata_update2(
                 return -1; /* Ignore topics that we dont have locally. */
         }
 
-        r = rd_kafka_topic_metadata_update(rkt, mdt, mdit, rd_clock());
+        r = rd_kafka_topic_metadata_update(rkt, mdt, mdit, rd_clock(),
+                                           &update_epoch_bump);
 
         rd_kafka_wrunlock(rkb->rkb_rk);
+
+        /* This is true in case of topic recreation and when we're using an
+         * idempotent/transactional producer. */
+        if (update_epoch_bump) {
+                /* Why do we bump epoch here rather than, say, at an rk-level
+                 * after checking this for all topics?
+                 * 1. We need to make sure leader changes (and the subsequent
+                 * broker delegation change) does not run before this, as
+                 * the producer might start sending to the new broker, which
+                 * would give us out of sequence errors.
+                 * 2. The rd_kafka_idemp_drain_epoch_bump() sets state in an
+                 * idempotent way, though the function isn't entirely
+                 * idempotent, so it's okay to do this repeatedly.
+                 */
+                rd_kafka_idemp_drain_epoch_bump(
+                    rkb->rkb_rk, RD_KAFKA_RESP_ERR_NO_ERROR, "topic recreated");
+        }
 
         rd_kafka_topic_destroy0(rkt); /* from find() */
 
@@ -1591,7 +1679,8 @@ void rd_kafka_topic_partitions_remove(rd_kafka_topic_t *rkt) {
 
         /* Setting the partition count to 0 moves all partitions to
          * the desired list (rktp_desp). */
-        rd_kafka_topic_partition_cnt_update(rkt, 0);
+        rd_kafka_topic_partition_cnt_update(rkt, 0,
+                                            rd_false /* topic_id_change */);
 
         /* Now clean out the desired partitions list.
          * Use reverse traversal to avoid excessive memory shuffling
@@ -2106,6 +2195,7 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
                                               .partition_cnt = partition_cnt};
         rd_kafka_metadata_topic_internal_t mdit = {.partitions = partitions};
         int i;
+        rd_bool_t update_epoch_bump;
 
         mdt.partitions = rd_alloca(sizeof(*mdt.partitions) * partition_cnt);
 
@@ -2118,7 +2208,9 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
         rd_kafka_wrlock(rkt->rkt_rk);
         rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, &mdit, rd_true,
                                              rd_false, rd_true);
-        rd_kafka_topic_metadata_update(rkt, &mdt, &mdit, rd_clock());
+        update_epoch_bump = rd_false;
+        rd_kafka_topic_metadata_update(rkt, &mdt, &mdit, rd_clock(),
+                                       &update_epoch_bump);
         rd_kafka_wrunlock(rkt->rkt_rk);
         rd_free(partitions);
 }

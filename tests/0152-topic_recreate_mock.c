@@ -84,7 +84,7 @@ static void do_test_topic_recreated_producer(rd_bool_t is_idempotent,
         /* Propagate topic change in metadata. */
         rd_sleep(2);
 
-        /* Produce messages to rereated topic - it should be seamless. */
+        /* Produce messages to recreated topic - it should be seamless. */
         test_produce_msgs2(rk, "test_topic", 0, 0, 0, 10, "test", 10);
 
         rd_kafka_destroy(rk);
@@ -138,7 +138,7 @@ static void do_test_two_topics_recreated_producer(rd_bool_t is_idempotent) {
         /* Propagate topic change in metadata. */
         rd_sleep(2);
 
-        /* Produce messages to rereated topic - it should be seamless. */
+        /* Produce messages to recreated topic - it should be seamless. */
         test_produce_msgs2(rk, "test_topic", 0, 0, 0, 10, "test", 10);
         test_produce_msgs2(rk, "test_topic2", 0, 0, 0, 10, "test", 10);
         rd_kafka_destroy(rk);
@@ -195,7 +195,7 @@ static void do_test_topic_recreated_transactional_producer() {
         /* Propagate topic change in metadata*/
         rd_sleep(2);
 
-        /* Produce messages to rereated topic. */
+        /* Produce messages to recreated topic. */
         rd_kafka_begin_transaction(rk);
         /* First message should queue without any problems. */
         err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("test_topic"),

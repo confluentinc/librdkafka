@@ -2143,37 +2143,37 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 <a name="supported-protocol-versions"></a>
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.7.0, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 4.0.0, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 
 
 | ApiKey  | Request name                  | Kafka max  | librdkafka max |
 | ------- | ----------------------------- | ---------- | -------------- |
-| 0       | Produce                       | 10         | 10             |
-| 1       | Fetch                         | 16         | 16             |
-| 2       | ListOffsets                   | 8          | 7              |
-| 3       | Metadata                      | 12         | 12             |
+| 0       | Produce                       | 12         | 10             |
+| 1       | Fetch                         | 17         | 16             |
+| 2       | ListOffsets                   | 10         | 7              |
+| 3       | Metadata                      | 13         | 12             |
 | 8       | OffsetCommit                  | 9          | 9              |
 | 9       | OffsetFetch                   | 9          | 9              |
-| 10      | FindCoordinator               | 4          | 2              |
+| 10      | FindCoordinator               | 6          | 2              |
 | 11      | JoinGroup                     | 9          | 5              |
 | 12      | Heartbeat                     | 4          | 3              |
 | 13      | LeaveGroup                    | 5          | 1              |
 | 14      | SyncGroup                     | 5          | 3              |
-| 15      | DescribeGroups                | 5          | 4              |
-| 16      | ListGroups                    | 4          | 4              |
+| 15      | DescribeGroups                | 6          | 4              |
+| 16      | ListGroups                    | 5          | 4              |
 | 17      | SaslHandshake                 | 1          | 1              |
-| 18      | ApiVersions                   | 3          | 3              |
+| 18      | ApiVersions                   | 4          | 3              |
 | 19      | CreateTopics                  | 7          | 4              |
 | 20      | DeleteTopics                  | 6          | 1              |
 | 21      | DeleteRecords                 | 2          | 1              |
-| 22      | InitProducerId                | 4          | 4              |
+| 22      | InitProducerId                | 5          | 4              |
 | 23      | OffsetForLeaderEpoch          | 4          | 2              |
-| 24      | AddPartitionsToTxn            | 4          | 0              |
-| 25      | AddOffsetsToTxn               | 3          | 0              |
-| 26      | EndTxn                        | 3          | 1              |
-| 28      | TxnOffsetCommit               | 3          | 3              |
+| 24      | AddPartitionsToTxn            | 5          | 0              |
+| 25      | AddOffsetsToTxn               | 4          | 0              |
+| 26      | EndTxn                        | 5          | 1              |
+| 28      | TxnOffsetCommit               | 5          | 3              |
 | 29      | DescribeAcls                  | 3          | 1              |
 | 30      | CreateAcls                    | 3          | 1              |
 | 31      | DeleteAcls                    | 3          | 1              |

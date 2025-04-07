@@ -263,6 +263,7 @@ _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
 _TEST_DECL(0150_telemetry_mock);
+_TEST_DECL(0151_topic_recreate_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -475,8 +476,7 @@ struct test tests[] = {
     _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0107_topic_recreate,
           0,
-          TEST_BRKVER_TOPIC_ADMINAPI,
-          .scenario = "noautocreate"),
+          TEST_BRKVER_TOPIC_ADMINAPI),
     _TEST(0109_auto_create_topics, 0),
     _TEST(0110_batch_size, 0),
     _TEST(0111_delay_create_topics,
@@ -522,7 +522,7 @@ struct test tests[] = {
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
-
+    _TEST(0151_topic_recreate_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

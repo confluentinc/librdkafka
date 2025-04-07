@@ -169,6 +169,11 @@ typedef enum {
         RD_KAFKA_GROUP_PROTOCOL_CONSUMER,
 } rd_kafka_group_protocol_t;
 
+typedef enum {
+        RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE,
+        RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP,
+} rd_kafka_metadata_recovery_strategy_t;
+
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
 #define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
@@ -236,6 +241,7 @@ struct rd_kafka_conf_s {
         char *broker_version_fallback;
         rd_kafka_secproto_t security_protocol;
         rd_kafka_client_dns_lookup_t client_dns_lookup;
+        rd_kafka_metadata_recovery_strategy_t metadata_recovery_strategy;
 
         struct {
 #if WITH_SSL
@@ -388,7 +394,6 @@ struct rd_kafka_conf_s {
         rd_kafkap_str_t *group_protocol_type;
         char *partition_assignment_strategy;
         rd_list_t partition_assignors;
-        rd_bool_t partition_assignors_cooperative;
         int enabled_assignor_cnt;
 
         void (*rebalance_cb)(rd_kafka_t *rk,

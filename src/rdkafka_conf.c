@@ -437,6 +437,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      1, 1000000, 1000000},
     {_RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
      .sdef = "max.in.flight.requests.per.connection"},
+    {_RK_GLOBAL, "metadata.recovery.strategy", _RK_C_S2I,
+     _RK(metadata_recovery_strategy),
+     "Controls how the client recovers when none of the brokers known to it "
+     "is available. If set to `none`, the client fails with a fatal error. "
+     "If set to `rebootstrap`, the client repeats the bootstrap process "
+     "using `bootstrap.servers` and brokers added through "
+     "`rd_kafka_brokers_add()`. Rebootstrapping is useful when a client "
+     "communicates with brokers so infrequently that the set of brokers "
+     "may change entirely before the client refreshes metadata. "
+     "Metadata recovery is triggered when all last-known brokers appear "
+     "unavailable simultaneously.",
+     .vdef = RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP,
+     .s2i  = {{RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE, "none"},
+             {RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP, "rebootstrap"},
+             {0, NULL}}},
     {_RK_GLOBAL | _RK_DEPRECATED | _RK_HIDDEN, "metadata.request.timeout.ms",
      _RK_C_INT, _RK(metadata_request_timeout_ms), "Not used.", 10, 900 * 1000,
      10},
@@ -540,7 +555,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
     },
     {_RK_GLOBAL, "socket.nagle.disable", _RK_C_BOOL, _RK(socket_nagle_disable),
-     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 0
+     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 1
 #ifndef TCP_NODELAY
      ,
      .unsupported = "TCP_NODELAY not available at build time"

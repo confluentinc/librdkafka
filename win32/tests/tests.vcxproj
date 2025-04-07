@@ -227,7 +227,9 @@
     <ClCompile Include="..\..\tests\0144-idempotence_mock.c" />
     <ClCompile Include="..\..\tests\0145-pause_resume_mock.c" />
     <ClCompile Include="..\..\tests\0146-metadata_mock.c" />
+    <ClCompile Include="..\..\tests\0149-broker-same-host-port.c" />
     <ClCompile Include="..\..\tests\0150-telemetry_mock.c" />
+    <ClCompile Include="..\..\tests\0151-purge-brokers.c" />
     <ClCompile Include="..\..\tests\0152-topic_recreate_mock.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />

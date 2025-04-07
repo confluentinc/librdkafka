@@ -135,7 +135,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                             exp->name, exp->result);
                 }
                 expect_match(exp, parts);
-                test_consumer_assign("rebalance", rk, parts);
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           parts);
                 exp->result = _EXP_ASSIGNED;
                 break;
 
@@ -147,7 +148,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                             exp->name, exp->result);
                 }
 
-                test_consumer_unassign("rebalance", rk);
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             parts);
                 exp->result = _EXP_REVOKED;
                 break;
 

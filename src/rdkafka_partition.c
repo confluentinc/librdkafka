@@ -824,8 +824,8 @@ void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
 
         /* Optimize insertion by bulk-moving messages in place.
          * We know that:
-         *  - destq is sorted but might not be continous (1,2,3,7)
-         *  - srcq is sorted but might not be continous (4,5,6,8)
+         *  - destq is sorted but might not be continuous (1,2,3,7)
+         *  - srcq is sorted but might not be continuous (4,5,6,8)
          *  - there migt be (multiple) overlaps between the two, e.g:
          *     destq = (1,2,3,7), srcq = (4,5,6,8)
          *  - there may be millions of messages.

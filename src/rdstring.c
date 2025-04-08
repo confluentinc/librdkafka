@@ -593,7 +593,7 @@ int rd_string_split_csv(const char *input,
 
         *cntp = 0;
 
-        // Count approximate field count (ignore sep inside quotes)
+        /* Count approximate field count (ignore sep inside quotes) */
         for (s = input; *s; s++) {
                 if (*s == '"')
                         in_quotes = !in_quotes;
@@ -601,9 +601,9 @@ int rd_string_split_csv(const char *input,
                         fieldcnt++;
         }
 
-        // Check for unbalanced quotes
+        /* Check for unbalanced quotes */
         if (in_quotes) {
-                return -1;  // Error: Unbalanced quotes
+                return -1; /* Error: Unbalanced quotes */
         }
 
         inputlen = (size_t)(s - input);
@@ -622,7 +622,7 @@ int rd_string_split_csv(const char *input,
 
                 if (!is_esc && *s == '"') {
                         in_quotes = !in_quotes;
-                        continue;  // Skip quotes
+                        continue; /* Skip quotes */
                 }
 
                 if (unlikely(!is_esc && *s == '\\')) {
@@ -632,11 +632,11 @@ int rd_string_split_csv(const char *input,
 
                 next_esc = rd_false;
 
-                // Strip leading whitespaces (outside quotes)
+                /* Strip leading whitespaces (outside quotes) */
                 if (!in_quotes && elen == 0 && isspace((int)*s))
                         continue;
 
-                // If not in quotes, sep is a field boundary
+                /* If not in quotes, sep is a field boundary */
                 if (!in_quotes && !is_esc && *s == sep)
                         goto done;
 
@@ -663,11 +663,11 @@ int rd_string_split_csv(const char *input,
                 continue;
 
         done:
-                // Strip trailing whitespace (outside quotes only)
+                /* Strip trailing whitespace (outside quotes only) */
                 while (elen > 0 && isspace((int)p[elen - 1]))
                         elen--;
 
-                // Skip empty if needed
+                /* Skip empty if needed */
                 if (elen == 0 && skip_empty) {
                         if (at_end)
                                 break;
@@ -686,7 +686,7 @@ int rd_string_split_csv(const char *input,
 
         *cntp   = i;
         *result = arr;
-        return 0;  // Success
+        return 0; /* Success */
 }
 
 /**
@@ -776,18 +776,18 @@ static int ut_string_split_csv(void) {
                 const char *input;
                 const char sep;
                 rd_bool_t skip_empty;
-                int exp_ret;  // Expected return value (0 for success, -1 for
-                              // error)
+                int exp_ret; /* Expected return value (0 for success, -1 for */
+                             /* error) */
                 size_t exp_cnt;
                 const char *exp[16];
         } tests[] = {
-            // Valid cases
+            /* Valid cases */
             {
                 "extension1:extension1val,\"extension2:extension2val1,"
                 "extension2val2\"",
                 ',',
                 rd_true,
-                0,  // Success
+                0, /* Success */
                 2,
                 {"extension1:extension1val",
                  "extension2:extension2val1,extension2val2"},
@@ -796,25 +796,25 @@ static int ut_string_split_csv(void) {
                 "extension1:extension1val,extension2:extension2val1",
                 ',',
                 rd_true,
-                0,  // Success
+                0, /* Success */
                 2,
                 {"extension1:extension1val", "extension2:extension2val1"},
             },
-            // Edge case: Empty string
+            /* Edge case: Empty string */
             {
                 "",
                 ',',
                 rd_true,
-                0,  // Success
+                0, /* Success */
                 0,
                 {NULL},
             },
-            // Edge case: Single key-value pair
+            /* Edge case: Single key-value pair */
             {
                 "extension1:extension1val",
                 ',',
                 rd_true,
-                0,  // Success
+                0, /* Success */
                 1,
                 {"extension1:extension1val"},
             },
@@ -826,22 +826,22 @@ static int ut_string_split_csv(void) {
              4,
              {"this is an ,escaped comma", ",", "\\",
               "and this is an unbalanced escape: \\\\\\"}},
-            // Edge case: String with leading and trailing whitespace
+            /* Edge case: String with leading and trailing whitespace */
             {
                 "  extension1:extension1val  ,  extension2:extension2val1  ",
                 ',',
                 rd_true,
-                0,  // Success
+                0, /* Success */
                 2,
                 {"extension1:extension1val", "extension2:extension2val1"},
             },
-            // Invalid case: Missing closing quote
+            /* Invalid case: Missing closing quote */
             {
                 "extension1:extension1val,\"extension2:extension2val1,"
                 "extension2val2",
-                ',',  // Missing closing quote
+                ',', /* Missing closing quote */
                 rd_true,
-                -1,  // Error: Unbalanced quotes
+                -1, /* Error: Unbalanced quotes */
                 0,
                 {NULL},
             },
@@ -872,7 +872,7 @@ static int ut_string_split_csv(void) {
                              "#%" PRIusz ": Expected return code %d, got %d", i,
                              tests[i].exp_ret, rc);
 
-                if (rc == 0) {  // Only validate results if parsing succeeded
+                if (rc == 0) { /* Only validate results if parsing succeeded */
                         RD_UT_ASSERT(cnt == tests[i].exp_cnt,
                                      "#%" PRIusz ": Expected %" PRIusz
                                      " elements, got %" PRIusz,

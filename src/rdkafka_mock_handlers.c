@@ -2905,6 +2905,9 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                 case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
+                        /* In case the error was set
+                         * by `rd_kafka_mock_next_request_error`. */
+                        MemberEpoch = -1;
                         mtx_lock(&mcluster->lock);
                         mcgrp = rd_kafka_mock_cgrp_consumer_find(mcluster,
                                                                  &GroupId);

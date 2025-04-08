@@ -1407,6 +1407,51 @@ done:
 }
 
 /**
+ * @brief Rejoin the group (KIP-848).
+ */
+static void
+rd_kafka_cgrp_consumer_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
+        char reason[512];
+        va_list ap;
+        char astr[128];
+
+        va_start(ap, fmt);
+        rd_vsnprintf(reason, sizeof(reason), fmt, ap);
+        va_end(ap);
+
+        if (rkcg->rkcg_group_assignment)
+                rd_snprintf(astr, sizeof(astr), " with %d owned partition(s)",
+                            rkcg->rkcg_group_assignment->cnt);
+        else
+                rd_snprintf(astr, sizeof(astr), " without an assignment");
+
+        if (rkcg->rkcg_subscription || rkcg->rkcg_next_subscription) {
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk, CONSUMER | RD_KAFKA_DBG_CGRP, "REJOIN",
+                    "Group \"%s\": %s group%s: %s", rkcg->rkcg_group_id->str,
+                    rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT
+                        ? "Joining"
+                        : "Rejoining",
+                    astr, reason);
+        } else {
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk, CONSUMER | RD_KAFKA_DBG_CGRP, "NOREJOIN",
+                    "Group \"%s\": Not %s group%s: %s: "
+                    "no subscribed topics",
+                    rkcg->rkcg_group_id->str,
+                    rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT
+                        ? "joining"
+                        : "rejoining",
+                    astr, reason);
+        }
+
+        rd_kafka_cgrp_leave_maybe(rkcg);
+        rd_kafka_cgrp_consumer_reset(rkcg);
+        rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
+        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg, "rejoining");
+}
+
+/**
  * @brief Rejoin the group.
  *
  * @remark This function must not have any side-effects but setting the
@@ -1419,6 +1464,10 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
         char reason[512];
         va_list ap;
         char astr[128];
+        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                rd_kafka_cgrp_consumer_rejoin(rkcg, fmt, ap);
+                return;
+        }
 
         va_start(ap, fmt);
         rd_vsnprintf(reason, sizeof(reason), fmt, ap);
@@ -1452,9 +1501,7 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
                 rd_kafka_cgrp_leave_maybe(rkcg);
         }
 
-        rd_kafka_cgrp_consumer_reset(rkcg);
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
-        rd_kafka_cgrp_consumer_expedite_next_heartbeat(rkcg, "rejoining");
 }
 
 
@@ -6233,9 +6280,6 @@ static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
 
         } else if (rkcg->rkcg_rebalance_rejoin) {
                 rkcg->rkcg_rebalance_rejoin = rd_false;
-
-                /* Leave group, if desired. */
-                rd_kafka_cgrp_leave_maybe(rkcg);
 
                 /* There are some cases (lost partitions), where a rejoin
                  * should occur immediately following the unassign (this

@@ -157,6 +157,7 @@ _TEST_DECL(0045_subscribe_update_topic_remove);
 _TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
 _TEST_DECL(0045_subscribe_update_mock);
 _TEST_DECL(0045_subscribe_update_racks_mock);
+_TEST_DECL(0045_resubscribe_with_regex);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
 _TEST_DECL(0048_partitioner);
@@ -381,6 +382,7 @@ struct test tests[] = {
           .scenario = "noautocreate"),
     _TEST(0045_subscribe_update_mock, TEST_F_LOCAL),
     _TEST(0045_subscribe_update_racks_mock, TEST_F_LOCAL),
+    _TEST(0045_resubscribe_with_regex, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0046_rkt_cache, TEST_F_LOCAL),
     _TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
     _TEST(0048_partitioner,
@@ -3107,6 +3109,34 @@ void test_consumer_subscribe(rd_kafka_t *rk, const char *topic) {
         if (err)
                 TEST_FAIL("%s: Failed to subscribe to %s: %s\n",
                           rd_kafka_name(rk), topic, rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(topics);
+}
+
+
+/**
+ * @brief Start subscribing for multiple topics
+ */
+void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...) {
+        rd_kafka_topic_partition_list_t *topics;
+        rd_kafka_resp_err_t err;
+        va_list ap;
+        int i;
+
+        topics = rd_kafka_topic_partition_list_new(topic_count);
+
+        va_start(ap, topic_count);
+        for (i = 0; i < topic_count; i++) {
+                const char *topic = va_arg(ap, const char *);
+                rd_kafka_topic_partition_list_add(topics, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+        va_end(ap);
+
+        err = rd_kafka_subscribe(rk, topics);
+        if (err)
+                TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
+                          rd_kafka_name(rk), rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(topics);
 }
@@ -7602,9 +7632,4 @@ const char *test_consumer_group_protocol() {
 int test_consumer_group_protocol_classic() {
         return !test_consumer_group_protocol_str ||
                !strcmp(test_consumer_group_protocol_str, "classic");
-}
-
-int test_consumer_group_protocol_consumer() {
-        return test_consumer_group_protocol_str &&
-               !strcmp(test_consumer_group_protocol_str, "consumer");
 }

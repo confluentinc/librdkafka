@@ -592,6 +592,8 @@ void test_verify_rkmessage0(const char *func,
 
 void test_consumer_subscribe(rd_kafka_t *rk, const char *topic);
 
+void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...);
+
 void test_consume_msgs_easy_mv0(const char *group_id,
                                 const char *topic,
                                 rd_bool_t txn,
@@ -893,8 +895,6 @@ int test_error_is_not_fatal_cb(rd_kafka_t *rk,
 const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
-
-int test_consumer_group_protocol_consumer();
 
 /**
  * @brief Calls rdkafka function (with arguments)

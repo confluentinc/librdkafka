@@ -283,6 +283,8 @@ typedef struct rd_kafkap_str_s {
 #define RD_KAFKAP_STR_INITIALIZER                                              \
         { .len = RD_KAFKAP_STR_LEN_NULL, .str = NULL }
 
+#define RD_KAFKAP_STR_INITIALIZER_EMPTY                                        \
+        { .len = 0, .str = "" }
 /**
  * Frees a Kafka string previously allocated with `rd_kafkap_str_new()`
  */

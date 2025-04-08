@@ -168,7 +168,7 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
                                          considering regex as well*/
         rd_list_t *subscribed_topic_names; /**< Subscribed topic names received
                                               in the heartbeat */
-        rd_kafkap_str_t *subscribed_topic_regex; /**< Subscribed regex */
+        char *subscribed_topic_regex;      /**< Subscribed regex */
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL
                                                   *   if there is no ongoing
                                                   *   request. */

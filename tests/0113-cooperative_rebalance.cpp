@@ -2009,11 +2009,11 @@ static void n_wildcard() {
       }
 
       TEST_ASSERT(rebalance_cb1.lost_call_cnt == expected_lost_cnt,
-                  "Expecting C_1's lost_call_cnt to be 1 not %d",
-                  rebalance_cb1.lost_call_cnt);
+                  "Expecting C_1's lost_call_cnt to be %d not %d",
+                  expected_lost_cnt, rebalance_cb1.lost_call_cnt);
       TEST_ASSERT(rebalance_cb2.lost_call_cnt == expected_lost_cnt,
-                  "Expecting C_2's lost_call_cnt to be 1 not %d",
-                  rebalance_cb2.lost_call_cnt);
+                  "Expecting C_2's lost_call_cnt to be %d not %d",
+                  expected_lost_cnt, rebalance_cb2.lost_call_cnt);
 
       /* Consumers will rejoin group after revoking the lost partitions.
        * this will result in an rebalance_cb assign (empty partitions).
@@ -2062,11 +2062,11 @@ static void n_wildcard() {
               rebalance_cb2.revoke_call_cnt);
 
   TEST_ASSERT(rebalance_cb1.lost_call_cnt == expected_lost_cnt,
-              "Expecting C_1's lost_call_cnt to be 1, not %d",
-              rebalance_cb1.lost_call_cnt);
+              "Expecting C_1's lost_call_cnt to be %d, not %d",
+              expected_lost_cnt, rebalance_cb1.lost_call_cnt);
   TEST_ASSERT(rebalance_cb2.lost_call_cnt == expected_lost_cnt,
-              "Expecting C_2's lost_call_cnt to be 1, not %d",
-              rebalance_cb2.lost_call_cnt);
+              "Expecting C_2's lost_call_cnt to be %d, not %d",
+              expected_lost_cnt, rebalance_cb2.lost_call_cnt);
 
   delete c1;
   delete c2;

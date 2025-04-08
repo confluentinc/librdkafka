@@ -1432,47 +1432,35 @@ static rd_bool_t rd_kafka_mock_cgrp_consumer_member_subscribed_topic_names_set(
                 return changed;
         }
 
-        if (!RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex)) {
-                if (member->subscribed_topic_regex) {
-                        rd_kafkap_str_destroy(member->subscribed_topic_regex);
-                        member->subscribed_topic_regex = NULL;
-                }
-                if (RD_KAFKAP_STR_LEN(SubscribedTopicRegex) > 0)
-                        member->subscribed_topic_regex =
-                            rd_kafkap_str_copy(SubscribedTopicRegex);
-        }
-
         if (SubscribedTopicNames) {
-                if (member->subscribed_topic_names)
-                        rd_list_destroy(member->subscribed_topic_names);
+                RD_IF_FREE(member->subscribed_topic_names, rd_list_destroy);
                 member->subscribed_topic_names =
                     rd_list_new(SubscribedTopicNamesCnt, rd_free);
                 for (i = 0; i < SubscribedTopicNamesCnt; i++) {
-                        rd_list_add(member->subscribed_topic_names,
-                                    rd_strdup(SubscribedTopicNames[i].str));
+                        rd_list_add(
+                            member->subscribed_topic_names,
+                            RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
                 }
         }
 
-        new_subscription =
-            rd_list_new(member->subscribed_topic_names &&
-                                rd_list_cnt(member->subscribed_topic_names) > 0
-                            ? rd_list_cnt(member->subscribed_topic_names)
-                            : 1,
-                        rd_free);
-
-        if (member->subscribed_topic_names) {
-                rd_list_copy_to(new_subscription,
-                                member->subscribed_topic_names,
-                                rd_list_string_copy, NULL);
+        if (!RD_KAFKAP_STR_IS_NULL(SubscribedTopicRegex)) {
+                RD_IF_FREE(member->subscribed_topic_regex, rd_free);
+                member->subscribed_topic_regex =
+                    RD_KAFKAP_STR_DUP(SubscribedTopicRegex);
         }
 
-        if (member->subscribed_topic_regex) {
+        new_subscription =
+            rd_list_new(rd_list_cnt(member->subscribed_topic_names), rd_free);
+
+        rd_list_copy_to(new_subscription, member->subscribed_topic_names,
+                        rd_list_string_copy, NULL);
+
+        if (member->subscribed_topic_regex[0]) {
                 rd_kafka_mock_cluster_t *mcluster = member->mcgrp->cluster;
                 rd_kafka_mock_topic_t *mtopic;
                 char errstr[1];
-                rd_regex_t *re =
-                    rd_regex_comp(member->subscribed_topic_regex->str, errstr,
-                                  sizeof(errstr));
+                rd_regex_t *re = rd_regex_comp(member->subscribed_topic_regex,
+                                               errstr, sizeof(errstr));
 
                 TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
                         if (rd_regex_exec(re, mtopic->name))
@@ -1624,7 +1612,7 @@ static void rd_kafka_mock_cgrp_consumer_member_destroy(
 
         RD_IF_FREE(member->subscribed_topic_names, rd_list_destroy_free);
 
-        RD_IF_FREE(member->subscribed_topic_regex, rd_kafkap_str_destroy);
+        RD_IF_FREE(member->subscribed_topic_regex, rd_free);
 
         rd_free(member);
 }
@@ -1635,7 +1623,6 @@ static void rd_kafka_mock_cgrp_consumer_member_destroy(
  *
  * @param mcgrp Consumer group to leave.
  * @param member Member that leaves.
- * @param is_static If true, the member is leaving with static group membership.
  *
  * @locks mcluster->lock MUST be held.
  */

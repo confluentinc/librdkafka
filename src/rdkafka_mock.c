@@ -3133,7 +3133,7 @@ static int ut_cgrp_consumer_member_next_assignment0(
         rd_kafkap_str_t MemberId        = {.str = "A", .len = 1};
         rd_kafkap_str_t InstanceId      = {.len = -1};
         rd_kafkap_str_t SubscribedTopic = {.str = topic, .len = strlen(topic)};
-        rd_kafkap_str_t SubscribedTopicRegex = RD_KAFKAP_STR_INITIALIZER;
+        rd_kafkap_str_t SubscribedTopicRegex = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         struct rd_kafka_mock_connection_s *conn =
             (struct rd_kafka_mock_connection_s
                  *)1; /* fake connection instance */

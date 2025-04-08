@@ -4631,9 +4631,30 @@ void test_flush(rd_kafka_t *rk, int timeout_ms) {
                           rd_kafka_outq_len(rk));
 }
 
+rd_bool_t
+test_deprecated_conf_consumer_group_protocol_consumer(const char *name) {
+        char *deprecated_conf[] = {
+            "session.timeout.ms", "partition.assignment.strategy",
+            "heartbeat.interval.ms", "group.protocol.type", NULL};
+        int i;
+        if (test_consumer_group_protocol_classic())
+                return rd_false;
+        for (i = 0; deprecated_conf[i]; i++) {
+                if (!strcmp(name, deprecated_conf[i]))
+                        return rd_true;
+        }
+        return rd_false;
+}
 
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
         char errstr[512];
+        if (test_deprecated_conf_consumer_group_protocol_consumer(name)) {
+                TEST_SAY(
+                    "Skipping setting deprecated configuration %s for CONSUMER "
+                    "protocol.\n",
+                    name);
+                return;
+        }
         if (rd_kafka_conf_set(conf, name, val, errstr, sizeof(errstr)) !=
             RD_KAFKA_CONF_OK)
                 TEST_FAIL("Failed to set config \"%s\"=\"%s\": %s\n", name, val,

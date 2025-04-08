@@ -1,6 +1,6 @@
-# librdkafka v2.9.0
+# librdkafka v2.10.0
 
-librdkafka v2.9.0 is a feature release:
+librdkafka v2.10.0 is a feature release:
 
  * Identify brokers only by broker id (#4557, @mfleming)
  * Remove unavailable brokers and their thread (#4557, @mfleming)
@@ -148,6 +148,11 @@ librdkafka v2.9.0 is a feature release:
    leader change and offset validation. This is done by resetting the fetch
    error backoff and waking up the delegated broker if present.
    Happens since 2.1.0 (#4970).
+
+
+
+*Note: there was no v2.9.0 librdkafka release,
+ it was a dependent clients release only*
 
 
 

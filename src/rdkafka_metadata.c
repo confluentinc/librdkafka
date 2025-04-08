@@ -977,11 +977,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                  * Mark the topic as non-existent */
                                 rd_kafka_topic_wrlock(rkt);
                                 rd_kafka_topic_set_notexists(
-                                    rkt,
-                                    /* Just rely on metadata
-                                     * propagation check */
-                                    rkt->rkt_topic_id,
-                                    RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                                    rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
                                 rd_kafka_topic_wrunlock(rkt);
 
                                 rd_kafka_topic_destroy0(rkt);
@@ -1017,11 +1013,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                  * Mark the topic as non-existent */
                                 rd_kafka_topic_wrlock(rkt);
                                 rd_kafka_topic_set_notexists(
-                                    rkt,
-                                    /* Just rely on metadata
-                                     * propagation check */
-                                    rkt->rkt_topic_id,
-                                    RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                                    rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
                                 rd_kafka_topic_wrunlock(rkt);
 
                                 rd_kafka_topic_destroy0(rkt);

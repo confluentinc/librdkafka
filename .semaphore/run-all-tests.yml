@@ -21,7 +21,7 @@ global_job_config:
       - python3 -m pip install -U pip
       - python3 -m pip -V
       - (cd tests && python3 -m pip install -r requirements.txt)
-      - ./configure --install-deps
+      - ./configure --install-deps --enable-werror --enable-devel
       - make -j all
       - make -j -C tests build
       - sem-version java 17

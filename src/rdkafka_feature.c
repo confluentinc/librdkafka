@@ -156,7 +156,7 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_SASL_HANDSHAKE,
         .depends =
             {
-                {RD_KAFKAP_SaslHandshake, 0, 0},
+                {RD_KAFKAP_SaslHandshake, 0, 1},
                 {-1},
             },
     },

@@ -5427,11 +5427,6 @@ rd_kafka_cgrp_consumer_unsubscribe(rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_cgrp_subscription_set(rkcg, NULL);
 
-        /*
-         * Clean-up group leader duties, if any.
-         */
-        rd_kafka_cgrp_group_leader_reset(rkcg, "unsubscribe");
-
         /* When group is rejoining the leave group call is either:
          * - been done on max.poll.interval reached
          * - not necessary because member has been fenced

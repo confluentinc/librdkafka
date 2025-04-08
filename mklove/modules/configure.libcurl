@@ -45,8 +45,8 @@ void foo (void) {
 function install_source {
     local name=$1
     local destdir=$2
-    local ver=7.86.0
-    local checksum="3dfdd39ba95e18847965cd3051ea6d22586609d9011d91df7bc5521288987a82"
+    local ver=8.10.1
+    local checksum="d15ebab765d793e2e96db090f0e172d127859d78ca6f6391d7eafecfd894bbc0"
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
@@ -86,8 +86,8 @@ function install_source {
 	--disable-manual \
 	--disable-ldap{,s} \
 	--disable-libcurl-option \
-        --without-{librtmp,libidn2,winidn,nghttp2,nghttp3,ngtcp2,quiche,brotli} &&
-	time make -j &&
+	--without-{librtmp,libidn2,winidn,nghttp2,nghttp3,ngtcp2,quiche,brotli,libpsl} &&
+	time make CPPFLAGS="$CPPFLAGS" -j &&
 	make DESTDIR="${destdir}" prefix=/usr install
     local ret=$?
 

@@ -1,3 +1,383 @@
+# librdkafka v2.9.0
+
+librdkafka v2.9.0 is a feature release:
+
+ * Identify brokers only by broker id (#4557, @mfleming)
+ * Remove unavailable brokers and their thread (#4557, @mfleming)
+ * Commits during a cooperative incremental rebalance aren't causing
+   an assignment lost if the generation id was bumped in between (#4908).
+ * Fix for librdkafka yielding before timeouts had been reached (#4970)
+ * Removed a 500ms latency when a consumer partition switches to a different
+   leader (#4970)
+ * The mock cluster implementation removes brokers from Metadata response
+   when they're not available, this simulates better the actual behavior of
+   a cluster that is using KRaft (#4970).
+ * Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry (#4970).
+ * Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still (@marcin-krystianc, #4970).
+ * Doesn't update partition leaders if the topic in metadata
+   response has errors (#4970).
+ * Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user (#4970).
+ * The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries (#4970).
+ * Deprecated `api.version.request`, `api.version.fallback.ms` and
+   `broker.version.fallback` configuration properties (#4970).
+ * When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group (#4970).
+ * When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription but weren't in previous one (#4970).
+ * Prevent metadata cache corruption when topic id changes
+   (@kwdubuc, @marcin-krystianc, @GerKr, #4970).
+ * Fix for the case where a metadata refresh enqueued on an unreachable broker
+   prevents refreshing the controller or the coordinator until that broker
+   becomes reachable again (#4970).
+ * Remove a one second wait after a partition fetch is restarted following a
+   leader change and offset validation (#4970).
+ * Fix the Nagle algorithm (TCP_NODELAY) on broker sockets to not be enabled
+   by default (#4986).
+
+
+## Fixes
+
+### General fixes
+
+ * Issues: #4212
+   Identify brokers only by broker id, as happens in Java,
+   avoid to find the broker with same hostname and use the same thread
+   and connection.
+   Happens since 1.x (#4557, @mfleming).
+ * Issues: #4557
+   Remove brokers not reported in a metadata call, along with their thread.
+   Avoids that unavailable brokers are selected for a new connection when
+   there's no one available. We cannot tell if a broker was removed
+   temporarily or permanently so we always remove it and it'll be added back when
+   it becomes available again.
+   Happens since 1.x (#4557, @mfleming).
+ * Issues: #4970
+   librdkafka code using `cnd_timedwait` was yielding before a timeout occurred
+   without the condition being fulfilled because of spurious wake-ups.
+   Solved by verifying with a monotonic clock that the expected point in time
+   was reached and calling the function again if needed.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry. It allows the client to continue working
+   in case of temporary problems to the Kafka metadata plane.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still. It achieves
+   this property expected effect even if a different broker had
+   previously reported the topic as existent.
+   Happens since 1.x (@marcin-krystianc, #4970).
+ * Issues: #4907
+   Doesn't update partition leaders if the topic in metadata
+   response has errors. It's in line with what Java client does and allows
+   to avoid segmentation faults for unknown partitions.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user. It's in line with what Java client
+   does and avoids returning to the user an error that wasn't meant to be
+   permanent.
+   Happens since 1.x (#4970).
+ * Issues: #4964, #4778
+   Prevent metadata cache corruption when topic id for the same topic name
+   changes. Solved by correctly removing the entry with the old topic id from metadata cache
+   to prevent subsequent use-after-free.
+   Happens since 2.4.0 (@kwdubuc, @marcin-krystianc, @GerKr, #4970).
+ * Issues: #4970
+   Fix for the case where a metadata refresh enqueued on an unreachable broker
+   prevents refreshing the controller or the coordinator until that broker
+   becomes reachable again. Given the request continues to be retried on that
+   broker, the counter for refreshing complete broker metadata doesn't reach
+   zero and prevents the client from obtaining the new controller or group or transactional coordinator.
+   It causes a series of debug messages like:
+   "Skipping metadata request: ... full request already in-transit", until
+   the broker the request is enqueued on is up again.
+   Solved by not retrying these kinds of metadata requests.
+   Happens since 1.x (#4970).
+ * The Nagle algorithm (TCP_NODELAY) is now disabled by default. It caused a
+   large increase in latency for some use cases, for example, when using an
+   SSL connection.
+   For efficient batching, the application should use `linger.ms`,
+   `batch.size` etc.
+   Happens since: 0.x (#4986).
+
+### Consumer fixes
+
+ * Issues: #4059
+   Commits during a cooperative incremental rebalance could cause an
+   assignment lost if the generation id was bumped by a second join
+   group request.
+   Solved by not rejoining the group in case an illegal generation error happens
+   during a rebalance.
+   Happening since v1.6.0 (#4908)
+ * Issues: #4970
+   When switching to a different leader a consumer could wait 500ms 
+   (`fetch.error.backoff.ms`) before starting to fetch again. The fetch backoff wasn't reset when joining the new broker.
+   Solved by resetting it, given it's not needed to backoff
+   the first fetch on a different node. This way faster leader switches are
+   possible.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries. Similar to the fix done in 2.3.0 in
+   `rd_kafka_query_watermark_offsets`. Additionally, the partition
+   current leader epoch is taken from metadata cache instead of
+   from passed partitions.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription
+   but weren't in previous one. This was due to the metadata request relative
+   to previous subscription.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Remove a one second wait after a partition fetch is restarted following a
+   leader change and offset validation. This is done by resetting the fetch
+   error backoff and waking up the delegated broker if present.
+   Happens since 2.1.0 (#4970).
+
+
+
+# librdkafka v2.8.0
+
+librdkafka v2.8.0 is a maintenance release:
+
+* Socket options are now all set before connection (#4893).
+* Client certificate chain is now sent when using `ssl.certificate.pem`
+  or `ssl_certificate` or `ssl.keystore.location` (#4894).
+* Avoid sending client certificates whose chain doesn't match with broker
+  trusted root certificates (#4900).
+* Fixes to allow to migrate partitions to leaders with same leader epoch,
+  or NULL leader epoch (#4901).
+* Support versions of OpenSSL without the ENGINE component (Chris Novakovic, #3535
+  and @remicollet, #4911).
+
+
+## Fixes
+
+### General fixes
+
+* Socket options are now all set before connection, as [documentation](https://man7.org/linux/man-pages/man7/tcp.7.html)
+  says it's needed for socket buffers to take effect, even if in some
+  cases they could have effect even after connection.
+  Happening since v0.9.0 (#4893).
+* Issues: #3225.
+  Client certificate chain is now sent when using `ssl.certificate.pem`
+  or `ssl_certificate` or `ssl.keystore.location`.
+  Without that, broker must explicitly add any intermediate certification
+  authority certificate to its truststore to be able to accept client
+  certificate.
+  Happens since: 1.x (#4894).
+
+### Consumer fixes
+
+* Issues: #4796.
+  Fix to allow to migrate partitions to leaders with NULL leader epoch.
+  NULL leader epoch can happen during a cluster roll with an upgrade to a
+  version supporting KIP-320.
+  Happening since v2.1.0 (#4901).
+* Issues: #4804.
+  Fix to allow to migrate partitions to leaders with same leader epoch.
+  Same leader epoch can happen when partition is
+  temporarily migrated to the internal broker (#4804), or if broker implementation
+  never bumps it, as it's not needed to validate the offsets.
+  Happening since v2.4.0 (#4901).
+
+
+*Note: there was no v2.7.0 librdkafka release*
+
+
+# librdkafka v2.6.1
+
+librdkafka v2.6.1 is a maintenance release:
+
+* Fix for a Fetch regression when connecting to Apache Kafka < 2.7 (#4871).
+* Fix for an infinite loop happening with cooperative-sticky assignor
+  under some particular conditions (#4800).
+* Fix for retrieving offset commit metadata when it contains
+  zeros and configured with `strndup` (#4876)
+* Fix for a loop of ListOffset requests, happening in a Fetch From Follower
+  scenario, if such request is made to the follower (#4616, #4754, @kphelps).
+* Fix to remove fetch queue messages that blocked the destroy of rdkafka
+  instances (#4724)
+* Upgrade Linux dependencies: OpenSSL 3.0.15, CURL 8.10.1 (#4875).
+* Upgrade Windows dependencies: MSVC runtime to 14.40.338160.0,
+  zstd 1.5.6, zlib 1.3.1, OpenSSL 3.3.2, CURL 8.10.1 (#4872).
+* SASL/SCRAM authentication fix: avoid concatenating
+  client side nonce once more, as it's already prepended in server sent nonce (#4895).
+* Allow retrying for status code 429 ('Too Many Requests') in HTTP requests for
+  OAUTHBEARER OIDC (#4902).
+
+## Fixes
+
+### General fixes
+
+* SASL/SCRAM authentication fix: avoid concatenating
+  client side nonce once more, as it's already prepended in 
+  server sent nonce.
+  librdkafka was incorrectly concatenating the client side nonce again, leading to [this fix](https://github.com/apache/kafka/commit/0a004562b8475d48a9961d6dab3a6aa24021c47f) being made on AK side, released with 3.8.1, with `endsWith` instead of `equals`.
+  Happening since v0.0.99 (#4895).
+
+### Consumer fixes
+
+* Issues: #4870
+  Fix for a Fetch regression when connecting to Apache Kafka < 2.7, causing
+  fetches to fail.
+  Happening since v2.6.0 (#4871)
+* Issues: #4783.
+  A consumer configured with the `cooperative-sticky` partition assignment
+  strategy could get stuck in an infinite loop, with corresponding spike of
+  main thread CPU usage.
+  That happened with some particular orders of members and potential 
+  assignable partitions.
+  Solved by removing the infinite loop cause.
+  Happening since: 1.6.0 (#4800).
+* Issues: #4649.
+  When retrieving offset metadata, if the binary value contained zeros
+  and librdkafka was configured with `strndup`, part of
+  the buffer after first zero contained uninitialized data
+  instead of rest of metadata. Solved by avoiding to use
+  `strndup` for copying metadata.
+  Happening since: 0.9.0 (#4876).
+* Issues: #4616
+  When an out of range on a follower caused an offset reset, the corresponding
+  ListOffsets request is made to the follower, causing a repeated
+  "Not leader for partition" error. Fixed by sending the request always
+  to the leader.
+  Happening since 1.5.0 (tested version) or previous ones (#4616, #4754, @kphelps).
+* Issues:
+  Fix to remove fetch queue messages that blocked the destroy of rdkafka
+  instances. Circular dependencies from a partition fetch queue message to
+  the same partition blocked the destroy of an instance, that happened
+  in case the partition was removed from the cluster while it was being
+  consumed. Solved by purging internal partition queue, after being stopped
+  and removed, to allow reference count to reach zero and trigger a destroy.
+  Happening since 2.0.2 (#4724).
+
+
+
+# librdkafka v2.6.0
+
+librdkafka v2.6.0 is a feature release:
+
+ * [KIP-460](https://cwiki.apache.org/confluence/display/KAFKA/KIP-460%3A+Admin+Leader+Election+RPC) Admin Leader Election RPC (#4845)
+ * [KIP-714] Complete consumer metrics support (#4808).
+ * [KIP-714] Produce latency average and maximum metrics support for parity with Java client (#4847).
+ * [KIP-848] ListConsumerGroups Admin API now has an optional filter to return only groups
+   of given types.
+ * Added Transactional id resource type for ACL operations (@JohnPreston, #4856).
+ * Fix for permanent fetch errors when using a newer Fetch RPC version with an older
+   inter broker protocol (#4806).
+
+
+
+## Fixes
+
+### Consumer fixes
+
+ * Issues: #4806
+   Fix for permanent fetch errors when brokers support a Fetch RPC version greater than 12 
+   but cluster is configured to use an inter broker protocol that is less than 2.8.
+   In this case returned topic ids are zero valued and Fetch has to fall back
+   to version 12, using topic names.
+   Happening since v2.5.0 (#4806)
+
+
+
+# librdkafka v2.5.3
+
+librdkafka v2.5.3 is a feature release.
+
+* Fix an assert being triggered during push telemetry call when no metrics matched on the client side. (#4826)
+
+## Fixes
+
+### Telemetry fixes
+
+* Issue: #4833
+Fix a regression introduced with [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) support in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription.
+Happening since 2.5.0 (#4826).
+
+*Note: there were no v2.5.1 and v2.5.2 librdkafka releases*
+
+
+# librdkafka v2.5.0
+
+> [!WARNING]
+This version has introduced a regression in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription. 
+>
+> You won't face any problem if:
+> * Broker doesn't support [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability).
+> * [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) feature is disabled on the broker side.
+> * [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) feature is disabled on the client side. This is enabled by default. Set configuration `enable.metrics.push` to `false`.
+> * If [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) is enabled on the broker side and there is no subscription configured there.
+> * If [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) is enabled on the broker side with subscriptions that match the [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) metrics defined on the client.
+> 
+> Having said this, we strongly recommend using `v2.5.3` and above to not face this regression at all.
+
+librdkafka v2.5.0 is a feature release.
+
+* [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+  Leader discovery optimisations for the client (#4756, #4767).
+* Fix segfault when using long client id because of erased segment when using flexver. (#4689)
+* Fix for an idempotent producer error, with a message batch not reconstructed
+  identically when retried (#4750)
+* Removed support for CentOS 6 and CentOS 7 (#4775).
+* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client 
+  metrics and observability (#4721).
+
+## Upgrade considerations
+
+ * CentOS 6 and CentOS 7 support was removed as they reached EOL
+   and security patches aren't publicly available anymore.
+   ABI compatibility from CentOS 8 on is maintained through pypa/manylinux,
+   AlmaLinux based.
+   See also [Confluent supported OSs page](https://docs.confluent.io/platform/current/installation/versions-interoperability.html#operating-systems) (#4775).
+
+## Enhancements
+
+  * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to
+    [v1.9.4](https://github.com/lz4/lz4/releases/tag/v1.9.4), which contains
+    bugfixes and performance improvements (#4726).
+  * [KIP-951](https://cwiki.apache.org/confluence/display/KAFKA/KIP-951%3A+Leader+discovery+optimisations+for+the+client)
+    With this KIP leader updates are received through Produce and Fetch responses
+    in case of errors corresponding to leader changes and a partition migration
+    happens before refreshing the metadata cache (#4756, #4767).
+
+
+## Fixes
+
+### General fixes
+
+*  Issues: [confluentinc/confluent-kafka-dotnet#2084](https://github.com/confluentinc/confluent-kafka-dotnet/issues/2084)
+   Fix segfault when a segment is erased and more data is written to the buffer.
+   Happens since 1.x when a portion of the buffer (segment) is erased for flexver or compression.
+   More likely to happen since 2.1.0, because of the upgrades to flexver, with certain string sizes like a long client id (#4689).
+
+### Idempotent producer fixes
+
+ * Issues: #4736
+   Fix for an idempotent producer error, with a message batch not reconstructed
+   identically when retried. Caused the error message "Local: Inconsistent state: Unable to reconstruct MessageSet".
+   Happening on large batches. Solved by using the same backoff baseline for all messages
+   in the batch.
+   Happens since 2.2.0 (#4750).
+
+
+
 # librdkafka v2.4.0
 
 librdkafka v2.4.0 is a feature release:
@@ -24,6 +404,11 @@ librdkafka v2.4.0 is a feature release:
  * Fix for an undesired partition migration with stale leader epoch (#4680).
  * Fix hang in cooperative consumer mode if an assignment is processed
    while closing the consumer (#4528).
+ * Upgrade OpenSSL to v3.0.13 (while building from source) with various security fixes,
+   check the [release notes](https://www.openssl.org/news/cl30.txt)
+   (@janjwerner-confluent, #4690).
+ * Upgrade zstd to v1.5.6, zlib to v1.3.1, and curl to v8.8.0 (@janjwerner-confluent, #4690).
+
 
 
 ## Upgrade considerations

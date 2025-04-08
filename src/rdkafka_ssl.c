@@ -225,15 +225,24 @@ rd_kafka_transport_ssl_io_update(rd_kafka_transport_t *rktrans,
                 if (serr2)
                         rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb, errstr,
                                            errstr_size);
-                else if (!rd_socket_errno || rd_socket_errno == ECONNRESET)
+                else if (!rd_socket_errno) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection closed by "
+                                   "peer");
                         rd_snprintf(errstr, errstr_size, "Disconnected");
-                else
+                } else if (rd_socket_errno == ECONNRESET) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection reset by peer");
+                        rd_snprintf(errstr, errstr_size, "Disconnected");
+                } else
                         rd_snprintf(errstr, errstr_size,
                                     "SSL transport error: %s",
                                     rd_strerror(rd_socket_errno));
                 return -1;
 
         case SSL_ERROR_ZERO_RETURN:
+                rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                           "Disconnected: SSL connection closed by peer");
                 rd_snprintf(errstr, errstr_size, "Disconnected");
                 return -1;
 
@@ -698,21 +707,91 @@ static EVP_PKEY *rd_kafka_ssl_PKEY_from_string(rd_kafka_t *rk,
 }
 
 /**
- * @brief Parse a PEM-formatted string into an X509 object.
+ * Read a PEM formatted cert chain from BIO \p in into \p chainp .
  *
- * @param str Input PEM string, nul-terminated
+ * @param rk rdkafka instance.
+ * @param in BIO to read from.
+ * @param chainp Stack to push the certificates to.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
+                                          STACK_OF(X509) * chainp,
+                                          pem_password_cb *password_cb,
+                                          void *password_cb_opaque) {
+        X509 *ca;
+        int r, ret = 0;
+        unsigned long err;
+        while (1) {
+                ca = X509_new();
+                if (ca == NULL) {
+                        rd_assert(!*"X509_new() allocation failed");
+                }
+                if (PEM_read_bio_X509(in, &ca, password_cb,
+                                      password_cb_opaque) != NULL) {
+                        r = sk_X509_push(chainp, ca);
+                        if (!r) {
+                                X509_free(ca);
+                                ret = -1;
+                                goto end;
+                        }
+                } else {
+                        X509_free(ca);
+                        break;
+                }
+        }
+        /* When the while loop ends, it's usually just EOF. */
+        err = ERR_peek_last_error();
+        if (ERR_GET_LIB(err) == ERR_LIB_PEM &&
+            ERR_GET_REASON(err) == PEM_R_NO_START_LINE)
+                ret = 0;
+        else
+                ret = -1; /* some real error */
+        ERR_clear_error();
+end:
+        return ret;
+}
+
+/**
+ * @brief Parse a PEM-formatted string into an X509 object.
+ *        Rest of CA chain is pushed to the \p chainp stack.
+ *
+ * @param str Input PEM string, nul-terminated.
+ * @param chainp Stack to push the certificates to.
  *
  * @returns a new X509 on success or NULL on error.
+ *
+ * @remark When NULL is returned the chainp stack is not modified.
  */
-static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk, const char *str) {
+static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
+                                           const char *str,
+                                           STACK_OF(X509) * chainp) {
         BIO *bio = BIO_new_mem_buf((void *)str, -1);
         X509 *x509;
 
         x509 =
             PEM_read_bio_X509(bio, NULL, rd_kafka_transport_ssl_passwd_cb, rk);
 
-        BIO_free(bio);
+        if (!x509) {
+                BIO_free(bio);
+                return NULL;
+        }
 
+        if (rd_kafka_ssl_read_cert_chain_from_BIO(
+                bio, chainp, rd_kafka_transport_ssl_passwd_cb, rk) != 0) {
+                /* Rest of the certificate is present,
+                 * but couldn't be read,
+                 * returning NULL as certificate cannot be verified
+                 * without its chain. */
+                rd_kafka_log(rk, LOG_WARNING, "SSL",
+                             "Failed to read certificate chain from PEM. "
+                             "Returning NULL certificate too.");
+                X509_free(x509);
+                BIO_free(bio);
+                return NULL;
+        }
+
+        BIO_free(bio);
         return x509;
 }
 
@@ -961,6 +1040,102 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
 #endif
 }
 
+/**
+ * @brief Simple utility function to check if \p ca DN is matching
+ *        any of the DNs in the \p ca_dns stack.
+ */
+static int rd_kafka_ssl_cert_issuer_match(STACK_OF(X509_NAME) * ca_dns,
+                                          X509 *ca) {
+        X509_NAME *issuer_dn = X509_get_issuer_name(ca);
+        X509_NAME *dn;
+        int i;
+
+        for (i = 0; i < sk_X509_NAME_num(ca_dns); i++) {
+                dn = sk_X509_NAME_value(ca_dns, i);
+                if (0 == X509_NAME_cmp(dn, issuer_dn)) {
+                        /* match found */
+                        return 1;
+                }
+        }
+        return 0;
+}
+
+/**
+ * @brief callback function for SSL_CTX_set_cert_cb, see
+ * https://docs.openssl.org/master/man3/SSL_CTX_set_cert_cb for details
+ * of the callback function requirements.
+ *
+ * According to section 4.2.4 of RFC 8446:
+ * The "certificate_authorities" extension is used to indicate the
+ * certificate authorities (CAs) which an endpoint supports and which
+ * SHOULD be used by the receiving endpoint to guide certificate
+ * selection.
+ *
+ * We avoid sending a client certificate if the issuer doesn't match any DN
+ * of server trusted certificate authorities (SSL_get_client_CA_list).
+ * This is done to avoid sending a client certificate that would almost
+ * certainly be rejected by the peer and would avoid successful
+ * SASL_SSL authentication on the same connection in case
+ * `ssl.client.auth=requested`.
+ */
+static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
+        rd_kafka_t *rk = arg;
+        STACK_OF(X509_NAME) * ca_list;
+        STACK_OF(X509) *certs = NULL;
+        X509 *cert;
+        int i;
+
+        /* Get client cert from SSL connection */
+        cert = SSL_get_certificate(ssl);
+        if (cert == NULL) {
+                /* If there's no client certificate,
+                 * skip certificate issuer verification and
+                 * avoid logging a warning. */
+                return 1;
+        }
+
+        /* Get the accepted client CA list from the SSL connection, this
+         * comes from the `certificate_authorities` field. */
+        ca_list = SSL_get_client_CA_list(ssl);
+        if (sk_X509_NAME_num(ca_list) < 1) {
+                /* `certificate_authorities` is supported either
+                 * in CertificateRequest (SSL <= 3, TLS <= 1.2)
+                 * or as an extension (TLS >= 1.3). This should be always
+                 * available, but in case it isn't, just send the certificate
+                 * and let the server validate it. */
+                return 1;
+        }
+
+        if (rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
+                /* A match is found, use the certificate. */
+                return 1;
+        }
+
+        /* Get client cert chain from SSL connection */
+        SSL_get0_chain_certs(ssl, &certs);
+
+        if (certs) {
+                /* Check if there's a match in the CA list for
+                 * each cert in the chain. */
+                for (i = 0; i < sk_X509_num(certs); i++) {
+                        cert = sk_X509_value(certs, i);
+                        if (rd_kafka_ssl_cert_issuer_match(ca_list, cert)) {
+                                /* A match is found, use the certificate. */
+                                return 1;
+                        }
+                }
+        }
+
+        /* No match is found, which means they would almost certainly be
+         * rejected by the peer.
+         * We decide to send no certificates. */
+        rd_kafka_log(rk, LOG_WARNING, "SSL",
+                     "No matching issuer found in "
+                     "server trusted certificate authorities, "
+                     "not sending any client certificates");
+        SSL_certs_clear(ssl);
+        return 1;
+}
 
 /**
  * @brief Registers certificates, keys, etc, on the SSL_CTX
@@ -1169,6 +1344,20 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         rd_snprintf(errstr, errstr_size, "ssl_cert failed: ");
                         return -1;
                 }
+
+                if (rk->rk_conf.ssl.cert->chain) {
+                        r = SSL_CTX_set0_chain(ctx,
+                                               rk->rk_conf.ssl.cert->chain);
+                        if (r != 1) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "ssl_cert failed: "
+                                            "setting certificate chain: ");
+                                return -1;
+                        } else {
+                                /* The chain is now owned by the CTX */
+                                rk->rk_conf.ssl.cert->chain = NULL;
+                        }
+                }
         }
 
         if (rk->rk_conf.ssl.cert_location) {
@@ -1188,16 +1377,21 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
         if (rk->rk_conf.ssl.cert_pem) {
                 X509 *x509;
+                STACK_OF(X509) *ca = sk_X509_new_null();
+                if (!ca) {
+                        rd_assert(!*"sk_X509_new_null() allocation failed");
+                }
 
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Loading public key from string");
 
-                x509 =
-                    rd_kafka_ssl_X509_from_string(rk, rk->rk_conf.ssl.cert_pem);
+                x509 = rd_kafka_ssl_X509_from_string(
+                    rk, rk->rk_conf.ssl.cert_pem, ca);
                 if (!x509) {
                         rd_snprintf(errstr, errstr_size,
                                     "ssl.certificate.pem failed: "
                                     "not in PEM format?: ");
+                        sk_X509_pop_free(ca, X509_free);
                         return -1;
                 }
 
@@ -1207,11 +1401,25 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ssl.certificate.pem failed: ");
+                                    "ssl.certificate.pem failed: "
+                                    "setting main certificate: ");
+                        sk_X509_pop_free(ca, X509_free);
                         return -1;
                 }
-        }
 
+                if (sk_X509_num(ca) == 0) {
+                        sk_X509_pop_free(ca, X509_free);
+                } else {
+                        r = SSL_CTX_set0_chain(ctx, ca);
+                        if (r != 1) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "ssl.certificate.pem failed: "
+                                            "setting certificate chain: ");
+                                sk_X509_pop_free(ca, X509_free);
+                                return -1;
+                        }
+                }
+        }
 
         /*
          * ssl_key, ssl.key.location and ssl.key.pem
@@ -1284,8 +1492,8 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
          * ssl.keystore.location
          */
         if (rk->rk_conf.ssl.keystore_location) {
-                EVP_PKEY *pkey;
-                X509 *cert;
+                EVP_PKEY *pkey     = NULL;
+                X509 *cert         = NULL;
                 STACK_OF(X509) *ca = NULL;
                 BIO *bio;
                 PKCS12 *p12;
@@ -1313,8 +1521,6 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         return -1;
                 }
 
-                pkey = EVP_PKEY_new();
-                cert = X509_new();
                 if (!PKCS12_parse(p12, rk->rk_conf.ssl.keystore_password, &pkey,
                                   &cert, &ca)) {
                         EVP_PKEY_free(pkey);
@@ -1330,28 +1536,17 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         return -1;
                 }
 
-                if (ca != NULL)
-                        sk_X509_pop_free(ca, X509_free);
-
                 PKCS12_free(p12);
                 BIO_free(bio);
 
-                r = SSL_CTX_use_certificate(ctx, cert);
-                X509_free(cert);
-                if (r != 1) {
-                        EVP_PKEY_free(pkey);
-                        rd_snprintf(errstr, errstr_size,
-                                    "Failed to use ssl.keystore.location "
-                                    "certificate: ");
-                        return -1;
-                }
-
-                r = SSL_CTX_use_PrivateKey(ctx, pkey);
-                EVP_PKEY_free(pkey);
+                r = SSL_CTX_use_cert_and_key(ctx, cert, pkey, ca, 1);
+                RD_IF_FREE(cert, X509_free);
+                RD_IF_FREE(pkey, EVP_PKEY_free);
+                if (ca != NULL)
+                        sk_X509_pop_free(ca, X509_free);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Failed to use ssl.keystore.location "
-                                    "private key: ");
+                                    "Failed to use ssl.keystore.location: ");
                         return -1;
                 }
 
@@ -1435,6 +1630,10 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 rd_snprintf(errstr, errstr_size, "Private key check failed: ");
                 return -1;
         }
+
+        /* Set client certificate callback to control the behaviour
+         * of client certificate selection TLS handshake. */
+        SSL_CTX_set_cert_cb(ctx, rd_kafka_ssl_cert_callback, rk);
 
         return 0;
 }

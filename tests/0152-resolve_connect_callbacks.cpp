@@ -97,7 +97,7 @@ class testConnectCb : public RdKafka::ConnectCb {
 
 
 extern "C" {
-int main_0150_resolve_connect_callbacks(int argc, char **argv) {
+int main_0152_resolve_connect_callbacks(int argc, char **argv) {
   RdKafka::Conf *conf;
   std::string errstr;
 

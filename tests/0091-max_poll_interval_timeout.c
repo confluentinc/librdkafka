@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -101,10 +102,7 @@ static void rebalance_cb(rd_kafka_t *rk,
                     rd_kafka_name(cons->rk), cons->rebalance_cnt,
                     cons->max_rebalance_cnt);
 
-        if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-                rd_kafka_assign(rk, parts);
-        else
-                rd_kafka_assign(rk, NULL);
+        test_rebalance_cb(rk, err, parts, opaque);
 }
 
 
@@ -206,7 +204,7 @@ static void do_test_with_assign(const char *topic) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(NULL, topic, 2, 1);
+        test_create_topic_wait_exists(NULL, topic, 2, 1, 5000);
 
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "max.poll.interval.ms", "7000" /*7s*/);
@@ -251,7 +249,7 @@ static void do_test_no_poll(const char *topic) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(NULL, topic, 2, 1);
+        test_create_topic_wait_exists(NULL, topic, 2, 1, 5000);
 
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "max.poll.interval.ms", "7000" /*7s*/);
@@ -285,7 +283,7 @@ int main_0091_max_poll_interval_timeout(int argc, char **argv) {
         const char *topic =
             test_mk_topic_name("0091_max_poll_interval_tmout", 1);
 
-        test_create_topic(NULL, topic, 2, 1);
+        test_create_topic_wait_exists(NULL, topic, 2, 1, 5000);
 
         do_test_with_subscribe(topic);
 

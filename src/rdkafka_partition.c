@@ -376,14 +376,24 @@ void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state) {
 
         rktp->rktp_fetch_state = fetch_state;
 
-        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
+        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
+                rktp->rktp_ts_fetch_backoff = 0;
+
+                /* Wake-up broker thread which might be idling on IO */
+                if (rktp->rktp_broker)
+                        rd_kafka_broker_wakeup(rktp->rktp_broker,
+                                               "fetch start");
+
                 rd_kafka_dbg(
                     rktp->rktp_rkt->rkt_rk, CONSUMER | RD_KAFKA_DBG_TOPIC,
                     "FETCH",
                     "Partition %.*s [%" PRId32 "] start fetching at %s",
                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                     rktp->rktp_partition,
-                    rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start));
+                    rd_kafka_fetch_pos2str(
+                        rd_kafka_toppar_fetch_decide_next_fetch_start_pos(
+                            rktp)));
+        }
 }
 
 
@@ -896,6 +906,7 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         int retry_max_ms) {
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
+        rd_ts_t now;
         int64_t jitter = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
                                    100 + RD_KAFKA_RETRY_JITTER_PERCENT);
         /* Scan through messages to see which ones are eligible for retry,
@@ -903,7 +914,14 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
          * set backoff time for first message and optionally
          * increase retry count for each message.
          * Sorted insert is not necessary since the original order
-         * srcq order is maintained. */
+         * srcq order is maintained.
+         *
+         * Start timestamp for calculating backoff is common,
+         * to avoid that messages from the same batch
+         * have different backoff, as they need to be retried
+         * by reconstructing the same batch, when idempotency is
+         * enabled. */
+        now = rd_clock();
         TAILQ_FOREACH_SAFE(rkm, &srcq->rkmq_msgs, rkm_link, tmp) {
                 if (rkm->rkm_u.producer.retries + incr_retry > max_retries)
                         continue;
@@ -927,7 +945,7 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         backoff = jitter * backoff * 10;
                         if (backoff > retry_max_ms * 1000)
                                 backoff = retry_max_ms * 1000;
-                        backoff = rd_clock() + backoff;
+                        backoff = now + backoff;
                 }
                 rkm->rkm_u.producer.ts_backoff = backoff;
 
@@ -1001,7 +1019,71 @@ void rd_kafka_toppar_insert_msgq(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_unlock(rktp);
 }
 
+/**
+ * @brief Purge internal fetch queue if toppar is stopped
+ * (RD_KAFKA_TOPPAR_FETCH_STOPPED) and removed from the cluster
+ * (RD_KAFKA_TOPPAR_F_REMOVE). Will be called from different places as it's
+ * removed starting from a metadata response and stopped from a rebalance or a
+ * consumer close.
+ *
+ * @remark Avoids circular dependencies in from `rktp_fetchq` ops to the same
+ * toppar that stop destroying a consumer.
+ *
+ * @locks rd_kafka_toppar_lock() MUST be held
+ */
+void rd_kafka_toppar_purge_internal_fetch_queue_maybe(rd_kafka_toppar_t *rktp) {
+        rd_kafka_q_t *rkq;
+        rkq = rktp->rktp_fetchq;
+        mtx_lock(&rkq->rkq_lock);
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE &&
+            !rktp->rktp_fetchq->rkq_fwdq) {
+                rd_kafka_op_t *rko;
+                int cnt = 0, barrier_cnt = 0, message_cnt = 0, other_cnt = 0;
 
+                /* Partition is being removed from the cluster and it's stopped,
+                 * so rktp->rktp_fetchq->rkq_fwdq is NULL.
+                 * Purge remaining operations in rktp->rktp_fetchq->rkq_q,
+                 * while holding lock, to avoid circular references */
+                rko = TAILQ_FIRST(&rkq->rkq_q);
+                while (rko) {
+                        if (rko->rko_type != RD_KAFKA_OP_BARRIER &&
+                            rko->rko_type != RD_KAFKA_OP_FETCH) {
+                                rd_kafka_log(
+                                    rktp->rktp_rkt->rkt_rk, LOG_WARNING,
+                                    "PARTDEL",
+                                    "Purging toppar fetch queue buffer op"
+                                    "with unexpected type: %s",
+                                    rd_kafka_op2str(rko->rko_type));
+                        }
+
+                        if (rko->rko_type == RD_KAFKA_OP_BARRIER)
+                                barrier_cnt++;
+                        else if (rko->rko_type == RD_KAFKA_OP_FETCH)
+                                message_cnt++;
+                        else
+                                other_cnt++;
+
+                        rko = TAILQ_NEXT(rko, rko_link);
+                        cnt++;
+                }
+
+                if (cnt) {
+                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, CGRP, "PARTDEL",
+                                     "Purge toppar fetch queue buffer "
+                                     "containing %d op(s) "
+                                     "(%d barrier(s), %d message(s), %d other)"
+                                     " to avoid "
+                                     "circular references",
+                                     cnt, barrier_cnt, message_cnt, other_cnt);
+                        rd_kafka_q_purge0(rktp->rktp_fetchq, rd_false);
+                } else {
+                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, CGRP, "PARTDEL",
+                                     "Not purging toppar fetch queue buffer."
+                                     " No ops present in the buffer.");
+                }
+        }
+        mtx_unlock(&rkq->rkq_lock);
+}
 
 /**
  * Helper method for purging queues when removing a toppar.
@@ -1153,7 +1235,8 @@ void rd_kafka_toppar_broker_delegate(rd_kafka_toppar_t *rktp,
 
         /* Undelegated toppars are delgated to the internal
          * broker for bookkeeping. */
-        if (!rkb && !rd_kafka_terminating(rk)) {
+        if (!rd_kafka_terminating(rk) &&
+            (!rkb || rd_kafka_broker_termination_in_progress(rkb))) {
                 rkb               = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }
@@ -1287,10 +1370,6 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_set_next_fetch_position(rktp, next_pos);
 
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-        /* Wake-up broker thread which might be idling on IO */
-        if (rktp->rktp_broker)
-                rd_kafka_broker_wakeup(rktp->rktp_broker, "ready to fetch");
 }
 
 
@@ -1351,7 +1430,7 @@ static void rd_kafka_toppar_handle_Offset(rd_kafka_t *rk,
 
         rd_kafka_toppar_lock(rktp);
         /* Drop reply from previous partition leader */
-        if (err != RD_KAFKA_RESP_ERR__DESTROY && rktp->rktp_broker != rkb)
+        if (err != RD_KAFKA_RESP_ERR__DESTROY && rktp->rktp_leader != rkb)
                 err = RD_KAFKA_RESP_ERR__OUTDATED;
         rd_kafka_toppar_unlock(rktp);
 
@@ -1541,7 +1620,7 @@ void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
         rd_kafka_assert(NULL,
                         thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread));
 
-        rkb = rktp->rktp_broker;
+        rkb = rktp->rktp_leader;
 
         if (!backoff_ms && (!rkb || rkb->rkb_source == RD_KAFKA_INTERNAL))
                 backoff_ms = 500;
@@ -1674,11 +1753,6 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
 
                 rd_kafka_toppar_set_fetch_state(rktp,
                                                 RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-                /* Wake-up broker thread which might be idling on IO */
-                if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker,
-                                               "fetch start");
         }
 
         rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;
@@ -3602,11 +3676,12 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                 struct rd_kafka_partition_leader *leader;
                 const rd_kafka_metadata_topic_t *mtopic;
                 const rd_kafka_metadata_partition_t *mpart;
+                const rd_kafka_metadata_partition_internal_t *mdpi;
                 rd_bool_t topic_wait_cache;
 
                 rd_kafka_metadata_cache_topic_partition_get(
-                    rk, &mtopic, &mpart, rktpar->topic, rktpar->partition,
-                    0 /*negative entries too*/);
+                    rk, &mtopic, &mpart, &mdpi, rktpar->topic,
+                    rktpar->partition, 0 /*negative entries too*/);
 
                 topic_wait_cache =
                     !mtopic ||
@@ -3674,9 +3749,11 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                         rd_kafka_topic_partition_update(rktpar2, rktpar);
                 } else {
                         /* Make a copy of rktpar and add to partitions list */
-                        rd_kafka_topic_partition_list_add_copy(
+                        rktpar2 = rd_kafka_topic_partition_list_add_copy(
                             leader->partitions, rktpar);
                 }
+                rd_kafka_topic_partition_set_current_leader_epoch(
+                    rktpar2, mdpi->leader_epoch);
 
                 rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -3800,7 +3877,7 @@ rd_kafka_topic_partition_list_query_leaders_async_worker(rd_kafka_op_t *rko) {
                 rd_kafka_metadata_refresh_topics(
                     rk, NULL, &query_topics, rd_true /*force*/,
                     rd_false /*!allow_auto_create*/, rd_false /*!cgrp_update*/,
-                    "query partition leaders");
+                    -1, "query partition leaders");
         }
 
         rd_list_destroy(leaders);
@@ -3989,7 +4066,7 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
                         rd_kafka_metadata_refresh_topics(
                             rk, NULL, &query_topics, rd_true /*force*/,
                             rd_false /*!allow_auto_create*/,
-                            rd_false /*!cgrp_update*/,
+                            rd_false /*!cgrp_update*/, -1,
                             "query partition leaders");
                         ts_query = now;
                         query_cnt++;
@@ -4346,6 +4423,89 @@ int rd_kafka_topic_partition_list_regex_cnt(
                 cnt += *rktpar->topic == '^';
         }
         return cnt;
+}
+
+
+/**
+ * @brief Match function that returns true if topic is not a regex.
+ */
+static int rd_kafka_topic_partition_not_regex(const void *elem,
+                                              const void *opaque) {
+        const rd_kafka_topic_partition_t *rktpar = elem;
+        return *rktpar->topic != '^';
+}
+
+/**
+ * @brief Return a new list with all regex topics removed.
+ *
+ * @remark The caller is responsible for freeing the returned list.
+ */
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
+        return rd_kafka_topic_partition_list_match(
+            rktparlist, rd_kafka_topic_partition_not_regex, NULL);
+}
+
+
+/**
+ * @brief Combine regexes present in the list into a single regex.
+ */
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
+        int i;
+        int combined_regex_len   = 1; /* 1 for null-terminator */
+        int regex_cnt            = 0;
+        int j                    = 1;
+        rd_bool_t is_first_regex = rd_true;
+        char *combined_regex_str;
+        rd_kafkap_str_t *combined_regex_kstr;
+
+        // Count the number of characters needed for the combined regex string
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                if (*rktpar->topic == '^') {
+                        combined_regex_len += strlen(rktpar->topic);
+                        regex_cnt++;
+                }
+        }
+
+        if (regex_cnt == 0)
+                return rd_kafkap_str_new("", 0);
+
+        combined_regex_len +=
+            3 * (regex_cnt - 1); /* 1 for each ')|(' separator */
+        combined_regex_len += 2; /* 2 for enclosing brackets */
+
+        // memory allocation for the combined regex string
+        combined_regex_str = rd_malloc(combined_regex_len);
+
+        // Construct the combined regex string
+        combined_regex_str[0] = '(';
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                char *topic = rktpar->topic;
+                if (*topic == '^') {
+                        if (!is_first_regex) {
+                                combined_regex_str[j++] = ')';
+                                combined_regex_str[j++] = '|';
+                                combined_regex_str[j++] = '(';
+                        }
+                        while (*topic) {
+                                combined_regex_str[j++] = *topic;
+                                topic++;
+                        }
+                        is_first_regex = rd_false;
+                }
+        }
+        combined_regex_str[j++] = ')';
+        combined_regex_str[j]   = '\0';
+
+        combined_regex_kstr =
+            rd_kafkap_str_new(combined_regex_str, combined_regex_len - 1);
+        rd_free(combined_regex_str);
+        return combined_regex_kstr;
 }
 
 

@@ -158,10 +158,7 @@ int main_0120_asymmetric_subscription(int argc, char **argv) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -172,10 +169,15 @@ int main_0120_asymmetric_subscription(int argc, char **argv) {
         rd_kafka_mock_topic_create(mcluster, "t3", _PART_CNT, 1);
         rd_kafka_mock_topic_create(mcluster, "t4", _PART_CNT, 1);
 
-
-        do_test_asymmetric("roundrobin", bootstraps);
         do_test_asymmetric("range", bootstraps);
-        do_test_asymmetric("cooperative-sticky", bootstraps);
+
+        /* These tests would be duplicate with KIP 848 protocol,
+         * given we're not testing the assignment here,
+         * as it's mocked. */
+        if (test_consumer_group_protocol_classic()) {
+                do_test_asymmetric("roundrobin", bootstraps);
+                do_test_asymmetric("cooperative-sticky", bootstraps);
+        }
 
         test_mock_cluster_destroy(mcluster);
 

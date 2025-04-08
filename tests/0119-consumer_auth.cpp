@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,7 +62,7 @@ static void do_test_fetch_unauth() {
 
   /* Create topic */
   const int partition_cnt = 3;
-  Test::create_topic(NULL, topic.c_str(), partition_cnt, 1);
+  Test::create_topic_wait_exists(NULL, topic.c_str(), partition_cnt, 1, 5000);
 
   /* Produce messages */
   test_produce_msgs_easy(topic.c_str(), 0, RdKafka::Topic::PARTITION_UA, 1000);
@@ -84,6 +85,9 @@ static void do_test_fetch_unauth() {
       "--operation Read --deny-host '*' "
       "--topic '%s'",
       bootstraps.c_str(), topic.c_str());
+
+  /* Allow ACLs to propagate */
+  rd_sleep(1);
 
   Test::subscribe(c, topic);
 
@@ -128,7 +132,22 @@ static void do_test_fetch_unauth() {
               "Expected exactly %d auth errors, saw %d", partition_cnt,
               auth_err_cnt);
 
+  c->close();
   delete c;
+
+  test_kafka_cmd(
+      "kafka-acls.sh --bootstrap-server %s "
+      "--remove --force --allow-principal 'User:*' "
+      "--operation Describe --allow-host '*' "
+      "--topic '%s'",
+      bootstraps.c_str(), topic.c_str());
+
+  test_kafka_cmd(
+      "kafka-acls.sh --bootstrap-server %s "
+      "--remove --force --deny-principal 'User:*' "
+      "--operation Read --deny-host '*' "
+      "--topic '%s'",
+      bootstraps.c_str(), topic.c_str());
 
   Test::Say(tostr() << _C_GRN << "[ Test unauthorized Fetch PASS ]\n");
 }

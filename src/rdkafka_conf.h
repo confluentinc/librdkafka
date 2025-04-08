@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +34,7 @@
 #include "rdkafka_cert.h"
 
 #if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 &&                        \
-    !defined(OPENSSL_IS_BORINGSSL)
+    !defined(OPENSSL_NO_ENGINE)
 #define WITH_SSL_ENGINE 1
 /* Deprecated in OpenSSL 3 */
 #include <openssl/engine.h>
@@ -164,9 +165,14 @@ typedef enum {
 } rd_kafka_client_dns_lookup_t;
 
 typedef enum {
-        RD_KAFKA_GROUP_PROTOCOL_GENERIC,
+        RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
         RD_KAFKA_GROUP_PROTOCOL_CONSUMER,
 } rd_kafka_group_protocol_t;
+
+typedef enum {
+        RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE,
+        RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP,
+} rd_kafka_metadata_recovery_strategy_t;
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
@@ -235,6 +241,7 @@ struct rd_kafka_conf_s {
         char *broker_version_fallback;
         rd_kafka_secproto_t security_protocol;
         rd_kafka_client_dns_lookup_t client_dns_lookup;
+        rd_kafka_metadata_recovery_strategy_t metadata_recovery_strategy;
 
         struct {
 #if WITH_SSL
@@ -353,6 +360,7 @@ struct rd_kafka_conf_s {
         /* Client group configuration */
         int coord_query_intvl_ms;
         int max_poll_interval_ms;
+        int enable_metrics_push;
 
         int builtin_features;
         /*

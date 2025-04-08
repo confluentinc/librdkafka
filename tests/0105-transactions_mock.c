@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,13 +45,14 @@
 
 
 static int allowed_error;
+static int allowed_error_2;
 
 /**
  * @brief Decide what error_cb's will cause the test to fail.
  */
 static int
 error_is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
-        if (err == allowed_error ||
+        if (err == allowed_error || err == allowed_error_2 ||
             /* If transport errors are allowed then it is likely
              * that we'll also see ALL_BROKERS_DOWN. */
             (allowed_error == RD_KAFKA_RESP_ERR__TRANSPORT &&
@@ -2062,7 +2064,9 @@ static void do_test_txn_coord_req_destroy(void) {
 
                 rd_kafka_mock_push_request_errors(
                     mcluster, RD_KAFKAP_AddOffsetsToTxn,
-                    1, /* first request + number of internal retries */
+                    3, /* first request + number of internal retries */
+                    RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                    RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
                     RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
 
                 err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("mytopic"),
@@ -2125,6 +2129,7 @@ static void do_test_txn_coord_req_destroy(void) {
                 TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
         }
 
+        TEST_SAY("Got %d errors\n", errcnt);
         TEST_ASSERT(errcnt > 0,
                     "Expected at least one send_offets_to_transaction() "
                     "failure");
@@ -3042,6 +3047,7 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
 
         /* Broker down is not a test-failing error */
         allowed_error          = RD_KAFKA_RESP_ERR__TRANSPORT;
+        allowed_error_2        = RD_KAFKA_RESP_ERR__TIMED_OUT;
         test_curr->is_fatal_cb = error_is_fatal_cb;
         test_curr->exp_dr_err  = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
@@ -3113,6 +3119,7 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
         rd_kafka_destroy(rk);
 
         allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
+        allowed_error_2        = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->exp_dr_err  = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->is_fatal_cb = NULL;
 
@@ -3822,10 +3829,7 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
 
 
 int main_0105_transactions_mock(int argc, char **argv) {
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_txn_recoverable_errors();
 

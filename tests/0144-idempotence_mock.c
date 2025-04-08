@@ -359,10 +359,7 @@ static void do_test_idempo_success_after_possibly_persisted(void) {
 }
 
 int main_0144_idempotence_mock(int argc, char **argv) {
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         int i;
         for (i = 1; i <= 5; i++)

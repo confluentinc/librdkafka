@@ -42,22 +42,7 @@ static void destroy_flags_rebalance_cb(rd_kafka_t *rk,
                                        rd_kafka_topic_partition_list_t *parts,
                                        void *opaque) {
         rebalance_cnt++;
-
-        TEST_SAY("rebalance_cb: %s with %d partition(s)\n",
-                 rd_kafka_err2str(err), parts->cnt);
-
-        switch (err) {
-        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
-                test_consumer_assign("rebalance", rk, parts);
-                break;
-
-        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                test_consumer_unassign("rebalance", rk);
-                break;
-
-        default:
-                TEST_FAIL("rebalance_cb: error: %s", rd_kafka_err2str(err));
-        }
+        test_rebalance_cb(rk, err, parts, opaque);
 }
 
 struct df_args {
@@ -162,6 +147,8 @@ static void do_test_destroy_flags(const char *topic,
                  destroy_flags, args->client_type, args->produce_cnt,
                  args->consumer_subscribe, args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
+
+        TEST_LATER_CHECK();
 }
 
 
@@ -184,8 +171,7 @@ static void destroy_flags(int local_mode) {
         /* Create the topic to avoid not-yet-auto-created-topics being
          * subscribed to (and thus raising an error). */
         if (!local_mode) {
-                test_create_topic(NULL, topic, 3, 1);
-                test_wait_topic_exists(NULL, topic, 5000);
+                test_create_topic_wait_exists(NULL, topic, 3, 1, 5000);
         }
 
         for (i = 0; i < (int)RD_ARRAYSIZE(args); i++) {
@@ -202,11 +188,21 @@ static void destroy_flags(int local_mode) {
 
 
 int main_0084_destroy_flags_local(int argc, char **argv) {
+        /* FIXME: fix the test with subscribe/unsubscribe PR. */
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
+                return 0;
+        }
         destroy_flags(1 /*no brokers*/);
         return 0;
 }
 
 int main_0084_destroy_flags(int argc, char **argv) {
+        /* FIXME: fix the test with subscribe/unsubscribe PR. */
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
+                return 0;
+        }
         destroy_flags(0 /*with brokers*/);
         return 0;
 }

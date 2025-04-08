@@ -75,17 +75,105 @@ typedef enum {
         RD_KAFKA_TOPIC_PARTITION_FIELD_CURRENT_EPOCH,
         /** Read/write int16_t for error code */
         RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+        /** Read/write timestamp */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_TIMESTAMP,
         /** Read/write str for metadata */
         RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA,
         /** Noop, useful for ternary ifs */
         RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
 } rd_kafka_topic_partition_field_t;
 
+/**
+ * @name Current Leader and NodeEndpoints for KIP-951
+ *       response triggered metadata updates.
+ *
+ * @{
+ */
+
+typedef struct rd_kafkap_CurrentLeader_s {
+        int32_t LeaderId;
+        int32_t LeaderEpoch;
+} rd_kafkap_CurrentLeader_t;
+
+typedef struct rd_kafkap_NodeEndpoint_s {
+        int32_t NodeId;
+        rd_kafkap_str_t Host;
+        int32_t Port;
+        rd_kafkap_str_t Rack;
+} rd_kafkap_NodeEndpoint_t;
+
+typedef struct rd_kafkap_NodeEndpoints_s {
+        int32_t NodeEndpointCnt;
+        rd_kafkap_NodeEndpoint_t *NodeEndpoints;
+} rd_kafkap_NodeEndpoints_t;
+
+/**@}*/
+
+/**
+ * @name Produce tags
+ * @{
+ *
+ */
+
+typedef struct rd_kafkap_Produce_reply_tags_Partition_s {
+        int32_t Partition;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafkap_Produce_reply_tags_Partition_t;
+
+typedef struct rd_kafkap_Produce_reply_tags_Topic_s {
+        char *TopicName;
+        rd_kafkap_Produce_reply_tags_Partition_t Partition;
+} rd_kafkap_Produce_reply_tags_Topic_t;
+
+typedef struct rd_kafkap_Produce_reply_tags_s {
+        int32_t leader_change_cnt;
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        rd_kafkap_Produce_reply_tags_Topic_t Topic;
+} rd_kafkap_Produce_reply_tags_t;
+
+/**@}*/
+
+/**
+ * @name Fetch tags
+ * @{
+ *
+ */
+
+typedef struct rd_kafkap_Fetch_reply_tags_Partition_s {
+        int32_t Partition;
+        rd_kafkap_CurrentLeader_t CurrentLeader;
+} rd_kafkap_Fetch_reply_tags_Partition_t;
+
+typedef struct rd_kafkap_Fetch_reply_tags_Topic_s {
+        rd_kafka_Uuid_t TopicId;
+        int32_t PartitionCnt;
+        rd_kafkap_Fetch_reply_tags_Partition_t *Partitions;
+        int32_t partitions_with_leader_change_cnt;
+} rd_kafkap_Fetch_reply_tags_Topic_t;
+
+typedef struct rd_kafkap_Fetch_reply_tags_s {
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        int32_t TopicCnt;
+        rd_kafkap_Fetch_reply_tags_Topic_t *Topics;
+        int32_t topics_with_leader_change_cnt;
+} rd_kafkap_Fetch_reply_tags_t;
+
+/**@}*/
+
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields);
+
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions_nullable(
+    rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields,
+    rd_bool_t *parse_err);
 
 int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
@@ -93,7 +181,15 @@ int rd_kafka_buf_write_topic_partitions(
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
     rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
     const rd_kafka_topic_partition_field_t *fields);
+
+int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_CurrentLeader_t *CurrentLeader);
+
+int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
+                                    rd_kafkap_NodeEndpoints_t *NodeEndpoints);
+
 
 rd_kafka_resp_err_t
 rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
@@ -171,10 +267,18 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  const char *group_id,
                                  rd_kafka_topic_partition_list_t *parts,
+                                 rd_bool_t use_topic_id,
+                                 int32_t generation_id_or_member_epoch,
+                                 rd_kafkap_str_t *member_id,
                                  rd_bool_t require_stable_offsets,
                                  int timeout,
                                  rd_kafka_replyq_t replyq,
-                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void (*resp_cb)(rd_kafka_t *,
+                                                 rd_kafka_broker_t *,
+                                                 rd_kafka_resp_err_t,
+                                                 rd_kafka_buf_t *,
+                                                 rd_kafka_buf_t *,
+                                                 void *),
                                  void *opaque);
 
 rd_kafka_resp_err_t
@@ -251,6 +355,8 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              int16_t max_ApiVersion,
                                              const char **states,
                                              size_t states_cnt,
+                                             const char **types,
+                                             size_t types_cnt,
                                              rd_kafka_replyq_t replyq,
                                              rd_kafka_resp_cb_t *resp_cb,
                                              void *opaque);
@@ -275,22 +381,42 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
                                rd_kafka_resp_cb_t *resp_cb,
                                void *opaque);
 
+void rd_kafka_ConsumerGroupHeartbeatRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    const rd_kafkap_str_t *member_id,
+    int32_t member_epoch,
+    const rd_kafkap_str_t *group_instance_id,
+    const rd_kafkap_str_t *rack_id,
+    int32_t rebalance_timeout_ms,
+    const rd_kafka_topic_partition_list_t *subscribed_topics,
+    rd_kafkap_str_t *subscribed_topic_regex,
+    const rd_kafkap_str_t *remote_assignor,
+    const rd_kafka_topic_partition_list_t *current_assignments,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
 rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const rd_list_t *topics,
+                                             rd_list_t *topic_ids,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
+                                             int32_t cgrp_subscription_version,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko);
 
 rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_kafka_broker_t *rkb,
     const rd_list_t *topics,
+    const rd_list_t *topic_ids,
     const char *reason,
     rd_bool_t allow_auto_create_topics,
     rd_bool_t include_cluster_authorized_operations,
     rd_bool_t include_topic_authorized_operations,
     rd_bool_t cgrp_update,
+    int32_t cgrp_subscription_version,
     rd_bool_t force_racks,
     rd_kafka_resp_cb_t *resp_cb,
     rd_kafka_replyq_t replyq,
@@ -505,6 +631,90 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_replyq_t replyq,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
+
+rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *elect_leaders /*(rd_kafka_EleactLeaders_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
+    rd_tmpabuf_t *tbuf,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints);
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_topics(rd_tmpabuf_t *tbuf,
+                                                         int topic_cnt);
+
+void rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(rd_tmpabuf_t *tbuf,
+                                                        char *topic_name,
+                                                        int32_t partition_cnt);
+
+void rd_kafkap_leader_discovery_metadata_init(rd_kafka_metadata_internal_t *mdi,
+                                              int32_t broker_id);
+
+void rd_kafkap_leader_discovery_set_brokers(
+    rd_tmpabuf_t *tbuf,
+    rd_kafka_metadata_internal_t *mdi,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints);
+
+void rd_kafkap_leader_discovery_set_topic_cnt(rd_tmpabuf_t *tbuf,
+                                              rd_kafka_metadata_internal_t *mdi,
+                                              int topic_cnt);
+
+void rd_kafkap_leader_discovery_set_topic(rd_tmpabuf_t *tbuf,
+                                          rd_kafka_metadata_internal_t *mdi,
+                                          int topic_idx,
+                                          rd_kafka_Uuid_t topic_id,
+                                          char *topic_name,
+                                          int partition_cnt);
+
+void rd_kafkap_leader_discovery_set_CurrentLeader(
+    rd_tmpabuf_t *tbuf,
+    rd_kafka_metadata_internal_t *mdi,
+    int topic_idx,
+    int partition_idx,
+    int32_t partition_id,
+    rd_kafkap_CurrentLeader_t *CurrentLeader);
+
+rd_kafka_resp_err_t
+rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
+                                          char *errstr,
+                                          size_t errstr_size,
+                                          rd_kafka_replyq_t replyq,
+                                          rd_kafka_resp_cb_t *resp_cb,
+                                          void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
+                              rd_kafka_Uuid_t *client_instance_id,
+                              int32_t subscription_id,
+                              rd_bool_t terminating,
+                              rd_kafka_compression_t compression_type,
+                              const void *metrics,
+                              size_t metrics_size,
+                              char *errstr,
+                              size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque);
+
+void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
+                                               rd_kafka_broker_t *rkb,
+                                               rd_kafka_resp_err_t err,
+                                               rd_kafka_buf_t *rkbuf,
+                                               rd_kafka_buf_t *request,
+                                               void *opaque);
+
+void rd_kafka_handle_PushTelemetry(rd_kafka_t *rk,
+                                   rd_kafka_broker_t *rkb,
+                                   rd_kafka_resp_err_t err,
+                                   rd_kafka_buf_t *rkbuf,
+                                   rd_kafka_buf_t *request,
+                                   void *opaque);
 
 
 #endif /* _RDKAFKA_REQUEST_H_ */

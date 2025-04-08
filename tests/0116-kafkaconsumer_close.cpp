@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -199,6 +200,8 @@ static void do_test_consumer_close(bool do_subscribe,
 
 extern "C" {
 int main_0116_kafkaconsumer_close(int argc, char **argv) {
+  TEST_SKIP_MOCK_CLUSTER(0);
+
   /* Parameters:
    *  subscribe, unsubscribe, close, with_queue */
   for (int i = 0; i < 1 << 4; i++) {

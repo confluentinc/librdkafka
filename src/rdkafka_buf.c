@@ -38,11 +38,10 @@ void rd_kafka_buf_destroy_final(rd_kafka_buf_t *rkbuf) {
         case RD_KAFKAP_Metadata:
                 if (rkbuf->rkbuf_u.Metadata.topics)
                         rd_list_destroy(rkbuf->rkbuf_u.Metadata.topics);
+                if (rkbuf->rkbuf_u.Metadata.topic_ids)
+                        rd_list_destroy(rkbuf->rkbuf_u.Metadata.topic_ids);
                 if (rkbuf->rkbuf_u.Metadata.reason)
                         rd_free(rkbuf->rkbuf_u.Metadata.reason);
-                if (rkbuf->rkbuf_u.Metadata.rko)
-                        rd_kafka_op_reply(rkbuf->rkbuf_u.Metadata.rko,
-                                          RD_KAFKA_RESP_ERR__DESTROY);
                 if (rkbuf->rkbuf_u.Metadata.decr) {
                         /* Decrease metadata cache's full_.._sent state. */
                         mtx_lock(rkbuf->rkbuf_u.Metadata.decr_lock);
@@ -391,7 +390,7 @@ int rd_kafka_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         rd_assert(rd_buf_len(&rkbuf->rkbuf_buf) > 0);
 
         if (unlikely(!rkb || rkb->rkb_source == RD_KAFKA_INTERNAL ||
-                     rd_kafka_terminating(rkb->rkb_rk) ||
+                     rd_kafka_broker_or_instance_terminating(rkb) ||
                      rkbuf->rkbuf_retries + incr_retry >
                          rkbuf->rkbuf_max_retries))
                 return 0;

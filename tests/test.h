@@ -676,6 +676,26 @@ void test_consumer_verify_assignment0(const char *func,
         test_consumer_verify_assignment0(__FUNCTION__, __LINE__, rk,           \
                                          fail_immediately, __VA_ARGS__)
 
+rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
+    const char *func,
+    int line,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
+#define test_consumer_verify_assignment_topic_partition_list(rk, parts)        \
+        test_consumer_verify_assignment_topic_partition_list0(                 \
+            __FUNCTION__, __LINE__, rk, parts)
+
+void test_consumer_wait_assignment_topic_partition_list0(
+    const char *func,
+    int line,
+    rd_kafka_t *rk,
+    rd_bool_t do_poll,
+    rd_kafka_topic_partition_list_t *expected_assignment,
+    int timeout_ms);
+#define test_consumer_wait_assignment_topic_partition_list(rk, do_poll, parts, \
+                                                           timeout_ms)         \
+        test_consumer_wait_assignment_topic_partition_list0(                   \
+            __FUNCTION__, __LINE__, rk, do_poll, parts, timeout_ms)
 
 void test_consumer_assign(const char *what,
                           rd_kafka_t *rk,

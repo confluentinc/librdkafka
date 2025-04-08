@@ -821,6 +821,94 @@ static void do_test_resubscribe_with_regex() {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Create many topics and apply several subscription
+ *        updates, unsubscribing and re-subscribing too.
+ *        After changing some subscriptions verifies that the assignment
+ *        corresponds to last one.
+ *
+ * @param with_rebalance_cb Use a rebalance callback to perform the assignment.
+ *                          It needs to poll the consumer when awaiting for the
+ *                          assignment in this case.
+ */
+static void do_test_many_updates(rd_bool_t with_rebalance_cb) {
+        char *topics[100] = {0};
+        char *topic;
+        size_t i;
+        char *group;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const int subscription_size = 5, partition_cnt = 4;
+        rd_kafka_topic_partition_list_t *expected_assignment = NULL;
+
+        SUB_TEST("%s", with_rebalance_cb ? "with rebalance callback"
+                                         : "without rebalance callback");
+
+        RD_ARRAY_FOREACH(topic, topics, i) {
+                topics[i] = rd_strdup(test_mk_topic_name("topic", 1));
+        }
+        group = topics[0];
+
+        test_conf_init(&conf, NULL, 60);
+        if (with_rebalance_cb)
+                rd_kafka_conf_set_rebalance_cb(conf, test_rebalance_cb);
+        rk = test_create_consumer(group, NULL, conf, NULL);
+
+        TEST_SAY("Creating %" PRIusz " topics\n", RD_ARRAY_SIZE(topics));
+        TEST_CALL_ERR__(test_CreateTopics_simple(
+            rk, NULL, topics, RD_ARRAY_SIZE(topics), partition_cnt, NULL));
+        test_wait_topic_exists(rk, topics[0], 5000);
+        /* Give the cluster some more time to propagate metadata
+         * for 100 topics */
+        rd_sleep(1);
+
+        RD_ARRAY_FOREACH(topic, topics, i) {
+                int j, k;
+                rd_kafka_topic_partition_list_t *subscription =
+                    rd_kafka_topic_partition_list_new(subscription_size);
+                RD_IF_FREE(expected_assignment,
+                           rd_kafka_topic_partition_list_destroy);
+                expected_assignment = rd_kafka_topic_partition_list_new(
+                    subscription_size * partition_cnt);
+                for (j = i; j < (int)RD_MIN(i + subscription_size,
+                                            RD_ARRAY_SIZE(topics));
+                     j++) {
+                        topic = topics[j];
+                        rd_kafka_topic_partition_list_add(
+                            subscription, topic, RD_KAFKA_PARTITION_UA);
+                        /* Every 7 * 5 we unsubscribe and check that assignment
+                         * is empty. */
+                        if (i % (7 * 5) != 0)
+                                for (k = 0; k < partition_cnt; k++)
+                                        rd_kafka_topic_partition_list_add(
+                                            expected_assignment, topic, k);
+                }
+                TEST_CALL_ERR__(rd_kafka_subscribe(rk, subscription));
+                rd_kafka_topic_partition_list_destroy(subscription);
+
+                if (i % 7 == 0)
+                        TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
+                if (i % 5 == 0)
+                        test_consumer_wait_assignment_topic_partition_list(
+                            rk,
+                            /* poll when we have a rebalance callback */
+                            with_rebalance_cb, expected_assignment, 10000);
+        }
+        test_consumer_wait_assignment_topic_partition_list(
+            rk, with_rebalance_cb, expected_assignment, 10000);
+
+        TEST_CALL_ERR__(test_DeleteTopics_simple(rk, NULL, topics,
+                                                 RD_ARRAY_SIZE(topics), NULL));
+        RD_ARRAY_FOREACH(topic, topics, i) {
+                rd_free(topics[i]);
+        }
+
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
 int main_0045_subscribe_update(int argc, char **argv) {
 
         if (!test_can_create_topics(1))
@@ -861,6 +949,12 @@ int main_0045_subscribe_update_mock(int argc, char **argv) {
 
 int main_0045_resubscribe_with_regex(int argc, char **argv) {
         do_test_resubscribe_with_regex();
+        return 0;
+}
+
+int main_0045_many_updates(int argc, char **argv) {
+        do_test_many_updates(rd_false);
+        do_test_many_updates(rd_true);
         return 0;
 }
 

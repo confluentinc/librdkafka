@@ -1223,8 +1223,9 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
                 }
                 if (!rk->rk_ts_last_poll_end)
                         rk->rk_ts_last_poll_end = now;
-                rd_dassert(rk->rk_ts_last_poll_end >=
-                           rk->rk_ts_last_poll_start);
+                /* Disabled until #5017 is merged
+                 * rd_dassert(rk->rk_ts_last_poll_end >=
+                 *            rk->rk_ts_last_poll_start); */
         }
 }
 

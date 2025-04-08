@@ -864,6 +864,7 @@ static int ut_string_split_csv(void) {
                 char **ret = NULL;
                 size_t cnt = 0;
                 int rc;
+                size_t j;
 
                 rc = rd_string_split_csv(tests[i].input, tests[i].sep,
                                          tests[i].skip_empty, &ret, &cnt);
@@ -878,7 +879,7 @@ static int ut_string_split_csv(void) {
                                      " elements, got %" PRIusz,
                                      i, tests[i].exp_cnt, cnt);
 
-                        for (size_t j = 0; j < cnt; j++) {
+                        for (j = 0; j < cnt; j++) {
                                 RD_UT_ASSERT(!strcmp(tests[i].exp[j], ret[j]),
                                              "#%" PRIusz
                                              ": Expected element %" PRIusz

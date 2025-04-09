@@ -8509,8 +8509,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                             SubscribedTopicRegex = RD_KAFKAP_STR_INITIALIZER;
                         int32_t MemberEpoch, idx;
                         char *member_id, *instance_id, *rack_id, *client_id,
-                            *client_host, *subscribed_topic_names,
-                            *subscribed_topic_regex                 = NULL;
+                            *client_host, *subscribed_topic_regex = NULL;
                         rd_kafka_MemberDescription_t *member        = NULL;
                         rd_kafka_topic_partition_list_t *assignment = NULL,
                                                         *target_assignment =
@@ -8581,7 +8580,6 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                         rd_free(rack_id);
                         rd_free(client_id);
                         rd_free(client_host);
-                        rd_free(subscribed_topic_names);
                         rd_free(subscribed_topic_regex);
                 }
                 rd_kafka_buf_read_i32(reply, &authorized_operations);

@@ -223,6 +223,7 @@ _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
 _TEST_DECL(0107_topic_recreate);
+_TEST_DECL(0107_topic_recreate_unknown_topic_id);
 _TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
 _TEST_DECL(0111_delay_create_topics);
@@ -476,7 +477,11 @@ struct test tests[] = {
     _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
-    _TEST(0107_topic_recreate, 0, TEST_BRKVER_TOPIC_ADMINAPI),
+    _TEST(0107_topic_recreate,
+          0,
+          TEST_BRKVER_TOPIC_ADMINAPI,
+          .scenario = "noautocreate"),
+    _TEST(0107_topic_recreate_unknown_topic_id, 0, TEST_BRKVER_TOPIC_ADMINAPI),
     _TEST(0109_auto_create_topics, 0),
     _TEST(0110_batch_size, 0),
     _TEST(0111_delay_create_topics,

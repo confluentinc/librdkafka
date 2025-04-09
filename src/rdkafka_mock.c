@@ -683,14 +683,32 @@ rd_kafka_mock_topic_new(rd_kafka_mock_cluster_t *mcluster,
         TAILQ_INSERT_TAIL(&mcluster->topics, mtopic, link);
         mcluster->topic_cnt++;
 
-        rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
-                     "Created topic \"%s\" with %d partition(s) and "
-                     "replication-factor %d",
-                     mtopic->name, mtopic->partition_cnt, replication_factor);
+        rd_kafka_dbg(
+            mcluster->rk, MOCK, "MOCK",
+            "Created topic \"%s\" with topic id \"%s\", %d partition(s) "
+            "and replication-factor %d",
+            mtopic->name, rd_kafka_Uuid_base64str(&mtopic->id),
+            mtopic->partition_cnt, replication_factor);
 
         return mtopic;
 }
 
+static void rd_kafka_mock_topic_remove(rd_kafka_mock_cluster_t *mcluster,
+                                       const char *topic) {
+        rd_kafka_mock_topic_t *mtopic;
+
+        mtopic = rd_kafka_mock_topic_find(mcluster, topic);
+        if (!mtopic)
+                return;
+
+        TAILQ_REMOVE(&mcluster->topics, mtopic, link);
+
+        rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                     "Deleted topic \"%s\" with topic id \"%s\"", mtopic->name,
+                     rd_kafka_Uuid_base64str(&mtopic->id));
+
+        rd_kafka_mock_topic_destroy(mtopic);
+}
 
 rd_kafka_mock_topic_t *
 rd_kafka_mock_topic_find(const rd_kafka_mock_cluster_t *mcluster,
@@ -2166,6 +2184,18 @@ rd_kafka_mock_topic_create(rd_kafka_mock_cluster_t *mcluster,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_mock_topic_delete(rd_kafka_mock_cluster_t *mcluster,
+                           const char *topic) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.name = rd_strdup(topic);
+        rko->rko_u.mock.cmd  = RD_KAFKA_MOCK_CMD_TOPIC_DELETE;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
 rd_kafka_mock_partition_set_leader(rd_kafka_mock_cluster_t *mcluster,
                                    const char *topic,
                                    int32_t partition,
@@ -2504,6 +2534,10 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                                              /* replication_factor */
                                              (int)rko->rko_u.mock.hi))
                         return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
+                break;
+
+        case RD_KAFKA_MOCK_CMD_TOPIC_DELETE:
+                rd_kafka_mock_topic_remove(mcluster, rko->rko_u.mock.name);
                 break;
 
         case RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR:

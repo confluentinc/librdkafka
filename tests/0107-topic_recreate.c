@@ -242,6 +242,9 @@ static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
 }
 
 
+/**
+ * @remark This is run only when scenario="noautocreate".
+ */
 int main_0107_topic_recreate(int argc, char **argv) {
         this_test = test_curr; /* Need to expose current test struct (in TLS)
                                 * to producer thread. */
@@ -255,5 +258,95 @@ int main_0107_topic_recreate(int argc, char **argv) {
         do_test_create_delete_create(10, 3);
         do_test_create_delete_create(3, 6);
 
+        return 0;
+}
+
+
+/**
+ * @brief Test topic create + delete + create with consumer.
+ *
+ * Details:
+ * 1. Create producer and produce 10 messages.
+ * 2. Create consumer (auto offset reset to earliest) and subscribe to topic,
+ *    consume the first 10 messages.
+ * 3. Recreate topic and produce 20 messages.
+ * 4. Consume remaining 20 messages - it should get all 20 because there should
+ *    be an offset reset when Fetch returns an UNKNOWN_TOPIC_ID error.
+ */
+static void do_test_topic_recreated_consumer_unknown_topic_id() {
+        rd_kafka_t *rk_producer;
+        rd_kafka_t *rk_consumer;
+        rd_kafka_conf_t *conf;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_topic_t *rkt;
+
+        SUB_TEST("Testing topic recreation with consumer\n");
+
+        /* Create producer. */
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        rk_producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* Create topic using admin API */
+        test_create_topic(rk_producer, topic, 1, 1);
+
+        /* Write 10 msgs */
+        test_produce_msgs2(rk_producer, topic, 0, 0, 0, 10, "test", 10);
+
+        /* Destroy and recreate producer */
+        rd_kafka_destroy(rk_producer);
+        rk_producer = NULL;
+
+        /* Create consumer. */
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "group.id", topic);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        /* Changing these becausee we don't accidentally want metadata refresh,
+         * we want this to be triggered by the UNKNOWN_TOPIC_ID error. */
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "90000");
+        test_conf_set(conf, "metadata.max.age.ms", "180000");
+        rk_consumer = test_create_handle(RD_KAFKA_CONSUMER, conf);
+
+        /* Subscribe to topic. */
+        test_consumer_subscribe(rk_consumer, topic);
+        test_consumer_wait_assignment(rk_consumer, rd_false);
+
+        /* Consume messages. */
+        rkt = test_create_consumer_topic(rk_consumer, topic);
+        test_consume_msgs("consume_from_topic", rkt, 0, 0, TEST_NO_SEEK, 0, 10,
+                          0);
+
+        /* Pause consumer so there are no fetches in the temporary state where
+         * there is no topic on the broker */
+        test_consumer_pause_resume_partition(rk_consumer, topic, 0, rd_true);
+        rd_sleep(2);
+
+        /* Recreate topic. */
+        test_delete_topic(rk_producer, topic);
+        rd_sleep(5);
+        test_create_topic(rk_producer, topic, 1, 1);
+
+        /* Produce 2x the number of messages. */
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        rk_producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_produce_msgs2(rk_producer, topic, 0, 0, 0, 20, "test", 10);
+
+        /* Resume consumer. */
+        test_consumer_pause_resume_partition(rk_consumer, topic, 0, rd_false);
+        rd_sleep(2);
+
+        /* Consume messages. */
+        test_consume_msgs("consume_from_topic", rkt, 0, 0, TEST_NO_SEEK, 0, 20,
+                          0);
+
+        /* Destroy consumer. */
+        rd_kafka_destroy(rk_consumer);
+        rd_kafka_destroy(rk_producer);
+        SUB_TEST_PASS();
+}
+
+int main_0107_topic_recreate_unknown_topic_id(int argc, char **argv) {
+        do_test_topic_recreated_consumer_unknown_topic_id();
         return 0;
 }

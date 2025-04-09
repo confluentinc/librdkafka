@@ -1,3 +1,34 @@
+# librdkafka v2.10.1
+
+librdkafka v2.10.1 is a maintenance release:
+
+ * Fix producer being unable to resume production after topic recreation
+   followed by leader change (#5022).
+ * Fix consumer being unable to resume production after topic recreation, both
+   in case of a leader change and otherwise (#5022)
+
+## Fixes
+
+### Producer fixes
+
+* Issues: #4898
+  When a topic is recreated, the producer may be unable to produce in cases of
+  a leader change, because the stored leader epoch may exceed the epoch of the
+  recreated topic. Solved by resetting the leader epoch if the topic is
+  recreated. Additionally, for idempotent producers, the queues are drained and
+  the epoch is bumped.
+  Happens since v2.1.0.
+
+### Consumer fixes
+
+* When a topic is recreated, the consumer may be unable to resume consumption
+  both in case of a leader change and otherwise, if the new topic partition has
+  more messages than the old topic.
+  Solved by resetting the leader epoch if the topic is recreated, and by
+  resetting the offsets for owned partitions.
+  Happens since v2.1.0.
+
+
 # librdkafka v2.10.0
 
 librdkafka v2.10.0 is a feature release:

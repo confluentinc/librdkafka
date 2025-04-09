@@ -6090,8 +6090,6 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
                                void *opaque) {
         rd_kafka_buf_t *rkbuf;
         size_t ofGroupsArrayCnt;
-        int i;
-        char *group;
 
         int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);

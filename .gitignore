@@ -31,3 +31,4 @@ cov-int
 gdbrun*.gdb
 TAGS
 vcpkg_installed
+*tmp-KafkaCluster*

@@ -411,7 +411,5 @@ const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
 
-int test_consumer_group_protocol_consumer();
-
 
 #endif /* _TESTSHARED_H_ */

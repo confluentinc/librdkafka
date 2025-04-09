@@ -1284,7 +1284,6 @@ static void rd_kafka_topic_assign_uas(rd_kafka_topic_t *rkt,
  * @locks topic_wrlock() MUST be held.
  */
 rd_bool_t rd_kafka_topic_set_notexists(rd_kafka_topic_t *rkt,
-                                       rd_kafka_Uuid_t topic_id,
                                        rd_kafka_resp_err_t err) {
         rd_ts_t remains_us;
         rd_bool_t permanent = err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
@@ -1302,8 +1301,6 @@ rd_bool_t rd_kafka_topic_set_notexists(rd_kafka_topic_t *rkt,
             rkt->rkt_ts_metadata;
 
         if (!permanent &&
-            /* Same topic id */
-            rd_kafka_Uuid_cmp(rkt->rkt_topic_id, topic_id) == 0 &&
             (rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN ||
              rkt->rkt_state == RD_KAFKA_TOPIC_S_ERROR ||
              rkt->rkt_state == RD_KAFKA_TOPIC_S_EXISTS) &&
@@ -1488,7 +1485,7 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
         if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION /*invalid topic*/ ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
             mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID)
-                rd_kafka_topic_set_notexists(rkt, mdit->topic_id, mdt->err);
+                rd_kafka_topic_set_notexists(rkt, mdt->err);
         else if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR &&
                  mdt->partition_cnt > 0)
                 rd_kafka_topic_set_exists(rkt, mdit->topic_id);

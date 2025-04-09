@@ -158,6 +158,14 @@ static RD_UNUSED void delete_topic(RdKafka::Handle *use_handle,
 }
 
 /**
+ * @brief
+ */
+static RD_UNUSED bool is_deprecated_conf_group_protocol_consumer(
+    const std::string &name) {
+  return test_is_deprecated_conf_group_protocol_consumer(name.c_str());
+}
+
+/**
  * @brief Get new configuration objects
  */
 void conf_init(RdKafka::Conf **conf, RdKafka::Conf **topic_conf, int timeout);
@@ -167,6 +175,11 @@ static RD_UNUSED void conf_set(RdKafka::Conf *conf,
                                std::string name,
                                std::string val) {
   std::string errstr;
+  if (Test::is_deprecated_conf_group_protocol_consumer(name)) {
+    Test::Say(tostr() << "Skipping setting deprecated configuration " << name
+                      << " for CONSUMER protocol.\n");
+    return;
+  }
   if (conf->set(name, val, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Conf failed: " + errstr);
 }

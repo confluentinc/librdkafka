@@ -39,19 +39,30 @@
  * The same test is run with and without allow.auto.create.topics
  * and with and without wildcard subscribes.
  *
+ * With the KIP 848 consumer group protocol, topics aren't automatically
+ * created when subscribing and the topic authorization error
+ * applies to the whole subscription, not just the unauthorized topics.
  */
 
 
 static void do_test_consumer(bool allow_auto_create_topics,
-                             bool with_wildcards) {
+                             bool with_wildcards,
+                             bool test_unauthorized_topic) {
   Test::Say(tostr() << _C_MAG << "[ Test allow.auto.create.topics="
                     << (allow_auto_create_topics ? "true" : "false")
                     << " with_wildcards=" << (with_wildcards ? "true" : "false")
-                    << " ]\n");
+                    << " test_unauthorized_topic="
+                    << (test_unauthorized_topic ? "true" : "false") << " ]\n");
 
   bool has_acl_cli = test_broker_version >= TEST_BRKVER(2, 1, 0, 0) &&
                      !test_needs_auth(); /* We can't bother passing Java
                                           * security config to kafka-acls.sh */
+  if (test_unauthorized_topic && !has_acl_cli) {
+    Test::Say(
+        "Skipping unauthorized topic test since kafka-acls.sh is not "
+        "available\n");
+    return;
+  }
 
   bool supports_allow = test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
 
@@ -83,7 +94,7 @@ static void do_test_consumer(bool allow_auto_create_topics,
   /* Create topics */
   Test::create_topic(c, topic_exists.c_str(), 1, 1);
 
-  if (has_acl_cli) {
+  if (test_unauthorized_topic) {
     Test::create_topic(c, topic_unauth.c_str(), 1, 1);
 
     /* Add denying ACL for unauth topic */
@@ -107,34 +118,40 @@ static void do_test_consumer(bool allow_auto_create_topics,
   std::map<std::string, RdKafka::ErrorCode> exp_errors;
 
   topics.push_back(topic_notexists);
-  if (has_acl_cli)
+
+  if (test_unauthorized_topic)
     topics.push_back(topic_unauth);
 
   if (with_wildcards) {
     topics.push_back("^" + topic_exists);
     topics.push_back("^" + topic_notexists);
+  } else {
+    topics.push_back(topic_exists);
+  }
+
+  if (test_consumer_group_protocol_classic()) {
     /* If the subscription contains at least one wildcard/regex
      * then no auto topic creation will take place (since the consumer
      * requests all topics in metadata, and not specific ones, thus
      * not triggering topic auto creation).
      * We need to handle the expected error cases accordingly. */
-    exp_errors["^" + topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
-    exp_errors[topic_notexists]       = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
-
-    if (has_acl_cli) {
-      /* Unauthorized topics are not included in list-all-topics Metadata,
-       * which we use for wildcards, so in this case the error code for
-       * unauthorixed topics show up as unknown topic. */
-      exp_errors[topic_unauth] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
-    }
-  } else {
-    topics.push_back(topic_exists);
-
-    /* Consumer doesn't do a preliminary Metadata call that
-     * returns a TOPIC_AUTHORIZATION_FAILED error with the consumer
-     * protocol. */
-    if (has_acl_cli && test_consumer_group_protocol_classic())
+    if (with_wildcards) {
+      exp_errors["^" + topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
+      exp_errors[topic_notexists]       = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
+      if (test_unauthorized_topic) {
+        /* Unauthorized topics are not included in list-all-topics Metadata,
+         * which we use for wildcards, so in this case the error code for
+         * unauthorixed topics show up as unknown topic. */
+        exp_errors[topic_unauth] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
+      }
+    } else if (test_unauthorized_topic) {
       exp_errors[topic_unauth] = RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED;
+    }
+  } else if (test_unauthorized_topic) {
+    /* Authorization errors happen if even a single topic
+     * is unauthorized and an error is returned for the whole subscription
+     * without reference to the topic. */
+    exp_errors[""] = RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED;
   }
 
   /* Consumer doesn't do a preliminary Metadata call that returns
@@ -160,6 +177,10 @@ static void do_test_consumer(bool allow_auto_create_topics,
     case RdKafka::ERR__PARTITION_EOF:
       run = false;
       break;
+
+    case RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED:
+      run = test_consumer_group_protocol_classic();
+      /* FALLTHRU */
 
     default:
       Test::Say("Consume error on " + msg->topic_name() + ": " + msg->errstr() +
@@ -212,22 +233,19 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
 extern "C" {
 int main_0109_auto_create_topics(int argc, char **argv) {
-  if (!test_consumer_group_protocol_classic()) {
-    Test::Skip(
-        "Test disabled, to be enabled again when TOPIC_AUTHORIZATION_FAILED "
-        "error is handled by KIP-848 implementation.\n");
-    return 0;
-  }
   /* Parameters:
-   *  allow auto create, with wildcards */
-  do_test_consumer(true, false);
-  do_test_consumer(false, false);
+   *  allow auto create, with wildcards, test unauthorized topic */
+  do_test_consumer(true, false, false);
+  do_test_consumer(false, false, false);
 
-  /* TODO: check again when regexes will be supported by KIP-848 */
-  if (test_consumer_group_protocol_classic()) {
-    do_test_consumer(true, true);
-    do_test_consumer(false, true);
-  }
+  do_test_consumer(true, true, false);
+  do_test_consumer(false, true, false);
+
+  do_test_consumer(true, false, true);
+  do_test_consumer(false, false, true);
+
+  do_test_consumer(true, true, true);
+  do_test_consumer(false, true, true);
 
   return 0;
 }

@@ -7765,7 +7765,7 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
                 member->assignment.partitions =
                     rd_kafka_topic_partition_list_new(0);
         if (target_assignment)
-                member->target_assignment.partitions =
+                member->target_assignment->partitions =
                     rd_kafka_topic_partition_list_copy(target_assignment);
         return member;
 }
@@ -7780,11 +7780,11 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
  */
 static rd_kafka_MemberDescription_t *
 rd_kafka_MemberDescription_copy(const rd_kafka_MemberDescription_t *src) {
-        if (src->target_assignment) {
+        if (src->target_assignment != NULL) {
                 return rd_kafka_MemberDescription_new(
                     src->client_id, src->consumer_id, src->group_instance_id,
                     src->host, src->assignment.partitions,
-                    src->target_assignment.partitions);
+                    src->target_assignment->partitions);
         } else {
                 return rd_kafka_MemberDescription_new(
                     src->client_id, src->consumer_id, src->group_instance_id,
@@ -7813,9 +7813,10 @@ rd_kafka_MemberDescription_destroy(rd_kafka_MemberDescription_t *member) {
         if (member->assignment.partitions)
                 rd_kafka_topic_partition_list_destroy(
                     member->assignment.partitions);
-        if (member->target_assignment && member->target_assignment.partitions)
+        if (member->target_assignment != NULL &&
+            member->target_assignment->partitions != NULL)
                 rd_kafka_topic_partition_list_destroy(
-                    member->target_assignment.partitions);
+                    member->target_assignment->partitions);
         rd_free(member);
 }
 

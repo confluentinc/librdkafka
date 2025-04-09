@@ -3331,7 +3331,6 @@ static void do_test_DescribeConsumerGroups_Compatibility(const char *what,
         expected_DescribeConsumerGroups_result_t
             expected[TEST_DESCRIBE_CONSUMER_GROUPS_CNT] = RD_ZERO_INIT;
         const char *describe_groups[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
-        char group_instance_ids[TEST_DESCRIBE_CONSUMER_GROUPS_CNT][512];
         char client_ids[TEST_DESCRIBE_CONSUMER_GROUPS_CNT][512];
         rd_kafka_t *rks[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
         const rd_kafka_DescribeConsumerGroups_result_t *res;

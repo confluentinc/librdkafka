@@ -4631,18 +4631,18 @@ void test_flush(rd_kafka_t *rk, int timeout_ms) {
                           rd_kafka_outq_len(rk));
 }
 
-rd_bool_t test_is_deprecated_conf_group_protocol_consumer(const char *name) {
+int test_is_deprecated_conf_group_protocol_consumer(const char *name) {
         char *deprecated_conf[] = {
             "session.timeout.ms", "partition.assignment.strategy",
             "heartbeat.interval.ms", "group.protocol.type", NULL};
         int i;
         if (test_consumer_group_protocol_classic())
-                return rd_false;
+                return 0;
         for (i = 0; deprecated_conf[i]; i++) {
                 if (!strcmp(name, deprecated_conf[i]))
-                        return rd_true;
+                        return 1;
         }
-        return rd_false;
+        return 0;
 }
 
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {

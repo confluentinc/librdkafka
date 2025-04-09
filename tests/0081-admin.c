@@ -3160,9 +3160,6 @@ static void do_test_DescribeConsumerGroups_Compatibility(const char *what,
         const rd_kafka_DescribeConsumerGroups_result_t *res;
         char *protocols[TEST_DESCRIBE_CONSUMER_GROUPS_CNT] = {
             "classic", "classic", "consumer", "consumer"};
-        size_t authorized_operation_cnt;
-        rd_bool_t has_group_instance_id =
-            test_broker_version >= TEST_BRKVER(2, 4, 0, 0);
 
         SUB_TEST_QUICK(
             "%s DescribeConsumerGroups Compatibility Test with %s, "

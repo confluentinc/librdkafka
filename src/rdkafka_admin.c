@@ -7910,7 +7910,7 @@ const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
 
 const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(
     const rd_kafka_MemberDescription_t *member) {
-        return &member->target_assignment;
+        return member->target_assignment;
 }
 
 const rd_kafka_topic_partition_list_t *

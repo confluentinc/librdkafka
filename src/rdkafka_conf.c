@@ -3768,33 +3768,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                    rd_kafka_conf_t *conf) {
         const char *errstr;
 
-        if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-
-                if (rd_kafka_conf_is_modified(conf, "session.timeout.ms")) {
-                        return "`session.timeout.ms` is not supported "
-                               "for `group.protocol=consumer`. It is defined "
-                               "on the broker side.";
-                }
-
-                if (rd_kafka_conf_is_modified(
-                        conf, "partition.assignment.strategy")) {
-                        return "`partition.assignment.strategy` is not "
-                               "supported for `group.protocol=consumer`. Use "
-                               "`group.remote.assignor` instead.";
-                }
-
-                if (rd_kafka_conf_is_modified(conf, "group.protocol.type")) {
-                        return "`group.protocol.type` is not supported "
-                               "for `group.protocol=consumer`";
-                }
-
-                if (rd_kafka_conf_is_modified(conf, "heartbeat.interval.ms")) {
-                        return "`heartbeat.interval.ms` is not supported "
-                               "for `group.protocol=consumer`. It is defined "
-                               "on the broker side.";
-                }
-        }
-
         if (!conf->sw_name)
                 rd_kafka_conf_set(conf, "client.software.name", "librdkafka",
                                   NULL, 0);
@@ -3880,6 +3853,45 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (cltype == RD_KAFKA_CONSUMER) {
 
+                if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
+                        if (conf->max_poll_interval_ms <
+                            conf->group_session_timeout_ms)
+                                return "`max.poll.interval.ms`must be >= "
+                                       "`session.timeout.ms`";
+                } else {
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "session.timeout.ms")) {
+                                return "`session.timeout.ms` is not supported "
+                                       "for `group.protocol=consumer`. It is "
+                                       "defined "
+                                       "on the broker side.";
+                        }
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "partition.assignment.strategy")) {
+                                return "`partition.assignment.strategy` is not "
+                                       "supported for "
+                                       "`group.protocol=consumer`. Use "
+                                       "`group.remote.assignor` instead.";
+                        }
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.protocol.type")) {
+                                return "`group.protocol.type` is not supported "
+                                       "for `group.protocol=consumer`";
+                        }
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "heartbeat.interval.ms")) {
+                                return "`heartbeat.interval.ms` is not "
+                                       "supported "
+                                       "for `group.protocol=consumer`. It is "
+                                       "defined "
+                                       "on the broker side.";
+                        }
+                }
+
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
                  * unless set by user. */
@@ -3909,11 +3921,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                             RD_MAX(conf->recv_max_msg_size,
                                    conf->fetch_max_bytes + 512);
                 }
-
-                if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&
-                    conf->max_poll_interval_ms < conf->group_session_timeout_ms)
-                        return "`max.poll.interval.ms`must be >= "
-                               "`session.timeout.ms`";
 
                 /* Simplifies rd_kafka_is_idempotent() which is producer-only */
                 conf->eos.idempotence = 0;

@@ -1115,9 +1115,10 @@ static void rd_kafka_topic_recreated_partition_reset(
             .leader_epoch = -1,
         };
 
-        /* Common */
         for (i = 0; i < rkt->rkt_partition_cnt; i++) {
                 rktp = rkt->rkt_p[i];
+
+                /* Common */
                 rd_kafka_toppar_lock(rktp);
                 /* By setting partition's leader epoch to -1, we make sure to
                  * always pick up whatever is in the metadata. Even if the
@@ -1127,30 +1128,30 @@ static void rd_kafka_topic_recreated_partition_reset(
                  * just continue, and if we're fetching from a follower, we'll
                  * just get a not follower error if applicable. */
                 rktp->rktp_leader_epoch = -1;
-                rd_kafka_toppar_unlock(rktp);
-        }
-        if (rk->rk_type == RD_KAFKA_PRODUCER) {
-                /* No op - we bump epoch and drain on rk-level for an idempotent
-                 * producer. */
-        } else if (rk->rk_type == RD_KAFKA_CONSUMER) {
-                /* Consumer: set each partition's offset to invalid so it can go
-                 * through a reset.
-                 *
-                 * Note that, this can lead to re-consumption in a particular
-                 * cases, for example:
-                 * 1. This consumer unsubscribes to the topic.
-                 * 2. Topic is recreated, new consumer is created and subscribes
-                 *    to the topic, and consumes messages and commits offsets.
-                 * 3. This consumer resubscribes to the topic and should ideally
-                 *    consume from consumer2's committed offsets, but since the
-                 *    topic is recreated, it will consume from whatever is in
-                 *    auto.offset.reset.
-                 * It's too bad - we can't help it because the broker does not
-                 * store offsets with topic id, only with topic name. */
-                rd_kafka_toppar_lock(rktp);
-                rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, next_pos,
-                                      RD_KAFKA_RESP_ERR_NO_ERROR,
-                                      "topic recreated");
+
+                if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                        /* Producer: No op - we bump epoch and drain on rk-level
+                         * for an idempotent producer. */
+                } else if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                        /* Consumer: set each partition's offset to invalid so
+                         * it can go through a reset.
+                         *
+                         * Note that, this can lead to re-consumption in a
+                         * particular cases, for example:
+                         * 1. This consumer unsubscribes to the topic.
+                         * 2. Topic is recreated, new consumer is created and
+                         * subscribes to the topic, and consumes messages and
+                         * commits offsets.
+                         * 3. This consumer resubscribes to the topic and should
+                         * ideally consume from consumer2's committed offsets,
+                         * but since the topic is recreated, it will consume
+                         * from whatever is in auto.offset.reset. It's too bad -
+                         * we can't help it because the broker does not store
+                         * offsets with topic id, only with topic name. */
+                        rd_kafka_offset_reset(
+                            rktp, RD_KAFKA_NODEID_UA, next_pos,
+                            RD_KAFKA_RESP_ERR_NO_ERROR, "topic recreated");
+                }
                 rd_kafka_toppar_unlock(rktp);
         }
 }

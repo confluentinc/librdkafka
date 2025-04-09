@@ -8135,8 +8135,7 @@ rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
                                             rd_kafka_resp_cb_t *resp_cb,
                                             void *opaque) {
 
-        int i, include_authorized_operations;
-        char *group;
+        int include_authorized_operations;
         rd_kafka_resp_err_t err;
         int groups_cnt          = rd_list_cnt(groups);
         rd_kafka_error_t *error = NULL;
@@ -8395,7 +8394,6 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                                             char *errstr,
                                             size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
-        int16_t api_version;
         int32_t cnt;
         rd_kafka_op_t *rko_result = NULL;
         rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
@@ -8410,7 +8408,6 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         int operation_cnt = -1;
         int32_t i;
 
-        api_version = rd_kafka_buf_ApiVersion(reply);
         rd_kafka_buf_read_throttle_time(reply);
 
         rd_kafka_buf_read_arraycnt(reply, &cnt, 100000);
@@ -8458,7 +8455,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
 
                 for (j = 0; j < member_cnt; j++) {
                         rd_kafkap_str_t MemberId, InstanceId, RackId, ClientId,
-                            ClientHost, SubscribedTopicNames,
+                            ClientHost,
                             SubscribedTopicRegex = RD_KAFKAP_STR_INITIALIZER;
                         int32_t MemberEpoch, idx;
                         char *member_id, *instance_id, *rack_id, *client_id,
@@ -8652,7 +8649,7 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
                  * References rko_fanout's memory, which will always outlive
                  * the fanned out op. */
                 rd_kafka_AdminOptions_set_opaque(
-                    &rko->rko_u.admin_request.options, grp);
+                    &rko->rko_u.admin_request.options, (void *)grp);
 
                 rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
                 rd_list_add(&rko->rko_u.admin_request.args, rd_strdup(grp));

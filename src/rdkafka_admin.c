@@ -7811,9 +7811,14 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
         else
                 member->assignment.partitions =
                     rd_kafka_topic_partition_list_new(0);
-        if (target_assignment)
+        if (target_assignment) {
+                member->target_assignment =
+                    rd_calloc(1, sizeof(rd_kafka_MemberAssignment_t));
                 member->target_assignment->partitions =
                     rd_kafka_topic_partition_list_copy(target_assignment);
+        } else {
+                member->target_assignment = NULL;
+        }
         return member;
 }
 
@@ -7860,10 +7865,12 @@ rd_kafka_MemberDescription_destroy(rd_kafka_MemberDescription_t *member) {
         if (member->assignment.partitions)
                 rd_kafka_topic_partition_list_destroy(
                     member->assignment.partitions);
-        if (member->target_assignment != NULL &&
-            member->target_assignment->partitions != NULL)
-                rd_kafka_topic_partition_list_destroy(
-                    member->target_assignment->partitions);
+        if (member->target_assignment) {
+                if (member->target_assignment->partitions)
+                        rd_kafka_topic_partition_list_destroy(
+                            member->target_assignment->partitions);
+                rd_free(member->target_assignment);
+        }
         rd_free(member);
 }
 

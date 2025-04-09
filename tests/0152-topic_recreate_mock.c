@@ -247,7 +247,7 @@ struct consumer_thread_arg {
         int broadcast_msg_cnt;
         cnd_t broadcast_cnd;
         mtx_t broadcast_mtx;
-        char *bootstrap_servers;
+        const char *bootstrap_servers;
 };
 
 /**

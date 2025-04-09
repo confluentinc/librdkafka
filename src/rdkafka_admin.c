@@ -8459,7 +8459,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                 for (j = 0; j < member_cnt; j++) {
                         rd_kafkap_str_t MemberId, InstanceId, RackId, ClientId,
                             ClientHost, SubscribedTopicNames,
-                            SubscribedTopicRegex;
+                            SubscribedTopicRegex = RD_KAFKAP_STR_INITIALIZER;
                         int32_t MemberEpoch, idx;
                         char *member_id, *instance_id, *rack_id, *client_id,
                             *client_host, *subscribed_topic_names,

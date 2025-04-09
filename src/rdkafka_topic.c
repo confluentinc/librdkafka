@@ -1110,6 +1110,10 @@ static void rd_kafka_topic_recreated_partition_reset(
         rd_kafka_t *rk = rkt->rkt_rk;
         rd_kafka_toppar_t *rktp;
         int32_t i;
+        rd_kafka_fetch_pos_t next_pos = {
+            .offset       = RD_KAFKA_OFFSET_INVALID,
+            .leader_epoch = -1,
+        };
 
         /* Common */
         for (i = 0; i < rkt->rkt_partition_cnt; i++) {
@@ -1129,9 +1133,25 @@ static void rd_kafka_topic_recreated_partition_reset(
                 /* No op - we bump epoch and drain on rk-level for an idempotent
                  * producer. */
         } else if (rk->rk_type == RD_KAFKA_CONSUMER) {
-                /* Consumer */
-                /* We need to reset offsets to be invalid. */
-                /* TODO. */
+                /* Consumer: set each partition's offset to invalid so it can go
+                 * through a reset.
+                 *
+                 * Note that, this can lead to re-consumption in a particular
+                 * cases, for example:
+                 * 1. This consumer unsubscribes to the topic.
+                 * 2. Topic is recreated, new consumer is created and subscribes
+                 *    to the topic, and consumes messages and commits offsets.
+                 * 3. This consumer resubscribes to the topic and should ideally
+                 *    consume from consumer2's committed offsets, but since the
+                 *    topic is recreated, it will consume from whatever is in
+                 *    auto.offset.reset.
+                 * It's too bad - we can't help it because the broker does not
+                 * store offsets with topic id, only with topic name. */
+                rd_kafka_toppar_lock(rktp);
+                rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, next_pos,
+                                      RD_KAFKA_RESP_ERR_NO_ERROR,
+                                      "topic recreated");
+                rd_kafka_toppar_unlock(rktp);
         }
 }
 
@@ -1509,12 +1529,11 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
 
                         rkt->rkt_topic_id = mdit->topic_id;
 
-                        rd_kafka_topic_recreated_partition_reset(rkt, mdt,
-                                                                 mdit);
-
-                        if (rd_kafka_is_idempotent(rk) &&
-                            both_topic_ids_non_zero) {
-                                *update_epoch_bump = rd_true;
+                        if (both_topic_ids_non_zero) {
+                                rd_kafka_topic_recreated_partition_reset(
+                                    rkt, mdt, mdit);
+                                if (rd_kafka_is_idempotent(rk))
+                                        *update_epoch_bump = rd_true;
                         }
                 }
                 /* If the metadata times out for a topic (because all brokers

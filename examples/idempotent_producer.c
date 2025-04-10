@@ -47,9 +47,7 @@
 #include <string.h>
 
 
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is builtin from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 
 static volatile sig_atomic_t run = 1;

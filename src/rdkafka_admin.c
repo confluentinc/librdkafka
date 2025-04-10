@@ -2865,10 +2865,14 @@ rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
 
 const char *rd_kafka_ConfigSource_name(rd_kafka_ConfigSource_t confsource) {
         static const char *names[] = {
-            "UNKNOWN_CONFIG",        "DYNAMIC_TOPIC_CONFIG",
-            "DYNAMIC_BROKER_CONFIG", "DYNAMIC_DEFAULT_BROKER_CONFIG",
-            "STATIC_BROKER_CONFIG",  "DEFAULT_CONFIG",
-            "UNSUPPORTED",           "UNSUPPORTED",
+            "UNKNOWN_CONFIG",
+            "DYNAMIC_TOPIC_CONFIG",
+            "DYNAMIC_BROKER_CONFIG",
+            "DYNAMIC_DEFAULT_BROKER_CONFIG",
+            "STATIC_BROKER_CONFIG",
+            "DEFAULT_CONFIG",
+            "DYNAMIC_BROKER_LOGGER_CONFIG",
+            "CLIENT_METRICS_CONFIG",
             "GROUP_CONFIG",
         };
 
@@ -3195,6 +3199,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 int16_t error_code;
                 rd_kafkap_str_t error_msg;
                 int8_t res_type;
+                int8_t config_resource_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
                 char *this_errstr = NULL;
@@ -3204,10 +3209,13 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
-                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_i8(reply, &config_resource_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                 rd_kafka_buf_skip_tags(reply);
+
+                res_type = map_from_config_resource_type_to_resource_type(
+                    config_resource_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||

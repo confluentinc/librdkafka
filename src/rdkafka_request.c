@@ -5342,7 +5342,9 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 int ei;
 
                 /* ResourceType */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf, map_from_resource_type_to_config_resource_type(
+                               config->restype));
 
                 /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);

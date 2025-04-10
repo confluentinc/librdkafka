@@ -1481,12 +1481,12 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
                 }
 
                 if (err != exp_err) {
-                    TEST_FAIL_LATER(
-                        "ConfigResource #%d: "
-                        "expected %s (%d), got %s (%s)",
-                        i, rd_kafka_err2name(exp_err), exp_err,
-                        rd_kafka_err2name(err), errstr2 ? errstr2 : "");
-                    fails++;
+                        TEST_FAIL_LATER(
+                            "ConfigResource #%d: "
+                            "expected %s (%d), got %s (%s)",
+                            i, rd_kafka_err2name(exp_err), exp_err,
+                            rd_kafka_err2name(err), errstr2 ? errstr2 : "");
+                        fails++;
                 }
         }
 

@@ -6081,6 +6081,9 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
                                void *opaque) {
         rd_kafka_buf_t *rkbuf;
         size_t ofGroupsArrayCnt;
+        int i;
+        char *group;
+        printf("rd_kafka_GroupsDescribeRequest: group_cnt=%zu\n", group_cnt);
 
         int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);
@@ -6104,6 +6107,7 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
         while (group_cnt-- > 0) {
                 rd_kafka_buf_write_str(rkbuf, groups[group_cnt], -1);
         }
+        printf("rd_kafka_GroupsDescribeRequest: groups written\n");
 
         rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

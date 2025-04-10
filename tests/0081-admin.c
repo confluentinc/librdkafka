@@ -5481,6 +5481,13 @@ static void do_test_apis(rd_kafka_type_t cltype) {
          * implementation */
         if (test_consumer_group_protocol_classic()) {
                 /* Describe groups */
+                size_t i;
+                for(i = 0;i < 50; i++) {
+                        do_test_DescribeConsumerGroups("temp queue", rk, NULL,
+                                                       -1);
+                        do_test_DescribeConsumerGroups("main queue", rk,
+                                                       mainq, 1500);
+                } 
                 do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
                 do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
         } else {

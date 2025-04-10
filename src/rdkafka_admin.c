@@ -1285,7 +1285,7 @@ rd_kafka_admin_fanout_op_new(rd_kafka_t *rk,
         rd_assert(rk);
         rd_assert(rkq);
         rd_assert(cbs);
-
+        printf("admin_fanout_op_new\n");
         rko         = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_FANOUT);
         rko->rko_rk = rk;
 
@@ -1293,6 +1293,7 @@ rd_kafka_admin_fanout_op_new(rd_kafka_t *rk,
 
         rko->rko_u.admin_request.fanout.cbs =
             (struct rd_kafka_admin_fanout_worker_cbs *)cbs;
+        printf("admin fanout 2\n");
 
         /* Make a copy of the options */
         if (options)
@@ -1315,6 +1316,7 @@ rd_kafka_admin_fanout_op_new(rd_kafka_t *rk,
         rko->rko_u.admin_request.state = RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS;
 
         rko->rko_u.admin_request.fanout.reqtype = req_type;
+        printf("admin fanout 3\n");
 
         return rko;
 }
@@ -1389,16 +1391,20 @@ static void rd_kafka_admin_fanout_op_distribute(rd_kafka_t *rk,
 static rd_kafka_op_res_t rd_kafka_admin_fanout_worker(rd_kafka_t *rk,
                                                       rd_kafka_q_t *rkq,
                                                       rd_kafka_op_t *rko) {
+        printf("reached rd_kafka_admin_fanout_worker\n");
         rd_kafka_op_t *rko_fanout = rko->rko_u.admin_result.fanout_parent;
         const char *name =
             rd_kafka_op2str(rko_fanout->rko_u.admin_request.fanout.reqtype);
         rd_kafka_op_t *rko_result;
+        printf("admin_fanout_worker\n");
 
         RD_KAFKA_OP_TYPE_ASSERT(rko, RD_KAFKA_OP_ADMIN_RESULT);
         RD_KAFKA_OP_TYPE_ASSERT(rko_fanout, RD_KAFKA_OP_ADMIN_FANOUT);
 
         rd_assert(rko_fanout->rko_u.admin_request.fanout.outstanding > 0);
+        printf("admin_fanout_worker 2\n");
         rko_fanout->rko_u.admin_request.fanout.outstanding--;
+        printf("admin_fanout_worker 3\n");
 
         rko->rko_u.admin_result.fanout_parent = NULL;
 
@@ -1422,7 +1428,9 @@ static rd_kafka_op_res_t rd_kafka_admin_fanout_worker(rd_kafka_t *rk,
         /* Add partial response to rko_fanout's result list. */
         rko_fanout->rko_u.admin_request.fanout.cbs->partial_response(rko_fanout,
                                                                      rko);
-
+        
+        printf("outstanding check\n");
+        printf("outstanding %d\n", rko_fanout->rko_u.admin_request.fanout.outstanding);
         if (rko_fanout->rko_u.admin_request.fanout.outstanding > 0)
                 /* Wait for outstanding requests to finish */
                 return RD_KAFKA_OP_RES_HANDLED;
@@ -1437,11 +1445,12 @@ static rd_kafka_op_res_t rd_kafka_admin_fanout_worker(rd_kafka_t *rk,
 
         /* Enqueue result on application queue, we're done. */
         rd_kafka_admin_result_enq(rko_fanout, rko_result);
-
+        
+        printf("op destroy\n");
         /* FALLTHRU */
         if (rko_fanout->rko_u.admin_request.fanout.outstanding == 0)
                 rd_kafka_op_destroy(rko_fanout);
-
+        printf("op destroy handled\n");
         return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy(rko) */
 }
 
@@ -7764,6 +7773,7 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
         else
                 member->assignment.partitions =
                     rd_kafka_topic_partition_list_new(0);
+        printf("reached rd_kafka_MemberDescription_new\n");
         if (target_assignment) {
                 member->target_assignment =
                     rd_calloc(1, sizeof(rd_kafka_MemberAssignment_t));
@@ -7772,6 +7782,7 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
         } else {
                 member->target_assignment = NULL;
         }
+        printf("reached rd_kafka_MemberDescription_new 2\n");
         return member;
 }
 
@@ -7785,6 +7796,7 @@ static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
  */
 static rd_kafka_MemberDescription_t *
 rd_kafka_MemberDescription_copy(const rd_kafka_MemberDescription_t *src) {
+        printf("inside rd_kafka_MemberDescription_copy\n");
         if (src->target_assignment != NULL) {
                 return rd_kafka_MemberDescription_new(
                     src->client_id, src->consumer_id, src->group_instance_id,
@@ -7810,6 +7822,7 @@ static void *rd_kafka_MemberDescription_list_copy(const void *elem,
 
 static void
 rd_kafka_MemberDescription_destroy(rd_kafka_MemberDescription_t *member) {
+        printf("reached rd_kafka_MemberDescription_destroy\n");
         rd_free(member->client_id);
         rd_free(member->consumer_id);
         rd_free(member->host);
@@ -7818,12 +7831,14 @@ rd_kafka_MemberDescription_destroy(rd_kafka_MemberDescription_t *member) {
         if (member->assignment.partitions)
                 rd_kafka_topic_partition_list_destroy(
                     member->assignment.partitions);
+        printf("reached rd_kafka_MemberDescription_destroy 2\n");
         if (member->target_assignment) {
                 if (member->target_assignment->partitions)
                         rd_kafka_topic_partition_list_destroy(
                             member->target_assignment->partitions);
                 rd_free(member->target_assignment);
         }
+        printf("reached rd_kafka_MemberDescription_destroy 3\n");
         rd_free(member);
 }
 
@@ -7946,6 +7961,7 @@ rd_kafka_ConsumerGroupDescription_new_error(
     const char *group_id,
     rd_kafka_error_t *error,
     rd_kafka_consumer_group_type_t type) {
+        printf("reached rd_kafka_ConsumerGroupDescription_new_error\n");
         return rd_kafka_ConsumerGroupDescription_new(
             group_id, rd_false, NULL, NULL, NULL, 0,
             RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN, NULL, error, type);
@@ -7960,6 +7976,7 @@ rd_kafka_ConsumerGroupDescription_new_error(
 static rd_kafka_ConsumerGroupDescription_t *
 rd_kafka_ConsumerGroupDescription_copy(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        printf("reached rd_kafka_ConsumerGroupDescription_copy\n");
         return rd_kafka_ConsumerGroupDescription_new(
             grpdesc->group_id, grpdesc->is_simple_consumer_group,
             &grpdesc->members, grpdesc->partition_assignor,
@@ -7979,6 +7996,7 @@ static void *rd_kafka_ConsumerGroupDescription_copy_opaque(const void *grpdesc,
 
 static void rd_kafka_ConsumerGroupDescription_destroy(
     rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        printf("reached rd_kafka_ConsumerGroupDescription_destroy\n");
         if (likely(grpdesc->group_id != NULL))
                 rd_free(grpdesc->group_id);
         rd_list_destroy(&grpdesc->members);
@@ -7990,6 +8008,7 @@ static void rd_kafka_ConsumerGroupDescription_destroy(
                 rd_kafka_Node_destroy(grpdesc->coordinator);
         if (grpdesc->authorized_operations_cnt)
                 rd_free(grpdesc->authorized_operations);
+        printf("destroyed\n");
         rd_free(grpdesc);
 }
 
@@ -8089,9 +8108,11 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
         int groups_cnt          = rd_list_cnt(groups);
         rd_kafka_error_t *error = NULL;
         char **groups_arr       = rd_calloc(groups_cnt, sizeof(*groups_arr));
+        printf("reached rd_kafka_admin_DescribeConsumerGroupsRequest\n");
 
         RD_LIST_FOREACH(group, groups, i) {
                 groups_arr[i] = rd_list_elem(groups, i);
+                printf("groups_arr[%d] = %s\n", i, groups_arr[i]);
         }
 
         include_authorized_operations =
@@ -8140,14 +8161,18 @@ rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
         int groups_cnt          = rd_list_cnt(groups);
         rd_kafka_error_t *error = NULL;
         char **groups_arr       = (char **)groups->rl_elems;
+        printf("groups_arr[0] = %s\n", groups_arr[0]);
 
         include_authorized_operations =
             rd_kafka_confval_get_int(&options->include_authorized_operations);
+        printf("reached rd_kafka_admin_ConsumerGroupDescribeRequest\n");
 
         error = rd_kafka_GroupsDescribeRequest(rkb, groups_arr, groups_cnt,
                                                include_authorized_operations,
                                                replyq, resp_cb, opaque);
+        printf("reached rd_kafka_admin_ConsumerGroupDescribeRequest 2\n");
         rd_free(groups_arr);
+        printf("reached rd_kafka_admin_ConsumerGroupDescribeRequest 3\n");
 
         if (error) {
                 rd_snprintf(errstr, errstr_size, "%s",
@@ -8156,6 +8181,7 @@ rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_error_destroy(error);
                 return err;
         }
+        printf("reached rd_kafka_admin_ConsumerGroupDescribeRequest 4\n");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -8192,6 +8218,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         rko_result = rd_kafka_admin_result_new(rko_req);
         rd_list_init(&rko_result->rko_u.admin_result.results, cnt,
                      rd_kafka_ConsumerGroupDescription_free);
+        printf("reached rd_kafka_DescribeConsumerGroupsResponse_parse\n");
 
         nodeid = rkb->rkb_nodeid;
         rd_kafka_broker_lock(rkb);
@@ -8333,6 +8360,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                             RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC);
 
                 rd_list_add(&rko_result->rko_u.admin_result.results, grpdesc);
+                printf("reached rd_kafka_DescribeConsumerGroupsResponse_parse 2\n");
 
                 rd_list_destroy(&members);
                 rd_free(group_id);
@@ -8407,6 +8435,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         uint16_t port;
         int operation_cnt = -1;
         int32_t i;
+        printf("Reached rd_kafka_ConsumerGroupDescribeResponseParse\n");
 
         rd_kafka_buf_read_throttle_time(reply);
 
@@ -8445,6 +8474,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                 group_state   = RD_KAFKAP_STR_DUP(&GroupState);
                 assignor_name = RD_KAFKAP_STR_DUP(&AssignorName);
                 error_str     = RD_KAFKAP_STR_DUP(&ErrorString);
+                printf("group_id = %s error = %s\n", group_id, error_str);
 
                 if (error_code) {
                         error = rd_kafka_error_new(
@@ -8548,6 +8578,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                             group_id, error,
                             RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER);
                 }
+                printf("grpdesc = %s, error = %d\n", grpdesc->group_id, grpdesc->error->code);
                 rd_list_add(&rko_result->rko_u.admin_result.results, grpdesc);
 
                 rd_list_destroy(&members);
@@ -8557,6 +8588,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                 rd_free(error_str);
                 RD_IF_FREE(error, rd_kafka_error_destroy);
                 RD_IF_FREE(operations, rd_free);
+                printf("freed everything\n");
 
                 error         = NULL;
                 group_id      = NULL;
@@ -8567,8 +8599,14 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         }
         rd_kafka_buf_skip_tags(reply);
         *rko_resultp = rko_result;
+        if (host)
+                rd_free(host);
+        if (node)
+                rd_kafka_Node_destroy(node);
+        printf("reached rd_kafka_ConsumerGroupDescribeResponseParse 2\n");
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:
+        printf("reached rd_kafka_ConsumerGroupDescribeResponseParse 3\n");
         if (group_id)
                 rd_free(group_id);
         if (group_state)
@@ -8579,6 +8617,7 @@ err_parse:
                 rd_free(error_str);
         if (error)
                 rd_kafka_error_destroy(error);
+        printf("reached rd_kafka_ConsumerGroupDescribeResponseParse 4\n");
         RD_IF_FREE(operations, rd_free);
         if (rko_result)
                 rd_kafka_op_destroy(rko_result);
@@ -8595,6 +8634,7 @@ err_parse:
 static void rd_kafka_DescribeConsumerGroups_response_merge(
     rd_kafka_op_t *rko_fanout,
     const rd_kafka_op_t *rko_partial) {
+        printf("reached rd_kafka_DescribeConsumerGroups_response_merge\n");
         rd_kafka_ConsumerGroupDescription_t *groupres = NULL;
         rd_kafka_ConsumerGroupDescription_t *newgroupres;
         const char *grp = rko_partial->rko_u.admin_result.opaque;
@@ -8628,6 +8668,7 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
              newgroupres->error->code ==
                  RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION)) {
                 rko_fanout->rko_u.admin_request.fanout.outstanding++;
+                printf("outstanding increased\n");
                 static const struct rd_kafka_admin_worker_cbs cbs = {
                     rd_kafka_admin_DescribeConsumerGroupsRequest,
                     rd_kafka_DescribeConsumerGroupsResponse_parse,
@@ -8649,7 +8690,8 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
                  * References rko_fanout's memory, which will always outlive
                  * the fanned out op. */
                 rd_kafka_AdminOptions_set_opaque(
-                    &rko->rko_u.admin_request.options, (void *)grp);
+                    &rko->rko_u.admin_request.options, grp);
+                printf("enqueued\n");
 
                 rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
                 rd_list_add(&rko->rko_u.admin_request.args, rd_strdup(grp));
@@ -8747,6 +8789,7 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
                     rd_kafka_admin_ConsumerGroupDescribeRequest,
                     rd_kafka_ConsumerGroupDescribeResponseParse,
                 };
+                printf("reached rd_kafka_DescribeConsumerGroups 2\n");
                 char *grp =
                     rd_list_elem(&rko_fanout->rko_u.admin_request.args, (int)i);
                 rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
@@ -8772,6 +8815,7 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
                             rd_strdup(groups[i]));
 
                 rd_kafka_q_enq(rk->rk_ops, rko);
+                printf("Enqueued request for group %s\n", grp);
         }
 }
 

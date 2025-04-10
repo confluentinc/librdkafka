@@ -383,8 +383,8 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
         rd_kafka_error_t *error      = NULL;
         rd_kafka_headers_t *hdrs     = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+        int existing                 = 0;
         size_t i;
-        int existing = 0;
 
         if (unlikely(rd_kafka_check_produce(rk, &error)))
                 return error;
@@ -552,7 +552,7 @@ rd_kafka_resp_err_t rd_kafka_producev(rd_kafka_t *rk, ...) {
         rd_kafka_resp_err_t err;
         rd_kafka_headers_t *hdrs     = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
-        int existing = 0;
+        int existing                 = 0;
 
         if (unlikely((err = rd_kafka_check_produce(rk, NULL))))
                 return err;

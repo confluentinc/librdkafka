@@ -8194,7 +8194,6 @@ rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
         error = rd_kafka_GroupsDescribeRequest(rkb, groups_arr, groups_cnt,
                                                include_authorized_operations,
                                                replyq, resp_cb, opaque);
-        rd_free(groups_arr);
 
         if (error) {
                 rd_snprintf(errstr, errstr_size, "%s",

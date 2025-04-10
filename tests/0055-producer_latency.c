@@ -366,7 +366,9 @@ int main_0055_producer_latency(int argc, char **argv) {
         return 0;
 }
 
-static void dr_msg_cb_first_message(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
+static void dr_msg_cb_first_message(rd_kafka_t *rk,
+                                    const rd_kafka_message_t *rkmessage,
+                                    void *opaque) {
         test_timing_t *t_produce = (test_timing_t *)rkmessage->_private;
         TIMING_STOP(t_produce);
         /* The reason for setting such a low value is that both the mcluster and
@@ -374,7 +376,9 @@ static void dr_msg_cb_first_message(rd_kafka_t *rk, const rd_kafka_message_t *rk
          * prevents the test from passing spuriously. */
         TIMING_ASSERT_LATER(t_produce, 0, 100);
 
-        TEST_ASSERT(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR, "expected no error, got %s", rd_kafka_err2str(rkmessage->err));
+        TEST_ASSERT(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected no error, got %s",
+                    rd_kafka_err2str(rkmessage->err));
         TEST_ASSERT(rkmessage->offset == 0);
 }
 

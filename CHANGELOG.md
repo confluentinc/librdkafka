@@ -1,3 +1,20 @@
+# librdkafka v2.10.1
+
+librdkafka v2.10.1 is a maintenance release:
+
+ * Fix an issue where the first message to any topic produced via `producev` or
+   `produceva` was not delivered late (by up to 1 second) (#5032).
+
+## Fixes
+
+### Producer fixes
+
+ * In case of `producev` or `produceva`, the producer did not enqueue a leader
+   query metadata request immediately, and rather, waited for the 1 second
+   timer to kick in. This could cause delays in the sending of the first message
+   by up to 1 second. (#5032).
+
+
 # librdkafka v2.10.0
 
 librdkafka v2.10.0 is a feature release:

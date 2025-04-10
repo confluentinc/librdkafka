@@ -5343,7 +5343,7 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
 
                 /* ResourceType */
                 rd_kafka_buf_write_i8(
-                    rkbuf, map_from_resource_type_to_config_resource_type(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
                                config->restype));
 
                 /* ResourceName */
@@ -5427,7 +5427,7 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
 
                 /* ResourceType */
                 rd_kafka_buf_write_i8(
-                    rkbuf, map_from_resource_type_to_config_resource_type(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
                                config->restype));
 
                 /* ResourceName */
@@ -5523,7 +5523,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
 
                 /* resource_type */
                 rd_kafka_buf_write_i8(
-                    rkbuf, map_from_resource_type_to_config_resource_type(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
                                config->restype));
 
                 /* resource_name */

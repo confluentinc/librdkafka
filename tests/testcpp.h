@@ -162,7 +162,7 @@ static RD_UNUSED void delete_topic(RdKafka::Handle *use_handle,
  */
 static RD_UNUSED bool is_deprecated_conf_group_protocol_consumer(
     const std::string &name) {
-  return test_is_deprecated_conf_group_protocol_consumer(name.c_str());
+  return test_is_forbidden_conf_group_protocol_consumer(name.c_str());
 }
 
 /**

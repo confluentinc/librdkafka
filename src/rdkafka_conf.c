@@ -1131,11 +1131,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "members of the group to assign partitions to group members. If "
      "there is more than one eligible strategy, preference is "
      "determined by the order of this list (strategies earlier in the "
-     "list have higher priority). "
-     "`partition.assignment.strategy` is not supported for "
+     "list have higher priority). Cooperative and non-cooperative (eager)"
+     "strategies must not be mixed. `partition.assignment.strategy` is not "
+     "supported for "
      "`group.protocol=consumer`. Use `group.remote.assignor` instead."
-     "Cooperative and non-cooperative (eager) strategies must not be "
-     "mixed. "
      "Available strategies: range, roundrobin, cooperative-sticky.",
      .sdef = "range,roundrobin"},
     {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "session.timeout.ms", _RK_C_INT,
@@ -1145,18 +1144,29 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "to indicate its liveness to the broker. If no hearts are "
      "received by the broker for a group member within the "
      "session timeout, the broker will remove the consumer from "
-     "the group and trigger a rebalance. `session.timeout.ms` is not supported "
-     "for `group.protocol=consumer`. It is defined on the broker side. The "
+     "the group and trigger a rebalance. The "
      "allowed range is configured with the **broker** configuration "
      "properties `group.min.session.timeout.ms` and "
-     "`group.max.session.timeout.ms`. "
+     "`group.max.session.timeout.ms`. `session.timeout.ms` is not supported "
+     "for `group.protocol=consumer`. It is set with the broker configuration "
+     "property "
+     "`group.consumer.session.timeout.ms` by default or can be configured "
+     "through the AdminClient IncrementalAlterConfigs API. "
+     "The allowed range is configured with the broker configuration "
+     "properties `group.consumer.min.session.timeout.ms` and "
+     "`group.consumer.max.session.timeout.ms`."
      "Also see `max.poll.interval.ms`.",
      1, 3600 * 1000, 45 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
      _RK(group_heartbeat_intvl_ms),
-     "Group session keepalive heartbeat interval."
+     "Group session keepalive heartbeat interval. "
      "`heartbeat.interval.ms` is not supported for `group.protocol=consumer`. "
-     "It is defined on the broker side.",
+     "It is set with the broker configuration property "
+     "`group.consumer.heartbeat.interval.ms` by default or can be configured "
+     "through the AdminClient IncrementalAlterConfigs API. The allowed range "
+     "is configured with the broker configuration properties "
+     "`group.consumer.min.heartbeat.interval.ms` and "
+     "`group.consumer.max.heartbeat.interval.ms`.",
      1, 3600 * 1000, 3 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "group.protocol.type", _RK_C_KSTR,
      _RK(group_protocol_type),
@@ -3870,8 +3880,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                                       "session.timeout.ms")) {
                                 return "`session.timeout.ms` is not supported "
                                        "for `group.protocol=consumer`. It is "
-                                       "defined "
-                                       "on the broker side.";
+                                       "defined broker side.";
                         }
 
                         if (rd_kafka_conf_is_modified(
@@ -3893,8 +3902,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`heartbeat.interval.ms` is not "
                                        "supported "
                                        "for `group.protocol=consumer`. It is "
-                                       "defined "
-                                       "on the broker side.";
+                                       "defined broker side.";
                         }
                 }
 

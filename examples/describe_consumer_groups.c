@@ -177,7 +177,7 @@ print_group_member_info(const rd_kafka_MemberDescription_t *member) {
         const rd_kafka_MemberAssignment_t *target_assignment =
             rd_kafka_MemberDescription_target_assignment(member);
         const rd_kafka_topic_partition_list_t *target_topic_partitions =
-            rd_kafka_MemberAssignment_partitions(target_assignment);
+            rd_kafka_MemberAssignment_target_partitions(target_assignment);
         if (!target_topic_partitions) {
                 printf("    No target assignment\n");
         } else if (target_topic_partitions->cnt == 0) {

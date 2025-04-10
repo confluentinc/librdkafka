@@ -365,3 +365,140 @@ int main_0055_producer_latency(int argc, char **argv) {
 
         return 0;
 }
+
+static void dr_msg_cb_first_message(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
+        test_timing_t *t_produce = (test_timing_t *)rkmessage->_private;
+        TIMING_STOP(t_produce);
+        /* The reason for setting such a low value is that both the mcluster and
+         * the producer are running locally, and there is no linger. This
+         * prevents the test from passing spuriously. */
+        TIMING_ASSERT_LATER(t_produce, 0, 100);
+
+        TEST_ASSERT(rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR, "expected no error, got %s", rd_kafka_err2str(rkmessage->err));
+        TEST_ASSERT(rkmessage->offset == 0);
+}
+
+/**
+ * Test producer latency with a first message to a topic, that is delayed by a
+ * given amount of time after creating the producer.
+ *
+ * Cases:
+ * 0: rd_kafka_produce
+ * 1: rd_kafka_producev
+ * 2: rd_kafka_produceva
+ * 3: rd_kafka_produce_batch
+ */
+static void test_producer_latency_first_message(int wait_time_ms,
+                                                int case_number) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const char *topic = test_mk_topic_name("0055_producer_latency_mock", 1);
+        test_timing_t t_produce;
+        rd_kafka_resp_err_t err;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstrap_servers;
+        const char *case_name = NULL;
+
+        if (case_number == 0) {
+                case_name = "rd_kafka_produce";
+        } else if (case_number == 1) {
+                case_name = "rd_kafka_producev";
+        } else if (case_number == 2) {
+                case_name = "rd_kafka_produceva";
+        } else if (case_number == 3) {
+                case_name = "rd_kafka_produce_batch";
+        }
+
+        SUB_TEST("Starting test for %s with wait time %d ms", case_name,
+                 wait_time_ms);
+
+        mcluster = test_mock_cluster_new(1, &bootstrap_servers);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstrap_servers);
+        test_conf_set(conf, "linger.ms", "0");
+        rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb_first_message);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        switch (case_number) {
+        case 0: {
+                char *payload         = "value";
+                rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, topic, NULL);
+                int res;
+                rd_usleep(wait_time_ms * 1000ll, 0);
+                TIMING_START(&t_produce, "Produce message");
+
+                res = rd_kafka_produce(rkt, 0, RD_KAFKA_MSG_F_COPY, payload, 5,
+                                       NULL, 0, &t_produce);
+                TEST_ASSERT(res == 0, "expected no error");
+                break;
+        }
+        case 1: {
+                rd_usleep(wait_time_ms * 1000ll, 0);
+                TIMING_START(&t_produce, "Produce message");
+                rd_kafka_producev(
+                    rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
+                    RD_KAFKA_V_VALUE("value", 5),
+                    RD_KAFKA_V_OPAQUE((&t_produce)), RD_KAFKA_V_END);
+                break;
+        }
+        case 2: {
+                rd_kafka_vu_t vus[3];
+                vus[0].vtype      = RD_KAFKA_VTYPE_TOPIC;
+                vus[0].u.cstr     = topic;
+                vus[1].vtype      = RD_KAFKA_VTYPE_VALUE;
+                vus[1].u.mem.ptr  = "value";
+                vus[1].u.mem.size = 5;
+                vus[2].vtype      = RD_KAFKA_VTYPE_OPAQUE;
+                vus[2].u.ptr      = &t_produce;
+
+                rd_usleep(wait_time_ms * 1000ll, 0);
+                TIMING_START(&t_produce, "Produce message");
+                rd_kafka_produceva(rk, vus, 3);
+                break;
+        }
+        case 3: {
+                rd_kafka_message_t rkmessages[1];
+                rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, topic, NULL);
+                int res;
+
+                rkmessages[0].payload  = "value";
+                rkmessages[0].len      = 5;
+                rkmessages[0]._private = &t_produce;
+
+                rd_usleep(wait_time_ms * 1000ll, 0);
+                TIMING_START(&t_produce, "Produce message");
+                res = rd_kafka_produce_batch(rkt, 0, RD_KAFKA_MSG_F_COPY,
+                                             rkmessages, 1);
+                TEST_ASSERT(res == 1, "expected 1 msg enqueued, got %d", res);
+                break;
+        }
+        }
+        rd_kafka_poll(rk, 0);
+        err = rd_kafka_flush(rk, 10000);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected all messages to be flushed, got %s",
+                    rd_kafka_err2str(err));
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+int main_0055_producer_latency_mock(int argc, char **argv) {
+        /* The topic_scan_all timer runs every 1 second. Originally, the issue
+         * was that the topic metadata was only fetched on the topic scan rather
+         * than when we were queueing the message. Having a variety of times
+         * makes sure that we don't get flaky passing tests due to coincidence.
+         */
+        int wait_time_mss[] = {500, 1200, 2500, 3700, 4900};
+        for (int i = 0; i < 5; i++) {
+                for (int j = 0; j < 3; j++) {
+                        test_producer_latency_first_message(wait_time_mss[i],
+                                                            j);
+                }
+        }
+        return 0;
+}

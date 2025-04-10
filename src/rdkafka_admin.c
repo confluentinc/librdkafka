@@ -2918,20 +2918,32 @@ const char *rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype) {
 }
 
 
-int8_t map_from_resource_type_to_config_resource_type(
-    rd_kafka_ResourceType_t restype) {
-        if (restype == RD_KAFKA_RESOURCE_GROUP)
+rd_kafka_ConfigResourceType_t
+rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype) {
+        switch (restype) {
+        case RD_KAFKA_RESOURCE_TOPIC:
+                return RD_KAFKA_CONFIG_RESOURCE_TOPIC;
+        case RD_KAFKA_RESOURCE_BROKER:
+                return RD_KAFKA_CONFIG_RESOURCE_BROKER;
+        case RD_KAFKA_RESOURCE_GROUP:
                 return RD_KAFKA_CONFIG_RESOURCE_GROUP;
-
-        return restype;
+        default:
+                return RD_KAFKA_CONFIG_RESOURCE_UNKNOWN;
+        }
 }
 
 rd_kafka_ResourceType_t
-map_from_config_resource_type_to_resource_type(int8_t config_resource_type) {
-        if (config_resource_type == RD_KAFKA_CONFIG_RESOURCE_GROUP)
+rd_kafka_ConfigResourceType_to_ResourceType(int8_t config_resource_type) {
+        switch (config_resource_type) {
+        case RD_KAFKA_CONFIG_RESOURCE_TOPIC:
+                return RD_KAFKA_RESOURCE_TOPIC;
+        case RD_KAFKA_CONFIG_RESOURCE_BROKER:
+                return RD_KAFKA_RESOURCE_BROKER;
+        case RD_KAFKA_CONFIG_RESOURCE_GROUP:
                 return RD_KAFKA_RESOURCE_GROUP;
-
-        return config_resource_type;
+        default:
+                return RD_KAFKA_RESOURCE_UNKNOWN;
+        }
 }
 
 
@@ -3214,7 +3226,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                 rd_kafka_buf_skip_tags(reply);
 
-                res_type = map_from_config_resource_type_to_resource_type(
+                res_type = rd_kafka_ConfigResourceType_to_ResourceType(
                     config_resource_type);
 
                 if (error_code) {
@@ -3411,7 +3423,7 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                 rd_kafka_buf_skip_tags(reply);
 
-                res_type = map_from_config_resource_type_to_resource_type(
+                res_type = rd_kafka_ConfigResourceType_to_ResourceType(
                     config_resource_type);
 
                 if (error_code) {
@@ -3686,7 +3698,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
 
-                res_type = map_from_config_resource_type_to_resource_type(
+                res_type = rd_kafka_ConfigResourceType_to_ResourceType(
                     config_resource_type);
 
                 if (error_code) {

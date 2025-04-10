@@ -287,7 +287,10 @@ struct rd_kafka_ConfigResource_result_s {
  * @brief Resource type specific to config apis.
  */
 typedef enum rd_kafka_ConfigResourceType_t {
-        RD_KAFKA_CONFIG_RESOURCE_GROUP = 32,
+        RD_KAFKA_CONFIG_RESOURCE_UNKNOWN = 0,
+        RD_KAFKA_CONFIG_RESOURCE_TOPIC   = 2,
+        RD_KAFKA_CONFIG_RESOURCE_BROKER  = 4,
+        RD_KAFKA_CONFIG_RESOURCE_GROUP   = 32,
 } rd_kafka_ConfigResourceType_t;
 
 /**
@@ -297,8 +300,8 @@ typedef enum rd_kafka_ConfigResourceType_t {
  *        resource type internally to rd_kafka_ConfigResourceType_t. Like the
  *        enum value for GROUP is 32 in Config Apis, but it is 3 for ACL Apis.
  */
-int8_t
-map_from_resource_type_to_config_resource_type(rd_kafka_ResourceType_t restype);
+rd_kafka_ConfigResourceType_t
+rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype);
 
 /**
  * @brief Maps int8_t(rd_kafka_ConfigResourceType_t) to rd_kafka_ResourceType_t
@@ -309,7 +312,7 @@ map_from_resource_type_to_config_resource_type(rd_kafka_ResourceType_t restype);
  *        Apis, but it is 3 for ACL Apis.
  */
 rd_kafka_ResourceType_t
-map_from_config_resource_type_to_resource_type(int8_t config_resource_type);
+rd_kafka_ConfigResourceType_to_ResourceType(int8_t config_resource_type);
 
 
 /**@}*/

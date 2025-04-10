@@ -1372,9 +1372,10 @@ retry_describe:
  */
 static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
                                            rd_kafka_queue_t *rkqu) {
-        rd_kafka_ConfigResource_t *configs[1];
+#define MY_CONFRES_CNT 1
+        rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
         rd_kafka_AdminOptions_t *options;
-        rd_kafka_resp_err_t exp_err;
+        rd_kafka_resp_err_t exp_err[MY_CONFRES_CNT];
         rd_kafka_event_t *rkev;
         rd_kafka_resp_err_t err;
         const rd_kafka_DescribeConfigs_result_t *res;
@@ -1392,14 +1393,15 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
         /*
          * ConfigResource #0: group config, for a non-existent group.
          */
-        configs[0] =
+        configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
         if (test_broker_version >= TEST_BRKVER(3, 8, 0, 0) &&
             !test_consumer_group_protocol_classic()) {
-                exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
-                exp_err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+                exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
         }
+        ci++;
 
         /*
          * Timeout options
@@ -1480,11 +1482,11 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
                         fails++;
                 }
 
-                if (err != exp_err) {
+                if (err != exp_err[i]) {
                         TEST_FAIL_LATER(
                             "ConfigResource #%d: "
                             "expected %s (%d), got %s (%s)",
-                            i, rd_kafka_err2name(exp_err), exp_err,
+                            i, rd_kafka_err2name(exp_err[i]), exp_err[i],
                             rd_kafka_err2name(err), errstr2 ? errstr2 : "");
                         fails++;
                 }

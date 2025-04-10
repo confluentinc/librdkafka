@@ -497,12 +497,15 @@ int main_0055_producer_latency_mock(int argc, char **argv) {
          * than when we were queueing the message. Having a variety of times
          * makes sure that we don't get flaky passing tests due to coincidence.
          */
+        int i, j;
         int wait_time_mss[] = {500, 1200, 2500, 3700, 4900};
-        for (int i = 0; i < 5; i++) {
-                for (int j = 0; j < 3; j++) {
+
+        for (i = 0; i < 5; i++) {
+                for (j = 0; j < 3; j++) {
                         test_producer_latency_first_message(wait_time_mss[i],
                                                             j);
                 }
         }
+
         return 0;
 }

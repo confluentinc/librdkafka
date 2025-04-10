@@ -23,6 +23,9 @@ export class OAuthClient {
       auth: {
         tokenHost: tokenHost,
         tokenPath: tokenPath
+      },
+      options: {
+        credentialsEncodingMode: 'loose'
       }
     }
 

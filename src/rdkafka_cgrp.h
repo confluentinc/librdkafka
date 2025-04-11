@@ -336,6 +336,8 @@ typedef struct rd_kafka_cgrp_s {
          *  incremental unassign. */
         rd_bool_t rkcg_rebalance_rejoin;
 
+        rd_ts_t rkcg_ts_last_err;          /* Timestamp of last error
+                                            * propagated to application */
         rd_kafka_resp_err_t rkcg_last_err; /* Last error propagated to
                                             * application.
                                             * This is for silencing

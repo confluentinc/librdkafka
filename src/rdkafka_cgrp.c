@@ -370,6 +370,36 @@ static int rd_kafka_cgrp_set_state(rd_kafka_cgrp_t *rkcg, int state) {
         return 1;
 }
 
+/**
+ * @brief Set the cgrp last error and current timestamp
+ *        as last error timestamp.
+ */
+static void rd_kafka_cgrp_set_last_err(rd_kafka_cgrp_t *rkcg,
+                                       rd_kafka_resp_err_t rkcg_last_err) {
+        rkcg->rkcg_last_err    = rkcg_last_err;
+        rkcg->rkcg_ts_last_err = rd_clock();
+}
+
+/**
+ * @brief Clears cgrp last error and its timestamp.
+ */
+static void rd_kafka_cgrp_clear_last_err(rd_kafka_cgrp_t *rkcg) {
+        rkcg->rkcg_last_err    = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rkcg->rkcg_ts_last_err = 0;
+}
+
+/**
+ * @brief Clears cgrp last error if it's an heartbeat related error like
+ *        a topic authorization failed one.
+ */
+static void
+rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(rd_kafka_cgrp_t *rkcg) {
+        if (rkcg->rkcg_last_err ==
+            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED) {
+                rd_kafka_cgrp_clear_last_err(rkcg);
+        }
+}
+
 
 void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
         if ((int)rkcg->rkcg_join_state == join_state)
@@ -775,7 +805,7 @@ err:
                             "FindCoordinator response error: %s", errstr);
 
                         /* Suppress repeated errors */
-                        rkcg->rkcg_last_err = ErrorCode;
+                        rd_kafka_cgrp_set_last_err(rkcg, ErrorCode);
                 }
 
                 /* Retries are performed by the timer-intervalled
@@ -3031,7 +3061,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         const int log_decode_errors = LOG_ERR;
         int16_t error_code          = 0;
         int actions                 = 0;
-        rd_kafkap_str_t error_str;
+        rd_kafkap_str_t error_str   = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         rd_kafkap_str_t member_id;
         int32_t member_epoch;
         int32_t heartbeat_interval_ms;
@@ -3185,6 +3215,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
             ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION &
             ~RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST &
             ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK;
+        rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(rkcg);
         rkcg->rkcg_last_heartbeat_err         = RD_KAFKA_RESP_ERR_NO_ERROR;
         rkcg->rkcg_expedite_heartbeat_retries = 0;
 
@@ -3252,8 +3283,13 @@ err:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
         default:
-                actions = rd_kafka_err_action(rkb, err, request,
-                                              RD_KAFKA_ERR_ACTION_END);
+                actions = rd_kafka_err_action(
+                    rkb, err, request,
+
+                    RD_KAFKA_ERR_ACTION_SPECIAL,
+                    RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+
+                    RD_KAFKA_ERR_ACTION_END);
                 break;
         }
 
@@ -3283,6 +3319,25 @@ err:
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                     rkcg, "coordinator query");
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {
+                rd_ts_t min_error_interval =
+                    RD_MAX(rkcg->rkcg_heartbeat_intvl_ms * 1000,
+                           /* default group.consumer.heartbeat.interval.ms */
+                           5000000);
+                if (rkcg->rkcg_last_err != err ||
+                    (rd_clock() >
+                     rkcg->rkcg_ts_last_err + min_error_interval)) {
+                        rd_kafka_cgrp_set_last_err(rkcg, err);
+                        rd_kafka_consumer_err(
+                            rkcg->rkcg_q, rd_kafka_broker_id(rkb), err, 0, NULL,
+                            NULL, err,
+                            "ConsumerGroupHeartbeat failed: %s%s%.*s",
+                            rd_kafka_err2str(err),
+                            RD_KAFKAP_STR_LEN(&error_str) ? ": " : "",
+                            RD_KAFKAP_STR_PR(&error_str));
+                }
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
@@ -5321,6 +5376,7 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
                         rkcg->rkcg_consumer_flags |=
                             RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
                             RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
+                        rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(rkcg);
                 }
         } else {
                 rkcg->rkcg_subscription_regex  = NULL;

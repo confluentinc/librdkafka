@@ -6086,7 +6086,7 @@ rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
                                       rd_kafka_resp_cb_t *resp_cb,
                                       void *opaque) {
         rd_kafka_buf_t *rkbuf;
-        size_t i, ofGroupsArrayCnt;
+        size_t i;
 
         int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);

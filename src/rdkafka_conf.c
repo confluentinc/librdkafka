@@ -3888,7 +3888,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`partition.assignment.strategy` is not "
                                        "supported for "
                                        "`group.protocol=consumer`. Use "
-                                       "`group.remote.assignor` instead.";
+                                       "`group.remote.assignor` instead";
                         }
 
                         if (rd_kafka_conf_is_modified(conf,
@@ -3902,7 +3902,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`heartbeat.interval.ms` is not "
                                        "supported "
                                        "for `group.protocol=consumer`. It is "
-                                       "defined broker side.";
+                                       "defined broker side";
                         }
                 }
 

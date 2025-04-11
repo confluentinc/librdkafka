@@ -4632,14 +4632,14 @@ void test_flush(rd_kafka_t *rk, int timeout_ms) {
 }
 
 int test_is_forbidden_conf_group_protocol_consumer(const char *name) {
-        char *deprecated_conf[] = {
+        char *forbidden_conf[] = {
             "session.timeout.ms", "partition.assignment.strategy",
             "heartbeat.interval.ms", "group.protocol.type", NULL};
         int i;
         if (test_consumer_group_protocol_classic())
                 return 0;
-        for (i = 0; deprecated_conf[i]; i++) {
-                if (!strcmp(name, deprecated_conf[i]))
+        for (i = 0; forbidden_conf[i]; i++) {
+                if (!strcmp(name, forbidden_conf[i]))
                         return 1;
         }
         return 0;
@@ -4649,7 +4649,7 @@ void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
         char errstr[512];
         if (test_is_forbidden_conf_group_protocol_consumer(name)) {
                 TEST_SAY(
-                    "Skipping setting deprecated configuration %s for CONSUMER "
+                    "Skipping setting forbidden configuration %s for CONSUMER "
                     "protocol.\n",
                     name);
                 return;

@@ -160,7 +160,7 @@ static RD_UNUSED void delete_topic(RdKafka::Handle *use_handle,
 /**
  * @brief
  */
-static RD_UNUSED bool is_deprecated_conf_group_protocol_consumer(
+static RD_UNUSED bool is_forbidden_conf_group_protocol_consumer(
     const std::string &name) {
   return test_is_forbidden_conf_group_protocol_consumer(name.c_str());
 }
@@ -175,8 +175,8 @@ static RD_UNUSED void conf_set(RdKafka::Conf *conf,
                                std::string name,
                                std::string val) {
   std::string errstr;
-  if (Test::is_deprecated_conf_group_protocol_consumer(name)) {
-    Test::Say(tostr() << "Skipping setting deprecated configuration " << name
+  if (Test::is_forbidden_conf_group_protocol_consumer(name)) {
+    Test::Say(tostr() << "Skipping setting forbidden configuration " << name
                       << " for CONSUMER protocol.\n");
     return;
   }

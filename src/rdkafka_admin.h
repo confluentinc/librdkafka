@@ -294,7 +294,7 @@ typedef enum rd_kafka_ConfigResourceType_t {
 } rd_kafka_ConfigResourceType_t;
 
 /**
- * @brief Maps rd_kafka_ResourceType_t to int8_t(rd_kafka_ConfigResourceType_t)
+ * @brief Maps `rd_kafka_ResourceType_t` to `rd_kafka_ConfigResourceType_t`
  *        for Config Apis. We are incorrectly using rd_kafka_ResourceType_t in
  *        both Config Apis and ACL Apis. So, we need this function to map the
  *        resource type internally to rd_kafka_ConfigResourceType_t. Like the
@@ -311,8 +311,8 @@ rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype);
  *        rd_kafka_ResourceType_t. Like the enum value for GROUP is 32 in Config
  *        Apis, but it is 3 for ACL Apis.
  */
-rd_kafka_ResourceType_t
-rd_kafka_ConfigResourceType_to_ResourceType(int8_t config_resource_type);
+rd_kafka_ResourceType_t rd_kafka_ConfigResourceType_to_ResourceType(
+    rd_kafka_ConfigResourceType_t config_resource_type);
 
 
 /**@}*/

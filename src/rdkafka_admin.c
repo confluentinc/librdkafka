@@ -2932,8 +2932,8 @@ rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype) {
         }
 }
 
-rd_kafka_ResourceType_t
-rd_kafka_ConfigResourceType_to_ResourceType(int8_t config_resource_type) {
+rd_kafka_ResourceType_t rd_kafka_ConfigResourceType_to_ResourceType(
+    rd_kafka_ConfigResourceType_t config_resource_type) {
         switch (config_resource_type) {
         case RD_KAFKA_CONFIG_RESOURCE_TOPIC:
                 return RD_KAFKA_RESOURCE_TOPIC;

@@ -39,6 +39,9 @@
 static int32_t *avail_brokers;
 static size_t avail_broker_cnt;
 
+#define group_configs_supported()                                              \
+        (test_broker_version >= TEST_BRKVER(3, 8, 0, 0))
+
 
 
 static void do_test_CreateTopics(const char *what,
@@ -935,7 +938,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         /** Test the test helper, for use in other tests. */
         do {
                 const char *broker_id = tsprintf("%d", avail_brokers[0]);
-                const char *group_id  = "my-group";
+                const char *group_id  = topics[0];
                 const char *confs_set_append[] = {
                     "compression.type", "SET",    "lz4",
                     "cleanup.policy",   "APPEND", "compact"};
@@ -1060,12 +1063,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
             configs[ci], "consumer.session.timeout.ms",
             RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
-        if (test_broker_version >= TEST_BRKVER(3, 8, 0, 0) &&
-            !test_consumer_group_protocol_classic()) {
-                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
-        } else {
-                exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
-        }
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         ci++;
 
         /*
@@ -1380,7 +1378,7 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
         rd_kafka_resp_err_t err;
         const rd_kafka_DescribeConfigs_result_t *res;
         const rd_kafka_ConfigResource_t **rconfigs;
-        char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        char *group;
         size_t rconfig_cnt;
         char errstr[128];
         const char *errstr2;
@@ -1390,12 +1388,14 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
 
         SUB_TEST_QUICK();
 
+        group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+
         /*
          * ConfigResource #0: group config, for a non-existent group.
          */
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
-        if (test_broker_version >= TEST_BRKVER(3, 8, 0, 0) &&
+        if (group_configs_supported() &&
             !test_consumer_group_protocol_classic()) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
@@ -1498,7 +1498,12 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
 
         rd_kafka_ConfigResource_destroy_array(configs, ci);
 
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_free(group);
+
         TEST_LATER_CHECK();
+#undef MY_CONFRES_CNT
 
         SUB_TEST_PASS();
 }

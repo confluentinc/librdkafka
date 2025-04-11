@@ -853,12 +853,14 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                         partitions->elems[0].offset = high;
                 }
 
-                rd_kafka_assign(rk, partitions);
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           partitions);
 
                 break;
         }
         case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                rd_kafka_assign(rk, NULL);
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             partitions);
                 break;
         default:
                 break;

@@ -8797,7 +8797,7 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
                     rd_list_elem(&rko_fanout->rko_u.admin_request.args, (int)i);
                 rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
                     rk, RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,
-                    RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT, &cbs, options,
+                    RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT, &cbs, options,
                     rk->rk_ops);
 
                 rko->rko_u.admin_request.fanout_parent = rko_fanout;

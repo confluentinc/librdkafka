@@ -118,7 +118,6 @@ static RD_UNUSED RD_INLINE int rd_kafka_event_setup(rd_kafka_t *rk,
         case RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT:
         case RD_KAFKA_EVENT_LISTOFFSETS_RESULT:
         case RD_KAFKA_EVENT_ELECTLEADERS_RESULT:
-        case RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT:
                 return 1;
 
         default:

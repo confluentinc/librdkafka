@@ -5610,8 +5610,6 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x400000
 /** ElectLeaders_result_t */
 #define RD_KAFKA_EVENT_ELECTLEADERS_RESULT 0x800000
-/** ConsumerGroupDescribe_result_t */
-#define RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT 0x1000000
 
 /**
  * @returns the event type for the given event.
@@ -5771,7 +5769,6 @@ int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT
  *  - RD_KAFKA_EVENT_LISTOFFSETS_RESULT
  *  - RD_KAFKA_EVENT_ELECTLEADERS_RESULT
- *  - RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT
  */
 RD_EXPORT
 void *rd_kafka_event_opaque(rd_kafka_event_t *rkev);

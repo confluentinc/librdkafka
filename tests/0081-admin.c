@@ -1064,7 +1064,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
             RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
         if (group_configs_supported() &&
-            !test_consumer_group_protocol_classic) {
+            !test_consumer_group_protocol_classic()) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;

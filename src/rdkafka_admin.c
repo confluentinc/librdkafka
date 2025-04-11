@@ -7897,20 +7897,15 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
 
 const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
-        return assignment->partitions;
+        if (assignment)
+                return assignment->partitions;
+        else
+                return NULL;
 }
 
 const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(
     const rd_kafka_MemberDescription_t *member) {
         return member->target_assignment;
-}
-
-const rd_kafka_topic_partition_list_t *
-rd_kafka_MemberAssignment_target_partitions(
-    const rd_kafka_MemberAssignment_t *assignment) {
-        if (!assignment)
-                return NULL;
-        return assignment->partitions;
 }
 
 
@@ -8438,9 +8433,8 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
         rd_kafka_error_t *error   = NULL;
         char *group_id = NULL, *group_state = NULL, *assignor_name = NULL,
-             *error_str = NULL, *host = NULL;
-        char *member_id = NULL, *instance_id = NULL, *client_id = NULL,
-             *client_host                   = NULL;
+             *error_str = NULL, *host = NULL, *member_id = NULL,
+             *instance_id = NULL, *client_id = NULL, *client_host = NULL;
         rd_kafka_AclOperation_t *operations = NULL;
         rd_kafka_Node_t *node               = NULL;
         int32_t nodeid;
@@ -8554,6 +8548,15 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                         if (target_assignment)
                                 rd_kafka_topic_partition_list_destroy(
                                     target_assignment);
+
+                        RD_IF_FREE(member_id, rd_free);
+                        RD_IF_FREE(instance_id, rd_free);
+                        RD_IF_FREE(client_id, rd_free);
+                        RD_IF_FREE(client_host, rd_free);
+                        member_id   = NULL;
+                        instance_id = NULL;
+                        client_id   = NULL;
+                        client_host = NULL;
                 }
                 rd_kafka_buf_read_i32(reply, &authorized_operations);
                 operations = rd_kafka_AuthorizedOperations_parse(
@@ -8638,9 +8641,7 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
         int orig_pos;
 
         rd_assert(rko_partial->rko_evtype ==
-                      RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT ||
-                  rko_partial->rko_evtype ==
-                      RD_KAFKA_EVENT_CONSUMERGROUPDESCRIBE_RESULT);
+                  RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT);
 
         if (!rko_partial->rko_err) {
                 /* Proper results.

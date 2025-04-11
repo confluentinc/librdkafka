@@ -9044,21 +9044,6 @@ RD_EXPORT
 const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(
     const rd_kafka_MemberDescription_t *member);
 
-/**
- * @brief Gets target assigned partitions of a member \p assignment.
- *
- * @param assignment The group member assignment.
- *
- * @return The target assigned partitions. It returns NULL for CLASSIC GROUPS.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p assignment object.
- */
-RD_EXPORT
-const rd_kafka_topic_partition_list_t *
-rd_kafka_MemberAssignment_target_partitions(
-    const rd_kafka_MemberAssignment_t *assignment);
-
 /**@}*/
 
 /**

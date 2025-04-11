@@ -6078,24 +6078,18 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
  *         released with rd_kafka_error_destroy() in case of error.
  */
 rd_kafka_error_t *
-rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
-                               char **groups,
-                               size_t group_cnt,
-                               rd_bool_t include_authorized_operations,
-                               rd_kafka_replyq_t replyq,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque) {
+rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                      char **groups,
+                                      size_t group_cnt,
+                                      rd_bool_t include_authorized_operations,
+                                      rd_kafka_replyq_t replyq,
+                                      rd_kafka_resp_cb_t *resp_cb,
+                                      void *opaque) {
         rd_kafka_buf_t *rkbuf;
-        size_t ofGroupsArrayCnt;
+        size_t i, ofGroupsArrayCnt;
 
         int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);
-
-        if (ApiVersion == -1) {
-                return rd_kafka_error_new(
-                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
-                    "Broker doesn't support ConsumerGroupDescribe");
-        }
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 1,
@@ -6104,11 +6098,10 @@ rd_kafka_GroupsDescribeRequest(rd_kafka_broker_t *rkb,
                 32 * group_cnt /* Groups */,
             rd_true /* flexver */);
 
-        ofGroupsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-        rd_kafka_buf_finalize_arraycnt(rkbuf, ofGroupsArrayCnt, group_cnt);
+        rd_kafka_buf_write_arraycnt(rkbuf, group_cnt);
 
-        while (group_cnt-- > 0) {
-                rd_kafka_buf_write_str(rkbuf, groups[group_cnt], -1);
+        for (i = 0; i < group_cnt; i++) {
+                rd_kafka_buf_write_str(rkbuf, groups[i], -1);
         }
 
         rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);

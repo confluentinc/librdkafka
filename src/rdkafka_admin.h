@@ -548,6 +548,8 @@ struct rd_kafka_ConsumerGroupDescription_s {
         char *partition_assignor;
         /** Consumer group state. */
         rd_kafka_consumer_group_state_t state;
+        /**< Consumer group type. */
+        rd_kafka_consumer_group_type_t type;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
         /** Count of operations allowed for topic. -1 indicates operations not
@@ -558,8 +560,6 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_AclOperation_t *authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;
-        /**< Consumer group type. */
-        rd_kafka_consumer_group_type_t type;
 };
 
 /**@}*/

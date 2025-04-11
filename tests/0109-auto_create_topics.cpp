@@ -192,7 +192,7 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
     case RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED:
       if (test_consumer_group_protocol_classic()) {
-        run = rd_true;
+        run = true;
       } else {
         /* `consumer` rebalance protocol:
          * wait for `unauthorized_error_cnt` consecutive errors. */

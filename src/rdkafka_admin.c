@@ -8560,17 +8560,30 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                     authorized_operations, &operation_cnt);
                 rd_kafka_buf_skip_tags(reply);
 
+                /* If the error code is Group ID Not Found or Unsupported
+                   Version, we will set the ConsumerGroupType to Consumer to
+                   identify it for further processing with the old protocol and
+                   eventually in rd_kafka_DescribeConsumerGroupsResponse_parse
+                   we will set the ConsumerGroupType to Unknown */
                 if (error == NULL) {
                         grpdesc = rd_kafka_ConsumerGroupDescription_new(
                             group_id, rd_false, &members, assignor_name,
                             operations, operation_cnt,
                             rd_kafka_consumer_group_state_code(group_state),
                             RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER, node, error);
+                } else if (error->code ==
+                               RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND ||
+                           error->code ==
+                               RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION) {
+                        grpdesc = rd_kafka_ConsumerGroupDescription_new_error(
+                            group_id, error,
+                            RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER);
                 } else {
                         grpdesc = rd_kafka_ConsumerGroupDescription_new_error(
                             group_id, error,
                             RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN);
                 }
+
                 rd_list_add(&rko_result->rko_u.admin_result.results, grpdesc);
 
                 rd_list_destroy(&members);

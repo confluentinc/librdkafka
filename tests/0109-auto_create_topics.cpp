@@ -63,8 +63,15 @@ static void do_test_consumer(bool allow_auto_create_topics,
         "available\n");
     return;
   }
+  if (!test_consumer_group_protocol_classic() && allow_auto_create_topics) {
+    Test::Say(
+        "Skipping test as it would be duplicate "
+        "with KIP 848 consumer protocol\n");
+    return;
+  }
 
   bool supports_allow = test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
+  const int cgrp_consumer_expected_consecutive_error_cnt = 3;
 
   std::string topic_exists    = Test::mk_topic_name("0109-exists", 1);
   std::string topic_notexists = Test::mk_topic_name("0109-notexists", 1);
@@ -129,12 +136,14 @@ static void do_test_consumer(bool allow_auto_create_topics,
     topics.push_back(topic_exists);
   }
 
+  /* `classic` protocol case: if the subscription contains at least one
+   * wildcard/regex then no auto topic creation will take place (since the
+   * consumer requests all topics in metadata, and not specific ones, thus not
+   * triggering topic auto creation). We need to handle the expected error cases
+   * accordingly.
+   *
+   * `consumer` protocol case: there's no automatic topic creation. */
   if (test_consumer_group_protocol_classic()) {
-    /* If the subscription contains at least one wildcard/regex
-     * then no auto topic creation will take place (since the consumer
-     * requests all topics in metadata, and not specific ones, thus
-     * not triggering topic auto creation).
-     * We need to handle the expected error cases accordingly. */
     if (with_wildcards) {
       exp_errors["^" + topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
       exp_errors[topic_notexists]       = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
@@ -154,8 +163,10 @@ static void do_test_consumer(bool allow_auto_create_topics,
     exp_errors[""] = RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED;
   }
 
-  /* Consumer doesn't do a preliminary Metadata call that returns
-   * UNKNOWN_TOPIC_OR_PART with the consumer protocol. */
+  /* `classic` protocol case: expect an error only if the broker supports the
+   * property and the test disallowed it.
+   *
+   * `consumer` protocol case: there's no automatic topic creation. */
   if (supports_allow && !allow_auto_create_topics &&
       test_consumer_group_protocol_classic())
     exp_errors[topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
@@ -166,7 +177,8 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
   /* Start consuming until EOF is reached, which indicates that we have an
    * assignment and any errors should have been reported. */
-  bool run = true;
+  bool run                  = true;
+  int consecutive_error_cnt = 0;
   while (run) {
     RdKafka::Message *msg = c->consume(tmout_multip(1000));
     switch (msg->err()) {
@@ -179,7 +191,14 @@ static void do_test_consumer(bool allow_auto_create_topics,
       break;
 
     case RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED:
-      run = test_consumer_group_protocol_classic();
+      if (test_consumer_group_protocol_classic()) {
+        run = rd_true;
+      } else {
+        /* `consumer` rebalance protocol:
+         * wait for `unauthorized_error_cnt` consecutive errors. */
+        run = (++consecutive_error_cnt) <
+              cgrp_consumer_expected_consecutive_error_cnt;
+      }
       /* FALLTHRU */
 
     default:
@@ -213,6 +232,13 @@ static void do_test_consumer(bool allow_auto_create_topics,
                      RdKafka::err2str(msg->err()));
       } else {
         exp_errors.erase(msg->topic_name());
+        if (!test_consumer_group_protocol_classic() &&
+            test_unauthorized_topic &&
+            consecutive_error_cnt <
+                cgrp_consumer_expected_consecutive_error_cnt) {
+          /* Expect same error on next HB */
+          exp_errors[""] = RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED;
+        }
       }
 
       break;

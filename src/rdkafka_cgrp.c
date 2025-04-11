@@ -3061,7 +3061,7 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         const int log_decode_errors = LOG_ERR;
         int16_t error_code          = 0;
         int actions                 = 0;
-        rd_kafkap_str_t error_str;
+        rd_kafkap_str_t error_str   = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         rd_kafkap_str_t member_id;
         int32_t member_epoch;
         int32_t heartbeat_interval_ms;
@@ -3324,15 +3324,20 @@ err:
         if (actions & RD_KAFKA_ERR_ACTION_SPECIAL &&
             rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) {
                 rd_ts_t min_error_interval =
-                    RD_MAX(rkcg->rkcg_heartbeat_intvl_ms * 1000, 3000000);
+                    RD_MAX(rkcg->rkcg_heartbeat_intvl_ms * 1000,
+                           /* default group.consumer.heartbeat.interval.ms */
+                           5000000);
                 if (rkcg->rkcg_last_err != err ||
                     (rd_clock() >
                      rkcg->rkcg_ts_last_err + min_error_interval)) {
                         rd_kafka_cgrp_set_last_err(rkcg, err);
                         rd_kafka_consumer_err(
                             rkcg->rkcg_q, rd_kafka_broker_id(rkb), err, 0, NULL,
-                            NULL, err, "ConsumerGroupHeartbeat failed: %s",
-                            rd_kafka_err2str(err));
+                            NULL, err,
+                            "ConsumerGroupHeartbeat failed: %s%s%.*s",
+                            rd_kafka_err2str(err),
+                            RD_KAFKAP_STR_LEN(&error_str) ? ": " : "",
+                            RD_KAFKAP_STR_PR(&error_str));
                 }
         }
 

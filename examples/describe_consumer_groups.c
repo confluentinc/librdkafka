@@ -164,20 +164,21 @@ print_group_member_info(const rd_kafka_MemberDescription_t *member) {
             rd_kafka_MemberDescription_host(member));
         const rd_kafka_MemberAssignment_t *assignment =
             rd_kafka_MemberDescription_assignment(member);
-        const rd_kafka_topic_partition_list_t *topic_partitions =
+        const rd_kafka_topic_partition_list_t *assigned_topic_partitions =
             rd_kafka_MemberAssignment_partitions(assignment);
-        if (!topic_partitions) {
-                printf("    No assignment\n");
-        } else if (topic_partitions->cnt == 0) {
-                printf("    Empty assignment\n");
-        } else {
-                printf("    Assignment:\n");
-                print_partition_list(stdout, topic_partitions, 0, "      ");
-        }
         const rd_kafka_MemberAssignment_t *target_assignment =
             rd_kafka_MemberDescription_target_assignment(member);
         const rd_kafka_topic_partition_list_t *target_topic_partitions =
             rd_kafka_MemberAssignment_target_partitions(target_assignment);
+        if (!assigned_topic_partitions) {
+                printf("    No assignment\n");
+        } else if (assigned_topic_partitions->cnt == 0) {
+                printf("    Empty assignment\n");
+        } else {
+                printf("    Assignment:\n");
+                print_partition_list(stdout, assigned_topic_partitions, 0,
+                                     "      ");
+        }
         if (!target_topic_partitions) {
                 printf("    No target assignment\n");
         } else if (target_topic_partitions->cnt == 0) {

@@ -1134,7 +1134,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "list have higher priority). Cooperative and non-cooperative (eager)"
      "strategies must not be mixed. `partition.assignment.strategy` is not "
      "supported for "
-     "`group.protocol=consumer`. Use `group.remote.assignor` instead."
+     "`group.protocol=consumer`. Use `group.remote.assignor` instead. "
      "Available strategies: range, roundrobin, cooperative-sticky.",
      .sdef = "range,roundrobin"},
     {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "session.timeout.ms", _RK_C_INT,
@@ -1154,7 +1154,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "through the AdminClient IncrementalAlterConfigs API. "
      "The allowed range is configured with the broker configuration "
      "properties `group.consumer.min.session.timeout.ms` and "
-     "`group.consumer.max.session.timeout.ms`."
+     "`group.consumer.max.session.timeout.ms`. "
      "Also see `max.poll.interval.ms`.",
      1, 3600 * 1000, 45 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
@@ -3880,7 +3880,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                                       "session.timeout.ms")) {
                                 return "`session.timeout.ms` is not supported "
                                        "for `group.protocol=consumer`. It is "
-                                       "defined broker side.";
+                                       "defined broker side";
                         }
 
                         if (rd_kafka_conf_is_modified(

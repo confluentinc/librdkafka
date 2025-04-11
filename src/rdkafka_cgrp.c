@@ -3321,8 +3321,7 @@ err:
                     rkcg, "coordinator query");
         }
 
-        if (actions & RD_KAFKA_ERR_ACTION_SPECIAL &&
-            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) {
+        if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {
                 rd_ts_t min_error_interval =
                     RD_MAX(rkcg->rkcg_heartbeat_intvl_ms * 1000,
                            /* default group.consumer.heartbeat.interval.ms */

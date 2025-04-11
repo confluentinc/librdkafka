@@ -73,7 +73,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-2
       jobs:
         - name: 'Style check'
           commands:

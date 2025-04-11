@@ -39,6 +39,7 @@ librdkafka v2.10.0 is a feature release:
    leader change and offset validation (#4970).
  * Fix the Nagle algorithm (TCP_NODELAY) on broker sockets to not be enabled
    by default (#4986).
+ * [KIP-848] `rd_kafka_DescribeConsumerGroups()` now supports KIP-848 introduced `consumer` groups. Two new fields for consumer group type and target assignment has also been added. Type defines whether this group is a `classic` or `consumer` group. Target assignment is only valid for the `consumer` protocol and its defaults to NULL. (#4922).
 
 
 ## Fixes
@@ -160,7 +161,6 @@ librdkafka v2.10.0 is a feature release:
 
 librdkafka v2.8.0 is a maintenance release:
 
-* DescribeConsumerGroup now supports new consumer protocol groups. Two field type and target assignment has also been added. Target Assignment is only valid for the new Consumer protocol and its default value is NULL. (#4922).
 * Socket options are now all set before connection (#4893).
 * Client certificate chain is now sent when using `ssl.certificate.pem`
   or `ssl_certificate` or `ssl.keystore.location` (#4894).

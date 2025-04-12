@@ -40,7 +40,7 @@ static int32_t *avail_brokers;
 static size_t avail_broker_cnt;
 
 #define group_configs_supported()                                              \
-        (test_broker_version >= TEST_BRKVER(3, 8, 0, 0))
+        (test_broker_version >= TEST_BRKVER(4, 0, 0, 0))
 
 
 
@@ -1063,8 +1063,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
             configs[ci], "consumer.session.timeout.ms",
             RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
         TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
-        if (group_configs_supported() &&
-            !test_consumer_group_protocol_classic()) {
+        if (group_configs_supported()) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
@@ -1400,8 +1399,7 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
          */
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
-        if (group_configs_supported() &&
-            !test_consumer_group_protocol_classic()) {
+        if (group_configs_supported()) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
@@ -1470,17 +1468,17 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
                 test_print_ConfigEntry_array(entries, entry_cnt, 1);
 
                 if (rd_kafka_ConfigResource_type(rconfigs[i]) !=
-                        rd_kafka_ConfigResource_type(configs[0]) ||
+                        rd_kafka_ConfigResource_type(configs[i]) ||
                     strcmp(rd_kafka_ConfigResource_name(rconfigs[i]),
-                           rd_kafka_ConfigResource_name(configs[0]))) {
+                           rd_kafka_ConfigResource_name(configs[i]))) {
                         TEST_FAIL_LATER(
                             "ConfigResource #%d: "
                             "expected type %s name %s, "
                             "got type %s name %s",
                             i,
                             rd_kafka_ResourceType_name(
-                                rd_kafka_ConfigResource_type(configs[0])),
-                            rd_kafka_ConfigResource_name(configs[0]),
+                                rd_kafka_ConfigResource_type(configs[i])),
+                            rd_kafka_ConfigResource_name(configs[i]),
                             rd_kafka_ResourceType_name(
                                 rd_kafka_ConfigResource_type(rconfigs[i])),
                             rd_kafka_ConfigResource_name(rconfigs[i]));

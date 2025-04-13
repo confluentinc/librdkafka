@@ -62,7 +62,7 @@ static void do_test_fetch_unauth() {
 
   /* Create topic */
   const int partition_cnt = 3;
-  Test::create_topic_wait_exists(NULL, topic.c_str(), partition_cnt, 1, 5000);
+  Test::create_topic_wait_exists(NULL, topic.c_str(), partition_cnt, -1, 5000);
 
   /* Produce messages */
   test_produce_msgs_easy(topic.c_str(), 0, RdKafka::Topic::PARTITION_UA, 1000);

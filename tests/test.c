@@ -6582,7 +6582,7 @@ rd_kafka_resp_err_t test_CreateTopics_simple(rd_kafka_t *rk,
         for (i = 0; i < topic_cnt; i++) {
                 char errstr[512];
                 new_topics[i] = rd_kafka_NewTopic_new(
-                    topics[i], num_partitions, 1, errstr, sizeof(errstr));
+                    topics[i], num_partitions, -1, errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],
                             "Failed to NewTopic(\"%s\", %d) #%" PRIusz ": %s",
                             topics[i], num_partitions, i, errstr);

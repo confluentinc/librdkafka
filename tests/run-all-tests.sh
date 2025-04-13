@@ -13,6 +13,9 @@ set -e
 # - default parallelism
 # - no assertions
 # - following AK and CP versions
+#
+# If TEST_CONF_FILE is set, it will be base64 decoded and 
+# used as the configuration file, without starting a trivup cluster.
 
 export TEST_KAFKA_GIT_REF=${TEST_KAFKA_GIT_REF:-4.0.0}
 export TEST_CP_VERSION=${TEST_CP_VERSION:-7.9.0}
@@ -63,6 +66,9 @@ if [ ! -z $TEST_ENV_VARIABLES ]; then
     done
     unset TEST_ENV_VARIABLES_ARRAY
 fi
+if [ ! -z $TEST_CONF_FILE ]; then
+    echo $TEST_CONF_FILE | base64 -d > ./tests/test.conf
+fi
 
 TEST_ARGS="$TEST_PARALLEL_ARG $TEST_ASSERT_ARG $TEST_QUICK_ARG $TEST_LOCAL_ARG $TEST_RUNNER_PARAMETERS $TEST_MODE"
 TEST_CONFIGURATION="$TEST_SSL_ARG $TEST_SASL_ARG $TEST_KRAFT_ARG $TEST_CONF_ARG $TEST_TRIVUP_PARAMETERS"
@@ -73,7 +79,11 @@ echo "kafka version: $TEST_KAFKA_VERSION"
 echo "CP version: $TEST_CP_VERSION"
 echo "configuration: $TEST_CONFIGURATION"
 echo "arguments: $TEST_ARGS"
-(cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
---version "$TEST_KAFKA_GIT_REF" \
---cpversion "$TEST_CP_VERSION" \
---cmd "python run-test-batches.py $TEST_ARGS")
+if [ ! -z $TEST_CONF_FILE ]; then
+    (cd tests && python run-test-batches.py $TEST_ARGS)
+else
+    (cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
+    --version "$TEST_KAFKA_GIT_REF" \
+    --cpversion "$TEST_CP_VERSION" \
+    --cmd "python run-test-batches.py $TEST_ARGS")
+fi

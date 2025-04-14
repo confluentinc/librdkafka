@@ -8431,8 +8431,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
         rd_kafka_error_t *error   = NULL;
         char *group_id = NULL, *group_state = NULL, *assignor_name = NULL,
-             *error_str = NULL, *host = NULL, *member_id = NULL,
-             *instance_id = NULL, *client_id = NULL, *client_host = NULL;
+             *error_str = NULL, *host = NULL;
         rd_kafka_AclOperation_t *operations                = NULL;
         rd_kafka_Node_t *node                              = NULL;
         rd_kafka_topic_partition_list_t *assignment        = NULL,

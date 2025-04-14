@@ -99,10 +99,10 @@ static void do_test_consumer(bool allow_auto_create_topics,
   delete conf;
 
   /* Create topics */
-  Test::create_topic(c, topic_exists.c_str(), 1, 1);
+  Test::create_topic(c, topic_exists.c_str(), 1, -1);
 
   if (test_unauthorized_topic) {
-    Test::create_topic(c, topic_unauth.c_str(), 1, 1);
+    Test::create_topic(c, topic_unauth.c_str(), 1, -1);
 
     /* Add denying ACL for unauth topic */
     test_kafka_cmd(

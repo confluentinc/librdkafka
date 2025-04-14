@@ -86,7 +86,7 @@ static void do_test_producer(bool topic_known) {
 
   /* Create topic */
   std::string topic_unauth = Test::mk_topic_name("0115-unauthorized", 1);
-  Test::create_topic_wait_exists(NULL, topic_unauth.c_str(), 3, 1, 5000);
+  Test::create_topic_wait_exists(NULL, topic_unauth.c_str(), 3, -1, 5000);
 
   int exp_dr_cnt = 0;
 

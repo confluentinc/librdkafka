@@ -3327,6 +3327,9 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
         rd_kafkap_bytes_t auth_data;
         char errstr[512];
 
+        if (rd_kafka_broker_is_any_err_destroy(err))
+                return;
+
         if (err) {
                 rd_snprintf(errstr, sizeof(errstr),
                             "SaslAuthenticateRequest failed: %s",

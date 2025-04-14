@@ -169,7 +169,9 @@ print_group_member_info(const rd_kafka_MemberDescription_t *member) {
         const rd_kafka_MemberAssignment_t *target_assignment =
             rd_kafka_MemberDescription_target_assignment(member);
         const rd_kafka_topic_partition_list_t *target_topic_partitions =
-            rd_kafka_MemberAssignment_partitions(target_assignment);
+            target_assignment
+                ? rd_kafka_MemberAssignment_partitions(target_assignment)
+                : NULL;
         if (!assigned_topic_partitions) {
                 printf("    No assignment\n");
         } else if (assigned_topic_partitions->cnt == 0) {
@@ -228,8 +230,8 @@ static void print_group_info(const rd_kafka_ConsumerGroupDescription_t *group) {
                          rd_kafka_Node_port(coordinator));
         }
         printf(
-            "Group \"%s\", partition assignor \"%s\", type \"%s\" "
-            " state %s%s, with %" PRId32 " member(s)\n",
+            "Group \"%s\", partition assignor \"%s\", type \"%s\""
+            " state \"%s\"%s, with %" PRId32 " member(s)\n",
             group_id, partition_assignor,
             rd_kafka_consumer_group_type_name(type),
             rd_kafka_consumer_group_state_name(state), coordinator_desc,

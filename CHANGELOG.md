@@ -39,8 +39,8 @@ librdkafka v2.10.0 is a feature release:
    leader change and offset validation (#4970).
  * Fix the Nagle algorithm (TCP_NODELAY) on broker sockets to not be enabled
    by default (#4986).
- * [KIP-848] `rd_kafka_DescribeConsumerGroups()` now supports KIP-848 introduced `consumer` groups. Two new fields for consumer group type and target assignment has also been added. Type defines whether this group is a `classic` or `consumer` group. Target assignment is only valid for the `consumer` protocol and its defaults to NULL. (#4922).
- * [KIP-848] Group Config is now supported in IncrementalAlterConfigs and DescribeConfigs. (#4939).
+ * [KIP-848] `rd_kafka_DescribeConsumerGroups()` now supports KIP-848 introduced `consumer` groups. Two new fields for consumer group type and target assignment have also been added. Type defines whether this group is a `classic` or `consumer` group. Target assignment is only valid for the `consumer` protocol and its defaults to NULL. (#4922).
+ * [KIP-848] Group Config is now supported in AlterConfigs, IncrementalAlterConfigs and DescribeConfigs. (#4939).
 
 
 ## Fixes

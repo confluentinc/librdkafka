@@ -545,6 +545,11 @@ struct rd_kafka_op_s {
                         /** Result cb for this op */
                         void (*result_cb)(rd_kafka_op_t *);
 
+                        struct rd_kafka_admin_worker_cbs
+                            *cbs; /**< Worker Callbacks
+                                   *   Moved from admin request
+                                   */
+
                         rd_list_t results; /**< Type depends on request type:
                                             *
                                             * (rd_kafka_topic_result_t *):

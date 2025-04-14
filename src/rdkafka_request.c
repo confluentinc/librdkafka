@@ -6069,8 +6069,6 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
 /**
  * @brief Construct and send ConsumerGroupDescribe requests
  *        to \p rkb with the groups (const char *) in \p groups.
- *        Uses \p max_ApiVersion as maximum API version, pass -1
- *        to use the maximum available version.
  *        Uses \p include_authorized_operations to get
  *        group ACL authorized operations.
  *

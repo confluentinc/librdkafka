@@ -8490,8 +8490,8 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                              rd_kafka_MemberDescription_free);
 
                 for (j = 0; j < MemberCnt; j++) {
-                        char *member_id = NULL,
-                        *instance_id = NULL, *client_id = NULL, *client_host = NULL;
+                        char *member_id = NULL, *instance_id = NULL,
+                             *client_id = NULL, *client_host = NULL;
                         rd_kafkap_str_t MemberId, InstanceId, RackId, ClientId,
                             ClientHost, SubscribedTopicRegex;
                         int32_t MemberEpoch, idx;
@@ -8531,10 +8531,9 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
 
                         rd_kafka_buf_skip_tags(reply);
 
-                        member_id   = RD_KAFKAP_STR_DUP(&MemberId);
-                        if(!RD_KAFKAP_STR_IS_NULL(&InstanceId)) {
-                                instance_id =
-                                    RD_KAFKAP_STR_DUP(&InstanceId);
+                        member_id = RD_KAFKAP_STR_DUP(&MemberId);
+                        if (!RD_KAFKAP_STR_IS_NULL(&InstanceId)) {
+                                instance_id = RD_KAFKAP_STR_DUP(&InstanceId);
                         }
                         client_id   = RD_KAFKAP_STR_DUP(&ClientId);
                         client_host = RD_KAFKAP_STR_DUP(&ClientHost);
@@ -8543,7 +8542,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                             client_id, member_id, instance_id, client_host,
                             assignment, target_assignment);
 
-                        
+
                         rd_list_add(&members, member);
 
                         RD_IF_FREE(assignment,
@@ -8608,7 +8607,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         }
         rd_kafka_buf_skip_tags(reply);
         RD_IF_FREE(host, rd_free);
-        RD_IF_FREE(node, rd_kafka_Node_destroy);  
+        RD_IF_FREE(node, rd_kafka_Node_destroy);
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 err_parse:

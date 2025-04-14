@@ -8906,9 +8906,6 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
  * @param grpdesc The group description.
  *
  * @return A group type.
- *
- * @remark The lifetime of the returned memory is the same
- *         as the lifetime of the \p grpdesc object.
  */
 RD_EXPORT
 rd_kafka_consumer_group_type_t rd_kafka_ConsumerGroupDescription_type(

@@ -528,7 +528,8 @@ struct rd_kafka_MemberDescription_s {
         char *host;                             /**< Group member host */
         rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
         rd_kafka_MemberAssignment_t
-            *target_assignment; /**< Target assignment */
+            *target_assignment; /**< Target assignment. `NULL` for `classic`
+                                   protocol */
 };
 
 /**

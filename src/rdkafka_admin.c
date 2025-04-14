@@ -7894,7 +7894,7 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
 
 const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
-        if(!assignment)
+        if (!assignment)
                 return NULL;
         return assignment->partitions;
 }

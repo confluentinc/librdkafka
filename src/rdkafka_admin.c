@@ -8323,7 +8323,9 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                         client_id   = RD_KAFKAP_STR_DUP(&ClientId);
                         client_host = RD_KAFKAP_STR_DUP(&ClientHost);
 
-                        /* Target Assignment is NULL for the classic protocol */
+                        /* Target Assignment is `NULL` for the `classic`
+                         * protocol as there is no concept of Target Assignment
+                         * there. */
                         member = rd_kafka_MemberDescription_new(
                             client_id, member_id, group_instance_id,
                             client_host, partitions,
@@ -8431,8 +8433,10 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
         char *group_id = NULL, *group_state = NULL, *assignor_name = NULL,
              *error_str = NULL, *host = NULL, *member_id = NULL,
              *instance_id = NULL, *client_id = NULL, *client_host = NULL;
-        rd_kafka_AclOperation_t *operations = NULL;
-        rd_kafka_Node_t *node               = NULL;
+        rd_kafka_AclOperation_t *operations                = NULL;
+        rd_kafka_Node_t *node                              = NULL;
+        rd_kafka_topic_partition_list_t *assignment        = NULL,
+                                        *target_assignment = NULL;
         int32_t nodeid;
         uint16_t port;
         int operation_cnt = -1;
@@ -8489,10 +8493,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                         rd_kafkap_str_t MemberId, InstanceId, RackId, ClientId,
                             ClientHost, SubscribedTopicRegex;
                         int32_t MemberEpoch, idx;
-                        rd_kafka_MemberDescription_t *member        = NULL;
-                        rd_kafka_topic_partition_list_t *assignment = NULL,
-                                                        *target_assignment =
-                                                            NULL;
+                        rd_kafka_MemberDescription_t *member;
                         int32_t SubscribedTopicNamesArrayCnt;
 
                         rd_kafka_buf_read_str(reply, &MemberId);
@@ -8538,12 +8539,10 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_skip_tags(reply);
                         rd_list_add(&members, member);
 
-                        if (assignment)
-                                rd_kafka_topic_partition_list_destroy(
-                                    assignment);
-                        if (target_assignment)
-                                rd_kafka_topic_partition_list_destroy(
-                                    target_assignment);
+                        RD_IF_FREE(assignment,
+                                   rd_kafka_topic_partition_list_destroy);
+                        RD_IF_FREE(target_assignment,
+                                   rd_kafka_topic_partition_list_destroy);
 
                         RD_IF_FREE(member_id, rd_free);
                         RD_IF_FREE(instance_id, rd_free);
@@ -8564,7 +8563,7 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                    identify it for further processing with the old protocol and
                    eventually in rd_kafka_DescribeConsumerGroupsResponse_parse
                    we will set the ConsumerGroupType to Unknown */
-                if (error == NULL) {
+                if (!error) {
                         grpdesc = rd_kafka_ConsumerGroupDescription_new(
                             group_id, rd_false, &members, assignor_name,
                             operations, operation_cnt,
@@ -8600,6 +8599,8 @@ rd_kafka_ConsumerGroupDescribeResponseParse(rd_kafka_op_t *rko_req,
                 error_str     = NULL;
                 operations    = NULL;
         }
+        RD_IF_FREE(host, rd_free);
+        RD_IF_FREE(node, rd_kafka_Node_destroy);
         rd_kafka_buf_skip_tags(reply);
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -8616,6 +8617,8 @@ err_parse:
         RD_IF_FREE(client_host, rd_free);
         RD_IF_FREE(error, rd_kafka_error_destroy);
         RD_IF_FREE(operations, rd_free);
+        RD_IF_FREE(assignment, rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(target_assignment, rd_kafka_topic_partition_list_destroy);
         RD_IF_FREE(rko_result, rd_kafka_op_destroy);
 
         rd_snprintf(
@@ -8623,6 +8626,55 @@ err_parse:
             "DescribeConsumerGroups response protocol parse failure: %s",
             rd_kafka_err2str(reply->rkbuf_err));
         return reply->rkbuf_err;
+}
+
+/**
+ * @brief In case if we get an Unsupported Feature error or if it is a consumer
+           group and we get errors GROUP_ID_NOT_FOUND(69) or
+           UNSUPPORTED_VERSION(35) we need to send a request to the old
+           protocol.
+ */
+static rd_bool_t do_fallback_to_old_consumer_group_descibe(
+    rd_kafka_ConsumerGroupDescription_t *groupres) {
+        if ((groupres->error &&
+             groupres->error->code == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE) ||
+            (groupres->type == RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER &&
+             groupres->error &&
+             (groupres->error->code == RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND ||
+              groupres->error->code ==
+                  RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION))) {
+                return rd_true;
+        }
+        return rd_false;
+}
+
+static void rd_kafka_create_describe_group_admin_request(
+    rd_kafka_op_t *rko_fanout,
+    rd_kafka_t *rk,
+    const char *group_id,
+    const struct rd_kafka_admin_worker_cbs *cbs,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_q_t *rkq) {
+        rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,
+            RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT, cbs, options, rkq);
+
+        rko->rko_u.admin_request.fanout_parent = rko_fanout;
+        rko->rko_u.admin_request.broker_id = RD_KAFKA_ADMIN_TARGET_COORDINATOR;
+        rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_GROUP;
+        rko->rko_u.admin_request.coordkey  = rd_strdup(group_id);
+
+        /* Set the group name as the opaque so the fanout worker use it
+         * to fill in errors.
+         * References rko_fanout's memory, which will always outlive
+         * the fanned out op. */
+        rd_kafka_AdminOptions_set_opaque(&rko->rko_u.admin_request.options,
+                                         (void *)group_id);
+
+        rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
+        rd_list_add(&rko->rko_u.admin_request.args, rd_strdup(group_id));
+
+        rd_kafka_q_enq(rko_fanout->rko_rk->rk_ops, rko);
 }
 
 /** @brief Merge the DescribeConsumerGroups response from a single broker
@@ -8656,47 +8708,17 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
                 rd_kafka_error_destroy(error);
         }
 
-        /* In case if we get an Unsupported Feature error or if it is a consumer
-           group and we get errors GROUP_ID_NOT_FOUND(69) or
-           UNSUPPORTED_VERSION(35) we need to send a request to the old
-           protocol. */
-        if ((newgroupres->error &&
-             newgroupres->error->code ==
-                 RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE) ||
-            (newgroupres->type == RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER &&
-             newgroupres->error &&
-             (newgroupres->error->code ==
-                  RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND ||
-              newgroupres->error->code ==
-                  RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION))) {
+        if (do_fallback_to_old_consumer_group_descibe(newgroupres)) {
+                /* We need to send a request to the old protocol */
                 rko_fanout->rko_u.admin_request.fanout.outstanding++;
                 static const struct rd_kafka_admin_worker_cbs cbs = {
                     rd_kafka_admin_DescribeConsumerGroupsRequest,
                     rd_kafka_DescribeConsumerGroupsResponse_parse,
                 };
-                rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
-                    rko_fanout->rko_rk, RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,
-                    RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT, &cbs,
+                rd_kafka_create_describe_group_admin_request(
+                    rko_fanout, rko_fanout->rko_rk, grp, &cbs,
                     &rko_fanout->rko_u.admin_request.options,
                     rko_fanout->rko_rk->rk_ops);
-
-                rko->rko_u.admin_request.fanout_parent = rko_fanout;
-                rko->rko_u.admin_request.broker_id =
-                    RD_KAFKA_ADMIN_TARGET_COORDINATOR;
-                rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_GROUP;
-                rko->rko_u.admin_request.coordkey  = rd_strdup(grp);
-
-                /* Set the group name as the opaque so the fanout worker use it
-                 * to fill in errors.
-                 * References rko_fanout's memory, which will always outlive
-                 * the fanned out op. */
-                rd_kafka_AdminOptions_set_opaque(
-                    &rko->rko_u.admin_request.options, (void *)grp);
-
-                rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
-                rd_list_add(&rko->rko_u.admin_request.args, rd_strdup(grp));
-
-                rd_kafka_q_enq(rko_fanout->rko_rk->rk_ops, rko);
 
                 rd_kafka_ConsumerGroupDescription_destroy(newgroupres);
         } else {
@@ -8791,29 +8813,8 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
                 };
                 char *grp =
                     rd_list_elem(&rko_fanout->rko_u.admin_request.args, (int)i);
-                rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
-                    rk, RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,
-                    RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT, &cbs, options,
-                    rk->rk_ops);
-
-                rko->rko_u.admin_request.fanout_parent = rko_fanout;
-                rko->rko_u.admin_request.broker_id =
-                    RD_KAFKA_ADMIN_TARGET_COORDINATOR;
-                rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_GROUP;
-                rko->rko_u.admin_request.coordkey  = rd_strdup(grp);
-
-                /* Set the group name as the opaque so the fanout worker use it
-                 * to fill in errors.
-                 * References rko_fanout's memory, which will always outlive
-                 * the fanned out op. */
-                rd_kafka_AdminOptions_set_opaque(
-                    &rko->rko_u.admin_request.options, grp);
-
-                rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
-                rd_list_add(&rko->rko_u.admin_request.args,
-                            rd_strdup(groups[i]));
-
-                rd_kafka_q_enq(rk->rk_ops, rko);
+                rd_kafka_create_describe_group_admin_request(
+                    rko_fanout, rk, grp, &cbs, options, rk->rk_ops);
         }
 }
 

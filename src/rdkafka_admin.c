@@ -322,6 +322,16 @@ rd_kafka_admin_fanout_worker(rd_kafka_t *rk,
                              rd_kafka_q_t *rkq,
                              rd_kafka_op_t *rko_fanout);
 
+static rd_kafka_resp_err_t
+rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                            const rd_list_t *groups /*(char*)*/,
+                                            rd_kafka_AdminOptions_t *options,
+                                            char *errstr,
+                                            size_t errstr_size,
+                                            rd_kafka_replyq_t replyq,
+                                            rd_kafka_resp_cb_t *resp_cb,
+                                            void *opaque);
+
 
 /**
  * @name Common admin request code
@@ -497,7 +507,12 @@ rd_kafka_admin_coord_request(rd_kafka_broker_t *rkb,
             rkb, &rko->rko_u.admin_request.args,
             &rko->rko_u.admin_request.options, errstr, sizeof(errstr), replyq,
             rd_kafka_admin_handle_response, eonce);
-        if (err) {
+
+        rd_bool_t is_consumer_group_response =
+            rko->rko_u.admin_request.cbs->request ==
+            rd_kafka_admin_ConsumerGroupDescribeRequest;
+
+        if (err && !is_consumer_group_response) {
                 rd_kafka_enq_once_del_source(eonce, "coordinator response");
                 rd_kafka_admin_result_fail(
                     rko, err, "%s worker failed to send request: %s",

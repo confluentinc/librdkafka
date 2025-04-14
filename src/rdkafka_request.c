@@ -6092,6 +6092,14 @@ rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);
 
+        if (ApiVersion == -1) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                    "ConsumerGroupDescribe (KIP-848) "
+                    "not supported by broker, "
+                    "requires broker version >= 4.0.0");
+        }
+
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_ConsumerGroupDescribe, 1,
             4 /* rd_kafka_buf_write_arraycnt_pos */ +

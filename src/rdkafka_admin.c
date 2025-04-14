@@ -7852,15 +7852,12 @@ rd_kafka_MemberDescription_destroy(rd_kafka_MemberDescription_t *member) {
         rd_free(member->client_id);
         rd_free(member->consumer_id);
         rd_free(member->host);
-        if (member->group_instance_id != NULL)
-                rd_free(member->group_instance_id);
-        if (member->assignment.partitions)
-                rd_kafka_topic_partition_list_destroy(
-                    member->assignment.partitions);
+        RD_IF_FREE(member->group_instance_id, rd_free);
+        RD_IF_FREE(member->assignment.partitions,
+                   rd_kafka_topic_partition_list_destroy);
         if (member->target_assignment) {
-                if (member->target_assignment->partitions)
-                        rd_kafka_topic_partition_list_destroy(
-                            member->target_assignment->partitions);
+                RD_IF_FREE(member->target_assignment->partitions,
+                           rd_kafka_topic_partition_list_destroy);
                 rd_free(member->target_assignment);
         }
         rd_free(member);
@@ -7897,10 +7894,9 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
 
 const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
-        if (assignment)
-                return assignment->partitions;
-        else
+        if(!assignment)
                 return NULL;
+        return assignment->partitions;
 }
 
 const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(

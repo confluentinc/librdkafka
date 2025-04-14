@@ -3308,6 +3308,209 @@ static void do_test_DescribeConsumerGroups(const char *what,
         SUB_TEST_PASS();
 }
 
+static void do_test_DescribeConsumerGroups_Compatibility(const char *what,
+                                                         rd_kafka_t *rk,
+                                                         rd_kafka_queue_t *useq,
+                                                         int request_timeout) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev           = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 4
+        int i;
+        const int partitions_cnt = 1;
+        const int msgs_cnt       = 100;
+        char *topic;
+        rd_kafka_metadata_topic_t exp_mdtopic = {0};
+        int64_t testid                        = test_id_generate();
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        const rd_kafka_ConsumerGroupDescription_t **results = NULL;
+        expected_DescribeConsumerGroups_result_t
+            expected[TEST_DESCRIBE_CONSUMER_GROUPS_CNT] = RD_ZERO_INIT;
+        const char *describe_groups[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
+        char client_ids[TEST_DESCRIBE_CONSUMER_GROUPS_CNT][512];
+        rd_kafka_t *rks[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
+        const rd_kafka_DescribeConsumerGroups_result_t *res;
+        char *protocols[TEST_DESCRIBE_CONSUMER_GROUPS_CNT] = {
+            "classic", "classic", "consumer", "consumer"};
+
+        SUB_TEST_QUICK(
+            "%s DescribeConsumerGroups Compatibility Test with %s, "
+            "request_timeout %d",
+            rd_kafka_name(rk), what, request_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (request_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+        topic             = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        exp_mdtopic.topic = topic;
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
+
+        /* Produce 100 msgs */
+        test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
+
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                rd_kafka_conf_t *conf;
+                char *group_id = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                test_conf_init(&conf, NULL, 0);
+                test_conf_set(conf, "group.protocol", protocols[i]);
+                printf("group.protocol: %s\n", protocols[i]);
+
+                snprintf(client_ids[i], sizeof(client_ids[i]),
+                         "client_id_%" PRId32, i);
+
+                test_conf_set(conf, "client.id", client_ids[i]);
+                test_conf_set(conf, "auto.offset.reset", "earliest");
+                rks[i] = test_create_consumer(group_id, NULL, conf, NULL);
+                test_consumer_subscribe(rks[i], topic);
+                /* Consume messages */
+                test_consumer_poll("consumer", rks[i], testid, -1, -1, msgs_cnt,
+                                   NULL);
+
+                expected[i].group_id = group_id;
+                expected[i].err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+                describe_groups[i]   = group_id;
+        }
+
+        TIMING_START(&timing, "DescribeConsumerGroups");
+        TEST_SAY("Call DescribeConsumerGroups\n");
+        rd_kafka_DescribeConsumerGroups(
+            rk, describe_groups, TEST_DESCRIBE_CONSUMER_GROUPS_CNT, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        TIMING_START(&timing, "DescribeConsumerGroups.queue_poll");
+
+        /* Poll result queue for DescribeConsumerGroups result. */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
+                TEST_SAY("DescribeConsumerGroups: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT) {
+                        break;
+                }
+
+                rd_kafka_event_destroy(rkev);
+        }
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeConsumerGroups_result(rkev);
+        TEST_ASSERT(res, "expected DescribeConsumerGroups_result, got %s",
+                    rd_kafka_event_name(rkev));
+
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == exp_err,
+                    "expected DescribeConsumerGroups to return %s, got %s (%s)",
+                    rd_kafka_err2str(exp_err), rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("DescribeConsumerGroups: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        size_t cnt = 0;
+        results    = rd_kafka_DescribeConsumerGroups_result_groups(res, &cnt);
+
+        TEST_ASSERT(
+            TEST_DESCRIBE_CONSUMER_GROUPS_CNT == cnt,
+            "expected DescribeConsumerGroups_result_groups to return %d items, "
+            "got %" PRIusz,
+            TEST_DESCRIBE_CONSUMER_GROUPS_CNT, cnt);
+
+        /* Verify results */
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                const rd_kafka_ConsumerGroupDescription_t *act = results[i];
+                rd_kafka_resp_err_t act_err = rd_kafka_error_code(
+                    rd_kafka_ConsumerGroupDescription_error(act));
+                rd_kafka_consumer_group_state_t state =
+                    rd_kafka_ConsumerGroupDescription_state(act);
+                rd_kafka_consumer_group_type_t type =
+                    rd_kafka_ConsumerGroupDescription_type(act);
+
+
+                TEST_ASSERT(strcmp(expected[i].group_id,
+                                   rd_kafka_ConsumerGroupDescription_group_id(
+                                       act)) == 0,
+                            "Result order mismatch at #%d: expected group id "
+                            "to be %s, got %s",
+                            i, expected[i].group_id,
+                            rd_kafka_ConsumerGroupDescription_group_id(act));
+
+                if (strcmp(protocols[i], "classic") == 0) {
+                        TEST_ASSERT(
+                            state == RD_KAFKA_CONSUMER_GROUP_STATE_STABLE ||
+                                state == RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
+                            "Expected Stable or Empty state for classic "
+                            "protocol, got %s.",
+                            rd_kafka_consumer_group_state_name(state));
+                        TEST_ASSERT(type ==
+                                        RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC,
+                                    "Expected classic type, got %s.",
+                                    rd_kafka_consumer_group_type_name(type));
+                } else if (strcmp(protocols[i], "consumer") == 0) {
+                        TEST_ASSERT(state ==
+                                        RD_KAFKA_CONSUMER_GROUP_STATE_STABLE,
+                                    "Expected Stable state, got %s.",
+                                    rd_kafka_consumer_group_state_name(state));
+                        TEST_ASSERT(type ==
+                                        RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER,
+                                    "Expected committed type, got %s.",
+                                    rd_kafka_consumer_group_type_name(type));
+                }
+
+                TEST_ASSERT(expected[i].err == act_err,
+                            "expected err=%d for group %s, got %d (%s)",
+                            expected[i].err, expected[i].group_id, act_err,
+                            rd_kafka_err2str(act_err));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                test_consumer_close(rks[i]);
+                rd_kafka_destroy(rks[i]);
+                rd_free(expected[i].group_id);
+        }
+
+        test_DeleteTopics_simple(rk, NULL, &topic, 1, NULL);
+        rd_free(topic);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+
+#undef TEST_DESCRIBE_CONSUMER_GROUPS_CNT
+
+        SUB_TEST_PASS();
+}
+
 /** @brief Helper function to check whether \p expected and \p actual contain
  * the same values. */
 static void
@@ -5456,10 +5659,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         /* TODO: check this test after KIP-848 admin operation
          * implementation */
-        if (test_consumer_group_protocol_classic()) {
-                /* Describe groups */
-                do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
-                do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
+        /* Describe groups */
+        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
+        if (test_broker_version >= TEST_BRKVER(3, 8, 0, 0)) {
+                do_test_DescribeConsumerGroups_Compatibility("temp queue", rk,
+                                                             NULL, -1);
+                do_test_DescribeConsumerGroups_Compatibility("main queue", rk,
+                                                             mainq, 1500);
         }
 
         /* Describe topics */

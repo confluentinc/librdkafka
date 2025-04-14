@@ -897,6 +897,12 @@ const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
 
+void test_poll_result_queue(rd_kafka_event_t *rkev,
+                            rd_kafka_queue_t *q,
+                            test_timing_t *timing,
+                            rd_kafka_event_type_t event_type,
+                            const char *api_name);
+
 /**
  * @brief Calls rdkafka function (with arguments)
  *        and checks its return value (must be rd_kafka_resp_err_t) for

@@ -2182,8 +2182,16 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
         }
 
         if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str) {
-                test_conf_set(conf, "group.protocol",
-                              test_consumer_group_protocol_str);
+                const char *group_protocol =
+                    test_conf_get(conf, "group.protocol");
+
+                if (strcmp(group_protocol, "classic") != 0 &&
+                    strcmp(group_protocol, "consumer") != 0) {
+                        // Set to test_consumer_group_protocol_str if not
+                        // "classic" or "consumer"
+                        test_conf_set(conf, "group.protocol",
+                                      test_consumer_group_protocol_str);
+                }
         }
 
         /* Creat kafka instance */
@@ -2690,7 +2698,10 @@ rd_kafka_t *test_create_consumer(
                 test_conf_set(conf, "group.id", group_id);
 
                 rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
-                test_conf_set(conf, "session.timeout.ms", tmp);
+                if (strcmp(test_conf_get(conf, "group.protocol"), "consumer") !=
+                    0) {
+                        test_conf_set(conf, "session.timeout.ms", tmp);
+                }
 
                 if (rebalance_cb)
                         rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
@@ -7652,4 +7663,37 @@ const char *test_consumer_group_protocol() {
 int test_consumer_group_protocol_classic() {
         return !test_consumer_group_protocol_str ||
                !strcmp(test_consumer_group_protocol_str, "classic");
+}
+
+/**
+ * @brief Polls the Kafka queue for a specific event type.
+ *
+ * @param rkev Pointer to the Kafka event object.
+ * @param q Kafka queue to poll.
+ * @param timing Timing object for measuring duration.
+ * @param event_type The expected event type to wait for.
+ * @param api_name Name of the API being polled (for logging purposes).
+ */
+void test_poll_result_queue(rd_kafka_event_t *rkev,
+                            rd_kafka_queue_t *q,
+                            test_timing_t *timing,
+                            rd_kafka_event_type_t event_type,
+                            const char *api_name) {
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
+                TEST_SAY("%s: got %s in %.3fms\n", api_name,
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) == event_type) {
+                        break;
+                }
+
+                rd_kafka_event_destroy(rkev);
+        }
 }

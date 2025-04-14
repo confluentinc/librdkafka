@@ -9032,7 +9032,7 @@ const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
  * @param member The group member.
  *
  * @return The target assignment for `consumer` group types.
- *         It returns NULL for the `classic` group types.
+ *         Returns NULL for the `classic` group types.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of the \p member object.

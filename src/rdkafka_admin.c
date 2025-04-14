@@ -512,7 +512,8 @@ rd_kafka_admin_coord_request(rd_kafka_broker_t *rkb,
             rko->rko_u.admin_request.cbs->request ==
             rd_kafka_admin_ConsumerGroupDescribeRequest;
 
-        if (err && (!is_consumer_group_response || err != RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE)) {
+        if (err && (!is_consumer_group_response ||
+                    err != RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE)) {
                 rd_kafka_enq_once_del_source(eonce, "coordinator response");
                 rd_kafka_admin_result_fail(
                     rko, err, "%s worker failed to send request: %s",

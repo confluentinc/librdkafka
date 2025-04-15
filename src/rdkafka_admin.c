@@ -322,16 +322,6 @@ rd_kafka_admin_fanout_worker(rd_kafka_t *rk,
                              rd_kafka_q_t *rkq,
                              rd_kafka_op_t *rko_fanout);
 
-static rd_kafka_resp_err_t
-rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
-                                            const rd_list_t *groups /*(char*)*/,
-                                            rd_kafka_AdminOptions_t *options,
-                                            char *errstr,
-                                            size_t errstr_size,
-                                            rd_kafka_replyq_t replyq,
-                                            rd_kafka_resp_cb_t *resp_cb,
-                                            void *opaque);
-
 
 /**
  * @name Common admin request code
@@ -508,13 +498,7 @@ rd_kafka_admin_coord_request(rd_kafka_broker_t *rkb,
             &rko->rko_u.admin_request.options, errstr, sizeof(errstr), replyq,
             rd_kafka_admin_handle_response, eonce);
 
-        rd_bool_t is_consumer_group_response =
-            rko->rko_u.admin_request.cbs->request ==
-            rd_kafka_admin_ConsumerGroupDescribeRequest;
-
-        if (err && (!is_consumer_group_response ||
-                    err != RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE)) {
-                rd_kafka_enq_once_del_source(eonce, "coordinator response");
+        if (err) {
                 rd_kafka_admin_result_fail(
                     rko, err, "%s worker failed to send request: %s",
                     rd_kafka_op2str(rko->rko_type), errstr);
@@ -8592,12 +8576,6 @@ rd_kafka_ConsumerGroupDescribeResponse_parse(rd_kafka_op_t *rko_req,
                             operations, operation_cnt,
                             rd_kafka_consumer_group_state_code(group_state),
                             RD_KAFKA_CONSUMER_GROUP_TYPE_CONSUMER, node, error);
-                } else if (error->code ==
-                               RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND ||
-                           error->code ==
-                               RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION) {
-                        grpdesc = rd_kafka_ConsumerGroupDescription_new_error(
-                            group_id, error);
                 } else {
                         grpdesc = rd_kafka_ConsumerGroupDescription_new_error(
                             group_id, error);
@@ -8648,15 +8626,14 @@ err_parse:
            UNSUPPORTED_VERSION(35) we need to send a request to the old
            protocol.
  */
-static rd_bool_t rd_kafka_admin_describe_consumer_group_fallback_to_classic(
+static rd_bool_t rd_kafka_admin_describe_consumer_group_do_fallback_to_classic(
     rd_kafka_ConsumerGroupDescription_t *groupres) {
-        if (groupres->error &&
-            (groupres->error->code == RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND ||
-             groupres->error->code == RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION ||
-             groupres->error->code == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE)) {
-                return rd_true;
-        }
-        return rd_false;
+        return groupres->error &&
+               (groupres->error->code == RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND ||
+                groupres->error->code ==
+                    RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION ||
+                groupres->error->code ==
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE);
 }
 
 static void rd_kafka_admin_describe_consumer_group_request(
@@ -8724,7 +8701,7 @@ static void rd_kafka_DescribeConsumerGroups_response_merge(
             rd_kafka_admin_ConsumerGroupDescribeRequest;
 
         if (is_consumer_group_response &&
-            rd_kafka_admin_describe_consumer_group_fallback_to_classic(
+            rd_kafka_admin_describe_consumer_group_do_fallback_to_classic(
                 newgroupres)) {
                 /* We need to send a request to the old protocol */
                 rko_fanout->rko_u.admin_request.fanout.outstanding++;

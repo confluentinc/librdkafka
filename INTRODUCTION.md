@@ -2056,6 +2056,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 | KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0                       | Supported                                                                                     |
 | KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 3.7.0 (EA)                  | Early Access                                                                                  |
+| KIP-899 - Allow producer and consumer clients to rebootstrap             | 3.8.0                       | Supported                                                                                     |
 | KIP-951 - Leader discovery optimisations for the client                  | 3.7.0                       | Supported                                                                                     |
 
 

@@ -1411,6 +1411,13 @@ class GTestRebalanceCb : public RdKafka::RebalanceCb {
 static void g_incremental_assign_call_eager() {
   SUB_TEST();
 
+  /* Only classic consumer group protocol supports EAGER protocol*/
+  if (!test_consumer_group_protocol_classic()) {
+    SUB_TEST_SKIP(
+        "Skipping incremental assign call eager test as EAGER protocol is only "
+        "supported in `classic` consumer group protocol");
+  }
+
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
 
@@ -1913,23 +1920,19 @@ static void n_wildcard() {
   Test::poll_once(c1, 500);
   Test::poll_once(c2, 500);
 
-  /* Callback count can vary in KIP-848 */
-  if (test_consumer_group_protocol_classic()) {
-    if (rebalance_cb1.assign_call_cnt != 0)
-      Test::Fail(
-          tostr() << "Expecting consumer 1's assign_call_cnt to be 0 not: "
-                  << rebalance_cb1.assign_call_cnt);
-    if (rebalance_cb2.assign_call_cnt != 0)
-      Test::Fail(
-          tostr() << "Expecting consumer 2's assign_call_cnt to be 0 not: "
-                  << rebalance_cb2.assign_call_cnt);
-  }
+  if (rebalance_cb1.assign_call_cnt != 0)
+    Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 0 not: "
+                       << rebalance_cb1.assign_call_cnt);
+  if (rebalance_cb2.assign_call_cnt != 0)
+    Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 0 not: "
+                       << rebalance_cb2.assign_call_cnt);
 
   bool done                    = false;
   bool created_topics          = false;
   bool deleted_topic           = false;
   int last_cb1_assign_call_cnt = 0;
   int last_cb2_assign_call_cnt = 0;
+  int expected_lost_cnt        = 0;
   while (!done) {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
@@ -1991,23 +1994,26 @@ static void n_wildcard() {
 
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
-      /* Callback count can vary in KIP-848 */
+      /* accumulated in lost case as well for the classic protocol*/
+      TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 1,
+                  "Expecting C_1's revoke_call_cnt to be 1 not %d",
+                  rebalance_cb1.revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 1,
+                  "Expecting C_2's revoke_call_cnt to be 1 not %d",
+                  rebalance_cb2.revoke_call_cnt);
+
+      /* Deleted topics are not counted as lost in KIP-848.
+       * Assignment changes are propogated through ConsumerGroupHeartbeat. */
       if (test_consumer_group_protocol_classic()) {
-        /* accumulated in lost case as well */
-        TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 1,
-                    "Expecting C_1's revoke_call_cnt to be 1 not %d",
-                    rebalance_cb1.revoke_call_cnt);
-        TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 1,
-                    "Expecting C_2's revoke_call_cnt to be 1 not %d",
-                    rebalance_cb2.revoke_call_cnt);
+        expected_lost_cnt++;
       }
 
-      TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
-                  "Expecting C_1's lost_call_cnt to be 1 not %d",
-                  rebalance_cb1.lost_call_cnt);
-      TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
-                  "Expecting C_2's lost_call_cnt to be 1 not %d",
-                  rebalance_cb2.lost_call_cnt);
+      TEST_ASSERT(rebalance_cb1.lost_call_cnt == expected_lost_cnt,
+                  "Expecting C_1's lost_call_cnt to be %d not %d",
+                  expected_lost_cnt, rebalance_cb1.lost_call_cnt);
+      TEST_ASSERT(rebalance_cb2.lost_call_cnt == expected_lost_cnt,
+                  "Expecting C_2's lost_call_cnt to be %d not %d",
+                  expected_lost_cnt, rebalance_cb2.lost_call_cnt);
 
       /* Consumers will rejoin group after revoking the lost partitions.
        * this will result in an rebalance_cb assign (empty partitions).
@@ -2029,13 +2035,10 @@ static void n_wildcard() {
   last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
   c1->close();
 
-  /* Callback count can vary in KIP-848 */
-  if (test_consumer_group_protocol_classic()) {
-    /* There should be no assign rebalance_cb calls on close */
-    TEST_ASSERT(rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt,
-                "Expecting C_1's assign_call_cnt to be %d not %d",
-                last_cb1_assign_call_cnt, rebalance_cb1.assign_call_cnt);
-  }
+  /* There should be no assign rebalance_cb calls on close */
+  TEST_ASSERT(rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt,
+              "Expecting C_1's assign_call_cnt to be %d not %d",
+              last_cb1_assign_call_cnt, rebalance_cb1.assign_call_cnt);
 
   /* Let C_2 catch up on the rebalance and get assigned C_1's partitions. */
   last_cb2_assign_call_cnt = rebalance_cb2.nonempty_assign_call_cnt;
@@ -2046,27 +2049,24 @@ static void n_wildcard() {
   last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
   c2->close();
 
-  /* Callback count can vary in KIP-848 */
-  if (test_consumer_group_protocol_classic()) {
-    /* There should be no assign rebalance_cb calls on close */
-    TEST_ASSERT(rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt,
-                "Expecting C_2's assign_call_cnt to be %d not %d",
-                last_cb2_assign_call_cnt, rebalance_cb2.assign_call_cnt);
+  /* There should be no assign rebalance_cb calls on close */
+  TEST_ASSERT(rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt,
+              "Expecting C_2's assign_call_cnt to be %d not %d",
+              last_cb2_assign_call_cnt, rebalance_cb2.assign_call_cnt);
 
-    TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 2,
-                "Expecting C_1's revoke_call_cnt to be 2 not %d",
-                rebalance_cb1.revoke_call_cnt);
-    TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 2,
-                "Expecting C_2's revoke_call_cnt to be 2 not %d",
-                rebalance_cb2.revoke_call_cnt);
-  }
+  TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 2,
+              "Expecting C_1's revoke_call_cnt to be 2 not %d",
+              rebalance_cb1.revoke_call_cnt);
+  TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 2,
+              "Expecting C_2's revoke_call_cnt to be 2 not %d",
+              rebalance_cb2.revoke_call_cnt);
 
-  TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
-              "Expecting C_1's lost_call_cnt to be 1, not %d",
-              rebalance_cb1.lost_call_cnt);
-  TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
-              "Expecting C_2's lost_call_cnt to be 1, not %d",
-              rebalance_cb2.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb1.lost_call_cnt == expected_lost_cnt,
+              "Expecting C_1's lost_call_cnt to be %d, not %d",
+              expected_lost_cnt, rebalance_cb1.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb2.lost_call_cnt == expected_lost_cnt,
+              "Expecting C_2's lost_call_cnt to be %d, not %d",
+              expected_lost_cnt, rebalance_cb2.lost_call_cnt);
 
   delete c1;
   delete c2;
@@ -3450,11 +3450,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   k_add_partition();
   l_unsubscribe();
   m_unsubscribe_2();
-
-  /* TODO: check again when regexes will be supported by KIP-848 */
-  if (test_consumer_group_protocol_classic()) {
-    n_wildcard();
-  }
+  n_wildcard();
   o_java_interop();
   for (i = 1; i <= 6; i++) /* iterate over 6 different test variations */
     s_subscribe_when_rebalancing(i);

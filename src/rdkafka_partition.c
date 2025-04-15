@@ -1235,7 +1235,8 @@ void rd_kafka_toppar_broker_delegate(rd_kafka_toppar_t *rktp,
 
         /* Undelegated toppars are delgated to the internal
          * broker for bookkeeping. */
-        if (!rkb && !rd_kafka_terminating(rk)) {
+        if (!rd_kafka_terminating(rk) &&
+            (!rkb || rd_kafka_broker_termination_in_progress(rkb))) {
                 rkb               = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }
@@ -4422,6 +4423,89 @@ int rd_kafka_topic_partition_list_regex_cnt(
                 cnt += *rktpar->topic == '^';
         }
         return cnt;
+}
+
+
+/**
+ * @brief Match function that returns true if topic is not a regex.
+ */
+static int rd_kafka_topic_partition_not_regex(const void *elem,
+                                              const void *opaque) {
+        const rd_kafka_topic_partition_t *rktpar = elem;
+        return *rktpar->topic != '^';
+}
+
+/**
+ * @brief Return a new list with all regex topics removed.
+ *
+ * @remark The caller is responsible for freeing the returned list.
+ */
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
+        return rd_kafka_topic_partition_list_match(
+            rktparlist, rd_kafka_topic_partition_not_regex, NULL);
+}
+
+
+/**
+ * @brief Combine regexes present in the list into a single regex.
+ */
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
+        int i;
+        int combined_regex_len   = 1; /* 1 for null-terminator */
+        int regex_cnt            = 0;
+        int j                    = 1;
+        rd_bool_t is_first_regex = rd_true;
+        char *combined_regex_str;
+        rd_kafkap_str_t *combined_regex_kstr;
+
+        // Count the number of characters needed for the combined regex string
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                if (*rktpar->topic == '^') {
+                        combined_regex_len += strlen(rktpar->topic);
+                        regex_cnt++;
+                }
+        }
+
+        if (regex_cnt == 0)
+                return rd_kafkap_str_new("", 0);
+
+        combined_regex_len +=
+            3 * (regex_cnt - 1); /* 1 for each ')|(' separator */
+        combined_regex_len += 2; /* 2 for enclosing brackets */
+
+        // memory allocation for the combined regex string
+        combined_regex_str = rd_malloc(combined_regex_len);
+
+        // Construct the combined regex string
+        combined_regex_str[0] = '(';
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                char *topic = rktpar->topic;
+                if (*topic == '^') {
+                        if (!is_first_regex) {
+                                combined_regex_str[j++] = ')';
+                                combined_regex_str[j++] = '|';
+                                combined_regex_str[j++] = '(';
+                        }
+                        while (*topic) {
+                                combined_regex_str[j++] = *topic;
+                                topic++;
+                        }
+                        is_first_regex = rd_false;
+                }
+        }
+        combined_regex_str[j++] = ')';
+        combined_regex_str[j]   = '\0';
+
+        combined_regex_kstr =
+            rd_kafkap_str_new(combined_regex_str, combined_regex_len - 1);
+        rd_free(combined_regex_str);
+        return combined_regex_kstr;
 }
 
 

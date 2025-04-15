@@ -248,7 +248,6 @@ int rd_kafka_topic_cmp_rkt(const void *_a, const void *_b);
 void rd_kafka_topic_partitions_remove(rd_kafka_topic_t *rkt);
 
 rd_bool_t rd_kafka_topic_set_notexists(rd_kafka_topic_t *rkt,
-                                       rd_kafka_Uuid_t topic_id,
                                        rd_kafka_resp_err_t err);
 rd_bool_t rd_kafka_topic_set_error(rd_kafka_topic_t *rkt,
                                    rd_kafka_resp_err_t err);
@@ -303,6 +302,10 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
                                   const char *reason);
 
 int rd_kafka_toppar_delegate_to_leader(rd_kafka_toppar_t *rktp);
+
+void rd_kafka_toppar_undelegate(rd_kafka_toppar_t *rktp);
+
+void rd_kafka_toppar_forget_leader(rd_kafka_toppar_t *rktp);
 
 rd_kafka_resp_err_t rd_kafka_topics_leader_query_sync(rd_kafka_t *rk,
                                                       int all_topics,

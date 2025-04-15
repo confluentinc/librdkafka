@@ -77,8 +77,9 @@ int main(int argc, char **argv) {
         char errstr[512];        /* librdkafka API error reporting buffer */
         const char *brokers;     /* Argument: broker list */
         const char *groupid;     /* Argument: Consumer group id */
-        char **topics;           /* Argument: list of topics to subscribe to */
-        int topic_cnt;           /* Number of topics to subscribe to */
+        const char *group_protocol;
+        char **topics; /* Argument: list of topics to subscribe to */
+        int topic_cnt; /* Number of topics to subscribe to */
         rd_kafka_topic_partition_list_t *subscription; /* Subscribed topics */
         int i;
 
@@ -88,15 +89,17 @@ int main(int argc, char **argv) {
         if (argc < 4) {
                 fprintf(stderr,
                         "%% Usage: "
-                        "%s <broker> <group.id> <topic1> <topic2>..\n",
+                        "%s <broker> <group.id> <group.protocol> <topic1> "
+                        "<topic2>..\n",
                         argv[0]);
                 return 1;
         }
 
-        brokers   = argv[1];
-        groupid   = argv[2];
-        topics    = &argv[3];
-        topic_cnt = argc - 3;
+        brokers        = argv[1];
+        groupid        = argv[2];
+        group_protocol = argv[3];
+        topics         = &argv[4];
+        topic_cnt      = argc - 4;
 
 
         /*
@@ -121,6 +124,13 @@ int main(int argc, char **argv) {
          * according to the partition.assignment.strategy
          * (consumer config property) to the consumers in the group. */
         if (rd_kafka_conf_set(conf, "group.id", groupid, errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return 1;
+        }
+
+        if (rd_kafka_conf_set(conf, "group.protocol", group_protocol, errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);

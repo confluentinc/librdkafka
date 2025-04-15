@@ -1,7 +1,9 @@
-# librdkafka v2.9.0
+# librdkafka v2.10.0
 
-librdkafka v2.9.0 is a feature release:
+librdkafka v2.10.0 is a feature release:
 
+ * Identify brokers only by broker id (#4557, @mfleming)
+ * Remove unavailable brokers and their thread (#4557, @mfleming)
  * Commits during a cooperative incremental rebalance aren't causing
    an assignment lost if the generation id was bumped in between (#4908).
  * Fix for librdkafka yielding before timeouts had been reached (#4970)
@@ -35,12 +37,28 @@ librdkafka v2.9.0 is a feature release:
    becomes reachable again (#4970).
  * Remove a one second wait after a partition fetch is restarted following a
    leader change and offset validation (#4970).
+ * Fix the Nagle algorithm (TCP_NODELAY) on broker sockets to not be enabled
+   by default (#4986).
+ * [KIP-848] `rd_kafka_DescribeConsumerGroups()` now supports KIP-848 introduced `consumer` groups. Two new fields for consumer group type and target assignment have also been added. Type defines whether this group is a `classic` or `consumer` group. Target assignment is only valid for the `consumer` protocol and its defaults to NULL. (#4922).
+ * [KIP-848] Group Config is now supported in AlterConfigs, IncrementalAlterConfigs and DescribeConfigs. (#4939).
 
 
 ## Fixes
 
 ### General fixes
 
+ * Issues: #4212
+   Identify brokers only by broker id, as happens in Java,
+   avoid to find the broker with same hostname and use the same thread
+   and connection.
+   Happens since 1.x (#4557, @mfleming).
+ * Issues: #4557
+   Remove brokers not reported in a metadata call, along with their thread.
+   Avoids that unavailable brokers are selected for a new connection when
+   there's no one available. We cannot tell if a broker was removed
+   temporarily or permanently so we always remove it and it'll be added back when
+   it becomes available again.
+   Happens since 1.x (#4557, @mfleming).
  * Issues: #4970
    librdkafka code using `cnd_timedwait` was yielding before a timeout occurred
    without the condition being fulfilled because of spurious wake-ups.
@@ -85,6 +103,12 @@ librdkafka v2.9.0 is a feature release:
    the broker the request is enqueued on is up again.
    Solved by not retrying these kinds of metadata requests.
    Happens since 1.x (#4970).
+ * The Nagle algorithm (TCP_NODELAY) is now disabled by default. It caused a
+   large increase in latency for some use cases, for example, when using an
+   SSL connection.
+   For efficient batching, the application should use `linger.ms`,
+   `batch.size` etc.
+   Happens since: 0.x (#4986).
 
 ### Consumer fixes
 
@@ -126,6 +150,11 @@ librdkafka v2.9.0 is a feature release:
    leader change and offset validation. This is done by resetting the fetch
    error backoff and waking up the delegated broker if present.
    Happens since 2.1.0 (#4970).
+
+
+
+*Note: there was no v2.9.0 librdkafka release,
+ it was a dependent clients release only*
 
 
 

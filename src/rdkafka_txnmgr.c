@@ -2958,6 +2958,11 @@ static void rd_kafka_txn_handle_FindCoordinator(rd_kafka_t *rk,
                             NodeId);
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_BROKER;
         }
+        if (rkb && rkb->rkb_source != RD_KAFKA_LEARNED) {
+                rd_kafka_broker_destroy(rkb);
+                rkb = NULL;
+                err = RD_KAFKA_RESP_ERR__UNKNOWN_BROKER;
+        }
         rd_kafka_rdunlock(rk);
 
         if (err)

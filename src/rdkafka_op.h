@@ -400,6 +400,8 @@ struct rd_kafka_op_s {
                 struct {
                         rd_kafka_metadata_t *md;
                         rd_kafka_metadata_internal_t *mdi;
+                        /* subscription version for this call */
+                        int32_t subscription_version;
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
                 } metadata;
@@ -413,7 +415,6 @@ struct rd_kafka_op_s {
                 } dr;
 
                 struct {
-                        int32_t nodeid;
                         char nodename[RD_KAFKA_NODENAME_SIZE];
                 } node;
 
@@ -579,6 +580,8 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
+                               RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
+                               RD_KAFKA_MOCK_CMD_BROKER_ADD,
                                RD_KAFKA_MOCK_CMD_COORD_SET,
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
                                RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET,
@@ -610,6 +613,8 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_LEADER
                                                   *    BROKER_SET_UPDOWN
                                                   *    BROKER_SET_RACK
+                                                  *    BROKER_DECOMMISSION
+                                                  *    BROKER_ADD
                                                   *    COORD_SET */
                         int64_t lo;              /**< Low offset, for:
                                                   *    TOPIC_CREATE (part cnt)
@@ -699,6 +704,18 @@ struct rd_kafka_op_s {
                         /** Preferred broker for telemetry. */
                         rd_kafka_broker_t *rkb;
                 } telemetry_broker;
+
+                struct {
+                        /**
+                         * Terminated and freed broker pointer,
+                         * can only be used for pointer comparison.
+                         */
+                        void *rkb;
+
+                        /** Termination callback to trigger
+                         * on the op handler's thread. */
+                        void (*cb)(rd_kafka_t *rk, void *rkb);
+                } terminated;
 
         } rko_u;
 };

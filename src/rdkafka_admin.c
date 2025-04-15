@@ -1511,8 +1511,9 @@ rd_kafka_admin_MetadataRequest(rd_kafka_broker_t *rkb,
             rd_false /* No admin operation requires topic creation. */,
             include_cluster_authorized_operations,
             include_topic_authorized_operations,
-            rd_false /* No admin operation should update cgrp. */, force_racks,
-            resp_cb, replyq,
+            rd_false /* No admin operation should update cgrp. */,
+            -1 /* No subscription version is used */, force_racks, resp_cb,
+            replyq,
             rd_true /* Admin operation metadata requests are always forced. */,
             opaque);
 }
@@ -2864,9 +2865,15 @@ rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
 
 const char *rd_kafka_ConfigSource_name(rd_kafka_ConfigSource_t confsource) {
         static const char *names[] = {
-            "UNKNOWN_CONFIG",        "DYNAMIC_TOPIC_CONFIG",
-            "DYNAMIC_BROKER_CONFIG", "DYNAMIC_DEFAULT_BROKER_CONFIG",
-            "STATIC_BROKER_CONFIG",  "DEFAULT_CONFIG",
+            "UNKNOWN_CONFIG",
+            "DYNAMIC_TOPIC_CONFIG",
+            "DYNAMIC_BROKER_CONFIG",
+            "DYNAMIC_DEFAULT_BROKER_CONFIG",
+            "STATIC_BROKER_CONFIG",
+            "DEFAULT_CONFIG",
+            "DYNAMIC_BROKER_LOGGER_CONFIG",
+            "CLIENT_METRICS_CONFIG",
+            "GROUP_CONFIG",
         };
 
         if ((unsigned int)confsource >=
@@ -2908,6 +2915,35 @@ const char *rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype) {
                 return "UNSUPPORTED";
 
         return names[restype];
+}
+
+
+rd_kafka_ConfigResourceType_t
+rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype) {
+        switch (restype) {
+        case RD_KAFKA_RESOURCE_TOPIC:
+                return RD_KAFKA_CONFIG_RESOURCE_TOPIC;
+        case RD_KAFKA_RESOURCE_BROKER:
+                return RD_KAFKA_CONFIG_RESOURCE_BROKER;
+        case RD_KAFKA_RESOURCE_GROUP:
+                return RD_KAFKA_CONFIG_RESOURCE_GROUP;
+        default:
+                return RD_KAFKA_CONFIG_RESOURCE_UNKNOWN;
+        }
+}
+
+rd_kafka_ResourceType_t rd_kafka_ConfigResourceType_to_ResourceType(
+    rd_kafka_ConfigResourceType_t config_resource_type) {
+        switch (config_resource_type) {
+        case RD_KAFKA_CONFIG_RESOURCE_TOPIC:
+                return RD_KAFKA_RESOURCE_TOPIC;
+        case RD_KAFKA_CONFIG_RESOURCE_BROKER:
+                return RD_KAFKA_RESOURCE_BROKER;
+        case RD_KAFKA_CONFIG_RESOURCE_GROUP:
+                return RD_KAFKA_RESOURCE_GROUP;
+        default:
+                return RD_KAFKA_RESOURCE_UNKNOWN;
+        }
 }
 
 
@@ -3175,6 +3211,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 int16_t error_code;
                 rd_kafkap_str_t error_msg;
                 int8_t res_type;
+                int8_t config_resource_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
                 char *this_errstr = NULL;
@@ -3184,10 +3221,13 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
-                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_i8(reply, &config_resource_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                 rd_kafka_buf_skip_tags(reply);
+
+                res_type = rd_kafka_ConfigResourceType_to_ResourceType(
+                    config_resource_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
@@ -3368,6 +3408,7 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 int16_t error_code;
                 rd_kafkap_str_t error_msg;
                 int8_t res_type;
+                int8_t config_resource_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
                 char *this_errstr = NULL;
@@ -3377,10 +3418,13 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
-                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_i8(reply, &config_resource_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                 rd_kafka_buf_skip_tags(reply);
+
+                res_type = rd_kafka_ConfigResourceType_to_ResourceType(
+                    config_resource_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
@@ -3638,6 +3682,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         for (i = 0; i < (int)res_cnt; i++) {
                 int16_t error_code;
                 rd_kafkap_str_t error_msg;
+                int8_t config_resource_type;
                 int8_t res_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
@@ -3649,9 +3694,12 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
-                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_i8(reply, &config_resource_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
                 RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+
+                res_type = rd_kafka_ConfigResourceType_to_ResourceType(
+                    config_resource_type);
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
@@ -8146,10 +8194,10 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_init(&rko_result->rko_u.admin_result.results, cnt,
                      rd_kafka_ConsumerGroupDescription_free);
 
-        rd_kafka_broker_lock(rkb);
         nodeid = rkb->rkb_nodeid;
-        host   = rd_strdup(rkb->rkb_origname);
-        port   = rkb->rkb_port;
+        rd_kafka_broker_lock(rkb);
+        host = rd_strdup(rkb->rkb_origname);
+        port = rkb->rkb_port;
         rd_kafka_broker_unlock(rkb);
 
         node = rd_kafka_Node_new(nodeid, host, port, NULL);

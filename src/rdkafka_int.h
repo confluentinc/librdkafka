@@ -290,17 +290,28 @@ struct rd_kafka_s {
         TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
         rd_list_t rk_broker_by_id; /* Fast id lookups. */
         rd_atomic32_t rk_broker_cnt;
-        /**< Number of brokers in state >= UP */
-        rd_atomic32_t rk_broker_up_cnt;
-        /**< Number of logical brokers in state >= UP, this is a sub-set
-         *   of rk_broker_up_cnt. */
-        rd_atomic32_t rk_logical_broker_up_cnt;
-        /**< Number of brokers that are down, only includes brokers
-         *   that have had at least one connection attempt. */
-        rd_atomic32_t rk_broker_down_cnt;
-        /**< Logical brokers currently without an address.
+        /**  Logical brokers count.
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
-        rd_atomic32_t rk_broker_addrless_cnt;
+        rd_atomic32_t rk_logical_broker_cnt;
+        /**  Number of configured or learned brokers in state >= UP */
+        rd_atomic32_t rk_broker_up_cnt;
+        /**  Number of brokers that are down, only includes brokers
+         *   that have had at least one connection attempt
+         *   and are configured or learned. */
+        rd_atomic32_t rk_broker_down_cnt;
+        /* Number of sparse connections requested
+         * but still not executed. */
+        rd_atomic32_t rk_scheduled_connections_cnt;
+
+        /**< Additional bootstrap servers list.
+         *   contains all brokers added through rd_kafka_brokers_add().
+         *   Doesn't contain the initially configured bootstrap brokers. */
+        rd_list_t additional_brokerlists;
+
+        /** Decommissioned threads to await */
+        rd_list_t wait_decommissioned_thrds;
+        /** Decommissioned brokers to await */
+        rd_list_t wait_decommissioned_brokers;
 
         mtx_t rk_internal_rkb_lock;
         rd_kafka_broker_t *rk_internal_rkb;
@@ -409,9 +420,9 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        rd_kafka_metadata_internal_t
-            *rk_full_metadata;       /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
+        rd_ts_t rk_ts_full_metadata;                      /* Timestamp of most
+                                                           * recent full
+                                                           * metadata */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */
@@ -608,6 +619,16 @@ struct rd_kafka_s {
         } rk_curr_msgs;
 
         rd_kafka_timers_t rk_timers;
+
+        /** Metadata refresh timer */
+        rd_kafka_timer_t metadata_refresh_tmr;
+        /** 1s interval timer */
+        rd_kafka_timer_t one_s_tmr;
+        /** Rebootstrap timer.
+         *  Will add bootstrap brokers again
+         *  when it's fired. */
+        rd_kafka_timer_t rebootstrap_tmr;
+
         thrd_t rk_thread;
 
         int rk_initialized; /**< Will be > 0 when the rd_kafka_t
@@ -877,15 +898,13 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
                              int timeout_ms,
                              unsigned int *curr_msgsp) {
         unsigned int cnt;
-        struct timespec tspec;
-
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
                 if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
                                       &rk->rk_curr_msgs.lock,
-                                      &tspec) == thrd_timedout)
+                                      abs_timeout) == thrd_timedout)
                         break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);
@@ -893,6 +912,9 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
         *curr_msgsp = cnt;
         return cnt == 0;
 }
+
+void rd_kafka_decommissioned_broker_thread_join(rd_kafka_t *rk,
+                                                void *rkb_decommissioned);
 
 void rd_kafka_destroy_final(rd_kafka_t *rk);
 
@@ -1201,8 +1223,9 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
                 }
                 if (!rk->rk_ts_last_poll_end)
                         rk->rk_ts_last_poll_end = now;
-                rd_dassert(rk->rk_ts_last_poll_end >=
-                           rk->rk_ts_last_poll_start);
+                /* Disabled until #5017 is merged
+                 * rd_dassert(rk->rk_ts_last_poll_end >=
+                 *            rk->rk_ts_last_poll_start); */
         }
 }
 
@@ -1217,6 +1240,8 @@ int rd_kafka_background_thread_main(void *arg);
 rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);
+
+void rd_kafka_rebootstrap(rd_kafka_t *rk);
 
 
 #endif /* _RDKAFKA_INT_H_ */

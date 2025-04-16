@@ -5710,6 +5710,7 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
 
         suppr = rd_interval(&rk->rk_suppress.sparse_connect_random,
                             rk->rk_conf.sparse_connect_intvl * 1000, 0);
+        mtx_unlock(&rk->rk_suppress.sparse_connect_lock);
 
         if (suppr <= 0) {
                 rd_kafka_dbg(rk, BROKER | RD_KAFKA_DBG_GENERIC, "CONNECT",
@@ -5719,9 +5720,9 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
                 /* Retry after interval + 1ms has passed */
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rk_suppress.sparse_connect_random_tmr,
-                    rd_false, 1000LL - suppr, rd_kafka_connect_any_timer_cb,
-                    (void *)reason);
-                goto done;
+                    rd_false /* don't restart */, 1000LL - suppr,
+                    rd_kafka_connect_any_timer_cb, (void *)reason);
+                return;
         }
 
         /* First pass:  only match brokers never connected to,
@@ -5743,7 +5744,7 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
                 rd_kafka_dbg(rk, BROKER | RD_KAFKA_DBG_GENERIC, "CONNECT",
                              "Cluster connection already in progress: %s",
                              reason);
-                goto done;
+                return;
         }
 
         rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_GENERIC, "CONNECT",
@@ -5754,8 +5755,6 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
         rd_kafka_broker_schedule_connection(rkb);
 
         rd_kafka_broker_destroy(rkb); /* refcnt from ..broker_random() */
-done:
-        mtx_unlock(&rk->rk_suppress.sparse_connect_lock);
 }
 
 

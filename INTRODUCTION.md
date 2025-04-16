@@ -2051,9 +2051,10 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 | KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0                       | Supported                                                                                     |
-| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 3.7.0 (EA)                  | Early Access                                                                                  |
+| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 4.0.0                       | Preview                                                                                  |
 | KIP-899 - Allow producer and consumer clients to rebootstrap             | 3.8.0                       | Supported                                                                                     |
 | KIP-951 - Leader discovery optimisations for the client                  | 3.7.0                       | Supported                                                                                     |
+| KIP-1082 - Require Client-Generated IDs over the ConsumerGroupHeartbeat  | 4.0.0                       | Supported                                                                                     |
 
 
 

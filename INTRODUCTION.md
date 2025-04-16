@@ -1564,7 +1564,7 @@ remote assignor.
 
 **Available features**
 
-All the features described in the KIP is available.
+All the features described in the KIP are available.
 
 - Subscription to one or more topics
 - Rebalance callbacks (see contract changes)
@@ -1589,7 +1589,7 @@ so the protocol will be enabled by default only with a librdkafka major release.
  - Protocol rebalance is fully incremental, so the only allowed functions to
    use in a rebalance callback will be `rd_kafka_incremental_assign` and
    `rd_kafka_incremental_unassign`. In the `classic` protocol, the expected 
-   function to call is determined based on the chosen`partition.assignment.strategy`
+   function to call is determined based on the chosen `partition.assignment.strategy`
    but this is removed for the `consumer` protocol.
 
    When setting the `group.remote.assignor` property, it's already

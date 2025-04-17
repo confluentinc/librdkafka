@@ -21,10 +21,10 @@ librdkafka v2.10.0 is a feature release:
 - Enhanced handling for `subscribe()` and `unsubscribe()` edge cases.
 
 > [!Note]
-> The [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) consumer is currently in **Preview** and should not be used in production environments. Features and behavior may change in future releases.
+> The [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) consumer is currently in **Preview** and should not be used in production environments. Implementation is feature complete but contract could have minor changes before General Availability.
 
 
- ## Other changes
+ ## Enhancements and Fixes
 
  * Identify brokers only by broker id (#4557, @mfleming)
  * Remove unavailable brokers and their thread (#4557, @mfleming)

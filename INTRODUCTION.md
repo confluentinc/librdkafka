@@ -1615,18 +1615,18 @@ so the protocol will be enabled by default only with a librdkafka major release.
 
    For the same reason, when closing or unsubscribing with auto-commit set,
    the member will try to commit until a specific timeout has passed.
-   Currently the timeout is the same as the `classic` protocol and it corresponds
-   to the `session.timeout.ms`, but it will change before the feature
-   reaches a stable state.
+   Currently the timeout is a fixed one and corresponds to the default remote session
+   timeout in Apache Kafka but it'll be possible to pass a custom timeout
+   when calling close in future with [KIP-1092](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=321719077).
 
  - An `UNKNOWN_TOPIC_OR_PART` error isn't received anymore when a consumer is
    subscribing to a topic that doesn't exist in local cache, as the consumer
    is still subscribing to the topic and it could be created just after that.
 
- - A consumer won't do a preliminary Metadata call that returns a
-   `TOPIC_AUTHORIZATION_FAILED`, as it's happening with group protocol `classic`.
-   Topic partitions will still be assigned to the member
-   by the Coordinator only if it's authorized to consume from the topic.
+ - A TOPIC_AUTHORIZATION_FAILED error will be returned as was happening
+   with group protocol classic, it happens once per heartbeat or subscription change and
+   it's a single error for the whole subscription. It's reported even when only a single topic
+   isn't authorized.
 
 
 ### Note on Batch consume APIs
@@ -2105,7 +2105,8 @@ release of librdkafka.
 | 47      | OffsetDelete                  | 0          | 0              |
 | 50      | DescribeUserScramCredentials  | 0          | 0              |
 | 51      | AlterUserScramCredentials     | 0          | 0              |
-| 68      | ConsumerGroupHeartbeat        | 0          | 0              |
+| 68      | ConsumerGroupHeartbeat        | 1          | 1              |
+| 69      | ConsumerGroupDescribe         | 1          | 0              |
 | 71      | GetTelemetrySubscriptions     | 0          | 0              |
 | 72      | PushTelemetry                 | 0          | 0              |
 

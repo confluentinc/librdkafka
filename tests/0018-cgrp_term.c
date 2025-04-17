@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,14 +64,16 @@ static void rebalance_cb(rd_kafka_t *rk,
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
                 assign_cnt++;
-                rd_kafka_assign(rk, partitions);
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           partitions);
                 break;
 
         case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
                 if (assign_cnt == 0)
                         TEST_FAIL("asymetric rebalance_cb\n");
                 assign_cnt--;
-                rd_kafka_assign(rk, NULL);
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             partitions);
                 break;
 
         default:

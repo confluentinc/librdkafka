@@ -187,7 +187,9 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                         ? RD_KAFKA_RESOURCE_TOPIC
                         : !strcmp(restype_s, "BROKER")
                               ? RD_KAFKA_RESOURCE_BROKER
-                              : RD_KAFKA_RESOURCE_UNKNOWN;
+                              : !strcmp(restype_s, "GROUP")
+                                    ? RD_KAFKA_RESOURCE_GROUP
+                                    : RD_KAFKA_RESOURCE_UNKNOWN;
 
                 if (restype == RD_KAFKA_RESOURCE_UNKNOWN) {
                         usage("Invalid resource type: %s", restype_s);

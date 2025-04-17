@@ -9,96 +9,97 @@ librdkafka also provides a native C++ interface.
 **Table of Contents**
 
 - [Introduction to librdkafka - the Apache Kafka C/C++ client library](#introduction-to-librdkafka---the-apache-kafka-cc-client-library)
-    - [Performance](#performance)
-        - [High throughput](#high-throughput)
-        - [Low latency](#low-latency)
-            - [Latency measurement](#latency-measurement)
-        - [Compression](#compression)
-    - [Message reliability](#message-reliability)
-        - [Producer message delivery success](#producer-message-delivery-success)
-        - [Producer message delivery failure](#producer-message-delivery-failure)
-            - [Error: Timed out in transmission queue](#error-timed-out-in-transmission-queue)
-            - [Error: Timed out in flight to/from broker](#error-timed-out-in-flight-tofrom-broker)
-            - [Error: Temporary broker-side error](#error-temporary-broker-side-error)
-            - [Error: Temporary errors due to stale metadata](#error-temporary-errors-due-to-stale-metadata)
-            - [Error: Local time out](#error-local-time-out)
-            - [Error: Permanent errors](#error-permanent-errors)
-        - [Producer retries](#producer-retries)
-        - [Reordering](#reordering)
-        - [Idempotent Producer](#idempotent-producer)
-            - [Guarantees](#guarantees)
-            - [Ordering and message sequence numbers](#ordering-and-message-sequence-numbers)
-            - [Partitioner considerations](#partitioner-considerations)
-            - [Message timeout considerations](#message-timeout-considerations)
-            - [Leader change](#leader-change)
-            - [Error handling](#error-handling)
-                - [RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER](#rdkafkaresperroutofordersequencenumber)
-                - [RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER](#rdkafkaresperrduplicatesequencenumber)
-                - [RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID](#rdkafkaresperrunknownproducerid)
-                - [Standard errors](#standard-errors)
-                - [Message persistence status](#message-persistence-status)
-        - [Transactional Producer](#transactional-producer)
-            - [Error handling](#error-handling-1)
-            - [Old producer fencing](#old-producer-fencing)
-            - [Configuration considerations](#configuration-considerations)
-        - [Exactly Once Semantics (EOS) and transactions](#exactly-once-semantics-eos-and-transactions)
-    - [Usage](#usage)
-        - [Documentation](#documentation)
-        - [Initialization](#initialization)
-        - [Configuration](#configuration)
-            - [Example](#example)
-        - [Termination](#termination)
-            - [High-level KafkaConsumer](#high-level-kafkaconsumer)
-            - [Producer](#producer)
-            - [Admin API client](#admin-api-client)
-            - [Speeding up termination](#speeding-up-termination)
-        - [Threads and callbacks](#threads-and-callbacks)
-        - [Brokers](#brokers)
-            - [SSL](#ssl)
-            - [OAUTHBEARER with support for OIDC](#oauthbearer-with-support-for-oidc)
-            - [Sparse connections](#sparse-connections)
-                - [Random broker selection](#random-broker-selection)
-                - [Persistent broker connections](#persistent-broker-connections)
-            - [Connection close](#connection-close)
-            - [Fetch From Follower](#fetch-from-follower)
-        - [Logging](#logging)
-            - [Debug contexts](#debug-contexts)
-        - [Feature discovery](#feature-discovery)
-        - [Producer API](#producer-api)
-        - [Simple Consumer API (legacy)](#simple-consumer-api-legacy)
-            - [Offset management](#offset-management)
-                - [Auto offset commit](#auto-offset-commit)
-                - [At-least-once processing](#at-least-once-processing)
-                - [Auto offset reset](#auto-offset-reset)
-        - [Consumer groups](#consumer-groups)
-            - [Static consumer groups](#static-consumer-groups)
-            - [Next generation of the consumer group protocol](#next-generation-of-the-consumer-group-protocol-kip-848)
-        - [Topics](#topics)
-            - [Unknown or unauthorized topics](#unknown-or-unauthorized-topics)
-            - [Topic metadata propagation for newly created topics](#topic-metadata-propagation-for-newly-created-topics)
-            - [Topic auto creation](#topic-auto-creation)
-        - [Metadata](#metadata)
-            - [< 0.9.3](#-093)
-            - [> 0.9.3](#-093)
-            - [Query reasons](#query-reasons)
-            - [Caching strategy](#caching-strategy)
-        - [Fatal errors](#fatal-errors)
-            - [Fatal producer errors](#fatal-producer-errors)
-            - [Fatal consumer errors](#fatal-consumer-errors)
-    - [Compatibility](#compatibility)
-        - [Broker version compatibility](#broker-version-compatibility)
-            - [Broker version >= 0.10.0.0 (or trunk)](#broker-version--01000-or-trunk)
-            - [Broker versions 0.9.0.x](#broker-versions-090x)
-            - [Broker versions 0.8.x.y](#broker-versions-08xy)
-            - [Detailed description](#detailed-description)
-        - [Supported KIPs](#supported-kips)
-        - [Supported protocol versions](#supported-protocol-versions)
+  - [Performance](#performance)
+    - [High throughput](#high-throughput)
+    - [Low latency](#low-latency)
+      - [Latency measurement](#latency-measurement)
+    - [Compression](#compression)
+  - [Message reliability](#message-reliability)
+    - [Producer message delivery success](#producer-message-delivery-success)
+    - [Producer message delivery failure](#producer-message-delivery-failure)
+      - [Error: Timed out in transmission queue](#error-timed-out-in-transmission-queue)
+      - [Error: Timed out in flight to/from broker](#error-timed-out-in-flight-tofrom-broker)
+      - [Error: Temporary broker-side error](#error-temporary-broker-side-error)
+      - [Error: Temporary errors due to stale metadata](#error-temporary-errors-due-to-stale-metadata)
+      - [Error: Local time out](#error-local-time-out)
+      - [Error: Permanent errors](#error-permanent-errors)
+    - [Producer retries](#producer-retries)
+    - [Reordering](#reordering)
+    - [Idempotent Producer](#idempotent-producer)
+      - [Guarantees](#guarantees)
+      - [Ordering and message sequence numbers](#ordering-and-message-sequence-numbers)
+      - [Partitioner considerations](#partitioner-considerations)
+      - [Message timeout considerations](#message-timeout-considerations)
+      - [Leader change](#leader-change)
+      - [Error handling](#error-handling)
+        - [RD\_KAFKA\_RESP\_ERR\_OUT\_OF\_ORDER\_SEQUENCE\_NUMBER](#rd_kafka_resp_err_out_of_order_sequence_number)
+        - [RD\_KAFKA\_RESP\_ERR\_DUPLICATE\_SEQUENCE\_NUMBER](#rd_kafka_resp_err_duplicate_sequence_number)
+        - [RD\_KAFKA\_RESP\_ERR\_UNKNOWN\_PRODUCER\_ID](#rd_kafka_resp_err_unknown_producer_id)
+        - [Standard errors](#standard-errors)
+        - [Message persistence status](#message-persistence-status)
+    - [Transactional Producer](#transactional-producer)
+      - [Error handling](#error-handling-1)
+      - [Old producer fencing](#old-producer-fencing)
+      - [Configuration considerations](#configuration-considerations)
+    - [Exactly Once Semantics (EOS) and transactions](#exactly-once-semantics-eos-and-transactions)
+  - [Usage](#usage)
+    - [Documentation](#documentation)
+    - [Initialization](#initialization)
+    - [Configuration](#configuration)
+      - [Example](#example)
+    - [Termination](#termination)
+      - [High-level KafkaConsumer](#high-level-kafkaconsumer)
+      - [Producer](#producer)
+      - [Admin API client](#admin-api-client)
+      - [Speeding up termination](#speeding-up-termination)
+    - [Threads and callbacks](#threads-and-callbacks)
+    - [Brokers](#brokers)
+      - [SSL](#ssl)
+      - [OAUTHBEARER with support for OIDC](#oauthbearer-with-support-for-oidc)
+      - [Sparse connections](#sparse-connections)
+        - [Random broker selection](#random-broker-selection)
+        - [Persistent broker connections](#persistent-broker-connections)
+      - [Connection close](#connection-close)
+      - [Fetch From Follower](#fetch-from-follower)
+    - [Logging](#logging)
+      - [Debug contexts](#debug-contexts)
+    - [Feature discovery](#feature-discovery)
+    - [Producer API](#producer-api)
+    - [Simple Consumer API (legacy)](#simple-consumer-api-legacy)
+      - [Offset management](#offset-management)
+        - [Auto offset commit](#auto-offset-commit)
+        - [At-least-once processing](#at-least-once-processing)
+        - [Auto offset reset](#auto-offset-reset)
+    - [Consumer groups](#consumer-groups)
+      - [Static consumer groups](#static-consumer-groups)
+    - [Next generation of the consumer group protocol: KIP 848](#next-generation-of-the-consumer-group-protocol-kip-848)
+    - [Note on Batch consume APIs](#note-on-batch-consume-apis)
+    - [Topics](#topics)
+      - [Unknown or unauthorized topics](#unknown-or-unauthorized-topics)
+      - [Topic metadata propagation for newly created topics](#topic-metadata-propagation-for-newly-created-topics)
+      - [Topic auto creation](#topic-auto-creation)
+    - [Metadata](#metadata)
+      - [\< 0.9.3](#-093)
+      - [\> 0.9.3](#-093-1)
+      - [Query reasons](#query-reasons)
+      - [Caching strategy](#caching-strategy)
+    - [Fatal errors](#fatal-errors)
+      - [Fatal producer errors](#fatal-producer-errors)
+      - [Fatal consumer errors](#fatal-consumer-errors)
+  - [Compatibility](#compatibility)
+    - [Broker version compatibility](#broker-version-compatibility)
+      - [Broker version \>= 0.10.0.0 (or trunk)](#broker-version--01000-or-trunk)
+      - [Broker versions 0.9.0.x](#broker-versions-090x)
+      - [Broker versions 0.8.x.y](#broker-versions-08xy)
+      - [Detailed description](#detailed-description)
+    - [Supported KIPs](#supported-kips)
+    - [Supported protocol versions](#supported-protocol-versions)
 - [Recommendations for language binding developers](#recommendations-for-language-binding-developers)
-    - [Expose the configuration interface pass-thru](#expose-the-configuration-interface-pass-thru)
-    - [Error constants](#error-constants)
-    - [Reporting client software name and version to broker](#reporting-client-software-name-and-version-to-broker)
-    - [Documentation reuse](#documentation-reuse)
-    - [Community support](#community-support)
+  - [Expose the configuration interface pass-thru](#expose-the-configuration-interface-pass-thru)
+  - [Error constants](#error-constants)
+  - [Reporting client software name and version to broker](#reporting-client-software-name-and-version-to-broker)
+  - [Documentation reuse](#documentation-reuse)
+  - [Community support](#community-support)
 
 <!-- markdown-toc end -->
 
@@ -1547,18 +1548,15 @@ Starting from librdkafka 2.4.0 the next generation consumer group rebalance prot
 defined in KIP 848 is introduced.
 
 **Warning**
-It's still in **Early Access** which means it's  _not production-ready_,
-given it's still under validation and lacking some needed features.
+It's still in **Preview** which means it's  _not production-ready_,
+given it's still under validation.
 Features and their contract might change in future.
 
 With this protocol the role of the Group Leader (a member) is removed and
 the assignment is calculated by the Group Coordinator (a broker) and sent
 to each member through heartbeats.
 
-To test it, a Kafka cluster must be set up, in KRaft mode, and the new group
-protocol enabled with the `group.coordinator.rebalance.protocols` property.
-Broker version must be Apache Kafka 3.7.0 or newer. See Apache Kafka
-[Release Notes](https://cwiki.apache.org/confluence/display/KAFKA/The+Next+Generation+of+the+Consumer+Rebalance+Protocol+%28KIP-848%29+-+Early+Access+Release+Notes).
+To test it, a Kafka cluster must be set up with broker version 4.0.0 or newer.
 
 Client side, it can be enabled by setting the new property `group.protocol=consumer`.
 A second property named `group.remote.assignor` is added to choose desired
@@ -1566,15 +1564,14 @@ remote assignor.
 
 **Available features**
 
+All the features described in the KIP are available.
+
 - Subscription to one or more topics
 - Rebalance callbacks (see contract changes)
 - Static group membership
 - Configure remote assignor
 - Max poll interval is enforced
 - Offline upgrade from an empty consumer group with committed offsets
-
-**Future features**
-
 - Regular expression support when subscribing
 - AdminClient changes as described in the KIP
 
@@ -1591,10 +1588,9 @@ so the protocol will be enabled by default only with a librdkafka major release.
 
  - Protocol rebalance is fully incremental, so the only allowed functions to
    use in a rebalance callback will be `rd_kafka_incremental_assign` and
-   `rd_kafka_incremental_unassign`. Currently you can still use existing code
-   and the expected function to call is determined based on the chosen
-   `partition.assignment.strategy` but this will be removed in next
-   release.
+   `rd_kafka_incremental_unassign`. In the `classic` protocol, the expected 
+   function to call is determined based on the chosen `partition.assignment.strategy`
+   but this is removed for the `consumer` protocol.
 
    When setting the `group.remote.assignor` property, it's already
    required to use the incremental assign and unassign functions.
@@ -1619,18 +1615,18 @@ so the protocol will be enabled by default only with a librdkafka major release.
 
    For the same reason, when closing or unsubscribing with auto-commit set,
    the member will try to commit until a specific timeout has passed.
-   Currently the timeout is the same as the `classic` protocol and it corresponds
-   to the `session.timeout.ms`, but it will change before the feature
-   reaches a stable state.
+   Currently the timeout is a fixed one and corresponds to the default remote session
+   timeout in Apache Kafka but it'll be possible to pass a custom timeout
+   when calling close in future with [KIP-1092](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=321719077).
 
  - An `UNKNOWN_TOPIC_OR_PART` error isn't received anymore when a consumer is
    subscribing to a topic that doesn't exist in local cache, as the consumer
    is still subscribing to the topic and it could be created just after that.
 
- - A consumer won't do a preliminary Metadata call that returns a
-   `TOPIC_AUTHORIZATION_FAILED`, as it's happening with group protocol `classic`.
-   Topic partitions will still be assigned to the member
-   by the Coordinator only if it's authorized to consume from the topic.
+ - A TOPIC_AUTHORIZATION_FAILED error will be returned as was happening
+   with group protocol classic, it happens once per heartbeat or subscription change and
+   it's a single error for the whole subscription. It's reported even when only a single topic
+   isn't authorized.
 
 
 ### Note on Batch consume APIs
@@ -2055,8 +2051,10 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 | KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0                       | Supported                                                                                     |
-| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 3.7.0 (EA)                  | Early Access                                                                                  |
+| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 4.0.0                       | Preview                                                                                  |
+| KIP-899 - Allow producer and consumer clients to rebootstrap             | 3.8.0                       | Supported                                                                                     |
 | KIP-951 - Leader discovery optimisations for the client                  | 3.7.0                       | Supported                                                                                     |
+| KIP-1082 - Require Client-Generated IDs over the ConsumerGroupHeartbeat  | 4.0.0                       | Supported                                                                                     |
 
 
 
@@ -2107,7 +2105,8 @@ release of librdkafka.
 | 47      | OffsetDelete                  | 0          | 0              |
 | 50      | DescribeUserScramCredentials  | 0          | 0              |
 | 51      | AlterUserScramCredentials     | 0          | 0              |
-| 68      | ConsumerGroupHeartbeat        | 0          | 0              |
+| 68      | ConsumerGroupHeartbeat        | 1          | 1              |
+| 69      | ConsumerGroupDescribe         | 1          | 0              |
 | 71      | GetTelemetrySubscriptions     | 0          | 0              |
 | 72      | PushTelemetry                 | 0          | 0              |
 

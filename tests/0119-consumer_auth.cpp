@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -133,6 +134,20 @@ static void do_test_fetch_unauth() {
 
   c->close();
   delete c;
+
+  test_kafka_cmd(
+      "kafka-acls.sh --bootstrap-server %s "
+      "--remove --force --allow-principal 'User:*' "
+      "--operation Describe --allow-host '*' "
+      "--topic '%s'",
+      bootstraps.c_str(), topic.c_str());
+
+  test_kafka_cmd(
+      "kafka-acls.sh --bootstrap-server %s "
+      "--remove --force --deny-principal 'User:*' "
+      "--operation Read --deny-host '*' "
+      "--topic '%s'",
+      bootstraps.c_str(), topic.c_str());
 
   Test::Say(tostr() << _C_GRN << "[ Test unauthorized Fetch PASS ]\n");
 }

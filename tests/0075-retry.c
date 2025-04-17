@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,6 +58,8 @@ static struct {
 
         } next;
         int term;
+        /* Number of created sockets */
+        int num_sockets;
 } ctrl;
 
 static int ctrl_thrd_main(void *arg) {
@@ -106,8 +109,16 @@ static int ctrl_thrd_main(void *arg) {
 static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
 
         mtx_lock(&ctrl.lock);
+        if (ctrl.num_sockets < 1) {
+                /* Since librdkafka is decommissioning brokers,
+                 * first connection is with a bootstrap broker,
+                 * next one is with a learned one. */
+                ctrl.num_sockets++;
+                mtx_unlock(&ctrl.lock);
+                return 0;
+        }
         if (ctrl.skm) {
-                /* Reject all but the first connect */
+                /* Reject all but the first two connects */
                 mtx_unlock(&ctrl.lock);
                 return ECONNREFUSED;
         }
@@ -244,6 +255,14 @@ static void do_test_low_socket_timeout(const char *topic) {
 
 int main_0075_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0075_retry", 1);
+
+        if (test_needs_auth()) {
+                /* When authentication is involved there's the need
+                 * for additional SASL calls. These are delayed too and
+                 * it changes test timing. */
+                TEST_SKIP("Cannot run this test with SSL/SASL\n");
+                return 0;
+        }
 
         do_test_low_socket_timeout(topic);
 

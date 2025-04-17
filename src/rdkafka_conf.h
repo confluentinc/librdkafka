@@ -151,8 +151,18 @@ typedef enum {
 
 typedef enum {
         RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
-        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC
+        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC,
 } rd_kafka_oauthbearer_method_t;
+
+typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_OIDC,
+        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER,
+} rd_kafka_oauthbearer_grant_type_t;
+
+typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256,
+        RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_ES256,
+} rd_kafka_oauthbearer_assertion_algorithm_t;
 
 typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_NONE,
@@ -176,7 +186,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 34)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -316,10 +326,20 @@ struct rd_kafka_conf_s {
                 int enable_callback_queue;
                 struct {
                         rd_kafka_oauthbearer_method_t method;
+                        rd_kafka_oauthbearer_grant_type_t grant_type;
                         char *token_endpoint_url;
                         char *client_id;
                         char *client_secret;
                         char *scope;
+                        char *assertion_private_key_file;
+                        char *assertion_private_key_passphrase;
+                        char *assertion_file;
+                        char *assertion_jwt_template_file;
+                        char *assertion_private_key_pem;
+                        rd_kafka_oauthbearer_assertion_algorithm_t
+                            assertion_signing_algorithm;
+                        int assertion_expiration;
+                        int assertion_issued_at;
                         char *extensions_str;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,

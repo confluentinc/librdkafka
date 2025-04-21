@@ -6,6 +6,13 @@ v1.3.0 is a feature release. It is supported for all usage.
 
 1. References librdkafka v2.10.0. Refer to the [librdkafka v2.10.0 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.10.0) for more information.
 
+## Fixes
+
+1. Support Protobuf oneof fields in Data Contract rules (#261)
+2. Ensure use of DEK object is thread-safe (#268)
+3. Fix token fetch to return after successful request (#278)
+4. Add loose OAuth authorization (#289)
+
 
 # confluent-kafka-javascript v1.2.0
 

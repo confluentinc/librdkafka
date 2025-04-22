@@ -84,8 +84,7 @@
 #endif
 
 #ifdef __QNXNTO__
-#define AI_FLAG AI_NUMERICHOST
-#warning "Only numeric addresses are supported as broker input for QNX Neutrino."
+#define AI_FLAG 0
 #else
 #define AI_FLAG AI_ADDRCONFIG
 #endif

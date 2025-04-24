@@ -879,6 +879,14 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_skip_tags(rkbuf);
 
+        if (ErrorCode) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Received top level error code: %" PRId16,
+                           ErrorCode);
+                err = ErrorCode;
+                goto err;
+        }
+
         /* Entire Metadata response now parsed without errors:
          * update our internal state according to the response. */
 
@@ -886,14 +894,6 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "No brokers or topics in metadata: should retry");
                 err = RD_KAFKA_RESP_ERR__PARTIAL;
-                goto err;
-        }
-
-        if (ErrorCode) {
-                rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "Received top level error code: %" PRId16,
-                           ErrorCode);
-                err = ErrorCode;
                 goto err;
         }
 

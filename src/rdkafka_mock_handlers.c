@@ -1299,30 +1299,37 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         int i;
         size_t of_Brokers_cnt;
         int32_t response_Brokers_cnt = 0;
+        rd_kafka_resp_err_t err;
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
                 rd_kafka_buf_write_i32(resp, 0);
         }
 
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+        if (err && rkbuf->rkbuf_reqhdr.ApiVersion < 13)
+                /* Top-level error code not supported */
+                err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
         /* Response: #Brokers */
         of_Brokers_cnt = rd_kafka_buf_write_arraycnt_pos(resp);
-
-        TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
-                if (!mrkb->up)
-                        continue;
-                /* Response: Brokers.Nodeid */
-                rd_kafka_buf_write_i32(resp, mrkb->id);
-                /* Response: Brokers.Host */
-                rd_kafka_buf_write_str(resp, mrkb->advertised_listener, -1);
-                /* Response: Brokers.Port */
-                rd_kafka_buf_write_i32(resp, (int32_t)mrkb->port);
-                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
-                        /* Response: Brokers.Rack (Matt's going to love this) */
-                        rd_kafka_buf_write_str(resp, mrkb->rack, -1);
+        if (!err) {
+                TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                        if (!mrkb->up)
+                                continue;
+                        /* Response: Brokers.Nodeid */
+                        rd_kafka_buf_write_i32(resp, mrkb->id);
+                        /* Response: Brokers.Host */
+                        rd_kafka_buf_write_str(resp, mrkb->advertised_listener, -1);
+                        /* Response: Brokers.Port */
+                        rd_kafka_buf_write_i32(resp, (int32_t)mrkb->port);
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
+                                /* Response: Brokers.Rack (Matt's going to love this) */
+                                rd_kafka_buf_write_str(resp, mrkb->rack, -1);
+                        }
+                        rd_kafka_buf_write_tags_empty(resp);
+                        response_Brokers_cnt++;
                 }
-                rd_kafka_buf_write_tags_empty(resp);
-                response_Brokers_cnt++;
         }
         rd_kafka_buf_finalize_arraycnt(resp, of_Brokers_cnt,
                                        response_Brokers_cnt);
@@ -1378,7 +1385,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                                        &IncludeTopicAuthorizedOperations);
         }
 
-        if (list_all_topics) {
+        if (!err && list_all_topics) {
                 rd_kafka_mock_topic_t *mtopic;
                 /* Response: #Topics */
                 rd_kafka_buf_write_arraycnt(resp, mcluster->topic_cnt);
@@ -1389,7 +1396,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                             mtopic->id, mtopic->name, mtopic, mtopic->err);
                 }
 
-        } else if (requested_topics) {
+        } else if (!err && requested_topics) {
                 /* Response: #Topics */
                 rd_kafka_buf_write_arraycnt(resp, requested_topics->cnt);
 
@@ -1461,6 +1468,11 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
 
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 13) {
+                /* Response: ErrorCode */
+                rd_kafka_buf_write_i16(resp, err);
+        }
+
         rd_kafka_buf_skip_tags(rkbuf);
         rd_kafka_buf_write_tags_empty(resp);
 
@@ -1516,7 +1528,8 @@ rd_kafka_mock_handle_FindCoordinator(rd_kafka_mock_connection_t *mconn,
 
         if (!err && RD_KAFKAP_STR_LEN(&Key) > 0) {
                 mrkb = rd_kafka_mock_cluster_get_coord(mcluster, KeyType, &Key);
-                rd_assert(mrkb);
+                if (!mrkb)
+                        err = RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE;
         }
 
         if (!mrkb && !err)
@@ -3003,7 +3016,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},
         [RD_KAFKAP_OffsetCommit] = {0, 9, 8, rd_kafka_mock_handle_OffsetCommit},
         [RD_KAFKAP_ApiVersion]   = {0, 2, 3, rd_kafka_mock_handle_ApiVersion},
-        [RD_KAFKAP_Metadata]     = {0, 12, 9, rd_kafka_mock_handle_Metadata},
+        [RD_KAFKAP_Metadata]     = {0, 13, 9, rd_kafka_mock_handle_Metadata},
         [RD_KAFKAP_FindCoordinator] = {0, 3, 3,
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,

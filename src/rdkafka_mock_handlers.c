@@ -1320,11 +1320,12 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                         /* Response: Brokers.Nodeid */
                         rd_kafka_buf_write_i32(resp, mrkb->id);
                         /* Response: Brokers.Host */
-                        rd_kafka_buf_write_str(resp, mrkb->advertised_listener, -1);
+                        rd_kafka_buf_write_str(resp, mrkb->advertised_listener,
+                                               -1);
                         /* Response: Brokers.Port */
                         rd_kafka_buf_write_i32(resp, (int32_t)mrkb->port);
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
-                                /* Response: Brokers.Rack (Matt's going to love this) */
+                                /* Response: Brokers.Rack */
                                 rd_kafka_buf_write_str(resp, mrkb->rack, -1);
                         }
                         rd_kafka_buf_write_tags_empty(resp);

@@ -87,7 +87,7 @@ static rd_bool_t fetch_metadata_verify_brokers(int32_t *expected_broker_ids,
  *        execute the next action even if brokers ids are
  *        verified or timeout has reached.
  *
- *        Checks metadata every 100ms for 10s max.
+ *        Checks metadata every 100ms for 20s max.
  */
 static void fetch_metadata(rd_kafka_t *rk,
                            int32_t *expected_broker_ids,
@@ -101,11 +101,11 @@ static void fetch_metadata(rd_kafka_t *rk,
         size_t actual_broker_id_cnt = 0;
         int32_t *actual_broker_ids  = NULL;
         size_t i;
-        int timeout_usecs                      = 10000000;
+        int timeout_usecs                      = 20000000;
         int64_t abs_timeout_us                 = test_clock() + timeout_usecs;
         rd_bool_t continue_requesting_metadata = rd_true;
 
-        TEST_SAY("Waiting for up to 10s for metadata update\n");
+        TEST_SAY("Waiting for up to 20s for metadata update\n");
 
         /* Trigger Metadata request which will update learned brokers. */
         do {

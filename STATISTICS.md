@@ -82,7 +82,7 @@ Per broker statistics.
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 name | string | `"example.com:9092/13"` | Broker hostname, port and broker id
-nodeid | int | 13 | Broker id (-1 for bootstraps)
+nodeid | int | 13 | Broker id (-1 for GroupCoordinator)
 nodename | string | `"example.com:9092"` | Broker hostname
 source | string | `"configured"` | Broker source (learned, configured, internal, logical)
 state | string | `"UP"` | Broker state (INIT, DOWN, CONNECT, AUTH, APIVERSION_QUERY, AUTH_HANDSHAKE, UP, UPDATE)

@@ -742,7 +742,7 @@ static void do_test_kip899_rebootstrap_cases(int variation) {
             {4, 5},
             {5},
             {5},
-            {},
+            {0},
             {1},
             {1},
             {1, 2},

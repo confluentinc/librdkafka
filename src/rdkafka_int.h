@@ -1088,6 +1088,16 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
 
 rd_kafka_error_t *rd_kafka_get_fatal_error(rd_kafka_t *rk);
 
+#define rd_kafka_producer_can_have_fatal_errors(rk)                            \
+        (rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence)
+
+#define rd_kafka_consumer_can_have_fatal_errors(rk)                            \
+        (rk->rk_type == RD_KAFKA_CONSUMER &&                                   \
+         (rk->rk_conf.group_instance_id ||                                     \
+          rk->rk_conf.metadata_recovery_strategy ==                            \
+              RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE ||                      \
+          rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER))
+
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code(rd_kafka_t *rk) {
         /* This is an optimization to avoid an atomic read which are costly
@@ -1096,11 +1106,10 @@ rd_kafka_fatal_error_code(rd_kafka_t *rk) {
          * 1) the idempotent producer
          * 2) static consumers (group.instance.id)
          * 3) Group using consumer protocol (Introduced in KIP-848). See exact
-         *    errors in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat() */
-        if ((rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence) ||
-            (rk->rk_type == RD_KAFKA_CONSUMER &&
-             (rk->rk_conf.group_instance_id ||
-              rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER)))
+         *    errors in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat()
+         * 4) metadata.recovery.strategy is `none` */
+        if (rd_kafka_producer_can_have_fatal_errors(rk) ||
+            rd_kafka_consumer_can_have_fatal_errors(rk))
                 return rd_atomic32_get(&rk->rk_fatal.err);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;

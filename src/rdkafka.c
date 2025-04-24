@@ -720,7 +720,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "maximum size the broker will accept"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED,
               "Broker: Client metadata is stale, "
-              "client should rebootstrap to obtain new metadata."),
+              "client should rebootstrap to obtain new metadata"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 

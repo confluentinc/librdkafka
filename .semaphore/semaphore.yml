@@ -8,7 +8,7 @@ version: v1.0
 name: build-test-release
 agent:
   machine:
-    type: s1-prod-ubuntu22-04-amd64-1
+    type: s1-prod-ubuntu24-04-amd64-1
 
 auto_cancel:
   running:
@@ -38,7 +38,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-2
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
@@ -52,7 +52,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-arm64-1
+          type: s1-prod-ubuntu24-04-arm64-1
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
@@ -66,7 +66,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-arm64-1
+          type: s1-prod-ubuntu24-04-arm64-1
       jobs:
         - name: "Build from source and test"
           commands:
@@ -92,7 +92,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-2
       prologue:
         commands:
           - export CKJS_LINKING=dynamic
@@ -121,7 +121,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-2
       prologue:
         commands:
           - npm install
@@ -142,7 +142,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-amd64-3
+          type: s1-prod-ubuntu24-04-amd64-3
       env_vars:
         - name: TARGET_PRODUCE_PERFORMANCE
           value: "35"
@@ -180,7 +180,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-2
       env_vars:
         - name: ARCHITECTURE
           value: "x64"
@@ -216,7 +216,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-arm64-1
+          type: s1-prod-ubuntu24-04-arm64-1
       env_vars:
         - name: ARCHITECTURE
           value: "arm64"
@@ -252,7 +252,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-amd64-1
+          type: s1-prod-ubuntu24-04-amd64-1
       env_vars:
         - name: ARCHITECTURE
           value: "x64"
@@ -288,7 +288,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-arm64-1
+          type: s1-prod-ubuntu24-04-arm64-1
       env_vars:
         - name: ARCHITECTURE
           value: "arm64"
@@ -460,7 +460,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu22-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-2
       jobs:
         - name: "Tarball"
           commands:
@@ -472,7 +472,7 @@ after_pipeline:
   task:
     agent:
       machine:
-        type: s1-prod-ubuntu20-04-amd64-1
+        type: s1-prod-ubuntu24-04-amd64-1
     jobs:
       - name: SonarQube
         commands:

@@ -10,6 +10,7 @@ codeowners:
   enable: true
 semaphore:
   enable: true
+  pipeline_enable: false
   tasks:
   - name: post-install
     scheduled: false

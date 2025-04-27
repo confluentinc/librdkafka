@@ -93,10 +93,12 @@ void rd_kafka_q_init0(rd_kafka_q_t *rkq,
         rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
         if (for_consume)
                 rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
-        rkq->rkq_rk     = rk;
-        rkq->rkq_qio    = NULL;
-        rkq->rkq_serve  = NULL;
-        rkq->rkq_opaque = NULL;
+        rkq->rkq_rk                 = rk;
+        rkq->rkq_qio                = NULL;
+        rkq->rkq_serve              = NULL;
+        rkq->rkq_opaque             = NULL;
+        rkq->rkq_ts_last_poll_start = 0;
+        rkq->rkq_ts_last_poll_end   = 0;
         mtx_init(&rkq->rkq_lock, mtx_plain);
         cnd_init(&rkq->rkq_cond);
 #if ENABLE_DEVEL
@@ -384,12 +386,13 @@ rd_kafka_op_filter(rd_kafka_q_t *rkq, rd_kafka_op_t *rko, int version) {
  *
  * Locality: any thread
  */
-rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
-                                    rd_ts_t timeout_us,
-                                    int32_t version,
-                                    rd_kafka_q_cb_type_t cb_type,
-                                    rd_kafka_q_serve_cb_t *callback,
-                                    void *opaque) {
+static rd_kafka_op_t *rd_kafka_q_pop_serve0(rd_kafka_q_t *rkq,
+                                            rd_ts_t timeout_us,
+                                            int32_t version,
+                                            rd_kafka_q_cb_type_t cb_type,
+                                            rd_kafka_q_serve_cb_t *callback,
+                                            void *opaque,
+                                            rd_bool_t consume_call) {
         rd_kafka_op_t *rko;
         rd_kafka_q_t *fwdq;
 
@@ -400,12 +403,14 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
         rd_kafka_yield_thread = 0;
         if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
                 const rd_bool_t can_q_contain_fetched_msgs =
+                    consume_call &&
                     rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
 
                 rd_ts_t abs_timeout = rd_timeout_init_us(timeout_us);
 
                 if (can_q_contain_fetched_msgs)
-                        rd_kafka_app_poll_start(rkq->rkq_rk, 0, timeout_us);
+                        rd_kafka_app_poll_start(rkq->rkq_rk, rkq, 0,
+                                                timeout_us);
 
                 while (1) {
                         rd_kafka_op_res_t res;
@@ -445,14 +450,14 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                                 } else if (unlikely(res ==
                                                     RD_KAFKA_OP_RES_YIELD)) {
                                         if (can_q_contain_fetched_msgs)
-                                                rd_kafka_app_polled(
-                                                    rkq->rkq_rk);
+                                                rd_kafka_app_polled(rkq->rkq_rk,
+                                                                    rkq);
                                         /* Callback yielded, unroll */
                                         return NULL;
                                 } else {
                                         if (can_q_contain_fetched_msgs)
-                                                rd_kafka_app_polled(
-                                                    rkq->rkq_rk);
+                                                rd_kafka_app_polled(rkq->rkq_rk,
+                                                                    rkq);
                                         break; /* Proper op, handle below. */
                                 }
                         }
@@ -461,7 +466,7 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                                 if (is_locked)
                                         mtx_unlock(&rkq->rkq_lock);
                                 if (can_q_contain_fetched_msgs)
-                                        rd_kafka_app_polled(rkq->rkq_rk);
+                                        rd_kafka_app_polled(rkq->rkq_rk, rkq);
                                 return NULL;
                         }
 
@@ -472,7 +477,7 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                                               abs_timeout) != thrd_success) {
                                 mtx_unlock(&rkq->rkq_lock);
                                 if (can_q_contain_fetched_msgs)
-                                        rd_kafka_app_polled(rkq->rkq_rk);
+                                        rd_kafka_app_polled(rkq->rkq_rk, rkq);
                                 return NULL;
                         }
                 }
@@ -481,8 +486,8 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                 /* Since the q_pop may block we need to release the parent
                  * queue's lock. */
                 mtx_unlock(&rkq->rkq_lock);
-                rko = rd_kafka_q_pop_serve(fwdq, timeout_us, version, cb_type,
-                                           callback, opaque);
+                rko = rd_kafka_q_pop_serve0(fwdq, timeout_us, version, cb_type,
+                                            callback, opaque, consume_call);
                 rd_kafka_q_destroy(fwdq);
         }
 
@@ -490,12 +495,31 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
         return rko;
 }
 
+rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
+                                    rd_ts_t timeout_us,
+                                    int32_t version,
+                                    rd_kafka_q_cb_type_t cb_type,
+                                    rd_kafka_q_serve_cb_t *callback,
+                                    void *opaque) {
+        return rd_kafka_q_pop_serve0(rkq, timeout_us, version, cb_type,
+                                     callback, opaque, rd_false);
+}
+
+rd_kafka_op_t *rd_kafka_q_consume_pop_serve(rd_kafka_q_t *rkq,
+                                            rd_ts_t timeout_us,
+                                            int32_t version,
+                                            rd_kafka_q_cb_type_t cb_type,
+                                            rd_kafka_q_serve_cb_t *callback,
+                                            void *opaque) {
+        return rd_kafka_q_pop_serve0(rkq, timeout_us, version, cb_type,
+                                     callback, opaque, rd_true);
+}
+
 rd_kafka_op_t *
 rd_kafka_q_pop(rd_kafka_q_t *rkq, rd_ts_t timeout_us, int32_t version) {
         return rd_kafka_q_pop_serve(rkq, timeout_us, version,
                                     RD_KAFKA_Q_CB_RETURN, NULL, NULL);
 }
-
 
 /**
  * Pop all available ops from a queue and call the provided
@@ -506,12 +530,13 @@ rd_kafka_q_pop(rd_kafka_q_t *rkq, rd_ts_t timeout_us, int32_t version) {
  *
  * Locality: any thread.
  */
-int rd_kafka_q_serve(rd_kafka_q_t *rkq,
-                     int timeout_ms,
-                     int max_cnt,
-                     rd_kafka_q_cb_type_t cb_type,
-                     rd_kafka_q_serve_cb_t *callback,
-                     void *opaque) {
+int rd_kafka_q_serve0(rd_kafka_q_t *rkq,
+                      int timeout_ms,
+                      int max_cnt,
+                      rd_kafka_q_cb_type_t cb_type,
+                      rd_kafka_q_serve_cb_t *callback,
+                      void *opaque,
+                      rd_bool_t consume_call) {
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_op_t *rko;
         rd_kafka_q_t localq;
@@ -519,6 +544,7 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         int cnt = 0;
         rd_ts_t abs_timeout;
         const rd_bool_t can_q_contain_fetched_msgs =
+            consume_call &&
             rd_kafka_q_can_contain_fetched_msgs(rkq, RD_DONT_LOCK);
 
         rd_dassert(cb_type);
@@ -531,8 +557,8 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
                 /* Since the q_pop may block we need to release the parent
                  * queue's lock. */
                 mtx_unlock(&rkq->rkq_lock);
-                ret = rd_kafka_q_serve(fwdq, timeout_ms, max_cnt, cb_type,
-                                       callback, opaque);
+                ret = rd_kafka_q_serve0(fwdq, timeout_ms, max_cnt, cb_type,
+                                        callback, opaque, consume_call);
                 rd_kafka_q_destroy(fwdq);
                 return ret;
         }
@@ -541,7 +567,7 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         abs_timeout = rd_timeout_init(timeout_ms);
 
         if (can_q_contain_fetched_msgs)
-                rd_kafka_app_poll_start(rk, 0, timeout_ms);
+                rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
 
         /* Wait for op */
         while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
@@ -555,7 +581,7 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         if (!rko) {
                 mtx_unlock(&rkq->rkq_lock);
                 if (can_q_contain_fetched_msgs)
-                        rd_kafka_app_polled(rk);
+                        rd_kafka_app_polled(rk, rkq);
                 return 0;
         }
 
@@ -591,11 +617,31 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
         }
 
         if (can_q_contain_fetched_msgs)
-                rd_kafka_app_polled(rk);
+                rd_kafka_app_polled(rk, rkq);
 
         rd_kafka_q_destroy_owner(&localq);
 
         return cnt;
+}
+
+int rd_kafka_q_serve(rd_kafka_q_t *rkq,
+                     int timeout_ms,
+                     int max_cnt,
+                     rd_kafka_q_cb_type_t cb_type,
+                     rd_kafka_q_serve_cb_t *callback,
+                     void *opaque) {
+        return rd_kafka_q_serve0(rkq, timeout_ms, max_cnt, cb_type, callback,
+                                 opaque, rd_false);
+}
+
+int rd_kafka_q_consume_serve(rd_kafka_q_t *rkq,
+                             int timeout_ms,
+                             int max_cnt,
+                             rd_kafka_q_cb_type_t cb_type,
+                             rd_kafka_q_serve_cb_t *callback,
+                             void *opaque) {
+        return rd_kafka_q_serve0(rkq, timeout_ms, max_cnt, cb_type, callback,
+                                 opaque, rd_true);
 }
 
 /**
@@ -681,7 +727,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
         abs_timeout = rd_timeout_init(timeout_ms);
 
-        rd_kafka_app_poll_start(rk, 0, timeout_ms);
+        rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
 
         rd_kafka_yield_thread = 0;
         while (cnt < rkmessages_size) {
@@ -785,7 +831,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rd_kafka_op_destroy(rko);
         }
 
-        rd_kafka_app_polled(rk);
+        rd_kafka_app_polled(rk, rkq);
 
         return cnt;
 }

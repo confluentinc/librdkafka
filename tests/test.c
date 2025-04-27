@@ -224,6 +224,7 @@ _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
 _TEST_DECL(0107_topic_recreate);
+_TEST_DECL(0107_topic_recreate_unknown_topic_id);
 _TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
 _TEST_DECL(0111_delay_create_topics);
@@ -266,6 +267,7 @@ _TEST_DECL(0146_metadata_mock);
 _TEST_DECL(0149_broker_same_host_port_mock);
 _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
+_TEST_DECL(0152_topic_recreate_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -481,6 +483,7 @@ struct test tests[] = {
           0,
           TEST_BRKVER_TOPIC_ADMINAPI,
           .scenario = "noautocreate"),
+    _TEST(0107_topic_recreate_unknown_topic_id, 0, TEST_BRKVER_TOPIC_ADMINAPI),
     _TEST(0109_auto_create_topics, 0),
     _TEST(0110_batch_size, 0),
     _TEST(0111_delay_create_topics,
@@ -528,6 +531,7 @@ struct test tests[] = {
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
+    _TEST(0152_topic_recreate_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */

@@ -59,7 +59,7 @@ static void sigterm(int sig) {
 
 class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
  public:
-  void dr_cb(RdKafka::Message &message) {
+  void dr_cb(RdKafka::Message &message) RD_OVERRIDE {
     /* If message.err() is non-zero the message delivery failed permanently
      * for the message. */
     if (message.err())

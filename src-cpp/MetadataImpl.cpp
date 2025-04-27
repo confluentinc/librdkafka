@@ -49,18 +49,18 @@ class BrokerMetadataImpl : public BrokerMetadata {
       broker_metadata_(broker_metadata), host_(broker_metadata->host) {
   }
 
-  int32_t id() const {
+  int32_t id() const RD_OVERRIDE {
     return broker_metadata_->id;
   }
 
-  std::string host() const {
+  std::string host() const RD_OVERRIDE {
     return host_;
   }
-  int port() const {
+  int port() const RD_OVERRIDE {
     return broker_metadata_->port;
   }
 
-  virtual ~BrokerMetadataImpl() {
+  ~BrokerMetadataImpl() RD_OVERRIDE {
   }
 
  private:
@@ -88,24 +88,24 @@ class PartitionMetadataImpl : public PartitionMetadata {
       isrs_.push_back(partition_metadata->isrs[i]);
   }
 
-  int32_t id() const {
+  int32_t id() const RD_OVERRIDE {
     return partition_metadata_->id;
   }
-  int32_t leader() const {
+  int32_t leader() const RD_OVERRIDE {
     return partition_metadata_->leader;
   }
-  ErrorCode err() const {
+  ErrorCode err() const RD_OVERRIDE {
     return static_cast<ErrorCode>(partition_metadata_->err);
   }
 
-  const std::vector<int32_t> *replicas() const {
+  const std::vector<int32_t> *replicas() const RD_OVERRIDE {
     return &replicas_;
   }
-  const std::vector<int32_t> *isrs() const {
+  const std::vector<int32_t> *isrs() const RD_OVERRIDE {
     return &isrs_;
   }
 
-  ~PartitionMetadataImpl() {
+  ~PartitionMetadataImpl() RD_OVERRIDE {
   }
 
  private:
@@ -126,18 +126,18 @@ class TopicMetadataImpl : public TopicMetadata {
           new PartitionMetadataImpl(&topic_metadata->partitions[i]));
   }
 
-  ~TopicMetadataImpl() {
+  ~TopicMetadataImpl() RD_OVERRIDE {
     for (size_t i = 0; i < partitions_.size(); ++i)
       delete partitions_[i];
   }
 
-  std::string topic() const {
+  std::string topic() const RD_OVERRIDE {
     return topic_;
   }
-  const std::vector<const PartitionMetadata *> *partitions() const {
+  const std::vector<const PartitionMetadata *> *partitions() const RD_OVERRIDE {
     return &partitions_;
   }
-  ErrorCode err() const {
+  ErrorCode err() const RD_OVERRIDE {
     return static_cast<ErrorCode>(topic_metadata_->err);
   }
 

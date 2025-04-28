@@ -42,9 +42,7 @@
 #include <sys/time.h>
 #include <getopt.h>
 
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is builtin from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h" /* for Kafka driver */
+#include <librdkafka/rdkafka.h> /* for Kafka driver */
 
 
 static volatile sig_atomic_t run = 1;

@@ -45,9 +45,7 @@
 #include <string.h>
 #include <errno.h>
 
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h" /* for Kafka driver */
+#include <librdkafka/rdkafka.h> /* for Kafka driver */
 /* Do not include these defines from your program, they will not be
  * provided by librdkafka. */
 #include "rd.h"

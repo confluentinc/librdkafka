@@ -159,11 +159,12 @@ struct rd_kafka_topic_s {
         rd_refcnt_t rkt_app_refcnt; /**< Number of active rkt's new()ed
                                      *   by application. */
 
-        enum { RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
-               RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
-               RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
-               RD_KAFKA_TOPIC_S_ERROR,     /* Topic exists but is in an errored
-                                            * state, such as auth failure. */
+        enum {
+                RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
+                RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
+                RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
+                RD_KAFKA_TOPIC_S_ERROR,     /* Topic exists but is in an errored
+                                             * state, such as auth failure. */
         } rkt_state;
         rd_ts_t rkt_ts_state; /**< State change time. */
 

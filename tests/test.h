@@ -323,7 +323,7 @@ struct test_msgver_s {
 
         const char *msgid_hdr; /**< msgid string is in header by this name,
                                 * rather than in the payload (default). */
-};                             /* test_msgver_t; */
+}; /* test_msgver_t; */
 
 /* Message */
 struct test_mv_m {

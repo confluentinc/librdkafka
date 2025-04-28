@@ -677,7 +677,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
          * desynchronized clusters): if so ignore it. */
         tver_skel.rktp = rktp;
         tver           = rd_list_find(request->rkbuf_rktp_vers, &tver_skel,
-                            rd_kafka_toppar_ver_cmp);
+                                      rd_kafka_toppar_ver_cmp);
         rd_kafka_assert(NULL, tver);
         if (tver->rktp != rktp || tver->version < fetch_version) {
                 rd_rkb_dbg(rkb, MSG, "DROP",

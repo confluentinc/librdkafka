@@ -148,8 +148,8 @@ static void do_test_sticky_partitioning(int sticky_delay) {
   /* When sticky.partitioning.linger.ms is long (greater than expected
    * length of run), one partition should be sticky and receive messages. */
   if (sticky_delay == 5000 && num_partitions_active > 1)
-    Test::Fail(tostr() << "Expected only 1 partition to receive msgs"
-                       << " but " << num_partitions_active
+    Test::Fail(tostr() << "Expected only 1 partition to receive msgs" << " but "
+                       << num_partitions_active
                        << " partitions received msgs.");
 
   /* When sticky.partitioning.linger.ms is short (sufficiently smaller than

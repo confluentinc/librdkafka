@@ -1132,7 +1132,7 @@ static RD_INLINE unsigned int test_rand(void) {
 #ifdef _WIN32
         rand_s(&r);
 #else
-        r     = rand();
+        r = rand();
 #endif
         return r;
 }
@@ -2030,7 +2030,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
                 pcwd = _getcwd(cwd, sizeof(cwd) - 1);
 #else
-                pcwd   = getcwd(cwd, sizeof(cwd) - 1);
+                pcwd = getcwd(cwd, sizeof(cwd) - 1);
 #endif
                 if (pcwd)
                         TEST_SAY("Current directory: %s\n", cwd);

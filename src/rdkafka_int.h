@@ -426,9 +426,11 @@ struct rd_kafka_s {
         int32_t rk_controllerid; /* ControllerId from metadata */
 
         /**< Producer: Delivery report mode */
-        enum { RD_KAFKA_DR_MODE_NONE,  /**< No delivery reports */
-               RD_KAFKA_DR_MODE_CB,    /**< Delivery reports through callback */
-               RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event API*/
+        enum {
+                RD_KAFKA_DR_MODE_NONE, /**< No delivery reports */
+                RD_KAFKA_DR_MODE_CB,   /**< Delivery reports through callback */
+                RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event
+                                           API*/
         } rk_drmode;
 
         /* Simple consumer count:

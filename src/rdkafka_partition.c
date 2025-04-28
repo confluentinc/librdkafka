@@ -1349,7 +1349,7 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         if (rktp->rktp_query_pos.offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
                 int64_t orig_offset = next_pos.offset;
                 int64_t tail_cnt    = llabs(rktp->rktp_query_pos.offset -
-                                         RD_KAFKA_OFFSET_TAIL_BASE);
+                                            RD_KAFKA_OFFSET_TAIL_BASE);
 
                 if (tail_cnt > next_pos.offset)
                         next_pos.offset = 0;

@@ -3978,8 +3978,8 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 else {
                         rk->rk_ts_last_poll_end = rd_clock();
                         struct consume_ctx ctx  = {.consume_cb =
-                                                      rk->rk_conf.consume_cb,
-                                                  .opaque = rk->rk_conf.opaque};
+                                                       rk->rk_conf.consume_cb,
+                                                   .opaque = rk->rk_conf.opaque};
 
                         return rd_kafka_consume_cb(rk, rkq, rko, cb_type, &ctx);
                 }

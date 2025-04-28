@@ -278,7 +278,8 @@ int rd_kafka_get_legacy_ApiVersions(const char *broker_version,
                 struct rd_kafka_ApiVersion *apis;
                 size_t api_cnt;
         } vermap[] = {
-#define _VERMAP(PFX, APIS) {PFX, APIS, RD_ARRAYSIZE(APIS)}
+#define _VERMAP(PFX, APIS)                                                     \
+        { PFX, APIS, RD_ARRAYSIZE(APIS) }
             _VERMAP("0.9.0", rd_kafka_ApiVersion_0_9_0),
             _VERMAP("0.8.2", rd_kafka_ApiVersion_0_8_2),
             _VERMAP("0.8.1", rd_kafka_ApiVersion_0_8_1),

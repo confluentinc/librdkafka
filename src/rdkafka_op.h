@@ -471,13 +471,14 @@ struct rd_kafka_op_s {
                         struct rd_kafka_admin_worker_cbs *cbs;
 
                         /** Worker state */
-                        enum { RD_KAFKA_ADMIN_STATE_INIT,
-                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
-                               RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
-                               RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
-                               RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
-                               RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
-                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
+                        enum {
+                                RD_KAFKA_ADMIN_STATE_INIT,
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
+                                RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
+                                RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
                         } state;
 
                         int32_t broker_id; /**< Requested broker id to
@@ -576,21 +577,22 @@ struct rd_kafka_op_s {
 
                 /**< Mock cluster command */
                 struct {
-                        enum { RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
-                               RD_KAFKA_MOCK_CMD_TOPIC_CREATE,
-                               RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
-                               RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
-                               RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
-                               RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
-                               RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
-                               RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
-                               RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
-                               RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
-                               RD_KAFKA_MOCK_CMD_BROKER_ADD,
-                               RD_KAFKA_MOCK_CMD_COORD_SET,
-                               RD_KAFKA_MOCK_CMD_APIVERSION_SET,
-                               RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET,
-                               RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET,
+                        enum {
+                                RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
+                                RD_KAFKA_MOCK_CMD_TOPIC_CREATE,
+                                RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
+                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
+                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
+                                RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
+                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
+                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
+                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
+                                RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
+                                RD_KAFKA_MOCK_CMD_BROKER_ADD,
+                                RD_KAFKA_MOCK_CMD_COORD_SET,
+                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
+                                RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET,
+                                RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET,
                         } cmd;
 
                         rd_kafka_resp_err_t err; /**< Error for:

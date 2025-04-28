@@ -2139,8 +2139,8 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
         rd_kafka_metadata_partition_internal_t *partitions =
             rd_calloc(partition_cnt, sizeof(*partitions));
         struct rd_kafka_metadata_topic mdt      = {.topic =
-                                                  (char *)rkt->rkt_topic->str,
-                                              .partition_cnt = partition_cnt};
+                                                       (char *)rkt->rkt_topic->str,
+                                                   .partition_cnt = partition_cnt};
         rd_kafka_metadata_topic_internal_t mdit = {.partitions = partitions};
         int i;
 

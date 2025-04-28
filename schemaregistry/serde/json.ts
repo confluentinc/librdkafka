@@ -207,7 +207,7 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
     } else {
       target = info
     }
-    msg = this.executeRules(subject, topic, RuleMode.READ, null, target, msg, null)
+    msg = await this.executeRules(subject, topic, RuleMode.READ, null, target, msg, null)
     if ((this.conf as JsonSerdeConfig).validate) {
       const validate = await this.toValidateFunction(info)
       if (validate != null && !validate(JSON.parse(msg))) {

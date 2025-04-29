@@ -437,6 +437,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      1, 1000000, 1000000},
     {_RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
      .sdef = "max.in.flight.requests.per.connection"},
+    {_RK_GLOBAL, "metadata.recovery.strategy", _RK_C_S2I,
+     _RK(metadata_recovery_strategy),
+     "Controls how the client recovers when none of the brokers known to it "
+     "is available. If set to `none`, the client fails with a fatal error. "
+     "If set to `rebootstrap`, the client repeats the bootstrap process "
+     "using `bootstrap.servers` and brokers added through "
+     "`rd_kafka_brokers_add()`. Rebootstrapping is useful when a client "
+     "communicates with brokers so infrequently that the set of brokers "
+     "may change entirely before the client refreshes metadata. "
+     "Metadata recovery is triggered when all last-known brokers appear "
+     "unavailable simultaneously.",
+     .vdef = RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP,
+     .s2i  = {{RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE, "none"},
+             {RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP, "rebootstrap"},
+             {0, NULL}}},
     {_RK_GLOBAL | _RK_DEPRECATED | _RK_HIDDEN, "metadata.request.timeout.ms",
      _RK_C_INT, _RK(metadata_request_timeout_ms), "Not used.", 10, 900 * 1000,
      10},
@@ -540,7 +555,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
     },
     {_RK_GLOBAL, "socket.nagle.disable", _RK_C_BOOL, _RK(socket_nagle_disable),
-     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 0
+     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 1
 #ifndef TCP_NODELAY
      ,
      .unsupported = "TCP_NODELAY not available at build time"
@@ -702,8 +717,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The application should mask this signal as an internal "
      "signal handler is installed.",
      0, 128, 0},
-    {_RK_GLOBAL | _RK_HIGH, "api.version.request", _RK_C_BOOL,
+    {_RK_GLOBAL | _RK_HIGH | _RK_DEPRECATED, "api.version.request", _RK_C_BOOL,
      _RK(api_version_request),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Request broker's supported API versions to adjust functionality to "
      "available protocol features. If set to false, or the "
      "ApiVersionRequest fails, the fallback version "
@@ -715,16 +732,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "api.version.request.timeout.ms", _RK_C_INT,
      _RK(api_version_request_timeout_ms),
      "Timeout for broker API version requests.", 1, 5 * 60 * 1000, 10 * 1000},
-    {_RK_GLOBAL | _RK_MED, "api.version.fallback.ms", _RK_C_INT,
-     _RK(api_version_fallback_ms),
+    {_RK_GLOBAL | _RK_MED | _RK_DEPRECATED, "api.version.fallback.ms",
+     _RK_C_INT, _RK(api_version_fallback_ms),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Dictates how long the `broker.version.fallback` fallback is used "
      "in the case the ApiVersionRequest fails. "
      "**NOTE**: The ApiVersionRequest is only issued when a new connection "
      "to the broker is made (such as after an upgrade).",
      0, 86400 * 7 * 1000, 0},
 
-    {_RK_GLOBAL | _RK_MED, "broker.version.fallback", _RK_C_STR,
-     _RK(broker_version_fallback),
+    {_RK_GLOBAL | _RK_MED | _RK_DEPRECATED, "broker.version.fallback",
+     _RK_C_STR, _RK(broker_version_fallback),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Older broker versions (before 0.10.0) provide no way for a client to "
      "query "
      "for supported protocol features "
@@ -1110,9 +1131,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "members of the group to assign partitions to group members. If "
      "there is more than one eligible strategy, preference is "
      "determined by the order of this list (strategies earlier in the "
-     "list have higher priority). "
-     "Cooperative and non-cooperative (eager) strategies must not be "
-     "mixed. "
+     "list have higher priority). Cooperative and non-cooperative (eager)"
+     "strategies must not be mixed. `partition.assignment.strategy` is not "
+     "supported for "
+     "`group.protocol=consumer`. Use `group.remote.assignor` instead. "
      "Available strategies: range, roundrobin, cooperative-sticky.",
      .sdef = "range,roundrobin"},
     {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "session.timeout.ms", _RK_C_INT,
@@ -1122,20 +1144,35 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "to indicate its liveness to the broker. If no hearts are "
      "received by the broker for a group member within the "
      "session timeout, the broker will remove the consumer from "
-     "the group and trigger a rebalance. "
-     "The allowed range is configured with the **broker** configuration "
+     "the group and trigger a rebalance. The "
+     "allowed range is configured with the **broker** configuration "
      "properties `group.min.session.timeout.ms` and "
-     "`group.max.session.timeout.ms`. "
+     "`group.max.session.timeout.ms`. `session.timeout.ms` is not supported "
+     "for `group.protocol=consumer`. It is set with the broker configuration "
+     "property "
+     "`group.consumer.session.timeout.ms` by default or can be configured "
+     "through the AdminClient IncrementalAlterConfigs API. "
+     "The allowed range is configured with the broker configuration "
+     "properties `group.consumer.min.session.timeout.ms` and "
+     "`group.consumer.max.session.timeout.ms`. "
      "Also see `max.poll.interval.ms`.",
      1, 3600 * 1000, 45 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
      _RK(group_heartbeat_intvl_ms),
-     "Group session keepalive heartbeat interval.", 1, 3600 * 1000, 3 * 1000},
+     "Group session keepalive heartbeat interval. "
+     "`heartbeat.interval.ms` is not supported for `group.protocol=consumer`. "
+     "It is set with the broker configuration property "
+     "`group.consumer.heartbeat.interval.ms` by default or can be configured "
+     "through the AdminClient IncrementalAlterConfigs API. The allowed range "
+     "is configured with the broker configuration properties "
+     "`group.consumer.min.heartbeat.interval.ms` and "
+     "`group.consumer.max.heartbeat.interval.ms`.",
+     1, 3600 * 1000, 3 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "group.protocol.type", _RK_C_KSTR,
      _RK(group_protocol_type),
      "Group protocol type for the `classic` group protocol. NOTE: Currently, "
-     "the only supported group "
-     "protocol type is `consumer`.",
+     "the only supported group protocol type is `consumer`. "
+     "`group.protocol.type` is not supported for `group.protocol=consumer`",
      .sdef = "consumer"},
     {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "group.protocol", _RK_C_S2I,
      _RK(group_protocol),
@@ -3832,6 +3869,43 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (cltype == RD_KAFKA_CONSUMER) {
 
+                if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
+                        if (conf->max_poll_interval_ms <
+                            conf->group_session_timeout_ms)
+                                return "`max.poll.interval.ms`must be >= "
+                                       "`session.timeout.ms`";
+                } else {
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "session.timeout.ms")) {
+                                return "`session.timeout.ms` is not supported "
+                                       "for `group.protocol=consumer`. It is "
+                                       "defined broker side";
+                        }
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "partition.assignment.strategy")) {
+                                return "`partition.assignment.strategy` is not "
+                                       "supported for "
+                                       "`group.protocol=consumer`. Use "
+                                       "`group.remote.assignor` instead";
+                        }
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.protocol.type")) {
+                                return "`group.protocol.type` is not supported "
+                                       "for `group.protocol=consumer`";
+                        }
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "heartbeat.interval.ms")) {
+                                return "`heartbeat.interval.ms` is not "
+                                       "supported "
+                                       "for `group.protocol=consumer`. It is "
+                                       "defined broker side";
+                        }
+                }
+
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
                  * unless set by user. */
@@ -3861,10 +3935,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                             RD_MAX(conf->recv_max_msg_size,
                                    conf->fetch_max_bytes + 512);
                 }
-
-                if (conf->max_poll_interval_ms < conf->group_session_timeout_ms)
-                        return "`max.poll.interval.ms`must be >= "
-                               "`session.timeout.ms`";
 
                 /* Simplifies rd_kafka_is_idempotent() which is producer-only */
                 conf->eos.idempotence = 0;
@@ -3960,7 +4030,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (conf->reconnect_backoff_max_ms < conf->reconnect_backoff_ms)
                 return "`reconnect.backoff.max.ms` must be >= "
-                       "`reconnect.max.ms`";
+                       "`reconnect.backoff.ms`";
 
         if (conf->sparse_connections) {
                 /* Set sparse connection random selection interval to

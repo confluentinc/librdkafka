@@ -185,6 +185,7 @@ void test_SAY(const char *file, int line, int level, const char *str);
 void test_SKIP(const char *file, int line, const char *str);
 
 void test_timeout_set(int timeout);
+int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 int test_set_special_conf(const char *name, const char *val, int *timeoutp);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
@@ -410,8 +411,6 @@ int test_waitpid(int pid);
 const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
-
-int test_consumer_group_protocol_consumer();
 
 
 #endif /* _TESTSHARED_H_ */

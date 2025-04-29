@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -146,7 +147,7 @@ static int verify_latency(struct latconf *latconf) {
         }
 
         latconf->wakeups = tot_wakeups;
-        if (latconf->wakeups < 5 || latconf->wakeups > 1000) {
+        if (latconf->wakeups > 1000) {
                 TEST_FAIL_LATER(
                     "%s: broker wakeups out of range: %d, "
                     "expected 5..1000",

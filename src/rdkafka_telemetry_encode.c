@@ -713,6 +713,10 @@ static void serialize_Metric(
  * @brief Encodes the metrics to opentelemetry_proto_metrics_v1_MetricsData and
  * returns the serialized data. Currently only supports encoding of connection
  * creation total by default
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_rdlock()
+ * @locality main thread
  */
 rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         rd_buf_t *rbuf = NULL;

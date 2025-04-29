@@ -1227,12 +1227,32 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
  * @locality any
  * @locks toppar_lock() MUST be held
  */
-rd_bool_t rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
+static rd_bool_t rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
     rd_kafka_toppar_t *rktp) {
         return rktp->rktp_op_version > rktp->rktp_fetch_version ||
                rd_kafka_fetch_pos_cmp(&rktp->rktp_next_fetch_start,
                                       &rktp->rktp_last_next_fetch_start) ||
                rktp->rktp_offsets.fetch_pos.offset == RD_KAFKA_OFFSET_INVALID;
+}
+
+/**
+ * @brief Return next fetch start position:
+ *        if it should start fetching from next fetch start
+ *        or continue with current fetch pos.
+ *
+ * @param rktp The toppar
+ *
+ * @returns Next fetch start position
+ *
+ * @locality any
+ * @locks toppar_lock() MUST be held
+ */
+rd_kafka_fetch_pos_t
+rd_kafka_toppar_fetch_decide_next_fetch_start_pos(rd_kafka_toppar_t *rktp) {
+        if (rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(rktp))
+                return rktp->rktp_next_fetch_start;
+        else
+                return rktp->rktp_offsets.fetch_pos;
 }
 
 /**

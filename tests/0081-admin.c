@@ -39,6 +39,9 @@
 static int32_t *avail_brokers;
 static size_t avail_broker_cnt;
 
+#define group_configs_supported()                                              \
+        (test_broker_version >= TEST_BRKVER(4, 0, 0, 0))
+
 
 
 static void do_test_CreateTopics(const char *what,
@@ -902,7 +905,7 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
  */
 static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                                             rd_kafka_queue_t *rkqu) {
-#define MY_CONFRES_CNT 3
+#define MY_CONFRES_CNT 4
         char *topics[MY_CONFRES_CNT];
         rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
         rd_kafka_AdminOptions_t *options;
@@ -935,6 +938,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         /** Test the test helper, for use in other tests. */
         do {
                 const char *broker_id = tsprintf("%d", avail_brokers[0]);
+                const char *group_id  = topics[0];
                 const char *confs_set_append[] = {
                     "compression.type", "SET",    "lz4",
                     "cleanup.policy",   "APPEND", "compact"};
@@ -947,6 +951,10 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 const char *confs_delete_subtract_broker[] = {
                     "background.threads", "DELETE",   "",
                     "log.cleanup.policy", "SUBTRACT", "compact"};
+                const char *confs_set_group[] = {"consumer.session.timeout.ms",
+                                                 "SET", "50000"};
+                const char *confs_delete_group[] = {
+                    "consumer.session.timeout.ms", "DELETE", ""};
 
                 TEST_SAY("Testing test helper with SET and APPEND\n");
                 test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
@@ -969,6 +977,16 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 test_IncrementalAlterConfigs_simple(
                     rk, RD_KAFKA_RESOURCE_BROKER, broker_id,
                     confs_delete_subtract_broker, 2);
+                TEST_SAY(
+                    "Testing test helper with SET with GROUP resource type\n");
+                test_IncrementalAlterConfigs_simple(
+                    rk, RD_KAFKA_RESOURCE_GROUP, group_id, confs_set_group, 1);
+                TEST_SAY(
+                    "Testing test helper with DELETE with GROUP resource "
+                    "type\n");
+                test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_GROUP,
+                                                    group_id,
+                                                    confs_delete_group, 1);
                 TEST_SAY("End testing test helper\n");
         } while (0);
 
@@ -1033,6 +1051,23 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
         else
                 exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN;
+        ci++;
+
+        /**
+         * ConfigResource #3: valid group config
+         */
+        configs[ci] =
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, "my-group");
+
+        error = rd_kafka_ConfigResource_add_incremental_config(
+            configs[ci], "consumer.session.timeout.ms",
+            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+        if (group_configs_supported()) {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        }
         ci++;
 
         /*
@@ -1335,6 +1370,148 @@ retry_describe:
 }
 
 /**
+ * @brief Test DescribeConfigs for groups
+ */
+static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
+                                           rd_kafka_queue_t *rkqu) {
+#define MY_CONFRES_CNT 1
+        rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t exp_err[MY_CONFRES_CNT];
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_DescribeConfigs_result_t *res;
+        const rd_kafka_ConfigResource_t **rconfigs;
+        char *group;
+        size_t rconfig_cnt;
+        char errstr[128];
+        const char *errstr2;
+        int ci = 0;
+        int i;
+        int fails = 0;
+
+        SUB_TEST_QUICK();
+
+        group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+
+        /*
+         * ConfigResource #0: group config, for a non-existent group.
+         */
+        configs[ci] =
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
+        if (group_configs_supported()) {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        }
+        ci++;
+
+        /*
+         * Timeout options
+         */
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+        err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
+                                                        sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+        /*
+         * Fire off request
+         */
+        rd_kafka_DescribeConfigs(rk, configs, ci, options, rkqu);
+
+        /*
+         * Wait for result
+         */
+        rkev = test_wait_admin_result(
+            rkqu, RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT, 10000 + 1000);
+
+        /*
+         * Extract result
+         */
+        res = rd_kafka_event_DescribeConfigs_result(rkev);
+        TEST_ASSERT(res, "Expected DescribeConfigs result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!err, "Expected success, not %s: %s",
+                    rd_kafka_err2name(err), errstr2);
+
+        rconfigs = rd_kafka_DescribeConfigs_result_resources(res, &rconfig_cnt);
+        TEST_ASSERT((int)rconfig_cnt == ci,
+                    "Expected %d result resources, got %" PRIusz "\n", ci,
+                    rconfig_cnt);
+
+        /*
+         * Verify status per resource
+         */
+        for (i = 0; i < (int)rconfig_cnt; i++) {
+                const rd_kafka_ConfigEntry_t **entries;
+                size_t entry_cnt;
+
+                err     = rd_kafka_ConfigResource_error(rconfigs[i]);
+                errstr2 = rd_kafka_ConfigResource_error_string(rconfigs[i]);
+
+                entries =
+                    rd_kafka_ConfigResource_configs(rconfigs[i], &entry_cnt);
+
+                TEST_SAY(
+                    "ConfigResource #%d: type %s (%d), \"%s\": "
+                    "%" PRIusz " ConfigEntries, error %s (%s)\n",
+                    i,
+                    rd_kafka_ResourceType_name(
+                        rd_kafka_ConfigResource_type(rconfigs[i])),
+                    rd_kafka_ConfigResource_type(rconfigs[i]),
+                    rd_kafka_ConfigResource_name(rconfigs[i]), entry_cnt,
+                    rd_kafka_err2name(err), errstr2 ? errstr2 : "");
+
+                test_print_ConfigEntry_array(entries, entry_cnt, 1);
+
+                if (rd_kafka_ConfigResource_type(rconfigs[i]) !=
+                        rd_kafka_ConfigResource_type(configs[i]) ||
+                    strcmp(rd_kafka_ConfigResource_name(rconfigs[i]),
+                           rd_kafka_ConfigResource_name(configs[i]))) {
+                        TEST_FAIL_LATER(
+                            "ConfigResource #%d: "
+                            "expected type %s name %s, "
+                            "got type %s name %s",
+                            i,
+                            rd_kafka_ResourceType_name(
+                                rd_kafka_ConfigResource_type(configs[i])),
+                            rd_kafka_ConfigResource_name(configs[i]),
+                            rd_kafka_ResourceType_name(
+                                rd_kafka_ConfigResource_type(rconfigs[i])),
+                            rd_kafka_ConfigResource_name(rconfigs[i]));
+                        fails++;
+                }
+
+                if (err != exp_err[i]) {
+                        TEST_FAIL_LATER(
+                            "ConfigResource #%d: "
+                            "expected %s (%d), got %s (%s)",
+                            i, rd_kafka_err2name(exp_err[i]), exp_err[i],
+                            rd_kafka_err2name(err), errstr2 ? errstr2 : "");
+                        fails++;
+                }
+        }
+
+        TEST_ASSERT(!fails, "See %d previous failure(s)", fails);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_ConfigResource_destroy_array(configs, ci);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_free(group);
+
+        TEST_LATER_CHECK();
+#undef MY_CONFRES_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief Test CreateAcls
  */
 static void
@@ -1516,7 +1693,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 2, NULL);
 
         /* Wait for ACL propagation. */
-        rd_sleep(1);
+        rd_sleep(tmout_multip(2));
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -1931,7 +2108,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 3, NULL);
 
         /* Wait for ACL propagation. */
-        rd_sleep(1);
+        rd_sleep(tmout_multip(2));
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -1953,7 +2130,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        rd_sleep(1);
+        rd_sleep(tmout_multip(2));
 
         /*
          * Wait for result
@@ -2266,8 +2443,6 @@ static void do_test_DeleteRecords(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        rd_sleep(1); /* Additional wait time for cluster propagation */
-
         /* Produce 100 msgs / partition */
         for (i = 0; i < MY_DEL_RECORDS_CNT; i++) {
                 int32_t partition;
@@ -2540,8 +2715,6 @@ static void do_test_DeleteGroups(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
 
-        rd_sleep(1); /* Additional wait time for cluster propagation */
-
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
@@ -2715,8 +2888,6 @@ static void do_test_ListConsumerGroups(const char *what,
 
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
-
-        rd_sleep(1); /* Additional wait time for cluster propagation */
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
@@ -3381,6 +3552,9 @@ static void do_test_DescribeTopics(const char *what,
             test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL));
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
+
         /* Call DescribeTopics. */
         options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
@@ -3440,18 +3614,20 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_event_destroy(rkev);
 
         /*
-         * Allow RD_KAFKA_ACL_OPERATION_DELETE to allow deletion
-         * of the created topic as currently our principal only has read
-         * and describe.
+         * Remove create ACLs to allow deletion
+         * of the created topic.
          */
         acl_bindings[0] = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
-            RD_KAFKA_ACL_OPERATION_DELETE, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
+            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
         TEST_CALL_ERR__(
-            test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL));
+            test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL));
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
+
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
 
 done:
         test_DeleteTopics_simple(rk, NULL, topic_names, 1, NULL);
@@ -3603,6 +3779,9 @@ static void do_test_DescribeCluster(const char *what,
         test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
+
         /* Call DescribeCluster. */
         options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER);
@@ -3663,6 +3842,9 @@ static void do_test_DescribeCluster(const char *what,
             NULL, 0);
         test_DeleteAcls_simple(rk, NULL, &acl_bindings_delete, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings_delete);
+
+        /* Wait for ACL propagation. */
+        rd_sleep(tmout_multip(2));
 
 done:
         TEST_LATER_CHECK();
@@ -3770,16 +3952,27 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                     rd_kafka_error_string(error));
 
         {
-                const rd_kafka_AclOperation_t expected[] = {
+                const rd_kafka_AclOperation_t expected_ak3[] = {
                     RD_KAFKA_ACL_OPERATION_DELETE,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE,
                     RD_KAFKA_ACL_OPERATION_READ};
+                const rd_kafka_AclOperation_t expected_ak4[] = {
+                    RD_KAFKA_ACL_OPERATION_DELETE,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                    RD_KAFKA_ACL_OPERATION_READ,
+                    RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
+                    RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS};
                 authorized_operations =
                     rd_kafka_ConsumerGroupDescription_authorized_operations(
                         results[0], &authorized_operations_cnt);
-                test_match_authorized_operations(expected, 3,
-                                                 authorized_operations,
-                                                 authorized_operations_cnt);
+                if (test_broker_version < TEST_BRKVER(4, 0, 0, 0))
+                        test_match_authorized_operations(
+                            expected_ak3, 3, authorized_operations,
+                            authorized_operations_cnt);
+                else
+                        test_match_authorized_operations(
+                            expected_ak4, 5, authorized_operations,
+                            authorized_operations_cnt);
         }
 
         rd_kafka_event_destroy(rkev);
@@ -3853,13 +4046,12 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         acl_bindings[0] = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_GROUP, group_id,
             RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
-            RD_KAFKA_ACL_OPERATION_DELETE, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
+            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
             NULL, 0);
-        test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL);
+        test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
-        /* It seems to be taking some time on the cluster for the ACLs to
-         * propagate for a group.*/
+        /* Wait for ACL propagation. */
         rd_sleep(tmout_multip(2));
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
@@ -3955,8 +4147,6 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
-
-        rd_sleep(1); /* Additional wait time for cluster propagation */
 
         consumer = test_create_consumer(groupid, NULL, NULL, NULL);
 
@@ -4232,8 +4422,6 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 /* Verify that topics are reported by metadata */
                 test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt,
                                           NULL, 0, 15 * 1000);
-
-                rd_sleep(1); /* Additional wait time for cluster propagation */
 
                 consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -4516,8 +4704,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
-
-        rd_sleep(1); /* Additional wait time for cluster propagation */
 
         consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -4819,8 +5005,8 @@ static void do_test_UserScramCredentials(const char *what,
         rd_kafka_event_destroy(event);
 #endif
 
-        /* Wait propagation. */
-        rd_sleep(1);
+        /* Wait for user propagation. */
+        rd_sleep(tmout_multip(2));
 
         /* Credential should be retrieved */
         options = rd_kafka_AdminOptions_new(
@@ -4934,8 +5120,8 @@ static void do_test_UserScramCredentials(const char *what,
 final_checks:
 #endif
 
-        /* Wait propagation. */
-        rd_sleep(1);
+        /* Wait for user propagation. */
+        rd_sleep(tmout_multip(2));
 
         /* Credential doesn't exist anymore for this user */
 
@@ -5258,6 +5444,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         /* DescribeConfigs */
         do_test_DescribeConfigs(rk, mainq);
+        do_test_DescribeConfigs_groups(rk, mainq);
 
         /* Delete records */
         do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);

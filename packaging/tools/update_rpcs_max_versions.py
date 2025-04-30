@@ -51,43 +51,46 @@ import re
 # Output will be the same with max versions updated
 # Should pass Apache Kafka root folder as first argument
 ak_folder = sys.argv[1]
+input_file = sys.argv[2]
 
-if len(sys.argv) != 2:
-    print("Usage: python3 update_rpcs_max_versions.py <kafka_folder>")
+if len(sys.argv) != 3:
+    print("Usage: python3 update_rpcs_max_versions.py <kafka_folder> "
+          "<input_file>")
     sys.exit(1)
 
-lines = sys.stdin.readlines()
-max_first_column = 0
-max_second_column = 0
-max_third_column = 0
-apis = []
-for line in lines:
-    line = re.sub('^\\s*\\|\\s*', '', line)
-    pipe_char = line.find('|')
-    max_first_column = max(max_first_column, pipe_char)
-    api_num = int(line[0:pipe_char])
-    line = line[pipe_char + 1:]
-    line = re.sub('^\\s*', '', line)
-    pipe_char = line.find('|')
-    max_second_column = max(max_second_column, pipe_char)
-    api = line[0:pipe_char].strip()
-    apis.append((api_num, api))
-    line = line[pipe_char + 1:].lstrip()
-    pipe_char = line.find('|')
-    max_third_column = max(max_third_column, pipe_char)
+with open(input_file, 'r') as input:
+    lines = input.readlines()
+    max_first_column = 0
+    max_second_column = 0
+    max_third_column = 0
+    apis = []
+    for line in lines:
+        line = re.sub('^\\s*\\|\\s*', '', line)
+        pipe_char = line.find('|')
+        max_first_column = max(max_first_column, pipe_char)
+        api_num = int(line[0:pipe_char])
+        line = line[pipe_char + 1:]
+        line = re.sub('^\\s*', '', line)
+        pipe_char = line.find('|')
+        max_second_column = max(max_second_column, pipe_char)
+        api = line[0:pipe_char].strip()
+        apis.append((api_num, api))
+        line = line[pipe_char + 1:].lstrip()
+        pipe_char = line.find('|')
+        max_third_column = max(max_third_column, pipe_char)
 
-for api_num, api in apis:
-    with open(f'{ak_folder}/clients/src/main/resources/common/message/'
-              f'{api}Request.json',
-              'r') as f:
-        text = f.readlines()
-        text = "".join([line for line in text
-                        if '#' not in line and '//' not in line])
-        json_object = json.loads(text)
-        max_version = json_object["validVersions"].split("-")[-1]
-        print('| ', end='')
-        print(str(api_num).ljust(max_first_column), end='')
-        print('| ', end='')
-        print(api.ljust(max_second_column), end='')
-        print('| ', end='')
-        print(str(max_version).ljust(max_third_column) + '|')
+    for api_num, api in apis:
+        with open(f'{ak_folder}/clients/src/main/resources/common/message/'
+                  f'{api}Request.json',
+                  'r') as f:
+            text = f.readlines()
+            text = "".join([line for line in text
+                            if '#' not in line and '//' not in line])
+            json_object = json.loads(text)
+            max_version = json_object["validVersions"].split("-")[-1]
+            print('| ', end='')
+            print(str(api_num).ljust(max_first_column), end='')
+            print('| ', end='')
+            print(api.ljust(max_second_column), end='')
+            print('| ', end='')
+            print(str(max_version).ljust(max_third_column) + '|')

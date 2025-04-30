@@ -4,7 +4,7 @@ import sys
 import re
 
 # This script updates the Apache Kafka RPCs max versions.
-# It reads the input from stdin, which should be a table
+# It reads the input from `input_file`, which should be a table
 # looking like the table in `INTRODUCTION.md`.
 # Should look like this (without the first space after the comment):
 # | 0       | Produce                       | 12         | 10             |

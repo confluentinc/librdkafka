@@ -114,9 +114,9 @@ rd_kafka_msgset_writer_select_MsgVersion(rd_kafka_msgset_writer_t *msetw) {
                 int feature;
                 int16_t ApiVersion;
         } compr_req[RD_KAFKA_COMPRESSION_NUM] = {
-                [RD_KAFKA_COMPRESSION_LZ4] = {RD_KAFKA_FEATURE_LZ4, 0},
+            [RD_KAFKA_COMPRESSION_LZ4] = {RD_KAFKA_FEATURE_LZ4, 0},
 #if WITH_ZSTD
-                [RD_KAFKA_COMPRESSION_ZSTD] = {RD_KAFKA_FEATURE_ZSTD, 7},
+            [RD_KAFKA_COMPRESSION_ZSTD] = {RD_KAFKA_FEATURE_ZSTD, 7},
 #endif
         };
 
@@ -705,8 +705,8 @@ rd_kafka_msgset_writer_write_msg_v2(rd_kafka_msgset_writer_t *msetw,
                                             sizeof(varint_OffsetDelta), Offset);
         sz_KeyLen   = rd_uvarint_enc_i32(varint_KeyLen, sizeof(varint_KeyLen),
                                        rkm->rkm_key
-                                           ? (int32_t)rkm->rkm_key_len
-                                           : (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
+                                             ? (int32_t)rkm->rkm_key_len
+                                             : (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
         sz_ValueLen = rd_uvarint_enc_i32(
             varint_ValueLen, sizeof(varint_ValueLen),
             rkm->rkm_payload ? (int32_t)rkm->rkm_len

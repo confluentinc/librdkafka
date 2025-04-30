@@ -191,8 +191,8 @@ static RD_UNUSED void print_TopicPartitions(
                     << " TopicPartition(s):\n");
   for (unsigned int i = 0; i < partitions.size(); i++)
     Test::Say(tostr() << " " << partitions[i]->topic() << "["
-                      << partitions[i]->partition() << "] "
-                      << "offset " << partitions[i]->offset() << ": "
+                      << partitions[i]->partition() << "] " << "offset "
+                      << partitions[i]->offset() << ": "
                       << RdKafka::err2str(partitions[i]->err()) << "\n");
 }
 

@@ -2182,7 +2182,7 @@ release of librdkafka.
 | 36      | SaslAuthenticate              | 2          | 1              |
 | 37      | CreatePartitions              | 3          | 0              |
 | 42      | DeleteGroups                  | 2          | 1              |
-| 43      | ElectLeaders                  | 2          | 2              | 
+| 43      | ElectLeaders                  | 2          | 2              |
 | 44      | IncrementalAlterConfigs       | 1          | 1              |
 | 47      | OffsetDelete                  | 0          | 0              |
 | 50      | DescribeUserScramCredentials  | 0          | 0              |

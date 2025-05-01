@@ -2048,7 +2048,7 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
 /**
  * Destroy/free topic_info
  */
-void rd_kafka_topic_info_destroy(rd_kafka_topic_info_t *ti) {
+void rd_kafka_topic_info_destroy_free(void *ti) {
         rd_free(ti);
 }
 

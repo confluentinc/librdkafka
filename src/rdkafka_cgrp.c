@@ -525,7 +525,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         }
 
         rkcg->rkcg_subscribed_topics =
-            rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
+            rd_list_new(0, rd_kafka_topic_info_destroy_free);
         rd_interval_init(&rkcg->rkcg_coord_query_intvl);
         rd_interval_init(&rkcg->rkcg_heartbeat_intvl);
         rd_interval_init(&rkcg->rkcg_join_intvl);
@@ -2745,7 +2745,7 @@ static rd_bool_t rd_kafka_cgrp_update_subscribed_topics(rd_kafka_cgrp_t *rkcg,
                                      "clearing subscribed topics list (%d)",
                                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                                      rd_list_cnt(rkcg->rkcg_subscribed_topics));
-                tinfos = rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
+                tinfos = rd_list_new(0, rd_kafka_topic_info_destroy_free);
 
         } else {
                 if (rd_list_cnt(tinfos) == 0)
@@ -5469,7 +5469,7 @@ rd_kafka_cgrp_modify_subscription(rd_kafka_cgrp_t *rkcg,
         /* Create a list of the topics in metadata that matches the new
          * subscription */
         tinfos = rd_list_new(rkcg->rkcg_subscription->cnt,
-                             (void *)rd_kafka_topic_info_destroy);
+                             rd_kafka_topic_info_destroy_free);
 
         /* Unmatched topics will be added to the errored list. */
         errored = rd_kafka_topic_partition_list_new(0);
@@ -6907,7 +6907,7 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
          * Create a list of the topics in metadata that matches our subscription
          */
         tinfos = rd_list_new(rkcg->rkcg_subscription->cnt,
-                             (void *)rd_kafka_topic_info_destroy);
+                             rd_kafka_topic_info_destroy_free);
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
                 rd_kafka_metadata_topic_match(rkcg->rkcg_rk, tinfos,
@@ -7484,7 +7484,7 @@ static int unittest_list_to_map(void) {
 }
 
 int unittest_member_metadata_serdes(void) {
-        rd_list_t *topics = rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
+        rd_list_t *topics = rd_list_new(0, rd_kafka_topic_info_destroy_free);
         rd_kafka_topic_partition_list_t *owned_partitions =
             rd_kafka_topic_partition_list_new(0);
         rd_kafkap_str_t *rack_id    = rd_kafkap_str_new("myrack", -1);

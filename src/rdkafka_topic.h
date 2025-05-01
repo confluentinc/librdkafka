@@ -291,7 +291,7 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
     const char *topic,
     int partition_cnt,
     const rd_kafka_metadata_partition_internal_t *mdpi);
-void rd_kafka_topic_info_destroy(rd_kafka_topic_info_t *ti);
+void rd_kafka_topic_info_destroy_free(void *ti);
 
 int rd_kafka_topic_match(rd_kafka_t *rk,
                          const char *pattern,

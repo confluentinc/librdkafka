@@ -1137,117 +1137,92 @@ static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
         return 1;
 }
 
-/**
- * @brief Registers certificates, keys, etc, on the SSL_CTX
- *
- * @returns -1 on error, or 0 on success.
- */
-static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
-                                  SSL_CTX *ctx,
-                                  char *errstr,
-                                  size_t errstr_size) {
-        rd_bool_t ca_probe   = rd_true;
-        rd_bool_t check_pkey = rd_false;
+static int rd_kafka_ssl_set_ca(rd_kafka_t *rk,
+                               SSL_CTX *ctx,
+                               rd_bool_t is_oidc,
+                               char *errstr,
+                               size_t errstr_size) {
+        rd_bool_t ca_probe = rd_true;
         int r;
+        const char *ca_location = is_oidc ? rk->rk_conf.ssl.oidc_ca_location
+                                          : rk->rk_conf.ssl.ca_location;
+        const char *ca_pem =
+            is_oidc ? rk->rk_conf.ssl.oidc_ca_pem : rk->rk_conf.ssl.ca_pem;
 
-        /*
-         * ssl_ca, ssl.ca.location, or Windows cert root store,
-         * or default paths.
-         */
-        if (rk->rk_conf.ssl.ca) {
-                /* CA certificate chain set with conf_set_ssl_cert() */
+
+        if (ca_location && strcmp(ca_location, "probe")) {
+                /* CA certificate location, either file or directory. */
+                int is_dir = rd_kafka_path_is_dir(ca_location);
+
                 rd_kafka_dbg(rk, SECURITY, "SSL",
-                             "Loading CA certificate(s) from memory");
+                             "Loading CA certificate(s) from %s %s",
+                             is_dir ? "directory" : "file", ca_location);
 
-                SSL_CTX_set_cert_store(ctx, rk->rk_conf.ssl.ca->store);
+                r = SSL_CTX_load_verify_locations(ctx,
+                                                  !is_dir ? ca_location : NULL,
+                                                  is_dir ? ca_location : NULL);
 
-                /* OpenSSL takes ownership of the store */
-                rk->rk_conf.ssl.ca->store = NULL;
-
-                ca_probe = rd_false;
-
-        } else {
-
-                if (rk->rk_conf.ssl.ca_location &&
-                    strcmp(rk->rk_conf.ssl.ca_location, "probe")) {
-                        /* CA certificate location, either file or directory. */
-                        int is_dir =
-                            rd_kafka_path_is_dir(rk->rk_conf.ssl.ca_location);
-
-                        rd_kafka_dbg(rk, SECURITY, "SSL",
-                                     "Loading CA certificate(s) from %s %s",
-                                     is_dir ? "directory" : "file",
-                                     rk->rk_conf.ssl.ca_location);
-
-                        r = SSL_CTX_load_verify_locations(
-                            ctx, !is_dir ? rk->rk_conf.ssl.ca_location : NULL,
-                            is_dir ? rk->rk_conf.ssl.ca_location : NULL);
-
-                        if (r != 1) {
-                                rd_snprintf(errstr, errstr_size,
-                                            "ssl.ca.location failed: ");
-                                return -1;
-                        }
-
-                        ca_probe = rd_false;
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.ca.location failed: ");
+                        return -1;
                 }
 
-                if (rk->rk_conf.ssl.ca_pem) {
-                        /* CA as PEM string */
-                        X509 *x509;
-                        X509_STORE *store;
-                        BIO *bio;
-                        int cnt = 0;
+                ca_probe = rd_false;
+        }
 
-                        /* Get the OpenSSL trust store */
-                        store = SSL_CTX_get_cert_store(ctx);
-                        rd_assert(store != NULL);
+        if (ca_pem) {
+                /* CA as PEM string */
+                X509 *x509;
+                X509_STORE *store;
+                BIO *bio;
+                int cnt = 0;
 
-                        rd_kafka_dbg(rk, SECURITY, "SSL",
-                                     "Loading CA certificate(s) from string");
+                /* Get the OpenSSL trust store */
+                store = SSL_CTX_get_cert_store(ctx);
+                rd_assert(store != NULL);
 
-                        bio =
-                            BIO_new_mem_buf((void *)rk->rk_conf.ssl.ca_pem, -1);
-                        rd_assert(bio != NULL);
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Loading CA certificate(s) from string");
 
-                        /* Add all certificates to cert store */
-                        while ((x509 = PEM_read_bio_X509(
-                                    bio, NULL, rd_kafka_transport_ssl_passwd_cb,
-                                    rk))) {
-                                if (!X509_STORE_add_cert(store, x509)) {
-                                        rd_snprintf(errstr, errstr_size,
-                                                    "failed to add ssl.ca.pem "
-                                                    "certificate "
-                                                    "#%d to CA cert store: ",
-                                                    cnt);
-                                        X509_free(x509);
-                                        BIO_free(bio);
-                                        return -1;
-                                }
+                bio = BIO_new_mem_buf((void *)ca_pem, -1);
+                rd_assert(bio != NULL);
 
-                                X509_free(x509);
-                                cnt++;
-                        }
-
-                        if (!BIO_eof(bio) || !cnt) {
+                /* Add all certificates to cert store */
+                while ((x509 = PEM_read_bio_X509(
+                            bio, NULL, rd_kafka_transport_ssl_passwd_cb, rk))) {
+                        if (!X509_STORE_add_cert(store, x509)) {
                                 rd_snprintf(errstr, errstr_size,
-                                            "failed to read certificate #%d "
-                                            "from ssl.ca.pem: "
-                                            "not in PEM format?: ",
+                                            "failed to add ssl.ca.pem "
+                                            "certificate "
+                                            "#%d to CA cert store: ",
                                             cnt);
+                                X509_free(x509);
                                 BIO_free(bio);
                                 return -1;
                         }
 
-                        BIO_free(bio);
-
-                        rd_kafka_dbg(rk, SECURITY, "SSL",
-                                     "Loaded %d CA certificate(s) from string",
-                                     cnt);
-
-
-                        ca_probe = rd_false;
+                        X509_free(x509);
+                        cnt++;
                 }
+
+                if (!BIO_eof(bio) || !cnt) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "failed to read certificate #%d "
+                                    "from ssl.ca.pem: "
+                                    "not in PEM format?: ",
+                                    cnt);
+                        BIO_free(bio);
+                        return -1;
+                }
+
+                BIO_free(bio);
+
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Loaded %d CA certificate(s) from string", cnt);
+
+
+                ca_probe = rd_false;
         }
 
         if (ca_probe) {
@@ -1273,8 +1248,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 r = -1;
 #endif
 
-                if ((rk->rk_conf.ssl.ca_location &&
-                     !strcmp(rk->rk_conf.ssl.ca_location, "probe"))
+                if ((ca_location && !strcmp(ca_location, "probe"))
 #if WITH_STATIC_LIB_libcrypto
                     || r == -1
 #endif
@@ -1308,6 +1282,41 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         }
                         r = 0;
                 }
+        }
+}
+
+/**
+ * @brief Registers certificates, keys, etc, on the SSL_CTX
+ *
+ * @returns -1 on error, or 0 on success.
+ */
+static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
+                                  SSL_CTX *ctx,
+                                  rd_bool_t is_oidc,
+                                  char *errstr,
+                                  size_t errstr_size) {
+        rd_bool_t ca_probe   = rd_true;
+        rd_bool_t check_pkey = rd_false;
+        int r;
+
+        /*
+         * ssl_ca, ssl.ca.location, or Windows cert root store,
+         * or default paths.
+         */
+        if (rk->rk_conf.ssl.ca) {
+                /* CA certificate chain set with conf_set_ssl_cert() */
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Loading CA certificate(s) from memory");
+
+                SSL_CTX_set_cert_store(ctx, rk->rk_conf.ssl.ca->store);
+
+                /* OpenSSL takes ownership of the store */
+                rk->rk_conf.ssl.ca->store = NULL;
+
+                ca_probe = rd_false;
+
+        } else {
+                rd_kafka_ssl_set_ca(rk, ctx, is_oidc, errstr, errstr_size);
         }
 
         if (rk->rk_conf.ssl.crl_location) {
@@ -1799,7 +1808,11 @@ static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
 
 
 
-int rd_kafka_ssl_ctx_config(rd_kafka_t *rk, SSL_CTX *ctx, char *errstr, size_t errstr_size);
+int rd_kafka_ssl_ctx_config(rd_kafka_t *rk,
+                            SSL_CTX *ctx,
+                            rd_bool_t is_oidc,
+                            char *errstr,
+                            size_t errstr_size);
 
 
 /**
@@ -1862,7 +1875,8 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 goto fail;
         }
 
-        if (rd_kafka_ssl_ctx_config(rk, ctx, errstr, errstr_size) != 0) {
+        if (rd_kafka_ssl_ctx_config(rk, ctx, rd_false, errstr, errstr_size) !=
+            0) {
                 goto fail;
         }
 
@@ -1892,7 +1906,11 @@ fail:
 /**
  * @brief Initialize an SSL context. Used by both main thread and curl
  */
-int rd_kafka_ssl_ctx_config(rd_kafka_t *rk, SSL_CTX *ctx, char *errstr, size_t errstr_size) {
+int rd_kafka_ssl_ctx_config(rd_kafka_t *rk,
+                            SSL_CTX *ctx,
+                            rd_bool_t is_oidc,
+                            char *errstr,
+                            size_t errstr_size) {
         int r;
 
 #ifdef SSL_OP_NO_SSLv3
@@ -1955,7 +1973,7 @@ int rd_kafka_ssl_ctx_config(rd_kafka_t *rk, SSL_CTX *ctx, char *errstr, size_t e
 #endif
 
         /* Register certificates, keys, etc. */
-        if (rd_kafka_ssl_set_certs(rk, ctx, errstr, errstr_size) == -1)
+        if (rd_kafka_ssl_set_certs(rk, ctx, is_oidc, errstr, errstr_size) == -1)
                 goto fail;
 
 

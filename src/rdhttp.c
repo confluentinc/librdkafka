@@ -44,6 +44,12 @@
 /** Maximum response size, increase as necessary. */
 #define RD_HTTP_RESPONSE_SIZE_MAX 1024 * 1024 * 500 /* 500kb */
 
+struct rd_kafka_curl_context_s {
+        rd_kafka_t *rk;
+        rd_bool_t is_oidc;
+};
+
+typedef struct rd_kafka_curl_context_s rd_kafka_curl_context_t;
 
 void rd_http_error_destroy(rd_http_error_t *herr) {
         rd_free(herr);
@@ -130,21 +136,23 @@ rd_http_req_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
 }
 
 static CURLcode rd_http_ssl_ctx_function(CURL *curl, void *sslctx, void *parm) {
-        rd_kafka_t *rk = parm;
-        SSL_CTX *ctx = sslctx;
+        rd_kafka_curl_context_t *curl_context = parm;
+        SSL_CTX *ctx                          = sslctx;
         char errstr[512];
-        if (rd_kafka_ssl_ctx_config(rk, ctx, errstr, sizeof(errstr)) == 0) {
+        if (rd_kafka_ssl_ctx_config(curl_context->rk, ctx,
+                                    curl_context->is_oidc, errstr,
+                                    sizeof(errstr)) == 0) {
                 return CURLE_OK;
         } else {
-                rd_kafka_log(rk, LOG_ERR, "HTTP",
+                rd_kafka_log(curl_context->rk, LOG_ERR, "HTTP",
                              "Failed to configure SSL context for curl: %s",
                              errstr);
                 return CURLE_FAILED_INIT;
         }
-
 }
 
-rd_http_error_t *rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
+rd_http_error_t *
+rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
 
         memset(hreq, 0, sizeof(*hreq));
 
@@ -153,11 +161,15 @@ rd_http_error_t *rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const cha
                 return rd_http_error_new(-1, "Failed to create curl handle");
 
         hreq->hreq_buf = rd_buf_new(1, 1024);
+        rd_kafka_curl_context_t *curl_context =
+            rd_malloc(sizeof(*curl_context));
+        curl_context->rk = rk;
+        curl_context->is_oidc =
+            url == rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
 
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_SSL_CTX_FUNCTION,
                          rd_http_ssl_ctx_function);
-        curl_easy_setopt(hreq->hreq_curl, CURLOPT_SSL_CTX_DATA,
-                         rk);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_SSL_CTX_DATA, curl_context);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_URL, url);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_PROTOCOLS,
                          CURLPROTO_HTTP | CURLPROTO_HTTPS);
@@ -220,7 +232,8 @@ const char *rd_http_req_get_content_type(rd_http_req_t *hreq) {
  * by calling rd_http_error_destroy(). In case of HTTP error the \p *rbufp
  * may be filled with the error response.
  */
-rd_http_error_t *rd_http_get(rd_kafka_t *rk, const char *url, rd_buf_t **rbufp) {
+rd_http_error_t *
+rd_http_get(rd_kafka_t *rk, const char *url, rd_buf_t **rbufp) {
         rd_http_req_t hreq;
         rd_http_error_t *herr;
 
@@ -395,7 +408,8 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
  *
  * Same error semantics as rd_http_get().
  */
-rd_http_error_t *rd_http_get_json(rd_kafka_t *rk, const char *url, cJSON **jsonp) {
+rd_http_error_t *
+rd_http_get_json(rd_kafka_t *rk, const char *url, cJSON **jsonp) {
         rd_http_req_t hreq;
         rd_http_error_t *herr;
         rd_slice_t slice;
@@ -486,8 +500,8 @@ int unittest_http(void) {
                 RD_UT_SKIP("RD_UT_HTTP_URL environment variable not set");
 
         RD_UT_BEGIN();
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
 
-#if 0  /* FIXME: unit test temporarily broken by adding rk option */
         error_url_size = strlen(base_url) + strlen("/error") + 1;
         error_url      = rd_alloca(error_url_size);
         rd_snprintf(error_url, error_url_size, "%s/error", base_url);
@@ -529,6 +543,5 @@ int unittest_http(void) {
                 cJSON_Delete(json);
         rd_http_error_destroy(herr);
 
-#endif  /* FIXME: unit test temporarily broken by adding rk option */
         RD_UT_PASS();
 }

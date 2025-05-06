@@ -423,8 +423,8 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
         cJSON *parsed_token;
 
         RD_UT_BEGIN();
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
 
-#if 0  /* FIXME: unit test temporarily broken by adding rk option */
         herr = rd_http_req_init(rk, &hreq, "");
 
         RD_UT_ASSERT(!herr,
@@ -461,7 +461,6 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
         rd_http_error_destroy(herr);
         rd_http_req_destroy(&hreq);
         cJSON_Delete(json);
-#endif  /* FIXME: unit test temporarily broken by adding rk option */
 
         RD_UT_PASS();
 }
@@ -479,10 +478,10 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
         rd_http_error_t *herr;
         cJSON *json = NULL;
         cJSON *parsed_token;
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
 
         RD_UT_BEGIN();
 
-#if 0  /* FIXME: unit test temporarily broken by adding rk option */
         herr = rd_http_req_init(rk, &hreq, "");
         RD_UT_ASSERT(!herr,
                      "Expected initialization to succeed, "
@@ -511,7 +510,6 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
         rd_http_error_destroy(herr);
         cJSON_Delete(json);
         cJSON_Delete(parsed_token);
-#endif  /* FIXME: unit test temporarily broken by adding rk option */
         RD_UT_PASS();
 }
 

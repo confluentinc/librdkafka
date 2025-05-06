@@ -93,18 +93,20 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
     }
 
     if (this.config != null) {
-      for (let [key, value] of config) {
-        let v = this.config.get(key)
-        if (v != null) {
-          if (v !== value) {
-            throw new RuleError('rule config key already set: {key}')
+      if (config != null) {
+        for (let [key, value] of config) {
+          let v = this.config.get(key)
+          if (v != null) {
+            if (v !== value) {
+              throw new RuleError('rule config key already set: {key}')
+            }
+          } else {
+            this.config.set(key, value)
           }
-        } else {
-          this.config.set(key, value)
         }
       }
     } else {
-      this.config = config
+      this.config = config != null ? config : new Map<string, string>()
     }
   }
 

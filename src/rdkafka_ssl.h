@@ -48,7 +48,11 @@ ssize_t rd_kafka_transport_ssl_recv(rd_kafka_transport_t *rktrans,
 
 void rd_kafka_ssl_ctx_term(rd_kafka_t *rk);
 int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size);
-int rd_kafka_ssl_ctx_config(rd_kafka_t *rk, SSL_CTX *ctx, char *errstr, size_t errstr_size);
+int rd_kafka_ssl_ctx_config(rd_kafka_t *rk,
+                            SSL_CTX *ctx,
+                            rd_bool_t is_oidc,
+                            char *errstr,
+                            size_t errstr_size);
 
 void rd_kafka_ssl_term(void);
 void rd_kafka_ssl_init(void);

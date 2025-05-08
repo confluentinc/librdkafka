@@ -129,6 +129,7 @@ describe('SchemaRegistryClient Integration Test', () => {
 
     const schemaMetadata: SchemaMetadata = {
       id: registerResponse?.id!,
+      guid: registerResponse?.guid!,
       version: schemaVersion,
       schema: schemaInfo.schema,
       subject: testSubject,
@@ -137,6 +138,7 @@ describe('SchemaRegistryClient Integration Test', () => {
 
     const schemaMetadata2: SchemaMetadata = {
       id: registerResponse2?.id!,
+      guid: registerResponse2?.guid!,
       version: registerResponse2?.version!,
       schema: backwardCompatibleSchemaInfo.schema,
       subject: testSubject,

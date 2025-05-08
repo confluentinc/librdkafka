@@ -9,6 +9,8 @@ import {
 } from "../schemaregistry-client";
 import {RuleRegistry} from "./rule-registry";
 import {ClientConfig} from "../rest-service";
+import {BufferWrapper, MAX_VARINT_LEN_64} from "./buffer-wrapper";
+import {IHeaders} from "../../types/kafkajs";
 
 export enum SerdeType {
   KEY = 'KEY',
@@ -16,6 +18,139 @@ export enum SerdeType {
 }
 
 export const MAGIC_BYTE = Buffer.alloc(1)
+export const MAGIC_BYTE_V0 = MAGIC_BYTE
+export const MAGIC_BYTE_V1 = Buffer.alloc(1, 1)
+
+export const KEY_SCHEMA_ID_HEADER = '__key_schema_id'
+export const VALUE_SCHEMA_ID_HEADER = '__value_schema_id'
+
+const byteToHex: string[] = [];
+for (let i = 0; i < 256; ++i) {
+  byteToHex.push((i + 0x100).toString(16).slice(1));
+}
+
+export class SchemaId {
+  schemaType: string
+  id?: number
+  guid?: string
+  messageIndexes?: number[]
+
+  constructor(schemaType: string, id?: number, guid?: string, messageIndexes?: number[]) {
+    this.schemaType = schemaType
+    this.id = id
+    this.guid = guid
+    this.messageIndexes = messageIndexes
+  }
+
+  fromBytes(payload: Buffer): number {
+    let totalBytesRead = 0
+    const magicByte = payload.subarray(0, 1)
+    if (magicByte.equals(MAGIC_BYTE_V0)) {
+      this.id = payload.subarray(1, 5).readInt32BE(0)
+      totalBytesRead = 5
+    } else if (magicByte.equals(MAGIC_BYTE_V1)) {
+      this.guid = this.stringifyUuid(payload.subarray(1, 17))
+      totalBytesRead = 17
+    } else {
+      throw new SerializationError(
+        `Unknown magic byte ${JSON.stringify(magicByte)}`
+      )
+    }
+    if (this.schemaType == "PROTOBUF") {
+      const [bytesRead, msgIndexes] = this.readMessageIndexes(payload.subarray(totalBytesRead))
+      this.messageIndexes = msgIndexes
+      totalBytesRead += bytesRead
+    }
+    return totalBytesRead
+  }
+
+  stringifyUuid(arr: Uint8Array, offset = 0) {
+    return (byteToHex[arr[offset + 0]] +
+      byteToHex[arr[offset + 1]] +
+      byteToHex[arr[offset + 2]] +
+      byteToHex[arr[offset + 3]] +
+      '-' +
+      byteToHex[arr[offset + 4]] +
+      byteToHex[arr[offset + 5]] +
+      '-' +
+      byteToHex[arr[offset + 6]] +
+      byteToHex[arr[offset + 7]] +
+      '-' +
+      byteToHex[arr[offset + 8]] +
+      byteToHex[arr[offset + 9]] +
+      '-' +
+      byteToHex[arr[offset + 10]] +
+      byteToHex[arr[offset + 11]] +
+      byteToHex[arr[offset + 12]] +
+      byteToHex[arr[offset + 13]] +
+      byteToHex[arr[offset + 14]] +
+      byteToHex[arr[offset + 15]]).toLowerCase();
+  }
+
+  idToBytes() : Buffer {
+    if (this.id == null) {
+      throw new SerializationError('Schema id is not set')
+    }
+    const idBuffer = Buffer.alloc(4)
+    idBuffer.writeInt32BE(this.id!, 0)
+    if (this.messageIndexes != null) {
+      return Buffer.concat([MAGIC_BYTE_V0, idBuffer, this.writeMessageIndexes(this.messageIndexes)])
+    }
+    return Buffer.concat([MAGIC_BYTE_V0, idBuffer])
+  }
+
+  guidToBytes() : Buffer {
+    if (this.guid == null) {
+      throw new SerializationError('Schema guid is not set')
+    }
+    const guidBuffer = Buffer.from(this.parseUuid(this.guid!))
+    if (this.messageIndexes != null) {
+      return Buffer.concat([MAGIC_BYTE_V1, guidBuffer, this.writeMessageIndexes(this.messageIndexes)])
+    }
+    return Buffer.concat([MAGIC_BYTE_V1, guidBuffer])
+  }
+
+  parseUuid(uuid: string): Uint8Array {
+    let v;
+    return Uint8Array.of(
+      (v = parseInt(uuid.slice(0, 8), 16)) >>> 24,
+      (v >>> 16) & 0xff,
+      (v >>> 8) & 0xff, v & 0xff,
+      (v = parseInt(uuid.slice(9, 13), 16)) >>> 8, v & 0xff,
+      (v = parseInt(uuid.slice(14, 18), 16)) >>> 8, v & 0xff,
+      (v = parseInt(uuid.slice(19, 23), 16)) >>> 8, v & 0xff,
+      ((v = parseInt(uuid.slice(24, 36), 16)) / 0x10000000000) & 0xff,
+      (v / 0x100000000) & 0xff, (v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff);
+  }
+
+  readMessageIndexes(payload: Buffer): [number, number[]] {
+    const bw = new BufferWrapper(payload)
+    const count = bw.readVarInt()
+    if (count == 0) {
+      return [1, [0]]
+    }
+    const msgIndexes = []
+    for (let i = 0; i < count; i++) {
+      msgIndexes.push(bw.readVarInt())
+    }
+    return [bw.pos, msgIndexes]
+  }
+
+  writeMessageIndexes(msgIndexes: number[]): Buffer {
+    if (msgIndexes.length === 1 && msgIndexes[0] === 0) {
+      const buffer = Buffer.alloc(1)
+      buffer.writeUInt8(0, 0)
+      return buffer
+    }
+    const buffer = Buffer.alloc((1 + msgIndexes.length) * MAX_VARINT_LEN_64)
+    const bw = new BufferWrapper(buffer)
+    bw.writeVarInt(msgIndexes.length)
+    for (let i = 0; i < msgIndexes.length; i++) {
+      bw.writeVarInt(msgIndexes[i])
+    }
+    return buffer.subarray(0, bw.pos)
+  }
+}
 
 /**
  * SerializationError represents a serialization error
@@ -247,6 +382,8 @@ export interface SerializerConfig extends SerdeConfig {
   useSchemaId?: number
   // normalizeSchemas determines whether to normalize schemas
   normalizeSchemas?: boolean
+  // schemaIdSerializer determines how to serialize schema IDs
+  schemaIdSerializer?: SchemaIdSerializerFunc
 }
 
 /**
@@ -265,49 +402,52 @@ export abstract class Serializer extends Serde {
    * Serialize serializes a message
    * @param topic - the topic
    * @param msg - the message
+   * @param headers - optional headers
    */
-  abstract serialize(topic: string, msg: any): Promise<Buffer>
+  abstract serialize(topic: string, msg: any, headers?: IHeaders): Promise<Buffer>
 
-  // GetID returns a schema ID for the given schema
-  async getId(topic: string, msg: any, info?: SchemaInfo, format?: string): Promise<[number, SchemaInfo]> {
+  // GetSchemaID returns a schema ID for the given schema
+  async getSchemaId(schemaType: string, topic: string, msg: any, info?: SchemaInfo, format?: string): Promise<[SchemaId, SchemaInfo]> {
     let autoRegister = this.config().autoRegisterSchemas
     let useSchemaId = this.config().useSchemaId
     let useLatestWithMetadata = this.config().useLatestWithMetadata
     let useLatest = this.config().useLatestVersion
     let normalizeSchema = this.config().normalizeSchemas
 
-    let id = -1
+    let metadata: SchemaMetadata
     let subject = this.subjectName(topic, info)
     if (autoRegister) {
-      id = await this.client.register(subject, info!, Boolean(normalizeSchema))
+      metadata = await this.client.registerFullResponse(subject, info!, Boolean(normalizeSchema))
     } else if (useSchemaId != null && useSchemaId >= 0) {
       info = await this.client.getBySubjectAndId(subject, useSchemaId, format)
-      id = useSchemaId
+      metadata = await this.client.getIdFullResponse(subject, info!, Boolean(normalizeSchema))
     } else if (useLatestWithMetadata != null && Object.keys(useLatestWithMetadata).length !== 0) {
-      let metadata = await this.client.getLatestWithMetadata(subject, useLatestWithMetadata, true, format)
+      metadata = await this.client.getLatestWithMetadata(subject, useLatestWithMetadata, true, format)
       info = metadata
-      id = metadata.id
     } else if (useLatest) {
-      let metadata = await this.client.getLatestSchemaMetadata(subject, format)
+      metadata = await this.client.getLatestSchemaMetadata(subject, format)
       info = metadata
-      id = metadata.id
     } else {
-      id = await this.client.getId(subject, info!, Boolean(normalizeSchema))
+      metadata = await this.client.getIdFullResponse(subject, info!, Boolean(normalizeSchema))
     }
-    return [id, info!]
+    let schemaId = new SchemaId(schemaType, metadata.id, metadata.guid)
+    return [schemaId, info!]
   }
 
-  writeBytes(id: number, msgBytes: Buffer): Buffer {
-    const idBuffer = Buffer.alloc(4)
-    idBuffer.writeInt32BE(id, 0)
-    return Buffer.concat([MAGIC_BYTE, idBuffer, msgBytes])
+  serializeSchemaId(topic: string, payload: Buffer, schemaId: SchemaId, headers?: IHeaders): Buffer {
+    const serializer = this.config().schemaIdSerializer ?? PrefixSchemaIdSerializer
+    return serializer(topic, this.serdeType, payload, schemaId, headers)
   }
 }
 
 /**
  * DeserializerConfig represents a deserializer configuration
  */
-export type DeserializerConfig = SerdeConfig
+export interface DeserializerConfig extends SerdeConfig {
+  // schemaIdDeserializer determines how to deserialize schema IDs
+  schemaIdDeserializer?: SchemaIdDeserializerFunc
+}
+
 
 /**
  * Migration represents a migration
@@ -334,21 +474,27 @@ export abstract class Deserializer extends Serde {
    * Deserialize deserializes a message
    * @param topic - the topic
    * @param payload - the payload
+   * @param headers - optional headers
    */
-  abstract deserialize(topic: string, payload: Buffer): Promise<any>
+  abstract deserialize(topic: string, payload: Buffer, headers?: IHeaders): Promise<any>
 
-  async getSchema(topic: string, payload: Buffer, format?: string): Promise<SchemaInfo> {
-    const magicByte = payload.subarray(0, 1)
-    if (!magicByte.equals(MAGIC_BYTE)) {
-      throw new SerializationError(
-        `Message encoded with magic byte ${JSON.stringify(magicByte)}, expected ${JSON.stringify(
-          MAGIC_BYTE,
-        )}`,
-      )
+  deserializeSchemaId(topic: string, payload: Buffer, schemaId: SchemaId, headers?: IHeaders): number {
+    const deserializer = this.config().schemaIdDeserializer ?? DualSchemaIdDeserializer
+    return deserializer(topic, this.serdeType, payload, schemaId, headers)
+  }
+
+  async getWriterSchema(topic: string, payload: Buffer, schemaId: SchemaId, headers?: IHeaders, format?: string): Promise<[SchemaInfo, number]> {
+    const bytesRead = this.deserializeSchemaId(topic, payload, schemaId, headers)
+    let info: SchemaInfo
+    if (schemaId.id != null) {
+      let subject = this.subjectName(topic)
+      info = await this.client.getBySubjectAndId(subject, schemaId.id!, format)
+    } else if (schemaId.guid != null) {
+      info = await this.client.getByGuid(schemaId.guid!, format)
+    } else {
+      throw new SerializationError("Invalid schema ID")
     }
-    const id = payload.subarray(1, 5).readInt32BE(0)
-    let subject = this.subjectName(topic)
-    return await this.client.getBySubjectAndId(subject, id, format)
+    return [info, bytesRead]
   }
 
   async getReaderSchema(subject: string, format?: string): Promise<SchemaMetadata | null> {
@@ -400,6 +546,7 @@ export abstract class Deserializer extends Serde {
     let version = await this.client.getVersion(subject, sourceInfo, false, true)
     let source: SchemaMetadata = {
       id: 0,
+      guid: "",
       version:    version,
       schema: sourceInfo.schema,
       references: sourceInfo.references,
@@ -499,6 +646,93 @@ export const TopicNameStrategy: SubjectNameStrategyFunc = (topic: string, serdeT
     suffix = '-key'
   }
   return topic + suffix
+}
+
+/**
+ * SchemaIdSerializerFunc serializes a schema ID/GUID
+ */
+export type SchemaIdSerializerFunc = (
+  topic: string,
+  serdeType: SerdeType,
+  payload: Buffer,
+  schemaId: SchemaId,
+  headers?: IHeaders,
+) => Buffer
+
+export const HeaderSchemaIdSerializer: SchemaIdSerializerFunc = (
+  topic: string,
+  serdeType: SerdeType,
+  payload: Buffer,
+  schemaId: SchemaId,
+  headers?: IHeaders) => {
+  if (headers == null) {
+    throw new SerializationError('Missing Headers')
+  }
+  let headerKey = serdeType === SerdeType.KEY ? KEY_SCHEMA_ID_HEADER : VALUE_SCHEMA_ID_HEADER
+  headers![headerKey] = schemaId.guidToBytes()
+  return payload
+}
+
+export const PrefixSchemaIdSerializer: SchemaIdSerializerFunc = (
+  topic: string,
+  serdeType: SerdeType,
+  payload: Buffer,
+  schemaId: SchemaId,
+  headers?: IHeaders) => {
+  return Buffer.concat([schemaId.idToBytes(), payload])
+}
+
+/**
+ * SchemaIdDeserializerFunc serializes a schema ID/GUID
+ */
+export type SchemaIdDeserializerFunc = (
+  topic: string,
+  serdeType: SerdeType,
+  payload: Buffer,
+  schemaId: SchemaId,
+  headers?: IHeaders,
+) => number
+
+export const DualSchemaIdDeserializer: SchemaIdDeserializerFunc = (
+  topic: string,
+  serdeType: SerdeType,
+  payload: Buffer,
+  schemaId: SchemaId,
+  headers?: IHeaders) => {
+  let headerKey = serdeType === SerdeType.KEY ? KEY_SCHEMA_ID_HEADER : VALUE_SCHEMA_ID_HEADER
+  // get header with headerKey from headers
+  if (headers != null) {
+    let headerValues = headers![headerKey]
+    let buf: Buffer | null
+    if (headerValues != null) {
+      if (Array.isArray(headerValues)) {
+        let headerValue = headerValues.length > 0 ? headerValues[headerValues.length - 1] : null
+        if (typeof headerValue === 'string') {
+          buf = Buffer.from(headerValue, 'utf8');
+        } else {
+          buf = headerValue
+        }
+      } else if (typeof headerValues === 'string') {
+        buf = Buffer.from(headerValues, 'utf8');
+      } else {
+        buf = headerValues
+      }
+      if (buf != null) {
+        schemaId.fromBytes(buf)
+        return 0
+      }
+    }
+  }
+  return schemaId.fromBytes(payload)
+}
+
+export const PrefixSchemaIdDeserializer: SchemaIdDeserializerFunc = (
+  topic: string,
+  serdeType: SerdeType,
+  payload: Buffer,
+  schemaId: SchemaId,
+  headers?: IHeaders) => {
+  return schemaId.fromBytes(payload)
 }
 
 /**

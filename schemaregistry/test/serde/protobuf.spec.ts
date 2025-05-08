@@ -4,7 +4,7 @@ import {
   ProtobufDeserializer, ProtobufDeserializerConfig,
   ProtobufSerializer, ProtobufSerializerConfig,
 } from "../../serde/protobuf";
-import {SerdeType} from "../../serde/serde";
+import {HeaderSchemaIdSerializer, SerdeType} from "../../serde/serde";
 import {
   Rule,
   RuleMode,
@@ -63,6 +63,28 @@ describe('ProtobufSerializer', () => {
 
     let deser = new ProtobufDeserializer(client, SerdeType.VALUE, {})
     let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).toEqual(obj)
+  })
+  it('guid in header', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new ProtobufSerializer(client, SerdeType.VALUE,
+      {autoRegisterSchemas: true, schemaIdSerializer: HeaderSchemaIdSerializer})
+    ser.registry.add(AuthorSchema)
+    let obj = create(AuthorSchema, {
+      name: 'Kafka',
+      id: 123,
+      picture: Buffer.from([1, 2]),
+      works: ['The Castle', 'The Trial']
+    })
+    let headers = {}
+    let bytes = await ser.serialize(topic, obj, headers)
+
+    let deser = new ProtobufDeserializer(client, SerdeType.VALUE, {})
+    let obj2 = await deser.deserialize(topic, bytes, headers)
     expect(obj2).toEqual(obj)
   })
   it('serialize second messsage', async () => {

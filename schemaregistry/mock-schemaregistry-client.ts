@@ -8,8 +8,10 @@ import {
   ServerConfig
 } from './schemaregistry-client';
 import stringify from "json-stringify-deterministic";
+import {v4} from "uuid";
 import {ClientConfig} from "./rest-service";
 import {RestError} from "./rest-error";
+import {SchemaId} from "./serde/serde";
 
 interface VersionCacheEntry {
   version: number;
@@ -45,6 +47,7 @@ class MockClient implements Client {
   private clientConfig?: ClientConfig;
   private infoToSchemaCache: Map<string, MetadataCacheEntry>;
   private idToSchemaCache: Map<string, InfoCacheEntry>;
+  private guidToSchemaCache: Map<string, InfoCacheEntry>;
   private schemaToVersionCache: Map<string, VersionCacheEntry>;
   private configCache: Map<string, ServerConfig>;
   private counter: Counter;
@@ -53,6 +56,7 @@ class MockClient implements Client {
     this.clientConfig = config
     this.infoToSchemaCache = new Map();
     this.idToSchemaCache = new Map();
+    this.guidToSchemaCache = new Map();
     this.schemaToVersionCache = new Map();
     this.configCache = new Map();
     this.counter = new Counter();
@@ -67,7 +71,7 @@ class MockClient implements Client {
     if (!metadata) {
       throw new RestError("Failed to register schema", 422, 42200);
     }
-    return metadata.id;
+    return metadata.id!;
   }
 
   async registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
@@ -78,24 +82,31 @@ class MockClient implements Client {
       return cacheEntry.metadata;
     }
 
-    const id = await this.getIDFromRegistry(subject, schema);
-    if (id === -1) {
+    const schemaId = await this.getIDFromRegistry(subject, schema);
+    if (schemaId.id === -1) {
       throw new RestError("Failed to retrieve schema ID from registry", 422, 42200);
     }
 
-    const metadata: SchemaMetadata = { ...schema, id };
+    const metadata: SchemaMetadata = { id: schemaId.id!, guid: schemaId.guid!, ...schema };
     this.infoToSchemaCache.set(cacheKey, { metadata, softDeleted: false });
 
     return metadata;
   }
 
-  private async getIDFromRegistry(subject: string, schema: SchemaInfo): Promise<number> {
+  private async getIDFromRegistry(subject: string, schema: SchemaInfo): Promise<SchemaId> {
     let id = -1;
-
     for (const [key, value] of this.idToSchemaCache.entries()) {
       const parsedKey = JSON.parse(key);
       if (parsedKey.subject === subject && this.schemasEqual(value.info, schema)) {
         id = parsedKey.id;
+        break;
+      }
+    }
+
+    let guid = "";
+    for (const [key, value] of this.guidToSchemaCache.entries()) {
+      if (this.schemasEqual(value.info, schema)) {
+        guid = key;
         break;
       }
     }
@@ -105,9 +116,11 @@ class MockClient implements Client {
       id = this.counter.increment();
       const idCacheKey = stringify({ subject, id });
       this.idToSchemaCache.set(idCacheKey, { info: schema, softDeleted: false });
+      guid = v4()
+      this.guidToSchemaCache.set(guid, { info: schema, softDeleted: false });
     }
 
-    return id;
+    return new SchemaId("", id, guid);
   }
 
   private async generateVersion(subject: string, schema: SchemaInfo): Promise<void> {
@@ -134,13 +147,27 @@ class MockClient implements Client {
     return cacheEntry.info;
   }
 
+  async getByGuid(guid: string, format?: string): Promise<SchemaInfo> {
+    const cacheEntry = this.guidToSchemaCache.get(guid);
+
+    if (!cacheEntry || cacheEntry.softDeleted) {
+      throw new RestError("Schema not found", 404, 40400);
+    }
+    return cacheEntry.info;
+  }
+
   async getId(subject: string, schema: SchemaInfo): Promise<number> {
+    const metadata = await this.getIdFullResponse(subject, schema);
+    return metadata.id!;
+  }
+
+  async getIdFullResponse(subject: string, schema: SchemaInfo): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, schema: minimize(schema) });
     const cacheEntry = this.infoToSchemaCache.get(cacheKey);
     if (!cacheEntry || cacheEntry.softDeleted) {
       throw new RestError("Schema not found", 404, 40400);
     }
-    return cacheEntry.metadata.id;
+    return cacheEntry.metadata;
   }
 
   async getLatestSchemaMetadata(subject: string, format?: string): Promise<SchemaMetadata> {
@@ -158,6 +185,7 @@ class MockClient implements Client {
       const parsedKey = JSON.parse(key);
       if (parsedKey.subject === subject && value.version === version) {
         json = parsedKey;
+        break
       }
     }
 
@@ -170,14 +198,26 @@ class MockClient implements Client {
       const parsedKey = JSON.parse(key);
       if (parsedKey.subject === subject && value.info.schema === json.schema.schema) {
         id = parsedKey.id;
+        break
       }
     }
     if (id === -1) {
       throw new RestError("Schema not found", 404, 40400);
     }
+    let guid: string = "";
+    for (const [key, value] of this.guidToSchemaCache.entries()) {
+      if (value.info.schema === json.schema.schema) {
+        guid = key
+        break
+      }
+    }
+    if (guid === "") {
+      throw new RestError("Schema not found", 404, 40400);
+    }
 
     return {
       id,
+      guid,
       version,
       subject,
       ...json.schema,
@@ -226,6 +266,7 @@ class MockClient implements Client {
       const parsedKey = JSON.parse(key);
       if (parsedKey.subject === subject && value.info.schema === latest.schema) {
         id = parsedKey.id;
+        break
       }
     }
     if (id === -1) {

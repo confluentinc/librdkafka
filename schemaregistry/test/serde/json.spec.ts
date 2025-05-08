@@ -1,6 +1,11 @@
 import {afterEach, describe, expect, it} from '@jest/globals';
 import {ClientConfig} from "../../rest-service";
-import {SerdeType, SerializationError, Serializer} from "../../serde/serde";
+import {
+  HeaderSchemaIdSerializer,
+  SerdeType,
+  SerializationError,
+  Serializer
+} from "../../serde/serde";
 import {
   Client,
   Rule,
@@ -240,6 +245,31 @@ describe('JsonSerializer', () => {
 
     let deser = new JsonDeserializer(client, SerdeType.VALUE, {})
     let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).toEqual(obj)
+  })
+  it('guid in header', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new JsonSerializer(client, SerdeType.VALUE, {
+      autoRegisterSchemas: true,
+      validate: true,
+      schemaIdSerializer: HeaderSchemaIdSerializer
+    })
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([0, 0, 0, 1]).toString('base64')
+    }
+    let headers = {}
+    let bytes = await ser.serialize(topic, obj, headers)
+
+    let deser = new JsonDeserializer(client, SerdeType.VALUE, {})
+    let obj2 = await deser.deserialize(topic, bytes, headers)
     expect(obj2).toEqual(obj)
   })
   it('serialize nested', async () => {

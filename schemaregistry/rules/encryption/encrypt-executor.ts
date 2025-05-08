@@ -3,7 +3,7 @@ import {
   FieldRuleExecutor,
   FieldTransform,
   FieldType,
-  MAGIC_BYTE,
+  MAGIC_BYTE_V0,
   RuleContext,
   RuleError,
 } from "../../serde/serde";
@@ -538,15 +538,15 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
   prefixVersion(version: number, ciphertext: Buffer): Buffer {
     const versionBuf = Buffer.alloc(4)
     versionBuf.writeInt32BE(version)
-    return Buffer.concat([MAGIC_BYTE, versionBuf, ciphertext])
+    return Buffer.concat([MAGIC_BYTE_V0, versionBuf, ciphertext])
   }
 
   extractVersion(ciphertext: Buffer): number | null {
     let magicByte = ciphertext.subarray(0, 1)
-    if (!magicByte.equals(MAGIC_BYTE)) {
+    if (!magicByte.equals(MAGIC_BYTE_V0)) {
       throw new RuleError(
         `Message encoded with magic byte ${JSON.stringify(magicByte)}, expected ${JSON.stringify(
-          MAGIC_BYTE,
+          MAGIC_BYTE_V0,
         )}`,
       )
     }

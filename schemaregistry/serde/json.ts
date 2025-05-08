@@ -2,7 +2,7 @@ import {
   Deserializer, DeserializerConfig,
   FieldTransform,
   FieldType, Migration, RefResolver, RuleConditionError,
-  RuleContext,
+  RuleContext, SchemaId,
   SerdeType, SerializationError,
   Serializer, SerializerConfig
 } from "./serde";
@@ -30,6 +30,9 @@ import { LRUCache } from "lru-cache";
 import { generateSchema } from "./json-util";
 import {RuleRegistry} from "./rule-registry";
 import stringify from "json-stringify-deterministic";
+import {IHeaders} from "../../types/kafkajs";
+
+export const JSON_TYPE = "JSON"
 
 export interface ValidateFunction {
   (this: any, data: any): boolean
@@ -82,8 +85,9 @@ export class JsonSerializer extends Serializer implements JsonSerde {
    * Serializes a message.
    * @param topic - the topic
    * @param msg - the message
+   * @param headers - optional headers
    */
-  override async serialize(topic: string, msg: any): Promise<Buffer> {
+  override async serialize(topic: string, msg: any, headers?: IHeaders): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
     }
@@ -102,7 +106,7 @@ export class JsonSerializer extends Serializer implements JsonSerde {
         schema: JSON.stringify(jsonSchema),
       }
     }
-    const [id, info] = await this.getId(topic, msg, schema)
+    const [schemaId, info] = await this.getSchemaId(JSON_TYPE, topic, msg, schema)
     const subject = this.subjectName(topic, info)
     msg = await this.executeRules(subject, topic, RuleMode.WRITE, null, info, msg, null)
     const msgBytes = Buffer.from(JSON.stringify(msg))
@@ -112,7 +116,7 @@ export class JsonSerializer extends Serializer implements JsonSerde {
         throw new SerializationError('Invalid message')
       }
     }
-    return this.writeBytes(id, msgBytes)
+    return this.serializeSchemaId(topic, msgBytes, schemaId, headers)
   }
 
   async fieldTransform(ctx: RuleContext, fieldTransform: FieldTransform, msg: any): Promise<any> {
@@ -180,8 +184,9 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
    * Deserializes a message.
    * @param topic - the topic
    * @param payload - the message payload
+   * @param headers - optional headers
    */
-  override async deserialize(topic: string, payload: Buffer): Promise<any> {
+  override async deserialize(topic: string, payload: Buffer, headers?: IHeaders): Promise<any> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error('Invalid buffer')
     }
@@ -189,14 +194,16 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
       return null
     }
 
-    const info = await this.getSchema(topic, payload)
+    const schemaId = new SchemaId(JSON_TYPE)
+    const [info, bytesRead] = await this.getWriterSchema(topic, payload, schemaId, headers)
+    payload = payload.subarray(bytesRead)
     const subject = this.subjectName(topic, info)
     const readerMeta = await this.getReaderSchema(subject)
     let migrations: Migration[] = []
     if (readerMeta != null) {
       migrations = await this.getMigrations(subject, info, readerMeta)
     }
-    const msgBytes = payload.subarray(5)
+    const msgBytes = payload
     let msg = JSON.parse(msgBytes.toString())
     if (migrations.length > 0) {
       msg = await this.executeMigrations(migrations, subject, topic, msg)

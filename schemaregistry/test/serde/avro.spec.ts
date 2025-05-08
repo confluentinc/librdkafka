@@ -6,7 +6,7 @@ import {
   AvroSerializer,
   AvroSerializerConfig
 } from "../../serde/avro";
-import {SerdeType, Serializer} from "../../serde/serde";
+import {HeaderSchemaIdSerializer, SerdeType, Serializer} from "../../serde/serde";
 import {
   Client,
   Rule,
@@ -358,6 +358,32 @@ describe('AvroSerializer', () => {
 
     let deser = new AvroDeserializer(client, SerdeType.VALUE, {})
     let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.intField).toEqual(obj.intField);
+    expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
+    expect(obj2.stringField).toEqual(obj.stringField);
+    expect(obj2.boolField).toEqual(obj.boolField);
+    expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('guid in header', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new AvroSerializer(client, SerdeType.VALUE,
+      {autoRegisterSchemas: true, schemaIdSerializer: HeaderSchemaIdSerializer})
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    let headers = {}
+    let bytes = await ser.serialize(topic, obj, headers)
+
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, {})
+    let obj2 = await deser.deserialize(topic, bytes, headers)
     expect(obj2.intField).toEqual(obj.intField);
     expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
     expect(obj2.stringField).toEqual(obj.stringField);

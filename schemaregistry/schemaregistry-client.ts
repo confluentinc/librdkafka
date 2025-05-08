@@ -81,7 +81,8 @@ export function minimize(info: SchemaInfo): SchemaInfo {
  * SchemaMetadata extends SchemaInfo with additional metadata
  */
 export interface SchemaMetadata extends SchemaInfo {
-  id: number;
+  id?: number;
+  guid?: string;
   subject?: string;
   version?: number;
 }
@@ -141,7 +142,9 @@ export interface Client {
   register(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
   registerFullResponse(subject: string, schema: SchemaInfo, normalize: boolean): Promise<SchemaMetadata>;
   getBySubjectAndId(subject: string, id: number, format?: string): Promise<SchemaInfo>;
+  getByGuid(guid: string, format?: string): Promise<SchemaInfo>;
   getId(subject: string, schema: SchemaInfo, normalize: boolean): Promise<number>;
+  getIdFullResponse(subject: string, schema: SchemaInfo, normalize: boolean): Promise<SchemaMetadata>;
   getLatestSchemaMetadata(subject: string, format?: string): Promise<SchemaMetadata>;
   getSchemaMetadata(subject: string, version: number, deleted: boolean, format?: string): Promise<SchemaMetadata>;
   getLatestWithMetadata(subject: string, metadata: { [key: string]: string },
@@ -174,8 +177,8 @@ export class SchemaRegistryClient implements Client {
   private clientConfig: ClientConfig;
   private restService: RestService;
 
-  private schemaToIdCache: LRUCache<string, number>;
   private idToSchemaInfoCache: LRUCache<string, SchemaInfo>;
+  private guidToSchemaInfoCache: LRUCache<string, SchemaInfo>;
   private infoToSchemaCache: LRUCache<string, SchemaMetadata>;
   private latestToSchemaCache: LRUCache<string, SchemaMetadata>;
   private schemaToVersionCache: LRUCache<string, number>;
@@ -184,6 +187,7 @@ export class SchemaRegistryClient implements Client {
 
   private schemaToIdMutex: Mutex;
   private idToSchemaInfoMutex: Mutex;
+  private guidToSchemaInfoMutex: Mutex;
   private infoToSchemaMutex: Mutex;
   private latestToSchemaMutex: Mutex;
   private schemaToVersionMutex: Mutex;
@@ -205,8 +209,8 @@ export class SchemaRegistryClient implements Client {
       config.basicAuthCredentials, config.bearerAuthCredentials,
       config.maxRetries, config.retriesWaitMs, config.retriesMaxWaitMs);
 
-    this.schemaToIdCache = new LRUCache(cacheOptions);
     this.idToSchemaInfoCache = new LRUCache(cacheOptions);
+    this.guidToSchemaInfoCache = new LRUCache(cacheOptions);
     this.infoToSchemaCache = new LRUCache(cacheOptions);
     this.latestToSchemaCache = new LRUCache(cacheOptions);
     this.schemaToVersionCache = new LRUCache(cacheOptions);
@@ -214,6 +218,7 @@ export class SchemaRegistryClient implements Client {
     this.metadataToSchemaCache = new LRUCache(cacheOptions);
     this.schemaToIdMutex = new Mutex();
     this.idToSchemaInfoMutex = new Mutex();
+    this.guidToSchemaInfoMutex = new Mutex();
     this.infoToSchemaMutex = new Mutex();
     this.latestToSchemaMutex = new Mutex();
     this.schemaToVersionMutex = new Mutex();
@@ -242,7 +247,7 @@ export class SchemaRegistryClient implements Client {
   async register(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
     const metadataResult = await this.registerFullResponse(subject, schema, normalize);
 
-    return metadataResult.id;
+    return metadataResult.id!;
   }
 
   /**
@@ -300,18 +305,57 @@ export class SchemaRegistryClient implements Client {
   }
 
   /**
+   * Get a schema by GUID.
+   * @param guid - The schema GUID.
+   * @param format - The format of the schema.
+   */
+  async getByGuid(guid: string, format?: string): Promise<SchemaInfo> {
+    return await this.guidToSchemaInfoMutex.runExclusive(async () => {
+      const cachedSchema: SchemaInfo | undefined = this.guidToSchemaInfoCache.get(guid);
+      if (cachedSchema) {
+        return cachedSchema;
+      }
+
+      let formatStr = format != null ? `?format=${format}` : '';
+
+      const response: AxiosResponse<SchemaInfo> = await this.restService.handleRequest(
+        `/schemas/guids/${guid}${formatStr}`,
+        'GET'
+      );
+      this.guidToSchemaInfoCache.set(guid, response.data);
+      return response.data;
+    });
+  }
+
+  /**
    * Get the ID for a schema.
    * @param subject - The subject under which the schema is registered.
    * @param schema - The schema whose ID to get.
    * @param normalize - Whether to normalize the schema before getting the ID.
    */
   async getId(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<number> {
+    const metadataResult = await this.getIdFullResponse(subject, schema, normalize);
+
+    return metadataResult.id!;
+  }
+
+  /**
+   * Get the ID for a schema.
+   * @param subject - The subject under which the schema is registered.
+   * @param schema - The schema whose ID to get.
+   * @param normalize - Whether to normalize the schema before getting the ID.
+   */
+  async getIdFullResponse(subject: string, schema: SchemaInfo, normalize: boolean = false): Promise<SchemaMetadata> {
     const cacheKey = stringify({ subject, schema: minimize(schema) });
 
     return await this.schemaToIdMutex.runExclusive(async () => {
-      const cachedId: number | undefined = this.schemaToIdCache.get(cacheKey);
-      if (cachedId) {
-        return cachedId;
+      const cachedSchemaMetadata: SchemaMetadata | undefined = this.infoToSchemaCache.get(cacheKey);
+      if (cachedSchemaMetadata) {
+        // Allow the schema to be looked up again if version is not valid
+        // This is for backward compatibility with versions before CP 8.0
+        if (cachedSchemaMetadata.version != null && cachedSchemaMetadata.version > 0) {
+          return cachedSchemaMetadata;
+        }
       }
 
       subject = encodeURIComponent(subject);
@@ -321,8 +365,8 @@ export class SchemaRegistryClient implements Client {
         'POST',
         schema
       );
-      this.schemaToIdCache.set(cacheKey, response.data.id);
-      return response.data.id;
+      this.infoToSchemaCache.set(cacheKey, response.data);
+      return response.data;
     });
   }
 
@@ -716,8 +760,8 @@ export class SchemaRegistryClient implements Client {
    * Clear all caches.
    */
   clearCaches(): void {
-    this.schemaToIdCache.clear();
     this.idToSchemaInfoCache.clear();
+    this.guidToSchemaInfoCache.clear();
     this.infoToSchemaCache.clear();
     this.latestToSchemaCache.clear();
     this.schemaToVersionCache.clear();
@@ -761,6 +805,12 @@ export class SchemaRegistryClient implements Client {
     });
   }
 
+  async addToGuidToSchemaInfoCache(guid: string, schema: SchemaInfo): Promise<void> {
+    await this.guidToSchemaInfoMutex.runExclusive(async () => {
+      this.guidToSchemaInfoCache.set(guid, schema);
+    });
+  }
+
   async getInfoToSchemaCacheSize(): Promise<number> {
     return await this.infoToSchemaMutex.runExclusive(async () => {
       return this.infoToSchemaCache.size;
@@ -782,6 +832,12 @@ export class SchemaRegistryClient implements Client {
   async getIdToSchemaInfoCacheSize(): Promise<number> {
     return await this.idToSchemaInfoMutex.runExclusive(async () => {
       return this.idToSchemaInfoCache.size;
+    });
+  }
+
+  async getGuidToSchemaInfoCacheSize(): Promise<number> {
+    return await this.guidToSchemaInfoMutex.runExclusive(async () => {
+      return this.guidToSchemaInfoCache.size;
     });
   }
 }

@@ -3,7 +3,7 @@ import {
   FieldTransform,
   FieldType, Migration, RefResolver,
   RuleConditionError,
-  RuleContext, SerdeType,
+  RuleContext, SchemaId, SerdeType,
   Serializer, SerializerConfig
 } from "./serde";
 import {
@@ -20,6 +20,9 @@ import Field = types.Field
 import { LRUCache } from 'lru-cache'
 import {RuleRegistry} from "./rule-registry";
 import stringify from "json-stringify-deterministic";
+import {IHeaders} from "../../types/kafkajs";
+
+export const AVRO_TYPE = "AVRO"
 
 type TypeHook = (schema: avro.Schema, opts: ForSchemaOptions) => Type | undefined
 
@@ -62,8 +65,9 @@ export class AvroSerializer extends Serializer implements AvroSerde {
    * serialize is used to serialize a message using Avro.
    * @param topic - the topic to serialize the message for
    * @param msg - the message to serialize
+   * @param headers - optional headers
    */
-  override async serialize(topic: string, msg: any): Promise<Buffer> {
+  override async serialize(topic: string, msg: any, headers?: IHeaders): Promise<Buffer> {
     if (this.client == null) {
       throw new Error('client is not initialized')
     }
@@ -82,7 +86,7 @@ export class AvroSerializer extends Serializer implements AvroSerde {
         schema: JSON.stringify(avroSchema),
       }
     }
-    const [id, info] = await this.getId(topic, msg, schema)
+    const [schemaId, info] = await this.getSchemaId(AVRO_TYPE, topic, msg, schema)
     let avroType: avro.Type
     let deps: Map<string, string>
     [avroType, deps] = await this.toType(info)
@@ -90,7 +94,7 @@ export class AvroSerializer extends Serializer implements AvroSerde {
     msg = await this.executeRules(
       subject, topic, RuleMode.WRITE, null, info, msg, getInlineTags(info, deps))
     const msgBytes = avroType.toBuffer(msg)
-    return this.writeBytes(id, msgBytes)
+    return this.serializeSchemaId(topic, msgBytes, schemaId, headers)
   }
 
   async fieldTransform(ctx: RuleContext, fieldTransform: FieldTransform, msg: any): Promise<any> {
@@ -164,7 +168,13 @@ export class AvroDeserializer extends Deserializer implements AvroSerde {
     }
   }
 
-  override async deserialize(topic: string, payload: Buffer): Promise<any> {
+  /**
+   * Deserializes a message.
+   * @param topic - the topic
+   * @param payload - the message payload
+   * @param headers - optional headers
+   */
+  override async deserialize(topic: string, payload: Buffer, headers?: IHeaders): Promise<any> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error('Invalid buffer')
     }
@@ -172,7 +182,9 @@ export class AvroDeserializer extends Deserializer implements AvroSerde {
       return null
     }
 
-    const info = await this.getSchema(topic, payload)
+    const schemaId = new SchemaId(AVRO_TYPE)
+    const [info, bytesRead] = await this.getWriterSchema(topic, payload, schemaId, headers)
+    payload = payload.subarray(bytesRead)
     const subject = this.subjectName(topic, info)
     const readerMeta = await this.getReaderSchema(subject)
     let migrations: Migration[] = []
@@ -182,7 +194,7 @@ export class AvroDeserializer extends Deserializer implements AvroSerde {
     const [writer, deps] = await this.toType(info)
 
     let msg: any
-    const msgBytes = payload.subarray(5)
+    const msgBytes = payload
     if (migrations.length > 0) {
       msg = writer.fromBuffer(msgBytes)
       msg = await this.executeMigrations(migrations, subject, topic, msg)

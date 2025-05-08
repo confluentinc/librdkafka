@@ -129,6 +129,7 @@ describe('SchemaRegistryClient-Register', () => {
   it('Should return id, version, metadata, and schema when RegisterFullResponse is called', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -145,6 +146,7 @@ describe('SchemaRegistryClient-Register', () => {
   it('Should return id, version, metadata, and schema from cache when RegisterFullResponse is called twice', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -198,13 +200,13 @@ describe('SchemaRegistryClient-Get-ID', () => {
   });
 
   it('Should return id from cache when GetId is called twice', async () => {
-    restService.handleRequest.mockResolvedValue({ data: { id: 1 } } as AxiosResponse);
+    restService.handleRequest.mockResolvedValue({ data: { id: 1, version: 1 } } as AxiosResponse);
 
     const response: number = await client.getId(mockSubject, schemaInfo);
     expect(response).toEqual(1);
     expect(restService.handleRequest).toHaveBeenCalledTimes(1);
 
-    restService.handleRequest.mockResolvedValue({ data: { id: 2 } } as AxiosResponse);
+    restService.handleRequest.mockResolvedValue({ data: { id: 2, version: 1 } } as AxiosResponse);
 
     const response2: number = await client.getId(mockSubject2, schemaInfo2);
     expect(response2).toEqual(2);
@@ -222,6 +224,7 @@ describe('SchemaRegistryClient-Get-ID', () => {
   it('Should return SchemaInfo when GetBySubjectAndId is called', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -238,6 +241,7 @@ describe('SchemaRegistryClient-Get-ID', () => {
   it('Should return SchemaInfo from cache when GetBySubjectAndId is called twice', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -284,6 +288,7 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
   it('Should return latest schema with metadata when GetLatestWithMetadata is called', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -300,6 +305,7 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
   it('Should return latest schema with metadata from cache when GetLatestWithMetadata is called twice', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -335,6 +341,7 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
   it('Should return SchemaMetadata when GetSchemaMetadata is called', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -351,6 +358,7 @@ describe('SchemaRegistryClient-Get-Schema-Metadata', () => {
   it('Should return SchemaMetadata from cache when GetSchemaMetadata is called twice', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -459,6 +467,7 @@ describe('SchemaRegistryClient-Subjects', () => {
   it('Should delete subject from all caches and registry when deleteSubject is called', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -484,6 +493,7 @@ describe('SchemaRegistryClient-Subjects', () => {
   it('Should delete subject version from all caches and registry when deleteSubjectVersion is called', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,
@@ -648,6 +658,7 @@ describe('SchemaRegistryClient-Cache', () => {
   it('Should delete cached item after expiry', async () => {
     const expectedResponse = {
       id: 1,
+      guid: "",
       version: 1,
       schema: schemaString,
       metadata: metadata,

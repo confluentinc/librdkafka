@@ -1,3 +1,24 @@
+# librdkafka v2.10.1
+
+librdkafka v2.10.1 is a maintenance release:
+
+ * Fix to add locks when updating the metadata cache for the consumer 
+   after no broker connection is available (@marcin-krystianc, #5066).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * Issues: #5051
+   Fix to add locks when updating the metadata cache for the consumer.
+   It can cause memory corruption or use-after-free in case
+   there's no broker connection and the consumer
+   group metadata needs to be updated.
+   Happens since 2.10.0 (#5066).
+
+
+
 # librdkafka v2.10.0
 
 librdkafka v2.10.0 is a feature release:

@@ -58,7 +58,7 @@ age | int | | Time since this client instance was created (microseconds)
 replyq | int gauge | | Number of ops (callbacks, events, etc) waiting in queue for application to serve with rd_kafka_poll()
 msg_cnt | int gauge | | Current number of messages in producer queues
 msg_size | int gauge | | Current total size of messages in producer queues
-msg_max | int | | Threshold: maximum number of messages allowed allowed on the producer queues
+msg_max | int | | Threshold: maximum number of messages allowed on the producer queues
 msg_size_max | int | | Threshold: maximum total size of messages allowed on the producer queues
 tx | int | | Total number of requests sent to Kafka brokers
 tx_bytes | int | | Total number of bytes transmitted to Kafka brokers

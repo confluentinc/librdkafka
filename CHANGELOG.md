@@ -1,3 +1,23 @@
+# librdkafka v2.10.1
+
+librdkafka v2.10.1 is a maintenance release:
+
+ * Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
+   brokers were added manually through `rd_kafka_brokers_add` (#5067).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * Issues: #5057
+   Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
+   brokers were added manually through `rd_kafka_brokers_add`.
+   Avoids a segmentation fault in this case.
+   Happens since 2.10.0 (#5067).
+
+
+
 # librdkafka v2.10.0
 
 librdkafka v2.10.0 is a feature release:

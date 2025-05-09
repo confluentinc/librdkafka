@@ -6521,6 +6521,8 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_bool(rkbuf, terminating);
         rd_kafka_buf_write_i8(rkbuf, compression_type);
 
+        rd_dassert(metrics != NULL);
+        rd_dassert(metrics_size >= 0);
         rd_kafkap_bytes_t *metric_bytes =
             rd_kafkap_bytes_new(metrics, metrics_size);
         rd_kafka_buf_write_kbytes(rkbuf, metric_bytes);

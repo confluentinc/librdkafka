@@ -3156,7 +3156,8 @@ static int ut_cgrp_consumer_member_next_assignment0(
                           fixtures[i].comment);
 
                 if (fixtures[i].session_timed_out) {
-                        rd_kafka_mock_cgrp_consumer_member_leave(mcgrp, member);
+                        rd_kafka_mock_cgrp_consumer_member_leave(mcgrp, member,
+                                                                 rd_false);
                         member = rd_kafka_mock_cgrp_consumer_member_add(
                             mcgrp, conn, &MemberId, &InstanceId,
                             &SubscribedTopic, 1, &SubscribedTopicRegex);

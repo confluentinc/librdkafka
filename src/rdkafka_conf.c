@@ -1253,6 +1253,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "This value may be overshot by fetch.message.max.bytes. "
      "This property has higher priority than queued.min.messages.",
      1, INT_MAX / 1024, 0x10000 /*64MB*/},
+    {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "queued.max.messages.total.kbytes",
+     _RK_C_INT, _RK(queued_total_max_msg_kbytes),
+     "Maximum number of kilobytes of queued pre-fetched messages. "
+     "Unlike queue.max.message.kbytes, this controls the total number of "
+     "kbytes queued in both simple and separate partition queues",
+     1, INT_MAX / 1024, 0x10000 /*64MB*/},
     {_RK_GLOBAL | _RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
      _RK(fetch_wait_max_ms),
      "Maximum time the broker may wait to fill the Fetch response "

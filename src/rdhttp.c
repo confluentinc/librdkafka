@@ -139,8 +139,7 @@ rd_http_error_t *rd_http_req_init(rd_http_req_t *hreq, const char *url) {
         hreq->hreq_buf = rd_buf_new(1, 1024);
 
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_URL, url);
-        curl_easy_setopt(hreq->hreq_curl, CURLOPT_PROTOCOLS,
-                         CURLPROTO_HTTP | CURLPROTO_HTTPS);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_PROTOCOLS_STR, "http,https");
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_MAXREDIRS, 16);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_TIMEOUT, 30);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_ERRORBUFFER,

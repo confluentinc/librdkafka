@@ -270,7 +270,7 @@ void do_test_oauthbearer(int64_t reauth_time,
         rd_kafka_t *rk        = NULL;
         uint64_t testid       = test_id_generate();
         rd_kafka_resp_err_t err;
-        char *mechanism;
+        char *mechanism, *oauthbearer_method;
         int msgrate, msgcnt, sent_msg;
         test_timing_t t_produce;
         int token_lifetime_s = token_lifetime_ms / 1000;
@@ -292,11 +292,16 @@ void do_test_oauthbearer(int64_t reauth_time,
                     mechanism);
         }
 
-        test_conf_set(
-            conf, "sasl.oauthbearer.config",
-            tsprintf("principal=admin scope=requiredScope lifeSeconds=%d",
-                     token_lifetime_s));
-        test_conf_set(conf, "enable.sasl.oauthbearer.unsecure.jwt", "true");
+        oauthbearer_method = test_conf_get(conf, "sasl.oauthbearer.method");
+        if (rd_strcasecmp(oauthbearer_method, "oidc")) {
+                test_conf_set(
+                    conf, "sasl.oauthbearer.config",
+                    tsprintf(
+                        "principal=admin scope=requiredScope lifeSeconds=%d",
+                        token_lifetime_s));
+                test_conf_set(conf, "enable.sasl.oauthbearer.unsecure.jwt",
+                              "true");
+        }
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         /* Enable to background queue since we don't want to poll the SASL
@@ -407,7 +412,9 @@ int main_0142_reauthentication(int argc, char **argv) {
         size_t broker_id_cnt;
         int32_t *broker_ids   = NULL;
         rd_kafka_conf_t *conf = NULL;
-        const char *security_protocol, *sasl_mechanism;
+        const char *security_protocol;
+        rd_bool_t sasl_mechanism_oauthbearer = rd_false;
+        rd_bool_t oauthbearer_method_default = rd_false;
 
         size_t i;
         int64_t reauth_time = INT64_MAX;
@@ -423,8 +430,11 @@ int main_0142_reauthentication(int argc, char **argv) {
                 return 0;
         }
 
-        sasl_mechanism = test_conf_get(NULL, "sasl.mechanism");
-        if (!rd_strcasecmp(sasl_mechanism, "oauthbearer"))
+        sasl_mechanism_oauthbearer = !rd_strcasecmp(
+            test_conf_get(NULL, "sasl.mechanism"), "oauthbearer");
+        oauthbearer_method_default = !rd_strcasecmp(
+            test_conf_get(NULL, "sasl.oauthbearer.method"), "default");
+        if (sasl_mechanism_oauthbearer && oauthbearer_method_default)
                 test_conf_set(conf, "enable.sasl.oauthbearer.unsecure.jwt",
                               "true");
 
@@ -485,13 +495,19 @@ int main_0142_reauthentication(int argc, char **argv) {
          * reauth time. */
         do_test_oauthbearer(reauth_time, topic, reauth_time / 2, rd_true);
         do_test_oauthbearer(reauth_time, topic, reauth_time / 2, rd_false);
-        /* Case when the token_lifetime is greater than the maximum reauth time
-         * configured.
-         * In this case, the broker returns the maximum reauth time configured.
-         * We don't need to recreate the token, but we need to reauthenticate
-         * using the same token. */
-        do_test_oauthbearer(reauth_time, topic, reauth_time * 2, rd_true);
-        do_test_oauthbearer(reauth_time, topic, reauth_time * 2, rd_false);
+
+        /* With OIDC the expiration time is fixed so do the testing only
+         * once. */
+        if (oauthbearer_method_default) {
+                /* Case when the token_lifetime is greater than the maximum
+                 * reauth time configured. In this case, the broker returns the
+                 * maximum reauth time configured. We don't need to recreate the
+                 * token, but we need to reauthenticate using the same token. */
+                do_test_oauthbearer(reauth_time, topic, reauth_time * 2,
+                                    rd_true);
+                do_test_oauthbearer(reauth_time, topic, reauth_time * 2,
+                                    rd_false);
+        }
 
         do_test_reauth_failure(reauth_time, topic);
 

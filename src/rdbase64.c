@@ -32,7 +32,7 @@
 #include <openssl/ssl.h>
 #else
 
-#define conv_bin2ascii(a, table) ((table)[(a)&0x3f])
+#define conv_bin2ascii(a, table) ((table)[(a) & 0x3f])
 
 static const unsigned char data_bin2ascii[65] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

@@ -101,11 +101,12 @@ typedef struct rd_kafka_mock_cgrp_classic_s {
         char *protocol_name;                     /**< Elected protocol name */
         int32_t generation_id;                   /**< Generation Id */
         int session_timeout_ms;                  /**< Session timeout */
-        enum { RD_KAFKA_MOCK_CGRP_STATE_EMPTY,   /* No members */
-               RD_KAFKA_MOCK_CGRP_STATE_JOINING, /* Members are joining */
-               RD_KAFKA_MOCK_CGRP_STATE_SYNCING, /* Syncing assignments */
-               RD_KAFKA_MOCK_CGRP_STATE_REBALANCING, /* Rebalance triggered */
-               RD_KAFKA_MOCK_CGRP_STATE_UP,          /* Group is operational */
+        enum {
+                RD_KAFKA_MOCK_CGRP_STATE_EMPTY,       /* No members */
+                RD_KAFKA_MOCK_CGRP_STATE_JOINING,     /* Members are joining */
+                RD_KAFKA_MOCK_CGRP_STATE_SYNCING,     /* Syncing assignments */
+                RD_KAFKA_MOCK_CGRP_STATE_REBALANCING, /* Rebalance triggered */
+                RD_KAFKA_MOCK_CGRP_STATE_UP,          /* Group is operational */
         } state;                        /**< Consumer group state */
         rd_kafka_timer_t session_tmr;   /**< Session timeout timer */
         rd_kafka_timer_t rebalance_tmr; /**< Rebalance state timer */
@@ -164,8 +165,11 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
         rd_kafka_topic_partition_list_t
             *returned_assignment; /**< Returned assignment */
 
-        rd_list_t *subscribed_topics; /**< Subscribed topics */
-
+        rd_list_t *subscribed_topics; /**< Final list of Subscribed topics after
+                                         considering regex as well*/
+        rd_list_t *subscribed_topic_names; /**< Subscribed topic names received
+                                              in the heartbeat */
+        char *subscribed_topic_regex;      /**< Subscribed regex */
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL
                                                   *   if there is no ongoing
                                                   *   request. */
@@ -466,7 +470,7 @@ struct rd_kafka_mock_cluster_s {
         struct {
                 rd_kafka_mock_io_handler_t *cb; /**< Callback */
                 void *opaque;                   /**< Callbacks' opaque */
-        } * handlers;
+        } *handlers;
 
         /**< Per-protocol request error stack. */
         rd_kafka_mock_error_stack_head_t errstacks;
@@ -681,13 +685,14 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
     const rd_kafka_mock_cgrp_consumer_t *mcgrp,
     const rd_kafkap_str_t *MemberId);
 
-rd_kafka_mock_cgrp_consumer_member_t *
-rd_kafka_mock_cgrp_consumer_member_add(rd_kafka_mock_cgrp_consumer_t *mcgrp,
-                                       struct rd_kafka_mock_connection_s *conn,
-                                       const rd_kafkap_str_t *MemberId,
-                                       const rd_kafkap_str_t *InstanceId,
-                                       rd_kafkap_str_t *SubscribedTopicNames,
-                                       int32_t SubscribedTopicNamesCnt);
+rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
+    rd_kafka_mock_cgrp_consumer_t *mcgrp,
+    struct rd_kafka_mock_connection_s *conn,
+    const rd_kafkap_str_t *MemberId,
+    const rd_kafkap_str_t *InstanceId,
+    rd_kafkap_str_t *SubscribedTopicNames,
+    int32_t SubscribedTopicNamesCnt,
+    const rd_kafkap_str_t *SubscribedTopicRegex);
 
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);

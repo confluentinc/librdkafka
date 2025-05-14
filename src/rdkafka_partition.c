@@ -376,14 +376,24 @@ void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state) {
 
         rktp->rktp_fetch_state = fetch_state;
 
-        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
+        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
+                rktp->rktp_ts_fetch_backoff = 0;
+
+                /* Wake-up broker thread which might be idling on IO */
+                if (rktp->rktp_broker)
+                        rd_kafka_broker_wakeup(rktp->rktp_broker,
+                                               "fetch start");
+
                 rd_kafka_dbg(
                     rktp->rktp_rkt->rkt_rk, CONSUMER | RD_KAFKA_DBG_TOPIC,
                     "FETCH",
                     "Partition %.*s [%" PRId32 "] start fetching at %s",
                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                     rktp->rktp_partition,
-                    rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start));
+                    rd_kafka_fetch_pos2str(
+                        rd_kafka_toppar_fetch_decide_next_fetch_start_pos(
+                            rktp)));
+        }
 }
 
 
@@ -1225,7 +1235,8 @@ void rd_kafka_toppar_broker_delegate(rd_kafka_toppar_t *rktp,
 
         /* Undelegated toppars are delgated to the internal
          * broker for bookkeeping. */
-        if (!rkb && !rd_kafka_terminating(rk)) {
+        if (!rd_kafka_terminating(rk) &&
+            (!rkb || rd_kafka_broker_termination_in_progress(rkb))) {
                 rkb               = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }
@@ -1338,7 +1349,7 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         if (rktp->rktp_query_pos.offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
                 int64_t orig_offset = next_pos.offset;
                 int64_t tail_cnt    = llabs(rktp->rktp_query_pos.offset -
-                                         RD_KAFKA_OFFSET_TAIL_BASE);
+                                            RD_KAFKA_OFFSET_TAIL_BASE);
 
                 if (tail_cnt > next_pos.offset)
                         next_pos.offset = 0;
@@ -1359,10 +1370,6 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_set_next_fetch_position(rktp, next_pos);
 
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-        /* Wake-up broker thread which might be idling on IO */
-        if (rktp->rktp_broker)
-                rd_kafka_broker_wakeup(rktp->rktp_broker, "ready to fetch");
 }
 
 
@@ -1746,11 +1753,6 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
 
                 rd_kafka_toppar_set_fetch_state(rktp,
                                                 RD_KAFKA_TOPPAR_FETCH_ACTIVE);
-
-                /* Wake-up broker thread which might be idling on IO */
-                if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker,
-                                               "fetch start");
         }
 
         rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;
@@ -3674,11 +3676,12 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                 struct rd_kafka_partition_leader *leader;
                 const rd_kafka_metadata_topic_t *mtopic;
                 const rd_kafka_metadata_partition_t *mpart;
+                const rd_kafka_metadata_partition_internal_t *mdpi;
                 rd_bool_t topic_wait_cache;
 
                 rd_kafka_metadata_cache_topic_partition_get(
-                    rk, &mtopic, &mpart, rktpar->topic, rktpar->partition,
-                    0 /*negative entries too*/);
+                    rk, &mtopic, &mpart, &mdpi, rktpar->topic,
+                    rktpar->partition, 0 /*negative entries too*/);
 
                 topic_wait_cache =
                     !mtopic ||
@@ -3746,9 +3749,11 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                         rd_kafka_topic_partition_update(rktpar2, rktpar);
                 } else {
                         /* Make a copy of rktpar and add to partitions list */
-                        rd_kafka_topic_partition_list_add_copy(
+                        rktpar2 = rd_kafka_topic_partition_list_add_copy(
                             leader->partitions, rktpar);
                 }
+                rd_kafka_topic_partition_set_current_leader_epoch(
+                    rktpar2, mdpi->leader_epoch);
 
                 rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -3872,7 +3877,7 @@ rd_kafka_topic_partition_list_query_leaders_async_worker(rd_kafka_op_t *rko) {
                 rd_kafka_metadata_refresh_topics(
                     rk, NULL, &query_topics, rd_true /*force*/,
                     rd_false /*!allow_auto_create*/, rd_false /*!cgrp_update*/,
-                    "query partition leaders");
+                    -1, "query partition leaders");
         }
 
         rd_list_destroy(leaders);
@@ -4061,7 +4066,7 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
                         rd_kafka_metadata_refresh_topics(
                             rk, NULL, &query_topics, rd_true /*force*/,
                             rd_false /*!allow_auto_create*/,
-                            rd_false /*!cgrp_update*/,
+                            rd_false /*!cgrp_update*/, -1,
                             "query partition leaders");
                         ts_query = now;
                         query_cnt++;
@@ -4418,6 +4423,89 @@ int rd_kafka_topic_partition_list_regex_cnt(
                 cnt += *rktpar->topic == '^';
         }
         return cnt;
+}
+
+
+/**
+ * @brief Match function that returns true if topic is not a regex.
+ */
+static int rd_kafka_topic_partition_not_regex(const void *elem,
+                                              const void *opaque) {
+        const rd_kafka_topic_partition_t *rktpar = elem;
+        return *rktpar->topic != '^';
+}
+
+/**
+ * @brief Return a new list with all regex topics removed.
+ *
+ * @remark The caller is responsible for freeing the returned list.
+ */
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
+        return rd_kafka_topic_partition_list_match(
+            rktparlist, rd_kafka_topic_partition_not_regex, NULL);
+}
+
+
+/**
+ * @brief Combine regexes present in the list into a single regex.
+ */
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist) {
+        int i;
+        int combined_regex_len   = 1; /* 1 for null-terminator */
+        int regex_cnt            = 0;
+        int j                    = 1;
+        rd_bool_t is_first_regex = rd_true;
+        char *combined_regex_str;
+        rd_kafkap_str_t *combined_regex_kstr;
+
+        // Count the number of characters needed for the combined regex string
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                if (*rktpar->topic == '^') {
+                        combined_regex_len += strlen(rktpar->topic);
+                        regex_cnt++;
+                }
+        }
+
+        if (regex_cnt == 0)
+                return rd_kafkap_str_new("", 0);
+
+        combined_regex_len +=
+            3 * (regex_cnt - 1); /* 1 for each ')|(' separator */
+        combined_regex_len += 2; /* 2 for enclosing brackets */
+
+        // memory allocation for the combined regex string
+        combined_regex_str = rd_malloc(combined_regex_len);
+
+        // Construct the combined regex string
+        combined_regex_str[0] = '(';
+        for (i = 0; i < rktparlist->cnt; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                    &(rktparlist->elems[i]);
+                char *topic = rktpar->topic;
+                if (*topic == '^') {
+                        if (!is_first_regex) {
+                                combined_regex_str[j++] = ')';
+                                combined_regex_str[j++] = '|';
+                                combined_regex_str[j++] = '(';
+                        }
+                        while (*topic) {
+                                combined_regex_str[j++] = *topic;
+                                topic++;
+                        }
+                        is_first_regex = rd_false;
+                }
+        }
+        combined_regex_str[j++] = ')';
+        combined_regex_str[j]   = '\0';
+
+        combined_regex_kstr =
+            rd_kafkap_str_new(combined_regex_str, combined_regex_len - 1);
+        rd_free(combined_regex_str);
+        return combined_regex_kstr;
 }
 
 

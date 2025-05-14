@@ -251,6 +251,15 @@ void test_conf_init(rd_kafka_conf_t **conf,
                     int timeout);
 
 
+typedef struct test_conf_log_interceptor_s test_conf_log_interceptor_t;
+
+test_conf_log_interceptor_t *
+test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
+                              void (*log_cb)(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf),
+                              const char **debug_contexts);
 
 void test_msg_fmt(char *dest,
                   size_t dest_size,
@@ -314,7 +323,7 @@ struct test_msgver_s {
 
         const char *msgid_hdr; /**< msgid string is in header by this name,
                                 * rather than in the payload (default). */
-};                             /* test_msgver_t; */
+}; /* test_msgver_t; */
 
 /* Message */
 struct test_mv_m {
@@ -583,6 +592,8 @@ void test_verify_rkmessage0(const char *func,
 
 void test_consumer_subscribe(rd_kafka_t *rk, const char *topic);
 
+void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...);
+
 void test_consume_msgs_easy_mv0(const char *group_id,
                                 const char *topic,
                                 rd_bool_t txn,
@@ -665,6 +676,7 @@ void test_consumer_verify_assignment0(const char *func,
         test_consumer_verify_assignment0(__FUNCTION__, __LINE__, rk,           \
                                          fail_immediately, __VA_ARGS__)
 
+
 void test_consumer_assign(const char *what,
                           rd_kafka_t *rk,
                           rd_kafka_topic_partition_list_t *parts);
@@ -675,6 +687,14 @@ void test_consumer_unassign(const char *what, rd_kafka_t *rk);
 void test_consumer_incremental_unassign(const char *what,
                                         rd_kafka_t *rk,
                                         rd_kafka_topic_partition_list_t *parts);
+void test_consumer_assign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
+void test_consumer_unassign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts);
 void test_consumer_assign_partition(const char *what,
                                     rd_kafka_t *rk,
                                     const char *topic,
@@ -689,6 +709,7 @@ void test_consumer_close(rd_kafka_t *rk);
 
 void test_flush(rd_kafka_t *rk, int timeout_ms);
 
+int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_topic_conf_get(const rd_kafka_topic_conf_t *tconf, const char *name);
 int test_conf_match(rd_kafka_conf_t *conf, const char *name, const char *val);
@@ -875,8 +896,6 @@ int test_error_is_not_fatal_cb(rd_kafka_t *rk,
 const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
-
-int test_consumer_group_protocol_consumer();
 
 /**
  * @brief Calls rdkafka function (with arguments)

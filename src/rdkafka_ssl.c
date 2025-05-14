@@ -225,15 +225,24 @@ rd_kafka_transport_ssl_io_update(rd_kafka_transport_t *rktrans,
                 if (serr2)
                         rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb, errstr,
                                            errstr_size);
-                else if (!rd_socket_errno || rd_socket_errno == ECONNRESET)
+                else if (!rd_socket_errno) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection closed by "
+                                   "peer");
                         rd_snprintf(errstr, errstr_size, "Disconnected");
-                else
+                } else if (rd_socket_errno == ECONNRESET) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                                   "Disconnected: connection reset by peer");
+                        rd_snprintf(errstr, errstr_size, "Disconnected");
+                } else
                         rd_snprintf(errstr, errstr_size,
                                     "SSL transport error: %s",
                                     rd_strerror(rd_socket_errno));
                 return -1;
 
         case SSL_ERROR_ZERO_RETURN:
+                rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
+                           "Disconnected: SSL connection closed by peer");
                 rd_snprintf(errstr, errstr_size, "Disconnected");
                 return -1;
 
@@ -815,7 +824,7 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         }
         wstore_name = rd_alloca(sizeof(*wstore_name) * wsize);
         werr        = mbstowcs_s(NULL, wstore_name, wsize, store_name,
-                          strlen(store_name));
+                                 strlen(store_name));
         rd_assert(!werr);
 
         w_store = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
@@ -1760,8 +1769,8 @@ static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
                 OSSL_PROVIDER *prov;
                 const char *buildinfo = NULL;
                 OSSL_PARAM request[]  = {{"buildinfo", OSSL_PARAM_UTF8_PTR,
-                                         (void *)&buildinfo, 0, 0},
-                                        {NULL, 0, NULL, 0, 0}};
+                                          (void *)&buildinfo, 0, 0},
+                                         {NULL, 0, NULL, 0, 0}};
 
                 prov = OSSL_PROVIDER_load(NULL, provider);
                 if (!prov) {
@@ -2011,7 +2020,7 @@ void rd_kafka_ssl_init(void) {
         if (!CRYPTO_get_locking_callback()) {
                 rd_kafka_ssl_locks_cnt = CRYPTO_num_locks();
                 rd_kafka_ssl_locks     = rd_malloc(rd_kafka_ssl_locks_cnt *
-                                               sizeof(*rd_kafka_ssl_locks));
+                                                   sizeof(*rd_kafka_ssl_locks));
                 for (i = 0; i < rd_kafka_ssl_locks_cnt; i++)
                         mtx_init(&rd_kafka_ssl_locks[i], mtx_plain);
 

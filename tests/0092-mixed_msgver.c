@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2018-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +52,11 @@ int main_0092_mixed_msgver(int argc, char **argv) {
 
         if (test_idempotent_producer) {
                 TEST_SKIP("Idempotent producer requires MsgVersion >= 2\n");
+                return 0;
+        }
+
+        if (test_broker_version >= TEST_BRKVER(4, 0, 0, 0)) {
+                TEST_SKIP("MsgVersion 1 was removed in Apache Kafka 4.0\n");
                 return 0;
         }
 

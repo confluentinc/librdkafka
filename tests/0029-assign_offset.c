@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -89,11 +90,13 @@ static void rebalance_cb(rd_kafka_t *rk,
                 }
                 TEST_SAY("Use these offsets:\n");
                 test_print_partition_list(parts);
-                test_consumer_assign("HL.REBALANCE", rk, parts);
+                test_consumer_assign_by_rebalance_protocol("HL.REBALANCE", rk,
+                                                           parts);
                 break;
 
         case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                test_consumer_unassign("HL.REBALANCE", rk);
+                test_consumer_unassign_by_rebalance_protocol("HL.REBALANCE", rk,
+                                                             parts);
                 break;
 
         default:

@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -337,21 +338,31 @@ static void do_test_verify(const int line,
   /*
    * Create any type of client
    */
-  std::string teststr = tostr()
-                        << line << ": "
-                        << "SSL cert verify: verify_ok=" << verify_ok
-                        << ", untrusted_client_key=" << untrusted_client_key
-                        << ", untrusted_client_key_intermediate_ca="
-                        << untrusted_client_key_intermediate_ca
-                        << ", load_key=" << load_names[load_key]
-                        << ", load_pub=" << load_names[load_pub]
-                        << ", load_ca=" << load_names[load_ca];
+  std::string teststr =
+      tostr() << line << ": " << "SSL cert verify: verify_ok=" << verify_ok
+              << ", untrusted_client_key=" << untrusted_client_key
+              << ", untrusted_client_key_intermediate_ca="
+              << untrusted_client_key_intermediate_ca
+              << ", load_key=" << load_names[load_key]
+              << ", load_pub=" << load_names[load_pub]
+              << ", load_ca=" << load_names[load_ca];
 
   Test::Say(_C_BLU "[ " + teststr + " ]\n" _C_CLR);
 
   RdKafka::Conf *conf;
-  TestEventCb eventCb(verify_ok && !untrusted_client_key);
+  std::string security_protocol;
   Test::conf_init(&conf, NULL, 10);
+  if (conf->get("security.protocol", security_protocol) !=
+      RdKafka::Conf::CONF_OK)
+    Test::Fail("Failed to get security.protocol");
+  /* sasl_ssl endpoints don't require
+   * SSL authentication even when
+   * ssl.client.auth=required */
+  bool should_succeed =
+      verify_ok && (!untrusted_client_key || !is_client_auth_required() ||
+                    security_protocol != "ssl");
+  TestEventCb eventCb(should_succeed);
+
   if (conf->set("event_cb", &eventCb, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Failed to set event_cb: " + errstr);
 
@@ -454,17 +465,10 @@ static void do_test_verify(const int line,
    * this test. */
   std::string cluster = p->clusterid(1000);
 
-  bool should_client_auth_fail =
-      untrusted_client_key && is_client_auth_required();
-  if (!should_client_auth_fail && verify_ok == cluster.empty())
+  if (should_succeed == cluster.empty())
     Test::Fail("Expected connection to " +
-               (std::string)(verify_ok ? "succeed" : "fail") +
+               (std::string)(should_succeed ? "succeed" : "fail") +
                ", but got clusterid '" + cluster + "'");
-  if (should_client_auth_fail && !cluster.empty())
-    Test::Fail(
-        "Expected connection to fail"
-        ", but got clusterid '" +
-        cluster + "'");
 
   delete p;
 

@@ -57,8 +57,13 @@ struct waitmsgs {
 };
 
 static mtx_t produce_req_lock;
+static mtx_t produce_sent_req_lock;
 static cnd_t produce_req_cnd;
+static cnd_t produce_sent_req_cnd;
+/* Number of completed produce requests, increased on response */
 static int produce_req_cnt = 0;
+/* Number of sent produce requests, increased on request */
+static int produce_sent_req_cnt = 0;
 
 
 #if WITH_SOCKEM
@@ -79,6 +84,13 @@ static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
         if (ApiKey == RD_KAFKAP_ApiVersion) {
                 test_sockfd = sockfd;
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+        if (ApiKey == RD_KAFKAP_Produce) {
+                mtx_lock(&produce_sent_req_lock);
+                produce_sent_req_cnt++;
+                if (produce_sent_req_cnt > 1)
+                        cnd_broadcast(&produce_sent_req_cnd);
+                mtx_unlock(&produce_sent_req_lock);
         }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -226,6 +238,8 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
         test_conf_set(conf, "enable.gapless.guarantee",
                       gapless ? "true" : "false");
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
+        produce_req_cnt      = 0;
+        produce_sent_req_cnt = 0;
 
         if (remote) {
 #if WITH_SOCKEM
@@ -238,7 +252,9 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
                         test_curr->is_fatal_cb = gapless_is_not_fatal_cb;
 
                 mtx_init(&produce_req_lock, mtx_plain);
+                mtx_init(&produce_sent_req_lock, mtx_plain);
                 cnd_init(&produce_req_cnd);
+                cnd_init(&produce_sent_req_cnd);
         } else {
                 test_conf_set(conf, "bootstrap.servers", NULL);
         }
@@ -269,16 +285,16 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
                             rd_kafka_err2str(err));
 
                 waitmsgs.exp_err[i] =
-                    (remote && i < 10
-                         ? RD_KAFKA_RESP_ERR_NO_ERROR
-                         : remote && i < 20 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
-                                            : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
+                    (remote && i < 10   ? RD_KAFKA_RESP_ERR_NO_ERROR
+                     : remote && i < 20 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
+                                        : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
 
                 waitmsgs.cnt++;
         }
 
 
         if (remote) {
+                test_timing_t t_produce;
                 /* Wait for ProduceRequest to be sent */
                 mtx_lock(&produce_req_lock);
                 cnd_timedwait_ms(&produce_req_cnd, &produce_req_lock,
@@ -286,6 +302,23 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
                 TEST_ASSERT(produce_req_cnt > 0,
                             "First Produce request should've been sent by now");
                 mtx_unlock(&produce_req_lock);
+
+                /* Wait second ProduceRequest is in-flight */
+                TIMING_START(&t_produce, "PRODUCE");
+                mtx_lock(&produce_sent_req_lock);
+                if (produce_sent_req_cnt < 2) {
+                        cnd_timedwait_ms(&produce_sent_req_cnd,
+                                         &produce_sent_req_lock, 15 * 1000);
+                }
+                TEST_ASSERT(produce_sent_req_cnt == 2,
+                            "No more than 2 requests should've "
+                            "been sent by now, "
+                            "%d sent produce requests",
+                            produce_sent_req_cnt);
+                mtx_unlock(&produce_sent_req_lock);
+                /* Even if still not in-flight, it should be sent
+                 * almost immediately given there are 19 messages in queue. */
+                TIMING_ASSERT_LATER(&t_produce, 0, 100);
 
                 purge_and_expect(what, __LINE__, rk, RD_KAFKA_PURGE_F_QUEUE,
                                  &waitmsgs, 10,

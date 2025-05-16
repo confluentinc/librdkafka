@@ -252,9 +252,9 @@ do_test_idempo_possibly_persisted_not_causing_fatal_error(size_t n) {
          * "possibly persisted" errors won't increase next_ack,
          * but it will be increased when receiving a NO_ERROR
          * during the second retry after broker is set up again. */
-        rd_usleep(250000, 0);
+        rd_usleep(500000, 0);
         rd_kafka_mock_broker_set_down(mcluster, 1);
-        rd_usleep(250000, 0);
+        rd_usleep(500000, 0);
 
         /* Produce rest of (5 - n) messages that will enqueued
          * after retried ones, msgids (6+n)->10. */

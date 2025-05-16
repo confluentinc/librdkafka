@@ -209,7 +209,7 @@ do_test_idempo_possibly_persisted_not_causing_fatal_error(size_t n) {
         size_t i;
         int remains = 0;
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("n=%" PRIusz, n);
 
         rk = create_idempo_producer(&mcluster, 1, "batch.num.messages", "1",
                                     "linger.ms", "0", NULL);

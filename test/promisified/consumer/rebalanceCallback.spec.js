@@ -18,6 +18,7 @@ describe('Consumer', () => {
         groupId = `consumer-group-id-${secureRandom()}`;
         consumerConfig = {
             groupId,
+            fromBeginning: true,
         };
         consumer = null;
         await createTopic({ topic: topicName, partitions: 3 });

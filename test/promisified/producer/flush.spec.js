@@ -75,7 +75,7 @@ describe('Producer > Flush', () => {
             let messageSent = false;
 
             /* Larger number of messages */
-            producer.send({ topic: topicName, messages: Array(100).fill(message) }).then(() => {
+            producer.send({ topic: topicName, messages: Array(1000).fill(message) }).then(() => {
                 messageSent = true;
             });
 

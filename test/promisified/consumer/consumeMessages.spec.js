@@ -412,19 +412,6 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
             partitions: partitions,
         });
 
-        /* Reconfigure producer and consumer in such a way that batches are likely
-         * to be small and we get multiple partitions in the cache at once.
-         * This is to reduce flakiness. */
-        producer = createProducer({}, {
-            'batch.num.messages': 1,
-        });
-
-        consumer = createConsumer({
-            'groupId': groupId,
-        }, {
-            'fetch.message.max.bytes': 1,
-        });
-
         await producer.connect();
         await consumer.connect();
         await consumer.subscribe({ topic: topicName });
@@ -451,7 +438,7 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
 
         await waitFor(() => consumer.assignment().length > 0, () => { }, 100);
 
-        const messages = Array(1024*9)
+        const messages = Array(4096 * 3)
             .fill()
             .map((_, i) => {
                 const value = secureRandom(512);

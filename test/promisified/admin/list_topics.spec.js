@@ -26,10 +26,20 @@ describe('Admin > listTopics', () => {
     it('should timeout', async () => {
         await admin.connect();
 
-        await expect(admin.listTopics({ timeout: 1 })).rejects.toHaveProperty(
-            'code',
-            ErrorCodes.ERR__TIMED_OUT
-        );
+        while (true) {
+            try {
+                await admin.listTopics({ timeout: 0.00001 });
+                jest.fail('Should have thrown an error');
+            } catch (e) {
+                if (e.code === ErrorCodes.ERR__TRANSPORT)
+                    continue;
+                expect(e).toHaveProperty(
+                    'code',
+                    ErrorCodes.ERR__TIMED_OUT
+                );
+                break;
+            }
+        }
     });
 
     it('should list consumer topics', async () => {

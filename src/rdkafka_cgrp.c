@@ -2576,8 +2576,12 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
                 /* Hint cache that something is interested in
                  * these topics so that they will be included in
                  * a future all known_topics query. */
+
+                rd_kafka_wrlock(rk);
                 rd_kafka_metadata_cache_hint(rk, &topics, NULL,
                                              RD_KAFKA_RESP_ERR__NOENT);
+                rd_kafka_wrunlock(rk);
+
                 rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_METADATA, "CGRPMETADATA",
                              "%s: need to refresh metadata (%dms old) "
                              "but no usable brokers available: %s",

@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2021-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -194,12 +195,14 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
         sec = test_conf_get(conf, "security.protocol");
         if (!strstr(sec, "sasl")) {
                 TEST_SKIP("Apache Kafka cluster not configured for SASL\n");
+                rd_kafka_conf_destroy(conf);
                 return 0;
         }
 
         oidc = test_conf_get(conf, "sasl.oauthbearer.method");
         if (rd_strcasecmp(oidc, "OIDC")) {
                 TEST_SKIP("`sasl.oauthbearer.method=OIDC` is required\n");
+                rd_kafka_conf_destroy(conf);
                 return 0;
         }
 

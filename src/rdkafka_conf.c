@@ -59,21 +59,22 @@
 struct rd_kafka_property {
         rd_kafka_conf_scope_t scope;
         const char *name;
-        enum { _RK_C_STR,
-               _RK_C_INT,
-               _RK_C_DBL, /* Double */
-               _RK_C_S2I, /* String to Integer mapping.
-                           * Supports limited canonical str->int mappings
-                           * using s2i[] */
-               _RK_C_S2F, /* CSV String to Integer flag mapping (OR:ed) */
-               _RK_C_BOOL,
-               _RK_C_PTR,     /* Only settable through special set functions */
-               _RK_C_PATLIST, /* Pattern list */
-               _RK_C_KSTR,    /* Kafka string */
-               _RK_C_ALIAS, /* Alias: points to other property through .sdef */
-               _RK_C_INTERNAL, /* Internal, don't expose to application */
-               _RK_C_INVALID,  /* Invalid property, used to catch known
-                                * but unsupported Java properties. */
+        enum {
+                _RK_C_STR,
+                _RK_C_INT,
+                _RK_C_DBL, /* Double */
+                _RK_C_S2I, /* String to Integer mapping.
+                            * Supports limited canonical str->int mappings
+                            * using s2i[] */
+                _RK_C_S2F, /* CSV String to Integer flag mapping (OR:ed) */
+                _RK_C_BOOL,
+                _RK_C_PTR,     /* Only settable through special set functions */
+                _RK_C_PATLIST, /* Pattern list */
+                _RK_C_KSTR,    /* Kafka string */
+                _RK_C_ALIAS, /* Alias: points to other property through .sdef */
+                _RK_C_INTERNAL, /* Internal, don't expose to application */
+                _RK_C_INVALID,  /* Invalid property, used to catch known
+                                 * but unsupported Java properties. */
         } type;
         int offset;
         const char *desc;
@@ -437,6 +438,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      1, 1000000, 1000000},
     {_RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
      .sdef = "max.in.flight.requests.per.connection"},
+    {_RK_GLOBAL, "metadata.recovery.strategy", _RK_C_S2I,
+     _RK(metadata_recovery_strategy),
+     "Controls how the client recovers when none of the brokers known to it "
+     "is available. If set to `none`, the client fails with a fatal error. "
+     "If set to `rebootstrap`, the client repeats the bootstrap process "
+     "using `bootstrap.servers` and brokers added through "
+     "`rd_kafka_brokers_add()`. Rebootstrapping is useful when a client "
+     "communicates with brokers so infrequently that the set of brokers "
+     "may change entirely before the client refreshes metadata. "
+     "Metadata recovery is triggered when all last-known brokers appear "
+     "unavailable simultaneously.",
+     .vdef = RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP,
+     .s2i  = {{RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE, "none"},
+              {RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP, "rebootstrap"},
+              {0, NULL}}},
     {_RK_GLOBAL | _RK_DEPRECATED | _RK_HIDDEN, "metadata.request.timeout.ms",
      _RK_C_INT, _RK(metadata_request_timeout_ms), "Not used.", 10, 900 * 1000,
      10},
@@ -540,7 +556,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
     },
     {_RK_GLOBAL, "socket.nagle.disable", _RK_C_BOOL, _RK(socket_nagle_disable),
-     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 0
+     "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.", 0, 1, 1
 #ifndef TCP_NODELAY
      ,
      .unsupported = "TCP_NODELAY not available at build time"
@@ -702,8 +718,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The application should mask this signal as an internal "
      "signal handler is installed.",
      0, 128, 0},
-    {_RK_GLOBAL | _RK_HIGH, "api.version.request", _RK_C_BOOL,
+    {_RK_GLOBAL | _RK_HIGH | _RK_DEPRECATED, "api.version.request", _RK_C_BOOL,
      _RK(api_version_request),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Request broker's supported API versions to adjust functionality to "
      "available protocol features. If set to false, or the "
      "ApiVersionRequest fails, the fallback version "
@@ -715,16 +733,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "api.version.request.timeout.ms", _RK_C_INT,
      _RK(api_version_request_timeout_ms),
      "Timeout for broker API version requests.", 1, 5 * 60 * 1000, 10 * 1000},
-    {_RK_GLOBAL | _RK_MED, "api.version.fallback.ms", _RK_C_INT,
-     _RK(api_version_fallback_ms),
+    {_RK_GLOBAL | _RK_MED | _RK_DEPRECATED, "api.version.fallback.ms",
+     _RK_C_INT, _RK(api_version_fallback_ms),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Dictates how long the `broker.version.fallback` fallback is used "
      "in the case the ApiVersionRequest fails. "
      "**NOTE**: The ApiVersionRequest is only issued when a new connection "
      "to the broker is made (such as after an upgrade).",
      0, 86400 * 7 * 1000, 0},
 
-    {_RK_GLOBAL | _RK_MED, "broker.version.fallback", _RK_C_STR,
-     _RK(broker_version_fallback),
+    {_RK_GLOBAL | _RK_MED | _RK_DEPRECATED, "broker.version.fallback",
+     _RK_C_STR, _RK(broker_version_fallback),
+     "**Post-deprecation actions: remove this configuration property, "
+     "brokers < 0.10.0 won't be supported anymore in librdkafka 3.x.** "
      "Older broker versions (before 0.10.0) provide no way for a client to "
      "query "
      "for supported protocol features "
@@ -758,10 +780,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(security_protocol), "Protocol used to communicate with brokers.",
      .vdef = RD_KAFKA_PROTO_PLAINTEXT,
      .s2i  = {{RD_KAFKA_PROTO_PLAINTEXT, "plaintext"},
-             {RD_KAFKA_PROTO_SSL, "ssl", _UNSUPPORTED_SSL},
-             {RD_KAFKA_PROTO_SASL_PLAINTEXT, "sasl_plaintext"},
-             {RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl", _UNSUPPORTED_SSL},
-             {0, NULL}}},
+              {RD_KAFKA_PROTO_SSL, "ssl", _UNSUPPORTED_SSL},
+              {RD_KAFKA_PROTO_SASL_PLAINTEXT, "sasl_plaintext"},
+              {RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl", _UNSUPPORTED_SSL},
+              {0, NULL}}},
 
     {_RK_GLOBAL, "ssl.cipher.suites", _RK_C_STR, _RK(ssl.cipher_suites),
      "A cipher suite is a named combination of authentication, "
@@ -889,7 +911,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OpenSSL >= 1.0.2 required.",
      .vdef = RD_KAFKA_SSL_ENDPOINT_ID_HTTPS,
      .s2i  = {{RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none"},
-             {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
+              {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
      _UNSUPPORTED_OPENSSL_1_0_2},
     {_RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
      _RK(ssl.cert_verify_cb),
@@ -1009,7 +1031,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "and `sasl.oauthbearer.token.endpoint.url`.",
      .vdef = RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
      .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT, "default"},
-             {RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc"}},
+              {RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc"}},
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.client.id", _RK_C_STR,
      _RK(sasl.oauthbearer.client_id),
@@ -1110,9 +1132,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "members of the group to assign partitions to group members. If "
      "there is more than one eligible strategy, preference is "
      "determined by the order of this list (strategies earlier in the "
-     "list have higher priority). "
-     "Cooperative and non-cooperative (eager) strategies must not be "
-     "mixed. "
+     "list have higher priority). Cooperative and non-cooperative (eager)"
+     "strategies must not be mixed. `partition.assignment.strategy` is not "
+     "supported for "
+     "`group.protocol=consumer`. Use `group.remote.assignor` instead. "
      "Available strategies: range, roundrobin, cooperative-sticky.",
      .sdef = "range,roundrobin"},
     {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "session.timeout.ms", _RK_C_INT,
@@ -1122,20 +1145,35 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "to indicate its liveness to the broker. If no hearts are "
      "received by the broker for a group member within the "
      "session timeout, the broker will remove the consumer from "
-     "the group and trigger a rebalance. "
-     "The allowed range is configured with the **broker** configuration "
+     "the group and trigger a rebalance. The "
+     "allowed range is configured with the **broker** configuration "
      "properties `group.min.session.timeout.ms` and "
-     "`group.max.session.timeout.ms`. "
+     "`group.max.session.timeout.ms`. `session.timeout.ms` is not supported "
+     "for `group.protocol=consumer`. It is set with the broker configuration "
+     "property "
+     "`group.consumer.session.timeout.ms` by default or can be configured "
+     "through the AdminClient IncrementalAlterConfigs API. "
+     "The allowed range is configured with the broker configuration "
+     "properties `group.consumer.min.session.timeout.ms` and "
+     "`group.consumer.max.session.timeout.ms`. "
      "Also see `max.poll.interval.ms`.",
      1, 3600 * 1000, 45 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
      _RK(group_heartbeat_intvl_ms),
-     "Group session keepalive heartbeat interval.", 1, 3600 * 1000, 3 * 1000},
+     "Group session keepalive heartbeat interval. "
+     "`heartbeat.interval.ms` is not supported for `group.protocol=consumer`. "
+     "It is set with the broker configuration property "
+     "`group.consumer.heartbeat.interval.ms` by default or can be configured "
+     "through the AdminClient IncrementalAlterConfigs API. The allowed range "
+     "is configured with the broker configuration properties "
+     "`group.consumer.min.heartbeat.interval.ms` and "
+     "`group.consumer.max.heartbeat.interval.ms`.",
+     1, 3600 * 1000, 3 * 1000},
     {_RK_GLOBAL | _RK_CGRP, "group.protocol.type", _RK_C_KSTR,
      _RK(group_protocol_type),
      "Group protocol type for the `classic` group protocol. NOTE: Currently, "
-     "the only supported group "
-     "protocol type is `consumer`.",
+     "the only supported group protocol type is `consumer`. "
+     "`group.protocol.type` is not supported for `group.protocol=consumer`",
      .sdef = "consumer"},
     {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "group.protocol", _RK_C_S2I,
      _RK(group_protocol),
@@ -1146,7 +1184,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "but will change to `consumer` in next releases.",
      .vdef = RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
      .s2i  = {{RD_KAFKA_GROUP_PROTOCOL_CLASSIC, "classic"},
-             {RD_KAFKA_GROUP_PROTOCOL_CONSUMER, "consumer"}}},
+              {RD_KAFKA_GROUP_PROTOCOL_CONSUMER, "consumer"}}},
     {_RK_GLOBAL | _RK_CGRP | _RK_MED, "group.remote.assignor", _RK_C_STR,
      _RK(group_remote_assignor),
      "Server side assignor to use. Keep it null to make server select a "
@@ -1272,8 +1310,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "(requires Apache Kafka 0.8.2 or later on the broker).",
      .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
      .s2i  = {{RD_KAFKA_OFFSET_METHOD_NONE, "none"},
-             {RD_KAFKA_OFFSET_METHOD_FILE, "file"},
-             {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
+              {RD_KAFKA_OFFSET_METHOD_FILE, "file"},
+              {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_HIGH, "isolation.level", _RK_C_S2I,
      _RK(isolation_level),
      "Controls how to read messages written transactionally: "
@@ -1282,7 +1320,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "transactional messages which have been aborted.",
      .vdef = RD_KAFKA_READ_COMMITTED,
      .s2i  = {{RD_KAFKA_READ_UNCOMMITTED, "read_uncommitted"},
-             {RD_KAFKA_READ_COMMITTED, "read_committed"}}},
+              {RD_KAFKA_READ_COMMITTED, "read_committed"}}},
     {_RK_GLOBAL | _RK_CONSUMER, "consume_cb", _RK_C_PTR, _RK(consume_cb),
      "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},
     {_RK_GLOBAL | _RK_CONSUMER, "rebalance_cb", _RK_C_PTR, _RK(rebalance_cb),
@@ -1427,11 +1465,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "the topic configuration property `compression.codec`. ",
      .vdef = RD_KAFKA_COMPRESSION_NONE,
      .s2i  = {{RD_KAFKA_COMPRESSION_NONE, "none"},
-             {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
-             {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
-             {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
-             {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
-             {0}}},
+              {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
+              {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
+              {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
+              {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
+              {0}}},
     {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "compression.type", _RK_C_ALIAS,
      .sdef = "compression.codec"},
     {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "batch.num.messages", _RK_C_INT,
@@ -1485,8 +1523,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "hostname. ",
      .vdef = RD_KAFKA_USE_ALL_DNS_IPS,
      .s2i  = {{RD_KAFKA_USE_ALL_DNS_IPS, "use_all_dns_ips"},
-             {RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
-              "resolve_canonical_bootstrap_servers_only"}}},
+              {RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
+               "resolve_canonical_bootstrap_servers_only"}}},
     {_RK_GLOBAL, "enable.metrics.push", _RK_C_BOOL, _RK(enable_metrics_push),
      "Whether to enable pushing of client metrics to the cluster, if the "
      "cluster has a client metrics subscription which matches this client",
@@ -1579,12 +1617,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "inherit = inherit global compression.codec configuration.",
      .vdef = RD_KAFKA_COMPRESSION_INHERIT,
      .s2i  = {{RD_KAFKA_COMPRESSION_NONE, "none"},
-             {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
-             {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
-             {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
-             {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
-             {RD_KAFKA_COMPRESSION_INHERIT, "inherit"},
-             {0}}},
+              {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
+              {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
+              {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
+              {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
+              {RD_KAFKA_COMPRESSION_INHERIT, "inherit"},
+              {0}}},
     {_RK_TOPIC | _RK_PRODUCER | _RK_HIGH, "compression.type", _RK_C_ALIAS,
      .sdef = "compression.codec"},
     {_RK_TOPIC | _RK_PRODUCER | _RK_MED, "compression.level", _RK_C_INT,
@@ -1668,7 +1706,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Apache Kafka 0.8.2 or later on the broker.).",
      .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
      .s2i  = {{RD_KAFKA_OFFSET_METHOD_FILE, "file"},
-             {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
+              {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
 
     {_RK_TOPIC | _RK_CONSUMER, "consume.callback.max.messages", _RK_C_INT,
      _RKT(consume_callback_max_msgs),
@@ -2328,7 +2366,7 @@ static int rd_kafka_anyconf_set(int scope,
                 const struct rd_kafka_property *_prop;                         \
                 rd_kafka_conf_res_t _res;                                      \
                 _prop = rd_kafka_conf_prop_find(SCOPE, NAME);                  \
-                rd_assert(_prop && * "invalid property name");                 \
+                rd_assert(_prop && *"invalid property name");                  \
                 _res = rd_kafka_anyconf_set_prop(                              \
                     SCOPE, CONF, _prop, (const void *)VALUE,                   \
                     1 /*allow-specifics*/, NULL, 0);                           \
@@ -3832,6 +3870,43 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (cltype == RD_KAFKA_CONSUMER) {
 
+                if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
+                        if (conf->max_poll_interval_ms <
+                            conf->group_session_timeout_ms)
+                                return "`max.poll.interval.ms`must be >= "
+                                       "`session.timeout.ms`";
+                } else {
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "session.timeout.ms")) {
+                                return "`session.timeout.ms` is not supported "
+                                       "for `group.protocol=consumer`. It is "
+                                       "defined broker side";
+                        }
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "partition.assignment.strategy")) {
+                                return "`partition.assignment.strategy` is not "
+                                       "supported for "
+                                       "`group.protocol=consumer`. Use "
+                                       "`group.remote.assignor` instead";
+                        }
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.protocol.type")) {
+                                return "`group.protocol.type` is not supported "
+                                       "for `group.protocol=consumer`";
+                        }
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "heartbeat.interval.ms")) {
+                                return "`heartbeat.interval.ms` is not "
+                                       "supported "
+                                       "for `group.protocol=consumer`. It is "
+                                       "defined broker side";
+                        }
+                }
+
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
                  * unless set by user. */
@@ -3861,10 +3936,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                             RD_MAX(conf->recv_max_msg_size,
                                    conf->fetch_max_bytes + 512);
                 }
-
-                if (conf->max_poll_interval_ms < conf->group_session_timeout_ms)
-                        return "`max.poll.interval.ms`must be >= "
-                               "`session.timeout.ms`";
 
                 /* Simplifies rd_kafka_is_idempotent() which is producer-only */
                 conf->eos.idempotence = 0;
@@ -3960,7 +4031,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (conf->reconnect_backoff_max_ms < conf->reconnect_backoff_ms)
                 return "`reconnect.backoff.max.ms` must be >= "
-                       "`reconnect.max.ms`";
+                       "`reconnect.backoff.ms`";
 
         if (conf->sparse_connections) {
                 /* Set sparse connection random selection interval to
@@ -4423,7 +4494,7 @@ int unittest_conf(void) {
         /* Verify that software.client.* string-safing works */
         conf = rd_kafka_conf_new();
         res  = rd_kafka_conf_set(conf, "client.software.name",
-                                " .~aba. va! !.~~", NULL, 0);
+                                 " .~aba. va! !.~~", NULL, 0);
         RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res);
         res = rd_kafka_conf_set(conf, "client.software.version",
                                 "!1.2.3.4.5!!! a", NULL, 0);
@@ -4442,7 +4513,7 @@ int unittest_conf(void) {
 
         readlen = sizeof(readval);
         res2    = rd_kafka_conf_get(conf, "client.software.version", readval,
-                                 &readlen);
+                                    &readlen);
         RD_UT_ASSERT(res2 == RD_KAFKA_CONF_OK, "%d", res2);
         RD_UT_ASSERT(!strcmp(readval, "1.2.3.4.5----a"),
                      "client.software.* safification failed: \"%s\"", readval);

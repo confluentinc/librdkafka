@@ -172,6 +172,7 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
             [RD_KAFKAP_ListTransactions]          = "ListTransactions",
             [RD_KAFKAP_AllocateProducerIds]       = "AllocateProducerIds",
             [RD_KAFKAP_ConsumerGroupHeartbeat]    = "ConsumerGroupHeartbeat",
+            [RD_KAFKAP_ConsumerGroupDescribe]     = "ConsumerGroupDescribe",
             [RD_KAFKAP_GetTelemetrySubscriptions] = "GetTelemetrySubscriptions",
             [RD_KAFKAP_PushTelemetry]             = "PushTelemetry",
 
@@ -283,6 +284,8 @@ typedef struct rd_kafkap_str_s {
 #define RD_KAFKAP_STR_INITIALIZER                                              \
         { .len = RD_KAFKAP_STR_LEN_NULL, .str = NULL }
 
+#define RD_KAFKAP_STR_INITIALIZER_EMPTY                                        \
+        { .len = 0, .str = "" }
 /**
  * Frees a Kafka string previously allocated with `rd_kafkap_str_new()`
  */

@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -101,10 +102,7 @@ static void rebalance_cb(rd_kafka_t *rk,
                     rd_kafka_name(cons->rk), cons->rebalance_cnt,
                     cons->max_rebalance_cnt);
 
-        if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-                rd_kafka_assign(rk, parts);
-        else
-                rd_kafka_assign(rk, NULL);
+        test_rebalance_cb(rk, err, parts, opaque);
 }
 
 

@@ -33,8 +33,8 @@
 
 int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now);
 
-rd_bool_t rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
-    rd_kafka_toppar_t *rktp);
+rd_kafka_fetch_pos_t
+rd_kafka_toppar_fetch_decide_next_fetch_start_pos(rd_kafka_toppar_t *rktp);
 
 rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                                      rd_kafka_broker_t *rkb,

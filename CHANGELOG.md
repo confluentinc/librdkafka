@@ -1,3 +1,206 @@
+# librdkafka v2.10.1
+
+librdkafka v2.10.1 is a maintenance release:
+
+ * Fix to add locks when updating the metadata cache for the consumer 
+   after no broker connection is available (@marcin-krystianc, #5066).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * Issues: #5051
+   Fix to add locks when updating the metadata cache for the consumer.
+   It can cause memory corruption or use-after-free in case
+   there's no broker connection and the consumer
+   group metadata needs to be updated.
+   Happens since 2.10.0 (#5066).
+
+
+
+# librdkafka v2.10.0
+
+librdkafka v2.10.0 is a feature release:
+
+## [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) – Now in **Preview**
+
+- [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) has transitioned from *Early Access* to *Preview*.
+- Added support for **regex-based subscriptions**.
+- Implemented client-side member ID generation as per [KIP-1082](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1082%3A+Require+Client-Generated+IDs+over+the+ConsumerGroupHeartbeat+RPC).
+- `rd_kafka_DescribeConsumerGroups()` now supports KIP-848-style `consumer` groups. Two new fields have been added:
+  - **Group type** – Indicates whether the group is `classic` or `consumer`.
+  - **Target assignment** – Applicable only to `consumer` protocol groups (defaults to `NULL`).
+- Group configuration is now supported in `AlterConfigs`, `IncrementalAlterConfigs`, and `DescribeConfigs`. ([#4939](https://github.com/confluentinc/librdkafka/pull/4939))
+- Added **Topic Authorization Error** support in the `ConsumerGroupHeartbeat` response.
+- Removed usage of the `partition.assignment.strategy` property for the `consumer` group protocol. An error will be raised if this is set with `group.protocol=consumer`.
+- Deprecated and disallowed the following properties for the `consumer` group protocol:
+  - `session.timeout.ms`
+  - `heartbeat.interval.ms`
+  - `group.protocol.type`  
+  Attempting to set any of these will result in an error.
+- Enhanced handling for `subscribe()` and `unsubscribe()` edge cases.
+
+> [!Note]
+> The [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) consumer is currently in **Preview** and should not be used in production environments. Implementation is feature complete but contract could have minor changes before General Availability.
+
+
+ ## Enhancements and Fixes
+
+ * Identify brokers only by broker id (#4557, @mfleming)
+ * Remove unavailable brokers and their thread (#4557, @mfleming)
+ * Commits during a cooperative incremental rebalance aren't causing
+   an assignment lost if the generation id was bumped in between (#4908).
+ * Fix for librdkafka yielding before timeouts had been reached (#4970)
+ * Removed a 500ms latency when a consumer partition switches to a different
+   leader (#4970)
+ * The mock cluster implementation removes brokers from Metadata response
+   when they're not available, this simulates better the actual behavior of
+   a cluster that is using KRaft (#4970).
+ * Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry (#4970).
+ * Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still (@marcin-krystianc, #4970).
+ * Doesn't update partition leaders if the topic in metadata
+   response has errors (#4970).
+ * Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user (#4970).
+ * The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries (#4970).
+ * Deprecated `api.version.request`, `api.version.fallback.ms` and
+   `broker.version.fallback` configuration properties (#4970).
+ * When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group (#4970).
+ * When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription but weren't in previous one (#4970).
+ * Prevent metadata cache corruption when topic id changes
+   (@kwdubuc, @marcin-krystianc, @GerKr, #4970).
+ * Fix for the case where a metadata refresh enqueued on an unreachable broker
+   prevents refreshing the controller or the coordinator until that broker
+   becomes reachable again (#4970).
+ * Remove a one second wait after a partition fetch is restarted following a
+   leader change and offset validation (#4970).
+ * Fix the Nagle algorithm (TCP_NODELAY) on broker sockets to not be enabled
+   by default (#4986).
+
+
+## Fixes
+
+### General fixes
+
+ * Issues: #4212
+   Identify brokers only by broker id, as happens in Java,
+   avoid to find the broker with same hostname and use the same thread
+   and connection.
+   Happens since 1.x (#4557, @mfleming).
+ * Issues: #4557
+   Remove brokers not reported in a metadata call, along with their thread.
+   Avoids that unavailable brokers are selected for a new connection when
+   there's no one available. We cannot tell if a broker was removed
+   temporarily or permanently so we always remove it and it'll be added back when
+   it becomes available again.
+   Happens since 1.x (#4557, @mfleming).
+ * Issues: #4970
+   librdkafka code using `cnd_timedwait` was yielding before a timeout occurred
+   without the condition being fulfilled because of spurious wake-ups.
+   Solved by verifying with a monotonic clock that the expected point in time
+   was reached and calling the function again if needed.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Doesn't remove topics from cache on temporary Metadata errors but only
+   on metadata cache expiry. It allows the client to continue working
+   in case of temporary problems to the Kafka metadata plane.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Doesn't mark the topic as unknown if it had been marked as existent earlier
+   and `topic.metadata.propagation.max.ms` hasn't passed still. It achieves
+   this property expected effect even if a different broker had
+   previously reported the topic as existent.
+   Happens since 1.x (@marcin-krystianc, #4970).
+ * Issues: #4907
+   Doesn't update partition leaders if the topic in metadata
+   response has errors. It's in line with what Java client does and allows
+   to avoid segmentation faults for unknown partitions.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Only topic authorization errors in a metadata response are considered
+   permanent and are returned to the user. It's in line with what Java client
+   does and avoids returning to the user an error that wasn't meant to be
+   permanent.
+   Happens since 1.x (#4970).
+ * Issues: #4964, #4778
+   Prevent metadata cache corruption when topic id for the same topic name
+   changes. Solved by correctly removing the entry with the old topic id from metadata cache
+   to prevent subsequent use-after-free.
+   Happens since 2.4.0 (@kwdubuc, @marcin-krystianc, @GerKr, #4970).
+ * Issues: #4970
+   Fix for the case where a metadata refresh enqueued on an unreachable broker
+   prevents refreshing the controller or the coordinator until that broker
+   becomes reachable again. Given the request continues to be retried on that
+   broker, the counter for refreshing complete broker metadata doesn't reach
+   zero and prevents the client from obtaining the new controller or group or transactional coordinator.
+   It causes a series of debug messages like:
+   "Skipping metadata request: ... full request already in-transit", until
+   the broker the request is enqueued on is up again.
+   Solved by not retrying these kinds of metadata requests.
+   Happens since 1.x (#4970).
+ * The Nagle algorithm (TCP_NODELAY) is now disabled by default. It caused a
+   large increase in latency for some use cases, for example, when using an
+   SSL connection.
+   For efficient batching, the application should use `linger.ms`,
+   `batch.size` etc.
+   Happens since: 0.x (#4986).
+
+### Consumer fixes
+
+ * Issues: #4059
+   Commits during a cooperative incremental rebalance could cause an
+   assignment lost if the generation id was bumped by a second join
+   group request.
+   Solved by not rejoining the group in case an illegal generation error happens
+   during a rebalance.
+   Happening since v1.6.0 (#4908)
+ * Issues: #4970
+   When switching to a different leader a consumer could wait 500ms 
+   (`fetch.error.backoff.ms`) before starting to fetch again. The fetch backoff wasn't reset when joining the new broker.
+   Solved by resetting it, given it's not needed to backoff
+   the first fetch on a different node. This way faster leader switches are
+   possible.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   The function `rd_kafka_offsets_for_times` refreshes leader information
+   if the error requires it, allowing it to succeed on
+   subsequent manual retries. Similar to the fix done in 2.3.0 in
+   `rd_kafka_query_watermark_offsets`. Additionally, the partition
+   current leader epoch is taken from metadata cache instead of
+   from passed partitions.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   When consumer is closed before destroying the client, the operations queue
+   isn't purged anymore as it contains operations
+   unrelated to the consumer group.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   When making multiple changes to the consumer subscription in a short time,
+   no unknown topic error is returned for topics that are in the new subscription
+   but weren't in previous one. This was due to the metadata request relative
+   to previous subscription.
+   Happens since 1.x (#4970).
+ * Issues: #4970
+   Remove a one second wait after a partition fetch is restarted following a
+   leader change and offset validation. This is done by resetting the fetch
+   error backoff and waking up the delegated broker if present.
+   Happens since 2.1.0 (#4970).
+
+
+
+*Note: there was no v2.9.0 librdkafka release,
+ it was a dependent clients release only*
+
+
+
 # librdkafka v2.8.0
 
 librdkafka v2.8.0 is a maintenance release:

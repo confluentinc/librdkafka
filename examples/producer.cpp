@@ -133,8 +133,8 @@ int main(int argc, char **argv) {
   /*
    * Read messages from stdin and produce to broker.
    */
-  std::cout << "% Type message value and hit enter "
-            << "to produce message." << std::endl;
+  std::cout << "% Type message value and hit enter " << "to produce message."
+            << std::endl;
 
   for (std::string line; run && std::getline(std::cin, line);) {
     if (line.empty()) {

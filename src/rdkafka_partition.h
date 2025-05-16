@@ -292,13 +292,14 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int32_t rktp_fetch_version; /* Op version of curr fetch.
                                        (broker thread) */
 
-        enum { RD_KAFKA_TOPPAR_FETCH_NONE = 0,
-               RD_KAFKA_TOPPAR_FETCH_STOPPING,
-               RD_KAFKA_TOPPAR_FETCH_STOPPED,
-               RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
-               RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
-               RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
-               RD_KAFKA_TOPPAR_FETCH_ACTIVE,
+        enum {
+                RD_KAFKA_TOPPAR_FETCH_NONE = 0,
+                RD_KAFKA_TOPPAR_FETCH_STOPPING,
+                RD_KAFKA_TOPPAR_FETCH_STOPPED,
+                RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
+                RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
+                RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
+                RD_KAFKA_TOPPAR_FETCH_ACTIVE,
         } rktp_fetch_state; /* Broker thread's state */
 
 #define RD_KAFKA_TOPPAR_FETCH_IS_STARTED(fetch_state)                          \
@@ -1008,6 +1009,12 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_get_err(
     const rd_kafka_topic_partition_list_t *rktparlist);
 
 int rd_kafka_topic_partition_list_regex_cnt(
+    const rd_kafka_topic_partition_list_t *rktparlist);
+
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist);
+
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
     const rd_kafka_topic_partition_list_t *rktparlist);
 
 void *rd_kafka_topic_partition_list_copy_opaque(const void *src, void *opaque);

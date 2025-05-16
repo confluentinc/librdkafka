@@ -1297,6 +1297,8 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         rd_bool_t list_all_topics                         = rd_false;
         int32_t TopicsCnt;
         int i;
+        size_t of_Brokers_cnt;
+        int32_t response_Brokers_cnt = 0;
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
@@ -1304,9 +1306,11 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         }
 
         /* Response: #Brokers */
-        rd_kafka_buf_write_arraycnt(resp, mcluster->broker_cnt);
+        of_Brokers_cnt = rd_kafka_buf_write_arraycnt_pos(resp);
 
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                if (!mrkb->up)
+                        continue;
                 /* Response: Brokers.Nodeid */
                 rd_kafka_buf_write_i32(resp, mrkb->id);
                 /* Response: Brokers.Host */
@@ -1318,7 +1322,10 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_str(resp, mrkb->rack, -1);
                 }
                 rd_kafka_buf_write_tags_empty(resp);
+                response_Brokers_cnt++;
         }
+        rd_kafka_buf_finalize_arraycnt(resp, of_Brokers_cnt,
+                                       response_Brokers_cnt);
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
                 /* Response: ClusterId */
@@ -2766,7 +2773,8 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                         *existing_assignment = NULL,
                                         *next_assignment     = NULL;
         rd_kafka_topic_partition_t *rktpar;
-        rd_kafkap_str_t GroupId, MemberId, InstanceId, RackId, ServerAssignor;
+        rd_kafkap_str_t GroupId, MemberId, InstanceId, RackId, ServerAssignor,
+            SubscribedTopicRegex;
         rd_kafkap_str_t *SubscribedTopicNames = NULL;
         int32_t MemberEpoch, RebalanceTimeoutMs, SubscribedTopicNamesCnt;
         int32_t i;
@@ -2809,6 +2817,8 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_read_str(rkbuf, &SubscribedTopicNames[i]);
                 }
         }
+
+        rd_kafka_buf_read_str(rkbuf, &SubscribedTopicRegex);
 
         /* ServerAssignor */
         rd_kafka_buf_read_str(rkbuf, &ServerAssignor);
@@ -2870,7 +2880,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
 
                 member = rd_kafka_mock_cgrp_consumer_member_add(
                     mcgrp, mconn, &MemberId, &InstanceId, SubscribedTopicNames,
-                    SubscribedTopicNamesCnt);
+                    SubscribedTopicNamesCnt, &SubscribedTopicRegex);
 
                 if (member) {
                         if (MemberEpoch >= 0) {
@@ -2895,6 +2905,9 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                 case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
+                        /* In case the error was set
+                         * by `rd_kafka_mock_next_request_error`. */
+                        MemberEpoch = -1;
                         mtx_lock(&mcluster->lock);
                         mcgrp = rd_kafka_mock_cgrp_consumer_find(mcluster,
                                                                  &GroupId);
@@ -2992,7 +3005,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_FindCoordinator] = {0, 3, 3,
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,
-                                      rd_kafka_mock_handle_InitProducerId},
+                                       rd_kafka_mock_handle_InitProducerId},
         [RD_KAFKAP_JoinGroup]       = {0, 6, 6, rd_kafka_mock_handle_JoinGroup},
         [RD_KAFKAP_Heartbeat]       = {0, 5, 4, rd_kafka_mock_handle_Heartbeat},
         [RD_KAFKAP_LeaveGroup] = {0, 4, 4, rd_kafka_mock_handle_LeaveGroup},
@@ -3007,7 +3020,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
-            {0, 0, 0, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
+            {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_GetTelemetrySubscriptions] =
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
         [RD_KAFKAP_PushTelemetry] = {0, 0, 0,

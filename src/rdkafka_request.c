@@ -3927,7 +3927,7 @@ rd_kafka_handle_idempotent_Produce_error(rd_kafka_broker_t *rkb,
                          * reason about the state of messages and thus
                          * not guarantee ordering or once-ness for R1,
                          * nor give the user a chance to opt out of sending
-                         * R2 to R5 which would be retried automatically. */
+                         * R2 to R4 which would be retried automatically. */
 
                         rd_kafka_idemp_set_fatal_error(
                             rk, perr->err,
@@ -3958,15 +3958,16 @@ rd_kafka_handle_idempotent_Produce_error(rd_kafka_broker_t *rkb,
                         perr->update_next_err = rd_true;
 
                 } else if (r > 0) {
-                        /* R2..R5 failed:
+                        /* R2..R4 failed:
                          * With max.in.flight > 1 we can have a situation
                          * where the first request in-flight (R1) to the broker
                          * fails, which causes the sub-sequent requests
                          * that are in-flight to have a non-sequential
                          * sequence number and thus fail.
-                         * But these sub-sequent requests (R2..R5) are not at
-                         * the risk of being duplicated 
-                         * so we re-enqueue the messages for later retry (without incrementing retries).
+                         * But these sub-sequent requests (R2..R4) are not at
+                         * the risk of being duplicated
+                         * so we re-enqueue the messages for later retry
+                         * (without incrementing retries).
                          */
                         rd_rkb_dbg(
                             rkb, MSG | RD_KAFKA_DBG_EOS, "ERRSEQ",

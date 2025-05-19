@@ -5762,26 +5762,18 @@ rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(new_acls));
 
         RD_LIST_FOREACH(new_acl, new_acls, i) {
-                rd_kafkap_str_t *acl_name, *acl_principal, *acl_host;
-
                 rd_kafka_buf_write_i8(rkbuf, new_acl->restype);
 
-                acl_name = rd_kafkap_str_new(new_acl->name, -1);
-                rd_kafka_buf_write_kstr(rkbuf, acl_name);
-                rd_kafkap_str_destroy(acl_name);
+                rd_kafka_buf_write_str(rkbuf, new_acl->name, -1);
 
                 if (ApiVersion >= 1) {
                         rd_kafka_buf_write_i8(rkbuf,
                                               new_acl->resource_pattern_type);
                 }
 
-                acl_principal = rd_kafkap_str_new(new_acl->principal, -1);
-                rd_kafka_buf_write_kstr(rkbuf, acl_principal);
-                rd_kafkap_str_destroy(acl_principal);
+                rd_kafka_buf_write_str(rkbuf, new_acl->principal, -1);
 
-                acl_host = rd_kafkap_str_new(new_acl->host, -1);
-                rd_kafka_buf_write_kstr(rkbuf, acl_host);
-                rd_kafkap_str_destroy(acl_host);
+                rd_kafka_buf_write_str(rkbuf, new_acl->host, -1);
 
                 rd_kafka_buf_write_i8(rkbuf, new_acl->operation);
 
@@ -5828,7 +5820,6 @@ rd_kafka_resp_err_t rd_kafka_DescribeAclsRequest(
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         const rd_kafka_AclBindingFilter_t *acl;
-        rd_kafkap_str_t *acl_name, *acl_principal, *acl_host;
         int op_timeout;
 
         if (rd_list_cnt(acls) == 0) {
@@ -5885,13 +5876,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeAclsRequest(
         rd_kafka_buf_write_i8(rkbuf, acl->restype);
 
         /* resource_name filter */
-        if (!acl->name) {
-                acl_name = rd_kafkap_str_new(NULL, -1);
-        } else {
-                acl_name = rd_kafkap_str_new(acl->name, -1);
-        }
-        rd_kafka_buf_write_kstr(rkbuf, acl_name);
-        rd_kafkap_str_destroy(acl_name);
+        rd_kafka_buf_write_str(rkbuf, acl->name, -1);
 
         if (ApiVersion > 0) {
                 /* resource_pattern_type (rd_kafka_ResourcePatternType_t) */
@@ -5899,22 +5884,10 @@ rd_kafka_resp_err_t rd_kafka_DescribeAclsRequest(
         }
 
         /* principal filter */
-        if (!acl->principal) {
-                acl_principal = rd_kafkap_str_new(NULL, -1);
-        } else {
-                acl_principal = rd_kafkap_str_new(acl->principal, -1);
-        }
-        rd_kafka_buf_write_kstr(rkbuf, acl_principal);
-        rd_kafkap_str_destroy(acl_principal);
+        rd_kafka_buf_write_str(rkbuf, acl->principal, -1);
 
         /* host filter */
-        if (!acl->host) {
-                acl_host = rd_kafkap_str_new(NULL, -1);
-        } else {
-                acl_host = rd_kafkap_str_new(acl->host, -1);
-        }
-        rd_kafka_buf_write_kstr(rkbuf, acl_host);
-        rd_kafkap_str_destroy(acl_host);
+        rd_kafka_buf_write_str(rkbuf, acl->host, -1);
 
         /* operation (rd_kafka_AclOperation_t) */
         rd_kafka_buf_write_i8(rkbuf, acl->operation);
@@ -6013,19 +5986,11 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(del_acls));
 
         RD_LIST_FOREACH(acl, del_acls, i) {
-                rd_kafkap_str_t *acl_name, *acl_principal, *acl_host;
-
                 /* resource_type */
                 rd_kafka_buf_write_i8(rkbuf, acl->restype);
 
                 /* resource_name filter */
-                if (!acl->name) {
-                        acl_name = rd_kafkap_str_new(NULL, -1);
-                } else {
-                        acl_name = rd_kafkap_str_new(acl->name, -1);
-                }
-                rd_kafka_buf_write_kstr(rkbuf, acl_name);
-                rd_kafkap_str_destroy(acl_name);
+                rd_kafka_buf_write_str(rkbuf, acl->name, -1);
 
                 if (ApiVersion > 0) {
                         /* resource_pattern_type
@@ -6035,22 +6000,10 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                 }
 
                 /* principal filter */
-                if (!acl->principal) {
-                        acl_principal = rd_kafkap_str_new(NULL, -1);
-                } else {
-                        acl_principal = rd_kafkap_str_new(acl->principal, -1);
-                }
-                rd_kafka_buf_write_kstr(rkbuf, acl_principal);
-                rd_kafkap_str_destroy(acl_principal);
+                rd_kafka_buf_write_str(rkbuf, acl->principal, -1);
 
                 /* host filter */
-                if (!acl->host) {
-                        acl_host = rd_kafkap_str_new(NULL, -1);
-                } else {
-                        acl_host = rd_kafkap_str_new(acl->host, -1);
-                }
-                rd_kafka_buf_write_kstr(rkbuf, acl_host);
-                rd_kafkap_str_destroy(acl_host);
+                rd_kafka_buf_write_str(rkbuf, acl->host, -1);
 
                 /* operation (rd_kafka_AclOperation_t) */
                 rd_kafka_buf_write_i8(rkbuf, acl->operation);

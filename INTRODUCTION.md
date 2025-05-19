@@ -2369,49 +2369,49 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 release of librdkafka.
 
 
-| ApiKey | Request name                 | Kafka max | librdkafka max |
-| ------ | ---------------------------- | --------- | -------------- |
-| 0      | Produce                      | 12        | 10             |
-| 1      | Fetch                        | 17        | 16             |
-| 2      | ListOffsets                  | 10        | 7              |
-| 3      | Metadata                     | 13        | 13             |
-| 8      | OffsetCommit                 | 9         | 9              |
-| 9      | OffsetFetch                  | 9         | 9              |
-| 10     | FindCoordinator              | 6         | 2              |
-| 11     | JoinGroup                    | 9         | 5              |
-| 12     | Heartbeat                    | 4         | 3              |
-| 13     | LeaveGroup                   | 5         | 1              |
-| 14     | SyncGroup                    | 5         | 3              |
-| 15     | DescribeGroups               | 6         | 4              |
-| 16     | ListGroups                   | 5         | 4              |
-| 17     | SaslHandshake                | 1         | 1              |
-| 18     | ApiVersions                  | 4         | 3              |
-| 19     | CreateTopics                 | 7         | 4              |
-| 20     | DeleteTopics                 | 6         | 1              |
-| 21     | DeleteRecords                | 2         | 1              |
-| 22     | InitProducerId               | 5         | 4              |
-| 23     | OffsetForLeaderEpoch         | 4         | 2              |
-| 24     | AddPartitionsToTxn           | 5         | 0              |
-| 25     | AddOffsetsToTxn              | 4         | 0              |
-| 26     | EndTxn                       | 5         | 1              |
-| 28     | TxnOffsetCommit              | 5         | 3              |
-| 29     | DescribeAcls                 | 3         | 1              |
-| 30     | CreateAcls                   | 3         | 1              |
-| 31     | DeleteAcls                   | 3         | 1              |
-| 32     | DescribeConfigs              | 4         | 1              |
-| 33     | AlterConfigs                 | 2         | 2              |
-| 36     | SaslAuthenticate             | 2         | 1              |
-| 37     | CreatePartitions             | 3         | 0              |
-| 42     | DeleteGroups                 | 2         | 1              |
-| 43     | ElectLeaders                 | 2         | 2              |
-| 44     | IncrementalAlterConfigs      | 1         | 1              |
-| 47     | OffsetDelete                 | 0         | 0              |
-| 50     | DescribeUserScramCredentials | 0         | 0              |
-| 51     | AlterUserScramCredentials    | 0         | 0              |
-| 68     | ConsumerGroupHeartbeat       | 1         | 1              |
-| 69     | ConsumerGroupDescribe        | 1         | 0              |
-| 71     | GetTelemetrySubscriptions    | 0         | 0              |
-| 72     | PushTelemetry                | 0         | 0              |
+| ApiKey  | Request name                  | Kafka max  | librdkafka max |
+| ------- | ----------------------------- | ---------- | -------------- |
+| 0       | Produce                       | 12         | 10             |
+| 1       | Fetch                         | 17         | 16             |
+| 2       | ListOffsets                   | 10         | 7              |
+| 3       | Metadata                      | 13         | 13             |
+| 8       | OffsetCommit                  | 9          | 9              |
+| 9       | OffsetFetch                   | 9          | 9              |
+| 10      | FindCoordinator               | 6          | 2              |
+| 11      | JoinGroup                     | 9          | 5              |
+| 12      | Heartbeat                     | 4          | 3              |
+| 13      | LeaveGroup                    | 5          | 1              |
+| 14      | SyncGroup                     | 5          | 3              |
+| 15      | DescribeGroups                | 6          | 5              |
+| 16      | ListGroups                    | 5          | 4              |
+| 17      | SaslHandshake                 | 1          | 1              |
+| 18      | ApiVersions                   | 4          | 3              |
+| 19      | CreateTopics                  | 7          | 4              |
+| 20      | DeleteTopics                  | 6          | 4              |
+| 21      | DeleteRecords                 | 2          | 2              |
+| 22      | InitProducerId                | 5          | 4              |
+| 23      | OffsetForLeaderEpoch          | 4          | 2              |
+| 24      | AddPartitionsToTxn            | 5          | 0              |
+| 25      | AddOffsetsToTxn               | 4          | 0              |
+| 26      | EndTxn                        | 5          | 1              |
+| 28      | TxnOffsetCommit               | 5          | 3              |
+| 29      | DescribeAcls                  | 3          | 1              |
+| 30      | CreateAcls                    | 3          | 1              |
+| 31      | DeleteAcls                    | 3          | 1              |
+| 32      | DescribeConfigs               | 4          | 1              |
+| 33      | AlterConfigs                  | 2          | 2              |
+| 36      | SaslAuthenticate              | 2          | 1              |
+| 37      | CreatePartitions              | 3          | 2              |
+| 42      | DeleteGroups                  | 2          | 2              |
+| 43      | ElectLeaders                  | 2          | 2              |
+| 44      | IncrementalAlterConfigs       | 1          | 1              |
+| 47      | OffsetDelete                  | 0          | 0              |
+| 50      | DescribeUserScramCredentials  | 0          | 0              |
+| 51      | AlterUserScramCredentials     | 0          | 0              |
+| 68      | ConsumerGroupHeartbeat        | 1          | 1              |
+| 69      | ConsumerGroupDescribe         | 1          | 0              |
+| 71      | GetTelemetrySubscriptions     | 0          | 0              |
+| 72      | PushTelemetry                 | 0          | 0              |
 
 <a name="recommendations-for-language-binding-developers"></a>
 # Recommendations for language binding developers

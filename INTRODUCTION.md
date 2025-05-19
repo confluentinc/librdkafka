@@ -2196,13 +2196,13 @@ release of librdkafka.
 | 12      | Heartbeat                     | 4          | 3              |
 | 13      | LeaveGroup                    | 5          | 1              |
 | 14      | SyncGroup                     | 5          | 3              |
-| 15      | DescribeGroups                | 6          | 4              |
+| 15      | DescribeGroups                | 6          | 5              |
 | 16      | ListGroups                    | 5          | 4              |
 | 17      | SaslHandshake                 | 1          | 1              |
 | 18      | ApiVersions                   | 4          | 3              |
 | 19      | CreateTopics                  | 7          | 4              |
-| 20      | DeleteTopics                  | 6          | 1              |
-| 21      | DeleteRecords                 | 2          | 1              |
+| 20      | DeleteTopics                  | 6          | 4              |
+| 21      | DeleteRecords                 | 2          | 2              |
 | 22      | InitProducerId                | 5          | 4              |
 | 23      | OffsetForLeaderEpoch          | 4          | 2              |
 | 24      | AddPartitionsToTxn            | 5          | 0              |
@@ -2215,8 +2215,8 @@ release of librdkafka.
 | 32      | DescribeConfigs               | 4          | 1              |
 | 33      | AlterConfigs                  | 2          | 2              |
 | 36      | SaslAuthenticate              | 2          | 1              |
-| 37      | CreatePartitions              | 3          | 0              |
-| 42      | DeleteGroups                  | 2          | 1              |
+| 37      | CreatePartitions              | 3          | 2              |
+| 42      | DeleteGroups                  | 2          | 2              |
 | 43      | ElectLeaders                  | 2          | 2              |
 | 44      | IncrementalAlterConfigs       | 1          | 1              |
 | 47      | OffsetDelete                  | 0          | 0              |

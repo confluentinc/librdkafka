@@ -5095,10 +5095,10 @@ rd_kafka_DeleteTopicsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf =
-            rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_DeleteTopics, 1,
-                                     /* FIXME */
-                                     4 + (rd_list_cnt(del_topics) * 100) + 4, ApiVersion >= 4);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DeleteTopics, 1,
+            /* FIXME */
+            4 + (rd_list_cnt(del_topics) * 100) + 4, ApiVersion >= 4);
 
         /* #topics */
         rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(del_topics));
@@ -5163,8 +5163,9 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_DeleteRecords, 1,
-                                         4 + (partitions->cnt * 100) + 4, ApiVersion >= 2);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DeleteRecords, 1, 4 + (partitions->cnt * 100) + 4,
+            ApiVersion >= 2);
 
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
@@ -5234,9 +5235,9 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_CreatePartitions, 1,
-                                         4 + (rd_list_cnt(new_parts) * 200) +
-                                             4 + 1, ApiVersion >= 2);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_CreatePartitions, 1,
+            4 + (rd_list_cnt(new_parts) * 200) + 4 + 1, ApiVersion >= 2);
 
         /* #topics */
         rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(new_parts));
@@ -5255,16 +5256,16 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
                         const rd_list_t *replicas;
                         int pi = -1;
 
-                        rd_kafka_buf_write_arraycnt(rkbuf,
-                                               rd_list_cnt(&newp->replicas));
+                        rd_kafka_buf_write_arraycnt(
+                            rkbuf, rd_list_cnt(&newp->replicas));
 
                         while (
                             (replicas = rd_list_elem(&newp->replicas, ++pi))) {
                                 int ri = 0;
 
                                 /* replica count */
-                                rd_kafka_buf_write_arraycnt(rkbuf,
-                                                       rd_list_cnt(replicas));
+                                rd_kafka_buf_write_arraycnt(
+                                    rkbuf, rd_list_cnt(replicas));
 
                                 /* replica */
                                 for (ri = 0; ri < rd_list_cnt(replicas); ri++) {
@@ -5618,9 +5619,9 @@ rd_kafka_DeleteGroupsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf =
-            rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_DeleteGroups, 1,
-                                     4 + (rd_list_cnt(del_groups) * 100) + 4, ApiVersion >= 2);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DeleteGroups, 1,
+            4 + (rd_list_cnt(del_groups) * 100) + 4, ApiVersion >= 2);
 
         /* #groups */
         rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(del_groups));

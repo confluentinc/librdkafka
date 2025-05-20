@@ -6,7 +6,7 @@ import {
   AvroSerializer,
   AvroSerializerConfig
 } from "../../serde/avro";
-import {HeaderSchemaIdSerializer, SerdeType, Serializer} from "../../serde/serde";
+import {HeaderSchemaIdSerializer, SerdeType, SerializationError, Serializer} from "../../serde/serde";
 import {
   Client,
   Rule,
@@ -30,6 +30,8 @@ import {RuleRegistry} from "@confluentinc/schemaregistry/serde/rule-registry";
 import {
   clearKmsClients
 } from "@confluentinc/schemaregistry/rules/encryption/kms-registry";
+import {CelExecutor} from "../../rules/cel/cel-executor";
+import {CelFieldExecutor} from "../../rules/cel/cel-field-executor";
 
 const rootSchema = `
 {
@@ -317,6 +319,8 @@ class FakeClock extends Clock {
 }
 
 const fieldEncryptionExecutor = FieldEncryptionExecutor.registerWithClock(new FakeClock())
+CelExecutor.register()
+CelFieldExecutor.register()
 JsonataExecutor.register()
 AwsKmsDriver.register()
 AzureKmsDriver.register()
@@ -655,6 +659,393 @@ describe('AvroSerializer', () => {
     let obj2 = await deser.deserialize(topic, bytes)
     expect(obj2.fieldToDelete).toEqual(undefined);
     expect(obj2.newOptionalField).toEqual("optional");
+  })
+  it('cel condition', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'CONDITION',
+      mode: RuleMode.WRITE,
+      type: 'CEL',
+      expr: "message.stringField == 'hi'"
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: demoSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.intField).toEqual(obj.intField);
+    expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
+    expect(obj2.stringField).toEqual(obj.stringField);
+    expect(obj2.boolField).toEqual(obj.boolField);
+    expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('cel condition fail', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'CONDITION',
+      mode: RuleMode.WRITE,
+      type: 'CEL',
+      expr: "message.stringField != 'hi'"
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: demoSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    try {
+      await ser.serialize(topic, obj)
+      expect(true).toBe(false)
+    } catch (err) {
+      expect(err).toBeInstanceOf(SerializationError)
+    }
+  })
+  it('cel condition ignore fail', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'CONDITION',
+      mode: RuleMode.WRITE,
+      type: 'CEL',
+      expr: "message.stringField != 'hi'",
+      onFailure: 'NONE'
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: demoSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.intField).toEqual(obj.intField);
+    expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
+    expect(obj2.stringField).toEqual(obj.stringField);
+    expect(obj2.boolField).toEqual(obj.boolField);
+    expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('cel field transform', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITE,
+      type: 'CEL_FIELD',
+      expr: "name == 'stringField' ; value + '-suffix'"
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: demoSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.intField).toEqual(obj.intField);
+    expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
+    expect(obj2.stringField).toEqual('hi-suffix');
+    expect(obj2.boolField).toEqual(obj.boolField);
+    expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('cel field complex transform', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITE,
+      type: 'CEL_FIELD',
+      expr: "typeName == 'STRING' ; value + '-suffix'",
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: complexSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      arrayField: [ 'hello' ],
+      mapField: { 'key': 'world' },
+      unionField: 'bye',
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.arrayField).toEqual([ 'hello-suffix' ]);
+    expect(obj2.mapField).toEqual({ 'key': 'world-suffix' });
+    expect(obj2.unionField).toEqual('bye-suffix');
+  })
+  it('cel field complex transform with null', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITE,
+      type: 'CEL_FIELD',
+      expr: "typeName == 'STRING' ; value + '-suffix'",
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: complexSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      arrayField: [ 'hello' ],
+      mapField: { 'key': 'world' },
+      unionField: null,
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.arrayField).toEqual([ 'hello-suffix' ]);
+    expect(obj2.mapField).toEqual({ 'key': 'world-suffix' });
+    expect(obj2.unionField).toEqual(null);
+  })
+  it('cel field condition', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'CONDITION',
+      mode: RuleMode.WRITE,
+      type: 'CEL_FIELD',
+      expr: "name == 'stringField' ; value == 'hi'"
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: demoSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.intField).toEqual(obj.intField);
+    expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
+    expect(obj2.stringField).toEqual(obj.stringField);
+    expect(obj2.boolField).toEqual(obj.boolField);
+    expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('cel field condition fail', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'CONDITION',
+      mode: RuleMode.WRITE,
+      type: 'CEL_FIELD',
+      expr: "name == 'stringField' ; value != 'hi'"
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: demoSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    try {
+      await ser.serialize(topic, obj)
+      expect(true).toBe(false)
+    } catch (err) {
+      expect(err).toBeInstanceOf(SerializationError)
+    }
   })
   it('basic encryption', async () => {
     let conf: ClientConfig = {

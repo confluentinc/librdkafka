@@ -3371,6 +3371,26 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_id(
                 return &rktparlist->elems[i];
 }
 
+/**
+ * @brief Find element by \p topic and \p partition. \p rkparlist must be
+ *        sorted by topic and partition.
+ *
+ * @returns a pointer to the first matching element, or NULL if not found.
+ */
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_sorted(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition) {
+        rd_kafka_topic_partition_t needle = {
+            .topic     = (char *)topic,
+            .partition = partition,
+        };
+        rd_kafka_topic_partition_t *found;
+        found =
+            bsearch(&needle, rktparlist->elems, rktparlist->cnt,
+                    sizeof(rktparlist->elems[0]), rd_kafka_topic_partition_cmp);
+        return found;
+}
 
 int rd_kafka_topic_partition_list_del_by_idx(
     rd_kafka_topic_partition_list_t *rktparlist,

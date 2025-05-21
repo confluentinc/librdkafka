@@ -158,6 +158,8 @@ typedef RD_MAP_TYPE(const char *,
 typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
                     const char *) map_toppar_str_t;
 
+typedef RD_MAP_TYPE(const char *, map_toppar_str_t *) map_str_map_toppar_str_t;
+
 typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
                     rd_list_t *) map_toppar_list_t;
 
@@ -513,6 +515,7 @@ static int sort_by_map_elem_val_toppar_list_cnt(const void *_a,
         return strcmp((const char *)a->key, (const char *)b->key);
 }
 
+typedef map_str_map_toppar_str_t consumer2AllPotentialPartitions_t;
 
 /**
  * @brief Assign partition to the most eligible consumer.
@@ -521,32 +524,34 @@ static int sort_by_map_elem_val_toppar_list_cnt(const void *_a,
  * assignments to consumers.
  * @returns true if partition was assigned, false otherwise.
  */
-static rd_bool_t
-maybeAssignPartition(const rd_kafka_topic_partition_t *partition,
-                     rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
-                     map_str_toppar_list_t *currentAssignment,
-                     map_str_toppar_list_t *consumer2AllPotentialPartitions,
-                     map_toppar_str_t *currentPartitionConsumer,
-                     rd_kafka_rack_info_t *rkri) {
+static rd_bool_t maybeAssignPartition(
+    const rd_kafka_topic_partition_t *partition,
+    rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
+    map_str_toppar_list_t *currentAssignment,
+    consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions,
+    map_toppar_str_t *currentPartitionConsumer,
+    rd_kafka_rack_info_t *rkri) {
         const rd_map_elem_t *elem;
         int i;
 
         RD_LIST_FOREACH(elem, sortedCurrentSubscriptions, i) {
                 const char *consumer = (const char *)elem->key;
-                const rd_kafka_topic_partition_list_t *partitions;
+                rd_kafka_topic_partition_list_t *assignedPartitions;
+                map_toppar_str_t *partitions;
 
                 partitions =
                     RD_MAP_GET(consumer2AllPotentialPartitions, consumer);
-                if (!rd_kafka_topic_partition_list_find(
-                        partitions, partition->topic, partition->partition))
+                if (!RD_MAP_GET(partitions, partition))
                         continue;
+
                 if (rkri != NULL &&
                     rd_kafka_racks_mismatch(rkri, consumer, partition))
                         continue;
 
+                assignedPartitions = (void *)elem->value;
                 rd_kafka_topic_partition_list_add(
-                    RD_MAP_GET(currentAssignment, consumer), partition->topic,
-                    partition->partition);
+                    assignedPartitions, partition->topic, partition->partition);
+                rd_kafka_topic_partition_list_sort_by_topic(assignedPartitions);
 
                 RD_MAP_SET(currentPartitionConsumer,
                            rd_kafka_topic_partition_copy(partition), consumer);
@@ -585,13 +590,13 @@ static RD_INLINE rd_bool_t consumerCanParticipateInReassignment(
     rd_kafka_t *rk,
     const char *consumer,
     map_str_toppar_list_t *currentAssignment,
-    map_str_toppar_list_t *consumer2AllPotentialPartitions,
+    consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions,
     map_toppar_list_t *partition2AllPotentialConsumers) {
         const rd_kafka_topic_partition_list_t *currentPartitions =
             RD_MAP_GET(currentAssignment, consumer);
         int currentAssignmentSize = currentPartitions->cnt;
         int maxAssignmentSize =
-            RD_MAP_GET(consumer2AllPotentialPartitions, consumer)->cnt;
+            RD_MAP_CNT(RD_MAP_GET(consumer2AllPotentialPartitions, consumer));
         int i;
 
         /* FIXME: And then what? Is this a local error? If so, assert. */
@@ -644,6 +649,9 @@ static void processPartitionMovement(
         rd_kafka_topic_partition_list_add(
             RD_MAP_GET(currentAssignment, newConsumer), partition->topic,
             partition->partition);
+        /* Keep the assignment sorted for binary search */
+        rd_kafka_topic_partition_list_sort_by_topic(
+            RD_MAP_GET(currentAssignment, newConsumer));
 
         rd_kafka_topic_partition_list_del(
             RD_MAP_GET(currentAssignment, oldConsumer), partition->topic,
@@ -693,26 +701,24 @@ static void reassignPartitionToConsumer(
 /**
  * @brief Reassign \p partition to an eligible new consumer.
  */
-static void
-reassignPartition(rd_kafka_t *rk,
-                  PartitionMovements_t *partitionMovements,
-                  const rd_kafka_topic_partition_t *partition,
-                  map_str_toppar_list_t *currentAssignment,
-                  rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
-                  map_toppar_str_t *currentPartitionConsumer,
-                  map_str_toppar_list_t *consumer2AllPotentialPartitions) {
-
+static void reassignPartition(
+    rd_kafka_t *rk,
+    PartitionMovements_t *partitionMovements,
+    const rd_kafka_topic_partition_t *partition,
+    map_str_toppar_list_t *currentAssignment,
+    rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
+    map_toppar_str_t *currentPartitionConsumer,
+    consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions) {
         const rd_map_elem_t *elem;
         int i;
 
         /* Find the new consumer */
         RD_LIST_FOREACH(elem, sortedCurrentSubscriptions, i) {
                 const char *newConsumer = (const char *)elem->key;
+                map_toppar_str_t *partitions =
+                    RD_MAP_GET(consumer2AllPotentialPartitions, newConsumer);
 
-                if (rd_kafka_topic_partition_list_find(
-                        RD_MAP_GET(consumer2AllPotentialPartitions,
-                                   newConsumer),
-                        partition->topic, partition->partition)) {
+                if (RD_MAP_GET(partitions, partition)) {
                         reassignPartitionToConsumer(
                             rk, partitionMovements, partition,
                             currentAssignment, sortedCurrentSubscriptions,
@@ -751,7 +757,7 @@ static rd_bool_t
 isBalanced(rd_kafka_t *rk,
            map_str_toppar_list_t *currentAssignment,
            const rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
-           map_str_toppar_list_t *consumer2AllPotentialPartitions,
+           consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions,
            map_toppar_list_t *partition2AllPotentialConsumers) {
 
         int minimum = ((const rd_kafka_topic_partition_list_t
@@ -819,10 +825,10 @@ isBalanced(rd_kafka_t *rk,
          *       currentAssignment's element we get both the consumer
          *       and partition list in elem here. */
         RD_LIST_FOREACH(elem, sortedCurrentSubscriptions, i) {
-                int j;
                 const char *consumer = (const char *)elem->key;
-                const rd_kafka_topic_partition_list_t *potentialTopicPartitions;
+                map_toppar_str_t *potentialTopicPartitions;
                 const rd_kafka_topic_partition_list_t *consumerPartitions;
+                const rd_kafka_topic_partition_t *partition;
 
                 consumerPartitions =
                     (const rd_kafka_topic_partition_list_t *)elem->value;
@@ -832,18 +838,17 @@ isBalanced(rd_kafka_t *rk,
 
                 /* Skip if this consumer already has all the topic partitions
                  * it can get. */
-                if (consumerPartitions->cnt == potentialTopicPartitions->cnt)
+                if (consumerPartitions->cnt ==
+                    (int)RD_MAP_CNT(potentialTopicPartitions))
                         continue;
 
                 /* Otherwise make sure it can't get any more partitions */
 
-                for (j = 0; j < potentialTopicPartitions->cnt; j++) {
-                        const rd_kafka_topic_partition_t *partition =
-                            &potentialTopicPartitions->elems[j];
+                RD_MAP_FOREACH_KEY(partition, potentialTopicPartitions) {
                         const char *otherConsumer;
                         int otherConsumerPartitionCount;
 
-                        if (rd_kafka_topic_partition_list_find(
+                        if (rd_kafka_topic_partition_list_find_sorted(
                                 consumerPartitions, partition->topic,
                                 partition->partition))
                                 continue;
@@ -880,17 +885,17 @@ isBalanced(rd_kafka_t *rk,
  *
  * @returns true if reassignment was performed.
  */
-static rd_bool_t
-performReassignments(rd_kafka_t *rk,
-                     PartitionMovements_t *partitionMovements,
-                     rd_kafka_topic_partition_list_t *reassignablePartitions,
-                     map_str_toppar_list_t *currentAssignment,
-                     map_toppar_cgpair_t *prevAssignment,
-                     rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
-                     map_str_toppar_list_t *consumer2AllPotentialPartitions,
-                     map_toppar_list_t *partition2AllPotentialConsumers,
-                     map_toppar_str_t *currentPartitionConsumer,
-                     rd_kafka_rack_info_t *rkri) {
+static rd_bool_t performReassignments(
+    rd_kafka_t *rk,
+    PartitionMovements_t *partitionMovements,
+    rd_kafka_topic_partition_list_t *reassignablePartitions,
+    map_str_toppar_list_t *currentAssignment,
+    map_toppar_cgpair_t *prevAssignment,
+    rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
+    consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions,
+    map_toppar_list_t *partition2AllPotentialConsumers,
+    map_toppar_str_t *currentPartitionConsumer,
+    rd_kafka_rack_info_t *rkri) {
         rd_bool_t reassignmentPerformed = rd_false;
         rd_bool_t modified, saveIsBalanced = rd_false;
         int iterations = 0;
@@ -926,14 +931,15 @@ performReassignments(rd_kafka_t *rk,
                         const char *consumer_rack                    = NULL;
                         rd_kafka_metadata_partition_internal_t *mdpi = NULL;
 
-                        /* FIXME: Is this a local error/bug? If so, assert */
-                        if (rd_list_cnt(consumers) <= 1)
+                        if (rd_list_cnt(consumers) <= 1) {
                                 rd_kafka_log(
                                     rk, LOG_ERR, "STICKY",
                                     "Sticky assignor: expected more than "
                                     "one potential consumer for partition "
                                     "%s [%" PRId32 "]",
                                     partition->topic, partition->partition);
+                                rd_dassert(rd_list_cnt(consumers) > 1);
+                        }
 
                         /* The partition must have a current consumer */
                         consumer =
@@ -1092,19 +1098,24 @@ static int getBalanceScore(map_str_toppar_list_t *assignment) {
         return score;
 }
 
-static void maybeAssign(rd_kafka_topic_partition_list_t *unassignedPartitions,
-                        map_toppar_list_t *partition2AllPotentialConsumers,
-                        rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
-                        map_str_toppar_list_t *currentAssignment,
-                        map_str_toppar_list_t *consumer2AllPotentialPartitions,
-                        map_toppar_str_t *currentPartitionConsumer,
-                        rd_bool_t removeAssigned,
-                        rd_kafka_rack_info_t *rkri) {
+static void
+maybeAssign(rd_kafka_topic_partition_list_t **unassignedPartitions,
+            map_toppar_list_t *partition2AllPotentialConsumers,
+            rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
+            map_str_toppar_list_t *currentAssignment,
+            consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions,
+            map_toppar_str_t *currentPartitionConsumer,
+            rd_bool_t removeAssigned,
+            rd_kafka_rack_info_t *rkri) {
         int i;
         const rd_kafka_topic_partition_t *partition;
+        rd_kafka_topic_partition_list_t *unassignedPartitionsNew =
+            removeAssigned ? rd_kafka_topic_partition_list_new(
+                                 (*unassignedPartitions)->cnt)
+                           : NULL;
 
-        for (i = 0; i < unassignedPartitions->cnt; i++) {
-                partition = &unassignedPartitions->elems[i];
+        for (i = 0; i < (*unassignedPartitions)->cnt; i++) {
+                partition = &(*unassignedPartitions)->elems[i];
                 rd_bool_t assigned;
 
                 /* Skip if there is no potential consumer for the partition.
@@ -1119,32 +1130,35 @@ static void maybeAssign(rd_kafka_topic_partition_list_t *unassignedPartitions,
                     partition, sortedCurrentSubscriptions, currentAssignment,
                     consumer2AllPotentialPartitions, currentPartitionConsumer,
                     rkri);
-                if (assigned && removeAssigned) {
-                        rd_kafka_topic_partition_list_del_by_idx(
-                            unassignedPartitions, i);
-                        i--; /* Since the current element was
-                              * removed we need the next for
-                              * loop iteration to stay at the
-                              * same index. */
+                if (unassignedPartitionsNew && !assigned) {
+                        rd_kafka_topic_partition_list_add(
+                            unassignedPartitionsNew, partition->topic,
+                            partition->partition);
                 }
+        }
+
+        if (unassignedPartitionsNew) {
+                rd_kafka_topic_partition_list_destroy(*unassignedPartitions);
+                *unassignedPartitions = unassignedPartitionsNew;
         }
 }
 
 /**
  * @brief Balance the current assignment using the data structures
  *        created in assign_cb(). */
-static void balance(rd_kafka_t *rk,
-                    PartitionMovements_t *partitionMovements,
-                    map_str_toppar_list_t *currentAssignment,
-                    map_toppar_cgpair_t *prevAssignment,
-                    rd_kafka_topic_partition_list_t *sortedPartitions,
-                    rd_kafka_topic_partition_list_t *unassignedPartitions,
-                    rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
-                    map_str_toppar_list_t *consumer2AllPotentialPartitions,
-                    map_toppar_list_t *partition2AllPotentialConsumers,
-                    map_toppar_str_t *currentPartitionConsumer,
-                    rd_bool_t revocationRequired,
-                    rd_kafka_rack_info_t *rkri) {
+static void
+balance(rd_kafka_t *rk,
+        PartitionMovements_t *partitionMovements,
+        map_str_toppar_list_t *currentAssignment,
+        map_toppar_cgpair_t *prevAssignment,
+        rd_kafka_topic_partition_list_t *sortedPartitions,
+        rd_kafka_topic_partition_list_t *unassignedPartitions,
+        rd_list_t *sortedCurrentSubscriptions /*rd_map_elem_t*/,
+        consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions,
+        map_toppar_list_t *partition2AllPotentialConsumers,
+        map_toppar_str_t *currentPartitionConsumer,
+        rd_bool_t revocationRequired,
+        rd_kafka_rack_info_t *rkri) {
 
         /* If the consumer with most assignments (thus the last element
          * in the ascendingly ordered sortedCurrentSubscriptions list) has
@@ -1196,13 +1210,13 @@ static void balance(rd_kafka_t *rk,
                  * unassignedPartitions. */
                 leftoverUnassignedPartitions =
                     rd_kafka_topic_partition_list_copy(unassignedPartitions);
-                maybeAssign(leftoverUnassignedPartitions,
+                maybeAssign(&leftoverUnassignedPartitions,
                             partition2AllPotentialConsumers,
                             sortedCurrentSubscriptions, currentAssignment,
                             consumer2AllPotentialPartitions,
                             currentPartitionConsumer, rd_true, rkri);
         }
-        maybeAssign(leftoverUnassignedPartitions,
+        maybeAssign(&leftoverUnassignedPartitions,
                     partition2AllPotentialConsumers, sortedCurrentSubscriptions,
                     currentAssignment, consumer2AllPotentialPartitions,
                     currentPartitionConsumer, rd_false, NULL);
@@ -1360,7 +1374,7 @@ static void prepopulateCurrentAssignments(
     map_str_toppar_list_t *currentAssignment,
     map_toppar_cgpair_t *prevAssignment,
     map_toppar_str_t *currentPartitionConsumer,
-    map_str_toppar_list_t *consumer2AllPotentialPartitions,
+    consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions,
     size_t estimated_partition_cnt) {
 
         /* We need to process subscriptions' user data with each consumer's
@@ -1378,6 +1392,7 @@ static void prepopulateCurrentAssignments(
             rd_list_t *, rd_kafka_topic_partition_cmp,
             rd_kafka_topic_partition_hash, NULL, rd_list_destroy_free);
         const rd_kafka_topic_partition_t *partition;
+        const rd_map_elem_t *elem;
         rd_list_t *consumers;
         int i;
 
@@ -1387,6 +1402,10 @@ static void prepopulateCurrentAssignments(
          * indexed by the partition. */
         for (i = 0; i < (int)member_cnt; i++) {
                 rd_kafka_group_member_t *consumer = &members[i];
+                map_toppar_str_t *consumer2AllPotentialPartitionsValueP =
+                    rd_calloc(1,
+                              sizeof(*consumer2AllPotentialPartitionsValueP));
+
                 int j;
 
                 RD_MAP_SET(subscriptions, consumer->rkgm_member_id->str,
@@ -1395,10 +1414,17 @@ static void prepopulateCurrentAssignments(
                 RD_MAP_SET(currentAssignment, consumer->rkgm_member_id->str,
                            rd_kafka_topic_partition_list_new(10));
 
+                map_toppar_str_t consumer2AllPotentialPartitionsValue =
+                    RD_MAP_INITIALIZER(
+                        estimated_partition_cnt, rd_kafka_topic_partition_cmp,
+                        rd_kafka_topic_partition_hash,
+                        rd_kafka_topic_partition_destroy_free, NULL);
+                *consumer2AllPotentialPartitionsValueP =
+                    consumer2AllPotentialPartitionsValue;
+
                 RD_MAP_SET(consumer2AllPotentialPartitions,
                            consumer->rkgm_member_id->str,
-                           rd_kafka_topic_partition_list_new(
-                               (int)estimated_partition_cnt));
+                           consumer2AllPotentialPartitionsValueP);
 
                 if (!consumer->rkgm_owned)
                         continue;
@@ -1482,6 +1508,11 @@ static void prepopulateCurrentAssignments(
                             ConsumerGenerationPair_new(previous->consumer,
                                                        previous->generation));
         }
+        RD_MAP_FOREACH_ELEM(elem, &currentAssignment->rmap) {
+                rd_kafka_topic_partition_list_t *rktparlist =
+                    (void *)elem->value;
+                rd_kafka_topic_partition_list_sort_by_topic(rktparlist);
+        }
 
         RD_MAP_DESTROY(&sortedPartitionConsumersByGeneration);
 }
@@ -1493,7 +1524,7 @@ static void prepopulateCurrentAssignments(
 static void
 populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
                       map_toppar_list_t *partition2AllPotentialConsumers,
-                      map_str_toppar_list_t *consumer2AllPotentialPartitions,
+                      map_str_map_toppar_str_t *consumer2AllPotentialPartitions,
                       size_t estimated_partition_cnt) {
         int i;
         const rd_kafka_group_member_t *rkgm;
@@ -1508,7 +1539,7 @@ populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
 
         RD_LIST_FOREACH(rkgm, &atopic->members, i) {
                 const char *consumer = rkgm->rkgm_member_id->str;
-                rd_kafka_topic_partition_list_t *partitions =
+                map_toppar_str_t *partitions =
                     RD_MAP_GET(consumer2AllPotentialPartitions, consumer);
                 int j;
 
@@ -1519,9 +1550,11 @@ populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
                         rd_list_t *consumers;
 
                         /* consumer2AllPotentialPartitions[consumer] += part */
-                        partition = rd_kafka_topic_partition_list_add(
-                            partitions, atopic->metadata->topic,
+                        partition = rd_kafka_topic_partition_new(
+                            atopic->metadata->topic,
                             atopic->metadata->partitions[j].id);
+
+                        RD_MAP_SET(partitions, partition, (void *)1);
 
                         /* partition2AllPotentialConsumers[part] += consumer */
                         if (!(consumers =
@@ -1552,10 +1585,10 @@ populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
  */
 static rd_bool_t areSubscriptionsIdentical(
     map_toppar_list_t *partition2AllPotentialConsumers,
-    map_str_toppar_list_t *consumer2AllPotentialPartitions) {
+    consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions) {
         const void *ignore;
-        const rd_list_t *lcurr, *lprev                       = NULL;
-        const rd_kafka_topic_partition_list_t *pcurr, *pprev = NULL;
+        const rd_list_t *lcurr, *lprev  = NULL;
+        map_toppar_str_t *pcurr, *pprev = NULL;
 
         RD_MAP_FOREACH(ignore, lcurr, partition2AllPotentialConsumers) {
                 if (lprev && rd_list_cmp(lcurr, lprev, rd_map_str_cmp))
@@ -1564,8 +1597,7 @@ static rd_bool_t areSubscriptionsIdentical(
         }
 
         RD_MAP_FOREACH(ignore, pcurr, consumer2AllPotentialPartitions) {
-                if (pprev && rd_kafka_topic_partition_list_cmp(
-                                 pcurr, pprev, rd_kafka_topic_partition_cmp))
+                if (pprev && rd_map_cmp(&pcurr->rmap, &pprev->rmap, NULL))
                         return rd_false;
                 pprev = pcurr;
         }
@@ -1601,13 +1633,13 @@ toppar_sort_by_list_cnt(const void *_a, const void *_b, void *opaque) {
  *
  * @returns The result of the partitions sort.
  */
-static rd_kafka_topic_partition_list_t *
-sortPartitions(rd_kafka_t *rk,
-               map_str_toppar_list_t *currentAssignment,
-               map_toppar_cgpair_t *prevAssignment,
-               rd_bool_t isFreshAssignment,
-               map_toppar_list_t *partition2AllPotentialConsumers,
-               map_str_toppar_list_t *consumer2AllPotentialPartitions) {
+static rd_kafka_topic_partition_list_t *sortPartitions(
+    rd_kafka_t *rk,
+    map_str_toppar_list_t *currentAssignment,
+    map_toppar_cgpair_t *prevAssignment,
+    rd_bool_t isFreshAssignment,
+    map_toppar_list_t *partition2AllPotentialConsumers,
+    consumer2AllPotentialPartitions_t *consumer2AllPotentialPartitions) {
 
         rd_kafka_topic_partition_list_t *sortedPartitions;
         map_str_toppar_list_t assignments = RD_MAP_INITIALIZER(
@@ -1831,6 +1863,11 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
                                    char *errstr,
                                    size_t errstr_size,
                                    void *opaque) {
+
+        /* Sort topics by name */
+        qsort(eligible_topics, eligible_topic_cnt, sizeof(*eligible_topics),
+              rd_kafka_assignor_topic_cmp);
+
         /* FIXME: Let the cgrp pass the actual eligible partition count */
         size_t partition_cnt = member_cnt * 10; /* FIXME */
         const rd_kafka_metadata_internal_t *mdi =
@@ -1874,10 +1911,9 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
 
         /* Mapping of all consumers to all potential topic partitions that
          * can be assigned to them. */
-        map_str_toppar_list_t consumer2AllPotentialPartitions =
+        consumer2AllPotentialPartitions_t consumer2AllPotentialPartitions =
             RD_MAP_INITIALIZER(member_cnt, rd_map_str_cmp, rd_map_str_hash,
-                               NULL,
-                               rd_kafka_topic_partition_list_destroy_free);
+                               NULL, rd_map_destroy_free);
 
         /* Mapping of partition to current consumer. */
         map_toppar_str_t currentPartitionConsumer =
@@ -3034,9 +3070,10 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;
-        rd_kafka_group_member_t members[200];
+        rd_kafka_group_member_t members[400];
         int member_cnt = RD_ARRAYSIZE(members);
-        rd_kafka_metadata_topic_t mt[40];
+        /* Keep a partitions/member ratio of 4 */
+        rd_kafka_metadata_topic_t mt[56];
         int topic_cnt = RD_ARRAYSIZE(mt);
         int i;
 

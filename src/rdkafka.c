@@ -2089,9 +2089,13 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 
         rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
 
-        rd_kafka_brokers_add0(
-            rk, rk->rk_conf.brokerlist, rd_true
-            /*resolve canonical bootstrap server list names if requested*/);
+        if (rk->rk_conf.brokerlist) {
+                rd_kafka_brokers_add0(
+                        rk,
+                        rk->rk_conf.brokerlist, rd_true
+                        /* resolve canonical bootstrap server
+                         * list names if requested*/);
+        }
 
         rd_kafka_rdlock(rk);
         if (rd_list_cnt(&rk->additional_brokerlists) == 0) {

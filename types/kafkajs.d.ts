@@ -1,4 +1,9 @@
-import { ConsumerGlobalConfig, GlobalConfig, ProducerGlobalConfig } from './config'
+import {
+  ConsumerGlobalConfig,
+  ConsumerTopicConfig,
+  GlobalConfig,
+  ProducerGlobalConfig,
+  ProducerTopicConfig } from './config'
 import {
   ConsumerGroupStates,
   GroupOverview,
@@ -94,7 +99,7 @@ export interface CommonConstructorConfig extends GlobalConfig {
 }
 
 export class Kafka {
-  constructor(config: CommonConstructorConfig)
+  constructor(config?: CommonConstructorConfig)
   producer(config?: ProducerConstructorConfig): Producer
   consumer(config: ConsumerConstructorConfig): Consumer
   admin(config?: AdminConstructorConfig): Admin
@@ -131,7 +136,9 @@ export interface ProducerConfig {
   logger?: Logger,
 }
 
-export interface ProducerConstructorConfig extends ProducerGlobalConfig {
+type ProducerGlobalAndTopicConfig = ProducerGlobalConfig & ProducerTopicConfig;
+
+export interface ProducerConstructorConfig extends ProducerGlobalAndTopicConfig {
   kafkaJS?: ProducerConfig;
 }
 
@@ -235,7 +242,9 @@ export interface ConsumerConfig {
   partitionAssignors?: PartitionAssignors[],
 }
 
-export interface ConsumerConstructorConfig extends ConsumerGlobalConfig {
+export type ConsumerGlobalAndTopicConfig = ConsumerGlobalConfig & ConsumerTopicConfig;
+
+export interface ConsumerConstructorConfig extends ConsumerGlobalAndTopicConfig {
   kafkaJS?: ConsumerConfig;
 }
 

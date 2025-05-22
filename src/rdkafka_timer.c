@@ -352,9 +352,12 @@ void rd_kafka_timers_run(rd_kafka_timers_t *rkts, int timeout_us) {
                         if ((oneshot = rtmr->rtmr_oneshot))
                                 rtmr->rtmr_interval = 0;
 
+                        void (*callback_copy)(rd_kafka_timers_t *rkts, void *arg) = rtmr->rtmr_callback;
+                        void *arg_copy = rtmr->rtmr_arg;
+
                         rd_kafka_timers_unlock(rkts);
 
-                        rtmr->rtmr_callback(rkts, rtmr->rtmr_arg);
+                        callback_copy(rkts, arg_copy);
 
                         rd_kafka_timers_lock(rkts);
 

@@ -53,6 +53,7 @@ static rd_bool_t fetch_metadata_verify_brokers(int32_t *expected_broker_ids,
 static void fetch_metadata(rd_kafka_t *rk,
                            int32_t *expected_broker_ids,
                            size_t expected_broker_id_cnt,
+                           rd_bool_t (*request_metadata_cb)(int action),
                            rd_bool_t (*await_after_action_cb)(int action),
                            int action) {
         const rd_kafka_metadata_t *md = NULL;
@@ -68,12 +69,15 @@ static void fetch_metadata(rd_kafka_t *rk,
 
         /* Trigger Metadata request which will update learned brokers. */
         do {
-                err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(5000));
-                if (md) {
-                        rd_kafka_metadata_destroy(md);
-                        md = NULL;
-                } else if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
-                        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                if (!request_metadata_cb || request_metadata_cb(action)) {
+                        err = rd_kafka_metadata(rk, 0, NULL, &md,
+                                                tmout_multip(5000));
+                        if (md) {
+                                rd_kafka_metadata_destroy(md);
+                                md = NULL;
+                        } else if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
+                                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                }
 
                 rd_usleep(100 * 1000, 0);
 
@@ -109,6 +113,11 @@ static void fetch_metadata(rd_kafka_t *rk,
         RD_IF_FREE(actual_broker_ids, rd_free);
 }
 
+#define do_test_add_remove_brokers(initial_cluster_size, actions, action_cnt,  \
+                                   expected_broker_ids, expected_brokers_cnt)  \
+        do_test_add_remove_brokers0(initial_cluster_size, actions, action_cnt, \
+                                    expected_broker_ids, expected_brokers_cnt, \
+                                    NULL, NULL, NULL);
 /**
  * @brief Test adding and removing brokers from the mock cluster.
  *        Verify that the client is updated with the new broker list.
@@ -139,14 +148,15 @@ static void fetch_metadata(rd_kafka_t *rk,
 #define TEST_ACTION_SET_UP_BROKER         3
 #define TEST_ACTION_SET_GROUP_COORDINATOR 4
 #define TEST_GROUP                        "topic1"
-static void *
-do_test_add_remove_brokers(int32_t initial_cluster_size,
-                           int32_t actions[][2],
-                           size_t action_cnt,
-                           int32_t expected_broker_ids[][5],
-                           int32_t expected_brokers_cnt[],
-                           void (*edit_configuration_cb)(rd_kafka_conf_t *conf),
-                           rd_bool_t (*await_after_action_cb)(int action)) {
+static void *do_test_add_remove_brokers0(
+    int32_t initial_cluster_size,
+    int32_t actions[][2],
+    size_t action_cnt,
+    int32_t expected_broker_ids[][5],
+    int32_t expected_brokers_cnt[],
+    rd_kafka_type_t (*edit_configuration_cb)(rd_kafka_conf_t *conf),
+    rd_bool_t (*request_metadata_cb)(int action),
+    rd_bool_t (*await_after_action_cb)(int action)) {
         rd_kafka_mock_cluster_t *cluster;
         const char *bootstraps;
         rd_kafka_conf_t *conf;
@@ -159,14 +169,18 @@ do_test_add_remove_brokers(int32_t initial_cluster_size,
         test_conf_init(&conf, NULL, 100);
 
         test_conf_set(conf, "bootstrap.servers", bootstraps);
-        test_conf_set(conf, "group.id", TEST_GROUP);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
-        if (edit_configuration_cb) {
-                edit_configuration_cb(conf);
-        }
+        rd_kafka_type_t type = RD_KAFKA_CONSUMER;
+        if (edit_configuration_cb)
+                type = edit_configuration_cb(conf);
 
-        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
-        test_consumer_subscribe(rk, TEST_GROUP);
+        if (type == RD_KAFKA_CONSUMER)
+                test_conf_set(conf, "group.id", TEST_GROUP);
+
+        rk = test_create_handle(type, conf);
+
+        if (type == RD_KAFKA_CONSUMER)
+                test_consumer_subscribe(rk, TEST_GROUP);
 
         /* Create a new topic to trigger partition reassignment */
         rd_kafka_mock_topic_create(cluster, TEST_GROUP, 3,
@@ -174,7 +188,7 @@ do_test_add_remove_brokers(int32_t initial_cluster_size,
 
         /* Verify state zero is reached */
         fetch_metadata(rk, expected_broker_ids[0], expected_brokers_cnt[0],
-                       await_after_action_cb, 0);
+                       request_metadata_cb, await_after_action_cb, 0);
 
         for (action = 0; action < action_cnt; action++) {
                 /* action: N, state: N+1 */
@@ -227,7 +241,8 @@ do_test_add_remove_brokers(int32_t initial_cluster_size,
 
                 fetch_metadata(rk, expected_broker_ids[next_state],
                                expected_brokers_cnt[next_state],
-                               await_after_action_cb, action);
+                               request_metadata_cb, await_after_action_cb,
+                               action);
         }
         TEST_SAY("Test verification complete\n");
         rd_atomic32_set(&verification_complete, 1);
@@ -264,8 +279,7 @@ static void do_test_replace_with_new_cluster(void) {
         };
 
         do_test_add_remove_brokers(3, actions, RD_ARRAY_SIZE(actions),
-                                   expected_broker_ids, expected_brokers_cnt,
-                                   NULL, NULL);
+                                   expected_broker_ids, expected_brokers_cnt);
 
         SUB_TEST_PASS();
 }
@@ -307,8 +321,7 @@ static void do_test_cluster_roll(void) {
         };
 
         do_test_add_remove_brokers(5, actions, RD_ARRAY_SIZE(actions),
-                                   expected_broker_ids, expected_brokers_cnt,
-                                   NULL, NULL);
+                                   expected_broker_ids, expected_brokers_cnt);
 
         SUB_TEST_PASS();
 }
@@ -321,7 +334,7 @@ static void do_test_remove_then_add_log_cb(const rd_kafka_t *rk,
                                            const char *fac,
                                            const char *buf) {
         if (!rd_atomic32_get(&do_test_remove_then_add_received_terminate) &&
-            strstr(buf, "/1: Handle terminates in state") > 0) {
+            strstr(buf, "/1: Handle terminates in state")) {
                 rd_atomic32_set(&do_test_remove_then_add_received_terminate, 1);
                 while (!rd_atomic32_get(&verification_complete))
                         rd_usleep(100 * 1000, 0);
@@ -350,7 +363,7 @@ static rd_bool_t do_test_remove_then_add_await_after_action_cb(int action) {
  *        proceed with adding it again before it's decommissioned.
  */
 static test_conf_log_interceptor_t *log_interceptor;
-static void
+static rd_kafka_type_t
 do_test_remove_then_add_edit_configuration_cb(rd_kafka_conf_t *conf) {
         const char *debug_contexts[2] = {"broker", NULL};
 
@@ -363,6 +376,8 @@ do_test_remove_then_add_edit_configuration_cb(rd_kafka_conf_t *conf) {
         test_conf_set(conf, "enable.sparse.connections", "false");
         log_interceptor = test_conf_set_log_interceptor(
             conf, do_test_remove_then_add_log_cb, debug_contexts);
+
+        return RD_KAFKA_CONSUMER;
 }
 
 /**
@@ -389,12 +404,107 @@ static void do_test_remove_then_add(void) {
             {TEST_ACTION_ADD_BROKER, 1},
         };
 
-        log_interceptor = do_test_add_remove_brokers(
+        log_interceptor = do_test_add_remove_brokers0(
             3, actions, RD_ARRAY_SIZE(actions), expected_broker_ids,
             expected_brokers_cnt, do_test_remove_then_add_edit_configuration_cb,
-            do_test_remove_then_add_await_after_action_cb);
+            NULL, do_test_remove_then_add_await_after_action_cb);
 
         rd_free(log_interceptor);
+        SUB_TEST_PASS();
+}
+
+static rd_atomic32_t
+    do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt;
+
+/**
+ * @brief Log callback that counts numer of rebootstrap sequences received.
+ */
+static void
+do_test_down_then_up_no_rebootstrap_loop_log_cb(const rd_kafka_t *rk,
+                                                int level,
+                                                const char *fac,
+                                                const char *buf) {
+        if (strstr(buf, "Starting re-bootstrap sequence")) {
+                rd_atomic32_add(
+                    &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt,
+                    1);
+        }
+}
+
+/**
+ * @brief Sets the logs callback to the log interceptor.
+ */
+static rd_kafka_type_t
+do_test_down_then_up_no_rebootstrap_loop_edit_configuration_cb(
+    rd_kafka_conf_t *conf) {
+        const char *debug_contexts[2] = {"generic", NULL};
+
+        log_interceptor = test_conf_set_log_interceptor(
+            conf, do_test_down_then_up_no_rebootstrap_loop_log_cb,
+            debug_contexts);
+        return RD_KAFKA_PRODUCER;
+}
+
+/**
+ * @brief After action 1 the broker is set down.
+ *        Don't await for metadata update.
+ */
+static rd_bool_t
+do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb(int action) {
+        return action != 1;
+}
+
+/**
+ * @brief Await 5s after setting up the broker down
+ *        to check for re-bootstrap sequences.
+ */
+static rd_bool_t
+do_test_down_then_up_no_rebootstrap_loop_await_after_action_cb(int action) {
+        if (action == 1) {
+                rd_sleep(5);
+        }
+        return rd_false;
+}
+
+/**
+ * @brief Test setting down a broker and then setting it up again.
+ *        It shouldn't cause a loop of re-bootstrap sequences.
+ */
+static void do_test_down_then_up_no_rebootstrap_loop(void) {
+        SUB_TEST_QUICK();
+        rd_atomic32_init(
+            &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt,
+            0);
+
+        int32_t expected_brokers_cnt[] = {1, 1, 1, 1};
+
+        int32_t expected_broker_ids[][5] = {{1}, {1}, {1}, {1}};
+
+        int32_t actions[][2] = {
+            {TEST_ACTION_SET_UP_BROKER, 1},
+            {TEST_ACTION_SET_DOWN_BROKER, 1},
+            {TEST_ACTION_SET_UP_BROKER, 1},
+        };
+
+        do_test_add_remove_brokers0(
+            1, actions, RD_ARRAY_SIZE(actions), expected_broker_ids,
+            expected_brokers_cnt,
+            do_test_down_then_up_no_rebootstrap_loop_edit_configuration_cb,
+            do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb,
+            do_test_down_then_up_no_rebootstrap_loop_await_after_action_cb);
+
+        /* With connections that go always to the broker without previous
+         * connections (the re-bootstrapped one) we get 5 re-bootstrap
+         * sequences. Given a 90% probability of selecting the learned broker
+         * there's a 10% probability of selecting the bootstrap one.
+         * The expected value is 0.5, we expect <= 3 here. */
+        TEST_ASSERT(
+            rd_atomic32_get(
+                &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt) <=
+                3,
+            "Expected <= 3 re-bootstrap sequences, got %d",
+            rd_atomic32_get(
+                &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt));
         SUB_TEST_PASS();
 }
 
@@ -447,6 +557,8 @@ int main_0151_purge_brokers_mock(int argc, char **argv) {
         do_test_cluster_roll();
 
         do_test_remove_then_add();
+
+        do_test_down_then_up_no_rebootstrap_loop();
 
         return 0;
 }

@@ -146,6 +146,7 @@ set(
     test.c
     testcpp.cpp
     rusage.c
+    ../src/rdallocator.c
 )
 
 if(NOT WIN32)

@@ -116,7 +116,7 @@ static void fetch_metadata(rd_kafka_t *rk,
                                 rd_kafka_metadata_destroy(md);
                                 md = NULL;
                         } else if (err != RD_KAFKA_RESP_ERR__TRANSPORT &&
-                                  !fetch_metadata_allowed_error(err))
+                                   !fetch_metadata_allowed_error(err))
                                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 }
 
@@ -220,7 +220,7 @@ static void do_test_add_remove_brokers0(
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
         rd_kafka_type_t type = RD_KAFKA_CONSUMER;
-         if (edit_configuration_cb)
+        if (edit_configuration_cb)
                 type = edit_configuration_cb(conf);
 
         if (type == RD_KAFKA_CONSUMER)
@@ -293,9 +293,8 @@ static void do_test_add_remove_brokers0(
 
                 fetch_metadata(rk, expected_broker_ids[next_state],
                                expected_brokers_cnt[next_state],
-                               request_metadata_cb, after_action_cb,
-                               action);
-                
+                               request_metadata_cb, after_action_cb, action);
+
                 /* Poll to get errors */
                 rkmessage = rd_kafka_consumer_poll(rk, 0);
                 if (handle_message)
@@ -522,7 +521,7 @@ do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb(int action) {
  */
 static rd_bool_t
 do_test_down_then_up_no_rebootstrap_loop_after_action_cb(rd_kafka_t **rkp,
-        int action) {
+                                                         int action) {
         if (action == 1) {
                 rd_sleep(5);
         }
@@ -554,8 +553,7 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             expected_brokers_cnt,
             do_test_down_then_up_no_rebootstrap_loop_edit_configuration_cb,
             do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb,
-            do_test_down_then_up_no_rebootstrap_loop_after_action_cb,
-            NULL);
+            do_test_down_then_up_no_rebootstrap_loop_after_action_cb, NULL);
 
         /* With connections that go always to the broker without previous
          * connections (the re-bootstrapped one) we get 5 re-bootstrap
@@ -766,8 +764,7 @@ static void do_test_kip899_rebootstrap_cases(int variation) {
         do_test_add_remove_brokers0(
             5, actions, RD_ARRAY_SIZE(actions), expected_broker_ids,
             expected_brokers_cnt,
-            do_test_kip899_rebootstrap_cases_edit_configuration_cb,
-            NULL,
+            do_test_kip899_rebootstrap_cases_edit_configuration_cb, NULL,
             do_test_kip899_rebootstrap_cases_after_action_cb,
             do_test_kip899_rebootstrap_cases_handle_message_cb);
 

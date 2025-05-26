@@ -592,7 +592,9 @@ void test_verify_rkmessage0(const char *func,
 
 void test_consumer_subscribe(rd_kafka_t *rk, const char *topic);
 
-void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...);
+void test_consumer_subscribe_multi(rd_kafka_t *rk, const char **topics, int topic_count);
+
+void test_consumer_subscribe_multi_va(rd_kafka_t *rk, int topic_count, ...);
 
 void test_consume_msgs_easy_mv0(const char *group_id,
                                 const char *topic,
@@ -666,7 +668,7 @@ int test_consumer_poll_timeout(const char *what,
                                test_msgver_t *mv,
                                int timeout_ms);
 
-void test_consumer_wait_assignment(rd_kafka_t *rk, rd_bool_t do_poll);
+void test_consumer_wait_assignment(rd_kafka_t *rk, rd_bool_t do_poll, int wait_interval_ms);
 void test_consumer_verify_assignment0(const char *func,
                                       int line,
                                       rd_kafka_t *rk,

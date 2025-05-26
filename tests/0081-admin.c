@@ -4152,7 +4152,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         if (sub_consumer) {
                 TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
-                test_consumer_wait_assignment(consumer, rd_true);
+                test_consumer_wait_assignment(consumer, rd_true, 1000);
         }
 
         /* Commit some offsets */
@@ -4428,7 +4428,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 if (sub_consumer) {
                         TEST_CALL_ERR__(
                             rd_kafka_subscribe(consumer, subscription));
-                        test_consumer_wait_assignment(consumer, rd_true);
+                        test_consumer_wait_assignment(consumer, rd_true, 1000);
                 }
         }
 
@@ -4709,7 +4709,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         if (sub_consumer) {
                 TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
-                test_consumer_wait_assignment(consumer, rd_true);
+                test_consumer_wait_assignment(consumer, rd_true, 1000);
         }
 
         /* Commit some offsets */

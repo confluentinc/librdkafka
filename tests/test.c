@@ -2193,7 +2193,7 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
                         test_conf_set(conf, "client.id", test_curr->name);
         }
 
-        if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str) {
+        if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str && !test_conf_get(conf, "group.protocol")) {
                 test_conf_set(conf, "group.protocol",
                               test_consumer_group_protocol_str);
         }
@@ -2701,8 +2701,14 @@ rd_kafka_t *test_create_consumer(
         if (group_id) {
                 test_conf_set(conf, "group.id", group_id);
 
-                rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
-                test_conf_set(conf, "session.timeout.ms", tmp);
+                char *group_protocol = test_conf_get(conf, "group.protocol");
+                int is_classic_protocol = (group_protocol && strcmp(group_protocol, "classic") == 0) ||
+                          (!group_protocol && test_consumer_group_protocol_classic);
+
+                if (is_classic_protocol) {
+                        rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
+                        test_conf_set(conf, "session.timeout.ms", tmp);
+                }
 
                 if (rebalance_cb)
                         rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);

@@ -29,7 +29,12 @@
 #include "test.h"
 #include "../src/rdkafka_proto.h"
 
-
+/**
+ * @brief Test that is adding and removing brokers from the mock cluster, to
+ * verify that the client is updated with the new broker list. This can trigger
+ * re-bootstrapping of the client so it's also verifying that
+ * the client is able to re-bootstrap itself correctly.
+ */
 
 /* Test verification is complete, thread safe variable */
 static rd_atomic32_t verification_complete;
@@ -719,13 +724,11 @@ static void do_test_kip899_rebootstrap_cases_handle_message_cb(
  *                       configuration.
  */
 static void do_test_kip899_rebootstrap_cases(int variation) {
-        SUB_TEST_QUICK("%s",
-                       variation == 0
-                           ? "`metadata.recovery.strategy=rebootstrap`"
-                           : variation == 1
-                                 ? "`metadata.recovery.strategy=none`"
-                                 : "`metadata.recovery.strategy=rebootstrap` "
-                                   "with additional brokers");
+        SUB_TEST_QUICK(
+            "%s", variation == 0   ? "`metadata.recovery.strategy=rebootstrap`"
+                  : variation == 1 ? "`metadata.recovery.strategy=none`"
+                                   : "`metadata.recovery.strategy=rebootstrap` "
+                                     "with additional brokers");
 
         do_test_kip899_rebootstrap_cases_variation          = variation;
         do_test_kip899_rebootstrap_cases_additional_brokers = NULL;
@@ -890,7 +893,7 @@ static void do_test_kip1102_rebootstrap_cases(int variation) {
         SUB_TEST_QUICK(
             "%s, %s",
             variation % 2 == 0 ? "metadata.recovery.rebootstrap.trigger.ms"
-                               : "re-bootstrap required error code",
+                               : "\"re-bootstrap required\" error code",
             variation / 2 == 0 ? "broker restarted" : "broker not restarted");
 
         do_test_kip1102_rebootstrap_cases_variation = variation;

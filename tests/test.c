@@ -1116,7 +1116,7 @@ test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
         if (!test_debug || !strstr(test_debug, "all")) {
                 char debug_with_contexts[256] = {0};
                 size_t i                      = rd_snprintf(debug_with_contexts,
-                                                            sizeof(debug_with_contexts), "%s",
+                                       sizeof(debug_with_contexts), "%s",
                                        test_debug ? test_debug : "");
                 /* Add all debug contexts and set debug configuration */
                 while (
@@ -1144,7 +1144,7 @@ static RD_INLINE unsigned int test_rand(void) {
 #ifdef _WIN32
         rand_s(&r);
 #else
-        r = rand();
+        r     = rand();
 #endif
         return r;
 }
@@ -2042,7 +2042,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
                 pcwd = _getcwd(cwd, sizeof(cwd) - 1);
 #else
-                pcwd = getcwd(cwd, sizeof(cwd) - 1);
+                pcwd   = getcwd(cwd, sizeof(cwd) - 1);
 #endif
                 if (pcwd)
                         TEST_SAY("Current directory: %s\n", cwd);
@@ -2193,7 +2193,8 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
                         test_conf_set(conf, "client.id", test_curr->name);
         }
 
-        if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str && !test_conf_get(conf, "group.protocol")) {
+        if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str &&
+            !test_conf_get(conf, "group.protocol")) {
                 test_conf_set(conf, "group.protocol",
                               test_consumer_group_protocol_str);
         }
@@ -2702,11 +2703,14 @@ rd_kafka_t *test_create_consumer(
                 test_conf_set(conf, "group.id", group_id);
 
                 char *group_protocol = test_conf_get(conf, "group.protocol");
-                int is_classic_protocol = (group_protocol && strcmp(group_protocol, "classic") == 0) ||
-                          (!group_protocol && test_consumer_group_protocol_classic);
+                int is_classic_protocol =
+                    (group_protocol &&
+                     strcmp(group_protocol, "classic") == 0) ||
+                    (!group_protocol && test_consumer_group_protocol_classic());
 
                 if (is_classic_protocol) {
-                        rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
+                        rd_snprintf(tmp, sizeof(tmp), "%d",
+                                    test_session_timeout_ms);
                         test_conf_set(conf, "session.timeout.ms", tmp);
                 }
 

@@ -203,22 +203,55 @@ done:
  */
 static void
 rd_kafka_oidc_client_credentials_build_post_fields(const char *scope,
+                                                   const char *client_id,
+                                                   const char *jwt_assertion,
                                                    char **post_fields,
                                                    size_t *post_fields_size) {
-        size_t scope_size = 0;
+        size_t scope_start, jwt_assertion_start, scope_size = 0;
+        *post_fields_size = strlen("grant_type=client_credentials");
+        scope_start = 0, jwt_assertion_start = 0;
+        char *scope_escaped     = NULL;
+        char *client_id_escaped = NULL;
 
-        if (scope)
-                scope_size = strlen(scope);
-        if (scope_size == 0) {
-                *post_fields      = rd_strdup("grant_type=client_credentials");
-                *post_fields_size = strlen("grant_type=client_credentials");
-        } else {
-                *post_fields_size =
-                    strlen("grant_type=client_credentials&scope=") + scope_size;
-                *post_fields = rd_malloc(*post_fields_size + 1);
-                rd_snprintf(*post_fields, *post_fields_size + 1,
-                            "grant_type=client_credentials&scope=%s", scope);
+        if (scope) {
+                scope_escaped = curl_easy_escape(NULL, scope, 0);
+                scope_size    = strlen(scope_escaped);
         }
+        if (scope_size > 0) {
+                scope_start = *post_fields_size;
+                *post_fields_size += strlen("&scope=") + scope_size;
+        }
+        if (jwt_assertion) {
+                jwt_assertion_start = *post_fields_size;
+                client_id_escaped   = curl_easy_escape(NULL, client_id, 0);
+                *post_fields_size +=
+                    strlen("&client_id=") + strlen(client_id_escaped);
+                *post_fields_size +=
+                    strlen(
+                        "&client_assertion_type=urn:ietf:params:oauth:client-"
+                        "assertion-type:jwt-bearer"
+                        "&client_assertion=") +
+                    strlen(jwt_assertion);
+        }
+
+        *post_fields = rd_malloc(*post_fields_size + 1);
+        rd_snprintf(*post_fields, *post_fields_size + 1,
+                    "grant_type=client_credentials");
+        if (scope_size > 0)
+                rd_snprintf(*post_fields + scope_start,
+                            *post_fields_size + 1 - scope_start, "&scope=%s",
+                            scope_escaped);
+        if (jwt_assertion)
+                rd_snprintf(*post_fields + jwt_assertion_start,
+                            *post_fields_size + 1 - jwt_assertion_start,
+                            "&client_id=%s"
+                            "&client_assertion_type=urn:ietf:params:oauth:"
+                            "client-assertion-type:jwt-bearer"
+                            "&client_assertion=%s",
+                            client_id_escaped, jwt_assertion);
+
+        RD_IF_FREE(scope_escaped, rd_free);
+        RD_IF_FREE(client_id_escaped, rd_free);
 }
 
 /**
@@ -764,6 +797,29 @@ fail:
         goto done;
 }
 
+static char *rd_kafka_oidc_assertion_create_from_config(rd_kafka_t *rk) {
+        char *jwt_assertion;
+        if (rk->rk_conf.sasl.oauthbearer.assertion.file) {
+                jwt_assertion = rd_kafka_oidc_assertion_read_from_file(
+                    rk->rk_conf.sasl.oauthbearer.assertion.file);
+        } else {
+                jwt_assertion = rd_kafka_oidc_assertion_create(
+                    rk, rk->rk_conf.sasl.oauthbearer.assertion.private_key.pem,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.file,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key
+                        .passphrase,
+                    rk->rk_conf.sasl.oauthbearer.assertion.algorithm,
+                    rk->rk_conf.sasl.oauthbearer.assertion.jwt_template_file,
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.subject,
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.issuer,
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.audience,
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.not_before_s,
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.expiration_s,
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.jti_include);
+        }
+        return jwt_assertion;
+}
+
 /**
  * @brief Implementation of JWT token refresh callback function.
  *        Creates a JWT assertion, exchanges it for an access token,
@@ -800,24 +856,7 @@ void rd_kafka_oidc_token_jwt_bearer_refresh_cb(rd_kafka_t *rk,
         if (rd_kafka_terminating(rk))
                 return;
 
-        if (rk->rk_conf.sasl.oauthbearer.assertion.file) {
-                jwt_assertion = rd_kafka_oidc_assertion_read_from_file(
-                    rk->rk_conf.sasl.oauthbearer.assertion.file);
-        } else {
-                jwt_assertion = rd_kafka_oidc_assertion_create(
-                    rk, rk->rk_conf.sasl.oauthbearer.assertion.private_key.pem,
-                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.file,
-                    rk->rk_conf.sasl.oauthbearer.assertion.private_key
-                        .passphrase,
-                    rk->rk_conf.sasl.oauthbearer.assertion.algorithm,
-                    rk->rk_conf.sasl.oauthbearer.assertion.jwt_template_file,
-                    rk->rk_conf.sasl.oauthbearer.assertion.claim.subject,
-                    rk->rk_conf.sasl.oauthbearer.assertion.claim.issuer,
-                    rk->rk_conf.sasl.oauthbearer.assertion.claim.audience,
-                    rk->rk_conf.sasl.oauthbearer.assertion.claim.not_before_s,
-                    rk->rk_conf.sasl.oauthbearer.assertion.claim.expiration_s,
-                    rk->rk_conf.sasl.oauthbearer.assertion.claim.jti_include);
-        }
+        jwt_assertion = rd_kafka_oidc_assertion_create_from_config(rk);
 
         if (!jwt_assertion) {
                 rd_kafka_oauthbearer_set_token_failure(
@@ -935,7 +974,8 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
         struct curl_slist *headers = NULL;
 
         const char *token_url;
-        char *sub = NULL;
+        char *sub           = NULL;
+        char *jwt_assertion = NULL;
 
         size_t post_fields_size;
         size_t extension_cnt;
@@ -953,9 +993,20 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
             rk->rk_conf.sasl.oauthbearer.client_id,
             rk->rk_conf.sasl.oauthbearer.client_secret, &headers);
 
+        if (!rk->rk_conf.sasl.oauthbearer.client_secret) {
+                jwt_assertion = rd_kafka_oidc_assertion_create_from_config(rk);
+
+                if (!jwt_assertion) {
+                        rd_kafka_oauthbearer_set_token_failure(
+                            rk, "Failed to create JWT assertion");
+                        goto done;
+                }
+        }
+
         /* Build post fields */
         rd_kafka_oidc_client_credentials_build_post_fields(
-            rk->rk_conf.sasl.oauthbearer.scope, &post_fields,
+            rk->rk_conf.sasl.oauthbearer.scope,
+            rk->rk_conf.sasl.oauthbearer.client_id, jwt_assertion, &post_fields,
             &post_fields_size);
 
         token_url = rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
@@ -1006,6 +1057,7 @@ done:
         RD_IF_FREE(headers, curl_slist_free_all);
         RD_IF_FREE(extensions, rd_free);
         RD_IF_FREE(extension_key_value, rd_free);
+        RD_IF_FREE(jwt_assertion, rd_free);
 }
 
 /**
@@ -1296,8 +1348,8 @@ static int ut_sasl_oauthbearer_oidc_post_fields(void) {
 
         RD_UT_BEGIN();
 
-        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields,
-                                                           &post_fields_size);
+        rd_kafka_oidc_client_credentials_build_post_fields(
+            scope, NULL, NULL, &post_fields, &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
                      "Expected expected_post_fields_size is %" PRIusz
@@ -1329,8 +1381,8 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
 
         RD_UT_BEGIN();
 
-        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields,
-                                                           &post_fields_size);
+        rd_kafka_oidc_client_credentials_build_post_fields(
+            scope, NULL, NULL, &post_fields, &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
                      "Expected expected_post_fields_size is %" PRIusz

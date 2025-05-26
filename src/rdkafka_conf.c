@@ -4050,17 +4050,23 @@ const char *
 rd_kafka_conf_finalize_oauthbearer_oidc_grant_type(rd_kafka_conf_t *conf) {
         switch (conf->sasl.oauthbearer.grant_type) {
         case RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS:
+                rd_bool_t has_assertion =
+                    conf->sasl.oauthbearer.assertion.file ||
+                    conf->sasl.oauthbearer.assertion.private_key.file ||
+                    conf->sasl.oauthbearer.assertion.private_key.pem;
                 if (!conf->sasl.oauthbearer.client_id)
                         return "`sasl.oauthbearer.client.id` is "
                                "mandatory when `sasl.oauthbearer.method=oidc` "
                                "is set";
 
-                if (!conf->sasl.oauthbearer.client_secret) {
+                if (!has_assertion && !conf->sasl.oauthbearer.client_secret) {
                         return "`sasl.oauthbearer.client.secret` is "
                                "mandatory when `sasl.oauthbearer.method=oidc` "
                                "is set";
                 }
-                break;
+                if (!has_assertion)
+                        break;
+                /* FALLTHRU */
         case RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER:
                 if (conf->sasl.oauthbearer.assertion.file) {
                         if (conf->sasl.oauthbearer.assertion.private_key.file)

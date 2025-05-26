@@ -1116,7 +1116,7 @@ test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
         if (!test_debug || !strstr(test_debug, "all")) {
                 char debug_with_contexts[256] = {0};
                 size_t i                      = rd_snprintf(debug_with_contexts,
-                                       sizeof(debug_with_contexts), "%s",
+                                                            sizeof(debug_with_contexts), "%s",
                                        test_debug ? test_debug : "");
                 /* Add all debug contexts and set debug configuration */
                 while (
@@ -1144,7 +1144,7 @@ static RD_INLINE unsigned int test_rand(void) {
 #ifdef _WIN32
         rand_s(&r);
 #else
-        r     = rand();
+        r = rand();
 #endif
         return r;
 }
@@ -2042,7 +2042,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
                 pcwd = _getcwd(cwd, sizeof(cwd) - 1);
 #else
-                pcwd   = getcwd(cwd, sizeof(cwd) - 1);
+                pcwd = getcwd(cwd, sizeof(cwd) - 1);
 #endif
                 if (pcwd)
                         TEST_SAY("Current directory: %s\n", cwd);

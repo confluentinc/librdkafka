@@ -323,7 +323,7 @@ struct test_msgver_s {
 
         const char *msgid_hdr; /**< msgid string is in header by this name,
                                 * rather than in the payload (default). */
-};                             /* test_msgver_t; */
+}; /* test_msgver_t; */
 
 /* Message */
 struct test_mv_m {
@@ -709,6 +709,7 @@ void test_consumer_close(rd_kafka_t *rk);
 
 void test_flush(rd_kafka_t *rk, int timeout_ms);
 
+int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_topic_conf_get(const rd_kafka_topic_conf_t *tconf, const char *name);
 int test_conf_match(rd_kafka_conf_t *conf, const char *name, const char *val);

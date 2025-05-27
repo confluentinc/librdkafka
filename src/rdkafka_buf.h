@@ -525,7 +525,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 #define rd_kafka_buf_skip_to(rkbuf, pos)                                       \
         do {                                                                   \
                 size_t __len1 =                                                \
-                    (size_t)(pos)-rd_slice_offset(&(rkbuf)->rkbuf_reader);     \
+                    (size_t)(pos) - rd_slice_offset(&(rkbuf)->rkbuf_reader);   \
                 if (__len1 &&                                                  \
                     !rd_slice_read(&(rkbuf)->rkbuf_reader, NULL, __len1))      \
                         rd_kafka_buf_check_len(rkbuf, __len1);                 \

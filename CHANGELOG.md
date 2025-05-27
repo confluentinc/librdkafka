@@ -2,8 +2,13 @@
 
 librdkafka v2.10.1 is a maintenance release:
 
+ * Fix to add locks when updating the metadata cache for the consumer 
+   after no broker connection is available (@marcin-krystianc, #5066).
+ * Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
+   brokers were added manually through `rd_kafka_brokers_add` (#5067).
  * Fix an issue where the first message to any topic produced via `producev` or
    `produceva` was not delivered late (by up to 1 second) (#5032).
+
 
 ## Fixes
 
@@ -14,10 +19,49 @@ librdkafka v2.10.1 is a maintenance release:
    timer to kick in. This could cause delays in the sending of the first message
    by up to 1 second. (#5032).
 
+### Consumer fixes
+
+ * Issues: #5051
+   Fix to add locks when updating the metadata cache for the consumer.
+   It can cause memory corruption or use-after-free in case
+   there's no broker connection and the consumer
+   group metadata needs to be updated.
+   Happens since 2.10.0 (#5066).
+ * Issues: #5057
+   Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
+   brokers were added manually through `rd_kafka_brokers_add`.
+   Avoids a segmentation fault in this case.
+   Happens since 2.10.0 (#5067).
+
+
 
 # librdkafka v2.10.0
 
 librdkafka v2.10.0 is a feature release:
+
+## [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) – Now in **Preview**
+
+- [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) has transitioned from *Early Access* to *Preview*.
+- Added support for **regex-based subscriptions**.
+- Implemented client-side member ID generation as per [KIP-1082](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1082%3A+Require+Client-Generated+IDs+over+the+ConsumerGroupHeartbeat+RPC).
+- `rd_kafka_DescribeConsumerGroups()` now supports KIP-848-style `consumer` groups. Two new fields have been added:
+  - **Group type** – Indicates whether the group is `classic` or `consumer`.
+  - **Target assignment** – Applicable only to `consumer` protocol groups (defaults to `NULL`).
+- Group configuration is now supported in `AlterConfigs`, `IncrementalAlterConfigs`, and `DescribeConfigs`. ([#4939](https://github.com/confluentinc/librdkafka/pull/4939))
+- Added **Topic Authorization Error** support in the `ConsumerGroupHeartbeat` response.
+- Removed usage of the `partition.assignment.strategy` property for the `consumer` group protocol. An error will be raised if this is set with `group.protocol=consumer`.
+- Deprecated and disallowed the following properties for the `consumer` group protocol:
+  - `session.timeout.ms`
+  - `heartbeat.interval.ms`
+  - `group.protocol.type`  
+  Attempting to set any of these will result in an error.
+- Enhanced handling for `subscribe()` and `unsubscribe()` edge cases.
+
+> [!Note]
+> The [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) consumer is currently in **Preview** and should not be used in production environments. Implementation is feature complete but contract could have minor changes before General Availability.
+
+
+ ## Enhancements and Fixes
 
  * Identify brokers only by broker id (#4557, @mfleming)
  * Remove unavailable brokers and their thread (#4557, @mfleming)

@@ -1690,6 +1690,7 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                 [RD_KAFKAP_AlterClientQuotas]            = rd_true,
                 [RD_KAFKAP_DescribeUserScramCredentials] = rd_true,
                 [RD_KAFKAP_AlterUserScramCredentials]    = rd_true,
+                [RD_KAFKAP_ConsumerGroupDescribe]        = rd_true,
             }};
         int i;
         int cnt = 0;
@@ -2088,9 +2089,13 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 
         rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
 
-        rd_kafka_brokers_add0(
-            rk, rk->rk_conf.brokerlist, rd_true
-            /*resolve canonical bootstrap server list names if requested*/);
+        if (rk->rk_conf.brokerlist) {
+                rd_kafka_brokers_add0(
+                        rk,
+                        rk->rk_conf.brokerlist, rd_true
+                        /* resolve canonical bootstrap server
+                         * list names if requested*/);
+        }
 
         rd_kafka_rdlock(rk);
         if (rd_list_cnt(&rk->additional_brokerlists) == 0) {
@@ -2374,7 +2379,6 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_atomic32_init(&rk->rk_logical_broker_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_up_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_down_cnt, 0);
-        rd_atomic32_init(&rk->rk_scheduled_connections_cnt, 0);
 
         rk->rk_rep             = rd_kafka_q_new(rk);
         rk->rk_ops             = rd_kafka_q_new(rk);
@@ -3978,8 +3982,8 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 else {
                         rk->rk_ts_last_poll_end = rd_clock();
                         struct consume_ctx ctx  = {.consume_cb =
-                                                      rk->rk_conf.consume_cb,
-                                                  .opaque = rk->rk_conf.opaque};
+                                                       rk->rk_conf.consume_cb,
+                                                   .opaque = rk->rk_conf.opaque};
 
                         return rd_kafka_consume_cb(rk, rkq, rko, cb_type, &ctx);
                 }

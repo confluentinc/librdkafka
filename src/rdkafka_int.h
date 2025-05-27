@@ -299,9 +299,6 @@ struct rd_kafka_s {
          *   that have had at least one connection attempt
          *   and are configured or learned. */
         rd_atomic32_t rk_broker_down_cnt;
-        /* Number of sparse connections requested
-         * but still not executed. */
-        rd_atomic32_t rk_scheduled_connections_cnt;
 
         /**< Additional bootstrap servers list.
          *   contains all brokers added through rd_kafka_brokers_add().
@@ -429,9 +426,11 @@ struct rd_kafka_s {
         int32_t rk_controllerid; /* ControllerId from metadata */
 
         /**< Producer: Delivery report mode */
-        enum { RD_KAFKA_DR_MODE_NONE,  /**< No delivery reports */
-               RD_KAFKA_DR_MODE_CB,    /**< Delivery reports through callback */
-               RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event API*/
+        enum {
+                RD_KAFKA_DR_MODE_NONE, /**< No delivery reports */
+                RD_KAFKA_DR_MODE_CB,   /**< Delivery reports through callback */
+                RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event
+                                           API*/
         } rk_drmode;
 
         /* Simple consumer count:
@@ -673,6 +672,12 @@ struct rd_kafka_s {
                  *   Use 10 < reconnect.backoff.jitter.ms / 2 < 1000.
                  */
                 rd_interval_t sparse_connect_random;
+
+                /**  Sparse connection timer: fires after remaining time of
+                 *   `sparse_connect_random` interval + 1ms.
+                 */
+                rd_kafka_timer_t sparse_connect_random_tmr;
+
                 /**< Lock for sparse_connect_random */
                 mtx_t sparse_connect_lock;
 

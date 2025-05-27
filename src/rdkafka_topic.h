@@ -159,11 +159,12 @@ struct rd_kafka_topic_s {
         rd_refcnt_t rkt_app_refcnt; /**< Number of active rkt's new()ed
                                      *   by application. */
 
-        enum { RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
-               RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
-               RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
-               RD_KAFKA_TOPIC_S_ERROR,     /* Topic exists but is in an errored
-                                            * state, such as auth failure. */
+        enum {
+                RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
+                RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
+                RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
+                RD_KAFKA_TOPIC_S_ERROR,     /* Topic exists but is in an errored
+                                             * state, such as auth failure. */
         } rkt_state;
         rd_ts_t rkt_ts_state; /**< State change time. */
 
@@ -290,7 +291,7 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
     const char *topic,
     int partition_cnt,
     const rd_kafka_metadata_partition_internal_t *mdpi);
-void rd_kafka_topic_info_destroy(rd_kafka_topic_info_t *ti);
+void rd_kafka_topic_info_destroy_free(void *ti);
 
 int rd_kafka_topic_match(rd_kafka_t *rk,
                          const char *pattern,

@@ -338,15 +338,14 @@ static void do_test_verify(const int line,
   /*
    * Create any type of client
    */
-  std::string teststr = tostr()
-                        << line << ": "
-                        << "SSL cert verify: verify_ok=" << verify_ok
-                        << ", untrusted_client_key=" << untrusted_client_key
-                        << ", untrusted_client_key_intermediate_ca="
-                        << untrusted_client_key_intermediate_ca
-                        << ", load_key=" << load_names[load_key]
-                        << ", load_pub=" << load_names[load_pub]
-                        << ", load_ca=" << load_names[load_ca];
+  std::string teststr =
+      tostr() << line << ": " << "SSL cert verify: verify_ok=" << verify_ok
+              << ", untrusted_client_key=" << untrusted_client_key
+              << ", untrusted_client_key_intermediate_ca="
+              << untrusted_client_key_intermediate_ca
+              << ", load_key=" << load_names[load_key]
+              << ", load_pub=" << load_names[load_pub]
+              << ", load_ca=" << load_names[load_ca];
 
   Test::Say(_C_BLU "[ " + teststr + " ]\n" _C_CLR);
 

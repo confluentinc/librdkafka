@@ -82,11 +82,10 @@ static void do_test_consumer_close(bool do_subscribe,
                                    bool do_unsubscribe,
                                    bool do_close,
                                    bool with_queue) {
-  std::string testname = tostr()
-                         << "Test C++ KafkaConsumer close "
-                         << "subscribe=" << do_subscribe
-                         << ", unsubscribe=" << do_unsubscribe
-                         << ", close=" << do_close << ", queue=" << with_queue;
+  std::string testname =
+      tostr() << "Test C++ KafkaConsumer close " << "subscribe=" << do_subscribe
+              << ", unsubscribe=" << do_unsubscribe << ", close=" << do_close
+              << ", queue=" << with_queue;
   SUB_TEST("%s", testname.c_str());
 
   rd_kafka_mock_cluster_t *mcluster;

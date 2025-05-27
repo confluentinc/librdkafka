@@ -3327,6 +3327,9 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
         rd_kafkap_bytes_t auth_data;
         char errstr[512];
 
+        if (rd_kafka_broker_is_any_err_destroy(err))
+                return;
+
         if (err) {
                 rd_snprintf(errstr, sizeof(errstr),
                             "SaslAuthenticateRequest failed: %s",
@@ -5342,7 +5345,9 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 int ei;
 
                 /* ResourceType */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
+                               config->restype));
 
                 /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -5424,7 +5429,9 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
                 int ei;
 
                 /* ResourceType */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
+                               config->restype));
 
                 /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -5518,7 +5525,9 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 int ei;
 
                 /* resource_type */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
+                               config->restype));
 
                 /* resource_name */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -6056,6 +6065,61 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+
+/**
+ * @brief Construct and send ConsumerGroupDescribe requests
+ *        to \p rkb with the groups (const char *) in \p groups.
+ *        Uses \p include_authorized_operations to get
+ *        group ACL authorized operations.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ */
+rd_kafka_error_t *
+rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                      char **groups,
+                                      size_t group_cnt,
+                                      rd_bool_t include_authorized_operations,
+                                      rd_kafka_replyq_t replyq,
+                                      rd_kafka_resp_cb_t *resp_cb,
+                                      void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        size_t i;
+
+        int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);
+
+        if (ApiVersion == -1) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                    "ConsumerGroupDescribe (KIP-848) "
+                    "not supported by broker, "
+                    "requires broker version >= 4.0.0");
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ConsumerGroupDescribe, 1,
+            4 /* rd_kafka_buf_write_arraycnt_pos */ +
+                1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
+                32 * group_cnt /* Groups */,
+            rd_true /* flexver */);
+
+        rd_kafka_buf_write_arraycnt(rkbuf, group_cnt);
+
+        for (i = 0; i < group_cnt; i++) {
+                rd_kafka_buf_write_str(rkbuf, groups[i], -1);
+        }
+
+        rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return NULL;
+}
+
 /**
  * @brief Parses and handles an InitProducerId reply.
  *

@@ -35,20 +35,30 @@
  #include "rdkafka.h" /* for Kafka driver */
  #include "rdtime.h"
 
-static int number_of_test_runs = 5;
-static int partition_cnt = 6;
+static int number_of_test_runs = 1;
+static int partition_cnt = 600;
 static int topic_cnt = 1;
-// static int consumer_cnt = 6;
+static int consumer_cnt = 60;
+static int batch_size = 10;
 static atomic_int run = 0;
 
 typedef struct consumer_s {
     int consumer_id;
+    int expected_assignment_cnt;
+    char *group_id;
+    char **subscriptions;
+    atomic_llong end_time;
+    rd_kafka_topic_partition_list_t *prev_assignment;
 } consumer_t;
 
 typedef struct producer_s {
     int producer_id;
     char* topic;
 } producer_t;
+
+long long int max(long long int a, long long int b) {
+    return (a > b) ? a : b;
+}
 
 static int producer_thread(void *arg) {
     producer_t *producer_args = arg;
@@ -76,6 +86,7 @@ static int producer_thread(void *arg) {
             i %= 2147483643;
     }
     
+    // printf("Producer %d finished producing messages for topic %s\n", producer_args->producer_id, producer_args->topic);
     rd_kafka_flush(rk, 10000); // Wait for all messages to be sent before exiting
     rd_kafka_topic_destroy(rkt);
     rd_kafka_destroy(rk);
@@ -84,21 +95,110 @@ static int producer_thread(void *arg) {
     return 0;
 }
 
-int single_consumer_run() {
-        const char *topics[topic_cnt];
-        rd_kafka_t *consumer;
+rd_kafka_topic_partition_list_t *list_diff(rd_kafka_topic_partition_list_t *a,
+                                      rd_kafka_topic_partition_list_t *b) {
+    rd_kafka_topic_partition_list_t *result = rd_kafka_topic_partition_list_new(0);
+    int i;
+
+    for (i = 0; i < a->cnt; i++) {
+        if (!rd_kafka_topic_partition_list_find(b, a->elems[i].topic, a->elems[i].partition)) {
+            rd_kafka_topic_partition_list_add(result, a->elems[i].topic, a->elems[i].partition);
+        }
+    }
+
+    return result;
+
+}
+
+static int consumer_thread(void *arg) {
+    rd_kafka_conf_t *conf;
+    rd_kafka_t *consumer;
+    rd_kafka_topic_partition_list_t *assignment = NULL;
+    consumer_t *consumer_args = arg;
+    rd_kafka_topic_partition_list_t *diff = rd_kafka_topic_partition_list_new(0);
+
+    test_conf_init(&conf, NULL, 60);
+    test_conf_set(conf, "auto.offset.reset", "earliest");
+    test_conf_set(conf, "enable.auto.commit", "false");
+    test_conf_set(conf, "heartbeat.interval.ms", "110");
+    test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+    // test_conf_set(conf, "debug", "generic");
+    /* Create consumers */
+    consumer = test_create_consumer(consumer_args->group_id, NULL, conf, NULL);
+    test_consumer_subscribe_multi(consumer, consumer_args->subscriptions, topic_cnt);
+
+    while(consumer_args->prev_assignment->cnt < consumer_args->expected_assignment_cnt) {
+        // printf("Consumer %d waiting for assignment: %d < %d\n", consumer_args->consumer_id, consumer_args->prev_assignment->cnt, consumer_args->expected_assignment_cnt);
+        rd_kafka_assignment(consumer, &assignment);
+        if(assignment->cnt != consumer_args->prev_assignment->cnt) {
+            TEST_SAY("Consumer %d assignment changed: %d -> %d\n",
+                     consumer_args->consumer_id,
+                     consumer_args->prev_assignment->cnt, assignment->cnt);
+            rd_kafka_topic_partition_list_destroy(diff);
+            diff = list_diff(assignment, consumer_args->prev_assignment);
+            rd_kafka_topic_partition_list_destroy(consumer_args->prev_assignment);
+            consumer_args->prev_assignment = rd_kafka_topic_partition_list_copy(assignment);
+        }
+        rd_kafka_topic_partition_list_destroy(assignment);
+        rd_usleep(100000, NULL); /* 10ms */
+    }
+
+    while(!(consumer_args->end_time)) {
+        // printf("Consumer %d waiting for end_time to be set\n", consumer_args->consumer_id);
+        rd_kafka_message_t *rkmessage;
+        rkmessage = rd_kafka_consumer_poll(consumer, 1);
+
+        if(rkmessage) {
+            int64_t batch_end_time = rd_uclock();
+            // printf("Consumer %d received message from topic %s partition %d at %lld\n", consumer_args->consumer_id, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition, batch_end_time);
+            if(rd_kafka_topic_partition_list_find(diff, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition)) {
+                    consumer_args->end_time = batch_end_time;
+                    // printf("Consumer %d setting end_time to %lld\n", consumer_args->consumer_id, consumer_args->end_time);
+            }
+            rd_kafka_message_destroy(rkmessage);
+        }
+    }
+
+    rd_kafka_topic_partition_list_destroy(diff);
+
+    while(run) {
+        rd_kafka_message_t *rkmessage;
+        rkmessage = rd_kafka_consumer_poll(consumer, 1000);
+        if (rkmessage) {
+            rd_kafka_message_destroy(rkmessage);
+        }
+        rd_sleep(1);
+    }
+
+    test_consumer_close(consumer);
+
+    // printf("Consumer closed\n");
+
+    rd_kafka_destroy(consumer);
+
+    // printf("Consumer destroyed\n");
+    return 0;
+}
+
+int do_test_performance_multiple_consumer() {
+        char *topics[topic_cnt];
         uint64_t testid;
-        rd_kafka_conf_t *conf;
-        producer_t producer_args = RD_ZERO_INIT;
+        producer_t producer_args[topic_cnt];
+        consumer_t consumer_args[consumer_cnt];
         test_msgver_t mv;
-        thrd_t thread_id[topic_cnt];
+        thrd_t producer_thread_ids[topic_cnt], consumer_thread_ids[consumer_cnt];
         const int timeout_ms = 10000;
         int i;
-        long long int start_time, end_time, elapsed_time_ms;
-
-        test_conf_init(&conf, NULL, 60);
-        test_conf_set(conf, "enable.auto.commit", "false");
-        test_conf_set(conf, "auto.offset.reset", "earliest");
+        int number_of_batches = consumer_cnt / batch_size;
+        int current_batch;
+        int batch_sleep_wait_time_us = 10000;
+        long long int start_time;
+        long long int end_time;
+        long long int batch_start_time;
+        long long int batch_end_time;
+        long long int elapsed_time_ms;
+        long long int individual_batch_elapsed_time_ms[number_of_batches];
+        long long int total_batch_elapsed_time_ms[number_of_batches];
 
         testid = test_id_generate();
         test_msgver_init(&mv, testid);
@@ -110,37 +210,92 @@ int single_consumer_run() {
                 test_create_topic_wait_exists(NULL, topics[i], partition_cnt, 1,
                                               5000);
 
-                producer_args.producer_id = i;
-                producer_args.topic       = strdup(topics[i]);
-                if (thrd_create(&thread_id[i], producer_thread,
-                                &producer_args) != thrd_success) {
+                producer_args[i].producer_id = i;
+                producer_args[i].topic       = strdup(topics[i]);
+                if (thrd_create(&producer_thread_ids[i], producer_thread,
+                                &producer_args[i]) != thrd_success) {
                         fprintf(stderr, "Failed to create producer thread\n");
                         return 1;
                 }
         }
 
-        start_time = rd_uclock();
+        start_time      = rd_uclock();
 
-        /* Create consumers */
-        consumer = test_create_consumer(topics[0], NULL, conf, NULL);
-        test_consumer_subscribe_multi(consumer, topics, topic_cnt);
-        test_consumer_wait_assignment(consumer, rd_false, 0);
-        while (test_consumer_poll_once(consumer, NULL, timeout_ms) != 1)
-                ;
-        end_time     = rd_uclock();
-        run          = 0;
-        elapsed_time_ms = (end_time - start_time) / 1000;
-        TEST_SAY("Rebalance took %llds and %lld ms\n", elapsed_time_ms / 1000,
-                 (elapsed_time_ms % 1000));
+        for(current_batch = 0; current_batch < number_of_batches; current_batch++) {
+                TEST_SAY("Starting batch %d of %d\n", current_batch + 1, number_of_batches);
+                int batch_start_index = current_batch * batch_size;
+                int expected_assignment_cnt = (partition_cnt * topic_cnt) / ((current_batch + 1) * batch_size);
+                batch_start_time = rd_uclock();
+                for (i = 0; i < batch_size; i++) {
+                        int consumer_index = batch_start_index + i;
+                        consumer_args[consumer_index].consumer_id = consumer_index;
+                        consumer_args[consumer_index].group_id = topics[0];
+                        consumer_args[consumer_index].subscriptions = topics;
+                        consumer_args[consumer_index].prev_assignment = rd_kafka_topic_partition_list_new(0);
+                        consumer_args[consumer_index].expected_assignment_cnt = expected_assignment_cnt;
+                        consumer_args[consumer_index].end_time = 0;
+                        TEST_SAY("Consumer %d started\n",
+                                 consumer_args[consumer_index].consumer_id);
+                        if (thrd_create(&consumer_thread_ids[consumer_index], consumer_thread, &consumer_args[consumer_index]) != thrd_success) {
+                                fprintf(stderr, "Failed to create consumer thread\n");
+                                return 1;
+                        }
+                }
+                batch_end_time = 0;
+                while(!batch_end_time) {
+                        printf("Waiting for batch %d to complete...\n", current_batch + 1);
+                        rd_sleep(1);
+                        // Since there is no revocation, we can just rely on the
+                        // end_time of the new consumers in the batch as there are
+                        // going to be assignments for the new consumers and old
+                        // consumers will only have revocations.
+                        for (i = 0; i < batch_size; i++) {
+                                int consumer_index = batch_start_index + i;
+                                printf("Checking consumer %d end_time: %lld\n",
+                                       consumer_index, consumer_args[consumer_index].end_time);
+                                if (!(consumer_args[consumer_index].end_time)) {
+                                        batch_end_time = 0;
+                                        break;
+                                }
+                                batch_end_time = max(batch_end_time, consumer_args[consumer_index].end_time);
+                        }
+                }
 
-        for (i = 0; i < topic_cnt; i++) {
-                thrd_join(thread_id[i], NULL);
+                TEST_SAY("Batch %d started at %lld\n", current_batch + 1, batch_start_time);
+                TEST_SAY("Batch %d completed with end time %lld\n", current_batch + 1, batch_end_time);
+                individual_batch_elapsed_time_ms[current_batch] = (batch_end_time - batch_start_time) / 1000;
+                TEST_SAY("Batch %d took %llds and %lldms\n", current_batch + 1,
+                         individual_batch_elapsed_time_ms[current_batch] / 1000,
+                         (individual_batch_elapsed_time_ms[current_batch] % 1000));
+
+                total_batch_elapsed_time_ms[current_batch] = (batch_end_time - start_time) / 1000;
+                TEST_SAY("Total time after batch %d: %llds and %lldms\n",
+                         current_batch + 1,
+                         total_batch_elapsed_time_ms[current_batch] / 1000,
+                         (total_batch_elapsed_time_ms[current_batch] % 1000));
+
+                rd_usleep(batch_sleep_wait_time_us, NULL); // Sleep for 10ms before starting the next batch
         }
 
-        test_consumer_close(consumer);
-        rd_kafka_destroy(consumer);
+        end_time        = rd_uclock();
+        run             = 0;
+        elapsed_time_ms = (end_time - start_time) / 1000;
+        TEST_SAY("All rebalances took %llds and %lldms\n", elapsed_time_ms / 1000,
+                 (elapsed_time_ms % 1000));
 
+        // printf("Waiting for all producer threads to finish...\n");
+        for (i = 0; i < topic_cnt; i++)
+                thrd_join(producer_thread_ids[i], NULL);
+
+        // printf("Waiting for all consumer threads to finish...\n");
+
+        for(i = 0; i < consumer_cnt; i++)
+                thrd_join(consumer_thread_ids[i], NULL);
+
+        // printf("All consumer threads finished\n");
         test_delete_all_test_topics(timeout_ms);
+
+        // printf("All topics deleted\n");
 
         return elapsed_time_ms;
 }
@@ -150,10 +305,9 @@ int main_0153_rebalance_performance(int argc, char **argv) {
     int current_run = 1;
     for (current_run = 1; current_run <= number_of_test_runs; current_run++) {
         TEST_SAY("Starting run %d of %d\n", current_run, number_of_test_runs);
-        avg_rebalance_time_ms += single_consumer_run();
+        avg_rebalance_time_ms += do_test_performance_multiple_consumer();
     }
     avg_rebalance_time_ms /= number_of_test_runs;
     TEST_SAY("Average rebalance time: %d ms\n", avg_rebalance_time_ms);
     return 0;
 }
-

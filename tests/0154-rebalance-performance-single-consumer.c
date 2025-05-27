@@ -84,7 +84,7 @@ static int producer_thread(void *arg) {
     return 0;
 }
 
-int single_consumer_run() {
+int do_test() {
         const char *topics[topic_cnt];
         rd_kafka_t *consumer;
         uint64_t testid;
@@ -150,7 +150,7 @@ int main_0154_rebalance_performance_single_consumer(int argc, char **argv) {
     int current_run = 1;
     for (current_run = 1; current_run <= number_of_test_runs; current_run++) {
         TEST_SAY("Starting run %d of %d\n", current_run, number_of_test_runs);
-        avg_rebalance_time_ms += single_consumer_run();
+        avg_rebalance_time_ms += do_test();
     }
     avg_rebalance_time_ms /= number_of_test_runs;
     TEST_SAY("Average rebalance time: %d ms\n", avg_rebalance_time_ms);

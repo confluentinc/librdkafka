@@ -435,6 +435,7 @@ static void test_producer_latency_first_message(int wait_time_ms,
 
                 res = rd_kafka_produce(rkt, 0, RD_KAFKA_MSG_F_COPY, payload, 5,
                                        NULL, 0, &t_produce);
+                rd_kafka_topic_destroy(rkt);
                 TEST_ASSERT(res == 0, "expected no error");
                 break;
         }
@@ -475,6 +476,7 @@ static void test_producer_latency_first_message(int wait_time_ms,
                 TIMING_START(&t_produce, "Produce message");
                 res = rd_kafka_produce_batch(rkt, 0, RD_KAFKA_MSG_F_COPY,
                                              rkmessages, 1);
+                rd_kafka_topic_destroy(rkt);
                 TEST_ASSERT(res == 1, "expected 1 msg enqueued, got %d", res);
                 break;
         }

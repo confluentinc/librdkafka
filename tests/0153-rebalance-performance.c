@@ -116,11 +116,12 @@ static int consumer_thread(void *arg) {
     rd_kafka_topic_partition_list_t *assignment = NULL;
     consumer_t *consumer_args = arg;
     rd_kafka_topic_partition_list_t *diff = rd_kafka_topic_partition_list_new(0);
+    int inside_list_diff = 0;
 
     test_conf_init(&conf, NULL, 60);
     test_conf_set(conf, "auto.offset.reset", "earliest");
     test_conf_set(conf, "enable.auto.commit", "false");
-    // test_conf_set(conf, "heartbeat.interval.ms", "5000");
+    test_conf_set(conf, "heartbeat.interval.ms", "110");
     test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
     // test_conf_set(conf, "debug", "generic");
     /* Create consumers */
@@ -135,6 +136,9 @@ static int consumer_thread(void *arg) {
                      consumer_args->consumer_id,
                      consumer_args->prev_assignment->cnt, assignment->cnt);
             rd_kafka_topic_partition_list_destroy(diff);
+            inside_list_diff++;
+            TEST_SAY_GREEN("Consumer %d inside list_diff: %d\n",
+                     consumer_args->consumer_id, inside_list_diff);
             diff = list_diff(assignment, consumer_args->prev_assignment);
             rd_kafka_topic_partition_list_destroy(consumer_args->prev_assignment);
             consumer_args->prev_assignment = rd_kafka_topic_partition_list_copy(assignment);
@@ -207,16 +211,24 @@ int do_test_performance_multiple_consumer() {
 
         run = 1;
 
+        // Topic creation
         topics = rd_malloc(topic_cnt * sizeof(*topics));
         for (i = 0; i < topic_cnt; i++) {
                 topics[i] = rd_malloc(64);
                 rd_snprintf(topics[i], 64, "%s-%d", topics_prefix, i);
 
-                test_create_topic_wait_exists(NULL, topics[i], partition_cnt, 1,
-                                              5000);
-                printf("Created topic %s, len = %d\n", topics[i], strlen(topics[i]));
-                printf("Working\n");
+                /*
+                 * TODO: Improve the topic creation logic to use multiple topics creation
+                 *       API instead of creating topics one by one.
+                 */
+                test_create_topic(NULL, topics[i], partition_cnt, 1);
+        }
+        // Wait for topics to be created and propogated to all the brokers
+        test_wait_topic_exists(NULL, topics[topic_cnt - 1], timeout_ms);
+        rd_sleep(5);
 
+        // Producer thread creation
+        for (i = 0; i < topic_cnt; i++) {
                 producer_args[i].producer_id = i;
                 producer_args[i].topic       = strdup(topics[i]);
                 if (thrd_create(&producer_thread_ids[i], producer_thread,
@@ -271,12 +283,12 @@ int do_test_performance_multiple_consumer() {
                 TEST_SAY("Batch %d started at %lld\n", current_batch + 1, batch_start_time);
                 TEST_SAY("Batch %d completed with end time %lld\n", current_batch + 1, batch_end_time);
                 individual_batch_elapsed_time_ms[current_batch] = (batch_end_time - batch_start_time) / 1000;
-                TEST_SAY("Batch %d took %llds and %lldms\n", current_batch + 1,
+                TEST_SAY_RED("Batch %d took %llds and %lldms\n", current_batch + 1,
                          individual_batch_elapsed_time_ms[current_batch] / 1000,
                          (individual_batch_elapsed_time_ms[current_batch] % 1000));
 
                 total_batch_elapsed_time_ms[current_batch] = (batch_end_time - start_time) / 1000;
-                TEST_SAY("Total time after batch %d: %llds and %lldms\n",
+                TEST_SAY_RED("Total time after batch %d: %llds and %lldms\n",
                          current_batch + 1,
                          total_batch_elapsed_time_ms[current_batch] / 1000,
                          (total_batch_elapsed_time_ms[current_batch] % 1000));
@@ -287,7 +299,7 @@ int do_test_performance_multiple_consumer() {
         end_time        = rd_uclock();
         run             = 0;
         elapsed_time_ms = (end_time - start_time) / 1000;
-        TEST_SAY("All rebalances took %llds and %lldms\n", elapsed_time_ms / 1000,
+        TEST_SAY_RED("All rebalances took %llds and %lldms\n", elapsed_time_ms / 1000,
                  (elapsed_time_ms % 1000));
 
         // Clean ups
@@ -323,10 +335,10 @@ int main_0153_rebalance_performance(int argc, char **argv) {
     int avg_rebalance_time_ms = 0;
     int current_run = 1;
     for (current_run = 1; current_run <= number_of_test_runs; current_run++) {
-        TEST_SAY("Starting run %d of %d\n", current_run, number_of_test_runs);
+        TEST_SAY_RED("Starting run %d of %d\n", current_run, number_of_test_runs);
         avg_rebalance_time_ms += do_test_performance_multiple_consumer();
     }
     avg_rebalance_time_ms /= number_of_test_runs;
-    TEST_SAY("Average rebalance time: %d ms\n", avg_rebalance_time_ms);
+    TEST_SAY_RED("Average rebalance time: %d ms\n", avg_rebalance_time_ms);
     return 0;
 }

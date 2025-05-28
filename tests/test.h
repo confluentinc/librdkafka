@@ -189,11 +189,12 @@ struct test {
 
 
 #define TEST_SAY0(...) fprintf(stderr, __VA_ARGS__)
-#define TEST_SAYL(LVL, ...)                                                    \
+#define TEST_SAY_COLOR(LVL, COLOR, ...)                                                    \
         do {                                                                   \
                 if (test_level >= LVL) {                                       \
+                        fprintf(stderr, "\033[%sm", COLOR);                    \
                         fprintf(                                               \
-                            stderr, "\033[36m[%-28s/%7.3fs] ",                 \
+                            stderr, "[%-28s/%7.3fs] ",                         \
                             test_curr->name,                                   \
                             test_curr->start                                   \
                                 ? ((float)(test_clock() - test_curr->start) /  \
@@ -203,7 +204,15 @@ struct test {
                         fprintf(stderr, "\033[0m");                            \
                 }                                                              \
         } while (0)
+#define TEST_SAYL(LVL, ...) TEST_SAY_COLOR(LVL, "36", __VA_ARGS__)
 #define TEST_SAY(...) TEST_SAYL(2, __VA_ARGS__)
+#define TEST_SAY_RED(...) TEST_SAY_COLOR(2, "31", __VA_ARGS__)
+#define TEST_SAY_GREEN(...) TEST_SAY_COLOR(2, "32", __VA_ARGS__)
+#define TEST_SAY_YELLOW(...) TEST_SAY_COLOR(2, "33", __VA_ARGS__)
+#define TEST_SAY_BLUE(...) TEST_SAY_COLOR(2, "34", __VA_ARGS__)
+#define TEST_SAY_MAGENTA(...) TEST_SAY_COLOR(2, "35", __VA_ARGS__)
+#define TEST_SAY_CYAN(...) TEST_SAY_COLOR(2, "36", __VA_ARGS__)
+#define TEST_SAY_WHITE(...) TEST_SAY_COLOR(2, "37", __VA_ARGS__)
 
 /**
  * Append JSON object (as string) to this tests' report array.

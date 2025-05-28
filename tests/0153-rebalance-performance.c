@@ -36,8 +36,8 @@
  #include "rdtime.h"
 
 static int number_of_test_runs = 1;
-static int partition_cnt = 600;
-static int topic_cnt = 1;
+static int partition_cnt = 30;
+static int topic_cnt = 20;
 static int consumer_cnt = 60;
 static int batch_size = 10;
 static atomic_int run = 0;
@@ -120,7 +120,7 @@ static int consumer_thread(void *arg) {
     test_conf_init(&conf, NULL, 60);
     test_conf_set(conf, "auto.offset.reset", "earliest");
     test_conf_set(conf, "enable.auto.commit", "false");
-    test_conf_set(conf, "heartbeat.interval.ms", "110");
+    // test_conf_set(conf, "heartbeat.interval.ms", "5000");
     test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
     // test_conf_set(conf, "debug", "generic");
     /* Create consumers */
@@ -181,7 +181,7 @@ static int consumer_thread(void *arg) {
 }
 
 int do_test_performance_multiple_consumer() {
-        char *topics[topic_cnt];
+        char **topics;
         uint64_t testid;
         producer_t producer_args[topic_cnt];
         consumer_t consumer_args[consumer_cnt];
@@ -199,16 +199,23 @@ int do_test_performance_multiple_consumer() {
         long long int elapsed_time_ms;
         long long int individual_batch_elapsed_time_ms[number_of_batches];
         long long int total_batch_elapsed_time_ms[number_of_batches];
+        const char *topics_prefix = test_mk_topic_name("0153-rebalance_performance", 1);
+
 
         testid = test_id_generate();
         test_msgver_init(&mv, testid);
 
         run = 1;
 
+        topics = rd_malloc(topic_cnt * sizeof(*topics));
         for (i = 0; i < topic_cnt; i++) {
-                topics[i] = test_mk_topic_name("0153-rebalance_performance", 1);
+                topics[i] = rd_malloc(64);
+                rd_snprintf(topics[i], 64, "%s-%d", topics_prefix, i);
+
                 test_create_topic_wait_exists(NULL, topics[i], partition_cnt, 1,
                                               5000);
+                printf("Created topic %s, len = %d\n", topics[i], strlen(topics[i]));
+                printf("Working\n");
 
                 producer_args[i].producer_id = i;
                 producer_args[i].topic       = strdup(topics[i]);
@@ -283,6 +290,13 @@ int do_test_performance_multiple_consumer() {
         TEST_SAY("All rebalances took %llds and %lldms\n", elapsed_time_ms / 1000,
                  (elapsed_time_ms % 1000));
 
+        // Clean ups
+
+        // destroy all the previous assignments
+        for (i = 0; i < consumer_cnt; i++) {
+            rd_kafka_topic_partition_list_destroy(consumer_args[i].prev_assignment);
+        }
+
         // printf("Waiting for all producer threads to finish...\n");
         for (i = 0; i < topic_cnt; i++)
                 thrd_join(producer_thread_ids[i], NULL);
@@ -291,6 +305,11 @@ int do_test_performance_multiple_consumer() {
 
         for(i = 0; i < consumer_cnt; i++)
                 thrd_join(consumer_thread_ids[i], NULL);
+
+        for(i = 0; i < topic_cnt; i++) {
+                rd_free(topics[i]);
+        }
+        rd_free(topics);
 
         // printf("All consumer threads finished\n");
         test_delete_all_test_topics(timeout_ms);

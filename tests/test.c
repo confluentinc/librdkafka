@@ -3136,7 +3136,7 @@ static void test_consumer_subscribe_multi0(rd_kafka_t *rk, const char **topics, 
         topics_list = rd_kafka_topic_partition_list_new(topic_count);
 
         for (i = 0; i < topic_count; i++) {
-                TEST_SAY0("  %s\n", topics[i]);
+                TEST_SAY("  %s\n", topics[i]);
                 rd_kafka_topic_partition_list_add(topics_list, topics[i],
                                                   RD_KAFKA_PARTITION_UA);
         }

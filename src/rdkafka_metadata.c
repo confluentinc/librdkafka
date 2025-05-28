@@ -667,6 +667,10 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                               md->brokers[i].host);
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].port);
 
+                char* dot = strrchr(md->brokers[i].host, '.');
+                if (dot != NULL && (dot[1] == ':' || dot[1] == '\0'))
+                        memmove(dot, &dot[1], strlen(&dot[1]) + 1);
+
                 mdi->brokers[i].id = md->brokers[i].id;
                 if (ApiVersion >= 1) {
                         rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf,

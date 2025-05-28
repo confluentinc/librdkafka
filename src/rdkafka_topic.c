@@ -539,7 +539,7 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk,
 
         /* Query for the topic leader (async) */
         if (!existing)
-                rd_kafka_topic_leader_query(rk, rkt);
+                rd_kafka_topic_fast_leader_query(rk);
 
         /* Drop our reference since there is already/now an app refcnt */
         rd_kafka_topic_destroy0(rkt);

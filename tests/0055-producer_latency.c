@@ -463,7 +463,7 @@ static void test_producer_latency_first_message(int wait_time_ms,
                 break;
         }
         case 3: {
-                rd_kafka_message_t rkmessages[1];
+                rd_kafka_message_t rkmessages[1] = {0};
                 rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, topic, NULL);
                 int res;
 
@@ -488,6 +488,7 @@ static void test_producer_latency_first_message(int wait_time_ms,
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(mcluster);
 
+        TEST_LATER_CHECK();
         SUB_TEST_PASS();
 }
 
@@ -501,7 +502,7 @@ int main_0055_producer_latency_mock(int argc, char **argv) {
         int wait_time_mss[] = {500, 1200, 2500, 3700, 4900};
 
         for (i = 0; i < 5; i++) {
-                for (j = 0; j < 3; j++) {
+                for (j = 0; j < 4; j++) {
                         test_producer_latency_first_message(wait_time_mss[i],
                                                             j);
                 }

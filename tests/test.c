@@ -401,7 +401,7 @@ struct test tests[] = {
     _TEST(0053_stats, 0),
     _TEST(0054_offset_time, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
-    _TEST(0055_producer_latency_mock, 0, TEST_F_LOCAL),
+    _TEST(0055_producer_latency_mock, TEST_F_LOCAL),
     _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0057_invalid_topic, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0058_log, TEST_F_LOCAL),

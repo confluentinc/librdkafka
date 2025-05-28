@@ -396,7 +396,7 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
                         rkt = rd_kafka_topic_new0(rk, vu->u.cstr, NULL,
                                                   &existing, 1);
                         if (!existing)
-                                rd_kafka_topic_leader_query(rk, rkt);
+                                rd_kafka_topic_fast_leader_query(rk);
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
@@ -565,7 +565,7 @@ rd_kafka_resp_err_t rd_kafka_producev(rd_kafka_t *rk, ...) {
                         rkt = rd_kafka_topic_new0(rk, va_arg(ap, const char *),
                                                   NULL, &existing, 1);
                         if (!existing)
-                                rd_kafka_topic_leader_query(rk, rkt);
+                                rd_kafka_topic_fast_leader_query(rk);
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:

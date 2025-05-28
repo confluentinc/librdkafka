@@ -5469,11 +5469,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         /* TODO: check this test after KIP-848 admin operation
          * implementation */
-        if (test_consumer_group_protocol_classic()) {
-                /* Describe groups */
-                do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
-                do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
-        }
+        
+        /* Describe groups */
+        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
 
         /* Describe topics */
         do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_false);

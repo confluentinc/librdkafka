@@ -17,6 +17,7 @@ https://github.com/confluentinc/librdkafka/compare/master...ClickHouse:librdkafk
 
 * https://github.com/confluentinc/librdkafka/pull/4982
 * https://github.com/confluentinc/librdkafka/pull/4788
+* https://github.com/confluentinc/librdkafka/pull/5089
 
 ### Fixes done earlier
 
@@ -99,4 +100,7 @@ git cherry-pick ccc6962711709948759068852e0eb0b44a1c5eeb # Fix possible data-rac
 
 git fetch confluentinc refs/pull/4718/head
 git cherry-pick f979784bd38ff8023bbac87aefdb9ea421ad7744 # Fix data race when a buffer queue is being reset instead of being initialized
+
+git fetch confluentinc refs/pull/5089/head
+git cherry-pick 5c185854404abf506d520042f61818d93d96cc91 # Fix data race in timers
 ```

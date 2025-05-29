@@ -6,11 +6,20 @@ librdkafka v2.10.1 is a maintenance release:
    after no broker connection is available (@marcin-krystianc, #5066).
  * Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
    brokers were added manually through `rd_kafka_brokers_add` (#5067).
+ * Fix an issue where the first message to any topic produced via `producev` or
+   `produceva` was not delivered late (by up to 1 second) (#5032).
  * Fix for a loop of re-bootstrap sequences in case the client reaches the
    `all brokers down` state (#5086).
 
 
 ## Fixes
+
+### Producer fixes
+
+ * In case of `producev` or `produceva`, the producer did not enqueue a leader
+   query metadata request immediately, and rather, waited for the 1 second
+   timer to kick in. This could cause delays in the sending of the first message
+   by up to 1 second. (#5032).
 
 ### Consumer fixes
 

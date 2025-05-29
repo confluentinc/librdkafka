@@ -323,7 +323,7 @@ int rd_kafka_metadata_cache_topics_count_exists(rd_kafka_t *rk,
                                                 const rd_list_t *topics,
                                                 int *metadata_agep);
 
-void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk);
+void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk, rd_bool_t force);
 
 void rd_kafka_metadata_cache_init(rd_kafka_t *rk);
 void rd_kafka_metadata_cache_destroy(rd_kafka_t *rk);

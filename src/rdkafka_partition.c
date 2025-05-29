@@ -2584,7 +2584,8 @@ void rd_kafka_toppar_leader_unavailable(rd_kafka_toppar_t *rktp,
         rkt->rkt_flags |= RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
         rd_kafka_topic_wrunlock(rkt);
 
-        rd_kafka_topic_fast_leader_query(rkt->rkt_rk);
+        rd_kafka_topic_fast_leader_query(rkt->rkt_rk,
+                                         rd_false /* don't force */);
 }
 
 

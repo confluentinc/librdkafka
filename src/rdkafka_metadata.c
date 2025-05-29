@@ -1789,16 +1789,19 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
  *        exponentially increased intervals until no topics are missing
  *        leaders.
  *
+ * @param force If true, run the query immediately without waiting for the
+ * interval.
+ *
  * @locks none
  * @locality any
  */
-void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
+void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk, rd_bool_t force) {
         rd_ts_t next;
 
-        /* Restart the timer if it will speed things up. */
+        /* Restart the timer if it will speed things up, or if forced. */
         next = rd_kafka_timer_next(
             &rk->rk_timers, &rk->rk_metadata_cache.rkmc_query_tmr, 1 /*lock*/);
-        if (next == -1 /* not started */ ||
+        if (force || next == -1 /* not started */ ||
             next >
                 (rd_ts_t)rk->rk_conf.metadata_refresh_fast_interval_ms * 1000) {
                 rd_kafka_dbg(rk, METADATA | RD_KAFKA_DBG_TOPIC, "FASTQUERY",

@@ -383,6 +383,7 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
         rd_kafka_error_t *error      = NULL;
         rd_kafka_headers_t *hdrs     = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+        int existing                 = 0;
         size_t i;
 
         if (unlikely(rd_kafka_check_produce(rk, &error)))
@@ -392,8 +393,11 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
                 const rd_kafka_vu_t *vu = &vus[i];
                 switch (vu->vtype) {
                 case RD_KAFKA_VTYPE_TOPIC:
-                        rkt =
-                            rd_kafka_topic_new0(rk, vu->u.cstr, NULL, NULL, 1);
+                        rkt = rd_kafka_topic_new0(rk, vu->u.cstr, NULL,
+                                                  &existing, 1);
+                        if (!existing)
+                                rd_kafka_topic_fast_leader_query(
+                                    rk, rd_true /* force */);
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
@@ -549,6 +553,7 @@ rd_kafka_resp_err_t rd_kafka_producev(rd_kafka_t *rk, ...) {
         rd_kafka_resp_err_t err;
         rd_kafka_headers_t *hdrs     = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+        int existing                 = 0;
 
         if (unlikely((err = rd_kafka_check_produce(rk, NULL))))
                 return err;
@@ -559,7 +564,10 @@ rd_kafka_resp_err_t rd_kafka_producev(rd_kafka_t *rk, ...) {
                 switch (vtype) {
                 case RD_KAFKA_VTYPE_TOPIC:
                         rkt = rd_kafka_topic_new0(rk, va_arg(ap, const char *),
-                                                  NULL, NULL, 1);
+                                                  NULL, &existing, 1);
+                        if (!existing)
+                                rd_kafka_topic_fast_leader_query(
+                                    rk, rd_true /* force */);
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:

@@ -399,6 +399,7 @@ static void test_producer_latency_first_message(int case_number) {
         test_timing_t t_produce;
         rd_kafka_resp_err_t err;
         rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err_produce;
         const char *bootstrap_servers;
         const char *case_name = NULL;
         int i;
@@ -449,11 +450,14 @@ static void test_producer_latency_first_message(int case_number) {
                 }
                 case 1: {
                         TIMING_START(&t_produce, "Produce message");
-                        rd_kafka_producev(rk, RD_KAFKA_V_TOPIC(topic),
-                                          RD_KAFKA_V_PARTITION(0),
-                                          RD_KAFKA_V_VALUE("value", 5),
-                                          RD_KAFKA_V_OPAQUE((&t_produce)),
-                                          RD_KAFKA_V_END);
+                        err_produce = rd_kafka_producev(
+                            rk, RD_KAFKA_V_TOPIC(topic),
+                            RD_KAFKA_V_PARTITION(0),
+                            RD_KAFKA_V_VALUE("value", 5),
+                            RD_KAFKA_V_OPAQUE((&t_produce)), RD_KAFKA_V_END);
+                        TEST_ASSERT(err_produce == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    "expected no error, got %s",
+                                    rd_kafka_err2str(err_produce));
                         break;
                 }
                 case 2: {
@@ -467,7 +471,7 @@ static void test_producer_latency_first_message(int case_number) {
                         vus[2].u.ptr      = &t_produce;
 
                         TIMING_START(&t_produce, "Produce message");
-                        rd_kafka_produceva(rk, vus, 3);
+                        TEST_CALL_ERROR__(rd_kafka_produceva(rk, vus, 3));
                         break;
                 }
                 case 3: {

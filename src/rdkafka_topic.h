@@ -320,8 +320,8 @@ void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
         rd_kafka_topic_leader_query0(rk, rkt, 1 /*lock*/,                      \
                                      rd_false /*dont force*/)
 
-#define rd_kafka_topic_fast_leader_query(rk)                                   \
-        rd_kafka_metadata_fast_leader_query(rk)
+#define rd_kafka_topic_fast_leader_query(rk, force)                            \
+        rd_kafka_metadata_fast_leader_query(rk, force)
 
 void rd_kafka_local_topics_to_list(rd_kafka_t *rk,
                                    rd_list_t *topics,

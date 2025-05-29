@@ -29,7 +29,8 @@ librdkafka v2.10.1 is a maintenance release:
    Fix for a loop of re-bootstrap sequences in case the client reaches the
    `all brokers down` state. The client continues to select the
    bootstrap brokers given they have no connection attempt and doesn't
-   re-connect to the learned ones.
+   re-connect to the learned ones. In case it happens a broker restart
+   can break the loop for the clients using the affected version.
    Fixed by giving a higher chance to connect to the learned brokers
    even if there are new ones that never tried to connect.
    Happens since 2.10.0 (#5086).

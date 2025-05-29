@@ -5712,7 +5712,7 @@ static void rd_kafka_connect_any_timer_cb(rd_kafka_timers_t *rkts, void *arg) {
  * @locks rd_kafka_rdlock() MUST be held
  */
 void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
-        rd_kafka_broker_t *rkb = NULL;
+        rd_kafka_broker_t *rkb;
         rd_ts_t suppr;
 
         /* Don't count connections to logical brokers since they serve
@@ -5744,35 +5744,47 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
                 return;
         }
 
-        /* 90% of times select a learned broker in init state.
+        /* In case there no learned brokers never connected to,
+         * 90% of times select a learned broker in init state.
          *
-         * This avoid problems after re-bootstrapping that cause
+         * This avoids problems after re-bootstrapping that cause
          * the bootstrap brokers to be always preferred
-         * given there are learned brokers that caused ALL_BROKERS_DOWN.
+         * given there are learned brokers that already connected and
+         * caused ALL_BROKERS_DOWN.
          *
-         * If that happens the learned brokers
-         * that already connected are never selected.
+         * If that happens those learned brokers
+         * that already connected are never selected unless
+         * they disappear and re-appear again as new brokers with 0 connects,
+         * so we have to assing a higher probability to it.
          *
          * Additionally we cannot always prefer the learned
          * brokers as their address could have changed and we need to
          * connect to the bootstrap brokers to know that.
+         * KIP-1102 `metadata.recovery.rebootstrap.trigger.ms` would
+         * be triggered in this case after 5 mins
+         * but it's a long time to wait.
          */
-        if (rd_jitter(0, 9) > 0) {
 
-                /* First pass:  only match learned brokers never connected to
-                 *              in state INIT, to try to exhaust
-                 *              the available brokers so that an
-                 *              ERR_ALL_BROKERS_DOWN error can be raised. */
-                rkb = rd_kafka_broker_random(
-                    rk, RD_KAFKA_BROKER_STATE_INIT,
-                    rd_kafka_broker_filter_learned_never_connected, NULL);
+        /* First pass:  only match learned brokers never connected to
+         *              in state INIT, to try to exhaust
+         *              the available brokers so that an
+         *              ERR_ALL_BROKERS_DOWN error can be raised. */
+        rkb = rd_kafka_broker_random(
+            rk, RD_KAFKA_BROKER_STATE_INIT,
+            rd_kafka_broker_filter_learned_never_connected, NULL);
 
-                if (!rkb)
-                        /* Second pass:  only match learned brokers
-                         *               in state INIT. */
-                        rkb = rd_kafka_broker_random(
-                            rk, RD_KAFKA_BROKER_STATE_INIT,
-                            rd_kafka_broker_filter_learned, NULL);
+#if ENABLE_DEVEL == 1
+        if (rkb)
+                rd_dassert(rkb->rkb_source == RD_KAFKA_LEARNED);
+#endif
+
+        if (!rkb && rd_jitter(0, 9) > 0) { /* 0.9 probability */
+                /* Second pass:  only match learned brokers
+                 *               in state INIT. */
+                rkb = rd_kafka_broker_random(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                             rd_kafka_broker_filter_learned,
+                                             NULL);
+
 #if ENABLE_DEVEL == 1
                 if (rkb)
                         rd_dassert(rkb->rkb_source == RD_KAFKA_LEARNED);

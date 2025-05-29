@@ -369,6 +369,7 @@ struct rd_kafka_conf_s {
         int check_crcs;
         int queued_min_msgs;
         int queued_max_msg_kbytes;
+        int queued_total_max_msg_kbytes;
         int64_t queued_max_msg_bytes;
         int fetch_wait_max_ms;
         int fetch_msg_max_bytes;

@@ -6,6 +6,8 @@ librdkafka v2.10.1 is a maintenance release:
    after no broker connection is available (@marcin-krystianc, #5066).
  * Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
    brokers were added manually through `rd_kafka_brokers_add` (#5067).
+ * Fix for a loop of re-bootstrap sequences in case the client reaches the
+   `all brokers down` state (#5086).
 
 
 ## Fixes
@@ -23,12 +25,24 @@ librdkafka v2.10.1 is a maintenance release:
    brokers were added manually through `rd_kafka_brokers_add`.
    Avoids a segmentation fault in this case.
    Happens since 2.10.0 (#5067).
+ * Issues: #5088
+   Fix for a loop of re-bootstrap sequences in case the client reaches the
+   `all brokers down` state. The client continues to select the
+   bootstrap brokers given they have no connection attempt and doesn't
+   re-connect to the learned ones. In case it happens a broker restart
+   can break the loop for the clients using the affected version.
+   Fixed by giving a higher chance to connect to the learned brokers
+   even if there are new ones that never tried to connect.
+   Happens since 2.10.0 (#5086).
 
 
 
 # librdkafka v2.10.0
 
 librdkafka v2.10.0 is a feature release:
+
+> [!WARNING] it's suggested to upgrade to 2.10.1 or later
+> because of the possibly critical bug #5088
 
 ## [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) – Now in **Preview**
 

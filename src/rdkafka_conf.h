@@ -155,7 +155,7 @@ typedef enum {
 } rd_kafka_oauthbearer_method_t;
 
 typedef enum {
-        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_OIDC,
+        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS,
         RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER,
 } rd_kafka_oauthbearer_grant_type_t;
 
@@ -332,15 +332,27 @@ struct rd_kafka_conf_s {
                         char *client_id;
                         char *client_secret;
                         char *scope;
-                        char *assertion_private_key_file;
-                        char *assertion_private_key_passphrase;
-                        char *assertion_file;
-                        char *assertion_jwt_template_file;
-                        char *assertion_private_key_pem;
-                        rd_kafka_oauthbearer_assertion_algorithm_t
-                            assertion_signing_algorithm;
-                        int assertion_expiration;
-                        int assertion_issued_at;
+                        struct {
+                                char *file;
+                                char *jwt_template_file;
+                                int expiration;
+                                int issued_at;
+                                struct {
+                                        char *sub;
+                                        char *aud;
+                                        char *iss;
+                                        char *jti;
+                                        char *nbf;
+                                        char *iat;
+                                        char *exp;
+                                } claims;
+                                struct {
+                                        char *file;
+                                        char *passphrase;
+                                        char *pem;
+                                        rd_kafka_oauthbearer_assertion_algorithm_t algorithm;
+                                } private_key;
+                        } assertion;
                         char *extensions_str;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,

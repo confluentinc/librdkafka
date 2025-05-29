@@ -438,4 +438,80 @@ typedef struct rd_chariov_s {
         size_t size;
 } rd_chariov_t;
 
+/**
+ * @brief Read a file in binary mode and return its contents.
+ *        The returned buffer is NULL-terminated if the file is text,
+ *        but the size parameter will contain the actual file size.
+ *
+ * @param file_path Path to the file to read
+ * @param size Pointer to store the file size (excluding NULL terminator if present)
+ * @param max_size Optional maximum file size to read (0 for no limit)
+ *
+ * @returns Newly allocated buffer containing the file contents.
+ *          NULL on error (file not found, too large, etc).
+ *          Caller must free with rd_free().
+ *
+ * @locality Any thread
+ */
+static RD_INLINE RD_UNUSED void *rd_read_file(const char *file_path,
+                                             size_t *size,
+                                             size_t max_size) {
+        FILE *file;
+        void *buf;
+        long file_size;
+        size_t read_size;
+
+        if (!file_path || !size) {
+                return NULL;
+        }
+
+        file = fopen(file_path, "rb");
+        if (!file) {
+                return NULL;
+        }
+
+        if (fseek(file, 0, SEEK_END) != 0) {
+                fclose(file);
+                return NULL;
+        }
+
+        file_size = ftell(file);
+        if (file_size < 0) {
+                fclose(file);
+                return NULL;
+        }
+
+        if (fseek(file, 0, SEEK_SET) != 0) {
+                fclose(file);
+                return NULL;
+        }
+
+        /* Check if file is too large */
+        if (max_size > 0 && (size_t)file_size > max_size) {
+                fclose(file);
+                return NULL;
+        }
+
+        /* Allocate buffer with extra byte for NULL terminator */
+        buf = rd_malloc(file_size + 1);
+        if (!buf) {
+                fclose(file);
+                return NULL;
+        }
+
+        read_size = fread(buf, 1, file_size, file);
+        fclose(file);
+
+        if (read_size != (size_t)file_size) {
+                rd_free(buf);
+                return NULL;
+        }
+
+        /* NULL terminate the buffer */
+        ((char *)buf)[file_size] = '\0';
+        *size = file_size;
+
+        return buf;
+}
+
 #endif /* _RD_H_ */

@@ -90,7 +90,7 @@ static char *rd_kafka_oidc_build_auth_header(const char *client_id,
  *
  * @locality Any thread.
  */
-static void rd_kafka_oidc_build_headers(const char *client_id,
+static void rd_kafka_oidc_client_credentials_build_headers(const char *client_id,
                                         const char *client_secret,
                                         struct curl_slist **headersp) {
         char *authorization_base64_header;
@@ -198,7 +198,7 @@ done:
  *        The post_fields_size will be returned in \p post_fields_size.
  *
  */
-static void rd_kafka_oidc_build_post_fields(const char *scope,
+static void rd_kafka_oidc_client_credentials_build_post_fields(const char *scope,
                                             char **post_fields,
                                             size_t *post_fields_size) {
         size_t scope_size = 0;
@@ -218,74 +218,6 @@ static void rd_kafka_oidc_build_post_fields(const char *scope,
 }
 
 /**
- * @brief Base64Url encode input data.
- *
- * This implementation uses OpenSSL's Base64 encoder and then
- * replaces characters as needed for Base64Url format:
- * - '+' is replaced with '-'
- * - '/' is replaced with '_'
- * - Padding '=' characters are removed
- *
- * @param input The data to encode
- * @param length Length of the input data
- *
- * @returns Newly allocated Base64Url encoded string, caller must free with
- * rd_free(). Returns NULL if memory allocation fails.
- *
- * @locality Any thread.
- */
-static char *rd_base64url_encode(const char *input, const size_t length) {
-        BIO *bmem = NULL, *b64 = NULL;
-        BUF_MEM *bptr = NULL;
-        char *buff    = NULL, *p;
-
-        b64 = BIO_new(BIO_f_base64());
-        if (!b64)
-                return NULL;
-
-        /* Do not use '\n' in encoded data */
-        BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-
-        bmem = BIO_new(BIO_s_mem());
-        if (!bmem) {
-                BIO_free_all(b64);
-                return NULL;
-        }
-
-        b64 = BIO_push(b64, bmem);
-
-        BIO_write(b64, input, length);
-        BIO_flush(b64);
-        BIO_get_mem_ptr(b64, &bptr);
-
-        buff = rd_malloc(bptr->length + 1);
-        if (!buff) {
-                BIO_free_all(b64);
-                return NULL;
-        }
-        memcpy(buff, bptr->data, bptr->length);
-        buff[bptr->length] = '\0';
-
-        BIO_free_all(b64);
-
-        for (p = buff; *p; p++) {
-                if (*p == '+')
-                        *p = '-';
-                else if (*p == '/')
-                        *p = '_';
-        }
-
-        /* Remove padding '=' characters */
-        int newlen = strlen(buff);
-        while (newlen > 0 && buff[newlen - 1] == '=') {
-                buff[newlen - 1] = '\0';
-                newlen--;
-        }
-
-        return buff;
-}
-
-/**
  * @brief Get JWT algorithm label string for the specified signing algorithm.
  *
  * @param token_signing_algo The algorithm enum value
@@ -294,7 +226,7 @@ static char *rd_base64url_encode(const char *input, const size_t length) {
  *
  * @locality Any thread.
  */
-static char *get_algo_label(
+static char *rd_kafka_oidc_assertion_get_algo_label(
     const rd_kafka_oauthbearer_assertion_algorithm_t token_signing_algo) {
         switch (token_signing_algo) {
         case RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256:
@@ -329,50 +261,25 @@ static int process_jwt_template_file(rd_kafka_t *rk,
         char *template_content = NULL;
         cJSON *template_json   = NULL;
         int ret                = -1;
-        long file_size;
-        size_t read_size;
-        FILE *fp;
+        size_t file_size;
 
         *header  = NULL;
         *payload = NULL;
 
-        fp = fopen(jwt_template_file_path, "r");
-        if (!fp) {
+        template_content = rd_read_file(jwt_template_file_path, &file_size, 1024*1024); /* 1MB limit */
+        if (!template_content) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
                              "Failed to open JWT template file: %s",
                              jwt_template_file_path);
                 return -1;
         }
 
-        fseek(fp, 0, SEEK_END);
-        file_size = ftell(fp);
-        fseek(fp, 0, SEEK_SET);
-
-        if (file_size <= 0) {
+        if (file_size == 0) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
                              "JWT template file is empty or invalid");
-                fclose(fp);
+                rd_free(template_content);
                 return -1;
         }
-
-        template_content = rd_malloc(file_size + 1);
-        if (!template_content) {
-                rd_kafka_log(rk, LOG_ERR, "JWT",
-                             "Failed to allocate memory for template content");
-                fclose(fp);
-                return -1;
-        }
-
-        read_size = fread(template_content, 1, file_size, fp);
-        fclose(fp);
-
-        if (read_size != (size_t)file_size) {
-                rd_kafka_log(rk, LOG_ERR, "JWT",
-                             "Failed to read JWT template file");
-                goto cleanup;
-        }
-
-        template_content[file_size] = '\0';
 
         template_json = cJSON_Parse(template_content);
         if (!template_json) {
@@ -440,7 +347,7 @@ cleanup:
  *
  * @locality Any thread.
  */
-static char *rd_kafka_create_jwt_assertion(
+static char *rd_kafka_oidc_assertion_create(
     rd_kafka_t *rk,
     const char *private_key_pem,
     const char *key_file_location,
@@ -463,15 +370,9 @@ static char *rd_kafka_create_jwt_assertion(
         cJSON *payload_json_obj = NULL;
         EVP_MD_CTX *mdctx       = NULL;
         unsigned char *sig      = NULL;
-
-        if ((private_key_pem && key_file_location) ||
-            (!private_key_pem && !key_file_location)) {
-                rd_kafka_log(rk, LOG_ERR, "JWT",
-                             "Exactly one of private_key_pem or "
-                             "key_file_location must be provided");
-                return NULL;
-        }
-        RD_UT_SAY("coming after key check");
+        rd_chariov_t header_iov;
+        rd_chariov_t payload_iov;
+        rd_chariov_t sig_iov;
 
         time_t now = issued_at ? rd_uclock() / 1000000 + issued_at
                                : rd_uclock() / 1000000;
@@ -490,7 +391,7 @@ static char *rd_kafka_create_jwt_assertion(
 
                 /* Add required header fields */
                 cJSON_AddStringToObject(header_json_obj, "alg",
-                                        get_algo_label(token_signing_algo));
+                                        rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
                 cJSON_AddStringToObject(header_json_obj, "typ", "JWT");
 
                 /* Add required payload fields */
@@ -515,14 +416,20 @@ static char *rd_kafka_create_jwt_assertion(
                         goto cleanup;
 
                 rd_snprintf(header_str, 256, "{\"alg\":\"%s\",\"typ\":\"JWT\"}",
-                            get_algo_label(token_signing_algo));
+                            rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
 
                 rd_snprintf(payload_str, 1024, "{\"iat\":%ld,\"exp\":%ld}",
                             (long)now, (long)exp);
         }
 
-        encoded_header  = rd_base64url_encode(header_str, strlen(header_str));
-        encoded_payload = rd_base64url_encode(payload_str, strlen(payload_str));
+        header_iov.ptr = header_str;
+        header_iov.size = strlen(header_str);   
+        encoded_header  = rd_base64_encode_str_urlsafe(&header_iov);
+
+        payload_iov.ptr = payload_str;
+        payload_iov.size = strlen(payload_str);
+        encoded_payload = rd_base64_encode_str_urlsafe(&payload_iov);
+
         if (!encoded_header || !encoded_payload)
                 goto cleanup;
 
@@ -533,7 +440,6 @@ static char *rd_kafka_create_jwt_assertion(
                 goto cleanup;
         rd_snprintf(unsigned_token, unsigned_token_len, "%s.%s", encoded_header,
                     encoded_payload);
-        RD_UT_SAY("unsigned_token %s", unsigned_token);
 
         if (private_key_pem) {
                 bio = BIO_new_mem_buf((void *)private_key_pem, -1);
@@ -542,19 +448,16 @@ static char *rd_kafka_create_jwt_assertion(
         }
 
         if (!bio) {
-                RD_UT_SAY("bio null");
                 rd_kafka_log(rk, LOG_ERR, "JWT",
                              "Failed to create BIO for private key");
                 goto cleanup;
         }
-        RD_UT_SAY("bio %p", bio);
 
         if (passphrase) {
                 pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL,
                                                (void *)passphrase);
         } else {
                 pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
-                RD_UT_SAY("pkey %p", pkey);
         }
         BIO_free(bio);
         bio = NULL;
@@ -563,7 +466,6 @@ static char *rd_kafka_create_jwt_assertion(
                 rd_kafka_log(rk, LOG_ERR, "JWT", "Failed to load private key");
                 goto cleanup;
         }
-        RD_UT_SAY("read pkey");
 
         mdctx = EVP_MD_CTX_new();
         if (!mdctx) {
@@ -606,7 +508,10 @@ static char *rd_kafka_create_jwt_assertion(
                 goto cleanup;
         }
 
-        encoded_signature = rd_base64url_encode(sig, siglen);
+        sig_iov.ptr = sig;
+        sig_iov.size = siglen;
+        encoded_signature = rd_base64_encode_str_urlsafe(&sig_iov);
+
         if (!encoded_signature)
                 goto cleanup;
 
@@ -660,26 +565,69 @@ cleanup:
 /**
  * @brief Build request body for JWT bearer token request.
  *
- * Creates a URL-encoded request body for token exchange with the JWT assertion.
+ * Creates a URL-encoded request body for token exchange with the JWT assertion
+ * and optional scope.
  *
  * @param assertion The JWT assertion to include in the request.
+ * @param scope Optional scope to include in the request (will be URL encoded).
  *
  * @returns Newly allocated string with the URL-encoded request body.
  *          Caller must free with rd_free(). NULL on memory allocation failure.
  *
  * @locality Any thread.
  */
-static char *rd_kafka_jwt_build_request_body(const char *assertion) {
+static char *rd_kafka_oidc_jwt_bearer_build_request_body(const char *assertion,
+                                                        const char *scope) {
         const char *grant_type = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-        size_t body_size       = strlen("grant_type=") + strlen(grant_type) +
-                           strlen("&assertion=") + strlen(assertion) + 1;
-        char *body = rd_malloc(body_size);
+        char *escaped_scope = NULL;
+        char *body = NULL;
+        size_t body_size;
+        CURL *curl = NULL;
 
-        if (!body)
+        if (!assertion)
                 return NULL;
 
-        rd_snprintf(body, body_size, "grant_type=%s&assertion=%s", grant_type,
-                    assertion);
+        /* Initialize curl for URL encoding */
+        curl = curl_easy_init();
+        if (!curl)
+                return NULL;
+
+        /* URL encode scope if provided */
+        if (scope) {
+                escaped_scope = curl_easy_escape(curl, scope, 0);
+                if (!escaped_scope) {
+                        curl_easy_cleanup(curl);
+                        return NULL;
+                }
+        }
+
+        /* Calculate body size */
+        body_size = strlen("grant_type=") + strlen(grant_type) +
+                   strlen("&assertion=") + strlen(assertion);
+        if (escaped_scope)
+                body_size += strlen("&scope=") + strlen(escaped_scope);
+
+        /* Allocate and build body */
+        body = rd_malloc(body_size + 1);
+        if (!body) {
+                if (escaped_scope)
+                        curl_free(escaped_scope);
+                curl_easy_cleanup(curl);
+                return NULL;
+        }
+
+        if (escaped_scope) {
+                rd_snprintf(body, body_size + 1,
+                           "grant_type=%s&assertion=%s&scope=%s",
+                           grant_type, assertion, escaped_scope);
+                curl_free(escaped_scope);
+        } else {
+                rd_snprintf(body, body_size + 1,
+                           "grant_type=%s&assertion=%s",
+                           grant_type, assertion);
+        }
+
+        curl_easy_cleanup(curl);
         return body;
 }
 
@@ -689,53 +637,25 @@ static char *rd_kafka_jwt_build_request_body(const char *assertion) {
  * @returns Newly allocated string with the JWT assertion.
  *          Caller must free with rd_free(). NULL on memory allocation failure.
  */
-static char *parse_jwt_assertion_from_file(const char *file_path) {
-        FILE *file;
+static char *rd_kafka_oidc_assertion_parse_template_file(const char *file_path) {
         size_t file_size;
         char *jwt_assertion;
-        size_t bytes_read;
-        const size_t max_size = 1024 * 1024;
+        const size_t max_size = 1024 * 1024; /* 1MB limit */
 
         if (!file_path) {
                 return NULL;
         }
 
-        file = fopen(file_path, "r");
-        if (!file) {
-                return NULL;
-        }
-
-        if (fseek(file, 0, SEEK_END) != 0) {
-                fclose(file);
-                return NULL;
-        }
-        file_size = ftell(file);
-        if (fseek(file, 0, SEEK_SET) != 0) {
-                fclose(file);
+        jwt_assertion = rd_read_file(file_path, &file_size, max_size);
+        if (!jwt_assertion) {
                 return NULL;
         }
 
         /* Validate file size */
         if (file_size == 0 || file_size > max_size) {
-                fclose(file);
-                return NULL;
-        }
-
-        jwt_assertion = rd_malloc(file_size + 1);
-        if (!jwt_assertion) {
-                fclose(file);
-                return NULL;
-        }
-
-        bytes_read = fread(jwt_assertion, 1, file_size, file);
-        fclose(file);
-
-        if (bytes_read != file_size) {
                 rd_free(jwt_assertion);
                 return NULL;
         }
-
-        jwt_assertion[file_size] = '\0';
 
         return jwt_assertion;
 }
@@ -778,19 +698,18 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
         if (rd_kafka_terminating(rk))
                 return;
 
-        if (rk->rk_conf.sasl.oauthbearer.assertion_file) {
-                jwt_assertion = parse_jwt_assertion_from_file(
-                    rk->rk_conf.sasl.oauthbearer.assertion_file);
+        if (rk->rk_conf.sasl.oauthbearer.assertion.file) {
+                jwt_assertion = rd_kafka_oidc_assertion_parse_template_file(
+                    rk->rk_conf.sasl.oauthbearer.assertion.file);
         } else {
-                jwt_assertion = rd_kafka_create_jwt_assertion(
-                    rk, rk->rk_conf.sasl.oauthbearer.assertion_private_key_pem,
-                    rk->rk_conf.sasl.oauthbearer.assertion_private_key_file,
-                    rk->rk_conf.sasl.oauthbearer
-                        .assertion_private_key_passphrase,
-                    rk->rk_conf.sasl.oauthbearer.assertion_signing_algorithm,
-                    rk->rk_conf.sasl.oauthbearer.assertion_jwt_template_file,
-                    rk->rk_conf.sasl.oauthbearer.assertion_issued_at,
-                    rk->rk_conf.sasl.oauthbearer.assertion_expiration);
+                jwt_assertion = rd_kafka_oidc_assertion_create(
+                    rk, rk->rk_conf.sasl.oauthbearer.assertion.private_key.pem,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.file,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.passphrase,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.algorithm,
+                    rk->rk_conf.sasl.oauthbearer.assertion.jwt_template_file,
+                    rk->rk_conf.sasl.oauthbearer.assertion.issued_at,
+                    rk->rk_conf.sasl.oauthbearer.assertion.expiration);
         }
 
         if (!jwt_assertion) {
@@ -799,7 +718,9 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                 goto done;
         }
 
-        request_body = rd_kafka_jwt_build_request_body(jwt_assertion);
+        request_body = rd_kafka_oidc_jwt_bearer_build_request_body(
+            jwt_assertion,
+            rk->rk_conf.sasl.oauthbearer.scope);
 
         if (!request_body) {
                 rd_kafka_oauthbearer_set_token_failure(
@@ -841,9 +762,9 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                 goto done;
         }
 
-        exp = rk->rk_conf.sasl.oauthbearer.assertion_expiration
+        exp = rk->rk_conf.sasl.oauthbearer.assertion.expiration
                   ? rd_uclock() / 1000000 +
-                        rk->rk_conf.sasl.oauthbearer.assertion_expiration
+                        rk->rk_conf.sasl.oauthbearer.assertion.expiration
                   : rd_uclock() / 1000000 + 300;
         if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
                 extensions =
@@ -918,12 +839,12 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         if (rd_kafka_terminating(rk))
                 return;
 
-        rd_kafka_oidc_build_headers(rk->rk_conf.sasl.oauthbearer.client_id,
+        rd_kafka_oidc_client_credentials_build_headers(rk->rk_conf.sasl.oauthbearer.client_id,
                                     rk->rk_conf.sasl.oauthbearer.client_secret,
                                     &headers);
 
         /* Build post fields */
-        rd_kafka_oidc_build_post_fields(rk->rk_conf.sasl.oauthbearer.scope,
+        rd_kafka_oidc_client_credentials_build_post_fields(rk->rk_conf.sasl.oauthbearer.scope,
                                         &post_fields, &post_fields_size);
 
         token_url = rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
@@ -1181,7 +1102,7 @@ static int ut_sasl_oauthbearer_oidc_post_fields(void) {
 
         RD_UT_BEGIN();
 
-        rd_kafka_oidc_build_post_fields(scope, &post_fields, &post_fields_size);
+        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields, &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
                      "Expected expected_post_fields_size is %" PRIusz
@@ -1213,7 +1134,7 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
 
         RD_UT_BEGIN();
 
-        rd_kafka_oidc_build_post_fields(scope, &post_fields, &post_fields_size);
+        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields, &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
                      "Expected expected_post_fields_size is %" PRIusz
@@ -1276,8 +1197,10 @@ static int ut_sasl_jwt_base64url_encode(void) {
         RD_UT_BEGIN();
 
         for (i = 0; i < RD_ARRAYSIZE(test_cases); i++) {
-                char *output = rd_base64url_encode(test_cases[i].input,
-                                                   strlen(test_cases[i].input));
+                rd_chariov_t input_iov;
+                input_iov.ptr = test_cases[i].input;
+                input_iov.size = strlen(test_cases[i].input);
+                char *output = rd_base64_encode_str_urlsafe(&input_iov);
 
                 RD_UT_ASSERT(output != NULL,
                              "Expected non-NULL output for input: %s",
@@ -1300,14 +1223,15 @@ static int ut_sasl_jwt_base64url_encode(void) {
  */
 static int ut_sasl_jwt_build_request_body(void) {
         const char *assertion = "test.jwt.assertion";
+        const char *scope = "test.scope";
         const char *expected =
             "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion="
-            "test.jwt.assertion";
+            "test.jwt.assertion&scope=test.scope";
         char *body;
 
         RD_UT_BEGIN();
 
-        body = rd_kafka_jwt_build_request_body(assertion);
+        body = rd_kafka_oidc_jwt_bearer_build_request_body(assertion, scope);
 
         RD_UT_ASSERT(body != NULL, "Expected non-NULL request body");
 
@@ -1344,7 +1268,7 @@ static int ut_sasl_jwt_parse_assertion_from_file(void) {
         fclose(tempfile);
 
         /* Test parsing from file */
-        result = parse_jwt_assertion_from_file(tempfile_path);
+        result = rd_kafka_oidc_assertion_parse_template_file(tempfile_path);
         RD_UT_ASSERT(result != NULL,
                      "Expected non-NULL result from parsing file");
         RD_UT_ASSERT(!strcmp(result, test_jwt),
@@ -1354,11 +1278,11 @@ static int ut_sasl_jwt_parse_assertion_from_file(void) {
         rd_free(result);
 
         /* Test with NULL path */
-        result = parse_jwt_assertion_from_file(NULL);
+        result = rd_kafka_oidc_assertion_parse_template_file(NULL);
         RD_UT_ASSERT(result == NULL, "Expected NULL result with NULL path");
 
         /* Test with non-existent file */
-        result = parse_jwt_assertion_from_file("/non/existent/file/path");
+        result = rd_kafka_oidc_assertion_parse_template_file("/non/existent/file/path");
         RD_UT_ASSERT(result == NULL,
                      "Expected NULL result with non-existent file");
 
@@ -1519,7 +1443,7 @@ static int ut_sasl_jwt_create_assertion(void) {
             "bm+7yWVTNlXYuKQqtuOkNQ==\n"
             "-----END PRIVATE KEY-----\n";
 
-        jwt = rd_kafka_create_jwt_assertion(
+        jwt = rd_kafka_oidc_assertion_create(
             rk, private_key_pem, NULL, NULL,
             RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256, NULL, 0, 300);
 

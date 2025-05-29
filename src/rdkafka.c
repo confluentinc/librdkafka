@@ -2434,7 +2434,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
             !rk->rk_conf.sasl.oauthbearer.token_refresh_cb) {
                 /* Use JWT bearer */
                 if (rk->rk_conf.sasl.oauthbearer.grant_type ==
-                    RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_OIDC) {
+                    RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS) {
                         rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                             &rk->rk_conf, rd_kafka_oidc_token_refresh_cb);
                 } else {

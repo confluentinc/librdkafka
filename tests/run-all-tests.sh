@@ -60,11 +60,8 @@ if [ ! -z $TEST_CONF ]; then
     TEST_CONF_ARG="--conf '$TEST_CONF'"
 fi
 if [ ! -z $TEST_ENV_VARIABLES ]; then
-    IFS=',' read -ra TEST_ENV_VARIABLES_ARRAY <<< "$TEST_ENV_VARIABLES"
-    for TEST_ENV_VARIABLE in "${TEST_ENV_VARIABLES_ARRAY[@]}"; do
-        export "$TEST_ENV_VARIABLE"
-    done
-    unset TEST_ENV_VARIABLES_ARRAY
+    # These can be multiple space-separated variables
+    export $TEST_ENV_VARIABLES
 fi
 if [ ! -z $TEST_CONF_FILE ]; then
     echo $TEST_CONF_FILE | base64 -d > ./tests/test.conf

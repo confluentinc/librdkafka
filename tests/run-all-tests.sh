@@ -59,11 +59,12 @@ fi
 if [ ! -z $TEST_CONF ]; then
     TEST_CONF_ARG="--conf '$TEST_CONF'"
 fi
-if [ ! -z $TEST_ENV_VARIABLES ]; then
+if [ ! -z "$TEST_ENV_VARIABLES" ]; then
     # These can be multiple space-separated variables
     export $TEST_ENV_VARIABLES
 fi
 if [ ! -z $TEST_CONF_FILE ]; then
+    echo "Writing test configuration file to ./tests/test.conf"
     echo $TEST_CONF_FILE | base64 -d > ./tests/test.conf
 fi
 
@@ -77,8 +78,10 @@ echo "CP version: $TEST_CP_VERSION"
 echo "configuration: $TEST_CONFIGURATION"
 echo "arguments: $TEST_ARGS"
 if [ ! -z $TEST_CONF_FILE ]; then
+    echo "Starting test run with configuration file"
     (cd tests && python run-test-batches.py $TEST_ARGS)
 else
+    echo "Starting test run trivup"
     (cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
     --version "$TEST_KAFKA_GIT_REF" \
     --cpversion "$TEST_CP_VERSION" \

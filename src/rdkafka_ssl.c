@@ -461,6 +461,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         /* Remove ":9092" port suffix from nodename */
         if ((t = strrchr(name, ':')))
                 *t = '\0';
+        if (name[strlen(name) - 1] == '.') {
+                name[strlen(name) - 1] = '\0';
+        }
 
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */

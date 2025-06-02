@@ -186,7 +186,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 34)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 50)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -335,17 +335,14 @@ struct rd_kafka_conf_s {
                         struct {
                                 char *file;
                                 char *jwt_template_file;
-                                int expiration;
-                                int issued_at;
                                 struct {
                                         char *sub;
                                         char *aud;
                                         char *iss;
-                                        char *jti;
-                                        char *nbf;
-                                        char *iat;
-                                        char *exp;
-                                } claims;
+                                        rd_bool_t jti_include;
+                                        int nbf_seconds;
+                                        int exp_seconds;
+                                } claim;
                                 struct {
                                         char *file;
                                         char *passphrase;

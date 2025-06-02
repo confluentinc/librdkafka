@@ -90,9 +90,10 @@ static char *rd_kafka_oidc_build_auth_header(const char *client_id,
  *
  * @locality Any thread.
  */
-static void rd_kafka_oidc_client_credentials_build_headers(const char *client_id,
-                                        const char *client_secret,
-                                        struct curl_slist **headersp) {
+static void
+rd_kafka_oidc_client_credentials_build_headers(const char *client_id,
+                                               const char *client_secret,
+                                               struct curl_slist **headersp) {
         char *authorization_base64_header;
 
         authorization_base64_header =
@@ -198,9 +199,10 @@ done:
  *        The post_fields_size will be returned in \p post_fields_size.
  *
  */
-static void rd_kafka_oidc_client_credentials_build_post_fields(const char *scope,
-                                            char **post_fields,
-                                            size_t *post_fields_size) {
+static void
+rd_kafka_oidc_client_credentials_build_post_fields(const char *scope,
+                                                   char **post_fields,
+                                                   size_t *post_fields_size) {
         size_t scope_size = 0;
 
         if (scope)
@@ -266,7 +268,8 @@ static int process_jwt_template_file(rd_kafka_t *rk,
         *header  = NULL;
         *payload = NULL;
 
-        template_content = rd_read_file(jwt_template_file, &file_size, 1024*1024); /* 1MB limit */
+        template_content = rd_read_file(jwt_template_file, &file_size,
+                                        1024 * 1024); /* 1MB limit */
         if (!template_content) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
                              "Failed to open JWT template file: %s",
@@ -387,7 +390,7 @@ static char *rd_kafka_oidc_assertion_create(
         const time_t now = not_before ? rd_uclock() / 1000000 - not_before
                                       : rd_uclock() / 1000000;
         const time_t exp = expiry ? rd_uclock() / 1000000 + expiry
-                            : rd_uclock() / 1000000 + 300;
+                                  : rd_uclock() / 1000000 + 300;
 
         if (jwt_template_file) {
                 if (process_jwt_template_file(rk, jwt_template_file,
@@ -400,8 +403,9 @@ static char *rd_kafka_oidc_assertion_create(
                 }
 
                 /* Add required header fields */
-                cJSON_AddStringToObject(header_json_obj, "alg",
-                                        rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
+                cJSON_AddStringToObject(
+                    header_json_obj, "alg",
+                    rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
                 cJSON_AddStringToObject(header_json_obj, "typ", "JWT");
 
                 /* Add required payload fields */
@@ -410,15 +414,20 @@ static char *rd_kafka_oidc_assertion_create(
 
                 /* Add optional claims if provided and not already present */
                 if (subject && !cJSON_GetObjectItem(payload_json_obj, "sub"))
-                        cJSON_AddStringToObject(payload_json_obj, "sub", subject);
+                        cJSON_AddStringToObject(payload_json_obj, "sub",
+                                                subject);
                 if (issuer && !cJSON_GetObjectItem(payload_json_obj, "iss"))
-                        cJSON_AddStringToObject(payload_json_obj, "iss", issuer);
+                        cJSON_AddStringToObject(payload_json_obj, "iss",
+                                                issuer);
                 if (audience && !cJSON_GetObjectItem(payload_json_obj, "aud"))
-                        cJSON_AddStringToObject(payload_json_obj, "aud", audience);
-                if (jti_include && !cJSON_GetObjectItem(payload_json_obj, "jti")) {
-                        jti_uuid = rd_kafka_Uuid_random();
+                        cJSON_AddStringToObject(payload_json_obj, "aud",
+                                                audience);
+                if (jti_include &&
+                    !cJSON_GetObjectItem(payload_json_obj, "jti")) {
+                        jti_uuid     = rd_kafka_Uuid_random();
                         jti_uuid_str = rd_kafka_Uuid_str(&jti_uuid);
-                        cJSON_AddStringToObject(payload_json_obj, "jti", jti_uuid_str);
+                        cJSON_AddStringToObject(payload_json_obj, "jti",
+                                                jti_uuid_str);
                         rd_free(jti_uuid_str);
                 }
 
@@ -439,8 +448,9 @@ static char *rd_kafka_oidc_assertion_create(
                 if (!header_str || !payload_str)
                         goto cleanup;
 
-                rd_snprintf(header_str, 256, "{\"alg\":\"%s\",\"typ\":\"JWT\"}",
-                            rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
+                rd_snprintf(
+                    header_str, 256, "{\"alg\":\"%s\",\"typ\":\"JWT\"}",
+                    rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
 
                 /* Start with required claims */
                 rd_snprintf(payload_str, 1024, "{\"iat\":%ld,\"exp\":%ld",
@@ -449,40 +459,40 @@ static char *rd_kafka_oidc_assertion_create(
                 /* Add optional claims if provided */
                 if (subject) {
                         rd_snprintf(payload_str + strlen(payload_str),
-                                   1024 - strlen(payload_str),
-                                   ",\"sub\":\"%s\"", subject);
+                                    1024 - strlen(payload_str),
+                                    ",\"sub\":\"%s\"", subject);
                 }
                 if (issuer) {
                         rd_snprintf(payload_str + strlen(payload_str),
-                                   1024 - strlen(payload_str),
-                                   ",\"iss\":\"%s\"", issuer);
+                                    1024 - strlen(payload_str),
+                                    ",\"iss\":\"%s\"", issuer);
                 }
                 if (audience) {
                         rd_snprintf(payload_str + strlen(payload_str),
-                                   1024 - strlen(payload_str),
-                                   ",\"aud\":\"%s\"", audience);
+                                    1024 - strlen(payload_str),
+                                    ",\"aud\":\"%s\"", audience);
                 }
                 if (jti_include) {
-                        jti_uuid = rd_kafka_Uuid_random();
+                        jti_uuid     = rd_kafka_Uuid_random();
                         jti_uuid_str = rd_kafka_Uuid_str(&jti_uuid);
                         rd_snprintf(payload_str + strlen(payload_str),
-                                   1024 - strlen(payload_str),
-                                   ",\"jti\":\"%s\"", jti_uuid_str);
+                                    1024 - strlen(payload_str),
+                                    ",\"jti\":\"%s\"", jti_uuid_str);
                         rd_free(jti_uuid_str);
                 }
 
                 /* Close the JSON object */
                 rd_snprintf(payload_str + strlen(payload_str),
-                           1024 - strlen(payload_str), "}");
+                            1024 - strlen(payload_str), "}");
         }
 
-        header_iov.ptr = header_str;
-        header_iov.size = strlen(header_str);   
+        header_iov.ptr  = header_str;
+        header_iov.size = strlen(header_str);
         encoded_header  = rd_base64_encode_str_urlsafe(&header_iov);
 
-        payload_iov.ptr = payload_str;
+        payload_iov.ptr  = payload_str;
         payload_iov.size = strlen(payload_str);
-        encoded_payload = rd_base64_encode_str_urlsafe(&payload_iov);
+        encoded_payload  = rd_base64_encode_str_urlsafe(&payload_iov);
 
         if (!encoded_header || !encoded_payload)
                 goto cleanup;
@@ -562,8 +572,8 @@ static char *rd_kafka_oidc_assertion_create(
                 goto cleanup;
         }
 
-        sig_iov.ptr = sig;
-        sig_iov.size = siglen;
+        sig_iov.ptr       = sig;
+        sig_iov.size      = siglen;
         encoded_signature = rd_base64_encode_str_urlsafe(&sig_iov);
 
         if (!encoded_signature)
@@ -591,7 +601,8 @@ cleanup:
 
         if (header_json_obj) {
                 if (header_str)
-                        free(header_str); /* cJSON_PrintUnformatted uses malloc */
+                        free(header_str); /* cJSON_PrintUnformatted uses malloc
+                                           */
                 cJSON_Delete(header_json_obj);
         } else if (header_str) {
                 rd_free(header_str); /* rd_malloc was used */
@@ -599,7 +610,8 @@ cleanup:
 
         if (payload_json_obj) {
                 if (payload_str)
-                        free(payload_str); /* cJSON_PrintUnformatted uses malloc */
+                        free(payload_str); /* cJSON_PrintUnformatted uses malloc
+                                            */
                 cJSON_Delete(payload_json_obj);
         } else if (payload_str) {
                 rd_free(payload_str); /* rd_malloc was used */
@@ -629,10 +641,10 @@ cleanup:
  * @locality Any thread.
  */
 static char *rd_kafka_oidc_jwt_bearer_build_request_body(const char *assertion,
-                                                        const char *scope) {
+                                                         const char *scope) {
         const char *grant_type = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-        char *escaped_scope = NULL;
-        char *body = NULL;
+        char *escaped_scope    = NULL;
+        char *body             = NULL;
         size_t body_size;
         CURL *curl = NULL;
 
@@ -655,7 +667,7 @@ static char *rd_kafka_oidc_jwt_bearer_build_request_body(const char *assertion,
 
         /* Calculate body size */
         body_size = strlen("grant_type=") + strlen(grant_type) +
-                   strlen("&assertion=") + strlen(assertion);
+                    strlen("&assertion=") + strlen(assertion);
         if (escaped_scope)
                 body_size += strlen("&scope=") + strlen(escaped_scope);
 
@@ -670,13 +682,12 @@ static char *rd_kafka_oidc_jwt_bearer_build_request_body(const char *assertion,
 
         if (escaped_scope) {
                 rd_snprintf(body, body_size + 1,
-                           "grant_type=%s&assertion=%s&scope=%s",
-                           grant_type, assertion, escaped_scope);
+                            "grant_type=%s&assertion=%s&scope=%s", grant_type,
+                            assertion, escaped_scope);
                 curl_free(escaped_scope);
         } else {
-                rd_snprintf(body, body_size + 1,
-                           "grant_type=%s&assertion=%s",
-                           grant_type, assertion);
+                rd_snprintf(body, body_size + 1, "grant_type=%s&assertion=%s",
+                            grant_type, assertion);
         }
 
         curl_easy_cleanup(curl);
@@ -689,7 +700,8 @@ static char *rd_kafka_oidc_jwt_bearer_build_request_body(const char *assertion,
  * @returns Newly allocated string with the JWT assertion.
  *          Caller must free with rd_free(). NULL on memory allocation failure.
  */
-static char *rd_kafka_oidc_assertion_parse_template_file(const char *file_path) {
+static char *
+rd_kafka_oidc_assertion_parse_template_file(const char *file_path) {
         size_t file_size;
         char *jwt_assertion;
         const size_t max_size = 1024 * 1024; /* 1MB limit */
@@ -719,7 +731,8 @@ static char *rd_kafka_oidc_assertion_parse_template_file(const char *file_path) 
  *
  * @param rk The rd_kafka_t instance
  * @param json The JSON response from the token endpoint
- * @param field_name The name of the field to extract (e.g., "access_token" or "id_token")
+ * @param field_name The name of the field to extract (e.g., "access_token" or
+ * "id_token")
  * @param token_out Pointer to store the extracted token
  * @param sub_out Pointer to store the subject from the token
  * @param exp_out Pointer to store the expiration from the token
@@ -729,39 +742,41 @@ static char *rd_kafka_oidc_assertion_parse_template_file(const char *file_path) 
  * @returns 0 on success, -1 on failure
  */
 static int rd_kafka_oidc_token_try_validate(rd_kafka_t *rk,
-                                          cJSON *json,
-                                          const char *field_name,
-                                          char **token_out,
-                                          const char **sub_out,
-                                          double *exp_out,
-                                          char *errstr_out,
-                                          size_t errstr_size) {
+                                            cJSON *json,
+                                            const char *field_name,
+                                            char **token_out,
+                                            const char **sub_out,
+                                            double *exp_out,
+                                            char *errstr_out,
+                                            size_t errstr_size) {
         cJSON *token_json = cJSON_GetObjectItem(json, field_name);
         if (!token_json) {
                 rd_snprintf(errstr_out, errstr_size,
-                           "Expected JSON response with \"%s\" field", field_name);
+                            "Expected JSON response with \"%s\" field",
+                            field_name);
                 return -1;
         }
 
         char *token = cJSON_GetStringValue(token_json);
         if (!token) {
                 rd_snprintf(errstr_out, errstr_size,
-                           "Expected token as a string value");
+                            "Expected token as a string value");
                 return -1;
         }
 
         char *decoded_payloads = NULL;
-        const char *errstr = rd_kafka_jwt_b64_decode_payload(token, &decoded_payloads);
+        const char *errstr =
+            rd_kafka_jwt_b64_decode_payload(token, &decoded_payloads);
         if (errstr) {
                 rd_snprintf(errstr_out, errstr_size,
-                           "Failed to decode JWT payload: %s", errstr);
+                            "Failed to decode JWT payload: %s", errstr);
                 return -1;
         }
 
         cJSON *payloads = cJSON_Parse(decoded_payloads);
         if (!payloads) {
                 rd_snprintf(errstr_out, errstr_size,
-                           "Failed to parse JSON JWT payload");
+                            "Failed to parse JSON JWT payload");
                 rd_free(decoded_payloads);
                 return -1;
         }
@@ -769,7 +784,7 @@ static int rd_kafka_oidc_token_try_validate(rd_kafka_t *rk,
         cJSON *jwt_exp = cJSON_GetObjectItem(payloads, "exp");
         if (!jwt_exp) {
                 rd_snprintf(errstr_out, errstr_size,
-                           "Expected JSON JWT response with \"exp\" field");
+                            "Expected JSON JWT response with \"exp\" field");
                 cJSON_Delete(payloads);
                 rd_free(decoded_payloads);
                 return -1;
@@ -777,8 +792,9 @@ static int rd_kafka_oidc_token_try_validate(rd_kafka_t *rk,
 
         double exp = cJSON_GetNumberValue(jwt_exp);
         if (exp <= 0) {
-                rd_snprintf(errstr_out, errstr_size,
-                           "Expected JSON JWT response with valid \"exp\" field");
+                rd_snprintf(
+                    errstr_out, errstr_size,
+                    "Expected JSON JWT response with valid \"exp\" field");
                 cJSON_Delete(payloads);
                 rd_free(decoded_payloads);
                 return -1;
@@ -787,7 +803,7 @@ static int rd_kafka_oidc_token_try_validate(rd_kafka_t *rk,
         cJSON *jwt_sub = cJSON_GetObjectItem(payloads, "sub");
         if (!jwt_sub) {
                 rd_snprintf(errstr_out, errstr_size,
-                           "Expected JSON JWT response with \"sub\" field");
+                            "Expected JSON JWT response with \"sub\" field");
                 cJSON_Delete(payloads);
                 rd_free(decoded_payloads);
                 return -1;
@@ -795,16 +811,17 @@ static int rd_kafka_oidc_token_try_validate(rd_kafka_t *rk,
 
         const char *sub = cJSON_GetStringValue(jwt_sub);
         if (!sub) {
-                rd_snprintf(errstr_out, errstr_size,
-                           "Expected JSON JWT response with valid \"sub\" field");
+                rd_snprintf(
+                    errstr_out, errstr_size,
+                    "Expected JSON JWT response with valid \"sub\" field");
                 cJSON_Delete(payloads);
                 rd_free(decoded_payloads);
                 return -1;
         }
 
         *token_out = rd_strdup(token);
-        *sub_out = sub;
-        *exp_out = exp;
+        *sub_out   = sub;
+        *exp_out   = exp;
 
         cJSON_Delete(payloads);
         rd_free(decoded_payloads);
@@ -849,15 +866,17 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                 return;
 
         if (rk->rk_conf.sasl.oauthbearer.assertion.file) {
-                /* When using a template file, we still need to process other assertion configs */
-                cJSON *header_json_obj = NULL;
+                /* When using a template file, we still need to process other
+                 * assertion configs */
+                cJSON *header_json_obj  = NULL;
                 cJSON *payload_json_obj = NULL;
-                char *template_content = NULL;
+                char *template_content  = NULL;
                 size_t file_size;
 
                 /* First read and parse the template file */
-                template_content = rd_read_file(rk->rk_conf.sasl.oauthbearer.assertion.file, 
-                                              &file_size, 1024*1024); /* 1MB limit */
+                template_content =
+                    rd_read_file(rk->rk_conf.sasl.oauthbearer.assertion.file,
+                                 &file_size, 1024 * 1024); /* 1MB limit */
                 if (!template_content) {
                         rd_kafka_oauthbearer_set_token_failure(
                             rk, "Failed to read JWT template file");
@@ -875,66 +894,83 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
 
                 /* Get header and payload objects */
                 header_json_obj = cJSON_GetObjectItem(template_json, "header");
-                payload_json_obj = cJSON_GetObjectItem(template_json, "payload");
+                payload_json_obj =
+                    cJSON_GetObjectItem(template_json, "payload");
 
                 if (!header_json_obj || !payload_json_obj) {
                         rd_kafka_oauthbearer_set_token_failure(
-                            rk, "JWT template must contain both 'header' and 'payload' objects");
+                            rk,
+                            "JWT template must contain both 'header' and "
+                            "'payload' objects");
                         cJSON_Delete(template_json);
                         rd_free(template_content);
                         goto done;
                 }
 
                 /* Duplicate the objects so we can modify them */
-                header_json_obj = cJSON_Duplicate(header_json_obj, 1);
+                header_json_obj  = cJSON_Duplicate(header_json_obj, 1);
                 payload_json_obj = cJSON_Duplicate(payload_json_obj, 1);
                 cJSON_Delete(template_json);
                 rd_free(template_content);
 
                 /* Add required header fields if not present */
                 if (!cJSON_GetObjectItem(header_json_obj, "alg"))
-                        cJSON_AddStringToObject(header_json_obj, "alg",
+                        cJSON_AddStringToObject(
+                            header_json_obj, "alg",
                             rd_kafka_oidc_assertion_get_algo_label(
-                                rk->rk_conf.sasl.oauthbearer.assertion.private_key.algorithm));
+                                rk->rk_conf.sasl.oauthbearer.assertion
+                                    .private_key.algorithm));
                 if (!cJSON_GetObjectItem(header_json_obj, "typ"))
                         cJSON_AddStringToObject(header_json_obj, "typ", "JWT");
 
                 /* Add required payload fields if not present */
-                time_t now = rk->rk_conf.sasl.oauthbearer.assertion.claim.nbf_seconds ?
-                            rd_uclock() / 1000000 - rk->rk_conf.sasl.oauthbearer.assertion.claim.nbf_seconds :
-                            rd_uclock() / 1000000;
-                time_t exp = rk->rk_conf.sasl.oauthbearer.assertion.claim.exp_seconds ?
-                            rd_uclock() / 1000000 + rk->rk_conf.sasl.oauthbearer.assertion.claim.exp_seconds :
-                            rd_uclock() / 1000000 + 300;
+                time_t now =
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.nbf_seconds
+                        ? rd_uclock() / 1000000 -
+                              rk->rk_conf.sasl.oauthbearer.assertion.claim
+                                  .nbf_seconds
+                        : rd_uclock() / 1000000;
+                time_t exp =
+                    rk->rk_conf.sasl.oauthbearer.assertion.claim.exp_seconds
+                        ? rd_uclock() / 1000000 +
+                              rk->rk_conf.sasl.oauthbearer.assertion.claim
+                                  .exp_seconds
+                        : rd_uclock() / 1000000 + 300;
 
                 if (!cJSON_GetObjectItem(payload_json_obj, "iat"))
-                        cJSON_AddNumberToObject(payload_json_obj, "iat", (double)now);
+                        cJSON_AddNumberToObject(payload_json_obj, "iat",
+                                                (double)now);
                 if (!cJSON_GetObjectItem(payload_json_obj, "exp"))
-                        cJSON_AddNumberToObject(payload_json_obj, "exp", (double)exp);
+                        cJSON_AddNumberToObject(payload_json_obj, "exp",
+                                                (double)exp);
 
                 /* Add optional claims if provided and not already present */
-                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.sub && 
+                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.sub &&
                     !cJSON_GetObjectItem(payload_json_obj, "sub"))
-                        cJSON_AddStringToObject(payload_json_obj, "sub", 
+                        cJSON_AddStringToObject(
+                            payload_json_obj, "sub",
                             rk->rk_conf.sasl.oauthbearer.assertion.claim.sub);
-                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.iss && 
+                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.iss &&
                     !cJSON_GetObjectItem(payload_json_obj, "iss"))
-                        cJSON_AddStringToObject(payload_json_obj, "iss", 
+                        cJSON_AddStringToObject(
+                            payload_json_obj, "iss",
                             rk->rk_conf.sasl.oauthbearer.assertion.claim.iss);
-                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.aud && 
+                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.aud &&
                     !cJSON_GetObjectItem(payload_json_obj, "aud"))
-                        cJSON_AddStringToObject(payload_json_obj, "aud", 
+                        cJSON_AddStringToObject(
+                            payload_json_obj, "aud",
                             rk->rk_conf.sasl.oauthbearer.assertion.claim.aud);
-                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.jti_include && 
+                if (rk->rk_conf.sasl.oauthbearer.assertion.claim.jti_include &&
                     !cJSON_GetObjectItem(payload_json_obj, "jti")) {
                         rd_kafka_Uuid_t jti_uuid = rd_kafka_Uuid_random();
-                        char *jti_uuid_str = rd_kafka_Uuid_str(&jti_uuid);
-                        cJSON_AddStringToObject(payload_json_obj, "jti", jti_uuid_str);
+                        char *jti_uuid_str       = rd_kafka_Uuid_str(&jti_uuid);
+                        cJSON_AddStringToObject(payload_json_obj, "jti",
+                                                jti_uuid_str);
                         rd_free(jti_uuid_str);
                 }
 
                 /* Convert to strings */
-                char *header_str = cJSON_PrintUnformatted(header_json_obj);
+                char *header_str  = cJSON_PrintUnformatted(header_json_obj);
                 char *payload_str = cJSON_PrintUnformatted(payload_json_obj);
 
                 if (!header_str || !payload_str) {
@@ -949,8 +985,10 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                 jwt_assertion = rd_kafka_oidc_assertion_create(
                     rk, rk->rk_conf.sasl.oauthbearer.assertion.private_key.pem,
                     rk->rk_conf.sasl.oauthbearer.assertion.private_key.file,
-                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.passphrase,
-                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.algorithm,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key
+                        .passphrase,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key
+                        .algorithm,
                     NULL, /* No template file since we already processed it */
                     rk->rk_conf.sasl.oauthbearer.assertion.claim.nbf_seconds,
                     rk->rk_conf.sasl.oauthbearer.assertion.claim.exp_seconds,
@@ -968,8 +1006,10 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
                 jwt_assertion = rd_kafka_oidc_assertion_create(
                     rk, rk->rk_conf.sasl.oauthbearer.assertion.private_key.pem,
                     rk->rk_conf.sasl.oauthbearer.assertion.private_key.file,
-                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.passphrase,
-                    rk->rk_conf.sasl.oauthbearer.assertion.private_key.algorithm,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key
+                        .passphrase,
+                    rk->rk_conf.sasl.oauthbearer.assertion.private_key
+                        .algorithm,
                     rk->rk_conf.sasl.oauthbearer.assertion.jwt_template_file,
                     rk->rk_conf.sasl.oauthbearer.assertion.claim.nbf_seconds,
                     rk->rk_conf.sasl.oauthbearer.assertion.claim.exp_seconds,
@@ -986,8 +1026,7 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
         }
 
         request_body = rd_kafka_oidc_jwt_bearer_build_request_body(
-            jwt_assertion,
-            rk->rk_conf.sasl.oauthbearer.scope);
+            jwt_assertion, rk->rk_conf.sasl.oauthbearer.scope);
 
         if (!request_body) {
                 rd_kafka_oauthbearer_set_token_failure(
@@ -1016,15 +1055,14 @@ void rd_kafka_jwt_refresh_cb(rd_kafka_t *rk,
         }
 
         /* Try to validate access_token first, then id_token if that fails */
-        if (rd_kafka_oidc_token_try_validate(rk, json, "access_token",
-                                           &access_token, &sub, &exp,
-                                           validate_errstr,
-                                           sizeof(validate_errstr)) != 0) {
-                if (rd_kafka_oidc_token_try_validate(rk, json, "id_token",
-                                                   &access_token, &sub, &exp,
-                                                   validate_errstr,
-                                                   sizeof(validate_errstr)) != 0) {
-                        rd_kafka_oauthbearer_set_token_failure(rk, validate_errstr);
+        if (rd_kafka_oidc_token_try_validate(
+                rk, json, "access_token", &access_token, &sub, &exp,
+                validate_errstr, sizeof(validate_errstr)) != 0) {
+                if (rd_kafka_oidc_token_try_validate(
+                        rk, json, "id_token", &access_token, &sub, &exp,
+                        validate_errstr, sizeof(validate_errstr)) != 0) {
+                        rd_kafka_oauthbearer_set_token_failure(rk,
+                                                               validate_errstr);
                         goto done;
                 }
         }
@@ -1103,13 +1141,14 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         if (rd_kafka_terminating(rk))
                 return;
 
-        rd_kafka_oidc_client_credentials_build_headers(rk->rk_conf.sasl.oauthbearer.client_id,
-                                    rk->rk_conf.sasl.oauthbearer.client_secret,
-                                    &headers);
+        rd_kafka_oidc_client_credentials_build_headers(
+            rk->rk_conf.sasl.oauthbearer.client_id,
+            rk->rk_conf.sasl.oauthbearer.client_secret, &headers);
 
         /* Build post fields */
-        rd_kafka_oidc_client_credentials_build_post_fields(rk->rk_conf.sasl.oauthbearer.scope,
-                                        &post_fields, &post_fields_size);
+        rd_kafka_oidc_client_credentials_build_post_fields(
+            rk->rk_conf.sasl.oauthbearer.scope, &post_fields,
+            &post_fields_size);
 
         token_url = rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
 
@@ -1366,7 +1405,8 @@ static int ut_sasl_oauthbearer_oidc_post_fields(void) {
 
         RD_UT_BEGIN();
 
-        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields, &post_fields_size);
+        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields,
+                                                           &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
                      "Expected expected_post_fields_size is %" PRIusz
@@ -1398,7 +1438,8 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
 
         RD_UT_BEGIN();
 
-        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields, &post_fields_size);
+        rd_kafka_oidc_client_credentials_build_post_fields(scope, &post_fields,
+                                                           &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
                      "Expected expected_post_fields_size is %" PRIusz
@@ -1462,9 +1503,9 @@ static int ut_sasl_oauthbearer_oidc_jwt_bearer_base64url_encode(void) {
 
         for (i = 0; i < RD_ARRAYSIZE(test_cases); i++) {
                 rd_chariov_t input_iov;
-                input_iov.ptr = test_cases[i].input;
+                input_iov.ptr  = test_cases[i].input;
                 input_iov.size = strlen(test_cases[i].input);
-                char *output = rd_base64_encode_str_urlsafe(&input_iov);
+                char *output   = rd_base64_encode_str_urlsafe(&input_iov);
 
                 RD_UT_ASSERT(output != NULL,
                              "Expected non-NULL output for input: %s",
@@ -1487,7 +1528,7 @@ static int ut_sasl_oauthbearer_oidc_jwt_bearer_base64url_encode(void) {
  */
 static int ut_sasl_oauthbearer_oidc_jwt_bearer_build_request_body(void) {
         const char *assertion = "test.jwt.assertion";
-        const char *scope = "test.scope";
+        const char *scope     = "test.scope";
         const char *expected =
             "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion="
             "test.jwt.assertion&scope=test.scope";
@@ -1546,7 +1587,8 @@ static int ut_sasl_oauthbearer_oidc_assertion_from_file(void) {
         RD_UT_ASSERT(result == NULL, "Expected NULL result with NULL path");
 
         /* Test with non-existent file */
-        result = rd_kafka_oidc_assertion_parse_template_file("/non/existent/file/path");
+        result = rd_kafka_oidc_assertion_parse_template_file(
+            "/non/existent/file/path");
         RD_UT_ASSERT(result == NULL,
                      "Expected NULL result with non-existent file");
 
@@ -1710,7 +1752,7 @@ static int ut_sasl_oauthbearer_oidc_assertion_create_assertion(void) {
         jwt = rd_kafka_oidc_assertion_create(
             rk, private_key_pem, NULL, NULL,
             RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256, NULL, 0, 300,
-            "test-subject", "test-issuer", "test-audience",rd_true );
+            "test-subject", "test-issuer", "test-audience", rd_true);
 
         RD_UT_ASSERT(jwt != NULL, "Failed to create JWT assertion");
 

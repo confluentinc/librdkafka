@@ -444,7 +444,8 @@ typedef struct rd_chariov_s {
  *        but the size parameter will contain the actual file size.
  *
  * @param file_path Path to the file to read
- * @param size Pointer to store the file size (excluding NULL terminator if present)
+ * @param size Pointer to store the file size (excluding NULL terminator if
+ * present)
  * @param max_size Optional maximum file size to read (0 for no limit)
  *
  * @returns Newly allocated buffer containing the file contents.
@@ -453,9 +454,8 @@ typedef struct rd_chariov_s {
  *
  * @locality Any thread
  */
-static RD_INLINE RD_UNUSED void *rd_read_file(const char *file_path,
-                                             size_t *size,
-                                             size_t max_size) {
+static RD_INLINE RD_UNUSED void *
+rd_read_file(const char *file_path, size_t *size, size_t max_size) {
         FILE *file;
         void *buf;
         long file_size;
@@ -509,7 +509,7 @@ static RD_INLINE RD_UNUSED void *rd_read_file(const char *file_path,
 
         /* NULL terminate the buffer */
         ((char *)buf)[file_size] = '\0';
-        *size = file_size;
+        *size                    = file_size;
 
         return buf;
 }

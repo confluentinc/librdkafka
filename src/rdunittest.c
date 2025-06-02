@@ -472,9 +472,11 @@ int rd_unittest(void) {
             {"http", unittest_http},
 #endif
 #if WITH_OAUTHBEARER_OIDC
-                {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
-                {"sasl_oauthbearer_oidc_jwt_bearer", unittest_sasl_oauthbearer_oidc_jwt_bearer},
-                {"sasl_oauthbearer_oidc_assertion", unittest_sasl_oauthbearer_oidc_assertion},
+            {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
+            {"sasl_oauthbearer_oidc_jwt_bearer",
+             unittest_sasl_oauthbearer_oidc_jwt_bearer},
+            {"sasl_oauthbearer_oidc_assertion",
+             unittest_sasl_oauthbearer_oidc_assertion},
 #endif
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},

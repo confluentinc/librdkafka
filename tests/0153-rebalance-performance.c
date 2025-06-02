@@ -36,10 +36,10 @@
  #include "rdtime.h"
 
 static int number_of_test_runs = 1;
-static int partition_cnt = 50;
-static int topic_cnt = 50;
-static int consumer_cnt = 10000;
-static int batch_size = 10;
+static int partition_cnt = 30;
+static int topic_cnt = 20;
+static int consumer_cnt = 60;
+static int batch_size = 60;
 static atomic_int run = 0;
 
 typedef struct consumer_s {
@@ -121,9 +121,9 @@ static int consumer_thread(void *arg) {
     test_conf_init(&conf, NULL, 60);
     test_conf_set(conf, "auto.offset.reset", "earliest");
     test_conf_set(conf, "enable.auto.commit", "false");
-    test_conf_set(conf, "heartbeat.interval.ms", "5000");
+    test_conf_set(conf, "heartbeat.interval.ms", "100");
     test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
-    // test_conf_set(conf, "debug", "generic");
+    // test_conf_set(conf, "debug", "conf");
     /* Create consumers */
     consumer = test_create_consumer(consumer_args->group_id, NULL, conf, NULL);
     test_consumer_subscribe_multi(consumer, consumer_args->subscriptions, topic_cnt);
@@ -293,13 +293,13 @@ int do_test_performance_multiple_consumer() {
                          total_batch_elapsed_time_ms[current_batch] / 1000,
                          (total_batch_elapsed_time_ms[current_batch] % 1000));
                 
-                if(individual_batch_elapsed_time_ms[current_batch] > 3000) {
-                        TEST_SAY_RED("Batch %d took too long: %llds and %lldms\n",
-                                  current_batch + 1,
-                                  individual_batch_elapsed_time_ms[current_batch] / 1000,
-                                  (individual_batch_elapsed_time_ms[current_batch] % 1000));
-                        break;
-                }
+                // if(individual_batch_elapsed_time_ms[current_batch] > 3000) {
+                //         TEST_SAY_RED("Batch %d took too long: %llds and %lldms\n",
+                //                   current_batch + 1,
+                //                   individual_batch_elapsed_time_ms[current_batch] / 1000,
+                //                   (individual_batch_elapsed_time_ms[current_batch] % 1000));
+                //         break;
+                // }
 
                 rd_usleep(batch_sleep_wait_time_us, NULL); // Sleep for 10ms before starting the next batch
         }

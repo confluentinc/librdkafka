@@ -35,7 +35,7 @@
  #include "rdkafka.h" /* for Kafka driver */
  #include "rdtime.h"
 
-static int number_of_test_runs = 5;
+static int number_of_test_runs = 20;
 static int partition_cnt = 6;
 static int topic_cnt = 1;
 // static int consumer_cnt = 6;
@@ -99,6 +99,7 @@ int do_test() {
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "heartbeat.interval.ms", "5000");
 
         testid = test_id_generate();
         test_msgver_init(&mv, testid);

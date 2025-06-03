@@ -236,7 +236,7 @@ void do_test_OffsetCommit_automatic_stale_member(
 
         rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
         rd_kafka_mock_coordinator_set(mcluster, "group", topic, 1);
-        rd_kafka_mock_set_default_session_timeout(mcluster, 10000);
+        rd_kafka_mock_set_group_consumer_session_timeout_ms(mcluster, 10000);
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
@@ -329,9 +329,9 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
 
-        if (!test_consumer_group_protocol_consumer()) {
+        if (test_consumer_group_protocol_classic()) {
                 TEST_SKIP(
-                    "Test meaningful only with Consumer Group 'Consumer' "
+                    "Test not meaningful with Consumer Group 'Classic' "
                     "protocol\n");
                 return 0;
         }

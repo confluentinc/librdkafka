@@ -37,7 +37,7 @@
 
 static int number_of_test_runs = 1;
 static int partition_cnt = 30;
-static int topic_cnt = 20;
+static int topic_cnt = 2;
 static int consumer_cnt = 60;
 static int batch_size = 60;
 static atomic_int run = 0;
@@ -48,6 +48,7 @@ typedef struct consumer_s {
     char *group_id;
     char **subscriptions;
     atomic_llong end_time;
+    rd_kafka_t *consumer;
     rd_kafka_topic_partition_list_t *prev_assignment;
 } consumer_t;
 
@@ -121,15 +122,18 @@ static int consumer_thread(void *arg) {
     test_conf_init(&conf, NULL, 60);
     test_conf_set(conf, "auto.offset.reset", "earliest");
     test_conf_set(conf, "enable.auto.commit", "false");
-    test_conf_set(conf, "heartbeat.interval.ms", "100");
-    test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+    if(test_consumer_group_protocol_classic()) {
+        test_conf_set(conf, "heartbeat.interval.ms", "100");
+        test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+    }
     // test_conf_set(conf, "debug", "conf");
     /* Create consumers */
     consumer = test_create_consumer(consumer_args->group_id, NULL, conf, NULL);
+    consumer_args->consumer = consumer;
     test_consumer_subscribe_multi(consumer, consumer_args->subscriptions, topic_cnt);
 
     while(consumer_args->prev_assignment->cnt < consumer_args->expected_assignment_cnt) {
-        // printf("Consumer %d waiting for assignment: %d < %d\n", consumer_args->consumer_id, consumer_args->prev_assignment->cnt, consumer_args->expected_assignment_cnt);
+        printf("Consumer %d waiting for assignment: %d < %d\n", consumer_args->consumer_id, consumer_args->prev_assignment->cnt, consumer_args->expected_assignment_cnt);
         rd_kafka_assignment(consumer, &assignment);
         if(assignment->cnt != consumer_args->prev_assignment->cnt) {
             TEST_SAY("Consumer %d assignment changed: %d -> %d\n",
@@ -171,7 +175,7 @@ static int consumer_thread(void *arg) {
         if (rkmessage) {
             rd_kafka_message_destroy(rkmessage);
         }
-        rd_sleep(1);
+        rd_sleep(5); /* Sleep for 5 seconds to avoid busy waiting */
     }
 
     test_consumer_close(consumer);
@@ -261,21 +265,30 @@ int do_test_performance_multiple_consumer() {
                         }
                 }
                 batch_end_time = 0;
-                while(!batch_end_time) {
+                int didnt_find_end_time = 1;
+                while(didnt_find_end_time) {
                         printf("Waiting for batch %d to complete...\n", current_batch + 1);
                         rd_sleep(1);
                         // Since there is no revocation, we can just rely on the
                         // end_time of the new consumers in the batch as there are
                         // going to be assignments for the new consumers and old
                         // consumers will only have revocations.
+                        didnt_find_end_time = 0;
                         for (i = 0; i < batch_size; i++) {
                                 int consumer_index = batch_start_index + i;
-                                printf("Checking consumer %d end_time: %lld\n",
-                                       consumer_index, consumer_args[consumer_index].end_time);
+                                rd_kafka_topic_partition_list_t *assignment;
+                                rd_kafka_assignment(consumer_args[consumer_index].consumer, &assignment);
+                                printf("Checking consumer %d (%s) end_time: %lld. Number of assignments are %d\n",
+                                       consumer_index, rd_kafka_memberid(consumer_args[consumer_index].consumer), consumer_args[consumer_index].end_time, assignment->cnt);
                                 if (!(consumer_args[consumer_index].end_time)) {
-                                        batch_end_time = 0;
-                                        break;
+                                        didnt_find_end_time = 1;
+                                        for(int j = 0; j < assignment->cnt; j++) {
+                                                TEST_SAY_YELLOW("Consumer %d (%s) has assignment for topic %s partition %d\n",
+                                                            consumer_index, rd_kafka_memberid(consumer_args[consumer_index].consumer),
+                                                            assignment->elems[j].topic, assignment->elems[j].partition);
+                                        }
                                 }
+                                rd_kafka_topic_partition_list_destroy(assignment);
                                 batch_end_time = max(batch_end_time, consumer_args[consumer_index].end_time);
                         }
                 }

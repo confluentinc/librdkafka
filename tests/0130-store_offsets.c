@@ -140,6 +140,7 @@ static void do_test_store_unassigned(void) {
         TEST_CALL_ERR__(rd_kafka_offsets_store(c, parts));
 
         TEST_SAY("Committing\n");
+        /* FIXME: this returns err _STATE for one of the partitions */
         TEST_CALL_ERR__(rd_kafka_commit(c, NULL, rd_false /*sync*/));
 
         TEST_SAY(

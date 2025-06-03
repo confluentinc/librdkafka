@@ -40,8 +40,9 @@ int rd_jitter(int low, int high) {
         if (unlikely(seed == 0)) {
                 struct timeval tv;
                 rd_gettimeofday(&tv, NULL);
-                seed = (unsigned int)(tv.tv_usec / 1000);
-                seed ^= (unsigned int)(intptr_t)thrd_current();
+                seed = (unsigned int)(tv.tv_sec ^ tv.tv_usec);
+                seed ^= (unsigned int)(uintptr_t)&seed;
+                seed ^= (unsigned int)(uintptr_t)pthread_self();
         }
 
         rand_num = rand_r(&seed);

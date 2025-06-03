@@ -798,6 +798,26 @@ static void test_init(void) {
         test_seed = seed;
 }
 
+const char *test_mk_topic_name_nocreate(const char *suffix, int randomized) {
+        static RD_TLS char ret[512];
+
+        /* Strip main_ prefix (caller is using __FUNCTION__) */
+        if (!strncmp(suffix, "main_", 5))
+                suffix += 5;
+
+        if (test_topic_random || randomized)
+                rd_snprintf(ret, sizeof(ret), "%s_rnd%" PRIx64 "_%s",
+                            test_topic_prefix, test_id_generate(), suffix);
+        else
+                rd_snprintf(ret, sizeof(ret), "%s_%s", test_topic_prefix,
+                            suffix);
+
+        TEST_SAY("Using topic \"%s\"\n", ret);
+        // TEST_SAY("Attempting to create topic \"%s\"\n", ret);
+        // test_create_topic_wait_exists(NULL, ret, 3, 3, 15000);
+        return ret;
+}
+
 const char *test_mk_topic_name(const char *suffix, int randomized) {
         static RD_TLS char ret[512];
 

@@ -798,7 +798,6 @@ static void test_init(void) {
         test_seed = seed;
 }
 
-
 const char *test_mk_topic_name(const char *suffix, int randomized) {
         static RD_TLS char ret[512];
 
@@ -814,7 +813,8 @@ const char *test_mk_topic_name(const char *suffix, int randomized) {
                             suffix);
 
         TEST_SAY("Using topic \"%s\"\n", ret);
-
+        TEST_SAY("Attempting to create topic \"%s\"\n", ret);
+        test_create_topic_wait_exists(NULL, ret, 3, 3, 15000);
         return ret;
 }
 

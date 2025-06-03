@@ -82,7 +82,7 @@ static const char *skip_tests_till = NULL; /* all */
 static const char *subtests_to_run = NULL; /* all */
 static const char *tests_to_skip   = NULL; /* none */
 int test_write_report              = 0;    /**< Write test report file */
-
+int is_auto_create_enabled = 1;
 static int show_summary = 1;
 static int test_summary(int do_lock);
 
@@ -833,8 +833,8 @@ const char *test_mk_topic_name(const char *suffix, int randomized) {
                             suffix);
 
         TEST_SAY("Using topic \"%s\"\n", ret);
-        TEST_SAY("Attempting to create topic \"%s\"\n", ret);
-        test_create_topic_wait_exists(NULL, ret, 3, 3, 15000);
+        // TEST_SAY("Attempting to create topic \"%s\"\n", ret);
+        // test_create_topic_wait_exists(NULL, ret, 3, 3, 15000);
         return ret;
 }
 
@@ -2062,6 +2062,10 @@ int main(int argc, char **argv) {
                         TEST_SAY("Current directory: %s\n", cwd);
         }
 
+        is_auto_create_enabled = test_check_auto_create_topic();
+        TEST_SAY("Auto topic creation: %s\n",
+                 is_auto_create_enabled ? "enabled" : "disabled");
+
         test_timeout_set(30);
 
         TIMING_START(&t_all, "ALL-TESTS");
@@ -2328,6 +2332,17 @@ void test_produce_msgs_nowait(rd_kafka_t *rk,
         int64_t tot_bytes     = 0;
         int64_t tot_time_poll = 0;
         int64_t per_msg_wait  = 0;
+
+        if (!test_check_topic_exists(rk, rd_kafka_topic_name(rkt))) {
+                TEST_SAY("Topic %s does not exist, creating it? %d\n",
+                         rd_kafka_topic_name(rkt), is_auto_create_enabled);
+                if (is_auto_create_enabled) {
+                        TEST_SAY("Auto-create topic is disabled, attempting to create topic\n");
+                        test_create_topic_wait_exists(
+                            rk, rd_kafka_topic_name(rkt), -1, -1, 15000);
+                }
+                return;
+        }
 
         if (msgrate > 0)
                 per_msg_wait = 1000000 / (int64_t)msgrate;
@@ -6050,6 +6065,26 @@ static int verify_topics_in_metadata(rd_kafka_t *rk,
 }
 
 
+// Check if topic exists in metadata. Does not fail except on
+// errors. Returns false if topic does not exist.
+rd_bool_t test_check_topic_exists(rd_kafka_t *use_rk, const char *topic) {
+        rd_kafka_metadata_topic_t topics = {.topic = (char *)topic};
+        rd_kafka_metadata_topic_t not_topics[1] = {{0}};
+        int fails;
+
+        if (!use_rk)
+                use_rk = test_create_producer();
+
+        fails = verify_topics_in_metadata(use_rk, &topics, 1, not_topics, 0);
+
+        if (fails > 0) {
+                TEST_SAY("Topic %s does not exist in metadata\n", topic);
+                return rd_false;
+        }
+
+        TEST_SAY("Topic %s exists in metadata\n", topic);
+        return rd_true;
+}
 
 /**
  * @brief Wait for metadata to reflect expected and not expected topics

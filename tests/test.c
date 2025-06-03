@@ -2062,7 +2062,7 @@ int main(int argc, char **argv) {
                         TEST_SAY("Current directory: %s\n", cwd);
         }
 
-        is_auto_create_enabled = test_check_auto_create_topic();
+        is_auto_create_enabled = 0; // test_check_auto_create_topic();
         TEST_SAY("Auto topic creation: %s\n",
                  is_auto_create_enabled ? "enabled" : "disabled");
 
@@ -2257,6 +2257,17 @@ test_create_topic_object(rd_kafka_t *rk, const char *topic, ...) {
         }
         va_end(ap);
 
+        if (!test_check_topic_exists(rk, topic)) {
+                TEST_SAY("Topic %s does not exist, creating it? %d\n",
+                         topic, is_auto_create_enabled);
+                if (!is_auto_create_enabled) {
+                        TEST_SAY("Auto-create topic is disabled, attempting to "
+                                 "create topic\n");
+                        test_create_topic_wait_exists(
+                            rk, topic, -1, -1, 15000);
+                }
+        }
+
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n",
@@ -2336,12 +2347,11 @@ void test_produce_msgs_nowait(rd_kafka_t *rk,
         if (!test_check_topic_exists(rk, rd_kafka_topic_name(rkt))) {
                 TEST_SAY("Topic %s does not exist, creating it? %d\n",
                          rd_kafka_topic_name(rkt), is_auto_create_enabled);
-                if (is_auto_create_enabled) {
+                if (!is_auto_create_enabled) {
                         TEST_SAY("Auto-create topic is disabled, attempting to create topic\n");
                         test_create_topic_wait_exists(
                             rk, rd_kafka_topic_name(rkt), -1, -1, 15000);
                 }
-                return;
         }
 
         if (msgrate > 0)

@@ -2302,6 +2302,17 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
                                 errstr, sizeof(errstr));
 
 
+        if (!test_check_topic_exists(rk, topic)) {
+                TEST_SAY("Topic %s does not exist, creating it? %d\n",
+                         topic, is_auto_create_enabled);
+                if (!is_auto_create_enabled) {
+                        TEST_SAY("Auto-create topic is disabled, attempting to "
+                                 "create topic\n");
+                        test_create_topic_wait_exists(
+                            rk, topic, -1, -1, 15000);
+                }
+        }
+
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n",

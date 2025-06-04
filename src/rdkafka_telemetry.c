@@ -33,6 +33,7 @@
 #include "nanopb/pb.h"
 #include "rdkafka_lz4.h"
 #include "snappy.h"
+#include "rdunittest.h"
 
 #if WITH_ZSTD
 #include "rdkafka_zstd.h"
@@ -720,4 +721,34 @@ void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
             0 /* immediate */, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+}
+
+/**
+ * @brief Overlapping prefixes should not match the metrics
+ *        multiple times.
+ */
+int unit_test_telemetry_match_requested_metrics_no_duplicates(void) {
+        rd_kafka_t *rk = rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+        rk->rk_telemetry.requested_metrics_cnt = 3;
+        rk->rk_telemetry.requested_metrics =
+            rd_calloc(rk->rk_telemetry.requested_metrics_cnt, sizeof(char *));
+        rk->rk_telemetry.requested_metrics[0] = rd_strdup("org");
+        rk->rk_telemetry.requested_metrics[1] = rd_strdup("org.apache");
+        rk->rk_telemetry.requested_metrics[2] = rd_strdup("org.apache.kafka");
+        rd_kafka_match_requested_metrics(rk);
+
+        RD_UT_ASSERT(rk->rk_telemetry.matched_metrics_cnt ==
+                         RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
+                     "Expected %d matched metrics, got %" PRIusz,
+                     RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
+                     rk->rk_telemetry.matched_metrics_cnt);
+        rd_kafka_destroy(rk);
+        return 0;
+}
+
+
+int unittest_telemetry(void) {
+        int fails = 0;
+        fails += unit_test_telemetry_match_requested_metrics_no_duplicates();
+        return fails;
 }

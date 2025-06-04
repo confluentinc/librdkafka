@@ -1,3 +1,22 @@
+# librdkafka v2.11.0
+
+librdkafka v2.11.0 is a feature release:
+
+ * Avoid copy outside boundaries when reading metric names in telemetry
+   subscription (#5105)
+
+
+## Fixes
+
+### Telemetry fixes
+
+* Issues: #5102
+  Avoid copy outside boundaries when reading metric names in telemetry
+  subscription. It can cause that some metrics aren't matched.
+  Happens since 2.5.0 (#5105).
+
+
+
 # librdkafka v2.10.1
 
 librdkafka v2.10.1 is a maintenance release:

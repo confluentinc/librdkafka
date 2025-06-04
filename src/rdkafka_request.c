@@ -6627,7 +6627,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                         rd_kafkap_str_t Metric;
                         rd_kafka_buf_read_str(rkbuf, &Metric);
                         rk->rk_telemetry.requested_metrics[i] =
-                            rd_strdup(Metric.str);
+                            RD_KAFKAP_STR_DUP(&Metric);
                 }
         }
 
@@ -7001,7 +7001,7 @@ static int unittest_handle_GetTelemetrySubscriptions(void) {
 
 
         RD_UT_ASSERT(rk->rk_telemetry.accepted_compression_types_cnt == 2,
-                     "Expected 2 accepted compression type, got %" PRIusz,
+                     "Expected 2 accepted compression types, got %" PRIusz,
                      rk->rk_telemetry.accepted_compression_types_cnt);
         RD_UT_ASSERT(rk->rk_telemetry.accepted_compression_types[0] ==
                          RD_KAFKA_COMPRESSION_GZIP,

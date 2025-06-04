@@ -6,6 +6,7 @@ librdkafka v2.11.0 is a feature release:
    with particular metric configurations (#4912).
  * Avoid copy outside boundaries when reading metric names in telemetry
    subscription (#5105)
+ * Metrics aren't duplicated when multiple prefixes match them (#5104)
 
 
 ## Fixes
@@ -25,6 +26,10 @@ librdkafka v2.11.0 is a feature release:
   Avoid copy outside boundaries when reading metric names in telemetry
   subscription. It can cause that some metrics aren't matched.
   Happens since 2.5.0 (#5105).
+* Issues: #5103
+  Metrics aren't duplicated when multiple prefixes match them.
+  Fixed by keeping track of the metrics that already matched.
+  Happens since 2.5.0 (#5104).
 
 
 

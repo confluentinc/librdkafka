@@ -429,6 +429,7 @@ extern int unittest_http(void);
 #if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
+extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
 
 int rd_unittest(void) {
@@ -471,7 +472,8 @@ int rd_unittest(void) {
 #if WITH_OAUTHBEARER_OIDC
             {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
 #endif
-            {"telemetry", unittest_telemetry_decode},
+            {"telemetry", unittest_telemetry},
+            {"telemetry_decode", unittest_telemetry_decode},
             {NULL}};
         int i;
         const char *match = rd_getenv("RD_UT_TEST", NULL);

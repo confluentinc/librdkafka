@@ -392,7 +392,7 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
         } else {
                 rd_kafka_log(rk, LOG_WARNING, "PUSH",
                              "Telemetry metrics encode error, not sending "
-                             "a NULL payload");
+                             "metrics");
         }
 
         if (metrics_payload)

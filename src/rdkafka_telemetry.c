@@ -174,6 +174,9 @@ static void update_matched_metrics(rd_kafka_t *rk, size_t j) {
 
 static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
         size_t metrics_cnt = RD_KAFKA_TELEMETRY_METRIC_CNT(rk), i;
+        rd_bool_t is_metric_included[RD_MAX(
+            (int)RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
+            (int)RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT)] = {0};
         const rd_kafka_telemetry_metric_info_t *info =
             RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
 
@@ -194,6 +197,9 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                        j;
 
                 for (j = 0; j < metrics_cnt; j++) {
+                        if (is_metric_included[j])
+                                continue;
+
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
                         char full_metric_name
@@ -206,8 +212,10 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                                     rk->rk_telemetry.requested_metrics[i],
                                     name_len) == 0;
 
-                        if (name_matches)
+                        if (name_matches) {
                                 update_matched_metrics(rk, j);
+                                is_metric_included[j] = rd_true;
+                        }
                 }
         }
 

@@ -7,6 +7,7 @@ librdkafka v2.11.0 is a feature release:
  * Avoid copy outside boundaries when reading metric names in telemetry
    subscription (#5105)
  * Metrics aren't duplicated when multiple prefixes match them (#5104)
+ * Fix for poll ratio calculation in case the queues are forwarded (#).
 
 
 ## Fixes
@@ -30,6 +31,12 @@ librdkafka v2.11.0 is a feature release:
   Metrics aren't duplicated when multiple prefixes match them.
   Fixed by keeping track of the metrics that already matched.
   Happens since 2.5.0 (#5104).
+* Issues: #
+  Fix for poll ratio calculation in case the queues are forwarded.
+  Poll ratio is now calculated per-queue instead of per-instance and
+  it allows to avoid calcultation problems linked to using the same
+  field.
+  Happens since 2.6.0 (#).
 
 
 

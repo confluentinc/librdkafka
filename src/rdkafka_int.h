@@ -392,16 +392,7 @@ struct rd_kafka_s {
                                         *   to avoid reaching
                                         * max.poll.interval.ms. during that time
                                         * frame. Only relevant for consumer. */
-        rd_ts_t rk_ts_last_poll_start; /**< Timestamp of last application
-                                        *   consumer_poll() call start
-                                        *   Only relevant for consumer.
-                                        *   Not an atomic as Kafka consumer
-                                        *   isn't thread safe. */
-        rd_ts_t rk_ts_last_poll_end;   /**< Timestamp of last application
-                                        *   consumer_poll() call end
-                                        *   Only relevant for consumer.
-                                        *   Not an atomic as Kafka consumer
-                                        *   isn't thread safe. */
+
         /* First fatal error. */
         struct {
                 rd_atomic32_t err; /**< rd_kafka_resp_err_t */
@@ -1179,8 +1170,10 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
  * @locality any
  * @locks none
  */
-static RD_INLINE RD_UNUSED void
-rd_kafka_app_poll_start(rd_kafka_t *rk, rd_ts_t now, rd_bool_t is_blocking) {
+static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
+                                                        rd_kafka_q_t *rkq,
+                                                        rd_ts_t now,
+                                                        rd_bool_t is_blocking) {
         if (rk->rk_type != RD_KAFKA_CONSUMER)
                 return;
 
@@ -1188,20 +1181,20 @@ rd_kafka_app_poll_start(rd_kafka_t *rk, rd_ts_t now, rd_bool_t is_blocking) {
                 now = rd_clock();
         if (is_blocking)
                 rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
-        if (rk->rk_ts_last_poll_end) {
+        if (rkq->rkq_ts_last_poll_end) {
                 int64_t poll_idle_ratio = 0;
-                rd_ts_t poll_interval   = now - rk->rk_ts_last_poll_start;
+                rd_ts_t poll_interval   = now - rkq->rkq_ts_last_poll_start;
                 if (poll_interval) {
-                        rd_ts_t idle_interval =
-                            rk->rk_ts_last_poll_end - rk->rk_ts_last_poll_start;
+                        rd_ts_t idle_interval = rkq->rkq_ts_last_poll_end -
+                                                rkq->rkq_ts_last_poll_start;
                         poll_idle_ratio =
                             idle_interval * 1000000 / poll_interval;
                 }
                 rd_avg_add(
                     &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
                     poll_idle_ratio);
-                rk->rk_ts_last_poll_start = now;
-                rk->rk_ts_last_poll_end   = 0;
+                rkq->rkq_ts_last_poll_start = now;
+                rkq->rkq_ts_last_poll_end   = 0;
         }
 }
 
@@ -1213,7 +1206,8 @@ rd_kafka_app_poll_start(rd_kafka_t *rk, rd_ts_t now, rd_bool_t is_blocking) {
  * @locality any
  * @locks none
  */
-static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
+static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk,
+                                                    rd_kafka_q_t *rkq) {
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 rd_ts_t now = rd_clock();
                 rd_atomic64_set(&rk->rk_ts_last_poll, now);
@@ -1226,11 +1220,10 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
                             rk->rk_cgrp,
                             "app polled after poll interval exceeded");
                 }
-                if (!rk->rk_ts_last_poll_end)
-                        rk->rk_ts_last_poll_end = now;
-                /* Disabled until #5017 is merged
-                 * rd_dassert(rk->rk_ts_last_poll_end >=
-                 *            rk->rk_ts_last_poll_start); */
+                if (!rkq->rkq_ts_last_poll_end)
+                        rkq->rkq_ts_last_poll_end = now;
+                rd_dassert(rkq->rkq_ts_last_poll_end >=
+                           rkq->rkq_ts_last_poll_start);
         }
 }
 

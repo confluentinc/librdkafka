@@ -7,6 +7,7 @@ librdkafka v2.11.0 is a feature release:
    subscription (#5105)
  * Fix for frequent disconnections on push telemetry requests
    with particular metric configurations (#4912).
+ * Fix for poll ratio calculation in case the queues are forwarded (#).
 
 
 ## Fixes
@@ -30,6 +31,12 @@ librdkafka v2.11.0 is a feature release:
   some metrics are matching the producer but none the consumer
   or the other way around.
   Happens since 2.5.0 (#4912).
+* Issues: #
+  Fix for poll ratio calculation in case the queues are forwarded.
+  Poll ratio is now calculated per-queue instead of per-instance and
+  it allows to avoid calcultation problems linked to using the same
+  field.
+  Happens since 2.6.0 (#).
 
 
 

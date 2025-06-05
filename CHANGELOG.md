@@ -1,3 +1,21 @@
+# librdkafka v2.11.0
+
+librdkafka v2.11.0 is a feature release:
+
+ * Metrics aren't duplicated when multiple prefixes match them (#5104)
+
+
+## Fixes
+
+### Telemetry fixes
+
+* Issues: #5103
+  Metrics aren't duplicated when multiple prefixes match them.
+  Fixed by keeping track of the metrics that already matched.
+  Happens since 2.5.0 (#5104).
+
+
+
 # librdkafka v2.10.1
 
 librdkafka v2.10.1 is a maintenance release:

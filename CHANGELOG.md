@@ -5,6 +5,8 @@ librdkafka v2.11.0 is a feature release:
  * Metrics aren't duplicated when multiple prefixes match them (#5104)
  * Avoid copy outside boundaries when reading metric names in telemetry
    subscription (#5105)
+ * Fix for frequent disconnections on push telemetry requests
+   with particular metric configurations (#4912).
 
 
 ## Fixes
@@ -19,6 +21,15 @@ librdkafka v2.11.0 is a feature release:
   Avoid copy outside boundaries when reading metric names in telemetry
   subscription. It can cause that some metrics aren't matched.
   Happens since 2.5.0 (#5105).
+* Issues: #5106
+  Fix for frequent disconnections on push telemetry requests
+  with particular metric configurations.
+  A `NULL` payload is sent in a push telemetry request when
+  an empty one is needed. This causes disconnections every time the
+  push is sent, only when metrics are requested and
+  some metrics are matching the producer but none the consumer
+  or the other way around.
+  Happens since 2.5.0 (#4912).
 
 
 

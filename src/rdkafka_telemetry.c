@@ -275,6 +275,24 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
         rd_slice_t payload_slice;
         size_t i;
         rd_kafka_resp_err_t r = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        if (payload->rbuf_len == 0) {
+                /* We can only initialize the slice to compress
+                 * if not empty. */
+                rd_kafka_dbg(rk, TELEMETRY, "PUSH",
+                             "Empty payload. "
+                             "Sending uncompressed payload");
+
+                /* It's not important the payload isn't actually a segment
+                 * inside the buffer, as size is 0, we can send any allocated
+                 * memory here, but we chose the buffer because it's
+                 * freed like the other COMPRESSION_NONE case, without
+                 * memory leaks. */
+                *compressed_payload      = payload;
+                *compressed_payload_size = 0;
+                return RD_KAFKA_COMPRESSION_NONE;
+        }
+
         rd_slice_init_full(&payload_slice, payload);
         for (i = 0; i < rk->rk_telemetry.accepted_compression_types_cnt; i++) {
                 rd_kafka_compression_t compression_type =
@@ -368,20 +386,23 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                      compressed_metrics_payload_size,
                                      rk->rk_telemetry.telemetry_max_bytes);
                 }
-        } else {
-                rd_kafka_dbg(rk, TELEMETRY, "PUSH",
-                             "No metrics to push. Sending empty payload.");
-        }
 
-        rd_kafka_dbg(rk, TELEMETRY, "PUSH",
-                     "Sending PushTelemetryRequest with terminating = %s",
-                     RD_STR_ToF(terminating));
-        rd_kafka_PushTelemetryRequest(
-            rkb, &rk->rk_telemetry.client_instance_id,
-            rk->rk_telemetry.subscription_id, terminating, compression_used,
-            compressed_metrics_payload, compressed_metrics_payload_size, NULL,
-            0, RD_KAFKA_REPLYQ(rk->rk_ops, 0), rd_kafka_handle_PushTelemetry,
-            NULL);
+                rd_kafka_dbg(
+                    rk, TELEMETRY, "PUSH",
+                    "Sending PushTelemetryRequest with terminating = %s",
+                    RD_STR_ToF(terminating));
+                rd_kafka_PushTelemetryRequest(
+                    rkb, &rk->rk_telemetry.client_instance_id,
+                    rk->rk_telemetry.subscription_id, terminating,
+                    compression_used, compressed_metrics_payload,
+                    compressed_metrics_payload_size, NULL, 0,
+                    RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                    rd_kafka_handle_PushTelemetry, NULL);
+        } else {
+                rd_kafka_log(rk, LOG_WARNING, "PUSH",
+                             "Telemetry metrics encode error, not sending "
+                             "metrics");
+        }
 
         if (metrics_payload)
                 rd_buf_destroy_free(metrics_payload);

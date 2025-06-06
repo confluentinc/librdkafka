@@ -946,11 +946,10 @@ static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
  *
  * @returns 0 if CA location was set, else -1.
  */
-static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
-                                                          SSL_CTX *ctx) {
+const char *rd_kafka_ssl_probe_path(rd_kafka_t *rk) {
 #if _WIN32
         /* No standard location on Windows, CA certs are in the ROOT store. */
-        return -1;
+        return NULL;
 #else
         /* The probe paths are based on:
          * https://www.happyassassin.net/posts/2015/01/12/a-note-about-ssltls-trusted-certificate-stores-and-platforms/
@@ -1001,7 +1000,6 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
         for (i = 0; (path = paths[i]); i++) {
                 struct stat st;
                 rd_bool_t is_dir;
-                int r;
 
                 if (stat(path, &st) != 0)
                         continue;
@@ -1011,33 +1009,51 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
                 if (is_dir && rd_kafka_dir_is_empty(path))
                         continue;
 
-                rd_kafka_dbg(rk, SECURITY, "CACERTS",
-                             "Setting default CA certificate location "
-                             "to %s, override with ssl.ca.location",
-                             path);
-
-                r = SSL_CTX_load_verify_locations(ctx, is_dir ? NULL : path,
-                                                  is_dir ? path : NULL);
-                if (r != 1) {
-                        char errstr[512];
-                        /* Read error and clear the error stack */
-                        rd_kafka_ssl_error(rk, NULL, errstr, sizeof(errstr));
-                        rd_kafka_dbg(rk, SECURITY, "CACERTS",
-                                     "Failed to set default CA certificate "
-                                     "location to %s %s: %s: skipping",
-                                     is_dir ? "directory" : "file", path,
-                                     errstr);
-                        continue;
-                }
-
-                return 0;
+                return path;
         }
 
         rd_kafka_dbg(rk, SECURITY, "CACERTS",
                      "Unable to find any standard CA certificate"
                      "paths: is the ca-certificates package installed?");
-        return -1;
+        return NULL;
 #endif
+}
+
+static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
+                                                          SSL_CTX *ctx) {
+        const char *path;
+        struct stat st;
+        rd_bool_t is_dir;
+        int r;
+
+        path = rd_kafka_ssl_probe_path(rk);
+        if (!path)
+                return -1;
+
+        if (stat(path, &st) != 0)
+                return -1;
+
+        is_dir = S_ISDIR(st.st_mode);
+
+        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                     "Setting default CA certificate location "
+                     "to %s, override with ssl.ca.location",
+                     path);
+
+        r = SSL_CTX_load_verify_locations(ctx, is_dir ? NULL : path,
+                                          is_dir ? path : NULL);
+        if (r != 1) {
+                char errstr[512];
+                /* Read error and clear the error stack */
+                rd_kafka_ssl_error(rk, NULL, errstr, sizeof(errstr));
+                rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                             "Failed to set default CA certificate "
+                             "location to %s %s: %s: skipping",
+                             is_dir ? "directory" : "file", path, errstr);
+                return -1;
+        }
+
+        return 0;
 }
 
 /**

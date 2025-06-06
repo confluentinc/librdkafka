@@ -441,18 +441,31 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "metadata.recovery.strategy", _RK_C_S2I,
      _RK(metadata_recovery_strategy),
      "Controls how the client recovers when none of the brokers known to it "
-     "is available. If set to `none`, the client fails with a fatal error. "
+     "is available. If set to `none`, the client doesn't re-bootstrap. "
      "If set to `rebootstrap`, the client repeats the bootstrap process "
      "using `bootstrap.servers` and brokers added through "
      "`rd_kafka_brokers_add()`. Rebootstrapping is useful when a client "
      "communicates with brokers so infrequently that the set of brokers "
      "may change entirely before the client refreshes metadata. "
      "Metadata recovery is triggered when all last-known brokers appear "
-     "unavailable simultaneously.",
+     "unavailable simultaneously or the client cannot refresh metadata within "
+     "`metadata.recovery.rebootstrap.trigger.ms` or it's requested in a "
+     "metadata response.",
      .vdef = RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP,
      .s2i  = {{RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE, "none"},
               {RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP, "rebootstrap"},
               {0, NULL}}},
+    {_RK_GLOBAL, "metadata.recovery.rebootstrap.trigger.ms", _RK_C_INT,
+     _RK(metadata_recovery_rebootstrap_trigger_ms),
+     "If a client configured to rebootstrap using "
+     "`metadata.recovery.strategy=rebootstrap` "
+     "is unable to obtain metadata from any "
+     "of the brokers for this interval, "
+     "client repeats the bootstrap process using "
+     "`bootstrap.servers` configuration "
+     "and brokers added through "
+     "`rd_kafka_brokers_add()`.",
+     0, INT_MAX, 300000},
     {_RK_GLOBAL | _RK_DEPRECATED | _RK_HIDDEN, "metadata.request.timeout.ms",
      _RK_C_INT, _RK(metadata_request_timeout_ms), "Not used.", 10, 900 * 1000,
      10},

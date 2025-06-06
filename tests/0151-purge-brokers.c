@@ -115,12 +115,16 @@ static void fetch_metadata(rd_kafka_t *rk,
         /* Trigger Metadata request which will update learned brokers. */
         do {
                 if (!request_metadata_cb || request_metadata_cb(action)) {
-                        err = rd_kafka_metadata(rk, 0, NULL, &md,
-                                                tmout_multip(5000));
+                        /* We set a short timeout because an unavailable
+                         * broker can be selected for the metadata request,
+                         * While the client still doesn't know about it.
+                         * In this case the request times out. */
+                        err = rd_kafka_metadata(rk, 0, NULL, &md, 1000);
                         if (md) {
                                 rd_kafka_metadata_destroy(md);
                                 md = NULL;
                         } else if (err != RD_KAFKA_RESP_ERR__TRANSPORT &&
+                                   err != RD_KAFKA_RESP_ERR__TIMED_OUT &&
                                    !fetch_metadata_allowed_error(err))
                                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 }
@@ -136,7 +140,7 @@ static void fetch_metadata(rd_kafka_t *rk,
                         expected_broker_ids, expected_broker_id_cnt,
                         actual_broker_ids, actual_broker_id_cnt);
 
-                if (action >= 0 && after_action_cb)
+                if (after_action_cb)
                         continue_requesting_metadata =
                             continue_requesting_metadata ||
                             after_action_cb(&rk, action);
@@ -164,7 +168,7 @@ static void fetch_metadata(rd_kafka_t *rk,
                                    expected_broker_ids, expected_brokers_cnt)  \
         do_test_add_remove_brokers0(initial_cluster_size, actions, action_cnt, \
                                     expected_broker_ids, expected_brokers_cnt, \
-                                    NULL, NULL, NULL, NULL);
+                                    NULL, NULL, NULL);
 /**
  * @brief Test adding and removing brokers from the mock cluster.
  *        Verify that the client is updated with the new broker list.
@@ -210,8 +214,7 @@ static void do_test_add_remove_brokers0(
     int32_t expected_brokers_cnt[],
     rd_kafka_type_t (*edit_configuration_cb)(rd_kafka_conf_t *conf),
     rd_bool_t (*request_metadata_cb)(int action),
-    rd_bool_t (*after_action_cb)(rd_kafka_t **rkp, int action),
-    void (*handle_message)(rd_kafka_t **rkp, rd_kafka_message_t *rkmessage)) {
+    rd_bool_t (*after_action_cb)(rd_kafka_t **rkp, int action)) {
         const char *bootstraps;
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
@@ -240,7 +243,7 @@ static void do_test_add_remove_brokers0(
 
         /* Verify state zero is reached */
         fetch_metadata(rk, expected_broker_ids[0], expected_brokers_cnt[0],
-                       request_metadata_cb, after_action_cb, 0);
+                       request_metadata_cb, after_action_cb, -1);
 
         for (action = 0; action < action_cnt; action++) {
                 rd_kafka_message_t *rkmessage;
@@ -302,12 +305,8 @@ static void do_test_add_remove_brokers0(
 
                 /* Poll to get errors */
                 rkmessage = rd_kafka_consumer_poll(rk, 0);
-                if (handle_message)
-                        handle_message(&rk, rkmessage);
-                else {
-                        RD_IF_FREE(rkmessage, rd_kafka_message_destroy);
-                        rkmessage = NULL;
-                }
+                RD_IF_FREE(rkmessage, rd_kafka_message_destroy);
+                rkmessage = NULL;
         }
         TEST_SAY("Test verification complete\n");
         rd_atomic32_set(&verification_complete, 1);
@@ -473,7 +472,7 @@ static void do_test_remove_then_add(void) {
         do_test_add_remove_brokers0(
             3, actions, RD_ARRAY_SIZE(actions), expected_broker_ids,
             expected_brokers_cnt, do_test_remove_then_add_edit_configuration_cb,
-            NULL, do_test_remove_then_add_after_action_cb, NULL);
+            NULL, do_test_remove_then_add_after_action_cb);
 
         rd_free(log_interceptor);
         SUB_TEST_PASS();
@@ -558,7 +557,7 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             expected_brokers_cnt,
             do_test_down_then_up_no_rebootstrap_loop_edit_configuration_cb,
             do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb,
-            do_test_down_then_up_no_rebootstrap_loop_after_action_cb, NULL);
+            do_test_down_then_up_no_rebootstrap_loop_after_action_cb);
 
         /* With connections that go always to the broker without previous
          * connections (the re-bootstrapped one) we get 5 re-bootstrap
@@ -621,11 +620,6 @@ static int do_test_kip899_rebootstrap_cases_variation;
 static char *do_test_kip899_rebootstrap_cases_additional_brokers;
 
 /**
- * @brief Was consumer re-created after a fatal error in variation 1?
- */
-static rd_bool_t do_test_kip899_rebootstrap_cases_consumer_recreated;
-
-/**
  * @brief Edit configuration by:
  *        - setting `metadata.recovery.strategy` to `none` to
  *          avoid re-bootstrapping when variation == 1
@@ -665,6 +659,17 @@ do_test_kip899_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
 }
 
 /**
+ * @brief Don't request metadata after setting all brokers down.
+ */
+static rd_bool_t
+do_test_kip899_rebootstrap_cases_request_metadata_cb(int action) {
+        if (action == 6) {
+                return rd_false;
+        }
+        return rd_true;
+}
+
+/**
  * @brief After action callback for `do_test_kip899_rebootstrap_cases`.
  *        In case we need to add some additional brokers, add them after
  *        first action.
@@ -676,35 +681,12 @@ do_test_kip899_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp, int action) {
             do_test_kip899_rebootstrap_cases_additional_brokers) {
                 rd_kafka_brokers_add(
                     *rkp, do_test_kip899_rebootstrap_cases_additional_brokers);
+        } else if (action == 6) {
+                /* After setting all*/
+                rd_sleep(1);
         }
         return rd_false;
 }
-
-/**
- * @brief Message handler for `do_test_kip899_rebootstrap_cases` test.
- *        Re-create the consumer if a fatal `REBOOTSTRAP_REQUIRED`
- *        error is received.
- */
-static void do_test_kip899_rebootstrap_cases_handle_message_cb(
-    rd_kafka_t **rkp,
-    rd_kafka_message_t *rkmessage) {
-        char errstr[512];
-        rd_kafka_t *rk = *rkp;
-        if (rkmessage && rkmessage->err == RD_KAFKA_RESP_ERR__FATAL &&
-            rd_kafka_fatal_error(rk, errstr, sizeof(errstr)) ==
-                RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED) {
-                rd_kafka_conf_t *conf = rd_kafka_conf_dup(rd_kafka_conf(rk));
-                /* Re-create the consumer manually */
-                rd_kafka_message_destroy(rkmessage);
-                rkmessage = NULL;
-                rd_kafka_destroy(rk);
-                *rkp = test_create_handle(RD_KAFKA_CONSUMER, conf);
-                do_test_kip899_rebootstrap_cases_consumer_recreated = rd_true;
-        }
-        RD_IF_FREE(rkmessage, rd_kafka_message_destroy);
-}
-
-
 
 /**
  * @brief KIP-899: Re-bootstrap test cases.
@@ -718,8 +700,7 @@ static void do_test_kip899_rebootstrap_cases_handle_message_cb(
  *        in initial configuration but added afterwards.
  *
  *        - variation 0: re-bootstrap is enabled and triggered.
- *        - variation 1: re-bootstrap is disabled, a fatal error is received
- *                       and the client is re-created.
+ *        - variation 1: re-bootstrap is disabled, no re-bootstrap is executed.
  *        - variation 2: same as #0 with brokers added after initial
  *                       configuration.
  */
@@ -732,8 +713,7 @@ static void do_test_kip899_rebootstrap_cases(int variation) {
 
         do_test_kip899_rebootstrap_cases_variation          = variation;
         do_test_kip899_rebootstrap_cases_additional_brokers = NULL;
-        do_test_kip899_rebootstrap_cases_consumer_recreated = rd_false;
-        int32_t expected_brokers_cnt[] = {5, 5, 4, 3, 2, 1, 1, 0, 1, 1, 2, 3};
+        int32_t expected_brokers_cnt[] = {5, 5, 4, 3, 2, 1, 1, 1, 1, 1, 2, 3};
 
         int32_t expected_broker_ids[][5] = {
             {1, 2, 3, 4, 5},
@@ -743,7 +723,7 @@ static void do_test_kip899_rebootstrap_cases(int variation) {
             {4, 5},
             {5},
             {5},
-            {0},
+            {5},
             {1},
             {1},
             {1, 2},
@@ -763,17 +743,27 @@ static void do_test_kip899_rebootstrap_cases(int variation) {
             {TEST_ACTION_SET_UP_BROKER, 2},
             {TEST_ACTION_SET_UP_BROKER, 3},
         };
+        if (variation == 1) {
+                /* If not re-bootstraping we've to start from the
+                 * last broker seen */
+                actions[7][1]              = 5;
+                actions[8][1]              = 5;
+                expected_broker_ids[8][0]  = 5;
+                expected_broker_ids[9][0]  = 5;
+                expected_broker_ids[10][0] = 2;
+                expected_broker_ids[10][1] = 5;
+                expected_broker_ids[11][0] = 2;
+                expected_broker_ids[11][1] = 3;
+                expected_broker_ids[11][2] = 5;
+        }
 
         do_test_add_remove_brokers0(
             5, actions, RD_ARRAY_SIZE(actions), expected_broker_ids,
             expected_brokers_cnt,
-            do_test_kip899_rebootstrap_cases_edit_configuration_cb, NULL,
-            do_test_kip899_rebootstrap_cases_after_action_cb,
-            do_test_kip899_rebootstrap_cases_handle_message_cb);
+            do_test_kip899_rebootstrap_cases_edit_configuration_cb,
+            do_test_kip899_rebootstrap_cases_request_metadata_cb,
+            do_test_kip899_rebootstrap_cases_after_action_cb);
 
-        TEST_ASSERT(do_test_kip899_rebootstrap_cases_consumer_recreated ==
-                        (variation == 1),
-                    "Expected a fatal error only on variation 1");
         RD_IF_FREE(do_test_kip899_rebootstrap_cases_additional_brokers,
                    rd_free);
         SUB_TEST_PASS();
@@ -884,7 +874,7 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
  *        - variation 1: a `REBOOTSTRAP_REQUIRED` error is returned from
  *                       each metadata call.
  *        - variation 2: same as #0 but broker isn't restarted.
- *        - variation 3: same as #0 but broker isn't restarted.
+ *        - variation 3: same as #1 but broker isn't restarted.
  */
 static void do_test_kip1102_rebootstrap_cases(int variation) {
         int rebootstrap_cnt = 0, expected_rebootstrap_cnt = 1,
@@ -925,7 +915,7 @@ static void do_test_kip1102_rebootstrap_cases(int variation) {
                                : RD_ARRAY_SIZE(actions) - 1,
             expected_broker_ids, expected_brokers_cnt,
             do_test_kip1102_rebootstrap_cases_edit_configuration_cb, NULL,
-            do_test_kip1102_rebootstrap_cases_after_action_cb, NULL);
+            do_test_kip1102_rebootstrap_cases_after_action_cb);
 
         rebootstrap_cnt =
             rd_atomic32_get(&do_test_kip1102_rebootstrap_cases_rebootstrap_cnt);

@@ -40,27 +40,34 @@ typedef struct consumer_s {
     char *memberid;
 } consumer_t;
 
+static int
+is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
+        if (err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+                return 0;
+        return 1;
+}
+
 static int consumer_thread(void *arg) {
     rd_kafka_conf_t *conf;
     rd_kafka_t *consumer;
     consumer_t *consumer_args = arg;
 
+    test_curr->is_fatal_cb = is_fatal_cb;
+
     test_conf_init(&conf, NULL, 60);
 
     consumer = test_create_consumer(consumer_args->group_id, NULL, conf, NULL);
-    test_consumer_subscribe(consumer, "test-topic");
-
-    rd_sleep(1); // Wait for the consumer to subscribe
 
     consumer_args->memberid = rd_kafka_memberid(consumer);
 
     test_consumer_close(consumer);
     rd_kafka_destroy(consumer);
+    test_curr->is_fatal_cb = NULL;
     return 0;
 }
 
 void do_test_unique_memberid() {
-        int consumer_cnt = 300;
+        int consumer_cnt = 500;
         int i;
         int j;
         int have_only_unique_memberid = 1;
@@ -69,7 +76,6 @@ void do_test_unique_memberid() {
         consumer_t consumer_args[consumer_cnt];
 
         SUB_TEST_QUICK();
-
 
         for(i = 0; i < consumer_cnt; i++) {
             consumer_args[i].group_id = group_id;
@@ -85,7 +91,7 @@ void do_test_unique_memberid() {
                 if(have_only_unique_memberid) {
                         for (j = i + 1; j < consumer_cnt; j++) {
                                 if (strcmp(consumer_args[i].memberid, consumer_args[j].memberid) == 0) {
-                                        printf("Consumer %d has the same member ID as consumer %d: %s\n",
+                                        TEST_SAY("Consumer %d has the same member ID as consumer %d: %s\n",
                                                i, j, consumer_args[i].memberid);
                                         have_only_unique_memberid = 0;
                                 }

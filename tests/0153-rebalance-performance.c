@@ -132,6 +132,7 @@ static int consumer_thread(void *arg) {
     consumer_args->consumer = consumer;
     test_consumer_subscribe_multi(consumer, consumer_args->subscriptions, topic_cnt);
 
+    // FIXME: This should be != instead of <
     while(consumer_args->prev_assignment->cnt < consumer_args->expected_assignment_cnt) {
         printf("Consumer %d waiting for assignment: %d < %d\n", consumer_args->consumer_id, consumer_args->prev_assignment->cnt, consumer_args->expected_assignment_cnt);
         rd_kafka_assignment(consumer, &assignment);
@@ -175,7 +176,7 @@ static int consumer_thread(void *arg) {
         if (rkmessage) {
             rd_kafka_message_destroy(rkmessage);
         }
-        rd_sleep(5); /* Sleep for 5 seconds to avoid busy waiting */
+        rd_usleep(50000, NULL); /* Sleep for 500 milli seconds to avoid busy waiting */
     }
 
     test_consumer_close(consumer);

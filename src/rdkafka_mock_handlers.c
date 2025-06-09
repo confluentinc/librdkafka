@@ -2708,6 +2708,7 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
 
         void *uncompressed_payload      = NULL;
         size_t uncompressed_payload_len = 0;
+        rd_assert(metrics.data != NULL);
 
         if (compression_type != RD_KAFKA_COMPRESSION_NONE) {
                 rd_rkb_log(rkb, LOG_DEBUG, "MOCKTELEMETRY",
@@ -2729,6 +2730,7 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
                 uncompressed_payload_len = metrics.len;
         }
 
+        rd_assert(uncompressed_payload != NULL);
         rd_kafka_mock_handle_PushTelemetry_payload(rkb, uncompressed_payload,
                                                    uncompressed_payload_len);
         if (compression_type != RD_KAFKA_COMPRESSION_NONE)

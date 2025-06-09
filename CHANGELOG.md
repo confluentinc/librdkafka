@@ -2,19 +2,19 @@
 
 librdkafka v2.11.0 is a feature release:
 
- * Fix for poll ratio calculation in case the queues are forwarded (#).
+* Fix for poll ratio calculation in case the queues are forwarded (#5017).
 
 
 ## Fixes
 
 ### Telemetry fixes
 
-* Issues: #
+* Issues: #5109
   Fix for poll ratio calculation in case the queues are forwarded.
   Poll ratio is now calculated per-queue instead of per-instance and
-  it allows to avoid calcultation problems linked to using the same
+  it allows to avoid calculation problems linked to using the same
   field.
-  Happens since 2.6.0 (#).
+  Happens since 2.6.0 (#5017).
 
 
 

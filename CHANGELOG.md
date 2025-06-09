@@ -4,6 +4,8 @@ librdkafka v2.11.0 is a feature release:
 
  * Fix for frequent disconnections on push telemetry requests
    with particular metric configurations (#4912).
+ * Avoid copy outside boundaries when reading metric names in telemetry
+   subscription (#5105)
 
 
 ## Fixes
@@ -19,6 +21,10 @@ librdkafka v2.11.0 is a feature release:
   some metrics are matching the producer but none the consumer
   or the other way around.
   Happens since 2.5.0 (#4912).
+* Issues: #5102
+  Avoid copy outside boundaries when reading metric names in telemetry
+  subscription. It can cause that some metrics aren't matched.
+  Happens since 2.5.0 (#5105).
 
 
 

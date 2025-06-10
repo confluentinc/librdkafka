@@ -6390,8 +6390,11 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                 break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                    rkcg, "back to steady state");
+                if(rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_EXPEDITE_HB_ON_NEXT_SERVE) {
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                        rkcg, "back to steady state");
+                        rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_EXPEDITE_HB_ON_NEXT_SERVE;
+                }
 
                 if (rkcg->rkcg_rebalance_rejoin) {
                         rkcg->rkcg_rebalance_rejoin = rd_false;
@@ -6421,9 +6424,12 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                  * the current state to decommission. */
                 still_in_group &= !rd_kafka_cgrp_try_terminate(rkcg);
 
-                if (still_in_group)
+                if (still_in_group & rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_EXPEDITE_HB_ON_NEXT_SERVE) {
                         rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                             rkcg, "back to init state");
+                        rkcg->rkcg_consumer_flags &= ~RD_KAFKA_CGRP_CONSUMER_F_EXPEDITE_HB_ON_NEXT_SERVE;
+                }
+
                 break;
         }
         default:

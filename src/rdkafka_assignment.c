@@ -653,6 +653,7 @@ void rd_kafka_assignment_serve(rd_kafka_t *rk) {
                              rk->rk_consumer.assignment.queried->cnt,
                              rk->rk_consumer.assignment.wait_stop_cnt,
                              rk->rk_consumer.wait_commit_cnt);
+                rk->rk_cgrp->rkcg_consumer_flags |= RD_KAFKA_CGRP_CONSUMER_F_EXPEDITE_HB_ON_NEXT_SERVE;
         }
 }
 

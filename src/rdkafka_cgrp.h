@@ -331,6 +331,7 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE 0x80
 /** Serve pending assignments after heartbeat */
 #define RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING 0x100
+#define RD_KAFKA_CGRP_CONSUMER_F_EXPEDITE_HB_ON_NEXT_SERVE 0x200
 
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */

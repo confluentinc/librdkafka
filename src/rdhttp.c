@@ -139,7 +139,15 @@ rd_http_error_t *rd_http_req_init(rd_http_req_t *hreq, const char *url) {
         hreq->hreq_buf = rd_buf_new(1, 1024);
 
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_URL, url);
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_PROTOCOLS_STR, "http,https");
+#else
+        /* As of 06/10/2025 Debian 10 and CentOS Stream 9 ship with
+         * older CURL versions, remove this condition once they're not supported
+         * anymore. */
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_PROTOCOLS,
+                         CURLPROTO_HTTP | CURLPROTO_HTTPS);
+#endif
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_MAXREDIRS, 16);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_TIMEOUT, 30);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_ERRORBUFFER,

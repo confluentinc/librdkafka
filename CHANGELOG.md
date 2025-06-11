@@ -4,7 +4,7 @@ librdkafka v2.10.1 is a maintenance release:
 
 * Fix to add locks when updating the metadata cache for the consumer 
   after no broker connection is available (@marcin-krystianc, #5066).
-* Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
+* Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
   brokers were added manually through `rd_kafka_brokers_add` (#5067).
 * Fix an issue where the first message to any topic produced via `producev` or
   `produceva` was not delivered late (by up to 1 second) (#5032).
@@ -31,7 +31,7 @@ librdkafka v2.10.1 is a maintenance release:
   even if there are new ones that never tried to connect.
   Happens since 2.10.0 (#5086).
 * Issues: #5057.
-  Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
+  Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
   brokers were added manually through `rd_kafka_brokers_add`.
   Avoids a segmentation fault in this case.
   Happens since 2.10.0 (#5067).

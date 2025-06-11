@@ -5672,7 +5672,7 @@ rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_CreateAcls, 0, 1, NULL);
+            rkb, RD_KAFKAP_CreateAcls, 0, 2, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "ACLs Admin API (KIP-140) not supported "
@@ -5713,10 +5713,11 @@ rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
                 len += rd_kafka_AclBinding_request_size(new_acl, ApiVersion);
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateAcls, 1, len);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_CreateAcls, 1,
+                                                 len, ApiVersion >= 2);
 
         /* #acls */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_acls));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(new_acls));
 
         RD_LIST_FOREACH(new_acl, new_acls, i) {
                 rd_kafka_buf_write_i8(rkbuf, new_acl->restype);
@@ -5735,6 +5736,10 @@ rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_i8(rkbuf, new_acl->operation);
 
                 rd_kafka_buf_write_i8(rkbuf, new_acl->permission_type);
+
+                if (ApiVersion >= 2) {
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+                }
         }
 
         /* timeout */
@@ -5791,7 +5796,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeAclsRequest(
         acl = rd_list_elem(acls, 0);
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DescribeAcls, 0, 1, NULL);
+            rkb, RD_KAFKAP_DescribeAcls, 0, 2, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "ACLs Admin API (KIP-140) not supported "
@@ -5821,9 +5826,9 @@ rd_kafka_resp_err_t rd_kafka_DescribeAclsRequest(
                 }
         }
 
-        rkbuf = rd_kafka_buf_new_request(
+        rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_DescribeAcls, 1,
-            rd_kafka_AclBinding_request_size(acl, ApiVersion));
+            rd_kafka_AclBinding_request_size(acl, ApiVersion), ApiVersion >= 2);
 
         /* resource_type */
         rd_kafka_buf_write_i8(rkbuf, acl->restype);
@@ -5896,7 +5901,7 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DeleteAcls, 0, 1, NULL);
+            rkb, RD_KAFKAP_DeleteAcls, 0, 2, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "ACLs Admin API (KIP-140) not supported "
@@ -5932,10 +5937,11 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                 len += rd_kafka_AclBinding_request_size(acl, ApiVersion);
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteAcls, 1, len);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_DeleteAcls, 1,
+                                                 len, ApiVersion >= 2);
 
         /* #acls */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(del_acls));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(del_acls));
 
         RD_LIST_FOREACH(acl, del_acls, i) {
                 /* resource_type */
@@ -5962,6 +5968,10 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
 
                 /* permission type (rd_kafka_AclPermissionType_t) */
                 rd_kafka_buf_write_i8(rkbuf, acl->permission_type);
+
+                if (ApiVersion >= 2) {
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+                }
         }
 
         /* timeout */

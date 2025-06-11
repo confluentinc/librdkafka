@@ -137,6 +137,7 @@ set(
     0144-idempotence_mock.c
     0145-pause_resume_mock.c
     0146-metadata_mock.c
+    0147-consumer_group_consumer_mock.c
     0149-broker-same-host-port.c
     0150-telemetry_mock.c
     0151-purge-brokers.c

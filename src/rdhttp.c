@@ -40,6 +40,8 @@
 #include <curl/curl.h>
 #include "rdhttp.h"
 
+#include "rdkafka_ssl.h"
+
 /** Maximum response size, increase as necessary. */
 #define RD_HTTP_RESPONSE_SIZE_MAX 1024 * 1024 * 500 /* 500kb */
 
@@ -128,8 +130,9 @@ rd_http_req_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
         return nmemb;
 }
 
-rd_http_error_t *rd_http_req_init(rd_http_req_t *hreq, const char *url) {
-
+rd_http_error_t *
+rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
+        const char *ca_path = NULL;
         memset(hreq, 0, sizeof(*hreq));
 
         hreq->hreq_curl = curl_easy_init();
@@ -156,6 +159,21 @@ rd_http_error_t *rd_http_req_init(rd_http_req_t *hreq, const char *url) {
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_WRITEFUNCTION,
                          rd_http_req_write_cb);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_WRITEDATA, (void *)hreq);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_VERBOSE, 1L);
+        if (rk->rk_conf.ssl.oidc_ca_location &&
+            !strcmp(rk->rk_conf.ssl.oidc_ca_location, "probe")) {
+                ca_path = rd_kafka_ssl_probe_path(rk);
+                if (ca_path) {
+                        curl_easy_setopt(hreq->hreq_curl, CURLOPT_CAINFO,
+                                         ca_path);
+                }
+        } else if (rk->rk_conf.ssl.oidc_ca_location) {
+                curl_easy_setopt(hreq->hreq_curl, CURLOPT_CAINFO,
+                                 rk->rk_conf.ssl.oidc_ca_location);
+        } else if (rk->rk_conf.ssl.oidc_ca_pem) {
+                curl_easy_setopt(hreq->hreq_curl, CURLOPT_CAINFO_BLOB,
+                                 rk->rk_conf.ssl.oidc_ca_pem);
+        }
 
         return NULL;
 }
@@ -207,13 +225,14 @@ const char *rd_http_req_get_content_type(rd_http_req_t *hreq) {
  * by calling rd_http_error_destroy(). In case of HTTP error the \p *rbufp
  * may be filled with the error response.
  */
-rd_http_error_t *rd_http_get(const char *url, rd_buf_t **rbufp) {
+rd_http_error_t *
+rd_http_get(rd_kafka_t *rk, const char *url, rd_buf_t **rbufp) {
         rd_http_req_t hreq;
         rd_http_error_t *herr;
 
         *rbufp = NULL;
 
-        herr = rd_http_req_init(&hreq, url);
+        herr = rd_http_req_init(rk, &hreq, url);
         if (unlikely(herr != NULL))
                 return herr;
 
@@ -317,7 +336,7 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
         size_t len;
         const char *content_type;
 
-        herr = rd_http_req_init(&hreq, url);
+        herr = rd_http_req_init(rk, &hreq, url);
         if (unlikely(herr != NULL))
                 return herr;
 
@@ -382,7 +401,8 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
  *
  * Same error semantics as rd_http_get().
  */
-rd_http_error_t *rd_http_get_json(const char *url, cJSON **jsonp) {
+rd_http_error_t *
+rd_http_get_json(rd_kafka_t *rk, const char *url, cJSON **jsonp) {
         rd_http_req_t hreq;
         rd_http_error_t *herr;
         rd_slice_t slice;
@@ -393,7 +413,7 @@ rd_http_error_t *rd_http_get_json(const char *url, cJSON **jsonp) {
 
         *jsonp = NULL;
 
-        herr = rd_http_req_init(&hreq, url);
+        herr = rd_http_req_init(rk, &hreq, url);
         if (unlikely(herr != NULL))
                 return herr;
 
@@ -468,6 +488,7 @@ int unittest_http(void) {
         cJSON *json, *jval;
         rd_http_error_t *herr;
         rd_bool_t empty;
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
 
         if (!base_url || !*base_url)
                 RD_UT_SKIP("RD_UT_HTTP_URL environment variable not set");
@@ -480,7 +501,7 @@ int unittest_http(void) {
 
         /* Try the base url first, parse its JSON and extract a key-value. */
         json = NULL;
-        herr = rd_http_get_json(base_url, &json);
+        herr = rd_http_get_json(rk, base_url, &json);
         RD_UT_ASSERT(!herr, "Expected get_json(%s) to succeed, got: %s",
                      base_url, herr->errstr);
 
@@ -500,7 +521,7 @@ int unittest_http(void) {
 
         /* Try the error URL, verify error code. */
         json = NULL;
-        herr = rd_http_get_json(error_url, &json);
+        herr = rd_http_get_json(rk, error_url, &json);
         RD_UT_ASSERT(herr != NULL, "Expected get_json(%s) to fail", error_url);
         RD_UT_ASSERT(herr->code >= 400,
                      "Expected get_json(%s) error code >= "

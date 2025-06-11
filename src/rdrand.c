@@ -30,6 +30,7 @@
 #include "rdrand.h"
 #include "rdtime.h"
 #include "tinycthread.h"
+#include "rdmurmur2.h"
 
 int rd_jitter(int low, int high) {
         int rand_num;
@@ -40,8 +41,9 @@ int rd_jitter(int low, int high) {
         if (unlikely(seed == 0)) {
                 struct timeval tv;
                 rd_gettimeofday(&tv, NULL);
-                seed = (unsigned int)(tv.tv_usec / 1000);
+                seed = (unsigned int)(tv.tv_usec);
                 seed ^= (unsigned int)(intptr_t)thrd_current();
+                seed = (unsigned int) rd_murmur2(&seed, sizeof(seed));
         }
 
         rand_num = rand_r(&seed);

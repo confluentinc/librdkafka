@@ -847,8 +847,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "If OpenSSL is dynamically linked the OpenSSL library's default "
      "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
      _UNSUPPORTED_SSL},
+    {_RK_GLOBAL, "oidc.ssl.ca.location", _RK_C_STR, _RK(ssl.oidc_ca_location),
+     "OIDC CA "
+     "certificate location. This is used to verify the OIDC issuer "
+     "certificate when using OIDC authentication. "
+     "This property is only used when `oidc.token.endpoint` is set.",
+     _UNSUPPORTED_SSL},
     {_RK_GLOBAL | _RK_SENSITIVE, "ssl.ca.pem", _RK_C_STR, _RK(ssl.ca_pem),
      "CA certificate string (PEM format) for verifying the broker's key.",
+     _UNSUPPORTED_SSL},
+    {_RK_GLOBAL | _RK_SENSITIVE, "oidc.ssl.ca.pem", _RK_C_STR, _RK(ssl.oidc_ca_pem),
+     "OIDC "
+     "CA certificate string (PEM format). This is used to verify the OIDC "
+     "issuer certificate when using OIDC authentication. "
+     "This property is only used when `oidc.token.endpoint` is set.",
      _UNSUPPORTED_SSL},
     {_RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL, _RK(ssl.ca),
      "CA certificate as set by rd_kafka_conf_set_ssl_cert()",
@@ -3814,6 +3826,8 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
         if (conf->ssl.ca && (conf->ssl.ca_location || conf->ssl.ca_pem))
                 return "`ssl.ca.location` or `ssl.ca.pem`, and memory-based "
                        "set_ssl_cert(CERT_CA) are mutually exclusive.";
+        if (!conf->ssl.oidc_ca_location && !conf->ssl.oidc_ca_pem)
+                rd_kafka_conf_set(conf, "oidc.ssl.ca.location", "probe", NULL, 0);
 #ifdef __APPLE__
         else if (!conf->ssl.ca && !conf->ssl.ca_location && !conf->ssl.ca_pem)
                 /* Default ssl.ca.location to 'probe' on OSX */

@@ -1,3 +1,12 @@
+# confluent-kafka-javascript v1.3.2
+
+v1.3.2 is a maintenance release. It is supported for all usage.
+
+## Enhancements
+
+1. References librdkafka v2.10.1. Refer to the [librdkafka v2.10.1 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.10.1) for more information.
+
+
 # confluent-kafka-javascript v1.3.1
 
 v1.3.1 is a maintenance release. It is supported for all usage.

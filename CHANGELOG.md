@@ -7,7 +7,7 @@ librdkafka v2.10.1 is a maintenance release:
 * Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
   brokers were added manually through `rd_kafka_brokers_add` (#5067).
 * Fix an issue where the first message to any topic produced via `producev` or
-  `produceva` was not delivered late (by up to 1 second) (#5032).
+  `produceva` was delivered late (by up to 1 second) (#5032).
 * Fix for a loop of re-bootstrap sequences in case the client reaches the
   `all brokers down` state (#5086).
 * Fix for frequent disconnections on push telemetry requests

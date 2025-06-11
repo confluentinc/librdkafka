@@ -1,19 +1,61 @@
-# librdkafka v2.11.0
+# librdkafka v2.10.1
 
-librdkafka v2.11.0 is a feature release:
+librdkafka v2.10.1 is a maintenance release:
 
- * Fix for frequent disconnections on push telemetry requests
-   with particular metric configurations (#4912).
- * Avoid copy outside boundaries when reading metric names in telemetry
-   subscription (#5105)
- * Metrics aren't duplicated when multiple prefixes match them (#5104)
+* Fix to add locks when updating the metadata cache for the consumer 
+  after no broker connection is available (@marcin-krystianc, #5066).
+* Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
+  brokers were added manually through `rd_kafka_brokers_add` (#5067).
+* Fix an issue where the first message to any topic produced via `producev` or
+  `produceva` was delivered late (by up to 1 second) (#5032).
+* Fix for a loop of re-bootstrap sequences in case the client reaches the
+  `all brokers down` state (#5086).
+* Fix for frequent disconnections on push telemetry requests
+  with particular metric configurations (#4912).
+* Avoid copy outside boundaries when reading metric names in telemetry
+  subscription (#5105)
+* Metrics aren't duplicated when multiple prefixes match them (#5104)
 
 
 ## Fixes
 
+### General fixes
+
+* Issues: #5088.
+  Fix for a loop of re-bootstrap sequences in case the client reaches the
+  `all brokers down` state. The client continues to select the
+  bootstrap brokers given they have no connection attempt and doesn't
+  re-connect to the learned ones. In case it happens a broker restart
+  can break the loop for the clients using the affected version.
+  Fixed by giving a higher chance to connect to the learned brokers
+  even if there are new ones that never tried to connect.
+  Happens since 2.10.0 (#5086).
+* Issues: #5057.
+  Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
+  brokers were added manually through `rd_kafka_brokers_add`.
+  Avoids a segmentation fault in this case.
+  Happens since 2.10.0 (#5067).
+
+### Producer fixes
+
+* In case of `producev` or `produceva`, the producer did not enqueue a leader
+  query metadata request immediately, and rather, waited for the 1 second
+  timer to kick in. This could cause delays in the sending of the first message
+  by up to 1 second.
+  Happens since 1.x (#5032).
+
+### Consumer fixes
+
+* Issues: #5051.
+  Fix to add locks when updating the metadata cache for the consumer.
+  It can cause memory corruption or use-after-free in case
+  there's no broker connection and the consumer
+  group metadata needs to be updated.
+  Happens since 2.10.0 (#5066).
+
 ### Telemetry fixes
 
-* Issues: #5106
+* Issues: #5106.
   Fix for frequent disconnections on push telemetry requests
   with particular metric configurations.
   A `NULL` payload is sent in a push telemetry request when
@@ -22,62 +64,14 @@ librdkafka v2.11.0 is a feature release:
   some metrics are matching the producer but none the consumer
   or the other way around.
   Happens since 2.5.0 (#4912).
-* Issues: #5102
+* Issues: #5102.
   Avoid copy outside boundaries when reading metric names in telemetry
   subscription. It can cause that some metrics aren't matched.
   Happens since 2.5.0 (#5105).
-* Issues: #5103
-  Metrics aren't duplicated when multiple prefixes match them.
+* Issues: #5103.
+  Telemetry metrics aren't duplicated when multiple prefixes match them.
   Fixed by keeping track of the metrics that already matched.
   Happens since 2.5.0 (#5104).
-
-
-
-# librdkafka v2.10.1
-
-librdkafka v2.10.1 is a maintenance release:
-
- * Fix to add locks when updating the metadata cache for the consumer 
-   after no broker connection is available (@marcin-krystianc, #5066).
- * Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
-   brokers were added manually through `rd_kafka_brokers_add` (#5067).
- * Fix an issue where the first message to any topic produced via `producev` or
-   `produceva` was not delivered late (by up to 1 second) (#5032).
- * Fix for a loop of re-bootstrap sequences in case the client reaches the
-   `all brokers down` state (#5086).
-
-
-## Fixes
-
-### Producer fixes
-
- * In case of `producev` or `produceva`, the producer did not enqueue a leader
-   query metadata request immediately, and rather, waited for the 1 second
-   timer to kick in. This could cause delays in the sending of the first message
-   by up to 1 second. (#5032).
-
-### Consumer fixes
-
- * Issues: #5051
-   Fix to add locks when updating the metadata cache for the consumer.
-   It can cause memory corruption or use-after-free in case
-   there's no broker connection and the consumer
-   group metadata needs to be updated.
-   Happens since 2.10.0 (#5066).
- * Issues: #5057
-   Fix to the re-bootstrap case when `boostrap.servers` is `NULL` and
-   brokers were added manually through `rd_kafka_brokers_add`.
-   Avoids a segmentation fault in this case.
-   Happens since 2.10.0 (#5067).
- * Issues: #5088
-   Fix for a loop of re-bootstrap sequences in case the client reaches the
-   `all brokers down` state. The client continues to select the
-   bootstrap brokers given they have no connection attempt and doesn't
-   re-connect to the learned ones. In case it happens a broker restart
-   can break the loop for the clients using the affected version.
-   Fixed by giving a higher chance to connect to the learned brokers
-   even if there are new ones that never tried to connect.
-   Happens since 2.10.0 (#5086).
 
 
 

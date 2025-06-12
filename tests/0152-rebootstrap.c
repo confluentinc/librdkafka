@@ -60,9 +60,7 @@ static void do_test_rebootstrap_brokers_add(rd_kafka_type_t rk_type,
         SUB_TEST_QUICK("%s",
                        rk_type == RD_KAFKA_PRODUCER ? "producer" : "consumer");
         test_conf_init(&conf, NULL, 30);
-        if (bootstrap_servers) {
-                test_conf_set(conf, "bootstrap.servers", bootstrap_servers);
-        }
+        test_conf_set(conf, "bootstrap.servers", bootstrap_servers);
         rd_kafka_conf_set_error_cb(
             conf, brokers_add_all_brokers_down_received_error_cb);
         rk = test_create_handle(rk_type, conf);

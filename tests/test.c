@@ -789,6 +789,9 @@ static void test_init(void) {
         test_consumer_group_protocol_str =
             test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
 
+        if ((tmp = test_getenv("TEST_BROKER_ENABLE_AUTO_CREATE", NULL)))
+                test_auto_create_enabled =
+                    !rd_strcasecmp(tmp, "true") || !strcmp(tmp, "1");
 
 #ifdef _WIN32
         test_init_win32();

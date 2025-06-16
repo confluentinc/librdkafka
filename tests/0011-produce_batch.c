@@ -91,6 +91,8 @@ static void test_single_partition(void) {
         int i;
         rd_kafka_message_t *rkmessages;
         char client_id[271];
+        const char *topic;
+
         SUB_TEST_QUICK();
 
         msgid_next = 0;
@@ -114,7 +116,10 @@ static void test_single_partition(void) {
         TEST_SAY("test_single_partition: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        topic = test_mk_topic_name("0011", 0);
+        test_create_topic_if_auto_create_disabled(rk, topic);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -230,6 +235,7 @@ static void test_partitioner(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+        const char *topic;
 
         SUB_TEST_QUICK();
 
@@ -244,7 +250,10 @@ static void test_partitioner(void) {
         TEST_SAY("test_partitioner: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        topic = test_mk_topic_name("0011_partitioner", 1);
+        test_create_topic_if_auto_create_disabled(rk, topic);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -366,7 +375,7 @@ static void test_per_message_partition_flag(void) {
         TEST_SAY("test_per_message_partition_flag: Created kafka instance %s\n",
                  rd_kafka_name(rk));
         topic_name = test_mk_topic_name("0011_per_message_flag", 1);
-        test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, 1,
+        test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
                                       5000);
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
@@ -491,6 +500,7 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+        const char *topic;
 
         SUB_TEST_QUICK();
 
@@ -507,7 +517,10 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         TEST_SAY("test_partitioner: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        topic = test_mk_topic_name("0011", 0);
+        test_create_topic_if_auto_create_disabled(rk, topic);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -650,6 +663,8 @@ static void test_message_single_partition_record_fail(int variation) {
             "test_message_single_partition_record_fail: Created kafka instance "
             "%s\n",
             rd_kafka_name(rk));
+
+        test_create_topic_if_auto_create_disabled(rk, topic_name);
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)

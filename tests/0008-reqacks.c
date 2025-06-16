@@ -130,6 +130,8 @@ int main_0008_reqacks(int argc, char **argv) {
                     "expecting status %d\n",
                     rd_kafka_name(rk), reqacks, exp_status);
 
+                test_create_topic_if_auto_create_disabled(rk, topic);
+
                 rkt = rd_kafka_topic_new(rk, topic, topic_conf);
                 if (!rkt)
                         TEST_FAIL("Failed to create topic: %s\n",

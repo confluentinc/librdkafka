@@ -83,6 +83,7 @@ static void do_test_unkpart(void) {
         int i;
         int fails = 0;
         const struct rd_kafka_metadata *metadata;
+        const char* topic;
 
         TEST_SAY(_C_BLU "%s\n" _C_CLR, __FUNCTION__);
 
@@ -94,7 +95,10 @@ static void do_test_unkpart(void) {
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0002", 0), topic_conf);
+        topic = test_mk_topic_name("0002", 0);
+        test_create_topic_if_auto_create_disabled(rk, topic);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n",
                           rd_kafka_err2str(rd_kafka_last_error()));
@@ -200,6 +204,8 @@ static void do_test_unkpart_timeout_nobroker(void) {
         test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        test_create_topic_if_auto_create_disabled(NULL, topic);
         rkt = rd_kafka_topic_new(rk, topic, NULL);
 
         err = rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,

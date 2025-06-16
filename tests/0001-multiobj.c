@@ -60,6 +60,8 @@ int main_0001_multiobj(int argc, char **argv) {
                 if (!topic)
                         topic = test_mk_topic_name("0001", 0);
 
+                test_create_topic_if_auto_create_disabled(NULL, topic);
+
                 TIMING_START(&t_full, "full create-produce-destroy cycle");
                 rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 

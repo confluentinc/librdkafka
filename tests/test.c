@@ -82,6 +82,8 @@ static const char *skip_tests_till = NULL; /* all */
 static const char *subtests_to_run = NULL; /* all */
 static const char *tests_to_skip   = NULL; /* none */
 int test_write_report              = 0;    /**< Write test report file */
+int test_auto_create_enabled =
+    -1; /**< Cached knowledge of it auto create is enabled, -1: yet to detect */
 
 static int show_summary = 1;
 static int test_summary(int do_lock);
@@ -5413,28 +5415,75 @@ test_auto_create_topic(rd_kafka_t *rk, const char *name, int timeout_ms) {
         return err;
 }
 
-
+static int verify_topics_in_metadata(rd_kafka_t *rk,
+                                     rd_kafka_metadata_topic_t *topics,
+                                     size_t topic_cnt,
+                                     rd_kafka_metadata_topic_t *not_topics,
+                                     size_t not_topic_cnt);
 /**
- * @brief Check if topic auto creation works.
+ * @brief Check if topic auto creation works. The result is cached.
  * @returns 1 if it does, else 0.
  */
 int test_check_auto_create_topic(void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t err;
-        const char *topic = test_mk_topic_name("autocreatetest", 1);
+        const char *topic;
+        rd_kafka_metadata_topic_t mdt;
+        int fails;
+
+        if (test_auto_create_enabled != -1)
+                return test_auto_create_enabled;
+
+        topic = test_mk_topic_name("autocreatetest", 1);
+        mdt.topic = (char *)topic;
 
         test_conf_init(&conf, NULL, 0);
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         err = test_auto_create_topic(rk, topic, tmout_multip(5000));
+        TEST_SAY("test_auto_create_topic() returned %s\n",
+                 rd_kafka_err2str(err));
         if (err)
                 TEST_SAY("Auto topic creation of \"%s\" failed: %s\n", topic,
                          rd_kafka_err2str(err));
+
+        /* Actually check if the topic exists or not. Errors only denote errors
+         * in topic creation, and not non-existence. */
+        fails = verify_topics_in_metadata(rk, &mdt, 1, NULL, 0);
+        if (fails > 0)
+                TEST_SAY(
+                    "Auto topic creation of \"%s\" failed as the topic does "
+                    "not exist.\n",
+                    topic);
+
         rd_kafka_destroy(rk);
 
-        return err ? 0 : 1;
+        if (fails == 0 && !err)
+                test_auto_create_enabled = 1;
+        else
+                test_auto_create_enabled = 0;
+
+        return test_auto_create_enabled;
 }
 
+/**
+ * @brief Create topic if auto topic creation is not enabled.
+ * @param use_rk The rdkafka handle to use, or NULL to create a new one.
+ * @param topicname The name of the topic to create.
+ */
+void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
+                                               const char *topicname) {
+        if (test_check_auto_create_topic()) {
+                return;
+        }
+
+        TEST_SAY("Auto topic creation is not enabled, creating topic %s\n",
+                 topicname);
+
+        /* If auto topic creation is not enabled, we create the topic with
+         * broker default values */
+        test_create_topic(use_rk, topicname, -1, -1);
+}
 
 /**
  * @brief Builds and runs a Java application from the java/ directory.

@@ -90,7 +90,7 @@ int main_0007_autotopic(int argc, char **argv) {
                     "NOTE! This test requires "
                     "auto.create.topics.enable=true to be configured on "
                     "the broker!\n");
-                return;
+                return 0;
         }
 
         /* Generate unique topic name */

@@ -110,7 +110,7 @@ int main_0003_msgmaxsize(int argc, char **argv) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         topic = test_mk_topic_name("0003", 0);
-        test_create_topic_if_auto_create_disabled(NULL, topic);
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
         if (!rkt)

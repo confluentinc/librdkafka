@@ -5473,9 +5473,11 @@ int test_check_auto_create_topic(void) {
  * @brief Create topic if auto topic creation is not enabled.
  * @param use_rk The rdkafka handle to use, or NULL to create a new one.
  * @param topicname The name of the topic to create.
+ * @param partition_cnt The number of partitions to create.
  */
 void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
-                                               const char *topicname) {
+                                               const char *topicname,
+                                               int partition_cnt) {
         if (test_check_auto_create_topic()) {
                 return;
         }
@@ -5485,7 +5487,7 @@ void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
 
         /* If auto topic creation is not enabled, we create the topic with
          * broker default values */
-        test_create_topic(use_rk, topicname, -1, -1);
+        test_create_topic(use_rk, topicname, partition_cnt, -1);
 }
 
 /**

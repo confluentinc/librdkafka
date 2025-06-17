@@ -442,6 +442,8 @@ static void test_produce_consume(void) {
         test_conf_init(NULL, NULL, 20);
         topic = test_mk_topic_name("0013", 0);
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, 1);
+
         TEST_SAY("Topic %s, testid %" PRIu64 "\n", topic, testid);
 
         /* Produce messages */

@@ -91,7 +91,7 @@ int main_0005_order(int argc, char **argv) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         topic = test_mk_topic_name("0005", 0);
-        test_create_topic_if_auto_create_disabled(rk, topic);
+        test_create_topic_if_auto_create_disabled(rk, topic, 1);
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));

@@ -96,7 +96,7 @@ static void do_test_unkpart(void) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         topic = test_mk_topic_name("0002", 0);
-        test_create_topic_if_auto_create_disabled(rk, topic);
+        test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -205,7 +205,7 @@ static void do_test_unkpart_timeout_nobroker(void) {
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic_if_auto_create_disabled(NULL, topic);
+        test_create_topic_if_auto_create_disabled(NULL, topic, 3);
         rkt = rd_kafka_topic_new(rk, topic, NULL);
 
         err = rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,

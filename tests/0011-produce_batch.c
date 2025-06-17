@@ -117,7 +117,7 @@ static void test_single_partition(void) {
                  rd_kafka_name(rk));
 
         topic = test_mk_topic_name("0011", 0);
-        test_create_topic_if_auto_create_disabled(rk, topic);
+        test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -251,7 +251,7 @@ static void test_partitioner(void) {
                  rd_kafka_name(rk));
 
         topic = test_mk_topic_name("0011_partitioner", 1);
-        test_create_topic_if_auto_create_disabled(rk, topic);
+        test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -518,7 +518,7 @@ static void test_message_partitioner_wo_per_message_flag(void) {
                  rd_kafka_name(rk));
 
         topic = test_mk_topic_name("0011", 0);
-        test_create_topic_if_auto_create_disabled(rk, topic);
+        test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -664,7 +664,7 @@ static void test_message_single_partition_record_fail(int variation) {
             "%s\n",
             rd_kafka_name(rk));
 
-        test_create_topic_if_auto_create_disabled(rk, topic_name);
+        test_create_topic_if_auto_create_disabled(rk, topic_name, 3);
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)

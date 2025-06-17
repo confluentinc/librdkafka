@@ -150,8 +150,20 @@ static rd_kafka_t *create_consumer(const char *bootstraps,
  * @brief Test heartbeat behavior with fatal errors,
  *        ensuring:
  *        - a fatal error is received on poll and consumer close
- *        - no rebalance cb is called
- *        - no final leave group heartbeat is sent
+ *        - sequence:
+ *          - in TEST_VARIATION_ERROR_FIRST_HB (1 HBs, 0 callbacks):
+ *            - first HB returns a fatal error
+ *            - no rebalance callbacks are called after that
+ *            - all operations on the consumer fail with fatal error \p err
+ *            - no final leave group HB is sent
+ *
+ *          - in TEST_VARIATION_ERROR_SECOND_HB (2 HBs, 1 assignment callback):
+ *            - first HB receives assignment
+ *            - an assignment callback is called
+ *            - second HB acknowledges the assignment and returns a fatal error.
+ *            - no rebalance callbacks are called after that
+ *            - all operations on the consumer fail with fatal error \p err.
+ *            - no final leave group HB is sent
  *
  * @param err The error code to test.
  * @param variation Test variation, see `test_variation_t`.
@@ -164,12 +176,14 @@ do_test_consumer_group_heartbeat_fatal_error(rd_kafka_resp_err_t err,
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_t *c;
         rd_kafka_message_t *rkmessage;
+        rd_kafka_resp_err_t fatal_error;
         int expected_heartbeats, found_heartbeats, expected_rebalance_cnt;
         test_timing_t timing;
         rebalance_cnt       = 0;
         rebalance_exp_lost  = rd_false;
         rebalance_exp_event = RD_KAFKA_RESP_ERR_NO_ERROR;
         const char *topic   = test_mk_topic_name(__FUNCTION__, 0);
+        char errstr[512];
 
         SUB_TEST_QUICK("%s, variation: %s", rd_kafka_err2name(err),
                        test_variation_name(variation));
@@ -241,6 +255,9 @@ do_test_consumer_group_heartbeat_fatal_error(rd_kafka_resp_err_t err,
         TEST_ASSERT(rkmessage->err == RD_KAFKA_RESP_ERR__FATAL,
                     "Expected a _FATAL error, got %s",
                     rd_kafka_err2name(rkmessage->err));
+        fatal_error = rd_kafka_fatal_error(c, errstr, sizeof(errstr));
+        TEST_ASSERT(fatal_error == err, "Expected fatal error %s, got %s",
+                    rd_kafka_err2name(err), rd_kafka_err2name(fatal_error));
         rd_kafka_message_destroy(rkmessage);
 
         TEST_ASSERT(rebalance_cnt == expected_rebalance_cnt,
@@ -250,6 +267,9 @@ do_test_consumer_group_heartbeat_fatal_error(rd_kafka_resp_err_t err,
         /* Close c, a fatal error is returned */
         TEST_ASSERT(rd_kafka_consumer_close(c) == RD_KAFKA_RESP_ERR__FATAL,
                     "Expected a _FATAL error, got %s", rd_kafka_err2name(err));
+        fatal_error = rd_kafka_fatal_error(c, errstr, sizeof(errstr));
+        TEST_ASSERT(fatal_error == err, "Expected fatal error %s, got %s",
+                    rd_kafka_err2name(err), rd_kafka_err2name(fatal_error));
 
         TEST_ASSERT(rebalance_cnt == expected_rebalance_cnt,
                     "Expected %d rebalance events, got %d",
@@ -302,8 +322,25 @@ static void do_test_consumer_group_heartbeat_fatal_errors(void) {
  * @brief Test heartbeat behavior with retriable errors,
  *        ensuring:
  *        - no error is received on poll and consumer close
- *        - rebalance cb is called to assign and revoke
- *        - final leave group heartbeat is sent
+ *        - sequence:
+ *          - in TEST_VARIATION_ERROR_FIRST_HB (4 HBs, 1 assignment callback, 1
+ * revocation callback):
+ *            - first HB is retried
+ *            - second HB receives assignment
+ *            - rebalance callback with an assignment
+ *            - third HB for the acknowledgment
+ *            - assignment revoked with a callback on consumer close
+ *            - final leave group HB
+ *
+ *          - in TEST_VARIATION_ERROR_SECOND_HB (4 HBs, 1 assignment callback, 1
+ * revocation callback):
+ *            - first HB receives assignment
+ *            - assignment callback is called
+ *            - second HB acknowledges the assignment and
+ *              returns a retriable error
+ *            - the HB is retried (third one)
+ *            - assignment revoked with a callback on consumer close
+ *            - final leave group HB
  *
  * @param err The error code to test.
  * @param variation Test variation, see `test_variation_t`.
@@ -357,21 +394,18 @@ do_test_consumer_group_heartbeat_retriable_error(rd_kafka_resp_err_t err,
         TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* First HB and retry */
-        expected_heartbeats = 2;
+        /* TEST_VARIATION_ERROR_FIRST_HB First HB and its retry + ACK. */
+        /* TEST_VARIATION_ERROR_SECOND_HB First HB + ACK and retry. */
+        expected_heartbeats = 3;
         rebalance_exp_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        if (variation == TEST_VARIATION_ERROR_SECOND_HB) {
-                TEST_SAY(
-                    "Consume from c, no message is returned, "
-                    "but assign callback is processed\n");
-                test_consumer_poll_no_msgs("after heartbeat", c, 0, 500);
-                TEST_ASSERT(
-                    rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,
+        TEST_SAY(
+            "Consume from c, no message is returned, "
+            "but assign callback is processed\n");
+        test_consumer_poll_no_msgs("after heartbeat", c, 0, 500);
+        TEST_ASSERT(rebalance_cnt > 0, "Expected > 0 rebalance events, got %d",
+                    rebalance_cnt);
+        TEST_ASSERT(rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected assign callback to be processed, but it wasn't");
-
-                /* wait 1 HB interval more */
-                expected_heartbeats += 1;
-        }
 
         TEST_SAY("Awaiting first HBs\n");
         TEST_ASSERT((found_heartbeats =
@@ -380,17 +414,10 @@ do_test_consumer_group_heartbeat_retriable_error(rd_kafka_resp_err_t err,
                     "Expected %d heartbeats, got %d", expected_heartbeats,
                     found_heartbeats);
 
-        TEST_SAY("Consume from c, no message is returned\n");
-        test_consumer_poll_no_msgs("after heartbeat", c, 0, 250);
-
-        TEST_ASSERT(rebalance_cnt > 0, "Expected > 0 rebalance events, got %d",
-                    rebalance_cnt);
-
         rebalance_exp_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
 
-        rd_kafka_mock_clear_requests(mcluster);
-        rebalance_cnt = 0;
         /* Close c without errors */
+        expected_heartbeats++;
         TEST_ASSERT(rd_kafka_consumer_close(c) == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected NO_ERROR, got %s", rd_kafka_err2name(err));
         TEST_ASSERT(rebalance_cnt > 0, "Expected > 0 rebalance events, got %d",
@@ -401,9 +428,11 @@ do_test_consumer_group_heartbeat_retriable_error(rd_kafka_resp_err_t err,
         rd_kafka_destroy(c);
 
         TEST_SAY("Awaiting leave group HB\n");
-        TEST_ASSERT(
-            (found_heartbeats = wait_all_heartbeats_done(mcluster, 1, 0)) == 1,
-            "Expected 1 leave group heartbeat, got %d", found_heartbeats);
+        TEST_ASSERT((found_heartbeats =
+                         wait_all_heartbeats_done(mcluster, expected_heartbeats,
+                                                  0)) == expected_heartbeats,
+                    "Expected %d heartbeats, got %d", expected_heartbeats,
+                    found_heartbeats);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -438,9 +467,30 @@ static void do_test_consumer_group_heartbeat_retriable_errors(void) {
  * @brief Test heartbeat behavior with consumer fenced errors,
  *        ensuring:
  *        - no error is received on poll and consumer close
- *        - rebalance callbacks are called, with partitions lost when
- *          necessary
- *        - a final leave group heartbeat is sent
+ *        - sequence:
+ *
+ *          - in TEST_VARIATION_ERROR_FIRST_HB (4 HBs, 1 assignment callback, 1
+ * revocation callback):
+ *            - first HB fences the member
+ *              it does not receives assignment
+ *              or revoke any partitions
+ *            - second HB receives assignment
+ *            - there's an assignment callback
+ *            - assignment is acknowledged (third HB)
+ *            - assignment is revoked on close (fourth HB)
+ *            - last revoke callback
+ *
+ *          - in TEST_VARIATION_ERROR_SECOND_HB (5 HBs, 2 assignment callbacks,
+ * 2 revocation callbacks of which 1 as lost):
+ *            - first HB receives assignment
+ *            - assignment callback is called
+ *            - second HB acknowledges the assignment, fences the consumer
+ *            - a lost callback is called (lost partitions)
+ *            - partitions are assigned again on re-joining (third HB)
+ *            - second assignment callback
+ *            - acknowledgment of the assignment (fourth HB)
+ *            - partitions are revoked on close (fifth HB)
+ *            - last revoke callback
  *
  * @param err The error code to test.
  * @param variation Test variation, see `test_variation_t`.
@@ -582,12 +632,12 @@ do_test_consumer_group_heartbeat_fenced_error(rd_kafka_resp_err_t err,
         expected_rebalance_cnt++;
         rebalance_exp_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
 
-        rd_kafka_mock_clear_requests(mcluster);
+        /* Leave group HB */
+        expected_heartbeats++;
         /* Close c, no error is returned */
         TEST_CALL_ERR__(rd_kafka_consumer_close(c));
         TEST_ASSERT(rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected revoke callback to be processed, but it wasn't");
-
         TEST_ASSERT(rebalance_cnt == expected_rebalance_cnt,
                     "Expected %d rebalance events, got %d",
                     expected_rebalance_cnt, rebalance_cnt);
@@ -596,9 +646,11 @@ do_test_consumer_group_heartbeat_fenced_error(rd_kafka_resp_err_t err,
 
         TEST_SAY("Verifying leave group heartbeat\n");
         /* After closing the consumer, 1 heartbeat should been sent */
-        TEST_ASSERT(
-            (found_heartbeats = wait_all_heartbeats_done(mcluster, 1, 0)) == 1,
-            "Expected 1 leave group heartbeat, got %d", found_heartbeats);
+        TEST_ASSERT((found_heartbeats =
+                         wait_all_heartbeats_done(mcluster, expected_heartbeats,
+                                                  0)) == expected_heartbeats,
+                    "Expected %d heartbeats, got %d", expected_heartbeats,
+                    found_heartbeats);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);

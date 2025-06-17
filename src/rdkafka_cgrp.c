@@ -654,6 +654,9 @@ static int rd_kafka_cgrp_coord_update(rd_kafka_cgrp_t *rkcg, int32_t coord_id) {
                 /* Clear previous broker handle, if any */
                 if (rkcg->rkcg_curr_coord)
                         rd_kafka_cgrp_coord_clear_broker(rkcg);
+
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                    rkcg, "coordinator changed");
         }
 
 
@@ -788,6 +791,8 @@ err:
 
             RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
 
+            RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+
             RD_KAFKA_ERR_ACTION_END);
 
 
@@ -805,6 +810,12 @@ err:
 
                         /* Suppress repeated errors */
                         rd_kafka_cgrp_set_last_err(rkcg, ErrorCode);
+                }
+
+                if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY_BROKER) {
+                        /* This error is one-time and should cause
+                         * an immediate retry. */
+                        rd_interval_reset(&rkcg->rkcg_coord_query_intvl);
                 }
 
                 /* Retries are performed by the timer-intervalled
@@ -3320,8 +3331,7 @@ err:
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                    rkcg, "coordinator query");
+                /* If coordinator changes, HB will be expedited. */
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {

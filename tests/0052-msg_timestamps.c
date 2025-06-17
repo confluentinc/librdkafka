@@ -161,12 +161,7 @@ static void test_timestamps(const char *broker_tstype,
         TEST_SAY(_C_MAG "Timestamp test using %s\n", topic);
         test_timeout_set(30);
 
-        test_kafka_topics(
-            "--create --topic \"%s\" "
-            "--replication-factor 1 --partitions 1 "
-            "--config message.timestamp.type=%s",
-            topic, broker_tstype);
-        test_wait_topic_exists(NULL, topic, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
         TEST_SAY(_C_MAG "Producing %d messages to %s\n", msgcnt, topic);
         produce_msgs(topic, 0, testid, msgcnt, broker_version, codec);

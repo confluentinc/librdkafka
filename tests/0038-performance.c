@@ -67,6 +67,7 @@ int main_0038_performance(int argc, char **argv) {
         test_conf_set(conf, "queue.buffering.max.messages", "10000000");
         test_conf_set(conf, "linger.ms", "100");
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
         rkt = test_create_producer_topic(rk, topic, "acks", "1", NULL);
         test_wait_topic_exists(rk, topic, 5000);
 

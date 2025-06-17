@@ -596,10 +596,9 @@ do_test_consumer_group_heartbeat_fenced_error(rd_kafka_resp_err_t err,
 
         TEST_SAY("Verifying leave group heartbeat\n");
         /* After closing the consumer, 1 heartbeat should been sent */
-        TEST_ASSERT((found_heartbeats =
-                         wait_all_heartbeats_done(mcluster, 1, 0)) == 1,
-                    "Expected 1 leave group heartbeat, got %d",
-                    found_heartbeats);
+        TEST_ASSERT(
+            (found_heartbeats = wait_all_heartbeats_done(mcluster, 1, 0)) == 1,
+            "Expected 1 leave group heartbeat, got %d", found_heartbeats);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);

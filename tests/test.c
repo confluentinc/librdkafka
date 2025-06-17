@@ -6111,7 +6111,7 @@ void test_wait_metadata_update(rd_kafka_t *rk,
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
-        abs_timeout = test_clock() + ((int64_t)tmout * 1000);
+        abs_timeout = test_clock() + ((int64_t)tmout_multip(tmout) * 1000);
 
         TEST_SAY("Waiting for up to %dms for metadata update\n", tmout);
 

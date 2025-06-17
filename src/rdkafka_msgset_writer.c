@@ -146,8 +146,8 @@ rd_kafka_msgset_writer_select_MsgVersion(rd_kafka_msgset_writer_t *msetw) {
          */
         if (msetw->msetw_compression &&
             (rd_kafka_broker_ApiVersion_supported(
-                 rkb, RD_KAFKAP_Produce, 0,
-                 compr_req[msetw->msetw_compression].ApiVersion, NULL) == -1 ||
+                 rkb, RD_KAFKAP_Produce, compr_req[msetw->msetw_compression].ApiVersion,
+                 999, NULL) == -1 ||
              (compr_req[msetw->msetw_compression].feature &&
               !(msetw->msetw_rkb->rkb_features &
                 compr_req[msetw->msetw_compression].feature)))) {

@@ -664,7 +664,7 @@ static void test_message_single_partition_record_fail(int variation) {
             "%s\n",
             rd_kafka_name(rk));
 
-        test_create_topic_if_auto_create_disabled(rk, topic_name, 3);
+        test_create_topic_if_auto_create_disabled(rk, topic_name, -1);
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)

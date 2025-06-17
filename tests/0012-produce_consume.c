@@ -506,7 +506,7 @@ static void test_produce_consume(void) {
         test_conf_init(NULL, NULL, 20);
         topic = test_mk_topic_name("0012", 1);
 
-        test_create_topic_if_auto_create_disabled(NULL, topic, 2);
+        test_create_topic_if_auto_create_disabled(NULL, topic, partition_cnt);
 
         TEST_SAY("Topic %s, testid %" PRIu64 "\n", topic, testid);
 

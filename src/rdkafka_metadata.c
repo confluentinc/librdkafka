@@ -881,8 +881,9 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
 
         if (ErrorCode) {
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "Received top level error code: %" PRId16,
-                           ErrorCode);
+                           "Metadata response: received top level "
+                           "error code %" PRId16 ": %s",
+                           ErrorCode, rd_kafka_err2str(ErrorCode));
                 err = ErrorCode;
                 goto err;
         }

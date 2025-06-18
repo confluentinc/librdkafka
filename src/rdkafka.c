@@ -2079,6 +2079,11 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 
         rd_dassert(rk->rk_conf.metadata_recovery_strategy !=
                    RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE);
+        if (rk->rk_conf.metadata_recovery_strategy ==
+            RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
+                /* This function should not be called in this case.
+                 * this is just a fail-safe. */
+                return;
 
         rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
 

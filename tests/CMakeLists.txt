@@ -142,6 +142,7 @@ set(
     0150-telemetry_mock.c
     0151-purge-brokers.c
     0152-rebootstrap.c
+    0153-memberid.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

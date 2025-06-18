@@ -409,7 +409,7 @@ struct test tests[] = {
     _TEST(0058_log, TEST_F_LOCAL),
     _TEST(0059_bsearch, 0, TEST_BRKVER(0, 10, 0, 0)),
     _TEST(0060_op_prio, 0, TEST_BRKVER(0, 9, 0, 0)),
-    _TEST(0061_consumer_lag, 0),
+    _TEST(0061_consumer_lag, TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0062_stats_event, TEST_F_LOCAL),
     _TEST(0063_clusterid, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0064_interceptors, 0, TEST_BRKVER(0, 9, 0, 0)),
@@ -1879,6 +1879,10 @@ int main(int argc, char **argv) {
                         test_neg_flags |= TEST_F_KNOWN_ISSUE;
                 else if (!strcmp(argv[i], "-E"))
                         test_neg_flags |= TEST_F_SOCKEM;
+                else if (!strcmp(argv[i], "-i"))
+                        test_flags |= TEST_F_IDEMPOTENT_PRODUCER;
+                else if (!strcmp(argv[i], "-I"))
+                        test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
                 else if (!strcmp(argv[i], "-V") && i + 1 < argc)
                         test_broker_version_str = argv[++i];
                 else if (!strcmp(argv[i], "-s") && i + 1 < argc)
@@ -1921,6 +1925,8 @@ int main(int argc, char **argv) {
                             "needed)\n"
                             "  -k/-K  Only/dont run tests with known issues\n"
                             "  -E     Don't run sockem tests\n"
+                            "  -i/-I   Only/don't run tests using "
+                            "idempotent/transactional producer\n"
                             "  -a     Assert on failures\n"
                             "  -r     Write test_report_...json file.\n"
                             "  -S     Dont show test summary\n"

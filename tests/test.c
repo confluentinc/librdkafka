@@ -7423,7 +7423,7 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
  *        received by mock cluster \p mcluster, matching
  *        function \p match , called with opaque \p opaque .
  */
-static size_t test_mock_get_matching_request_cnt(
+size_t test_mock_get_matching_request_cnt(
     rd_kafka_mock_cluster_t *mcluster,
     rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
     void *opaque) {

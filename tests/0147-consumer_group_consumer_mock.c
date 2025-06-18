@@ -805,6 +805,59 @@ static void do_test_metadata_unknown_topic_id_tests(void) {
         }
 }
 
+static void do_test_adherence_to_hb_interval(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_topic_partition_list_t *subscription;
+        rd_kafka_t *c;
+        const char *topic =
+            test_mk_topic_name("do_test_adherence_to_hb_interval", 1);
+        rd_kafka_conf_t *conf;
+        size_t heartbeat_request_count = 0;
+
+        SUB_TEST_QUICK("do_test_adherence_to_hb_interval");
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 1000);
+        rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "auto.commit.interval.ms", "100");
+        c = test_create_consumer(topic, NULL, conf, NULL);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+        TEST_SAY("Subscribing to topic\n");
+        TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        TEST_SAY("Subscription done, waiting for heartbeats\n");
+
+        rd_sleep(2); /* Sleep to ensure that some HB are sent */
+
+        heartbeat_request_count = test_mock_get_matching_request_cnt(
+            mcluster, is_heartbeat_request, NULL);
+        TEST_SAY("Heartbeat request count: %zu\n", heartbeat_request_count);
+
+        /* Assert that we received the expected number of heartbeats */
+        TEST_ASSERT(heartbeat_request_count >= 3 &&
+                        heartbeat_request_count <= 5,
+                    "Expected between 3 and 5 heartbeats, got %zu",
+                    heartbeat_request_count);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -820,6 +873,8 @@ int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         do_test_consumer_group_heartbeat_fenced_errors();
 
         do_test_metadata_unknown_topic_id_tests();
+
+        do_test_adherence_to_hb_interval();
 
         return 0;
 }

@@ -60,7 +60,7 @@ static int consumer_thread(void *arg) {
 }
 
 void do_test_unique_memberid() {
-        int consumer_cnt = 500;
+        const int consumer_cnt = 500;
         int i;
         int j;
         int have_only_unique_memberids = 1;

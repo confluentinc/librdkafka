@@ -730,11 +730,6 @@ int test_partition_list_and_offsets_cmp(rd_kafka_topic_partition_list_t *al,
                                         rd_kafka_topic_partition_list_t *bl);
 
 void test_kafka_topics(const char *fmt, ...);
-void test_admin_create_topic(rd_kafka_t *use_rk,
-                             const char *topicname,
-                             int partition_cnt,
-                             int replication_factor,
-                             const char **configs);
 void test_create_topic(rd_kafka_t *use_rk,
                        const char *topicname,
                        int partition_cnt,

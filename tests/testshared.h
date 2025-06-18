@@ -412,6 +412,12 @@ const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
 
+void test_admin_create_topic(rd_kafka_t *use_rk,
+                             const char *topicname,
+                             int partition_cnt,
+                             int replication_factor,
+                             const char **configs);
+
 int test_check_auto_create_topic(void);
 void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
                                                const char *topicname,

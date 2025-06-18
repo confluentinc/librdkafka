@@ -116,6 +116,7 @@ static void do_test_bsearch(void) {
   std::string errstr;
   RdKafka::ErrorCode err;
   MyDeliveryReportCb my_dr;
+  const char *configs[] = {"message.timestamp.type", "CreateTime", NULL};
 
   topic = Test::mk_topic_name("0059-bsearch", 1);
   Test::conf_init(&conf, &tconf, 0);
@@ -133,6 +134,7 @@ static void do_test_bsearch(void) {
   /* Start with now() - 1h */
   timestamp_ms = std::time(0) * 1000LL - 3600LL * 1000LL;
 
+  test_admin_create_topic(NULL, topic.c_str(), 1, -1, configs);
   test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), 1);
 
   for (int i = 0; i < msgcnt; i++) {

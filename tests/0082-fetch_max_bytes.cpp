@@ -52,6 +52,8 @@ static void do_test_fetch_max_bytes(void) {
 
   std::string topic = Test::mk_topic_name("0081-fetch_max_bytes", 1);
 
+  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), partcnt);
+
   /* Produce messages to partitions */
   for (int32_t p = 0; p < (int32_t)partcnt; p++)
     test_produce_msgs_easy_size(topic.c_str(), 0, p, msgcnt, msgsize);

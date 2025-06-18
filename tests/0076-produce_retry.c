@@ -409,31 +409,50 @@ static void do_test_produce_retry_invalid_msg(rd_kafka_mock_cluster_t *mcluster,
 
 int main_0076_produce_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0076_produce_retry", 1);
-        const rd_bool_t has_idempotence =
-            test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
 
 #if WITH_SOCKEM
-        if (has_idempotence) {
-                /* Idempotence, no try fail, should succeed. */
-                do_test_produce_retries(topic, 1, 0, 0);
-                /* Idempotence, try fail, should succeed. */
-                do_test_produce_retries(topic, 1, 1, 0);
-        }
-        /* No idempotence, try fail, should fail. */
-        do_test_produce_retries(topic, 0, 1, 1);
+        /* Idempotence, no try fail, should succeed. */
+        do_test_produce_retries(topic, 1, 0, 0);
+        /* Idempotence, try fail, should succeed. */
+        do_test_produce_retries(topic, 1, 1, 0);
 #endif
-
-        if (has_idempotence) {
-                /* Idempotence, no try fail, should succeed. */
-                do_test_produce_retries_disconnect(topic, 1, 0, 0);
-                /* Idempotence, try fail, should succeed. */
-                do_test_produce_retries_disconnect(topic, 1, 1, 0);
-        }
-        /* No idempotence, try fail, should fail. */
-        do_test_produce_retries_disconnect(topic, 0, 1, 1);
+        /* Idempotence, no try fail, should succeed. */
+        do_test_produce_retries_disconnect(topic, 1, 0, 0);
+        /* Idempotence, try fail, should succeed. */
+        do_test_produce_retries_disconnect(topic, 1, 1, 0);
 
         return 0;
 }
+
+int main_0076_produce_retry_idempotent(int argc, char **argv) {
+        const char *topic =
+            test_mk_topic_name("0076_produce_retry_idempotent", 1);
+        const rd_bool_t has_idempotence =
+            test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
+
+        if (!has_idempotence) {
+                TEST_SKIP("Broker does not support idempotence.\n");
+                return 0;
+        }
+
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
+#if WITH_SOCKEM
+        /* Idempotence, no try fail, should succeed. */
+        do_test_produce_retries(topic, 1, 0, 0);
+        /* Idempotence, try fail, should succeed. */
+        do_test_produce_retries(topic, 1, 1, 0);
+#endif
+
+        /* Idempotence, no try fail, should succeed. */
+        do_test_produce_retries_disconnect(topic, 1, 0, 0);
+        /* Idempotence, try fail, should succeed. */
+        do_test_produce_retries_disconnect(topic, 1, 1, 0);
+
+        return 0;
+}
+
 
 int main_0076_produce_retry_mock(int argc, char **argv) {
         rd_kafka_mock_cluster_t *mcluster;

@@ -60,29 +60,30 @@ static int consumer_thread(void *arg) {
 }
 
 void do_test_unique_memberid() {
-        const int consumer_cnt = 500;
         int i;
         int j;
         int have_only_unique_memberids = 1;
         const char *group_id           = test_mk_topic_name("0153-memberid", 1);
-        thrd_t thread_id[consumer_cnt];
-        consumer_t consumer_args[consumer_cnt];
+
+#define CONSUMER_CNT 500
+        thrd_t thread_id[CONSUMER_CNT];
+        consumer_t consumer_args[CONSUMER_CNT];
 
         SUB_TEST_QUICK();
 
-        for (i = 0; i < consumer_cnt; i++) {
+        for (i = 0; i < CONSUMER_CNT; i++) {
                 consumer_args[i].group_id = group_id;
                 consumer_args[i].memberid = NULL;
                 thrd_create(&thread_id[i], consumer_thread, &consumer_args[i]);
         }
 
-        for (i = 0; i < consumer_cnt; i++) {
+        for (i = 0; i < CONSUMER_CNT; i++) {
                 thrd_join(thread_id[i], NULL);
         }
 
-        for (i = 0; i < consumer_cnt; i++) {
+        for (i = 0; i < CONSUMER_CNT; i++) {
                 if (have_only_unique_memberids) {
-                        for (j = i + 1; j < consumer_cnt; j++) {
+                        for (j = i + 1; j < CONSUMER_CNT; j++) {
                                 if (strcmp(consumer_args[i].memberid,
                                            consumer_args[j].memberid) == 0) {
                                         TEST_SAY(
@@ -99,7 +100,7 @@ void do_test_unique_memberid() {
 
         if (have_only_unique_memberids) {
                 TEST_SAY("All %d consumers have unique member IDs\n",
-                         consumer_cnt);
+                         CONSUMER_CNT);
         } else {
                 TEST_FAIL("Not all consumers have unique member IDs\n");
         }

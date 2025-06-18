@@ -6429,7 +6429,7 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                         rkcg->rkcg_rebalance_rejoin = rd_false;
                         rd_kafka_cgrp_rejoin(
                             rkcg,
-                            "rejoining group to redistribute "
+                            "Assignment Done: rejoining group to redistribute "
                             "previously owned partitions to other "
                             "group members");
                 } else if (rkcg->rkcg_consumer_flags &

@@ -810,7 +810,6 @@ static void do_test_adherence_to_hb_interval(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_t *c;
-        test_timing_t timing;
         const char *topic =
             test_mk_topic_name("do_test_adherence_to_hb_interval", 1);
         rd_kafka_conf_t *conf;
@@ -824,7 +823,6 @@ static void do_test_adherence_to_hb_interval(void) {
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
-        test_conf_set(conf, "group.protocol", "consumer");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "auto.commit.interval.ms", "100");
         c = test_create_consumer(topic, NULL, conf, NULL);
@@ -840,15 +838,16 @@ static void do_test_adherence_to_hb_interval(void) {
 
         TEST_SAY("Subscription done, waiting for heartbeats\n");
 
-        rd_sleep(2);  // Sleep to ensure that some HB are sent
+        rd_sleep(2); /* Sleep to ensure that some HB are sent */
 
         heartbeat_request_count = test_mock_get_matching_request_cnt(
             mcluster, is_heartbeat_request, NULL);
         TEST_SAY("Heartbeat request count: %zu\n", heartbeat_request_count);
 
-        /** Assert that we received the expected number of heartbeats */
-        TEST_ASSERT(heartbeat_request_count > 2 && heartbeat_request_count <= 5,
-                    "Expected less than 5 heartbeats, got %zu",
+        /* Assert that we received the expected number of heartbeats */
+        TEST_ASSERT(heartbeat_request_count >= 3 &&
+                        heartbeat_request_count <= 5,
+                    "Expected between 3 and 5 heartbeats, got %zu",
                     heartbeat_request_count);
 
         rd_kafka_mock_stop_request_tracking(mcluster);

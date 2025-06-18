@@ -26,10 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- #include "test.h"
+#include "test.h"
 typedef struct consumer_s {
-    const char *group_id;
-    char *memberid;
+        const char *group_id;
+        char *memberid;
 } consumer_t;
 
 static int
@@ -40,22 +40,23 @@ is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
 }
 
 static int consumer_thread(void *arg) {
-    rd_kafka_conf_t *conf;
-    rd_kafka_t *consumer;
-    consumer_t *consumer_args = arg;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *consumer;
+        consumer_t *consumer_args = arg;
 
-    test_curr->is_fatal_cb = is_fatal_cb;
+        test_curr->is_fatal_cb = is_fatal_cb;
 
-    test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 60);
 
-    consumer = test_create_consumer(consumer_args->group_id, NULL, conf, NULL);
+        consumer =
+            test_create_consumer(consumer_args->group_id, NULL, conf, NULL);
 
-    consumer_args->memberid = rd_kafka_memberid(consumer);
+        consumer_args->memberid = rd_kafka_memberid(consumer);
 
-    test_consumer_close(consumer);
-    rd_kafka_destroy(consumer);
-    test_curr->is_fatal_cb = NULL;
-    return 0;
+        test_consumer_close(consumer);
+        rd_kafka_destroy(consumer);
+        test_curr->is_fatal_cb = NULL;
+        return 0;
 }
 
 void do_test_unique_memberid() {
@@ -63,28 +64,31 @@ void do_test_unique_memberid() {
         int i;
         int j;
         int have_only_unique_memberids = 1;
-        const char *group_id = test_mk_topic_name("0153-memberid", 1);
+        const char *group_id           = test_mk_topic_name("0153-memberid", 1);
         thrd_t thread_id[consumer_cnt];
         consumer_t consumer_args[consumer_cnt];
 
         SUB_TEST_QUICK();
 
-        for(i = 0; i < consumer_cnt; i++) {
-            consumer_args[i].group_id = group_id;
-            consumer_args[i].memberid = NULL;
-            thrd_create(&thread_id[i], consumer_thread, &consumer_args[i]);
+        for (i = 0; i < consumer_cnt; i++) {
+                consumer_args[i].group_id = group_id;
+                consumer_args[i].memberid = NULL;
+                thrd_create(&thread_id[i], consumer_thread, &consumer_args[i]);
         }
 
-        for(i = 0; i < consumer_cnt; i++) {
-            thrd_join(thread_id[i], NULL);
+        for (i = 0; i < consumer_cnt; i++) {
+                thrd_join(thread_id[i], NULL);
         }
 
-        for(i = 0; i < consumer_cnt; i++) {
-                if(have_only_unique_memberids) {
+        for (i = 0; i < consumer_cnt; i++) {
+                if (have_only_unique_memberids) {
                         for (j = i + 1; j < consumer_cnt; j++) {
-                                if (strcmp(consumer_args[i].memberid, consumer_args[j].memberid) == 0) {
-                                        TEST_SAY("Consumer %d has the same member ID as consumer %d: %s\n",
-                                               i, j, consumer_args[i].memberid);
+                                if (strcmp(consumer_args[i].memberid,
+                                           consumer_args[j].memberid) == 0) {
+                                        TEST_SAY(
+                                            "Consumer %d has the same member "
+                                            "ID as consumer %d: %s\n",
+                                            i, j, consumer_args[i].memberid);
                                         have_only_unique_memberids = 0;
                                         break;
                                 }
@@ -94,7 +98,8 @@ void do_test_unique_memberid() {
         }
 
         if (have_only_unique_memberids) {
-                TEST_SAY("All %d consumers have unique member IDs\n", consumer_cnt);
+                TEST_SAY("All %d consumers have unique member IDs\n",
+                         consumer_cnt);
         } else {
                 TEST_FAIL("Not all consumers have unique member IDs\n");
         }
@@ -103,10 +108,11 @@ void do_test_unique_memberid() {
 }
 
 int main_0153_memberid(int argc, char **argv) {
-        
-        if(test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Member ID is not generated on the client side in classic "
-                          "protocol, skipping test");
+
+        if (test_consumer_group_protocol_classic()) {
+                TEST_SKIP(
+                    "Member ID is not generated on the client side in classic "
+                    "protocol, skipping test");
                 return 0;
         }
 

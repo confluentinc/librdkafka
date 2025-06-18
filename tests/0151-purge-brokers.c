@@ -571,6 +571,7 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             "Expected <= 3 re-bootstrap sequences, got %d",
             rd_atomic32_get(
                 &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt));
+        rd_free(log_interceptor);
         SUB_TEST_PASS();
 }
 
@@ -793,9 +794,11 @@ static void do_test_kip1102_rebootstrap_cases_log_cb(const rd_kafka_t *rk,
 static rd_kafka_type_t
 do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
         const char *debug_contexts[2] = {"conf", NULL};
-        /* Leave group timeout + 1s to avoid false positive from that case.
-         * ERR_UNKNOWN causes a group rejoin while Syncing */
-        test_conf_set(conf, "metadata.recovery.rebootstrap.trigger.ms", "6000");
+        /* This is 2 seconds less of the metadata refresh sequence expected
+         * total duration.
+         * ERR_UNKNOWN is returned as a top level error
+         * so the rebootstrap timer isn't reset. */
+        test_conf_set(conf, "metadata.recovery.rebootstrap.trigger.ms", "5000");
         /* Avoid Head Of Line blocking from fetch requests for predictable
          * timing */
         test_conf_set(conf, "fetch.wait.max.ms", "10");

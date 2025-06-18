@@ -877,6 +877,12 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
                                                const char **bootstraps);
+
+size_t test_mock_get_matching_request_cnt(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque);
+
 size_t test_mock_wait_matching_requests(
     rd_kafka_mock_cluster_t *mcluster,
     size_t num,

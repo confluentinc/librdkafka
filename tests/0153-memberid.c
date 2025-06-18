@@ -1,8 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2022, Magnus Edenhill
- *               2023, Confluent Inc.
+ * Copyright (c) 2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,14 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- #include <stdatomic.h>
-
  #include "test.h"
- /* Typical include path would be <librdkafka/rdkafka.h>, but this program
-  * is built from within the librdkafka source tree and thus differs. */
- #include "rdkafka.h" /* for Kafka driver */
- #include "rdtime.h"
-
 typedef struct consumer_s {
     const char *group_id;
     char *memberid;
@@ -70,7 +62,7 @@ void do_test_unique_memberid() {
         int consumer_cnt = 500;
         int i;
         int j;
-        int have_only_unique_memberid = 1;
+        int have_only_unique_memberids = 1;
         const char *group_id = test_mk_topic_name("0153-memberid", 1);
         thrd_t thread_id[consumer_cnt];
         consumer_t consumer_args[consumer_cnt];
@@ -88,19 +80,20 @@ void do_test_unique_memberid() {
         }
 
         for(i = 0; i < consumer_cnt; i++) {
-                if(have_only_unique_memberid) {
+                if(have_only_unique_memberids) {
                         for (j = i + 1; j < consumer_cnt; j++) {
                                 if (strcmp(consumer_args[i].memberid, consumer_args[j].memberid) == 0) {
                                         TEST_SAY("Consumer %d has the same member ID as consumer %d: %s\n",
                                                i, j, consumer_args[i].memberid);
-                                        have_only_unique_memberid = 0;
+                                        have_only_unique_memberids = 0;
+                                        break;
                                 }
                         }
                 }
                 rd_free(consumer_args[i].memberid);
         }
 
-        if (have_only_unique_memberid) {
+        if (have_only_unique_memberids) {
                 TEST_SAY("All %d consumers have unique member IDs\n", consumer_cnt);
         } else {
                 TEST_FAIL("Not all consumers have unique member IDs\n");
@@ -114,6 +107,12 @@ int main_0153_memberid(int argc, char **argv) {
         if(test_consumer_group_protocol_classic()) {
                 TEST_SKIP("Member ID is not generated on the client side in classic "
                           "protocol, skipping test");
+                return 0;
+        }
+
+        if (!strcmp(test_mode, "valgrind")) {
+                TEST_SKIP("Test is too heavy for valgrind, skipping it");
+                return 0;
         }
 
         do_test_unique_memberid();

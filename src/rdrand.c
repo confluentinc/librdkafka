@@ -43,6 +43,14 @@ int rd_jitter(int low, int high) {
                 rd_gettimeofday(&tv, NULL);
                 seed = (unsigned int)(tv.tv_usec);
                 seed ^= (unsigned int)(intptr_t)thrd_current();
+
+                /* When many threads are created at the same time and the
+                 * thread id is different only by a few bits it's possible that
+                 * `rand_r`, that is initially multiplying by `1103515245`,
+                 * truncates the variable bits and uses the same seed for
+                 * different threads. By applying `murmur2` we ensure that seed
+                 * variability is distributed across various bits at different
+                 * positions. */
                 seed = (unsigned int) rd_murmur2(&seed, sizeof(seed));
         }
 

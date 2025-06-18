@@ -409,8 +409,6 @@ static void do_test_produce_retry_invalid_msg(rd_kafka_mock_cluster_t *mcluster,
 
 int main_0076_produce_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0076_produce_retry", 1);
-        const rd_bool_t has_idempotence =
-            test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
         test_create_topic_if_auto_create_disabled(NULL, topic, -1);
 
 #if WITH_SOCKEM

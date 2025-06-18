@@ -2,6 +2,7 @@
 
 librdkafka v2.11.0 is a feature release:
 
+* [KIP-1102](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1102%3A+Enable+clients+to+rebootstrap+based+on+timeout+or+error+code) Enable clients to rebootstrap based on timeout or error code (#4981, #5119).
 * Fix for poll ratio calculation in case the queues are forwarded (#5017).
 
 
@@ -124,8 +125,22 @@ librdkafka v2.10.0 is a feature release:
 > The [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) consumer is currently in **Preview** and should not be used in production environments. Implementation is feature complete but contract could have minor changes before General Availability.
 
 
+ ## Upgrade considerations
+
+
+  Starting from this version, brokers not reported in Metadata RPC call are
+  removed along with their thread. Brokers and their threads are added back
+  when they appear in a Metadata RPC response again. When no brokers are left
+  or they're not reachable the client will start a re-bootstrap sequence
+  by default. `metadata.recovery.strategy` controls this, 
+  which defaults to `rebootstrap`.
+  Setting `metadata.recovery.strategy` to `none` avoid any re-bootstrapping and
+  leaves only the broker received in last successful metadata response.
+
+
  ## Enhancements and Fixes
 
+ * [KIP-899](https://cwiki.apache.org/confluence/display/KAFKA/KIP-899%3A+Allow+producer+and+consumer+clients+to+rebootstrap) Allow producer and consumer clients to rebootstrap
  * Identify brokers only by broker id (#4557, @mfleming)
  * Remove unavailable brokers and their thread (#4557, @mfleming)
  * Commits during a cooperative incremental rebalance aren't causing

@@ -206,6 +206,7 @@ _TEST_DECL(0084_destroy_flags);
 _TEST_DECL(0085_headers);
 _TEST_DECL(0086_purge_local);
 _TEST_DECL(0086_purge_remote);
+_TEST_DECL(0086_purge_remote_idempotent);
 _TEST_DECL(0088_produce_metadata_timeout);
 _TEST_DECL(0089_max_poll_interval);
 _TEST_DECL(0090_idempotence);
@@ -454,6 +455,7 @@ struct test tests[] = {
     _TEST(0085_headers, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0086_purge_local, TEST_F_LOCAL),
     _TEST(0086_purge_remote, 0),
+    _TEST(0086_purge_remote_idempotent, TEST_F_IDEMPOTENT_PRODUCER),
 #if WITH_SOCKEM
     _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
 #endif

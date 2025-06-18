@@ -107,6 +107,8 @@ static void test_offset_time(void) {
         "not " +
         RdKafka::err2str(err));
 
+  Test::create_topic(p, topic.c_str(), 4, -1);
+
   Test::Say("Producing to " + topic + "\n");
   for (int partition = 0; partition < 2; partition++) {
     for (int ti = 0; ti < timestamp_cnt * 2; ti += 2) {

@@ -749,10 +749,6 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt(rd_kafka_t *rk,
                                                int timeout_ms);
 rd_kafka_resp_err_t
 test_auto_create_topic(rd_kafka_t *rk, const char *name, int timeout_ms);
-int test_check_auto_create_topic(void);
-void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
-                                               const char *topicname,
-                                               int partition_cnt);
 
 void test_create_partitions(rd_kafka_t *use_rk,
                             const char *topicname,

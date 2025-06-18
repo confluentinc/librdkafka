@@ -412,5 +412,9 @@ const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
 
+int test_check_auto_create_topic(void);
+void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
+                                               const char *topicname,
+                                               int partition_cnt);
 
 #endif /* _TESTSHARED_H_ */

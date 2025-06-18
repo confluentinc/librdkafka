@@ -133,6 +133,8 @@ static void do_test_bsearch(void) {
   /* Start with now() - 1h */
   timestamp_ms = std::time(0) * 1000LL - 3600LL * 1000LL;
 
+  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), 1);
+
   for (int i = 0; i < msgcnt; i++) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
                      (void *)topic.c_str(), topic.size(), NULL, 0, timestamp_ms,

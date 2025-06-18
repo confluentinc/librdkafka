@@ -127,13 +127,15 @@ librdkafka v2.10.0 is a feature release:
 
  ## Upgrade considerations
 
-  Since this version threads for decommissioned or unavailable brokers are removed and
-  the client won't try to connect to one of them. Brokers and their threads
-  are added back when they appear in a Metadata RPC response again.
-  When no brokers are left or they're not reachable the client will start a
-  re-bootstrap sequence by default, to handle the case in a custom way set
-  the `metadata.recovery.strategy` to `none` and a fatal error will be
-  reported in that case.
+
+  Starting from this version, brokers not reported in Metadata RPC call are
+  removed along with their thread. Brokers and their threads are added back
+  when they appear in a Metadata RPC response again. When no brokers are left
+  or they're not reachable the client will start a re-bootstrap sequence
+  by default. `metadata.recovery.strategy` controls this, 
+  which defaults to `rebootstrap`.
+  Setting `metadata.recovery.strategy` to `none` avoid any re-bootstrapping and
+  leaves only the broker received in last successful metadata response.
 
 
  ## Enhancements and Fixes

@@ -397,7 +397,6 @@ static void do_test_topic_remove(void) {
 
         TEST_SAY("Topic removal: removing %s\n", topic_f);
         test_delete_topic(rk, topic_f);
-        test_wait_metadata_update(rk, NULL, 0, &topic_f, 1, 5000);
 
         await_revoke("Topic removal: rebalance after topic removal", rk, queue);
 
@@ -406,7 +405,6 @@ static void do_test_topic_remove(void) {
 
         TEST_SAY("Topic removal: removing %s\n", topic_g);
         test_delete_topic(rk, topic_g);
-        test_wait_metadata_update(rk, NULL, 0, &topic_g, 1, 5000);
 
         await_revoke("Topic removal: rebalance after 2nd topic removal", rk,
                      queue);

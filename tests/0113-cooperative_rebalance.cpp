@@ -3247,7 +3247,7 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
    */
   p = test_create_producer();
 
-  test_create_topic_wait_exists(p, topic, partition_cnt, 1, 5000);
+  test_create_topic_wait_exists(p, topic, partition_cnt, -1, 5000);
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3331,7 +3331,7 @@ static void x_incremental_rebalances(void) {
   SUB_TEST();
   test_conf_init(&conf, NULL, 60);
 
-  test_create_topic_wait_exists(NULL, topic, 6, 1, 5000);
+  test_create_topic_wait_exists(NULL, topic, 6, -1, 5000);
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {

@@ -105,7 +105,7 @@ static void do_test_producer(bool timeout_too_short) {
   while (test_clock() < end_wait)
     p->poll(1000);
 
-  Test::create_topic(NULL, topic.c_str(), 1, 3);
+  Test::create_topic(NULL, topic.c_str(), 1, -1);
 
   p->flush(10 * 1000);
 

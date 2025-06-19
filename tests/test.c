@@ -435,7 +435,8 @@ struct test tests[] = {
     _TEST(0075_retry, TEST_F_SOCKEM),
 #endif
     _TEST(0076_produce_retry, TEST_F_SOCKEM),
-    _TEST(0076_produce_retry_idempotent, TEST_F_SOCKEM | TEST_F_IDEMPOTENT_PRODUCER),
+    _TEST(0076_produce_retry_idempotent,
+          TEST_F_SOCKEM | TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0076_produce_retry_mock, TEST_F_LOCAL),
     _TEST(0077_compaction,
           0,
@@ -460,7 +461,9 @@ struct test tests[] = {
     _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
 #endif
     _TEST(0089_max_poll_interval, 0, TEST_BRKVER(0, 10, 1, 0)),
-    _TEST(0090_idempotence, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0090_idempotence,
+          TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0091_max_poll_interval_timeout, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0092_mixed_msgver, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0093_holb_consumer, 0, TEST_BRKVER(0, 10, 1, 0)),

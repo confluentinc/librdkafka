@@ -245,7 +245,7 @@ static void do_test_non_exist_and_partchange(void) {
          * - Increase the partition count
          * - Verify updated assignment
          */
-        test_kafka_topics("--alter --topic %s --partitions 4", topic_a);
+        test_create_partitions(rk, topic_a, 4);
         await_revoke("#2", rk, queue);
 
         await_assignment("#2: more partitions", rk, queue, 1, topic_a, 4);
@@ -396,7 +396,8 @@ static void do_test_topic_remove(void) {
                          topic_f, parts_f, topic_g, parts_g);
 
         TEST_SAY("Topic removal: removing %s\n", topic_f);
-        test_kafka_topics("--delete --topic %s", topic_f);
+        test_delete_topic(rk, topic_f);
+        test_wait_metadata_update(rk, NULL, 0, &topic_f, 1, 5000);
 
         await_revoke("Topic removal: rebalance after topic removal", rk, queue);
 
@@ -404,7 +405,8 @@ static void do_test_topic_remove(void) {
                          topic_g, parts_g);
 
         TEST_SAY("Topic removal: removing %s\n", topic_g);
-        test_kafka_topics("--delete --topic %s", topic_g);
+        test_delete_topic(rk, topic_g);
+        test_wait_metadata_update(rk, NULL, 0, &topic_g, 1, 5000);
 
         await_revoke("Topic removal: rebalance after 2nd topic removal", rk,
                      queue);

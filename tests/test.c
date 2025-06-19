@@ -50,6 +50,7 @@ int test_seed  = 0;
 
 char test_mode[64]                                  = "bare";
 char test_scenario[64]                              = "default";
+int test_scenario_set                               = 0;
 static volatile sig_atomic_t test_exit              = 0;
 static char test_topic_prefix[128]                  = "rdkafkatest";
 static int test_topic_random                        = 0;
@@ -779,8 +780,10 @@ static void test_init(void) {
                 test_level = atoi(tmp);
         if ((tmp = test_getenv("TEST_MODE", NULL)))
                 strncpy(test_mode, tmp, sizeof(test_mode) - 1);
-        if ((tmp = test_getenv("TEST_SCENARIO", NULL)))
+        if ((tmp = test_getenv("TEST_SCENARIO", NULL))) {
                 strncpy(test_scenario, tmp, sizeof(test_scenario) - 1);
+                test_scenario_set = 1;
+        }
         if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
                 test_sockem_conf = tmp;
         if ((tmp = test_getenv("TEST_SEED", NULL)))
@@ -1506,7 +1509,8 @@ static void run_tests(int argc, char **argv) {
                         skip_reason = tmp;
                 }
 
-                if (!strstr(scenario, test_scenario)) {
+                /* Only care about scenarios if user has set them explicitly. */
+                if (test_scenario_set && !strstr(scenario, test_scenario)) {
                         rd_snprintf(tmp, sizeof(tmp),
                                     "requires test scenario %s", scenario);
                         skip_silent = rd_true;
@@ -1896,10 +1900,11 @@ int main(int argc, char **argv) {
                         test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
                 else if (!strcmp(argv[i], "-V") && i + 1 < argc)
                         test_broker_version_str = argv[++i];
-                else if (!strcmp(argv[i], "-s") && i + 1 < argc)
+                else if (!strcmp(argv[i], "-s") && i + 1 < argc) {
                         strncpy(test_scenario, argv[++i],
                                 sizeof(test_scenario) - 1);
-                else if (!strcmp(argv[i], "-S"))
+                        test_scenario_set = 1;
+                } else if (!strcmp(argv[i], "-S"))
                         show_summary = 0;
                 else if (!strcmp(argv[i], "-D"))
                         test_delete_topics_between = 1;
@@ -2042,7 +2047,8 @@ int main(int argc, char **argv) {
                 TEST_SAY("Skip tests before: %s\n", skip_tests_till);
         TEST_SAY("Test mode    : %s%s%s\n", test_quick ? "quick, " : "",
                  test_mode, test_on_ci ? ", CI" : "");
-        TEST_SAY("Test scenario: %s\n", test_scenario);
+        if (test_scenario_set)
+                TEST_SAY("Test scenario: %s\n", test_scenario);
         TEST_SAY("Test filter  : %s\n", (test_flags & TEST_F_LOCAL)
                                             ? "local tests only"
                                             : "no filter");

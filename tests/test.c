@@ -469,13 +469,13 @@ struct test tests[] = {
     _TEST(0093_holb_consumer, 0, TEST_BRKVER(0, 10, 1, 0)),
 #if WITH_SOCKEM
     _TEST(0094_idempotence_msg_timeout,
-          TEST_F_SOCKEM,
+          TEST_F_SOCKEM | TEST_F_IDEMPOTENT_PRODUCER,
           TEST_BRKVER(0, 11, 0, 0)),
 #endif
     _TEST(0095_all_brokers_down, TEST_F_LOCAL),
     _TEST(0097_ssl_verify, 0),
     _TEST(0097_ssl_verify_local, TEST_F_LOCAL),
-    _TEST(0098_consumer_txn, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0098_consumer_txn, TEST_F_IDEMPOTENT_PRODUCER, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0099_commit_metadata, 0),
     _TEST(0100_thread_interceptors, TEST_F_LOCAL),
     _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2, 4, 0, 0)),
@@ -2048,8 +2048,14 @@ int main(int argc, char **argv) {
         if (test_rusage)
                 TEST_SAY("Test rusage : yes (%.2fx CPU calibration)\n",
                          test_rusage_cpu_calibration);
-        if (test_idempotent_producer)
+        if (test_idempotent_producer) {
+                if (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)
+                        TEST_WARN(
+                            "Skipping tests that require an idempotent "
+                            "producer while also enabling idempotency for "
+                            "other tests, possible logical inconsistency.\n");
                 TEST_SAY("Test Idempotent Producer: enabled\n");
+        }
 
         {
                 char cwd[512], *pcwd;

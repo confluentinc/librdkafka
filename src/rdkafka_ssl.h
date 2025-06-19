@@ -66,4 +66,6 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
                                           pem_password_cb *password_cb,
                                           void *password_cb_opaque);
 
+const char *rd_kafka_ssl_probe_path(rd_kafka_t *rk);
+
 #endif /* _RDKAFKA_SSL_H_ */

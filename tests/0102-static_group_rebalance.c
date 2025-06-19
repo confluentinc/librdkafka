@@ -162,7 +162,7 @@ static void do_test_static_group_rebalance(void) {
         c[0].mv = &mv;
         c[1].mv = &mv;
 
-        test_create_topic_wait_exists(NULL, topic, 3, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 3, -1, 5000);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_set(conf, "max.poll.interval.ms", "9000");
@@ -260,7 +260,7 @@ static void do_test_static_group_rebalance(void) {
          * New topics matching the subscription pattern should cause
          * group rebalance
          */
-        test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 1, 1,
+        test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 1, -1,
                                       5000);
 
         /* Await revocation */

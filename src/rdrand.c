@@ -33,11 +33,8 @@
 #include "rdmurmur2.h"
 
 int rd_jitter(int low, int high) {
-        int rand_num;
-#if HAVE_RAND_R
         static RD_TLS unsigned int seed = 0;
 
-        /* Initial seed with time+thread id */
         if (unlikely(seed == 0)) {
                 struct timeval tv;
                 rd_gettimeofday(&tv, NULL);
@@ -54,11 +51,7 @@ int rd_jitter(int low, int high) {
                 seed = (unsigned int)rd_murmur2(&seed, sizeof(seed));
         }
 
-        rand_num = rand_r(&seed);
-#else
-        rand_num = rand();
-#endif
-        return (low + (rand_num % ((high - low) + 1)));
+        return (low + (rd_rand_r(&seed) % ((high - low) + 1)));
 }
 
 void rd_array_shuffle(void *base, size_t nmemb, size_t entry_size) {

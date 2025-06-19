@@ -4,9 +4,19 @@ librdkafka v2.11.0 is a feature release:
 
 * [KIP-1102](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1102%3A+Enable+clients+to+rebootstrap+based+on+timeout+or+error+code) Enable clients to rebootstrap based on timeout or error code (#4981).
 * Fix for poll ratio calculation in case the queues are forwarded (#5017).
+* Fix data race when buffer queues are being reset instead of being
+  initialized (#4718).
 
 
 ## Fixes
+
+### General fixes
+
+* Issues: #4522.
+  A data race happened when emptying buffers of a failing broker, in its thread,
+  with the statistics callback in main thread gathering the buffer counts.
+  Solved by resetting the atomic counters instead of initializing them.
+  Happening since 1.x (#4718).
 
 ### Telemetry fixes
 

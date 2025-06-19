@@ -369,7 +369,7 @@ static void test_stats() {
   myEventCb consumer_event(stats_schema_path);
 
   std::string topic = Test::mk_topic_name("0053_stats", 1);
-  test_create_topic_wait_exists(NULL, topic, 2, -1, 5000);
+  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), 2);
 
   const int partcnt = 2;
   int msgcnt        = (test_quick ? 10 : 100) * partcnt;

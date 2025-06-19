@@ -484,7 +484,7 @@ struct test tests[] = {
     _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2, 3, 0, 0)),
     _TEST(0102_static_group_rebalance_mock, TEST_F_LOCAL),
-    _TEST(0103_transactions_local, TEST_F_LOCAL),
+    _TEST(0103_transactions_local, TEST_F_LOCAL | TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0103_transactions,
           TEST_F_IDEMPOTENT_PRODUCER,
           TEST_BRKVER(0, 11, 0, 0),

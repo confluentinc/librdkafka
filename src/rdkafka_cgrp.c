@@ -5868,6 +5868,8 @@ static void rd_kafka_cgrp_handle_assign_op(rd_kafka_cgrp_t *rkcg,
                         rkcg->rkcg_rebalance_incr_assignment = NULL;
                 }
 
+                rkcg->rkcg_rebalance_rejoin = rd_false;
+
                 rko->rko_u.assign.method = RD_KAFKA_ASSIGN_METHOD_ASSIGN;
 
                 if (rkcg->rkcg_join_state ==
@@ -6152,11 +6154,94 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
             rd_kafka_cgrp_handle_ConsumerGroupHeartbeat, NULL);
 }
 
+#define rd_kafka_cgrp_consumer_check_invariant_mutually_exclusive(             \
+    FIELD, FLAG_A, FLAG_B)                                                     \
+        (((FIELD) & (FLAG_A | FLAG_B)) != (FLAG_A | FLAG_B))
+
+/**
+ * @brief Verify that the consumer group never enters an invalid state.
+ *        below is a list of allowed join states plus the global and
+ *        state-dependent invariants.
+ *
+ * @remark Must only be called when devel mode is enabled
+ *
+ * @locality main thread
+ * @locks none
+ */
+static void rd_kafka_cgrp_consumer_check_invariants(rd_kafka_cgrp_t *rkcg) {
+        /* CONSUMER_F_SEND_NEW_SUBSCRIPTION and
+         * CONSUMER_F_SENDING_NEW_SUBSCRIPTION aren't always mutually exclusive
+         * given you can ask to send a new subscription when the previous
+         * one is being sent. */
+
+        /* F_SUBSCRIPTION iff all subscription fields are non-NULL. */
+        rd_dassert(((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) > 0) ==
+                   (rkcg->rkcg_subscription != NULL &&
+                    rkcg->rkcg_subscription_topics != NULL &&
+                    rkcg->rkcg_subscription_regex != NULL));
+
+        /* F_WILDCARD_SUBSCRIPTION iff F_SUBSCRIPTION and regex is not empty. */
+        rd_dassert(
+            ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) > 0) ==
+            (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
+             RD_KAFKAP_STR_LEN(rkcg->rkcg_subscription_regex) > 0));
+
+        /* CONSUMER_F_WAIT_ACK and
+         * CONSUMER_F_SENDING_ACK aren't always mutually exclusive.
+         * given when you receive a HB response in STEADY state and
+         * you were waiting for an ACK you need to verify if the HB was
+         * for sending the ACK, as it could have started in previous states. */
+
+        /* CONSUMER_F_WAIT_REJOIN and CONSUMER_F_WAIT_REJOIN_TO_COMPLETE
+         * are mutually exclusive. */
+        rd_dassert(rd_kafka_cgrp_consumer_check_invariant_mutually_exclusive(
+            rkcg->rkcg_consumer_flags, RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN,
+            RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE));
+
+        /* F_LEAVE_ON_UNASSIGN_DONE and F_WAIT_LEAVE
+         * are mutually exclusive. */
+        rd_dassert(rd_kafka_cgrp_consumer_check_invariant_mutually_exclusive(
+            rkcg->rkcg_flags, RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE,
+            RD_KAFKA_CGRP_F_WAIT_LEAVE));
+
+        switch (rkcg->rkcg_join_state) {
+        case RD_KAFKA_CGRP_JOIN_STATE_INIT:
+                rd_dassert(rkcg->rkcg_current_assignment->cnt == 0);
+                rd_dassert(!(rkcg->rkcg_consumer_flags &
+                             RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK));
+
+                /* Generation id can be greater than 0 in this state
+                 * if target assignment is empty
+                 * a reconciliation isn't started. */
+                /* FALLTHRU */
+        case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
+                rd_dassert(!rkcg->rkcg_rebalance_incr_assignment);
+                rd_dassert(!rkcg->rkcg_rebalance_rejoin);
+                rd_dassert(!(rkcg->rkcg_flags &
+                             RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE));
+                rd_dassert(!(rkcg->rkcg_consumer_flags &
+                             RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE));
+                break;
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL:
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL:
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE:
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE:
+                break;
+        default:
+                rd_kafka_log(
+                    rkcg->rkcg_rk, LOG_EMERG, "CGRP",
+                    "Invalid state detected: %s",
+                    rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
+                rd_dassert(!*"invalid state");
+                break;
+        }
+}
+
 static rd_bool_t
 rd_kafka_cgrp_consumer_heartbeat_preconditions_met(rd_kafka_cgrp_t *rkcg) {
-        rd_dassert(
-            !(rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT &&
-              rkcg->rkcg_flags & RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE));
+#if ENABLE_DEVEL == 1
+        rd_kafka_cgrp_consumer_check_invariants(rkcg);
+#endif
 
         if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION))
                 return rd_false;

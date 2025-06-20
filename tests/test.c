@@ -2292,6 +2292,12 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
 
         test_conf_init(NULL, &topic_conf, 0);
 
+        /* Make sure all replicas are in-sync after producing
+         * so that consume test wont fail - this is overriden if the user sets
+         * a different value explicitly. */
+        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
+                                errstr, sizeof(errstr));
+
         va_start(ap, topic);
         while ((name = va_arg(ap, const char *)) &&
                (val = va_arg(ap, const char *))) {
@@ -2300,12 +2306,6 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
                         TEST_FAIL("Conf failed: %s\n", errstr);
         }
         va_end(ap);
-
-        /* Make sure all replicas are in-sync after producing
-         * so that consume test wont fail. */
-        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
-                                errstr, sizeof(errstr));
-
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)

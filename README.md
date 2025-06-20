@@ -176,6 +176,7 @@ Questions and discussions are welcome on the [Discussions](https://github.com/co
   * Common Lisp: [cl-rdkafka](https://github.com/SahilKang/cl-rdkafka)
   * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
   * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
+  * Dart: [kafka_dart](https://github.com/stefanoamorelli/kafka_dart)
   * Erlang: [erlkaf](https://github.com/silviucpp/erlkaf)
   * Go: [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go)
   * Haskell (kafka, conduit, avro, schema registry): [hw-kafka](https://github.com/haskell-works/hw-kafka)

@@ -801,11 +801,6 @@ int main_0102_static_group_rebalance(int argc, char **argv) {
 int main_0102_static_group_rebalance_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
-        TEST_SKIP(
-            "Static membership mock fixes are present in another PR. Test it "
-            "with that PR.\n");
-        return 0;
-
         if (test_consumer_group_protocol_classic()) {
                 TEST_SKIP(
                     "Static membership isn't implemented "

@@ -261,6 +261,7 @@ _TEST_DECL(0134_ssl_provider);
 _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
 _TEST_DECL(0137_barrier_batch_consume);
+_TEST_DECL(0137_barrier_batch_consume_idempotent);
 _TEST_DECL(0138_admin_mock);
 _TEST_DECL(0139_offset_validation_mock);
 _TEST_DECL(0140_commit_metadata);
@@ -536,8 +537,9 @@ struct test tests[] = {
     _TEST(0135_sasl_credentials, 0),
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
+    _TEST(0137_barrier_batch_consume_idempotent, TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
-    _TEST(0139_offset_validation_mock, 0),
+    _TEST(0139_offset_validation_mock, TEST_F_LOCAL),
     _TEST(0140_commit_metadata, 0),
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),

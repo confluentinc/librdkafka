@@ -613,7 +613,12 @@ int main_0137_barrier_batch_consume(int argc, char **argv) {
         do_test_consume_batch_store_offset();
         do_test_consume_batch_with_pause_and_resume_different_batch();
         do_test_consume_batch_with_pause_and_resume_same_batch();
-        do_test_consume_batch_control_msgs();
 
+        return 0;
+}
+
+
+int main_0137_barrier_batch_consume_idempotent(int argc, char **argv) {
+        do_test_consume_batch_control_msgs();
         return 0;
 }

@@ -547,7 +547,7 @@ struct test tests[] = {
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
-    _TEST(0150_telemetry_mock, 0),
+    _TEST(0150_telemetry_mock, TEST_F_LOCAL),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
 

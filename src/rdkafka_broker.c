@@ -4333,7 +4333,18 @@ static RD_INLINE void rd_kafka_broker_idle_check(rd_kafka_broker_t *rkb) {
 
         idle_ms = (int)((rd_clock() - ts_last_activity) / 1000);
 
-        if (likely(idle_ms < rkb->rkb_rk->rk_conf.connections_max_idle_ms))
+        if (!rkb->rkb_c.connection_max_idle_ms) {
+                /* Add a different jitter for each broker. */
+                rkb->rkb_c.connection_max_idle_ms =
+                    rkb->rkb_rk->rk_conf.connections_max_idle_ms;
+                if (rkb->rkb_c.connection_max_idle_ms >=
+                    2 * rkb->rkb_rk->rk_conf.socket_connection_setup_timeout_ms)
+                        rkb->rkb_c.connection_max_idle_ms -= rd_jitter(
+                            0, rkb->rkb_rk->rk_conf
+                                   .socket_connection_setup_timeout_ms);
+        }
+
+        if (likely(idle_ms < rkb->rkb_c.connection_max_idle_ms))
                 return;
 
         rd_kafka_broker_planned_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,

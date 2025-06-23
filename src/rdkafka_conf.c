@@ -3945,19 +3945,12 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                "`sasl.oauthbearer.method=oidc` are "
                                "mutually exclusive";
 
-                if (!conf->sasl.oauthbearer.token_endpoint_url) {
+                if (conf->sasl.oauthbearer.method ==
+                        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+                    !conf->sasl.oauthbearer.token_endpoint_url) {
                         return "`sasl.oauthbearer.token.endpoint.url` "
                                "is mandatory when "
                                "`sasl.oauthbearer.method=oidc` is set";
-                }
-
-                if (conf->sasl.oauthbearer.method ==
-                    RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC) {
-                        if (!conf->sasl.oauthbearer.token_endpoint_url) {
-                                return "`sasl.oauthbearer.token.endpoint.url` "
-                                       "is mandatory when "
-                                       "`sasl.oauthbearer.method=oidc` is set";
-                        }
                 }
 
                 if (conf->sasl.oauthbearer.method ==

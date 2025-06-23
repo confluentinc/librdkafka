@@ -94,7 +94,8 @@
  */
 
 #ifndef TAILQ_HEAD_INITIALIZER
-#define TAILQ_HEAD_INITIALIZER(head) {NULL, &(head).tqh_first}
+#define TAILQ_HEAD_INITIALIZER(head)                                           \
+        { NULL, &(head).tqh_first }
 #endif
 
 #ifndef TAILQ_INSERT_BEFORE
@@ -390,7 +391,8 @@
 #endif
 
 #ifndef SIMPLEQ_HEAD_INITIALIZER
-#define SIMPLEQ_HEAD_INITIALIZER(head) {NULL, &(head).sqh_first}
+#define SIMPLEQ_HEAD_INITIALIZER(head)                                         \
+        { NULL, &(head).sqh_first }
 #endif
 
 #ifndef SIMPLEQ_EMPTY

@@ -2436,10 +2436,12 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 if (rk->rk_conf.sasl.oauthbearer.grant_type ==
                     RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS) {
                         rd_kafka_conf_set_oauthbearer_token_refresh_cb(
-                            &rk->rk_conf, rd_kafka_oidc_token_refresh_cb);
+                            &rk->rk_conf,
+                            rd_kafka_oidc_token_client_credentials_refresh_cb);
                 } else {
                         rd_kafka_conf_set_oauthbearer_token_refresh_cb(
-                            &rk->rk_conf, rd_kafka_jwt_refresh_cb);
+                            &rk->rk_conf,
+                            rd_kafka_oidc_token_jwt_bearer_refresh_cb);
                 }
         }
 #endif
@@ -5369,7 +5371,7 @@ void rd_kafka_Uuid_destroy(rd_kafka_Uuid_t *uuid) {
  *
  * @remark  Must be freed after use.
  */
-const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid) {
+char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid) {
         int i, j;
         unsigned char bytes[16];
         char *ret = rd_calloc(37, sizeof(*ret));

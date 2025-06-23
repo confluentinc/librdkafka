@@ -129,10 +129,11 @@ char *rd_base64_encode_str(const rd_chariov_t *in) {
  */
 char *rd_base64_encode_str_urlsafe(const rd_chariov_t *in) {
         rd_chariov_t out;
+        char *p;
         rd_base64_encode(in, &out);
 
         /* Replace + with - and / with _ */
-        for (char *p = out.ptr; *p; p++) {
+        for (p = out.ptr; *p; p++) {
                 if (*p == '+')
                         *p = '-';
                 else if (*p == '/')

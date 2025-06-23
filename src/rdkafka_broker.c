@@ -353,25 +353,36 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                 /* no-op */
         } else if (rd_kafka_broker_state_is_down(state) &&
                    !rkb->rkb_down_reported) {
-                /* Propagate ALL_BROKERS_DOWN event if all brokers are
-                 * now down, unless we're terminating.
-                 * Only trigger for brokers that has an address set,
-                 * e.g., not logical brokers that lost their address. */
-                if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
-                        rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
-                            rd_atomic32_get(
-                                &rkb->rkb_rk->rk_logical_broker_cnt) &&
-                    !rd_kafka_terminating(rkb->rkb_rk)) {
-                        rd_kafka_rebootstrap(rkb->rkb_rk);
-                        rd_kafka_op_err(
-                            rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
-                            "%i/%i brokers are down",
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_down_cnt),
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
-                                rd_atomic32_get(
-                                    &rkb->rkb_rk->rk_logical_broker_cnt));
+                if (rkb->rkb_c.skip_broker_down) {
+                        /* Reset the flag so if it doesn't re-connect it's
+                         * not treated as a planned disconnection. */
+                        rkb->rkb_c.skip_broker_down = rd_false;
+                } else {
+                        /* Propagate ALL_BROKERS_DOWN event if all brokers are
+                         * now down, unless we're terminating.
+                         * Only trigger for brokers that has an address set,
+                         * e.g., not logical brokers that lost their address. */
+                        if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt,
+                                            1) ==
+                                rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_logical_broker_cnt) &&
+                            !rd_kafka_terminating(rkb->rkb_rk)) {
+                                rd_kafka_rebootstrap(rkb->rkb_rk);
+                                rd_kafka_op_err(
+                                    rkb->rkb_rk,
+                                    RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+                                    "%i/%i brokers are down",
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_down_cnt),
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_cnt) -
+                                        rd_atomic32_get(
+                                            &rkb->rkb_rk
+                                                 ->rk_logical_broker_cnt));
+                        }
+                        rkb->rkb_down_reported = 1;
                 }
-                rkb->rkb_down_reported = 1;
 
         } else if (rd_kafka_broker_state_is_up(state) &&
                    rkb->rkb_down_reported) {
@@ -739,6 +750,11 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
 }
 
 
+#define rd_kafka_broker_planned_fail(RKB, ERR, FMT, ...)                       \
+        do {                                                                   \
+                (RKB)->rkb_c.skip_broker_down = rd_true;                       \
+                rd_kafka_broker_fail(RKB, LOG_DEBUG, ERR, FMT, __VA_ARGS__);   \
+        } while (0)
 
 /**
  * @brief Handle broker connection close.
@@ -1065,8 +1081,9 @@ static int rd_kafka_broker_resolve(rd_kafka_broker_t *rkb,
         int save_idx = 0;
 
         if (!*nodename && rkb->rkb_source == RD_KAFKA_LOGICAL) {
-                rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__RESOLVE,
-                                     "Logical broker has no address yet");
+                rd_kafka_broker_planned_fail(
+                    rkb, RD_KAFKA_RESP_ERR__RESOLVE, "%s",
+                    "Logical broker has no address yet");
                 return -1;
         }
 
@@ -3183,9 +3200,9 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_wrunlock(rkb->rkb_rk);
 
                 if (updated) {
-                        rd_kafka_broker_fail(rkb, LOG_DEBUG,
-                                             RD_KAFKA_RESP_ERR__TRANSPORT,
-                                             "Broker hostname updated");
+                        rd_kafka_broker_planned_fail(
+                            rkb, RD_KAFKA_RESP_ERR__TRANSPORT, "%s",
+                            "Broker hostname updated");
                 }
 
                 rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
@@ -3436,9 +3453,9 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                  * and trigger a state change.
                  * This makes sure any eonce dependent on state changes
                  * are triggered. */
-                rd_kafka_broker_fail(rkb, LOG_DEBUG,
-                                     rd_kafka_broker_destroy_error(rkb->rkb_rk),
-                                     "Decommissioning this broker");
+                rd_kafka_broker_planned_fail(
+                    rkb, rd_kafka_broker_destroy_error(rkb->rkb_rk), "%s",
+                    "Decommissioning this broker");
 
                 rd_kafka_broker_prepare_destroy(rkb);
                 /* Release main thread reference here */
@@ -3480,9 +3497,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_broker_unlock(rkb);
 
                         if (do_disconnect)
-                                rd_kafka_broker_fail(
-                                    rkb, LOG_DEBUG,
-                                    RD_KAFKA_RESP_ERR__TRANSPORT,
+                                rd_kafka_broker_planned_fail(
+                                    rkb, RD_KAFKA_RESP_ERR__TRANSPORT, "%s",
                                     "Closing connection due to "
                                     "nodename change");
                 }
@@ -4320,10 +4336,10 @@ static RD_INLINE void rd_kafka_broker_idle_check(rd_kafka_broker_t *rkb) {
         if (likely(idle_ms < rkb->rkb_rk->rk_conf.connections_max_idle_ms))
                 return;
 
-        rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__TRANSPORT,
-                             "Connection max idle time exceeded "
-                             "(%dms since last activity)",
-                             idle_ms);
+        rd_kafka_broker_planned_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                                     "Connection max idle time exceeded "
+                                     "(%dms since last activity)",
+                                     idle_ms);
 }
 
 
@@ -4669,8 +4685,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
         while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
                 ;
 
-        rd_kafka_broker_fail(rkb, LOG_DEBUG, rd_kafka_broker_destroy_error(rk),
-                             "Broker handle is terminating");
+        rd_kafka_broker_planned_fail(rkb, rd_kafka_broker_destroy_error(rk),
+                                     "%s", "Broker handle is terminating");
 
         rd_rkb_dbg(rkb, BROKER, "TERMINATE",
                    "Handle terminates in state %s: "
@@ -5860,8 +5876,8 @@ static void rd_kafka_broker_handle_purge_queues(rd_kafka_broker_t *rkb,
                  * the protocol stream, so we need to disconnect from the broker
                  * to get a clean protocol socket. */
                 if (partial_cnt)
-                        rd_kafka_broker_fail(
-                            rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__PURGE_QUEUE,
+                        rd_kafka_broker_planned_fail(
+                            rkb, RD_KAFKA_RESP_ERR__PURGE_QUEUE,
                             "Purged %d partially sent request: "
                             "forcing disconnect",
                             partial_cnt);

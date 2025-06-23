@@ -196,6 +196,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                              *   disconnection to avoid
                                              *   reaching the all
                                              *   brokers down state. */
+                int connection_max_idle_ms; /**< Maximum idle time
+                                             *   for this broker connection.
+                                             *   jitter is different for
+                                             *   each broker to avoid the
+                                             *   ALL_BROKERS_DOWN error. */
         } rkb_c;
 
         struct {

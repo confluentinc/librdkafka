@@ -333,24 +333,27 @@ struct rd_kafka_conf_s {
                         char *client_secret;
                         char *scope;
                         struct {
+                                rd_kafka_oauthbearer_assertion_algorithm_t
+                                    algorithm;
                                 char *file;
                                 char *jwt_template_file;
+
                                 struct {
-                                        char *sub;
-                                        char *aud;
-                                        char *iss;
+                                        char *subject;
+                                        char *audience;
+                                        char *issuer;
                                         rd_bool_t jti_include;
-                                        int nbf_seconds;
-                                        int exp_seconds;
+                                        int not_before_s;
+                                        int expiration_s;
                                 } claim;
                                 struct {
                                         char *file;
                                         char *passphrase;
                                         char *pem;
-                                        rd_kafka_oauthbearer_assertion_algorithm_t
-                                            algorithm;
                                 } private_key;
+
                         } assertion;
+
                         char *extensions_str;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,

@@ -439,79 +439,71 @@ typedef struct rd_chariov_s {
 } rd_chariov_t;
 
 /**
- * @brief Read a file in binary mode and return its contents.
- *        The returned buffer is NULL-terminated if the file is text,
- *        but the size parameter will contain the actual file size.
+ * @brief Read the file at \p file_path in binary mode and return its contents.
+ *        The returned buffer is NULL-terminated,
+ *        the size parameter will contain the actual file size.
  *
- * @param file_path Path to the file to read
- * @param size Pointer to store the file size (excluding NULL terminator if
- * present)
- * @param max_size Optional maximum file size to read (0 for no limit)
+ * @param file_path Path to the file to read.
+ * @param size Pointer to store the file size (optional).
+ * @param max_size Maximum file size to read (0 for no limit) (optional).
  *
  * @returns Newly allocated buffer containing the file contents.
  *          NULL on error (file not found, too large, etc).
- *          Caller must free with rd_free().
+ *
+ * @remark The returned pointer ownership is transferred to the caller.
  *
  * @locality Any thread
  */
-static RD_INLINE RD_UNUSED void *
+static RD_INLINE RD_UNUSED char *
 rd_read_file(const char *file_path, size_t *size, size_t max_size) {
         FILE *file;
-        void *buf;
-        long file_size;
+        char *buf = NULL;
+        size_t file_size;
         size_t read_size;
+        if (!size)
+                size = &read_size;
 
-        if (!file_path || !size) {
-                return NULL;
-        }
-
+#ifndef _WIN32
         file = fopen(file_path, "rb");
-        if (!file) {
+#else
+        file  = NULL;
+        errno = fopen_s(&file, file_path, "rb");
+#endif
+        if (!file)
                 return NULL;
-        }
 
-        if (fseek(file, 0, SEEK_END) != 0) {
-                fclose(file);
-                return NULL;
-        }
+        if (fseek(file, 0, SEEK_END) != 0)
+                goto err;
 
-        file_size = ftell(file);
-        if (file_size < 0) {
-                fclose(file);
-                return NULL;
-        }
+        file_size = (size_t)ftell(file);
+        if (file_size < 0)
+                goto err;
 
-        if (fseek(file, 0, SEEK_SET) != 0) {
-                fclose(file);
-                return NULL;
-        }
+        if (fseek(file, 0, SEEK_SET) != 0)
+                goto err;
 
         /* Check if file is too large */
-        if (max_size > 0 && (size_t)file_size > max_size) {
-                fclose(file);
-                return NULL;
-        }
+        if (max_size > 0 && file_size > max_size)
+                goto err;
 
         /* Allocate buffer with extra byte for NULL terminator */
-        buf = rd_malloc(file_size + 1);
-        if (!buf) {
-                fclose(file);
-                return NULL;
-        }
-
+        buf       = (char *)rd_malloc(file_size + 1);
         read_size = fread(buf, 1, file_size, file);
-        fclose(file);
 
-        if (read_size != (size_t)file_size) {
-                rd_free(buf);
-                return NULL;
-        }
+        if (read_size != file_size)
+                goto err;
 
         /* NULL terminate the buffer */
-        ((char *)buf)[file_size] = '\0';
-        *size                    = file_size;
-
+        buf[file_size] = '\0';
+        *size          = file_size;
+        fclose(file);
         return buf;
+err:
+        fclose(file);
+        if (buf)
+                rd_free(buf);
+        return NULL;
 }
+
 
 #endif /* _RD_H_ */

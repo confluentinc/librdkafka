@@ -1082,85 +1082,93 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.grant.type", _RK_C_S2I,
-     _RK(sasl.oauthbearer.grant_type),
-     "OAuth grant type to use when communicating with the identity provider.",
-     .vdef = RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS,
-     .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS, "oidc"},
-              {RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER,
-               "urn:ietf:params:oauth:grant-type:jwt-bearer"}}},
+    {
+        _RK_GLOBAL,
+        "sasl.oauthbearer.grant.type",
+        _RK_C_S2I,
+        _RK(sasl.oauthbearer.grant_type),
+        "OAuth grant type to use when communicating with the identity "
+        "provider.",
+        _UNSUPPORTED_OIDC,
+        .vdef = RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS,
+        .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS,
+                  "client_credentials"},
+                 {RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER,
+                  "urn:ietf:params:oauth:grant-type:jwt-bearer"}},
+    },
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.algorithm", _RK_C_S2I,
+     _RK(sasl.oauthbearer.assertion.algorithm),
+     "Algorithm the client should use to sign the assertion sent "
+     "to the identity provider and in the OAuth alg header in the JWT "
+     "assertion.",
+     _UNSUPPORTED_OIDC,
+     .vdef = RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256,
+     .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256, "RS256"},
+              {RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_ES256, "ES256"}}},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.assertion.private.key.file",
      _RK_C_STR, _RK(sasl.oauthbearer.assertion.private_key.file),
-     "Path to client's private key (PEM) used for authentication.",
+     "Path to client's private key (PEM) used for authentication "
+     "when using the JWT assertion.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL | _RK_SENSITIVE,
      "sasl.oauthbearer.assertion.private.key.passphrase", _RK_C_STR,
      _RK(sasl.oauthbearer.assertion.private_key.passphrase),
-     "Private key passphrase (for use with `ssl.key.location` "
-     "and `set_ssl_cert()`)",
+     "Private key passphrase for `sasl.oauthbearer.assertion.private.key.file`"
+     " or `sasl.oauthbearer.assertion.private.key.pem`.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.assertion.private.key.pem",
      _RK_C_STR, _RK(sasl.oauthbearer.assertion.private_key.pem),
-     "Private key passphrase (for use with `ssl.key.location` "
-     "and `set_ssl_cert()`)",
+     "Client's private key (PEM) used for authentication "
+     "when using the JWT assertion.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.assertion.file", _RK_C_STR,
      _RK(sasl.oauthbearer.assertion.file),
      "Path to the assertion file. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.aud", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.claim.audience),
+     "JWT audience claim. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.exp.seconds", _RK_C_INT,
+     _RK(sasl.oauthbearer.assertion.claim.expiration_s),
+     "Assertion expiration time in seconds. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     1, INT_MAX, 300, _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.iss", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.claim.issuer),
+     "JWT issuer claim. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.jti.include", _RK_C_BOOL,
+     _RK(sasl.oauthbearer.assertion.claim.jti_include),
+     "JWT ID claim. When set to `true`a random UUID is generated. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     0, 1, 0, _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.nbf.seconds", _RK_C_INT,
+     _RK(sasl.oauthbearer.assertion.claim.not_before_s),
+     "Assertion not before time in seconds. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     0, INT_MAX, 60, _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.sub", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.claim.subject),
+     "JWT subject claim. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.assertion.jwt.template.file", _RK_C_STR,
      _RK(sasl.oauthbearer.assertion.jwt_template_file),
      "Path to the JWT template file. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
+     "assertion is needed.",
      _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.sub", _RK_C_STR,
-     _RK(sasl.oauthbearer.assertion.claim.sub),
-     "JWT subject claim. "
-     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
-     _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.aud", _RK_C_STR,
-     _RK(sasl.oauthbearer.assertion.claim.aud),
-     "JWT audience claim. "
-     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
-     _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.iss", _RK_C_STR,
-     _RK(sasl.oauthbearer.assertion.claim.iss),
-     "JWT issuer claim. "
-     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
-     _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.jti.include", _RK_C_BOOL,
-     _RK(sasl.oauthbearer.assertion.claim.jti_include),
-     "JWT ID claim. "
-     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
-     0, 1, 0, _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.nbf.seconds", _RK_C_INT,
-     _RK(sasl.oauthbearer.assertion.claim.nbf_seconds),
-     "JWT not before claim. "
-     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
-     0, 60 * 60 * 24 /*1 day*/, 60, _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.exp.seconds", _RK_C_INT,
-     _RK(sasl.oauthbearer.assertion.claim.exp_seconds),
-     "JWT expiration claim. "
-     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
-     "grant type is needed.",
-     60, 60 * 60 * 24 /*1 day*/, 300, _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.assertion.algorithm", _RK_C_S2I,
-     _RK(sasl.oauthbearer.assertion.private_key.algorithm),
-     "This is the algorithm the client should use to sign the assertion sent "
-     "to the identity provider and in the OAuth alg header in the JWT "
-     "assertion.",
-     .vdef = RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256,
-     .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256, "RS256"},
-              {RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_ES256, "ES256"}}},
-
 
 
     /* Plugins */
@@ -3944,6 +3952,15 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                 }
 
                 if (conf->sasl.oauthbearer.method ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC) {
+                        if (!conf->sasl.oauthbearer.token_endpoint_url) {
+                                return "`sasl.oauthbearer.token.endpoint.url` "
+                                       "is mandatory when "
+                                       "`sasl.oauthbearer.method=oidc` is set";
+                        }
+                }
+
+                if (conf->sasl.oauthbearer.method ==
                         RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
                     conf->sasl.oauthbearer.grant_type ==
                         RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS) {
@@ -3963,120 +3980,139 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                     conf->sasl.oauthbearer.grant_type ==
                         RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER) {
                         if (conf->sasl.oauthbearer.assertion.file) {
-                                const char *errstr = NULL;
                                 if (conf->sasl.oauthbearer.assertion.private_key
-                                        .file) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion."
-                                            "private.key.file is set";
-                                } else if (conf->sasl.oauthbearer.assertion
-                                               .private_key.passphrase) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion."
-                                            "private.key.passphrase is set";
-                                } else if (conf->sasl.oauthbearer.assertion
-                                               .private_key.pem) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion."
-                                            "private.key.pem is set";
-                                } else if (conf->sasl.oauthbearer.assertion
-                                               .private_key.algorithm) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion."
-                                            "private.key.algorithm is set";
-                                } else if (conf->sasl.oauthbearer.assertion
-                                               .jwt_template_file) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion.jwt."
-                                            "template.file is set";
-                                } else if (conf->sasl.oauthbearer.assertion
-                                               .claim.sub) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion.claim."
-                                            "sub is set";
-                                } else if (conf->sasl.oauthbearer.assertion
-                                               .claim.aud) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion.issued_"
-                                            "at is set";
-                                } else if (conf->sasl.oauthbearer.assertion
-                                               .claim.iss) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion.claim."
-                                            "iss is set";
-                                } else if (rd_kafka_conf_is_modified(
-                                               conf,
-                                               "sasl.oauthbearer.assertion."
-                                               "claim.jti.include")) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion.claim."
-                                            "jti.include is set";
-                                } else if (rd_kafka_conf_is_modified(
-                                               conf,
-                                               "sasl.oauthbearer.assertion."
-                                               "claim.exp.seconds")) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion.claim."
-                                            "exp.seconds is set";
-                                } else if (rd_kafka_conf_is_modified(
-                                               conf,
-                                               "sasl.oauthbearer.assertion."
-                                               "claim.nbf.seconds")) {
-                                        errstr =
-                                            "sasl.oauthbearer.assertion.file "
-                                            "cannot be set when "
-                                            "sasl.oauthbearer.assertion.claim."
-                                            "nbf.seconds is set";
-                                }
+                                        .file)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.file` cannot both be set";
 
-                                if (errstr)
-                                        return errstr;
+                                if (conf->sasl.oauthbearer.assertion.private_key
+                                        .pem)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.pem` cannot both be set";
+
+                                if (conf->sasl.oauthbearer.assertion.private_key
+                                        .passphrase)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.passphrase` cannot both be "
+                                               "set";
+
+                                if (conf->sasl.oauthbearer.assertion
+                                        .jwt_template_file)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "jwt.template.file` cannot both "
+                                               "be set";
+
+                                if (conf->sasl.oauthbearer.assertion.claim
+                                        .subject)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.sub` cannot both be set";
+
+                                if (conf->sasl.oauthbearer.assertion.claim
+                                        .audience)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.aud` cannot both be set";
+
+                                if (conf->sasl.oauthbearer.assertion.claim
+                                        .issuer)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.iss` cannot both be set";
+
+                                if (rd_kafka_conf_is_modified(
+                                        conf,
+                                        "sasl.oauthbearer."
+                                        "assertion.claim.jti.include"))
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.jti.include` cannot both "
+                                               "be set";
+
+                                if (rd_kafka_conf_is_modified(
+                                        conf,
+                                        "sasl.oauthbearer."
+                                        "assertion.claim.exp.seconds"))
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.exp.seconds` cannot both "
+                                               "be set";
+
+
+                                if (rd_kafka_conf_is_modified(
+                                        conf,
+                                        "sasl.oauthbearer."
+                                        "assertion.claim.nbf.seconds"))
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.nbf.seconds` cannot both "
+                                               "be set";
                         } else {
                                 if (conf->sasl.oauthbearer.assertion.private_key
                                         .file &&
                                     conf->sasl.oauthbearer.assertion.private_key
-                                        .pem) {
-                                        return "sasl.oauthbearer.assertion."
-                                               "private.key.file and "
-                                               "sasl.oauthbearer.assertion."
-                                               "private.key.pem cannot both be "
-                                               "set";
-                                }
+                                        .pem)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.pem` cannot both be set";
 
                                 if (!conf->sasl.oauthbearer.assertion
                                          .private_key.file &&
                                     !conf->sasl.oauthbearer.assertion
-                                         .private_key.pem) {
-                                        return "sasl.oauthbearer.assertion."
-                                               "private_key.file or "
-                                               "sasl.oauthbearer.assertion."
-                                               "private_key.pem is mandatory "
-                                               "when "
-                                               "sasl.oauthbearer.grant_type is "
-                                               "set to "
-                                               "urn:ietf:params:oauth:grant-"
-                                               "type:jwt-bearer";
-                                }
+                                         .private_key.pem)
+                                        return "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.file` or "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.pem` is mandatory when "
+                                               "`sasl.oauthbearer.grant.type` "
+                                               "is set to "
+                                               "`urn:ietf:params:oauth:grant-"
+                                               "type:jwt-"
+                                               "bearer`";
                         }
                 }
 

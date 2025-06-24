@@ -451,12 +451,14 @@ static void do_test_static_group_rebalance_consumer(void) {
         uint64_t testid              = test_id_generate();
         const char *topic =
             test_mk_topic_name("0102_static_group_rebalance", 1);
-        char *topics = rd_strdup(tsprintf("^%s.*", topic));
+        char *topics         = rd_strdup(tsprintf("^%s.*", topic));
+        const char *group_id = topic;
         test_timing_t t_close;
-        /* FIXME: change this group `group.consumer.session.timeout.ms`
-         * in order to match the classic group configuration
-         * when the IncrementalAlterConfigs changes for 848 are merged. */
-        int session_timeout_ms               = 45000;
+
+        int session_timeout_ms = 6000;
+        test_broker_conf_set_group_consumer_session_timeout_ms(
+            group_id, session_timeout_ms);
+
         rd_ts_t prev_assigned[_CONSUMER_CNT] = RD_ZERO_INIT;
         rd_ts_t prev_revoked[_CONSUMER_CNT]  = RD_ZERO_INIT;
 
@@ -471,15 +473,11 @@ static void do_test_static_group_rebalance_consumer(void) {
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_set(conf, "max.poll.interval.ms", "9000");
-        test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
         test_conf_set(conf, "metadata.max.age.ms", "5000");
         test_conf_set(conf, "enable.partition.eof", "true");
         test_conf_set(conf, "group.instance.id", "consumer1");
-        test_conf_set(conf, "group.protocol", "consumer");
-        test_conf_set(conf, "partition.assignment.strategy",
-                      "cooperative-sticky");
 
         rd_kafka_conf_set_opaque(conf, &c[0]);
         c[0].rk = test_create_consumer(topic, rebalance_cb,
@@ -487,7 +485,7 @@ static void do_test_static_group_rebalance_consumer(void) {
 
         rd_kafka_conf_set_opaque(conf, &c[1]);
         test_conf_set(conf, "group.instance.id", "consumer2");
-        c[1].rk = test_create_consumer(topic, rebalance_cb,
+        c[1].rk = test_create_consumer(group_id, rebalance_cb,
                                        rd_kafka_conf_dup(conf), NULL);
         rd_kafka_conf_destroy(conf);
 

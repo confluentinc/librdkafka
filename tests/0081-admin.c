@@ -3105,6 +3105,11 @@ static void do_test_DescribeConsumerGroups(const char *what,
                         if (!strcmp(protocols[i], "Classic")) {
                                 test_conf_set0(conf, "session.timeout.ms",
                                               "5000", rd_false);
+                        } else {
+                                const char *confs_set_group[] = {"consumer.session.timeout.ms",
+                                                 "SET", "5000"};
+                                test_IncrementalAlterConfigs_simple(
+                                    rk, RD_KAFKA_RESOURCE_GROUP, group_id, confs_set_group, 1);
                         }
                         test_conf_set(conf, "auto.offset.reset", "earliest");
                         test_conf_set(conf, "group.protocol", protocols[i]);

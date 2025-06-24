@@ -84,9 +84,7 @@
 #endif
 
 #ifdef __QNXNTO__
-#define AI_FLAG 0
-#else
-#define AI_FLAG AI_ADDRCONFIG
+#define AI_ADDRCONFIG 0
 #endif
 
 static const int rd_kafka_max_block_ms = 1000;
@@ -1080,7 +1078,7 @@ static int rd_kafka_broker_resolve(rd_kafka_broker_t *rkb,
         if (!rkb->rkb_rsal) {
                 /* Resolve */
                 rkb->rkb_rsal = rd_getaddrinfo(
-                    nodename, RD_KAFKA_PORT_STR, AI_FLAG,
+                    nodename, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
                     rkb->rkb_rk->rk_conf.broker_addr_family, SOCK_STREAM,
                     IPPROTO_TCP, rkb->rkb_rk->rk_conf.resolve_cb,
                     rkb->rkb_rk->rk_conf.opaque, &errstr);
@@ -5464,7 +5462,7 @@ int rd_kafka_brokers_add0(rd_kafka_t *rk,
                                      "Canonicalizing bootstrap broker %s:%d",
                                      host, port);
                         sockaddr_list = rd_getaddrinfo(
-                            host, RD_KAFKA_PORT_STR, AI_FLAG,
+                            host, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
                             rk->rk_conf.broker_addr_family, SOCK_STREAM,
                             IPPROTO_TCP, rk->rk_conf.resolve_cb,
                             rk->rk_conf.opaque, &err_str);

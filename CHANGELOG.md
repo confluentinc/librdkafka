@@ -5,6 +5,13 @@ v1.3.2 is a maintenance release. It is supported for all usage.
 ## Enhancements
 
 1. References librdkafka v2.10.1. Refer to the [librdkafka v2.10.1 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.10.1) for more information.
+2. Support for schema id in header (#303)
+3. Add CEL support for Data Quality rules (#313)
+
+## Fixes
+
+1. Fix missing await during JSON deserialization (#301)
+2. Fix possible NPE in CSFLE executor (#305)
 
 
 # confluent-kafka-javascript v1.3.1

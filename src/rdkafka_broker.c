@@ -78,11 +78,6 @@
 #include "rdendian.h"
 #include "rdunittest.h"
 
-/* for uclibc < 0.9.29 */
-#ifndef AI_ADDRCONFIG
-#define AI_ADDRCONFIG 0x0020
-#endif
-
 #ifdef __QNXNTO__
 #define AI_ADDRCONFIG 0
 #endif

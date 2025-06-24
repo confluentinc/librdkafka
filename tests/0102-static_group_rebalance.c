@@ -674,15 +674,29 @@ static rd_bool_t is_api_key(rd_kafka_mock_request_t *request, void *opaque) {
 }
 
 /**
+ * @enum do_test_static_membership_mock_variation_t
+ * @brief Variations of the static membership mock test.
+ */
+typedef enum do_test_static_membership_mock_variation_t {
+        /** Consumer 1 leaves with unsubscribe and rejoins the group */
+        DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_SAME_INSTANCE = 0,
+        /** Consumer 1 leaves with unsubscribe and a new consumer with same
+         *  group.instance.id joins the group */
+        DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_NEW_INSTANCE = 1,
+        DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION__CNT
+} do_test_static_membership_mock_variation_t;
+
+/**
  * @brief Static group membership tests with the mock cluster.
  *        Checks that consumer returns the same assignment
  *        and generation id after re-joining.
  *
- *        variation 1) consumer 1 leaves and rejoins the group.
- *        variation 2) consumer 1 leaves and a new consumer with same
- *                     group.instance.id joins the group.
+ * @param variation Test variation to run.
+ *
+ * @sa `do_test_static_membership_mock_variation_t`
  */
-static void do_test_static_membership_mock(int variation) {
+static void do_test_static_membership_mock(
+    do_test_static_membership_mock_variation_t variation) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         int32_t api_key   = RD_KAFKAP_ConsumerGroupHeartbeat;
@@ -693,8 +707,11 @@ static void do_test_static_membership_mock(int variation) {
         rd_kafka_topic_partition_list_t *prev_assignment1, *prev_assignment2,
             *next_assignment1, *next_assignment2;
 
-        SUB_TEST_QUICK("%s", variation == 1 ? "with unsubscribe"
-                                            : "with new instance");
+        SUB_TEST_QUICK(
+            "%s",
+            variation == DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_SAME_INSTANCE
+                ? "with same instance"
+                : "with new instance");
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 2, 3);
@@ -730,7 +747,8 @@ static void do_test_static_membership_mock(int variation) {
                                          &api_key);
         rd_kafka_mock_stop_request_tracking(mcluster);
 
-        if (variation == 2) {
+        if (variation ==
+            DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_NEW_INSTANCE) {
                 /* Don't destroy it immediately because the
                  * topic partition lists still hold a reference. */
                 consumer_1_to_destroy = consumer1;
@@ -800,6 +818,7 @@ int main_0102_static_group_rebalance(int argc, char **argv) {
 
 int main_0102_static_group_rebalance_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
+        int variation;
 
         if (test_consumer_group_protocol_classic()) {
                 TEST_SKIP(
@@ -808,7 +827,11 @@ int main_0102_static_group_rebalance_mock(int argc, char **argv) {
                 return 0;
         }
 
-        do_test_static_membership_mock(1);
-        do_test_static_membership_mock(2);
+        for (variation = DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_SAME_INSTANCE;
+             variation < DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION__CNT;
+             variation++) {
+                do_test_static_membership_mock(variation);
+        }
+
         return 0;
 }

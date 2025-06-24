@@ -482,34 +482,31 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
 
         /* Provide more meaningful error messages in certain cases */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&
-            !strcmp(errstr, "Disconnected")) {
+            rd_kafka_transport_error_disconnected(errstr)) {
                 if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY) {
                         /* A disconnect while requesting ApiVersion typically
                          * means we're connecting to a SSL-listener as
                          * PLAINTEXT, but may also be caused by connecting to
                          * a broker that does not support ApiVersion (<0.10). */
-
                         if (rkb->rkb_proto != RD_KAFKA_PROTO_SSL &&
-                            rkb->rkb_proto != RD_KAFKA_PROTO_SASL_SSL)
-                                rd_kafka_broker_set_error(
-                                    rkb, level, err,
-                                    "Disconnected while requesting "
+                            rkb->rkb_proto != RD_KAFKA_PROTO_SASL_SSL) {
+                                ofe = rd_snprintf(
+                                    errstr + of, sizeof(errstr) - of, "%s",
+                                    ": requesting "
                                     "ApiVersion: "
                                     "might be caused by incorrect "
                                     "security.protocol configuration "
                                     "(connecting to a SSL listener?) or "
                                     "broker version is < 0.10 "
-                                    "(see api.version.request)",
-                                    ap /*ignored*/);
-                        else
-                                rd_kafka_broker_set_error(
-                                    rkb, level, err,
-                                    "Disconnected while requesting "
+                                    "(see api.version.request)");
+                        } else {
+                                ofe = rd_snprintf(
+                                    errstr + of, sizeof(errstr) - of, "%s",
+                                    ": requesting "
                                     "ApiVersion: "
                                     "might be caused by broker version "
-                                    "< 0.10 (see api.version.request)",
-                                    ap /*ignored*/);
-                        return;
+                                    "< 0.10 (see api.version.request)");
+                        }
 
                 } else if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP &&
                            state_duration_ms < 2000 /*2s*/ &&
@@ -517,18 +514,20 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
                                RD_KAFKA_PROTO_SASL_SSL &&
                            rkb->rkb_rk->rk_conf.security_protocol !=
                                RD_KAFKA_PROTO_SASL_PLAINTEXT) {
+
                         /* If disconnected shortly after transitioning to UP
                          * state it typically means the broker listener is
                          * configured for SASL authentication but the client
                          * is not. */
-                        rd_kafka_broker_set_error(
-                            rkb, level, err,
-                            "Disconnected: verify that security.protocol "
-                            "is correctly configured, broker might "
-                            "require SASL authentication",
-                            ap /*ignored*/);
-                        return;
+                        ofe =
+                            rd_snprintf(errstr + of, sizeof(errstr) - of, "%s",
+                                        ": verify that security.protocol "
+                                        "is correctly configured, broker might "
+                                        "require SASL authentication");
                 }
+                if (ofe > sizeof(errstr) - of)
+                        ofe = sizeof(errstr) - of;
+                of += ofe;
         }
 
         /* Check if error is identical to last error (prior to appending
@@ -2146,7 +2145,7 @@ int rd_kafka_recv(rd_kafka_broker_t *rkb) {
 err_parse:
         err = rkbuf->rkbuf_err;
 err:
-        if (!strcmp(errstr, "Disconnected"))
+        if (rd_kafka_transport_error_disconnected(errstr))
                 rd_kafka_broker_conn_closed(rkb, err, errstr);
         else
                 rd_kafka_broker_fail(rkb, LOG_ERR, err, "Receive failed: %s",

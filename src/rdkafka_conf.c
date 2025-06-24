@@ -624,7 +624,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "performed to determine a suitable default value, this is currently "
      "limited to identifying brokers on Azure "
      "(see librdkafka issue #3109 for more info). "
-     "Actual value value can be lower, up to "
+     "Actual value can be lower, up to "
      "`socket.connection.setup.timeout.ms` lower, "
      "only if `connections.max.idle.ms` >= "
      "2 * `socket.connection.setup.timeout.ms`, "

@@ -1,7 +1,156 @@
+# librdkafka v2.11.0
+
+librdkafka v2.11.0 is a feature release:
+
+* [KIP-1102](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1102%3A+Enable+clients+to+rebootstrap+based+on+timeout+or+error+code) Enable clients to rebootstrap based on timeout or error code (#4981).
+* Fix for poll ratio calculation in case the queues are forwarded (#5017).
+* Fix data race when buffer queues are being reset instead of being
+  initialized (#4718).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #4522.
+  A data race happened when emptying buffers of a failing broker, in its thread,
+  with the statistics callback in main thread gathering the buffer counts.
+  Solved by resetting the atomic counters instead of initializing them.
+  Happening since 1.x (#4718).
+
+### Telemetry fixes
+
+* Issues: #5109
+  Fix for poll ratio calculation in case the queues are forwarded.
+  Poll ratio is now calculated per-queue instead of per-instance and
+  it allows to avoid calculation problems linked to using the same
+  field.
+  Happens since 2.6.0 (#5017).
+
+
+
+# librdkafka v2.10.1
+
+librdkafka v2.10.1 is a maintenance release:
+
+* Fix to add locks when updating the metadata cache for the consumer 
+  after no broker connection is available (@marcin-krystianc, #5066).
+* Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
+  brokers were added manually through `rd_kafka_brokers_add` (#5067).
+* Fix an issue where the first message to any topic produced via `producev` or
+  `produceva` was delivered late (by up to 1 second) (#5032).
+* Fix for a loop of re-bootstrap sequences in case the client reaches the
+  `all brokers down` state (#5086).
+* Fix for frequent disconnections on push telemetry requests
+  with particular metric configurations (#4912).
+* Avoid copy outside boundaries when reading metric names in telemetry
+  subscription (#5105)
+* Metrics aren't duplicated when multiple prefixes match them (#5104)
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5088.
+  Fix for a loop of re-bootstrap sequences in case the client reaches the
+  `all brokers down` state. The client continues to select the
+  bootstrap brokers given they have no connection attempt and doesn't
+  re-connect to the learned ones. In case it happens a broker restart
+  can break the loop for the clients using the affected version.
+  Fixed by giving a higher chance to connect to the learned brokers
+  even if there are new ones that never tried to connect.
+  Happens since 2.10.0 (#5086).
+* Issues: #5057.
+  Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
+  brokers were added manually through `rd_kafka_brokers_add`.
+  Avoids a segmentation fault in this case.
+  Happens since 2.10.0 (#5067).
+
+### Producer fixes
+
+* In case of `producev` or `produceva`, the producer did not enqueue a leader
+  query metadata request immediately, and rather, waited for the 1 second
+  timer to kick in. This could cause delays in the sending of the first message
+  by up to 1 second.
+  Happens since 1.x (#5032).
+
+### Consumer fixes
+
+* Issues: #5051.
+  Fix to add locks when updating the metadata cache for the consumer.
+  It can cause memory corruption or use-after-free in case
+  there's no broker connection and the consumer
+  group metadata needs to be updated.
+  Happens since 2.10.0 (#5066).
+
+### Telemetry fixes
+
+* Issues: #5106.
+  Fix for frequent disconnections on push telemetry requests
+  with particular metric configurations.
+  A `NULL` payload is sent in a push telemetry request when
+  an empty one is needed. This causes disconnections every time the
+  push is sent, only when metrics are requested and
+  some metrics are matching the producer but none the consumer
+  or the other way around.
+  Happens since 2.5.0 (#4912).
+* Issues: #5102.
+  Avoid copy outside boundaries when reading metric names in telemetry
+  subscription. It can cause that some metrics aren't matched.
+  Happens since 2.5.0 (#5105).
+* Issues: #5103.
+  Telemetry metrics aren't duplicated when multiple prefixes match them.
+  Fixed by keeping track of the metrics that already matched.
+  Happens since 2.5.0 (#5104).
+
+
+
 # librdkafka v2.10.0
 
 librdkafka v2.10.0 is a feature release:
 
+> [!WARNING] it's suggested to upgrade to 2.10.1 or later
+> because of the possibly critical bug #5088
+
+## [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) – Now in **Preview**
+
+- [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) has transitioned from *Early Access* to *Preview*.
+- Added support for **regex-based subscriptions**.
+- Implemented client-side member ID generation as per [KIP-1082](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1082%3A+Require+Client-Generated+IDs+over+the+ConsumerGroupHeartbeat+RPC).
+- `rd_kafka_DescribeConsumerGroups()` now supports KIP-848-style `consumer` groups. Two new fields have been added:
+  - **Group type** – Indicates whether the group is `classic` or `consumer`.
+  - **Target assignment** – Applicable only to `consumer` protocol groups (defaults to `NULL`).
+- Group configuration is now supported in `AlterConfigs`, `IncrementalAlterConfigs`, and `DescribeConfigs`. ([#4939](https://github.com/confluentinc/librdkafka/pull/4939))
+- Added **Topic Authorization Error** support in the `ConsumerGroupHeartbeat` response.
+- Removed usage of the `partition.assignment.strategy` property for the `consumer` group protocol. An error will be raised if this is set with `group.protocol=consumer`.
+- Deprecated and disallowed the following properties for the `consumer` group protocol:
+  - `session.timeout.ms`
+  - `heartbeat.interval.ms`
+  - `group.protocol.type`  
+  Attempting to set any of these will result in an error.
+- Enhanced handling for `subscribe()` and `unsubscribe()` edge cases.
+
+> [!Note]
+> The [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) consumer is currently in **Preview** and should not be used in production environments. Implementation is feature complete but contract could have minor changes before General Availability.
+
+
+ ## Upgrade considerations
+
+
+  Starting from this version, brokers not reported in Metadata RPC call are
+  removed along with their threads. Brokers and their threads are added back
+  when they appear in a Metadata RPC response again. When no brokers are left
+  or they're not reachable, the client will start a re-bootstrap sequence
+  by default. `metadata.recovery.strategy` controls this, 
+  which defaults to `rebootstrap`.
+  Setting `metadata.recovery.strategy` to `none` avoids any re-bootstrapping and
+  leaves only the broker received in last successful metadata response.
+
+
+ ## Enhancements and Fixes
+
+ * [KIP-899](https://cwiki.apache.org/confluence/display/KAFKA/KIP-899%3A+Allow+producer+and+consumer+clients+to+rebootstrap) Allow producer and consumer clients to rebootstrap
  * Identify brokers only by broker id (#4557, @mfleming)
  * Remove unavailable brokers and their thread (#4557, @mfleming)
  * Commits during a cooperative incremental rebalance aren't causing
@@ -51,7 +200,7 @@ librdkafka v2.10.0 is a feature release:
    and connection.
    Happens since 1.x (#4557, @mfleming).
  * Issues: #4557
-   Remove brokers not reported in a metadata call, along with their thread.
+   Remove brokers not reported in a metadata call, along with their threads.
    Avoids that unavailable brokers are selected for a new connection when
    there's no one available. We cannot tell if a broker was removed
    temporarily or permanently so we always remove it and it'll be added back when
@@ -160,7 +309,6 @@ librdkafka v2.10.0 is a feature release:
 
 librdkafka v2.8.0 is a maintenance release:
 
-* Extend Config Apis to support group config (#4939).
 * Socket options are now all set before connection (#4893).
 * Client certificate chain is now sent when using `ssl.certificate.pem`
   or `ssl_certificate` or `ssl.keystore.location` (#4894).

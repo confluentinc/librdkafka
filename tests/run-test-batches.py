@@ -121,7 +121,7 @@ def run_tests():
         for j in range(0, len(TESTS), batch_size):
             interrupted = False
             TESTS_BATCH = ','.join(TESTS[j:j + batch_size])
-            print(f"Running tests: {TESTS_BATCH}, iteration: {i+1}",
+            print(f"Running tests: {TESTS_BATCH}, iteration: {i + 1}",
                   file=sys.stderr)
             p = subprocess.Popen(['./run-test.sh', '-D'] + args,
                                  env={**os.environ, 'TESTS': TESTS_BATCH},

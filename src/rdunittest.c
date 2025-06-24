@@ -429,6 +429,7 @@ extern int unittest_http(void);
 #if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
+extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
 
 int rd_unittest(void) {
@@ -437,43 +438,43 @@ int rd_unittest(void) {
                 const char *name;
                 int (*call)(void);
         } unittests[] = {
-                {"sysqueue", unittest_sysqueue},
-                {"string", unittest_string},
-                {"map", unittest_map},
-                {"rdbuf", unittest_rdbuf},
-                {"rdvarint", unittest_rdvarint},
-                {"crc32c", unittest_rd_crc32c},
-                {"msg", unittest_msg},
-                {"murmurhash", unittest_murmur2},
-                {"fnv1a", unittest_fnv1a},
-                {"mock", unittest_mock_cluster},
+            {"sysqueue", unittest_sysqueue},
+            {"string", unittest_string},
+            {"map", unittest_map},
+            {"rdbuf", unittest_rdbuf},
+            {"rdvarint", unittest_rdvarint},
+            {"crc32c", unittest_rd_crc32c},
+            {"msg", unittest_msg},
+            {"murmurhash", unittest_murmur2},
+            {"fnv1a", unittest_fnv1a},
+            {"mock", unittest_mock_cluster},
 #if WITH_HDRHISTOGRAM
-                {"rdhdrhistogram", unittest_rdhdrhistogram},
+            {"rdhdrhistogram", unittest_rdhdrhistogram},
 #endif
 #ifdef _WIN32
-                {"rdclock", unittest_rdclock},
+            {"rdclock", unittest_rdclock},
 #endif
-                {"conf", unittest_conf},
-                {"broker", unittest_broker},
-                {"request", unittest_request},
+            {"conf", unittest_conf},
+            {"broker", unittest_broker},
+            {"request", unittest_request},
 #if WITH_SASL_OAUTHBEARER
-                {"sasl_oauthbearer", unittest_sasl_oauthbearer},
+            {"sasl_oauthbearer", unittest_sasl_oauthbearer},
 #endif
-                {"aborted_txns", unittest_aborted_txns},
-                {"cgrp", unittest_cgrp},
+            {"aborted_txns", unittest_aborted_txns},
+            {"cgrp", unittest_cgrp},
 #if WITH_SASL_SCRAM
-                {"scram", unittest_scram},
+            {"scram", unittest_scram},
 #endif
-                {"assignors", unittest_assignors},
+            {"assignors", unittest_assignors},
 #if WITH_CURL
-                {"http", unittest_http},
+            {"http", unittest_http},
 #endif
 #if WITH_OAUTHBEARER_OIDC
-                {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
+            {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
 #endif
-                {"telemetry", unittest_telemetry_decode},
-                {NULL}
-        };
+            {"telemetry", unittest_telemetry},
+            {"telemetry_decode", unittest_telemetry_decode},
+            {NULL}};
         int i;
         const char *match = rd_getenv("RD_UT_TEST", NULL);
         int cnt           = 0;

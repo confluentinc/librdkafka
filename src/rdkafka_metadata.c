@@ -572,6 +572,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         int broker_changes            = 0;
         int cache_changes             = 0;
         int cgrp_subscription_version = -1;
+        int16_t ErrorCode             = 0;
 
         /* If client rack is present, the metadata cache (topic or full) needs
          * to contain the partition to rack map. */
@@ -872,7 +873,20 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                     ClusterAuthorizedOperations;
         }
 
+        if (ApiVersion >= 13) {
+                rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        }
+
         rd_kafka_buf_skip_tags(rkbuf);
+
+        if (ErrorCode) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Metadata response: received top level "
+                           "error code %" PRId16 ": %s",
+                           ErrorCode, rd_kafka_err2str(ErrorCode));
+                err = ErrorCode;
+                goto err;
+        }
 
         /* Entire Metadata response now parsed without errors:
          * update our internal state according to the response. */
@@ -1025,6 +1039,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rkb->rkb_rk);
 
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
+        rd_kafka_rebootstrap_tmr_restart(rkb->rkb_rk);
 
         /* Update cached cluster id. */
         if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&
@@ -1789,16 +1804,19 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
  *        exponentially increased intervals until no topics are missing
  *        leaders.
  *
+ * @param force If true, run the query immediately without waiting for the
+ * interval.
+ *
  * @locks none
  * @locality any
  */
-void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
+void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk, rd_bool_t force) {
         rd_ts_t next;
 
-        /* Restart the timer if it will speed things up. */
+        /* Restart the timer if it will speed things up, or if forced. */
         next = rd_kafka_timer_next(
             &rk->rk_timers, &rk->rk_metadata_cache.rkmc_query_tmr, 1 /*lock*/);
-        if (next == -1 /* not started */ ||
+        if (force || next == -1 /* not started */ ||
             next >
                 (rd_ts_t)rk->rk_conf.metadata_refresh_fast_interval_ms * 1000) {
                 rd_kafka_dbg(rk, METADATA | RD_KAFKA_DBG_TOPIC, "FASTQUERY",

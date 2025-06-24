@@ -220,7 +220,7 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 
 
 /* Round/align X upwards to STRIDE, which must be power of 2. */
-#define RD_ROUNDUP(X, STRIDE) (((X) + ((STRIDE)-1)) & ~(STRIDE - 1))
+#define RD_ROUNDUP(X, STRIDE) (((X) + ((STRIDE) - 1)) & ~(STRIDE - 1))
 
 #define RD_ARRAY_SIZE(A)          (sizeof((A)) / sizeof(*(A)))
 #define RD_ARRAYSIZE(A)           RD_ARRAY_SIZE(A)
@@ -427,7 +427,7 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get(rd_refcnt_t *R) {
 
 #define RD_INTERFACE_CALL(i, name, ...) (i->name(i->opaque, __VA_ARGS__))
 
-#define RD_CEIL_INTEGER_DIVISION(X, DEN) (((X) + ((DEN)-1)) / (DEN))
+#define RD_CEIL_INTEGER_DIVISION(X, DEN) (((X) + ((DEN) - 1)) / (DEN))
 
 /**
  * @brief Utility types to hold memory,size tuple.

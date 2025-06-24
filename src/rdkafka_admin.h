@@ -527,6 +527,9 @@ struct rd_kafka_MemberDescription_s {
         char *group_instance_id;                /**< Group instance id */
         char *host;                             /**< Group member host */
         rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
+        rd_kafka_MemberAssignment_t
+            *target_assignment; /**< Target assignment. `NULL` for `classic`
+                                   protocol */
 };
 
 /**
@@ -546,6 +549,8 @@ struct rd_kafka_ConsumerGroupDescription_s {
         char *partition_assignor;
         /** Consumer group state. */
         rd_kafka_consumer_group_state_t state;
+        /** Consumer group type. */
+        rd_kafka_consumer_group_type_t type;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
         /** Count of operations allowed for topic. -1 indicates operations not

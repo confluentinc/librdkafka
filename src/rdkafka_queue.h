@@ -91,6 +91,12 @@ struct rd_kafka_q_s {
          * Shall return 1 if op was handled, else 0. */
         rd_kafka_q_serve_cb_t *rkq_serve;
         void *rkq_opaque;
+        rd_ts_t rkq_ts_last_poll_start; /**< Timestamp of last queue
+                                         *   poll() call start
+                                         *   Only relevant for a consumer. */
+        rd_ts_t rkq_ts_last_poll_end;   /**< Timestamp of last queue
+                                         *   poll() call end
+                                         *   Only relevant for a consumer. */
 
 #if ENABLE_DEVEL
         char rkq_name[64]; /* Debugging: queue name (FUNC:LINE) */
@@ -841,6 +847,13 @@ rd_kafka_op_t *rd_kafka_q_pop_serve(rd_kafka_q_t *rkq,
                                     rd_kafka_q_serve_cb_t *callback,
                                     void *opaque);
 rd_kafka_op_t *
+rd_kafka_q_pop_serve_maybe_consume(rd_kafka_q_t *rkq,
+                                   rd_ts_t timeout_us,
+                                   int32_t version,
+                                   rd_kafka_q_cb_type_t cb_type,
+                                   rd_kafka_q_serve_cb_t *callback,
+                                   void *opaque);
+rd_kafka_op_t *
 rd_kafka_q_pop(rd_kafka_q_t *rkq, rd_ts_t timeout_us, int32_t version);
 int rd_kafka_q_serve(rd_kafka_q_t *rkq,
                      int timeout_ms,
@@ -848,6 +861,12 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
                      rd_kafka_q_cb_type_t cb_type,
                      rd_kafka_q_serve_cb_t *callback,
                      void *opaque);
+int rd_kafka_q_serve_maybe_consume(rd_kafka_q_t *rkq,
+                                   int timeout_ms,
+                                   int max_cnt,
+                                   rd_kafka_q_cb_type_t cb_type,
+                                   rd_kafka_q_serve_cb_t *callback,
+                                   void *opaque);
 
 
 int rd_kafka_q_move_cnt(rd_kafka_q_t *dstq,

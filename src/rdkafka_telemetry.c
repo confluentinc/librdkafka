@@ -33,6 +33,7 @@
 #include "nanopb/pb.h"
 #include "rdkafka_lz4.h"
 #include "snappy.h"
+#include "rdunittest.h"
 
 #if WITH_ZSTD
 #include "rdkafka_zstd.h"
@@ -173,6 +174,9 @@ static void update_matched_metrics(rd_kafka_t *rk, size_t j) {
 
 static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
         size_t metrics_cnt = RD_KAFKA_TELEMETRY_METRIC_CNT(rk), i;
+        rd_bool_t is_metric_included[RD_MAX(
+            (int)RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
+            (int)RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT)] = {0};
         const rd_kafka_telemetry_metric_info_t *info =
             RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
 
@@ -193,6 +197,9 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                        j;
 
                 for (j = 0; j < metrics_cnt; j++) {
+                        if (is_metric_included[j])
+                                continue;
+
                         /* Prefix matching the requested metrics with the
                          * available metrics. */
                         char full_metric_name
@@ -205,8 +212,10 @@ static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
                                     rk->rk_telemetry.requested_metrics[i],
                                     name_len) == 0;
 
-                        if (name_matches)
+                        if (name_matches) {
                                 update_matched_metrics(rk, j);
+                                is_metric_included[j] = rd_true;
+                        }
                 }
         }
 
@@ -266,6 +275,24 @@ rd_kafka_push_telemetry_payload_compress(rd_kafka_t *rk,
         rd_slice_t payload_slice;
         size_t i;
         rd_kafka_resp_err_t r = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        if (payload->rbuf_len == 0) {
+                /* We can only initialize the slice to compress
+                 * if not empty. */
+                rd_kafka_dbg(rk, TELEMETRY, "PUSH",
+                             "Empty payload. "
+                             "Sending uncompressed payload");
+
+                /* It's not important the payload isn't actually a segment
+                 * inside the buffer, as size is 0, we can send any allocated
+                 * memory here, but we chose the buffer because it's
+                 * freed like the other COMPRESSION_NONE case, without
+                 * memory leaks. */
+                *compressed_payload      = payload;
+                *compressed_payload_size = 0;
+                return RD_KAFKA_COMPRESSION_NONE;
+        }
+
         rd_slice_init_full(&payload_slice, payload);
         for (i = 0; i < rk->rk_telemetry.accepted_compression_types_cnt; i++) {
                 rd_kafka_compression_t compression_type =
@@ -359,20 +386,23 @@ static void rd_kafka_send_push_telemetry(rd_kafka_t *rk,
                                      compressed_metrics_payload_size,
                                      rk->rk_telemetry.telemetry_max_bytes);
                 }
-        } else {
-                rd_kafka_dbg(rk, TELEMETRY, "PUSH",
-                             "No metrics to push. Sending empty payload.");
-        }
 
-        rd_kafka_dbg(rk, TELEMETRY, "PUSH",
-                     "Sending PushTelemetryRequest with terminating = %s",
-                     RD_STR_ToF(terminating));
-        rd_kafka_PushTelemetryRequest(
-            rkb, &rk->rk_telemetry.client_instance_id,
-            rk->rk_telemetry.subscription_id, terminating, compression_used,
-            compressed_metrics_payload, compressed_metrics_payload_size, NULL,
-            0, RD_KAFKA_REPLYQ(rk->rk_ops, 0), rd_kafka_handle_PushTelemetry,
-            NULL);
+                rd_kafka_dbg(
+                    rk, TELEMETRY, "PUSH",
+                    "Sending PushTelemetryRequest with terminating = %s",
+                    RD_STR_ToF(terminating));
+                rd_kafka_PushTelemetryRequest(
+                    rkb, &rk->rk_telemetry.client_instance_id,
+                    rk->rk_telemetry.subscription_id, terminating,
+                    compression_used, compressed_metrics_payload,
+                    compressed_metrics_payload_size, NULL, 0,
+                    RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                    rd_kafka_handle_PushTelemetry, NULL);
+        } else {
+                rd_kafka_log(rk, LOG_WARNING, "PUSH",
+                             "Telemetry metrics encode error, not sending "
+                             "metrics");
+        }
 
         if (metrics_payload)
                 rd_buf_destroy_free(metrics_payload);
@@ -699,4 +729,34 @@ void rd_kafka_set_telemetry_broker_maybe(rd_kafka_t *rk,
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
             0 /* immediate */, rd_kafka_telemetry_fsm_tmr_cb, (void *)rk);
+}
+
+/**
+ * @brief Overlapping prefixes should not match the metrics
+ *        multiple times.
+ */
+int unit_test_telemetry_match_requested_metrics_no_duplicates(void) {
+        rd_kafka_t *rk = rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+        rk->rk_telemetry.requested_metrics_cnt = 3;
+        rk->rk_telemetry.requested_metrics =
+            rd_calloc(rk->rk_telemetry.requested_metrics_cnt, sizeof(char *));
+        rk->rk_telemetry.requested_metrics[0] = rd_strdup("org");
+        rk->rk_telemetry.requested_metrics[1] = rd_strdup("org.apache");
+        rk->rk_telemetry.requested_metrics[2] = rd_strdup("org.apache.kafka");
+        rd_kafka_match_requested_metrics(rk);
+
+        RD_UT_ASSERT(rk->rk_telemetry.matched_metrics_cnt ==
+                         RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
+                     "Expected %d matched metrics, got %" PRIusz,
+                     RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
+                     rk->rk_telemetry.matched_metrics_cnt);
+        rd_kafka_destroy(rk);
+        return 0;
+}
+
+
+int unittest_telemetry(void) {
+        int fails = 0;
+        fails += unit_test_telemetry_match_requested_metrics_no_duplicates();
+        return fails;
 }

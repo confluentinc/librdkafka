@@ -481,12 +481,12 @@ void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk) {
         ((partition) < (current_partition_cnt) &&                              \
                  (partition) >= (new_partition_cnt)                            \
              ? rd_false                                                        \
-             : (partition) < (new_partition_cnt) &&                            \
-                       (partition) >= (current_partition_cnt)                  \
-                   ? rd_true                                                   \
-                   : (new_partition).leader_epoch == -1 ||                     \
-                         (new_partition).leader_epoch >=                       \
-                             (current_partition.leader_epoch));
+         : (partition) < (new_partition_cnt) &&                                \
+                 (partition) >= (current_partition_cnt)                        \
+             ? rd_true                                                         \
+             : (new_partition).leader_epoch == -1 ||                           \
+                   (new_partition).leader_epoch >=                             \
+                       (current_partition.leader_epoch));
 
 
 static struct rd_kafka_metadata_cache_entry *

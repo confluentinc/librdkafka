@@ -445,9 +445,9 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
         if (mpart->replicas)
                 rd_free(mpart->replicas);
 
-        mpart->replicas = replica_cnt
-                              ? rd_calloc(replica_cnt, sizeof(*mpart->replicas))
-                              : NULL;
+        mpart->replicas    = replica_cnt
+                                 ? rd_calloc(replica_cnt, sizeof(*mpart->replicas))
+                                 : NULL;
         mpart->replica_cnt = replica_cnt;
         if (replica_cnt == 0) {
                 rd_kafka_mock_partition_set_leader0(mpart, NULL);

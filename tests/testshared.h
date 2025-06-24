@@ -62,7 +62,7 @@ extern int test_quick;
 /** @brief Broker version to int */
 #define TEST_BRKVER(A, B, C, D) (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
 /** @brief return single version component from int */
-#define TEST_BRKVER_X(V, I) (((V) >> (24 - ((I)*8))) & 0xff)
+#define TEST_BRKVER_X(V, I) (((V) >> (24 - ((I) * 8))) & 0xff)
 
 /** @brief Topic Admin API supported by this broker version and later */
 #define TEST_BRKVER_TOPIC_ADMINAPI TEST_BRKVER(0, 10, 2, 0)
@@ -394,7 +394,7 @@ void test_sub_skip(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 #ifndef _WIN32
 #define rd_sleep(S) sleep(S)
 #else
-#define rd_sleep(S) Sleep((S)*1000)
+#define rd_sleep(S) Sleep((S) * 1000)
 #endif
 
 /* Make sure __SANITIZE_ADDRESS__ (gcc) is defined if compiled with asan */

@@ -323,7 +323,7 @@ struct test_msgver_s {
 
         const char *msgid_hdr; /**< msgid string is in header by this name,
                                 * rather than in the payload (default). */
-};                             /* test_msgver_t; */
+}; /* test_msgver_t; */
 
 /* Message */
 struct test_mv_m {
@@ -877,6 +877,12 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
                                                const char **bootstraps);
+
+size_t test_mock_get_matching_request_cnt(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque);
+
 size_t test_mock_wait_matching_requests(
     rd_kafka_mock_cluster_t *mcluster,
     size_t num,

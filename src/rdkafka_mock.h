@@ -383,7 +383,7 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
  * @param broker_id The broker to delete
  * @returns 0 on success or -1 on error
  */
-RD_EXPORT int
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *cluster,
                                   int32_t broker_id);
 

@@ -3103,13 +3103,13 @@ static void do_test_DescribeConsumerGroups(const char *what,
                         test_conf_set(conf, "group.instance.id",
                                       group_instance_ids[i]);
                         if (!strcmp(protocols[i], "Classic")) {
-                                test_conf_set(conf, "session.timeout.ms",
-                                              "5000");
+                                test_conf_set0(conf, "session.timeout.ms",
+                                              "5000", rd_false);
                         }
                         test_conf_set(conf, "auto.offset.reset", "earliest");
                         test_conf_set(conf, "group.protocol", protocols[i]);
                         rks[i] =
-                            test_create_consumer(group_id, NULL, conf, NULL);
+                            test_create_consumer0(group_id, NULL, conf, NULL, rd_false);
                         test_consumer_subscribe(rks[i], topic);
                         /* Consume messages */
                         test_consumer_poll("consumer", rks[i], testid, -1, -1,
@@ -3296,7 +3296,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         }
 
         /* Wait session timeout + 1s. Because using static group membership */
-        rd_sleep(6);
+        rd_sleep(10);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);
@@ -5469,7 +5469,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         /* TODO: check this test after KIP-848 admin operation
          * implementation */
-        
         /* Describe groups */
         do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
         do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);

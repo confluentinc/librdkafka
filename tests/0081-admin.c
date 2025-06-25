@@ -2825,8 +2825,12 @@ static void do_test_DeleteGroups(const char *what,
 /**
  * @brief Helper for do_test_ListConsumerGroups, makes ListConsumerGroups call
  * and checks returned group count equals to \p exp_found.
+ *
  * Parameter \p exp_type, if not UNKNOWN, needs to match
  * returned groups type.
+ *
+ * If \p match_states is true, then the state of the
+ * returned groups is checked and expected to be `EMPTY`.
  */
 static void
 test_ListConsumerGroups_helper(rd_kafka_t *rk,

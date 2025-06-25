@@ -107,6 +107,19 @@ static int static_member_wait_rebalance0(int line,
 #define static_member_wait_rebalance(C, START, TARGET, TIMEOUT_MS)             \
         static_member_wait_rebalance0(__LINE__, C, START, TARGET, TIMEOUT_MS)
 
+/**
+ * @brief Get generation id of consumer \p consumer .
+ */
+static int32_t consumer_generation_id(rd_kafka_t *consumer) {
+        rd_kafka_consumer_group_metadata_t *group_metadata;
+        int32_t generation_id;
+
+        group_metadata = rd_kafka_consumer_group_metadata(consumer);
+        generation_id =
+            rd_kafka_consumer_group_metadata_generation_id(group_metadata);
+        rd_kafka_consumer_group_metadata_destroy(group_metadata);
+        return generation_id;
+}
 
 static void rebalance_cb(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
@@ -455,10 +468,13 @@ static void do_test_static_group_rebalance_consumer(void) {
         char *topics         = rd_strdup(tsprintf("^%s.*", topic));
         const char *group_id = topic;
         test_timing_t t_close;
+        int32_t prev_member_epoch[_CONSUMER_CNT], member_epoch[_CONSUMER_CNT];
 
         int session_timeout_ms = 6000;
         test_broker_conf_set_group_consumer_session_timeout_ms(
             group_id, session_timeout_ms);
+        test_broker_conf_set_group_consumer_heartbeat_interval_ms(
+            group_id, 1000 /* 1s heartbeat interval */);
 
         rd_ts_t prev_assigned[_CONSUMER_CNT] = RD_ZERO_INIT;
         rd_ts_t prev_revoked[_CONSUMER_CNT]  = RD_ZERO_INIT;
@@ -559,6 +575,7 @@ static void do_test_static_group_rebalance_consumer(void) {
          * only the members receiving the new partitions will have
          * rebalance callbacks triggered.
          */
+        rebalance_start = test_clock();
         test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 4, 1,
                                       5000);
 
@@ -583,6 +600,10 @@ static void do_test_static_group_rebalance_consumer(void) {
         rebalance_start  = test_clock();
         prev_assigned[0] = c[0].assigned_at;
         prev_revoked[0]  = c[0].revoked_at;
+
+        prev_member_epoch[0] = consumer_generation_id(c[0].rk);
+        prev_member_epoch[1] = consumer_generation_id(c[1].rk);
+
         rd_kafka_unsubscribe(c[1].rk);
 
         /* Await revocation */
@@ -603,6 +624,20 @@ static void do_test_static_group_rebalance_consumer(void) {
                 c[0].curr_line = __LINE__;
                 test_consumer_poll_once(c[0].rk, &mv, 0);
         }
+
+        member_epoch[0] = consumer_generation_id(c[0].rk);
+        member_epoch[1] = consumer_generation_id(c[1].rk);
+
+        TEST_ASSERT(prev_member_epoch[0] == member_epoch[0],
+                    "c[0] should have the same member epoch "
+                    "as before the unsubscribe. "
+                    "expected %" PRId32 ", got %" PRId32,
+                    prev_member_epoch[0], member_epoch[0]);
+        TEST_ASSERT(prev_member_epoch[1] == member_epoch[1],
+                    "c[1] should have the same member epoch "
+                    "as before the unsubscribe. "
+                    "expected %" PRId32 ", got %" PRId32,
+                    prev_member_epoch[1], member_epoch[1]);
 
         TEST_SAY("== Testing max poll violation ==\n");
 
@@ -640,7 +675,22 @@ static void do_test_static_group_rebalance_consumer(void) {
         static_member_expect_rebalance(&c[1], rebalance_start,
                                        &c[1].assigned_at, -1);
 
-        TEST_SAY("== Testing `consumer.session.timeout.ms` member eviction ==\n");
+        member_epoch[0] = consumer_generation_id(c[0].rk);
+        member_epoch[1] = consumer_generation_id(c[1].rk);
+
+        TEST_ASSERT(prev_member_epoch[0] == member_epoch[0],
+                    "c[0] should have the same member epoch "
+                    "as before reaching `max.poll.interval.ms`. "
+                    "expected %" PRId32 ", got %" PRId32,
+                    prev_member_epoch[0], member_epoch[0]);
+        TEST_ASSERT(prev_member_epoch[1] == member_epoch[1],
+                    "c[1] should have the same member epoch "
+                    "as before reaching `max.poll.interval.ms`. "
+                    "expected %" PRId32 ", got %" PRId32,
+                    prev_member_epoch[1], member_epoch[1]);
+
+        TEST_SAY(
+            "== Testing `consumer.session.timeout.ms` member eviction ==\n");
 
         rebalance_start        = test_clock();
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
@@ -905,20 +955,6 @@ static rd_kafka_t *create_consumer(const char *bootstraps,
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.partition.eof", "true");
         return test_create_consumer(group_id, NULL, conf, NULL);
-}
-
-/**
- * @brief Get generation id of consumer \p consumer .
- */
-static int32_t consumer_generation_id(rd_kafka_t *consumer) {
-        rd_kafka_consumer_group_metadata_t *group_metadata;
-        int32_t generation_id;
-
-        group_metadata = rd_kafka_consumer_group_metadata(consumer);
-        generation_id =
-            rd_kafka_consumer_group_metadata_generation_id(group_metadata);
-        rd_kafka_consumer_group_metadata_destroy(group_metadata);
-        return generation_id;
 }
 
 /**

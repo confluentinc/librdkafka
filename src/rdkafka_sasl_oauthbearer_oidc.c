@@ -273,7 +273,7 @@ rd_kafka_oidc_assertion_parse_template_file(rd_kafka_t *rk,
         *payload = NULL;
 
         template_content =
-            rd_read_file(jwt_template_file_path, &file_size, 1024 * 1024);
+            rd_file_read(jwt_template_file_path, &file_size, 1024 * 1024);
         if (!template_content) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
                              "Failed to open JWT template file: %s",
@@ -636,7 +636,7 @@ static char *rd_kafka_oidc_assertion_read_from_file(const char *file_path) {
         if (!file_path)
                 return NULL;
         const size_t max_size = 1024 * 1024; /* 1MB limit */
-        return rd_read_file(file_path, NULL, max_size);
+        return rd_file_read(file_path, NULL, max_size);
 }
 
 /**
@@ -1259,16 +1259,15 @@ static int ut_sasl_oauthbearer_oidc_jwt_bearer_build_request_body(void) {
  */
 static int ut_sasl_oauthbearer_oidc_assertion_parse_from_file(void) {
 
-        char tempfile_path[] = "/tmp/testfileXXXXXX";
+        char tempfile_path[512];
         FILE *tempfile;
-        int tempfile_fd;
         const char *test_jwt = "header.payload.signature";
         char *result;
 
         RD_UT_BEGIN();
 
-        tempfile_fd = mkstemp(tempfile_path);
-        tempfile    = fdopen(tempfile_fd, "w");
+        tempfile = rd_file_mkstemp("rdtmp", "wb", tempfile_path,
+                                   sizeof(tempfile_path));
         fprintf(tempfile, "%s", test_jwt);
         fclose(tempfile);
 
@@ -1302,9 +1301,9 @@ static int ut_sasl_oauthbearer_oidc_assertion_parse_from_file(void) {
  *        Creates a file with valid JWT template JSON.
  */
 static char *ut_create_mock_jwt_template_file(void) {
-        char tempfile_path[] = "/tmp/testfileXXXXXX";
         FILE *tempfile;
-        int tempfile_fd;
+        char tempfile_path[512];
+
         const char *template_json =
             "{\n"
             "  \"header\": {\n"
@@ -1316,11 +1315,10 @@ static char *ut_create_mock_jwt_template_file(void) {
             "  }\n"
             "}";
 
-        tempfile_fd = mkstemp(tempfile_path);
-        tempfile    = fdopen(tempfile_fd, "w");
-        if (!tempfile) {
+        tempfile = rd_file_mkstemp("rdtmp", "wb", tempfile_path,
+                                   sizeof(tempfile_path));
+        if (!tempfile)
                 return NULL;
-        }
 
         fprintf(tempfile, "%s", template_json);
         fclose(tempfile);

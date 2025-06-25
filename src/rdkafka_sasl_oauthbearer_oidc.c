@@ -408,6 +408,11 @@ static char *rd_kafka_oidc_assertion_create(
         }
 
         /* Add required header fields */
+        cJSON_DeleteItemFromObjectCaseSensitive(header_json_obj, "alg");
+        cJSON_DeleteItemFromObjectCaseSensitive(header_json_obj, "typ");
+        cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "iat");
+        cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "exp");
+        cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "nbf");
         cJSON_AddStringToObject(
             header_json_obj, "alg",
             rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
@@ -419,18 +424,29 @@ static char *rd_kafka_oidc_assertion_create(
                                 (double)expiration_time);
         cJSON_AddNumberToObject(payload_json_obj, "nbf", (double)not_before);
 
-        if (subject)
+        if (subject) {
+                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                                                        "sub");
                 cJSON_AddStringToObject(payload_json_obj, "sub", subject);
+        }
 
-        if (issuer)
+        if (issuer) {
+                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                                                        "iss");
                 cJSON_AddStringToObject(payload_json_obj, "iss", issuer);
+        }
 
-        if (audience)
+        if (audience) {
+                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                                                        "aud");
                 cJSON_AddStringToObject(payload_json_obj, "aud", audience);
+        }
 
         if (jti_include) {
                 jti_uuid     = rd_kafka_Uuid_random();
                 jti_uuid_str = rd_kafka_Uuid_str(&jti_uuid);
+                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                                                        "jti");
                 cJSON_AddStringToObject(payload_json_obj, "jti", jti_uuid_str);
                 rd_free(jti_uuid_str);
         }
@@ -867,7 +883,7 @@ done:
         RD_IF_FREE(json, cJSON_Delete);
         RD_IF_FREE(extensions, rd_free);
         RD_IF_FREE(extension_key_value, rd_free);
-        RD_IF_FREE(jwt_token, rd_free);
+        /* jwt_token is freed as part of the json object */
 }
 
 /**
@@ -891,12 +907,12 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
         rd_http_error_t *herr;
 
         char *jwt_token;
-        char *post_fields;
+        char *post_fields = NULL;
 
         struct curl_slist *headers = NULL;
 
         const char *token_url;
-        char *sub;
+        char *sub = NULL;
 
         size_t post_fields_size;
         size_t extension_cnt;

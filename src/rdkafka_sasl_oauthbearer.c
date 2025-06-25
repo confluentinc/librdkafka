@@ -1265,6 +1265,7 @@ static int rd_kafka_sasl_oauthbearer_client_new(rd_kafka_transport_t *rktrans,
         else
                 state->md_principal_name = NULL;
 
+        rd_list_init_copy(&state->extensions, &handle->extensions);
         rd_list_copy_to(&state->extensions, &handle->extensions,
                         rd_strtup_list_copy, NULL);
 

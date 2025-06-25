@@ -439,7 +439,8 @@ static void do_test_static_group_rebalance_classic(void) {
  *        session times out, it doesn't leave on unsubscribe
  *        or max.poll.interval.ms reached.
  *        KIP-1092 will be implemented so a static member can
- *        leave the group permanently before reaching session.timeout.ms.
+ *        leave the group permanently before reaching
+ *        `consumer.session.timeout.ms`.
  */
 static void do_test_static_group_rebalance_consumer(void) {
         rd_kafka_conf_t *conf;
@@ -546,8 +547,8 @@ static void do_test_static_group_rebalance_consumer(void) {
         }
         TIMING_STOP(&t_close);
 
-        /* Should complete before `session.timeout.ms` */
-        TIMING_ASSERT(&t_close, 0, session_timeout_ms);
+        /* Should complete before 45s (default close timeout) */
+        TIMING_ASSERT(&t_close, 0, 45000);
 
 
         TEST_SAY("== Testing subscription expansion ==\n");
@@ -639,7 +640,7 @@ static void do_test_static_group_rebalance_consumer(void) {
         static_member_expect_rebalance(&c[1], rebalance_start,
                                        &c[1].assigned_at, -1);
 
-        TEST_SAY("== Testing `session.timeout.ms` member eviction ==\n");
+        TEST_SAY("== Testing `consumer.session.timeout.ms` member eviction ==\n");
 
         rebalance_start        = test_clock();
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;

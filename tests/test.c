@@ -100,7 +100,7 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME) extern int main_##NAME(int, char **)
 #define _TEST(NAME, FLAGS, ...)                                                \
-        { .name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__ }
+        {.name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__}
 
 
 /**
@@ -2177,7 +2177,9 @@ void test_dr_msg_cb(rd_kafka_t *rk,
                 test_curr->produce_sync_err = rkmessage->err;
 }
 
-rd_kafka_t *test_create_handle0(int mode, rd_kafka_conf_t *conf, rd_bool_t environment_group_protocol) {
+rd_kafka_t *test_create_handle0(int mode,
+                                rd_kafka_conf_t *conf,
+                                rd_bool_t environment_group_protocol) {
         rd_kafka_t *rk;
         char errstr[512];
 
@@ -2192,8 +2194,9 @@ rd_kafka_t *test_create_handle0(int mode, rd_kafka_conf_t *conf, rd_bool_t envir
                         test_conf_set(conf, "client.id", test_curr->name);
         }
 
-        if (environment_group_protocol && mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str) {
-                        test_conf_set(conf, "group.protocol",
+        if (environment_group_protocol && mode == RD_KAFKA_CONSUMER &&
+            test_consumer_group_protocol_str) {
+                test_conf_set(conf, "group.protocol",
                               test_consumer_group_protocol_str);
         }
 
@@ -2729,9 +2732,8 @@ rd_kafka_t *test_create_consumer0(
         /* Create kafka instance */
         if (!environment_group_protocol) {
                 rk = test_create_handle0(RD_KAFKA_CONSUMER, conf,
-                                 environment_group_protocol);
-        }
-        else {
+                                         environment_group_protocol);
+        } else {
                 rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
         }
 
@@ -4694,7 +4696,8 @@ void test_conf_set0(rd_kafka_conf_t *conf,
                     const char *val,
                     rd_bool_t environment_group_protocol) {
         char errstr[512];
-        if (environment_group_protocol && test_is_forbidden_conf_group_protocol_consumer(name)) {
+        if (environment_group_protocol &&
+            test_is_forbidden_conf_group_protocol_consumer(name)) {
                 TEST_SAY(
                     "Skipping setting forbidden configuration %s for CONSUMER "
                     "protocol.\n",
@@ -4708,7 +4711,8 @@ void test_conf_set0(rd_kafka_conf_t *conf,
 }
 
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
-        return test_conf_set0(conf, name, val, rd_true /* environment_group_protocol */);
+        return test_conf_set0(conf, name, val,
+                              rd_true /* environment_group_protocol */);
 }
 
 /**

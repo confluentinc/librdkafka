@@ -3104,17 +3104,19 @@ static void do_test_DescribeConsumerGroups(const char *what,
                                       group_instance_ids[i]);
                         if (!strcmp(protocols[i], "Classic")) {
                                 test_conf_set0(conf, "session.timeout.ms",
-                                              "6000", rd_false);
+                                               "6000", rd_false);
                         } else {
-                                const char *confs_set_group[] = {"consumer.session.timeout.ms",
-                                                 "SET", "5000"};
+                                const char *confs_set_group[] = {
+                                    "consumer.session.timeout.ms", "SET",
+                                    "5000"};
                                 test_IncrementalAlterConfigs_simple(
-                                    rk, RD_KAFKA_RESOURCE_GROUP, group_id, confs_set_group, 1);
+                                    rk, RD_KAFKA_RESOURCE_GROUP, group_id,
+                                    confs_set_group, 1);
                         }
                         test_conf_set(conf, "auto.offset.reset", "earliest");
                         test_conf_set(conf, "group.protocol", protocols[i]);
-                        rks[i] =
-                            test_create_consumer0(group_id, NULL, conf, NULL, rd_false);
+                        rks[i] = test_create_consumer0(group_id, NULL, conf,
+                                                       NULL, rd_false);
                         test_consumer_subscribe(rks[i], topic);
                         /* Consume messages */
                         test_consumer_poll("consumer", rks[i], testid, -1, -1,
@@ -5475,7 +5477,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* TODO: check this test after KIP-848 admin operation
          * implementation */
         /* Describe groups */
-        //do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        // do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
         do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
 
         /* Describe topics */

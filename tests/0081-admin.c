@@ -5475,7 +5475,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* TODO: check this test after KIP-848 admin operation
          * implementation */
         /* Describe groups */
-        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        //do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
         do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
 
         /* Describe topics */

@@ -455,7 +455,7 @@ typedef struct rd_chariov_s {
  * @locality Any thread
  */
 static RD_INLINE RD_UNUSED char *
-rd_read_file(const char *file_path, size_t *size, size_t max_size) {
+rd_file_read(const char *file_path, size_t *size, size_t max_size) {
         FILE *file;
         char *buf = NULL;
         size_t file_size;
@@ -505,5 +505,43 @@ err:
         return NULL;
 }
 
+static RD_INLINE RD_UNUSED FILE *
+rd_file_mkstemp(const char *prefix,
+                const char *mode,
+                char *tempfile_path_out,
+                size_t tempfile_path_out_size) {
+        FILE *tempfile;
+
+#ifdef _WIN32
+        char tempfolder_path[MAX_PATH];
+        char tempfile_path[MAX_PATH];
+        if (!GetTempPathA(MAX_PATH, tempfolder_path))
+                return NULL; /* Failed to get temp folder path */
+
+
+        if (!GetTempFileNameA(tempfolder_path, "TMP", 1, tempfile_path))
+                return NULL; /* Failed to create temp file name */
+
+        tempfile = fopen(tempfile_path, mode);
+#else
+        int tempfile_fd;
+        char tempfile_path[512];
+        rd_snprintf(tempfile_path, sizeof(tempfile_path), "/tmp/%sXXXXXX",
+                    prefix);
+        tempfile_fd = mkstemp(tempfile_path);
+        if (tempfile_fd < 0)
+                return NULL;
+
+        tempfile = fdopen(tempfile_fd, mode);
+#endif
+
+        if (!tempfile)
+                return NULL;
+
+        if (tempfile_path_out)
+                rd_snprintf(tempfile_path_out, tempfile_path_out_size, "%s",
+                            tempfile_path);
+        return tempfile;
+}
 
 #endif /* _RD_H_ */

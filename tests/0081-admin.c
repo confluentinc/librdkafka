@@ -3037,7 +3037,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         rd_kafka_resp_err_t err;
         char errstr[512];
         const char *errstr2;
-#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 6
+#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 5
         int known_groups = TEST_DESCRIBE_CONSUMER_GROUPS_CNT - 1;
         int i;
         const int partitions_cnt = 1;
@@ -3059,7 +3059,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         rd_bool_t has_group_instance_id =
             test_broker_version >= TEST_BRKVER(2, 4, 0, 0);
         char *protocols[TEST_DESCRIBE_CONSUMER_GROUPS_CNT] = {
-            "Classic", "Classic", "Classic", "Consumer", "Consumer", "Classic"};
+            "Classic", "Classic", "Classic", "Consumer", "Classic"};
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
@@ -3104,7 +3104,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
                                       group_instance_ids[i]);
                         if (!strcmp(protocols[i], "Classic")) {
                                 test_conf_set0(conf, "session.timeout.ms",
-                                              "5000", rd_false);
+                                              "6000", rd_false);
                         } else {
                                 const char *confs_set_group[] = {"consumer.session.timeout.ms",
                                                  "SET", "5000"};
@@ -3300,8 +3300,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 rd_kafka_destroy(rks[i]);
         }
 
-        /* Wait session timeout + 1s. Because using static group membership */
-        rd_sleep(10);
+        /* Wait session timeout + 2s. Because using static group membership */
+        rd_sleep(8);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);

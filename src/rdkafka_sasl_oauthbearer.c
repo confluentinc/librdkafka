@@ -420,10 +420,7 @@ rd_kafka_oauthbearer_set_token0(rd_kafka_t *rk,
         rwlock_wrlock(&handle->lock);
 
         RD_IF_FREE(handle->md_principal_name, rd_free);
-        if (md_principal_name)
-                handle->md_principal_name = rd_strdup(md_principal_name);
-        else
-                handle->md_principal_name = NULL;
+        handle->md_principal_name = rd_strdup(md_principal_name);
 
         RD_IF_FREE(handle->token_value, rd_free);
         handle->token_value = rd_strdup(token_value);

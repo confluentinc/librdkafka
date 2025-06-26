@@ -260,27 +260,18 @@ typedef enum oidc_configuration_jwt_bearer_variation_t {
 #define OIDC_CONFIGURATION_JWT_BEARER_VARIATION__FIRST_FAILING                 \
         OIDC_CONFIGURATION_JWT_BEARER_VARIATION_JOSE_ALGORITHM_ES256
 
-static const char *oidc_configuration_jwt_bearer_variation_str(
+static const char *oidc_configuration_jwt_bearer_variation_name(
     oidc_configuration_jwt_bearer_variation_t variation) {
-        switch (variation) {
-        case OIDC_CONFIGURATION_JWT_BEARER_VARIATION_PRIVATE_KEY_FILE:
-                return "private key file";
-        case OIDC_CONFIGURATION_JWT_BEARER_VARIATION_PRIVATE_KEY_FILE_ENCRYPTED:
-                return "private key enctrypted file";
-        case OIDC_CONFIGURATION_JWT_BEARER_VARIATION_PRIVATE_KEY_STRING:
-                return "private key pem string";
-        case OIDC_CONFIGURATION_JWT_BEARER_VARIATION_PRIVATE_KEY_STRING_ENCRYPTED:
-                return "private key pem string encrypted";
-        case OIDC_CONFIGURATION_JWT_BEARER_VARIATION_TEMPLATE_FILE:
-                return "template file";
-        case OIDC_CONFIGURATION_JWT_BEARER_VARIATION_JOSE_ALGORITHM_ES256:
-                return "JOSE algorithm ES256";
-        case OIDC_CONFIGURATION_JWT_BEARER_VARIATION_INVALID_SCOPE:
-                return "invalid scope";
-        default:
-                rd_assert(!*"Unknown OIDC JWT bearer test variation");
-        }
-        return NULL;
+        rd_assert(
+            variation >=
+                OIDC_CONFIGURATION_JWT_BEARER_VARIATION_PRIVATE_KEY_FILE &&
+            variation < OIDC_CONFIGURATION_JWT_BEARER_VARIATION__CNT);
+        static const char *names[] = {
+            "private key file",       "private key encrypted file",
+            "private key pem string", "private key encrypted pem string",
+            "template file",          "JOSE algorithm ES256",
+            "invalid scope"};
+        return names[variation];
 }
 
 static rd_kafka_conf_t *oidc_configuration_jwt_bearer(
@@ -365,7 +356,7 @@ static rd_kafka_conf_t *oidc_configuration_jwt_bearer(
 fail:
         rd_kafka_conf_destroy(conf);
         TEST_WARN("Skipping OIDC JWT bearer test variation: %s",
-                  oidc_configuration_jwt_bearer_variation_str(variation));
+                  oidc_configuration_jwt_bearer_variation_name(variation));
         return NULL;
 }
 
@@ -384,7 +375,7 @@ void do_test_produce_consumer_with_OIDC_jwt_bearer(rd_kafka_conf_t *conf) {
 
                 test_name = tsprintf(
                     "JWT bearer: %s\n",
-                    oidc_configuration_jwt_bearer_variation_str(variation));
+                    oidc_configuration_jwt_bearer_variation_name(variation));
 
                 if (variation <
                     OIDC_CONFIGURATION_JWT_BEARER_VARIATION__FIRST_FAILING)

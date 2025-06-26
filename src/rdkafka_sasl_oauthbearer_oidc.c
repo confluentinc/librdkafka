@@ -843,6 +843,17 @@ void rd_kafka_oidc_token_jwt_bearer_refresh_cb(rd_kafka_t *rk,
                 goto done;
         }
 
+        /*
+         * RFC 7523 Section 1 says that an access token should be returned
+         * https://datatracker.ietf.org/doc/html/rfc7523#section-1
+         * Some providers (e.g. GCP) return an `id_token` instead, depending
+         * on the configured `target_audience` in the request JWT bearer token.
+         * This may be because the validation endpoint is not accessible
+         * for validating the `access_token` while the `id_token` is validated
+         * through the JWKS URL.
+         * This function will try to validate the `access_token` and then the
+         * `id_token`.
+         */
         jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
                                                      &exp, validate_errstr,
                                                      sizeof(validate_errstr));

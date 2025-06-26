@@ -158,7 +158,7 @@ _TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
 _TEST_DECL(0045_subscribe_update_mock);
 _TEST_DECL(0045_subscribe_update_racks_mock);
 _TEST_DECL(0045_resubscribe_with_regex);
-_TEST_DECL(0045_many_updates);
+_TEST_DECL(0045_subscribe_many_updates);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
 _TEST_DECL(0048_partitioner);
@@ -389,7 +389,7 @@ struct test tests[] = {
     _TEST(0045_subscribe_update_mock, TEST_F_LOCAL),
     _TEST(0045_subscribe_update_racks_mock, TEST_F_LOCAL),
     _TEST(0045_resubscribe_with_regex, 0, TEST_BRKVER(0, 9, 0, 0)),
-    _TEST(0045_many_updates, 0, TEST_BRKVER(0, 10, 2, 0)),
+    _TEST(0045_subscribe_many_updates, 0, TEST_BRKVER(0, 10, 2, 0)),
     _TEST(0046_rkt_cache, TEST_F_LOCAL),
     _TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
     _TEST(0048_partitioner,
@@ -3124,8 +3124,9 @@ rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
     const char *func,
     int line,
     rd_kafka_t *rk,
-    rd_kafka_topic_partition_list_t *expected_assignment) {
-        rd_kafka_topic_partition_list_t *assignment;
+    const rd_kafka_topic_partition_list_t *expected_assignment) {
+        rd_kafka_topic_partition_list_t *assignment,
+                *expected_assignment_copy;
         rd_kafka_resp_err_t err;
         int i;
         rd_bool_t ret = rd_true;
@@ -3134,27 +3135,29 @@ rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
                 TEST_FAIL("%s:%d: Failed to get assignment for %s: %s", func,
                           line, rd_kafka_name(rk), rd_kafka_err2str(err));
 
-        TEST_SAY("%s assignment (%d partition(s)):\n", rd_kafka_name(rk),
+        TEST_SAYL(4, "%s assignment (%d partition(s)):\n", rd_kafka_name(rk),
                  assignment->cnt);
         for (i = 0; i < assignment->cnt; i++)
-                TEST_SAY(" %s [%" PRId32 "]\n", assignment->elems[i].topic,
-                         assignment->elems[i].partition);
-
-        rd_kafka_topic_partition_list_sort(assignment, NULL, NULL);
-        rd_kafka_topic_partition_list_sort(expected_assignment, NULL, NULL);
-
+                TEST_SAYL(4, " %s [%" PRId32 "]\n", assignment->elems[i].topic,
+                          assignment->elems[i].partition);
+        
         if (assignment->cnt != expected_assignment->cnt) {
                 ret = rd_false;
                 goto done;
-        } else {
-                for (i = 0; i < assignment->cnt; i++) {
-                        if (strcmp(assignment->elems[i].topic,
-                                   expected_assignment->elems[i].topic) ||
-                            assignment->elems[i].partition !=
-                                expected_assignment->elems[i].partition) {
-                                ret = rd_false;
-                                goto done;
-                        }
+        }
+
+        expected_assignment_copy =
+            rd_kafka_topic_partition_list_copy(expected_assignment);
+        rd_kafka_topic_partition_list_sort(assignment, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(expected_assignment_copy, NULL, NULL);
+
+        for (i = 0; i < assignment->cnt; i++) {
+                if (strcmp(assignment->elems[i].topic,
+                           expected_assignment_copy->elems[i].topic) ||
+                        assignment->elems[i].partition !=
+                        expected_assignment_copy->elems[i].partition) {
+                        ret = rd_false;
+                        goto done;
                 }
         }
 
@@ -3174,38 +3177,44 @@ void test_consumer_wait_assignment_topic_partition_list0(
     int line,
     rd_kafka_t *rk,
     rd_bool_t do_poll,
-    rd_kafka_topic_partition_list_t *expected_assignment,
+    const rd_kafka_topic_partition_list_t *expected_assignment,
     int timeout_ms) {
         int i;
         rd_ts_t end        = test_clock() + timeout_ms * 1000;
         rd_bool_t verified = rd_false;
+        rd_kafka_topic_partition_list_t *expected_assignment_copy;
 
         TEST_SAY("Verifying assignment\n");
-        rd_kafka_topic_partition_list_sort(expected_assignment, NULL, NULL);
-        TEST_SAY("%s expected assignment (%d partition(s)):\n",
+        expected_assignment_copy = 
+            rd_kafka_topic_partition_list_copy(expected_assignment);
+        rd_kafka_topic_partition_list_sort(
+                expected_assignment_copy, NULL, NULL);
+        TEST_SAYL(4, "%s expected assignment (%d partition(s)):\n",
                  rd_kafka_name(rk), expected_assignment->cnt);
-        for (i = 0; i < expected_assignment->cnt; i++)
-                TEST_SAY(" %s [%" PRId32 "]\n",
-                         expected_assignment->elems[i].topic,
-                         expected_assignment->elems[i].partition);
+        for (i = 0; i < expected_assignment_copy->cnt; i++)
+                TEST_SAYL(4, " %s [%" PRId32 "]\n",
+                          expected_assignment_copy->elems[i].topic,
+                          expected_assignment_copy->elems[i].partition);
 
         do {
                 verified =
                     test_consumer_verify_assignment_topic_partition_list0(
-                        func, line, rk, expected_assignment);
-                if (!verified) {
-                        if (do_poll)
-                                test_consumer_poll_once(rk, NULL, 100);
-                        else
-                                rd_usleep(100 * 1000, NULL);
-                }
-        } while (test_clock() < end && !verified);
+                        func, line, rk, expected_assignment_copy);
+                if (verified)
+                        break;
+
+                if (do_poll)
+                        test_consumer_poll_once(rk, NULL, 100);
+                else
+                        rd_usleep(100 * 1000, NULL);
+
+        } while (test_clock() < end);
 
         if (!verified) {
                 TEST_FAIL(
                     "%s:%d: Expected assignment not found in %s's "
-                    "assignment",
-                    func, line, rd_kafka_name(rk));
+                    "assignment within timeout %d",
+                    func, line, rd_kafka_name(rk), timeout_ms);
         }
         TEST_SAY("Verified assignment\n");
 }

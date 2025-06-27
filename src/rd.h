@@ -438,4 +438,9 @@ typedef struct rd_chariov_s {
         size_t size;
 } rd_chariov_t;
 
+
+#if HAVE_RAND_R
+#include "rdrandr.h"
+#endif  // !HAVE_RAND_R
+
 #endif /* _RD_H_ */

@@ -23,6 +23,10 @@ SRCS_$(WITH_SSL) += rdkafka_ssl.c
 SRCS_$(WITH_CURL) += rdhttp.c
 SRCS_$(WITH_OAUTHBEARER_OIDC) += rdkafka_sasl_oauthbearer_oidc.c
 
+ifneq ($(HAVE_RAND_R), y)
+SRCS_y += rdrandr.c
+endif
+
 SRCS_LZ4 = rdxxhash.c
 ifneq ($(WITH_LZ4_EXT), y)
 # Use built-in liblz4

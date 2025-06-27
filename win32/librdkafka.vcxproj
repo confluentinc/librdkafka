@@ -152,6 +152,7 @@
     <ClInclude Include="..\src\rdkafka_header.h" />
     <ClInclude Include="..\src\rdlog.h" />
     <ClInclude Include="..\src\rdstring.h" />
+    <ClInclude Include="..\src\rdrandr.h" />
     <ClInclude Include="..\src\rdrand.h" />
     <ClInclude Include="..\src\rdsysqueue.h" />
     <ClInclude Include="..\src\rdtime.h" />
@@ -246,6 +247,7 @@
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />
     <ClCompile Include="..\src\rdstring.c" />
+    <ClCompile Include="..\src\rdrandr.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\rdunittest.c" />

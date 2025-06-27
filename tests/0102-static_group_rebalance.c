@@ -184,7 +184,6 @@ static void do_test_static_group_rebalance(void) {
         test_conf_set(conf, "group.instance.id", "consumer2");
         c[1].rk = test_create_consumer(topic, rebalance_cb,
                                        rd_kafka_conf_dup(conf), NULL);
-        rd_kafka_conf_destroy(conf);
 
         test_wait_topic_exists(c[1].rk, topic, 5000);
 
@@ -227,15 +226,15 @@ static void do_test_static_group_rebalance(void) {
         test_msgver_verify("first.verify", &mv, TEST_MSGVER_ALL, 0, msgcnt);
 
         TEST_SAY("== Testing consumer restart ==\n");
-        conf = rd_kafka_conf_dup(rd_kafka_conf(c[1].rk));
 
         /* Only c[1] should exhibit rebalance behavior */
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         TIMING_START(&t_close, "consumer restart");
         test_consumer_close(c[1].rk);
         rd_kafka_destroy(c[1].rk);
-
-        c[1].rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        c[1].rk = test_create_consumer(topic, rebalance_cb,
+                                       rd_kafka_conf_dup(conf), NULL);
+        rd_kafka_conf_destroy(conf);
         rd_kafka_poll_set_consumer(c[1].rk);
 
         test_consumer_subscribe(c[1].rk, topics);

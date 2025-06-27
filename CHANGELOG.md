@@ -1,3 +1,20 @@
+# librdkafka v2.11.0
+
+librdkafka v2.11.0 is a feature release:
+
+* Fix feature-gating to work with Apache Kafka 4.0 (#).
+
+## Fixes
+
+### General fixes
+
+* Issues: #4948
+  Protocol RPC versions are used to detect broker versions and gate features.
+  In case an old version of a protocol RPC was removed from the broker, a
+  feature gated on the presence of specific versions of the RPC would stop
+  working. Fixes GSSAPI not working with Apache Kafka 4.0.
+
+
 # librdkafka v2.10.1
 
 librdkafka v2.10.1 is a maintenance release:

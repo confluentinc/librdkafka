@@ -172,12 +172,14 @@ int rd_kafka_sasl_io_event(rd_kafka_transport_t *rktrans,
         r = rd_kafka_transport_framed_recv(rktrans, &rkbuf, errstr,
                                            errstr_size);
         if (r == -1) {
-                if (!strcmp(errstr, "Disconnected"))
-                        rd_snprintf(errstr, errstr_size,
-                                    "Disconnected: check client %s credentials "
+                if (rd_kafka_transport_error_disconnected(errstr)) {
+                        int curr_len = strlen(errstr);
+                        rd_snprintf(errstr + curr_len, errstr_size - curr_len,
+                                    ": check client %s credentials "
                                     "and broker logs",
                                     rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl
                                         .mechanisms);
+                }
                 return -1;
         } else if (r == 0) /* not fully received yet */
                 return 0;

@@ -111,17 +111,28 @@ static const struct rd_kafka_feature_map {
             },
     },
     {
-        /* @brief >=0.9.0: Broker-based balanced consumer groups. */
+        /* @brief >=0.9.0: Broker-based balanced consumer groups (classic). */
         .feature = RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER,
         .depends =
             {
-                {RD_KAFKAP_FindCoordinator, 0, 0},
-                {RD_KAFKAP_OffsetCommit, 1, 2},
-                {RD_KAFKAP_OffsetFetch, 1, 1},
-                {RD_KAFKAP_JoinGroup, 0, 0},
-                {RD_KAFKAP_SyncGroup, 0, 0},
-                {RD_KAFKAP_Heartbeat, 0, 0},
-                {RD_KAFKAP_LeaveGroup, 0, 0},
+                {RD_KAFKAP_FindCoordinator, 0, INT16_MAX},
+                {RD_KAFKAP_OffsetCommit, 1, INT16_MAX},
+                {RD_KAFKAP_OffsetFetch, 1, INT16_MAX},
+                {RD_KAFKAP_JoinGroup, 0, INT16_MAX},
+                {RD_KAFKAP_SyncGroup, 0, INT16_MAX},
+                {RD_KAFKAP_Heartbeat, 0, INT16_MAX},
+                {RD_KAFKAP_LeaveGroup, 0, INT16_MAX},
+                {-1},
+            },
+    },
+    {
+        /* @brief Broker-based balanced consumer groups (KIP 848). */
+        .feature = RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER,
+        .depends =
+            {
+                {RD_KAFKAP_ConsumerGroupHeartbeat, 0, INT16_MAX},
+                {RD_KAFKAP_OffsetCommit, 9, INT16_MAX},
+                {RD_KAFKAP_OffsetFetch, 9, INT16_MAX},
                 {-1},
             },
     },
@@ -145,7 +156,18 @@ static const struct rd_kafka_feature_map {
         .feature = RD_KAFKA_FEATURE_SASL_GSSAPI,
         .depends =
             {
-                {RD_KAFKAP_JoinGroup, 0, 0},
+                {RD_KAFKAP_JoinGroup, 0, INT16_MAX},
+                {-1},
+            },
+    },
+    {
+        /* @brief >=0.10.0: SASL (GSSAPI) authentication.
+         * Fallback in case JoinGroup is removed along with the
+         * "classic" consumer group protocol. */
+        .feature = RD_KAFKA_FEATURE_SASL_GSSAPI,
+        .depends =
+            {
+                {RD_KAFKAP_SaslHandshake, 0, INT16_MAX},
                 {-1},
             },
     },

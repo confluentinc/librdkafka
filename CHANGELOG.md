@@ -6,6 +6,8 @@ librdkafka v2.11.0 is a feature release:
 * Fix for poll ratio calculation in case the queues are forwarded (#5017).
 * Fix data race when buffer queues are being reset instead of being
   initialized (#4718).
+* Features BROKER_BALANCED_CONSUMER and SASL_GSSAPI don't depend on
+  JoinGroup v0 anymore, missing in AK 4.0 and CP 8.0 (#).
 
 
 ## Fixes
@@ -17,6 +19,12 @@ librdkafka v2.11.0 is a feature release:
   with the statistics callback in main thread gathering the buffer counts.
   Solved by resetting the atomic counters instead of initializing them.
   Happening since 1.x (#4718).
+* Issues: #4948
+  Features BROKER_BALANCED_CONSUMER and SASL_GSSAPI don't depend on
+  JoinGroup v0 anymore, missing in AK 4.0 and CP 8.0. This PR partially
+  fixes the linked issue, a complete fix for all features will follow.
+  Rest of fixes are necessary only in a subsequent major version (e.g. AK 5.x) .
+  Happening since 1.x (#).
 
 ### Telemetry fixes
 

@@ -546,6 +546,16 @@ void test_rebalance_cb(rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t *parts,
                        void *opaque);
 
+rd_kafka_t *test_create_consumer0(
+    const char *group_id,
+    void (*rebalance_cb)(rd_kafka_t *rk,
+                         rd_kafka_resp_err_t err,
+                         rd_kafka_topic_partition_list_t *partitions,
+                         void *opaque),
+    rd_kafka_conf_t *conf,
+    rd_kafka_topic_conf_t *default_topic_conf,
+    rd_bool_t environment_group_protocol);
+
 rd_kafka_t *test_create_consumer(
     const char *group_id,
     void (*rebalance_cb)(rd_kafka_t *rk,
@@ -710,6 +720,10 @@ void test_consumer_close(rd_kafka_t *rk);
 void test_flush(rd_kafka_t *rk, int timeout_ms);
 
 int test_is_forbidden_conf_group_protocol_consumer(const char *name);
+void test_conf_set0(rd_kafka_conf_t *conf,
+                    const char *name,
+                    const char *val,
+                    rd_bool_t environment_group_protocol);
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_topic_conf_get(const rd_kafka_topic_conf_t *tconf, const char *name);
 int test_conf_match(rd_kafka_conf_t *conf, const char *name, const char *val);

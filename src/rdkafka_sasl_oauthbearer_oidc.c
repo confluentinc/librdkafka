@@ -688,14 +688,14 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
         if (!access_token_json) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON response with \"%s\" field", field);
-                goto done;
+                goto fail;
         }
 
         jwt_token = cJSON_GetStringValue(access_token_json);
         if (!jwt_token) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected token as a string value");
-                goto done;
+                goto fail;
         }
 
         decode_errstr =
@@ -703,14 +703,14 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
         if (decode_errstr != NULL) {
                 rd_snprintf(errstr, errstr_size,
                             "Failed to decode JWT payload: %s", decode_errstr);
-                goto done;
+                goto fail;
         }
 
         payloads = cJSON_Parse(decoded_payloads);
         if (payloads == NULL) {
                 rd_snprintf(errstr, errstr_size,
                             "Failed to parse JSON JWT payload");
-                goto done;
+                goto fail;
         }
 
         jwt_exp = cJSON_GetObjectItem(payloads, "exp");
@@ -718,7 +718,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
                             "\"exp\" field");
-                goto done;
+                goto fail;
         }
 
         *exp = cJSON_GetNumberValue(jwt_exp);
@@ -726,7 +726,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
                             "valid \"exp\" field");
-                goto done;
+                goto fail;
         }
 
         jwt_sub = cJSON_GetObjectItem(payloads, "sub");
@@ -734,7 +734,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
                             "\"sub\" field");
-                goto done;
+                goto fail;
         }
 
         *sub = cJSON_GetStringValue(jwt_sub);
@@ -742,7 +742,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
                             "valid \"sub\" field");
-                goto done;
+                goto fail;
         }
         *sub = rd_strdup(*sub);
 done:
@@ -751,6 +751,9 @@ done:
         if (decoded_payloads)
                 rd_free(decoded_payloads);
         return jwt_token;
+fail:
+        jwt_token = NULL;
+        goto done;
 }
 
 /**

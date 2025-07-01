@@ -135,6 +135,8 @@ const char *rd_kafka_ssl_last_error_str(void) {
  *
  * If 'rkb' is non-NULL broker-specific logging will be used,
  * else it will fall back on global 'rk' debugging.
+ *
+ * `ctx_identifier` is a string used to customize the log message.
  */
 static char *rd_kafka_ssl_error(rd_kafka_t *rk,
                                 rd_kafka_broker_t *rkb,

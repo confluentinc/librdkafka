@@ -230,7 +230,7 @@ typedef struct rd_kafka_msgq_s {
 } rd_kafka_msgq_t;
 
 #define RD_KAFKA_MSGQ_INITIALIZER(rkmq)                                        \
-        {.rkmq_msgs = TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs)}
+        { .rkmq_msgs = TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs) }
 
 #define RD_KAFKA_MSGQ_FOREACH(elm, head)                                       \
         TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)

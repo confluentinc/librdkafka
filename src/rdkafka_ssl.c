@@ -138,10 +138,11 @@ const char *rd_kafka_ssl_last_error_str(void) {
  *
  * `ctx_identifier` is a string used to customize the log message.
  */
-static char *rd_kafka_ssl_error(rd_kafka_t *rk,
-                                rd_kafka_broker_t *rkb,
-                                char *errstr,
-                                size_t errstr_size) {
+char *rd_kafka_ssl_error0(rd_kafka_t *rk,
+                          rd_kafka_broker_t *rkb,
+                          char *ctx_identifier,
+                          char *errstr,
+                          size_t errstr_size) {
         unsigned long l;
         const char *file, *data, *func;
         int line, flags;
@@ -168,9 +169,11 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
                 if (cnt++ > 0) {
                         /* Log last message */
                         if (rkb)
-                                rd_rkb_log(rkb, LOG_ERR, "SSL", "%s", errstr);
+                                rd_rkb_log(rkb, LOG_ERR, "SSL", "%s: %s",
+                                           ctx_identifier, errstr);
                         else
-                                rd_kafka_log(rk, LOG_ERR, "SSL", "%s", errstr);
+                                rd_kafka_log(rk, LOG_ERR, "SSL", "%s: %s",
+                                             ctx_identifier, errstr);
                 }
 
                 ERR_error_string_n(l, buf, sizeof(buf));
@@ -190,12 +193,18 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
 
         if (cnt == 0)
                 rd_snprintf(errstr, errstr_size,
-                            "No further error information available");
+                            "%s: No further error information available",
+                            ctx_identifier);
 
         return errstr;
 }
 
-
+static char *rd_kafka_ssl_error(rd_kafka_t *rk,
+                                rd_kafka_broker_t *rkb,
+                                char *errstr,
+                                size_t errstr_size) {
+        return rd_kafka_ssl_error0(rk, rkb, "kafka", errstr, errstr_size);
+}
 
 /**
  * Set transport IO event polling based on SSL error.
@@ -948,10 +957,12 @@ static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
  *
  * @returns 0 if CA location was set, else -1.
  */
-const char *rd_kafka_ssl_probe_path(rd_kafka_t *rk) {
+int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
+                                                   char *ctx_identifier,
+                                                   SSL_CTX *ctx) {
 #if _WIN32
         /* No standard location on Windows, CA certs are in the ROOT store. */
-        return NULL;
+        return -1;
 #else
         /* The probe paths are based on:
          * https://www.happyassassin.net/posts/2015/01/12/a-note-about-ssltls-trusted-certificate-stores-and-platforms/
@@ -1002,6 +1013,7 @@ const char *rd_kafka_ssl_probe_path(rd_kafka_t *rk) {
         for (i = 0; (path = paths[i]); i++) {
                 struct stat st;
                 rd_bool_t is_dir;
+                int r;
 
                 if (stat(path, &st) != 0)
                         continue;
@@ -1011,51 +1023,34 @@ const char *rd_kafka_ssl_probe_path(rd_kafka_t *rk) {
                 if (is_dir && rd_kafka_dir_is_empty(path))
                         continue;
 
-                return path;
+                rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                             "Setting default CA certificate location for %s "
+                             "to \"%s\"",
+                             ctx_identifier, path);
+
+                r = SSL_CTX_load_verify_locations(ctx, is_dir ? NULL : path,
+                                                  is_dir ? path : NULL);
+                if (r != 1) {
+                        char errstr[512];
+                        /* Read error and clear the error stack */
+                        rd_kafka_ssl_error(rk, NULL, errstr, sizeof(errstr));
+                        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                                     "Failed to set default CA certificate "
+                                     "location to %s %s for %s: %s: skipping",
+                                     is_dir ? "directory" : "file", path,
+                                     ctx_identifier, errstr);
+                        continue;
+                }
+
+                return 0;
         }
 
         rd_kafka_dbg(rk, SECURITY, "CACERTS",
                      "Unable to find any standard CA certificate"
-                     "paths: is the ca-certificates package installed?");
-        return NULL;
+                     "paths for %s: is the ca-certificates package installed?",
+                     ctx_identifier);
+        return -1;
 #endif
-}
-
-static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
-                                                          SSL_CTX *ctx) {
-        const char *path;
-        struct stat st;
-        rd_bool_t is_dir;
-        int r;
-
-        path = rd_kafka_ssl_probe_path(rk);
-        if (!path)
-                return -1;
-
-        if (stat(path, &st) != 0)
-                return -1;
-
-        is_dir = S_ISDIR(st.st_mode);
-
-        rd_kafka_dbg(rk, SECURITY, "CACERTS",
-                     "Setting default CA certificate location "
-                     "to %s, override with ssl.ca.location",
-                     path);
-
-        r = SSL_CTX_load_verify_locations(ctx, is_dir ? NULL : path,
-                                          is_dir ? path : NULL);
-        if (r != 1) {
-                char errstr[512];
-                /* Read error and clear the error stack */
-                rd_kafka_ssl_error(rk, NULL, errstr, sizeof(errstr));
-                rd_kafka_dbg(rk, SECURITY, "CACERTS",
-                             "Failed to set default CA certificate "
-                             "location to %s %s: %s: skipping",
-                             is_dir ? "directory" : "file", path, errstr);
-                return -1;
-        }
-
-        return 0;
 }
 
 /**
@@ -1304,8 +1299,8 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                          * of standard CA certificate paths and use the
                          * first one that is found.
                          * Ignore failures. */
-                        r = rd_kafka_ssl_probe_and_set_default_ca_location(rk,
-                                                                           ctx);
+                        r = rd_kafka_ssl_probe_and_set_default_ca_location(
+                            rk, "kafka", ctx);
                 }
 
                 if (r == -1) {

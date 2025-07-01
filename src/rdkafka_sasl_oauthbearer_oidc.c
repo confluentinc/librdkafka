@@ -1074,6 +1074,7 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
         rd_http_error_destroy(herr);
         rd_http_req_destroy(&hreq);
         cJSON_Delete(json);
+        rd_free(rk);
 
         RD_UT_PASS();
 }
@@ -1122,6 +1123,7 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
         rd_http_error_destroy(herr);
         cJSON_Delete(json);
         cJSON_Delete(parsed_token);
+        rd_free(rk);
         RD_UT_PASS();
 }
 

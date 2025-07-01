@@ -40,7 +40,9 @@
 #include <curl/curl.h>
 #include "rdhttp.h"
 
+#if WITH_SSL
 #include "rdkafka_ssl.h"
+#endif
 
 /** Maximum response size, increase as necessary. */
 #define RD_HTTP_RESPONSE_SIZE_MAX 1024 * 1024 * 500 /* 500kb */
@@ -130,9 +132,113 @@ rd_http_req_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
         return nmemb;
 }
 
+#if WITH_SSL
+/**
+ * @brief Callback function for setting up the SSL_CTX for HTTPS requests.
+ *
+ * This function sets the default CA paths for the SSL_CTX, and if that fails,
+ * it attempts to probe and set a default CA location. If `probe` is forced
+ * it skips the default CA paths and directly probes for CA certificates.
+ *
+ * On Windows, it attempts to load CA root certificates from the
+ * configured Windows certificate stores before falling back to the default.
+ *
+ * @return `CURLE_OK` on success, or `CURLE_SSL_CACERT_BADFILE` on failure.
+ */
+static CURLcode
+rd_http_ssl_ctx_function(CURL *curl, void *sslctx, void *userptr) {
+        SSL_CTX *ctx   = (SSL_CTX *)sslctx;
+        rd_kafka_t *rk = (rd_kafka_t *)userptr;
+        int r          = -1;
+        rd_bool_t force_probe =
+            !rd_strcmp(rk->rk_conf.ssl.https_ca_location, "probe");
+        rd_bool_t use_probe = force_probe;
+
+#if WITH_STATIC_LIB_libcrypto
+        /* We fallback to `probe` when statically linked. */
+        use_probe = rd_true;
+#endif
+
+#ifdef _WIN32
+        /* Attempt to load CA root certificates from the
+         * configured Windows certificate stores. */
+        r = rd_kafka_ssl_win_load_cert_stores(rk, ctx,
+                                              rk->rk_conf.ssl.ca_cert_stores);
+        if (r == 0) {
+                rd_kafka_log(rk, LOG_NOTICE, "CERTSTORE",
+                             "No CA certificates loaded for `https` from "
+                             "Windows certificate stores: "
+                             "falling back to default OpenSSL CA paths");
+                r = -1;
+        } else if (r == -1)
+                rd_kafka_log(rk, LOG_NOTICE, "CERTSTORE",
+                             "Failed to load CA certificates for `https` from "
+                             "Windows certificate stores: "
+                             "falling back to default OpenSSL CA paths");
+
+        if (r != -1) {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Successfully loaded CA certificates from "
+                             "Windows certificate stores for `https`");
+                return CURLE_OK; /* Success, CA certs loaded on Windows */
+        }
+#endif
+
+        if (!force_probe) {
+                /* Previous default behavior: use predefined paths set when
+                 * building OpenSSL. */
+                char errstr[512];
+                r = SSL_CTX_set_default_verify_paths(ctx);
+                if (r == 1) {
+                        rd_kafka_dbg(rk, SECURITY, "SSL",
+                                     "SSL_CTX_set_default_verify_paths() "
+                                     "for `https` "
+                                     "succeeded");
+                        return CURLE_OK; /* Success */
+                }
+
+                /* Read error and clear the error stack. */
+                rd_kafka_ssl_error0(rk, NULL, "https", errstr, sizeof(errstr));
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "SSL_CTX_set_default_verify_paths() "
+                             "for `https` "
+                             "failed: %s",
+                             errstr);
+        }
+
+        if (use_probe) {
+                /* We asked for probing or we're using
+                 * a statically linked version of OpenSSL. */
+
+                r = rd_kafka_ssl_probe_and_set_default_ca_location(rk, "https",
+                                                                   ctx);
+                if (r == 0)
+                        return CURLE_OK;
+        }
+
+        return CURLE_SSL_CACERT_BADFILE;
+}
+
+static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
+        rd_bool_t force_probe =
+            !rd_strcmp(rk->rk_conf.ssl.https_ca_location, "probe");
+
+        if (!force_probe && rk->rk_conf.ssl.https_ca_location) {
+                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO,
+                                 rk->rk_conf.ssl.https_ca_location);
+        } else if (!force_probe && rk->rk_conf.ssl.https_ca_pem) {
+                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO_BLOB,
+                                 rk->rk_conf.ssl.https_ca_pem);
+        } else {
+                curl_easy_setopt(hreq_curl, CURLOPT_SSL_CTX_FUNCTION,
+                                 rd_http_ssl_ctx_function);
+                curl_easy_setopt(hreq_curl, CURLOPT_SSL_CTX_DATA, rk);
+        }
+}
+#endif
+
 rd_http_error_t *
 rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
-        const char *ca_path = NULL;
         memset(hreq, 0, sizeof(*hreq));
 
         hreq->hreq_curl = curl_easy_init();
@@ -159,21 +265,10 @@ rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_WRITEFUNCTION,
                          rd_http_req_write_cb);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_WRITEDATA, (void *)hreq);
-        curl_easy_setopt(hreq->hreq_curl, CURLOPT_VERBOSE, 1L);
-        if (rk->rk_conf.ssl.oidc_ca_location &&
-            !strcmp(rk->rk_conf.ssl.oidc_ca_location, "probe")) {
-                ca_path = rd_kafka_ssl_probe_path(rk);
-                if (ca_path) {
-                        curl_easy_setopt(hreq->hreq_curl, CURLOPT_CAINFO,
-                                         ca_path);
-                }
-        } else if (rk->rk_conf.ssl.oidc_ca_location) {
-                curl_easy_setopt(hreq->hreq_curl, CURLOPT_CAINFO,
-                                 rk->rk_conf.ssl.oidc_ca_location);
-        } else if (rk->rk_conf.ssl.oidc_ca_pem) {
-                curl_easy_setopt(hreq->hreq_curl, CURLOPT_CAINFO_BLOB,
-                                 rk->rk_conf.ssl.oidc_ca_pem);
-        }
+
+#if WITH_SSL
+        rd_http_ssl_configure(rk, hreq->hreq_curl);
+#endif
 
         return NULL;
 }
@@ -488,13 +583,14 @@ int unittest_http(void) {
         cJSON *json, *jval;
         rd_http_error_t *herr;
         rd_bool_t empty;
-        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
+        rd_kafka_t *rk;
 
         if (!base_url || !*base_url)
                 RD_UT_SKIP("RD_UT_HTTP_URL environment variable not set");
 
         RD_UT_BEGIN();
 
+        rk             = rd_calloc(1, sizeof(*rk));
         error_url_size = strlen(base_url) + strlen("/error") + 1;
         error_url      = rd_alloca(error_url_size);
         rd_snprintf(error_url, error_url_size, "%s/error", base_url);
@@ -535,6 +631,7 @@ int unittest_http(void) {
         if (json)
                 cJSON_Delete(json);
         rd_http_error_destroy(herr);
+        rd_free(rk);
 
         RD_UT_PASS();
 }

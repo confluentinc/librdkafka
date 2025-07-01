@@ -199,6 +199,15 @@ struct rd_kafka_property {
             "available at build time"
 #endif
 
+#if WITH_OAUTHBEARER_OIDC
+#define _UNSUPPORTED_HTTPS .unsupported = NULL
+#else
+#define _UNSUPPORTED_HTTPS                                                     \
+        .unsupported =                                                         \
+            "HTTPS calls depend on libcurl and OpenSSL which were not "        \
+            "available at build time"
+#endif
+
 #ifdef _WIN32
 #define _UNSUPPORTED_WIN32_GSSAPI                                              \
         .unsupported =                                                         \
@@ -860,10 +869,26 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "If OpenSSL is dynamically linked the OpenSSL library's default "
      "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
      _UNSUPPORTED_SSL},
-    {_RK_GLOBAL, "oidc.ssl.ca.location", _RK_C_STR, _RK(ssl.oidc_ca_location),
-     "TBD", _UNSUPPORTED_SSL},
-    {_RK_GLOBAL, "oidc.ssl.ca.pem", _RK_C_STR, _RK(ssl.oidc_ca_pem), "TBD",
-     _UNSUPPORTED_SSL},
+    {_RK_GLOBAL, "https.ca.location", _RK_C_STR, _RK(ssl.https_ca_location),
+     "File or directory path to CA certificate(s) for verifying "
+     "HTTPS endpoints. "
+     "Defaults: "
+     "On Windows the system's CA certificates are automatically looked "
+     "up in the Windows Root certificate store. "
+     "On Mac OSX this configuration defaults to `probe`. "
+     "It is recommended to install openssl using Homebrew, "
+     "to provide CA certificates. "
+     "On Linux install the distribution's ca-certificates package. "
+     "If OpenSSL is statically linked or `https.ca.location` is set to "
+     "`probe` a list of standard paths will be probed and the first one "
+     "found will be used as the default CA certificate location path. "
+     "If OpenSSL is dynamically linked the OpenSSL library's default "
+     "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
+     _UNSUPPORTED_HTTPS},
+    {_RK_GLOBAL, "https.ca.pem", _RK_C_STR, _RK(ssl.https_ca_pem),
+     "CA certificate string (PEM format) for verifying HTTPS endpoints. "
+     "Optional: see `https.ca.location`.",
+     _UNSUPPORTED_HTTPS},
     {_RK_GLOBAL | _RK_SENSITIVE, "ssl.ca.pem", _RK_C_STR, _RK(ssl.ca_pem),
      "CA certificate string (PEM format) for verifying the broker's key.",
      _UNSUPPORTED_SSL},
@@ -3931,9 +3956,10 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
         else if (!conf->ssl.ca && !conf->ssl.ca_location && !conf->ssl.ca_pem)
                 /* Default ssl.ca.location to 'probe' on OSX */
                 rd_kafka_conf_set(conf, "ssl.ca.location", "probe", NULL, 0);
-        if (!conf->ssl.ca_location && !conf->ssl.ca_pem)
-                rd_kafka_conf_set(conf, "oidc.ssl.ca.location", "probe", NULL,
-                                  0);
+
+        /* Default https.ca.location to 'probe' on OSX */
+        if (!conf->ssl.https_ca_location && !conf->ssl.https_ca_pem)
+                rd_kafka_conf_set(conf, "https.ca.location", "probe", NULL, 0);
 #endif
 #endif
 

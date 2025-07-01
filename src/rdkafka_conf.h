@@ -270,8 +270,8 @@ struct rd_kafka_conf_s {
                 rd_kafka_cert_t *cert;
                 char *ca_location;
                 char *ca_pem;
-                char *oidc_ca_location;
-                char *oidc_ca_pem;
+                char *https_ca_location;
+                char *https_ca_pem;
                 rd_kafka_cert_t *ca;
                 /** CSV list of Windows certificate stores */
                 char *ca_cert_stores;

@@ -76,4 +76,10 @@ char *rd_kafka_ssl_error0(rd_kafka_t *rk,
                           char *errstr,
                           size_t errstr_size);
 
+#ifdef _WIN32
+int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
+                                      SSL_CTX *ctx,
+                                      const char *store_names);
+#endif
+
 #endif /* _RDKAFKA_SSL_H_ */

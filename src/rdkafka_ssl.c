@@ -899,9 +899,9 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
  *
  * @returns the number of successfully loaded certificates, or -1 on error.
  */
-static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
-                                             SSL_CTX *ctx,
-                                             const char *store_names) {
+int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
+                                      SSL_CTX *ctx,
+                                      const char *store_names) {
         char *s;
         int cert_cnt = 0, fail_cnt = 0;
 

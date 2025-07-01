@@ -270,8 +270,6 @@ struct rd_kafka_conf_s {
                 rd_kafka_cert_t *cert;
                 char *ca_location;
                 char *ca_pem;
-                char *https_ca_location;
-                char *https_ca_pem;
                 rd_kafka_cert_t *ca;
                 /** CSV list of Windows certificate stores */
                 char *ca_cert_stores;
@@ -299,6 +297,11 @@ struct rd_kafka_conf_s {
                                       size_t errstr_size,
                                       void *opaque);
         } ssl;
+
+        struct {
+                char *ca_location;
+                char *ca_pem;
+        } https;
 
         struct {
                 const struct rd_kafka_sasl_provider *provider;

@@ -151,7 +151,7 @@ rd_http_ssl_ctx_function(CURL *curl, void *sslctx, void *userptr) {
         rd_kafka_t *rk = (rd_kafka_t *)userptr;
         int r          = -1;
         rd_bool_t force_probe =
-            !rd_strcmp(rk->rk_conf.ssl.https_ca_location, "probe");
+            !rd_strcmp(rk->rk_conf.https.ca_location, "probe");
         rd_bool_t use_probe = force_probe;
 
 #if WITH_STATIC_LIB_libcrypto
@@ -221,21 +221,21 @@ rd_http_ssl_ctx_function(CURL *curl, void *sslctx, void *userptr) {
 
 static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
         rd_bool_t force_probe =
-            !rd_strcmp(rk->rk_conf.ssl.https_ca_location, "probe");
+            !rd_strcmp(rk->rk_conf.https.ca_location, "probe");
 
-        if (!force_probe && rk->rk_conf.ssl.https_ca_location) {
+        if (!force_probe && rk->rk_conf.https.ca_location) {
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Setting `https` CA certs from "
                              "configured location: %s",
-                             rk->rk_conf.ssl.https_ca_location);
+                             rk->rk_conf.https.ca_location);
                 curl_easy_setopt(hreq_curl, CURLOPT_CAINFO,
-                                 rk->rk_conf.ssl.https_ca_location);
-        } else if (!force_probe && rk->rk_conf.ssl.https_ca_pem) {
+                                 rk->rk_conf.https.ca_location);
+        } else if (!force_probe && rk->rk_conf.https.ca_pem) {
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Setting `https` CA certs from "
                              "configured PEM string");
                 curl_easy_setopt(hreq_curl, CURLOPT_CAINFO_BLOB,
-                                 rk->rk_conf.ssl.https_ca_pem);
+                                 rk->rk_conf.https.ca_pem);
         } else {
                 curl_easy_setopt(hreq_curl, CURLOPT_SSL_CTX_FUNCTION,
                                  rd_http_ssl_ctx_function);

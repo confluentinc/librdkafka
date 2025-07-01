@@ -869,7 +869,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "If OpenSSL is dynamically linked the OpenSSL library's default "
      "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
      _UNSUPPORTED_SSL},
-    {_RK_GLOBAL, "https.ca.location", _RK_C_STR, _RK(ssl.https_ca_location),
+    {_RK_GLOBAL, "https.ca.location", _RK_C_STR, _RK(https.ca_location),
      "File or directory path to CA certificate(s) for verifying "
      "HTTPS endpoints. "
      "Defaults: "
@@ -885,7 +885,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "If OpenSSL is dynamically linked the OpenSSL library's default "
      "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
      _UNSUPPORTED_HTTPS},
-    {_RK_GLOBAL, "https.ca.pem", _RK_C_STR, _RK(ssl.https_ca_pem),
+    {_RK_GLOBAL, "https.ca.pem", _RK_C_STR, _RK(https.ca_pem),
      "CA certificate string (PEM format) for verifying HTTPS endpoints. "
      "Optional: see `https.ca.location`.",
      _UNSUPPORTED_HTTPS},
@@ -3958,7 +3958,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                 rd_kafka_conf_set(conf, "ssl.ca.location", "probe", NULL, 0);
 
         /* Default https.ca.location to 'probe' on OSX */
-        if (!conf->ssl.https_ca_location && !conf->ssl.https_ca_pem)
+        if (!conf->https.ca_location && !conf->https.ca_pem)
                 rd_kafka_conf_set(conf, "https.ca.location", "probe", NULL, 0);
 #endif
 #endif

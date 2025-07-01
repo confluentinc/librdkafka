@@ -67,12 +67,12 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
                                           void *password_cb_opaque);
 
 int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
-                                                   char *ctx_identifier,
+                                                   const char *ctx_identifier,
                                                    SSL_CTX *ctx);
 
 char *rd_kafka_ssl_error0(rd_kafka_t *rk,
                           rd_kafka_broker_t *rkb,
-                          char *ctx_identifier,
+                          const char *ctx_identifier,
                           char *errstr,
                           size_t errstr_size);
 

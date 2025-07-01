@@ -140,7 +140,7 @@ const char *rd_kafka_ssl_last_error_str(void) {
  */
 char *rd_kafka_ssl_error0(rd_kafka_t *rk,
                           rd_kafka_broker_t *rkb,
-                          char *ctx_identifier,
+                          const char *ctx_identifier,
                           char *errstr,
                           size_t errstr_size) {
         unsigned long l;
@@ -958,7 +958,7 @@ int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
  * @returns 0 if CA location was set, else -1.
  */
 int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
-                                                   char *ctx_identifier,
+                                                   const char *ctx_identifier,
                                                    SSL_CTX *ctx) {
 #if _WIN32
         /* No standard location on Windows, CA certs are in the ROOT store. */

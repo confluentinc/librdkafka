@@ -224,9 +224,16 @@ static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
             !rd_strcmp(rk->rk_conf.ssl.https_ca_location, "probe");
 
         if (!force_probe && rk->rk_conf.ssl.https_ca_location) {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Setting `https` CA certs from "
+                             "configured location: %s",
+                             rk->rk_conf.ssl.https_ca_location);
                 curl_easy_setopt(hreq_curl, CURLOPT_CAINFO,
                                  rk->rk_conf.ssl.https_ca_location);
         } else if (!force_probe && rk->rk_conf.ssl.https_ca_pem) {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Setting `https` CA certs from "
+                             "configured PEM string");
                 curl_easy_setopt(hreq_curl, CURLOPT_CAINFO_BLOB,
                                  rk->rk_conf.ssl.https_ca_pem);
         } else {

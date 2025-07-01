@@ -1197,7 +1197,40 @@ To use this authentication method the client needs to be configured as follows:
   provided to the broker. A comma-separated list of key=value pairs.
   For example:
   `supportFeatureX=true,organizationId=sales-emea`
+* `https.ca.location` - (optional) to customize the CA certificates
+   location.
 
+* `https.ca.pem` - (optional) to provide the CA certificates as a PEM string.
+
+##### JWT bearer grant type (KIP-1139)
+
+This KIP adds support for the `client_credentials, urn:ietf:params:oauth:grant-type:jwt-bearer`
+grant type, with a series of properties to be used for creating a JWT assertion
+sent to the token endpoint. The authenticated principal corresponds to the
+`sub` claim returned by token endpoint, `sasl.oauthbearer.client.id` and
+`sasl.oauthbearer.client.secret` aren't used. Required JWT claims must be set
+either through the template or with the `claim` properties.
+
+* `sasl.oauthbearer.grant.type` - changes the default grant type, set it to
+  `urn:ietf:params:oauth:grant-type:jwt-bearer`.
+* `sasl.oauthbearer.assertion.algorithm` - JWT algorithm defaults to `RS256`.
+* `sasl.oauthbearer.assertion.private.key.file` - a private key file for signing
+   the token.
+* `sasl.oauthbearer.assertion.private.key.passphrase` - (optional) passphrase for the key if encrypted.
+* `sasl.oauthbearer.assertion.private.key.pem` - alternatively to the key file
+  it's possible to pass the private key as a string.
+* `sasl.oauthbearer.assertion.file` - (optional) assertion file: with this property all other
+  assertion related fields are ignored and the assertion is read from this file
+  that should be periodically updated.
+* `sasl.oauthbearer.assertion.jwt.template.file` - (optional) template file: a template containing
+  a default `header` and `payload` that can be overwritten by the `claim` properties.
+* `sasl.oauthbearer.assertion.claim.aud`,
+  `sasl.oauthbearer.assertion.claim.exp.seconds`,
+  `sasl.oauthbearer.assertion.claim.iss`,
+  `sasl.oauthbearer.assertion.claim.jti.include`,
+  `sasl.oauthbearer.assertion.claim.sub` - (optional) the `claim` properties:
+  it's possible to dynamically customize the JWT claims with these or to
+  skip the template file and use only these properties.
 
 <a name="sparse-connections"></a>
 #### Sparse connections

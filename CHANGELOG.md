@@ -5,7 +5,8 @@ v1.4.0 is a feature release. It is supported for all usage.
 ## Enhancements
 
 1. References librdkafka v2.11.0. Refer to the [librdkafka v2.11.0 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.11.0) for more information.
-2. [KIP-848] `describeGroups()` now supports KIP-848 introduced `consumer` groups. Two new fields for consumer group type and target assignment have also been added. Type defines whether this group is a `classic` or `consumer` group. Target assignment is only valid for the `consumer` protocol and its defaults to being undefined.
+2. [KIP-848] `describeGroups()` now supports KIP-848 introduced `consumer` groups. Two new fields for consumer group type and target assignment have also been added. Type defines whether this group is a `classic` or `consumer` group. Target assignment is only valid for the `consumer` protocol and its defaults to being undefined (#329)
+3. [KIP-848] Admin API for listing consumer groups now has an optional filter to return only groups of given types (#328)
 
 # confluent-kafka-javascript v1.3.2
 

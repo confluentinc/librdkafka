@@ -1317,11 +1317,15 @@ void AdminClientCreatePartitions::HandleErrorCallback() {
 AdminClientListGroups::AdminClientListGroups(
     Nan::Callback* callback, AdminClient* client, bool is_match_states_set,
     std::vector<rd_kafka_consumer_group_state_t>& match_states,
+    bool is_match_types_set,
+    std::vector<rd_kafka_consumer_group_type_t>& match_types,
     const int& timeout_ms)
     : ErrorAwareWorker(callback),
       m_client(client),
       m_is_match_states_set(is_match_states_set),
       m_match_states(match_states),
+      m_is_match_types_set(is_match_types_set),
+      m_match_types(match_types),
       m_timeout_ms(timeout_ms) {}
 
 AdminClientListGroups::~AdminClientListGroups() {
@@ -1332,6 +1336,7 @@ AdminClientListGroups::~AdminClientListGroups() {
 
 void AdminClientListGroups::Execute() {
   Baton b = m_client->ListGroups(m_is_match_states_set, m_match_states,
+                                 m_is_match_types_set, m_match_types,
                                  m_timeout_ms, &m_event_response);
   if (b.err() != RdKafka::ERR_NO_ERROR) {
     SetErrorBaton(b);

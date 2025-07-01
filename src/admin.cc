@@ -483,7 +483,9 @@ Baton AdminClient::CreatePartitions(
 
 Baton AdminClient::ListGroups(
     bool is_match_states_set,
-    std::vector<rd_kafka_consumer_group_state_t> &match_states, int timeout_ms,
+    std::vector<rd_kafka_consumer_group_state_t> &match_states,
+    bool is_match_types_set,
+    std::vector<rd_kafka_consumer_group_type_t> &match_types, int timeout_ms,
     /* out */ rd_kafka_event_t **event_response) {
   if (!IsConnected()) {
     return Baton(RdKafka::ERR__STATE);
@@ -510,6 +512,15 @@ Baton AdminClient::ListGroups(
       rd_kafka_error_t *error =
           rd_kafka_AdminOptions_set_match_consumer_group_states(
               options, &match_states[0], match_states.size());
+      if (error) {
+        return Baton::BatonFromErrorAndDestroy(error);
+      }
+    }
+
+    if (is_match_types_set) {
+      rd_kafka_error_t *error =
+          rd_kafka_AdminOptions_set_match_consumer_group_types(
+              options, &match_types[0], match_types.size());
       if (error) {
         return Baton::BatonFromErrorAndDestroy(error);
       }
@@ -1195,9 +1206,26 @@ NAN_METHOD(AdminClient::NodeListGroups) {
     }
   }
 
+  std::vector<rd_kafka_consumer_group_type_t> match_types;
+  v8::Local<v8::String> match_consumer_group_types_key =
+      Nan::New("matchConsumerGroupTypes").ToLocalChecked();
+  bool is_match_types_set =
+      Nan::Has(config, match_consumer_group_types_key).FromMaybe(false);
+  v8::Local<v8::Array> match_types_array = Nan::New<v8::Array>();
+
+  if (is_match_types_set) {
+    match_types_array = GetParameter<v8::Local<v8::Array>>(
+        config, "matchConsumerGroupTypes", match_types_array);
+    if (match_types_array->Length()) {
+      match_types = Conversion::Admin::FromV8GroupTypeArray(
+          match_types_array);
+    }
+  }
+
   // Queue the work.
   Nan::AsyncQueueWorker(new Workers::AdminClientListGroups(
-      callback, client, is_match_states_set, match_states, timeout_ms));
+      callback, client, is_match_states_set, match_states, is_match_types_set,
+      match_types, timeout_ms));
 }
 
 /**

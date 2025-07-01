@@ -532,6 +532,8 @@ class AdminClientListGroups : public ErrorAwareWorker {
  public:
   AdminClientListGroups(Nan::Callback *, NodeKafka::AdminClient *, bool,
                         std::vector<rd_kafka_consumer_group_state_t> &,
+                        bool,
+                        std::vector<rd_kafka_consumer_group_type_t> &,
                         const int &);
   ~AdminClientListGroups();
 
@@ -543,6 +545,8 @@ class AdminClientListGroups : public ErrorAwareWorker {
   NodeKafka::AdminClient *m_client;
   const bool m_is_match_states_set;
   std::vector<rd_kafka_consumer_group_state_t> m_match_states;
+  const bool m_is_match_types_set;
+  std::vector<rd_kafka_consumer_group_type_t> m_match_types;
   const int m_timeout_ms;
   rd_kafka_event_t *m_event_response;
 };

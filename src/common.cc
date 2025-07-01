@@ -909,6 +909,35 @@ std::vector<rd_kafka_consumer_group_state_t> FromV8GroupStateArray(
 }
 
 /**
+ * @brief Converts a v8 array of group types into a vector of
+ * rd_kafka_consumer_group_type_t.
+ */
+std::vector<rd_kafka_consumer_group_type_t> FromV8GroupTypeArray(
+    v8::Local<v8::Array> array) {
+  v8::Local<v8::Array> parameter = array.As<v8::Array>();
+  std::vector<rd_kafka_consumer_group_type_t> returnVec;
+  if (parameter->Length() >= 1) {
+    for (unsigned int i = 0; i < parameter->Length(); i++) {
+      v8::Local<v8::Value> v;
+      if (!Nan::Get(parameter, i).ToLocal(&v)) {
+        continue;
+      }
+      Nan::Maybe<int64_t> maybeT = Nan::To<int64_t>(v);
+      if (maybeT.IsNothing()) {
+        continue;
+      }
+      int64_t type_number = maybeT.FromJust();
+      if (type_number < 0 || type_number >= RD_KAFKA_CONSUMER_GROUP_TYPE__CNT) {
+        continue;
+      }
+      returnVec.push_back(
+          static_cast<rd_kafka_consumer_group_type_t>(type_number));
+    }
+  }
+  return returnVec;
+}
+
+/**
  * @brief Converts a rd_kafka_ListConsumerGroups_result_t* into a v8 object.
  */
 v8::Local<v8::Object> FromListConsumerGroupsResult(
@@ -920,6 +949,7 @@ v8::Local<v8::Object> FromListConsumerGroupsResult(
         protocolType: string,
         isSimpleConsumerGroup: boolean,
         state: ConsumerGroupState (internally a number)
+        type: ConsumerGroupType (internally a number)
       }[],
       errors: LibrdKafkaError[]
     }
@@ -956,6 +986,9 @@ v8::Local<v8::Object> FromListConsumerGroupsResult(
 
     Nan::Set(groupObject, Nan::New("state").ToLocalChecked(),
              Nan::New<v8::Number>(rd_kafka_ConsumerGroupListing_state(group)));
+
+    Nan::Set(groupObject, Nan::New("type").ToLocalChecked(),
+              Nan::New<v8::Number>(rd_kafka_ConsumerGroupListing_type(group)));
 
     Nan::Set(groups, i, groupObject);
   }

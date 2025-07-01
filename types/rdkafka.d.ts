@@ -363,6 +363,7 @@ export interface GroupOverview {
     protocolType: string;
     isSimpleConsumerGroup: boolean;
     state: ConsumerGroupStates;
+    type: ConsumerGroupTypes;
 }
 
 export enum AclOperationTypes {
@@ -504,7 +505,7 @@ export interface IAdminClient {
     listTopics(options?: { timeout?: number }, cb?: (err: LibrdKafkaError, topics: string[]) => any): void;
 
     listGroups(cb?: (err: LibrdKafkaError, result: { groups: GroupOverview[], errors: LibrdKafkaError[] }) => any): void;
-    listGroups(options?: { timeout?: number, matchConsumerGroupStates?: ConsumerGroupStates[] },
+    listGroups(options?: { timeout?: number, matchConsumerGroupStates?: ConsumerGroupStates[], matchConsumerGroupTypes?: ConsumerGroupTypes[] },
         cb?: (err: LibrdKafkaError, result: { groups: GroupOverview[], errors: LibrdKafkaError[] }) => any): void;
 
     describeGroups(groupIds: string[], cb?: (err: LibrdKafkaError, result: GroupDescriptions) => any): void;

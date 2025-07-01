@@ -1,13 +1,14 @@
 jest.setTimeout(30000);
 
 const {
+    testConsumerGroupProtocolClassic,
     createConsumer,
     secureRandom,
     createTopic,
     waitFor,
     createAdmin,
 } = require('../testhelpers');
-const { ConsumerGroupStates, ErrorCodes } = require('../../../lib').KafkaJS;
+const { ConsumerGroupStates, ConsumerGroupTypes, ErrorCodes } = require('../../../lib').KafkaJS;
 
 describe('Admin > listGroups', () => {
     let topicName, groupId, consumer, admin;
@@ -19,6 +20,7 @@ describe('Admin > listGroups', () => {
         consumer = createConsumer({
             groupId,
             fromBeginning: true,
+            autoCommit: true,
         });
 
         await createTopic({ topic: topicName, partitions: 2 });
@@ -46,10 +48,12 @@ describe('Admin > listGroups', () => {
         await consumer.run({ eachMessage: async () => {} });
 
         await waitFor(() => consumer.assignment().length > 0, () => null, 1000);
+        const groupType = testConsumerGroupProtocolClassic() ? ConsumerGroupTypes.CLASSIC : ConsumerGroupTypes.CONSUMER;
 
         await admin.connect();
         let listGroupsResult = await admin.listGroups({
             matchConsumerGroupStates: undefined,
+            matchConsumerGroupTypes: undefined,
         });
         expect(listGroupsResult.errors).toEqual([]);
         expect(listGroupsResult.groups).toEqual(
@@ -59,9 +63,19 @@ describe('Admin > listGroups', () => {
                     isSimpleConsumerGroup: false,
                     protocolType: 'consumer',
                     state: ConsumerGroupStates.STABLE,
+                    type: groupType,
                 }),
             ])
         );
+
+        // Consumer group should not show up when filtering for opposite group type.
+        let oppositeGroupType = testConsumerGroupProtocolClassic() ? ConsumerGroupTypes.CONSUMER : ConsumerGroupTypes.CLASSIC;
+        listGroupsResult = await admin.listGroups({
+            matchConsumerGroupTypes: [ oppositeGroupType ],
+        });
+        expect(listGroupsResult.errors).toEqual([]);
+        expect(listGroupsResult.groups.map(group => group.groupId)).not.toContain(groupId);
+
 
         // Disconnect the consumer to make the group EMPTY.
         await consumer.disconnect();
@@ -76,6 +90,7 @@ describe('Admin > listGroups', () => {
                     isSimpleConsumerGroup: false,
                     protocolType: 'consumer',
                     state: ConsumerGroupStates.EMPTY,
+                    type: groupType,
                 }),
             ])
         );

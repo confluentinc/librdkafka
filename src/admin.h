@@ -54,6 +54,8 @@ class AdminClient : public Connection {
   // Baton DescribeConfig(rd_kafka_NewTopic_t* topic, int timeout_ms);
   Baton ListGroups(bool is_match_states_set,
                    std::vector<rd_kafka_consumer_group_state_t>& match_states,
+                   bool is_match_types_set,
+                   std::vector<rd_kafka_consumer_group_type_t>& match_types,
                    int timeout_ms,
                    rd_kafka_event_t** event_response);
   Baton DescribeGroups(std::vector<std::string>& groups,

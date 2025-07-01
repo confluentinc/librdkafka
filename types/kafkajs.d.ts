@@ -14,7 +14,8 @@ import {
   Node,
   AclOperationTypes,
   Uuid,
-  IsolationLevel
+  IsolationLevel,
+  ConsumerGroupTypes
 } from './rdkafka'
 
 import {
@@ -34,6 +35,7 @@ export {
   AclOperationTypes,
   Uuid,
   IsolationLevel,
+  ConsumerGroupTypes
 } from './rdkafka'
 
 export interface OauthbearerProviderResponse {
@@ -413,7 +415,8 @@ export type Admin = {
   listTopics(options?: { timeout?: number }): Promise<string[]>
   listGroups(options?: {
     timeout?: number,
-    matchConsumerGroupStates?: ConsumerGroupStates[]
+    matchConsumerGroupStates?: ConsumerGroupStates[],
+    matchConsumerGroupTypes?: ConsumerGroupTypes[]
   }): Promise<{ groups: GroupOverview[], errors: LibrdKafkaError[] }>
   describeGroups(
     groups: string[],

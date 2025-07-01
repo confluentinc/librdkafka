@@ -116,6 +116,10 @@ rd_kafka_NewTopic_t **FromV8TopicObjectArray(v8::Local<v8::Array>);
 std::vector<rd_kafka_consumer_group_state_t> FromV8GroupStateArray(
     v8::Local<v8::Array>);
 
+// ListGroups: request
+std::vector<rd_kafka_consumer_group_type_t> FromV8GroupTypeArray(
+    v8::Local<v8::Array> array);
+
 // ListGroups: response
 v8::Local<v8::Object> FromListConsumerGroupsResult(
     const rd_kafka_ListConsumerGroups_result_t *);

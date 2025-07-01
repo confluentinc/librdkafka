@@ -51,14 +51,11 @@ typedef enum test_variation_t {
 } test_variation_t;
 
 static const char *test_variation_name(test_variation_t variation) {
-        switch (variation) {
-        case TEST_VARIATION_ERROR_FIRST_HB:
-                return "error on first heartbeat";
-        case TEST_VARIATION_ERROR_SECOND_HB:
-                return "error on second heartbeat";
-        default:
-                rd_assert(!"Unknown test variation");
-        }
+        rd_assert(variation >= TEST_VARIATION_ERROR_FIRST_HB &&
+                  variation < TEST_VARIATION__CNT);
+        static const char *names[] = {"error on first heartbeat",
+                                      "error on second heartbeat"};
+        return names[variation];
 }
 
 static int allowed_error;

@@ -352,6 +352,12 @@ export enum ConsumerGroupStates {
     EMPTY = 5,
 }
 
+export enum ConsumerGroupTypes {
+    UNKNOWN = 0,
+    CONSUMER = 1,
+    CLASSIC = 2,
+}
+
 export interface GroupOverview {
     groupId: string;
     protocolType: string;
@@ -383,6 +389,7 @@ export type MemberDescription = {
     memberMetadata: Buffer
     groupInstanceId?: string,
     assignment: TopicPartition[]
+    targetAssignment?: TopicPartition[]
 }
 
 export type Node = {
@@ -407,6 +414,7 @@ export type GroupDescription = {
     protocolType: string
     partitionAssignor: string
     state: ConsumerGroupStates
+    type: ConsumerGroupTypes
     coordinator: Node
     authorizedOperations?: AclOperationTypes[]
 }

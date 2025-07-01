@@ -980,6 +980,9 @@ v8::Local<v8::Object> FromMemberDescription(
         assignment: {
           topicPartitions: TopicPartition[]
         },
+        targetAssignment?: {
+          topicPartitions: TopicPartition[]
+        }
     }
   */
   v8::Local<v8::Object> returnObject = Nan::New<v8::Object>();
@@ -1027,6 +1030,23 @@ v8::Local<v8::Object> FromMemberDescription(
            topicPartitions);
   Nan::Set(returnObject, Nan::New("assignment").ToLocalChecked(),
            assignmentObject);
+
+  // targetAssignment
+  const rd_kafka_MemberAssignment_t* target_assignment =
+      rd_kafka_MemberDescription_target_assignment(member);
+  if (target_assignment) {
+    const rd_kafka_topic_partition_list_t* target_partitions =
+        rd_kafka_MemberAssignment_partitions(target_assignment);
+    v8::Local<v8::Array> targetTopicPartitions =
+        Conversion::TopicPartition::ToTopicPartitionV8Array(
+            target_partitions, false);
+    v8::Local<v8::Object> targetAssignmentObject = Nan::New<v8::Object>();
+    Nan::Set(targetAssignmentObject,
+             Nan::New("topicPartitions").ToLocalChecked(),
+             targetTopicPartitions);
+    Nan::Set(returnObject, Nan::New("targetAssignment").ToLocalChecked(),
+             targetAssignmentObject);
+  }
 
   return returnObject;
 }
@@ -1104,6 +1124,10 @@ v8::Local<v8::Object> FromConsumerGroupDescription(
   // state
   Nan::Set(returnObject, Nan::New("state").ToLocalChecked(),
            Nan::New<v8::Number>(rd_kafka_ConsumerGroupDescription_state(desc)));
+
+  // type
+  Nan::Set(returnObject, Nan::New("type").ToLocalChecked(),
+           Nan::New<v8::Number>(rd_kafka_ConsumerGroupDescription_type(desc)));
 
   // coordinator
   const rd_kafka_Node_t* coordinator =

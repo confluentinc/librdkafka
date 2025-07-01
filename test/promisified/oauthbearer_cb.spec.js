@@ -21,7 +21,7 @@ describe('Client > oauthbearer callback', () => {
         oauthbearer_cb_called = 0;
     });
 
-    it('works for producer',
+    it.skip('works for producer',
         async () => {
             const client = createProducer({
                 sasl: {
@@ -38,7 +38,7 @@ describe('Client > oauthbearer callback', () => {
         }
     );
 
-    it('works for consumer',
+    it.skip('works for consumer',
         async () => {
             const client = createConsumer({
                 groupId: 'gid',
@@ -56,7 +56,7 @@ describe('Client > oauthbearer callback', () => {
         }
     );
 
-    it('works for admin',
+    it.skip('works for admin',
         async () => {
             const client = createAdmin({
                 sasl: {

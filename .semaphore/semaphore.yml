@@ -102,13 +102,21 @@ blocks:
           commands:
             - make test
             - artifact push workflow coverage/mocha/coverage-final.json --destination "mocha-coverage.json"
-        - name: "Promisified Tests"
+        - name: "Promisified Tests (Classic Protocol)"
           commands:
             - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
-            - docker compose up -d && sleep 30
+            - docker compose -f test/docker/docker-compose.yml up -d && sleep 30
             - export NODE_OPTIONS='--max-old-space-size=1536'
             - npx jest --no-colors --ci test/promisified/
-            - artifact push workflow coverage/jest/coverage-final.json --destination "jest-coverage.json"
+            - artifact push workflow coverage/jest/coverage-final.json --destination "jest-classic-coverage.json"
+        - name: "Promisified Tests (Consumer Protocol)"
+          commands:
+            - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+            - docker compose -f test/docker/docker-compose-kraft.yml up -d && sleep 30
+            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
+            - export NODE_OPTIONS='--max-old-space-size=1536'
+            - npx jest --no-colors --ci test/promisified/
+            - artifact push workflow coverage/jest/coverage-final.json --destination "jest-consumer-coverage.json"
         - name: "Lint"
           commands:
             - make lint
@@ -163,10 +171,10 @@ blocks:
           - export BUILD_LIBRDKAFKA=0
           - npm run install-from-source
       jobs:
-        - name: "Performance Test"
+        - name: "Performance Test (Classic Protocol)"
           commands:
             - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
-            - docker compose up -d && sleep 30
+            - docker compose -f test/docker/docker-compose.yml up -d && sleep 30
             - export NODE_OPTIONS='--max-old-space-size=1536'
             - cd examples/performance
             - npm install
@@ -479,7 +487,8 @@ after_pipeline:
           - checkout
           - sem-version java 11
           - artifact pull workflow mocha-coverage.json
-          - artifact pull workflow jest-coverage.json
+          - artifact pull workflow jest-classic-coverage.json
+          - artifact pull workflow jest-consumer-coverage.json
           - artifact pull workflow jest-sr-coverage.json
           - npx --yes istanbul-merge --out merged-output/merged-coverage.json *-coverage.json
           - npx nyc report -t merged-output --report-dir coverage --reporter=text --reporter=lcov

@@ -1,11 +1,11 @@
 version: '3'
 services:
   zookeeper:
-    image: confluentinc/cp-zookeeper
+    image: confluentinc/cp-zookeeper:7.9.2
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
   kafka:
-    image: confluentinc/cp-kafka
+    image: confluentinc/cp-kafka:7.9.2
     restart: always
     depends_on:
       - zookeeper

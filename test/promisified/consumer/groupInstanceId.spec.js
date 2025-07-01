@@ -3,6 +3,7 @@ jest.setTimeout(30000);
 const { waitFor,
     secureRandom,
     createTopic,
+    testConsumerGroupProtocolClassic,
     createConsumer,
     sleep, } = require("../testhelpers");
 const { ErrorCodes } = require('../../../lib').KafkaJS;
@@ -128,9 +129,12 @@ describe('Consumer with static membership', () => {
         expect(consumer2.assignment().length).toBe(1);
 
         await waitFor(() => consumer2.assignment().length === 2, () => null, 1000);
+
         expect(consumer2.assignment().length).toBe(2);
-        expect(assigns).toBe(2);
-        expect(revokes).toBe(1);
+        if (testConsumerGroupProtocolClassic()) {
+            expect(assigns).toBe(2);
+            expect(revokes).toBe(1);
+        }
 
         await consumer2.disconnect();
     });

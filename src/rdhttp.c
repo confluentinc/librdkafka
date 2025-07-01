@@ -224,18 +224,41 @@ static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
             !rd_strcmp(rk->rk_conf.https.ca_location, "probe");
 
         if (!force_probe && rk->rk_conf.https.ca_location) {
+                rd_bool_t is_dir;
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Setting `https` CA certs from "
                              "configured location: %s",
                              rk->rk_conf.https.ca_location);
-                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO,
-                                 rk->rk_conf.https.ca_location);
+                if (rd_file_stat(rk->rk_conf.https.ca_location, &is_dir)) {
+                        if (is_dir) {
+                                curl_easy_setopt(hreq_curl, CURLOPT_CAPATH,
+                                                 rk->rk_conf.https.ca_location);
+                                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO,
+                                                 NULL);
+                        } else {
+                                curl_easy_setopt(hreq_curl, CURLOPT_CAPATH,
+                                                 NULL);
+                                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO,
+                                                 rk->rk_conf.https.ca_location);
+                        }
+                } else {
+                        /* Path doesn't exist, don't set any trusted
+                         * certificate. */
+                        curl_easy_setopt(hreq_curl, CURLOPT_CAINFO, NULL);
+                        curl_easy_setopt(hreq_curl, CURLOPT_CAPATH, NULL);
+                }
         } else if (!force_probe && rk->rk_conf.https.ca_pem) {
+                struct curl_blob ca_blob = {
+                    .data  = rk->rk_conf.https.ca_pem,
+                    .len   = strlen(rk->rk_conf.https.ca_pem),
+                    .flags = CURL_BLOB_COPY};
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Setting `https` CA certs from "
                              "configured PEM string");
-                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO_BLOB,
-                                 rk->rk_conf.https.ca_pem);
+                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO_BLOB, &ca_blob);
+                /* Only the blob should be set, no default paths. */
+                curl_easy_setopt(hreq_curl, CURLOPT_CAINFO, NULL);
+                curl_easy_setopt(hreq_curl, CURLOPT_CAPATH, NULL);
         } else {
                 curl_easy_setopt(hreq_curl, CURLOPT_SSL_CTX_FUNCTION,
                                  rd_http_ssl_ctx_function);

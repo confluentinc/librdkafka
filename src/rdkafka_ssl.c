@@ -949,7 +949,32 @@ int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
 }
 #endif /* MSC_VER */
 
+/**
+ * @brief Probe for a single \p path and if found and not an empty directory,
+ *        set it on the \p ctx.
+ *
+ * @returns 0 if CA location was set with an error, 1 if it was set correctly,
+ *          -1 if path should be skipped.
+ */
+static int rd_kafka_ssl_set_ca_path(rd_kafka_t *rk,
+                                    const char *ctx_identifier,
+                                    const char *path,
+                                    SSL_CTX *ctx,
+                                    rd_bool_t *is_dir) {
+        if (!rd_file_stat(path, is_dir))
+                return -1;
 
+        if (*is_dir && rd_kafka_dir_is_empty(path))
+                return -1;
+
+        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                     "Setting default CA certificate location for %s "
+                     "to \"%s\"",
+                     ctx_identifier, path);
+
+        return SSL_CTX_load_verify_locations(ctx, *is_dir ? NULL : path,
+                                             *is_dir ? path : NULL);
+}
 
 /**
  * @brief Probe for the system's CA certificate location and if found set it
@@ -1011,25 +1036,12 @@ int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
         int i;
 
         for (i = 0; (path = paths[i]); i++) {
-                struct stat st;
                 rd_bool_t is_dir;
-                int r;
-
-                if (stat(path, &st) != 0)
+                int r = rd_kafka_ssl_set_ca_path(rk, ctx_identifier, path, ctx,
+                                                 &is_dir);
+                if (r == -1)
                         continue;
 
-                is_dir = S_ISDIR(st.st_mode);
-
-                if (is_dir && rd_kafka_dir_is_empty(path))
-                        continue;
-
-                rd_kafka_dbg(rk, SECURITY, "CACERTS",
-                             "Setting default CA certificate location for %s "
-                             "to \"%s\"",
-                             ctx_identifier, path);
-
-                r = SSL_CTX_load_verify_locations(ctx, is_dir ? NULL : path,
-                                                  is_dir ? path : NULL);
                 if (r != 1) {
                         char errstr[512];
                         /* Read error and clear the error stack */

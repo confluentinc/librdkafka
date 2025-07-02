@@ -56,6 +56,10 @@
 #include <windows.h>
 #endif
 
+#ifdef WITH_OAUTHBEARER_OIDC
+#include <curl/curl.h>
+#endif
+
 struct rd_kafka_property {
         rd_kafka_conf_scope_t scope;
         const char *name;
@@ -1179,7 +1183,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.jti.include", _RK_C_BOOL,
      _RK(sasl.oauthbearer.assertion.claim.jti_include),
-     "JWT ID claim. When set to `true`a random UUID is generated. "
+     "JWT ID claim. When set to `true`, a random UUID is generated. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
      "assertion is needed.",
      0, 1, 0, _UNSUPPORTED_OIDC},
@@ -3960,11 +3964,17 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
         if (conf->https.ca_location && conf->https.ca_pem)
                 return "`https.ca.location` and `https.ca.pem` "
                        "are mutually exclusive";
+
         if (conf->https.ca_location &&
             rd_strcmp(conf->https.ca_location, "probe") &&
             !rd_file_stat(conf->https.ca_location, NULL))
                 return "`https.ca.location` must be "
                        "an existing file or directory";
+
+#if !CURL_AT_LEAST_VERSION(7, 77, 0)
+        if (conf->https.ca_pem)
+                return "`https.ca.pem` requires libcurl 7.77.0 or later";
+#endif
 #endif
 
 

@@ -248,6 +248,7 @@ static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
                         curl_easy_setopt(hreq_curl, CURLOPT_CAPATH, NULL);
                 }
         } else if (!force_probe && rk->rk_conf.https.ca_pem) {
+#if CURL_AT_LEAST_VERSION(7, 77, 0)
                 struct curl_blob ca_blob = {
                     .data  = rk->rk_conf.https.ca_pem,
                     .len   = strlen(rk->rk_conf.https.ca_pem),
@@ -256,6 +257,7 @@ static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
                              "Setting `https` CA certs from "
                              "configured PEM string");
                 curl_easy_setopt(hreq_curl, CURLOPT_CAINFO_BLOB, &ca_blob);
+#endif
                 /* Only the blob should be set, no default paths. */
                 curl_easy_setopt(hreq_curl, CURLOPT_CAINFO, NULL);
                 curl_easy_setopt(hreq_curl, CURLOPT_CAPATH, NULL);

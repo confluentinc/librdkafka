@@ -871,7 +871,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _UNSUPPORTED_SSL},
     {_RK_GLOBAL, "https.ca.location", _RK_C_STR, _RK(https.ca_location),
      "File or directory path to CA certificate(s) for verifying "
-     "HTTPS endpoints. "
+     "HTTPS endpoints, like `sasl.oauthbearer.token.endpoint.url` used for "
+     "OAUTHBEARER/OIDC authentication. "
+     "Mutually exclusive with `https.ca.pem`. "
      "Defaults: "
      "On Windows the system's CA certificates are automatically looked "
      "up in the Windows Root certificate store. "
@@ -887,6 +889,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _UNSUPPORTED_HTTPS},
     {_RK_GLOBAL, "https.ca.pem", _RK_C_STR, _RK(https.ca_pem),
      "CA certificate string (PEM format) for verifying HTTPS endpoints. "
+     "Mutually exclusive with `https.ca.location`. "
      "Optional: see `https.ca.location`.",
      _UNSUPPORTED_HTTPS},
     {_RK_GLOBAL | _RK_SENSITIVE, "ssl.ca.pem", _RK_C_STR, _RK(ssl.ca_pem),
@@ -3952,6 +3955,18 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
         if (conf->ssl.ca && (conf->ssl.ca_location || conf->ssl.ca_pem))
                 return "`ssl.ca.location` or `ssl.ca.pem`, and memory-based "
                        "set_ssl_cert(CERT_CA) are mutually exclusive.";
+
+#if WITH_OAUTHBEARER_OIDC
+        if (conf->https.ca_location && conf->https.ca_pem)
+                return "`https.ca.location` and `https.ca.pem` "
+                       "are mutually exclusive";
+        if (conf->https.ca_location &&
+            !rd_file_stat(conf->https.ca_location, NULL))
+                return "`https.ca.location` must be "
+                       "an existing file or directory";
+#endif
+
+
 #ifdef __APPLE__
         else if (!conf->ssl.ca && !conf->ssl.ca_location && !conf->ssl.ca_pem)
                 /* Default ssl.ca.location to 'probe' on OSX */

@@ -813,6 +813,7 @@ static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
  * @brief Attempt load CA certificates from a Windows Certificate store.
  */
 static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
+                                            const char *ctx_identifier,
                                             SSL_CTX *ctx,
                                             const char *store_name) {
         HCERTSTORE w_store;
@@ -827,10 +828,11 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         /* Convert store_name to wide-char */
         werr = mbstowcs_s(&wsize, NULL, 0, store_name, strlen(store_name));
         if (werr || wsize < 2 || wsize > 1000) {
-                rd_kafka_log(rk, LOG_ERR, "CERTSTORE",
-                             "Invalid Windows certificate store name: %.*s%s",
-                             30, store_name,
-                             wsize < 2 ? " (empty)" : " (truncated)");
+                rd_kafka_log(
+                    rk, LOG_ERR, "CERTSTORE",
+                    "%s: Invalid Windows certificate store name: %.*s%s",
+                    ctx_identifier, 30, store_name,
+                    wsize < 2 ? " (empty)" : " (truncated)");
                 return -1;
         }
         wstore_name = rd_alloca(sizeof(*wstore_name) * wsize);
@@ -846,9 +848,9 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         if (!w_store) {
                 rd_kafka_log(
                     rk, LOG_ERR, "CERTSTORE",
-                    "Failed to open Windows certificate "
+                    "%s: Failed to open Windows certificate "
                     "%s store: %s",
-                    store_name,
+                    ctx_identifier, store_name,
                     rd_strerror_w32(GetLastError(), errstr, sizeof(errstr)));
                 return -1;
         }
@@ -884,9 +886,9 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         CertCloseStore(w_store, 0);
 
         rd_kafka_dbg(rk, SECURITY, "CERTSTORE",
-                     "%d certificate(s) successfully added from "
+                     "%s: %d certificate(s) successfully added from "
                      "Windows Certificate %s store, %d failed",
-                     cnt, store_name, fail_cnt);
+                     ctx_identifier, cnt, store_name, fail_cnt);
 
         if (cnt == 0 && fail_cnt > 0)
                 return -1;
@@ -900,6 +902,7 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
  * @returns the number of successfully loaded certificates, or -1 on error.
  */
 int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
+                                      const char *ctx_identifier,
                                       SSL_CTX *ctx,
                                       const char *store_names) {
         char *s;
@@ -935,7 +938,8 @@ int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
                         s = "";
                 }
 
-                r = rd_kafka_ssl_win_load_cert_store(rk, ctx, store_name);
+                r = rd_kafka_ssl_win_load_cert_store(rk, ctx_identifier, ctx,
+                                                     store_name);
                 if (r != -1)
                         cert_cnt += r;
                 else
@@ -1280,7 +1284,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 /* Attempt to load CA root certificates from the
                  * configured Windows certificate stores. */
                 r = rd_kafka_ssl_win_load_cert_stores(
-                    rk, ctx, rk->rk_conf.ssl.ca_cert_stores);
+                    rk, "kafka", ctx, rk->rk_conf.ssl.ca_cert_stores);
                 if (r == 0) {
                         rd_kafka_log(
                             rk, LOG_NOTICE, "CERTSTORE",

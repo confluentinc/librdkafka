@@ -162,7 +162,7 @@ rd_http_ssl_ctx_function(CURL *curl, void *sslctx, void *userptr) {
 #ifdef _WIN32
         /* Attempt to load CA root certificates from the
          * configured Windows certificate stores. */
-        r = rd_kafka_ssl_win_load_cert_stores(rk, ctx,
+        r = rd_kafka_ssl_win_load_cert_stores(rk, "https", ctx,
                                               rk->rk_conf.ssl.ca_cert_stores);
         if (r == 0) {
                 rd_kafka_log(rk, LOG_NOTICE, "CERTSTORE",
@@ -178,8 +178,8 @@ rd_http_ssl_ctx_function(CURL *curl, void *sslctx, void *userptr) {
 
         if (r != -1) {
                 rd_kafka_dbg(rk, SECURITY, "SSL",
-                             "Successfully loaded CA certificates from "
-                             "Windows certificate stores for `https`");
+                             "Successfully loaded CA certificates for `https` "
+                             "from Windows certificate stores");
                 return CURLE_OK; /* Success, CA certs loaded on Windows */
         }
 #endif

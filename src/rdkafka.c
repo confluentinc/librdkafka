@@ -5213,13 +5213,8 @@ const char *rd_kafka_get_debug_contexts(void) {
 
 
 int rd_kafka_path_is_dir(const char *path) {
-#ifdef _WIN32
-        struct _stat st;
-        return (_stat(path, &st) == 0 && st.st_mode & S_IFDIR);
-#else
-        struct stat st;
-        return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
-#endif
+        rd_bool_t is_dir;
+        return rd_file_stat(path, &is_dir) && is_dir;
 }
 
 

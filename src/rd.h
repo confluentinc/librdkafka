@@ -53,6 +53,7 @@
 #include <time.h>
 #include <assert.h>
 #include <limits.h>
+#include <sys/stat.h>
 
 #include "tinycthread.h"
 #include "rdsysqueue.h"
@@ -542,6 +543,36 @@ rd_file_mkstemp(const char *prefix,
                 rd_snprintf(tempfile_path_out, tempfile_path_out_size, "%s",
                             tempfile_path);
         return tempfile;
+}
+
+/**
+ * @brief Retrive stat for a \p path .
+ *
+ * @param path Path to the file or directory.
+ * @param is_dir Pointer to store if the \p path is a directory (optional).
+ *
+ * @return `rd_true` if the path exists.
+ */
+static RD_INLINE RD_UNUSED rd_bool_t rd_file_stat(const char *path,
+                                                  rd_bool_t *is_dir) {
+#ifdef _WIN32
+        struct _stat st;
+        if (_stat(path, &st) == 0) {
+                if (is_dir)
+                        *is_dir = st.st_mode & S_IFDIR;
+                return rd_true;
+        }
+#else
+        struct stat st;
+        if (stat(path, &st) == 0) {
+                if (is_dir)
+                        *is_dir = S_ISDIR(st.st_mode);
+                return rd_true;
+        }
+#endif
+        if (is_dir)
+                *is_dir = rd_false;
+        return rd_false;
 }
 
 #endif /* _RD_H_ */

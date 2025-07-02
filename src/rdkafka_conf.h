@@ -299,6 +299,11 @@ struct rd_kafka_conf_s {
         } ssl;
 
         struct {
+                char *ca_location;
+                char *ca_pem;
+        } https;
+
+        struct {
                 const struct rd_kafka_sasl_provider *provider;
                 char *principal;
                 char *mechanisms;

@@ -1034,10 +1034,11 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
         cJSON *json = NULL;
         char *token;
         cJSON *parsed_token;
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
 
         RD_UT_BEGIN();
 
-        herr = rd_http_req_init(&hreq, "");
+        herr = rd_http_req_init(rk, &hreq, "");
 
         RD_UT_ASSERT(!herr,
                      "Expected initialize to succeed, "
@@ -1073,6 +1074,7 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
         rd_http_error_destroy(herr);
         rd_http_req_destroy(&hreq);
         cJSON_Delete(json);
+        rd_free(rk);
 
         RD_UT_PASS();
 }
@@ -1089,10 +1091,11 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
         rd_http_error_t *herr;
         cJSON *json = NULL;
         cJSON *parsed_token;
+        rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
 
         RD_UT_BEGIN();
 
-        herr = rd_http_req_init(&hreq, "");
+        herr = rd_http_req_init(rk, &hreq, "");
         RD_UT_ASSERT(!herr,
                      "Expected initialization to succeed, "
                      "but it failed with error code: %d, error string: %s",
@@ -1120,6 +1123,7 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
         rd_http_error_destroy(herr);
         cJSON_Delete(json);
         cJSON_Delete(parsed_token);
+        rd_free(rk);
         RD_UT_PASS();
 }
 

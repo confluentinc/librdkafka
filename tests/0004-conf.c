@@ -769,6 +769,22 @@ int main_0004_conf(int argc, char **argv) {
                             errstr);
                 rd_kafka_conf_destroy(conf);
         }
+        {
+                TEST_SAY(
+                    "Verify that https.ca.location doesn't give an error when "
+                    "set to `probe`\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "https.ca.location", "probe");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                TEST_ASSERT(
+                    rk, "Expected rd_kafka_new() not to fail, but it failed");
+
+                rd_kafka_destroy(rk);
+        }
 #endif /* WITH_OAUTHBEARER_OIDC */
 
         /* Verify that OpenSSL_AppLink is not needed on Windows (#3554) */

@@ -3961,6 +3961,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                 return "`https.ca.location` and `https.ca.pem` "
                        "are mutually exclusive";
         if (conf->https.ca_location &&
+            rd_strcmp(conf->https.ca_location, "probe") &&
             !rd_file_stat(conf->https.ca_location, NULL))
                 return "`https.ca.location` must be "
                        "an existing file or directory";

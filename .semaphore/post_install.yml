@@ -36,7 +36,7 @@ blocks:
             - env_var: DOCKER_IMAGE
               values: ["debian:bullseye", "debian:bookworm", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
@@ -55,7 +55,7 @@ blocks:
             - env_var: DOCKER_IMAGE
               values: ["debian:bullseye", "debian:bookworm", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04"]
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
@@ -72,7 +72,7 @@ blocks:
         - name: "Install"
           matrix:
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - docker run -v "$(pwd):/v" "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
@@ -89,7 +89,7 @@ blocks:
         - name: "Install"
           matrix:
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - docker run -v "$(pwd):/v" "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
@@ -108,7 +108,7 @@ blocks:
             - env_var: DOCKER_IMAGE
               values: ["quay.io/centos/centos:stream9", "almalinux:9", "rockylinux:9"]
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
@@ -127,7 +127,7 @@ blocks:
             - env_var: DOCKER_IMAGE
               values: ["quay.io/centos/centos:stream9", "almalinux:9", "rockylinux:9"]
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
@@ -141,7 +141,7 @@ blocks:
         - name: "Install"
           matrix:
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - sem-version node $NODE_VERSION
             - bash ci/post-install/install-mac.sh "$NODE_VERSION" "$LIBRARY_VERSION"
@@ -156,7 +156,7 @@ blocks:
         - name: "Install"
           matrix:
             - env_var: NODE_VERSION
-              values: ["18", "20", "21", "22", "23"]
+              values: ["18", "20", "21", "22", "23", "24"]
           commands:
             - sem-version node $NODE_VERSION
             - bash ci/post-install/install-mac.sh "$NODE_VERSION" "$LIBRARY_VERSION"
@@ -187,7 +187,7 @@ blocks:
         - name: "Install"
           matrix:
             - env_var: NODE_VERSION
-              values: ["18.19.0", "20.11.0", "21.6.1", "22.2.0", "23.2.0"]
+              values: ["18.19.0", "20.11.0", "21.6.1", "22.2.0", "23.2.0", "24.3.0"]
           commands:
             - Invoke-WebRequest "https://nodejs.org/download/release/v${env:NODE_VERSION}/node-v${env:NODE_VERSION}-x64.msi" -OutFile node.msi
             - msiexec /qn /l* node-log.txt /i node.msi

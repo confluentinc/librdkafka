@@ -16,10 +16,13 @@ depsPrecompiledDir = '../deps/precompiled'
 depsIncludeDir = '../deps/include'
 buildReleaseDir = 'Release'
 
-# alternative: 'https://api.nuget.org/v3-flatcontainer/librdkafka.redist/{}/librdkafka.redist.{}.nupkg'.format(librdkafkaVersion, librdkafkaVersion)
+# Use publicly documented API to download librdkafka NuGet package.
+# https://api.nuget.org/v3-flatcontainer/{package}/{version}/{package}.{version}.nupkg
+# See https://learn.microsoft.com/en-us/nuget/api/package-base-address-resource#download-package-content-nupkg
 env_dist = os.environ
-downloadBaseUrl = env_dist['NODE_RDKAFKA_NUGET_BASE_URL'] if 'NODE_RDKAFKA_NUGET_BASE_URL' in env_dist else 'https://globalcdn.nuget.org/packages/'
-librdkafkaNugetUrl = downloadBaseUrl + 'librdkafka.redist.{}.nupkg'.format(librdkafkaVersion)
+downloadBaseUrl = env_dist['NODE_RDKAFKA_NUGET_BASE_URL'] if 'NODE_RDKAFKA_NUGET_BASE_URL' in env_dist else 'https://api.nuget.org/v3-flatcontainer/librdkafka.redist/{version}/'
+librdkafkaNugetUrl = downloadBaseUrl + 'librdkafka.redist.{version}.nupkg'
+librdkafkaNugetUrl = librdkafkaNugetUrl.format(version=librdkafkaVersion.lower())
 print('download librdkafka form ' + librdkafkaNugetUrl)
 outputDir = 'librdkafka.redist'
 outputFile = outputDir + '.zip'

@@ -28,7 +28,7 @@ global_job_config:
       - git submodule update --init --recursive
       - cd deps/librdkafka
       - git fetch origin
-      - git checkout v2.10.1
+      - git checkout v2.11.0-RC4
       - cd ../../
       - cache clear
 
@@ -209,6 +209,7 @@ blocks:
                 - 21,120
                 - 22,127
                 - 23,131
+                - 24,137
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
@@ -245,6 +246,7 @@ blocks:
                 - 21,120
                 - 22,127
                 - 23,131
+                - 24,137
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
@@ -281,6 +283,7 @@ blocks:
                 - 21,120
                 - 22,127
                 - 23,131
+                - 24,137
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
@@ -317,6 +320,7 @@ blocks:
                 - 21,120
                 - 22,127
                 - 23,131
+                - 24,137
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
@@ -350,6 +354,7 @@ blocks:
                 - 21,120
                 - 22,127
                 - 23,131
+                - 24,137
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
@@ -385,6 +390,7 @@ blocks:
                 - 21,120
                 - 22,127
                 - 23,131
+                - 24,137
           commands:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
@@ -439,6 +445,7 @@ blocks:
                 - 21.6.1,120
                 - 22.2.0,127
                 - 23.2.0,131
+                - 24.3.0,137
           commands:
             - $env:NODE_VERSION = $env:NODE_VERSION_ABI.Split(',')[0]
             - $env:NODE_ABI = $env:NODE_VERSION_ABI.Split(',')[1]
@@ -449,6 +456,7 @@ blocks:
             - pip install setuptools
             - $env:ARTIFACT_KEY = "confluent-kafka-javascript-${env:SEMAPHORE_GIT_TAG_NAME}-node-v${env:NODE_ABI}-${env:PLATFORM}-${env:LIBC}-${env:ARCHITECTURE}.tar.gz"
             - echo "$env:ARTIFACT_KEY"
+            - npm config delete registry # we have no requirement for internal packages.
             - npm ci # node-pre-gyp will fallback to build here, because new tag implies no release yet.
             - npx node-pre-gyp package
             - ls "build/stage/${env:SEMAPHORE_GIT_TAG_NAME}/${env:ARTIFACT_KEY}"

@@ -167,6 +167,7 @@ blocks:
             - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version '4.0.0'
               --cpversion 7.9.0
+              --conf '["group.consumer.min.session.timeout.ms=1", "group.consumer.min.heartbeat.interval.ms=1"]'
               --cmd 'make quick')
 
 

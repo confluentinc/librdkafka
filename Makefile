@@ -80,7 +80,7 @@ rpm: distclean
 	$(MAKE) -C packaging/rpm
 
 LICENSES.txt: .PHONY
-	@(for i in LICENSE LICENSE.*[^~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
+	@(for i in LICENSE LICENSE.*[!~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
 	@cmp $@ $@.tmp || mv -f $@.tmp $@ ; rm -f $@.tmp
 
 

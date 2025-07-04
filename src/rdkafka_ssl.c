@@ -237,14 +237,12 @@ rd_kafka_transport_ssl_io_update(rd_kafka_transport_t *rktrans,
                         rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb, errstr,
                                            errstr_size);
                 else if (!rd_socket_errno) {
-                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
-                                   "Disconnected: connection closed by "
-                                   "peer");
-                        rd_snprintf(errstr, errstr_size, "Disconnected");
+                        rd_snprintf(errstr, errstr_size,
+                                    "Disconnected: connection closed by "
+                                    "peer");
                 } else if (rd_socket_errno == ECONNRESET) {
-                        rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
-                                   "Disconnected: connection reset by peer");
-                        rd_snprintf(errstr, errstr_size, "Disconnected");
+                        rd_snprintf(errstr, errstr_size,
+                                    "Disconnected: connection reset by peer");
                 } else
                         rd_snprintf(errstr, errstr_size,
                                     "SSL transport error: %s",
@@ -252,9 +250,8 @@ rd_kafka_transport_ssl_io_update(rd_kafka_transport_t *rktrans,
                 return -1;
 
         case SSL_ERROR_ZERO_RETURN:
-                rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SOCKET",
-                           "Disconnected: SSL connection closed by peer");
-                rd_snprintf(errstr, errstr_size, "Disconnected");
+                rd_snprintf(errstr, errstr_size,
+                            "Disconnected: SSL connection closed by peer");
                 return -1;
 
         default:
@@ -676,7 +673,7 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
                             " (install ca-certificates package)"
 #endif
                             ;
-                else if (!strcmp(errstr, "Disconnected")) {
+                else if (rd_kafka_transport_error_disconnected(errstr)) {
                         extra = ": connecting to a PLAINTEXT broker listener?";
                         /* Disconnects during handshake are most likely
                          * not due to SSL, but rather at the transport level */

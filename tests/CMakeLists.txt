@@ -162,6 +162,7 @@ target_link_libraries(test-runner PUBLIC rdkafka++)
 add_test(NAME RdKafkaTestInParallel COMMAND test-runner -p5)
 add_test(NAME RdKafkaTestSequentially COMMAND test-runner -p1)
 add_test(NAME RdKafkaTestBrokerLess COMMAND test-runner -p5 -l)
+add_test(NAME RdKafkaTestBrokerLessQuick COMMAND test-runner -p5 -l -Q)
 
 if(NOT WIN32 AND NOT APPLE)
   set(tests_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

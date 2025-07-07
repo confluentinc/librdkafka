@@ -311,6 +311,24 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
 }
 
 /**
+ * @brief Check that at least a ApiVersion greater or equal to
+ *        \p minver exists for \p ApiKey.
+ *
+ * @returns `rd_true` if the broker supports \p ApiKey with
+ *          a version greater than or equal to \p minver, else `rd_false`.
+ * @locks none
+ * @locks_acquired rd_kafka_broker_lock()
+ * @locality any
+ */
+rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver) {
+        return rd_kafka_broker_ApiVersion_supported0(
+                   rkb, ApiKey, minver, INT16_MAX, NULL,
+                   rd_true /* do_lock */) != -1;
+}
+
+/**
  * @brief Set broker state.
  *
  *        \c rkb->rkb_state is the previous state, while

@@ -145,12 +145,16 @@ rd_kafka_msgset_writer_select_MsgVersion(rd_kafka_msgset_writer_t *msetw) {
          * by both client and broker, else disable compression.
          */
         if (msetw->msetw_compression &&
-            (rd_kafka_broker_ApiVersion_supported(
-                 rkb, RD_KAFKAP_Produce, 0,
-                 compr_req[msetw->msetw_compression].ApiVersion, NULL) == -1 ||
-             (compr_req[msetw->msetw_compression].feature &&
-              !(msetw->msetw_rkb->rkb_features &
-                compr_req[msetw->msetw_compression].feature)))) {
+            (
+                /* ApiVersion is smaller than the minimum one */
+                !rd_kafka_broker_ApiVersion_at_least(
+                    rkb, RD_KAFKAP_Produce,
+                    compr_req[msetw->msetw_compression].ApiVersion) ||
+                /* There's a corresponding feature and it isn't supported
+                 * by this broker. */
+                (compr_req[msetw->msetw_compression].feature &&
+                 !(msetw->msetw_rkb->rkb_features &
+                   compr_req[msetw->msetw_compression].feature)))) {
                 if (unlikely(
                         rd_interval(&rkb->rkb_suppress.unsupported_compression,
                                     /* at most once per day */

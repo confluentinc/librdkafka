@@ -407,13 +407,7 @@ static void rd_kafka_parse_Metadata_update_topic(
  * @locality rdkafka main thread
  */
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
-        int features;
-        int16_t ApiVersion = 0;
-
-        ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
-
-        return ApiVersion >= 9;
+        return rd_kafka_broker_ApiVersion_at_least(rkb, RD_KAFKAP_Metadata, 9);
 }
 
 /* Populates the topic partition to rack mapping for the the topic given by

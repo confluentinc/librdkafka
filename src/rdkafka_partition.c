@@ -146,8 +146,8 @@ static void rd_kafka_toppar_consumer_lag_req(rd_kafka_toppar_t *rktp) {
          * broker supports FETCH >= v5, since this will be set when
          * doing fetch requests.
          */
-        if (rd_kafka_broker_ApiVersion_supported(
-                rktp->rktp_broker, RD_KAFKAP_Fetch, 0, 5, NULL) == 5) {
+        if (rd_kafka_broker_ApiVersion_at_least(rktp->rktp_broker,
+                                                RD_KAFKAP_Fetch, 5)) {
                 rd_kafka_toppar_unlock(rktp);
                 return;
         }

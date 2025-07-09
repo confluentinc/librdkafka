@@ -1,3 +1,23 @@
+# librdkafka v2.11.1
+
+librdkafka v2.11.1 is a maintenance release:
+
+* Made the conditions for enabling the features future proof (#5130).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #4948, #4956.
+  Made the conditions for enabling the features future proof, allowing to
+  remove RPC versions in a subsequent Apache Kafka version without disabling
+  features. The existing checks were matching a single version instead of
+  a range and were failing if the older version was removed.
+  Happening since 1.x (#5130).
+
+
+
 # librdkafka v2.11.0
 
 librdkafka v2.11.0 is a feature release:

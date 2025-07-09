@@ -343,7 +343,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         rd_kafka_secproto_t rkb_proto;
 
-        int rkb_down_reported; /* Down event reported */
+        /** Down event was reported for this broker
+         *  after last connection to any broker. */
+        rd_atomic32_t rkb_down_reported;
 #if WITH_SASL_CYRUS
         rd_kafka_timer_t rkb_sasl_kinit_refresh_tmr;
 #endif

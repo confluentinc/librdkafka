@@ -580,13 +580,14 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
                    identical ? ": identical to last error" : "",
                    suppress ? ": error log suppressed" : "");
 
-        if (level != LOG_DEBUG && (level <= LOG_CRIT || !suppress)) {
+        if (level <= LOG_WARNING && (level <= LOG_CRIT || !suppress)) {
                 rd_kafka_log(rkb->rkb_rk, level, "FAIL", "%s: %s",
                              rkb->rkb_name, errstr);
 
-                /* Send ERR op to application for processing. */
-                rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, err, "%s: %s",
-                                  rkb->rkb_name, errstr);
+                if (level <= LOG_ERR)
+                        /* Send ERR op to application for processing. */
+                        rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, err, "%s: %s",
+                                          rkb->rkb_name, errstr);
         }
 }
 

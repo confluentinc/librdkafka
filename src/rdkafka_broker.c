@@ -329,6 +329,25 @@ rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
 }
 
 /**
+ * @brief Reset broker down reported flag for all brokers.
+ *        In case it was set to 1 it will be reset to 0 and
+ *        the broker down count will be decremented.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_rdlock()
+ * @locality any
+ */
+static void rd_kafka_broker_reset_any_broker_down_reported(rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_atomic32_set(&rkb->rkb_down_reported, 0) == 1)
+                        rd_atomic32_sub(&rk->rk_broker_down_cnt, 1);
+        }
+        rd_kafka_rdunlock(rk);
+}
+
+/**
  * @brief Set broker state.
  *
  *        \c rkb->rkb_state is the previous state, while
@@ -338,7 +357,8 @@ rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
  * @locality broker thread
  */
 void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
-        rd_bool_t trigger_monitors = rd_false;
+        rd_bool_t trigger_monitors = rd_false,
+                  skip_broker_down = rkb->rkb_c.skip_broker_down;
 
         if ((int)rkb->rkb_state == state)
                 return;
@@ -348,61 +368,65 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                      rd_kafka_broker_state_names[rkb->rkb_state],
                      rd_kafka_broker_state_names[state]);
 
+        if (rd_kafka_broker_state_is_down(state) && skip_broker_down)
+                /* Reset the flag so if it disconnects again it won't be
+                 * treated as a planned disconnection. */
+                rkb->rkb_c.skip_broker_down = rd_false;
+
         if (rkb->rkb_source == RD_KAFKA_INTERNAL ||
             RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                 /* no-op */
-        } else if (rd_kafka_broker_state_is_down(state) &&
-                   !rkb->rkb_down_reported) {
-                if (rkb->rkb_c.skip_broker_down) {
-                        /* Reset the flag so if it doesn't re-connect it's
-                         * not treated as a planned disconnection. */
-                        rkb->rkb_c.skip_broker_down = rd_false;
-                } else {
-                        /* Propagate ALL_BROKERS_DOWN event if all brokers are
-                         * now down, unless we're terminating.
-                         * Only trigger for brokers that has an address set,
-                         * e.g., not logical brokers that lost their address. */
-                        if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt,
-                                            1) ==
-                                rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
-                                    rd_atomic32_get(
-                                        &rkb->rkb_rk->rk_logical_broker_cnt) &&
-                            !rd_kafka_terminating(rkb->rkb_rk)) {
-                                rd_kafka_rebootstrap(rkb->rkb_rk);
-                                rd_kafka_op_err(
-                                    rkb->rkb_rk,
-                                    RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
-                                    "%i/%i brokers are down",
-                                    rd_atomic32_get(
-                                        &rkb->rkb_rk->rk_broker_down_cnt),
-                                    rd_atomic32_get(
-                                        &rkb->rkb_rk->rk_broker_cnt) -
-                                        rd_atomic32_get(
-                                            &rkb->rkb_rk
-                                                 ->rk_logical_broker_cnt));
-                        }
-                        rkb->rkb_down_reported = 1;
+        } else if (rd_kafka_broker_state_is_down(state) && !skip_broker_down &&
+                   /* Only 0 -> 1 */
+                   rd_atomic32_set(&rkb->rkb_down_reported, 1) == 0) {
+
+                /* Propagate ALL_BROKERS_DOWN event if all brokers are
+                 * now down, unless we're terminating. */
+                if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
+                        rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
+                            rd_atomic32_get(
+                                &rkb->rkb_rk->rk_logical_broker_cnt) &&
+                    !rd_kafka_terminating(rkb->rkb_rk)) {
+                        rd_kafka_rebootstrap(rkb->rkb_rk);
+                        rd_kafka_op_err(
+                            rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+                            "%i/%i brokers are down",
+                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_down_cnt),
+                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
+                                rd_atomic32_get(
+                                    &rkb->rkb_rk->rk_logical_broker_cnt));
                 }
 
         } else if (rd_kafka_broker_state_is_up(state) &&
-                   rkb->rkb_down_reported) {
+                   /* Only 1 -> 0 */
+                   rd_atomic32_set(&rkb->rkb_down_reported, 0) == 1) {
                 rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
-                rkb->rkb_down_reported = 0;
         }
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
                 if (rd_kafka_broker_state_is_up(state) &&
                     !rd_kafka_broker_state_is_up(rkb->rkb_state)) {
-                        /* Up -> Down */
-                        if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                                rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
-                                                1);
+                        /* ~Up -> Up */
+                        if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
+                                /* If at least one broker connects we reset
+                                 * the down counter to try again with rest of
+                                 * brokers. Otherwise, a single broker
+                                 * connection can cause `ALL_BROKERS_DOWN` to
+                                 * get triggered even if the connection to rest
+                                 * of brokers was restored but they didn't
+                                 * attempt a re-connection because of sparse
+                                 * broker connections. */
+                                if (rd_atomic32_add(
+                                        &rkb->rkb_rk->rk_broker_up_cnt, 1) == 1)
+                                        rd_kafka_broker_reset_any_broker_down_reported(
+                                            rkb->rkb_rk);
+                        }
 
                         trigger_monitors = rd_true;
 
                 } else if (rd_kafka_broker_state_is_up(rkb->rkb_state) &&
                            !rd_kafka_broker_state_is_up(state)) {
-                        /* ~Down(!Up) -> Up */
+                        /* Up -> Down */
                         if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 rd_atomic32_sub(&rkb->rkb_rk->rk_broker_up_cnt,
                                                 1);
@@ -4719,7 +4743,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
 
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                         rd_atomic32_sub(&rkb->rkb_rk->rk_logical_broker_cnt, 1);
-                } else if (rkb->rkb_down_reported) {
+                } else if (rd_atomic32_set(&rkb->rkb_down_reported, 0) == 1) {
+                        /* Only 1 -> 0 */
                         rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
                 }
                 rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
@@ -4951,6 +4976,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rkb->rkb_reconnect_backoff_ms = rk->rk_conf.reconnect_backoff_ms;
         rd_atomic32_init(&rkb->rkb_persistconn.coord, 0);
         rd_atomic32_init(&rkb->termination_in_progress, 0);
+        rd_atomic32_init(&rkb->rkb_down_reported, 0);
 
         rd_atomic64_init(&rkb->rkb_c.ts_send, 0);
         rd_atomic64_init(&rkb->rkb_c.ts_recv, 0);

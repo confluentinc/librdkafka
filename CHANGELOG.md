@@ -3,7 +3,7 @@
 librdkafka v2.11.1 is a maintenance release:
 
 * Made the conditions for enabling the features future proof (#5130).
-* Avoid returning an all brokers down error on planned disconnections (#).
+* Avoid returning an all brokers down error on planned disconnections (#5126).
 
 
 ## Fixes
@@ -17,7 +17,7 @@ librdkafka v2.11.1 is a maintenance release:
   a range and were failing if the older version was removed.
   Happening since 1.x (#5130).
 
-* Issues: #.
+* Issues: #5142.
   Avoid returning an all brokers down error on planned disconnections.
   This is done by avoiding to count planned disconnections, such as idle
   disconnections, broker host change and similar as events that can cause
@@ -25,7 +25,7 @@ librdkafka v2.11.1 is a maintenance release:
   since 2.10.0 possibly starting a re-bootstrap sequence.
   Also avoids the same error just after connecting and disconnecting from
   a single broker, rest of brokers need to be tried again in that case.
-  Happening since 1.x (#).
+  Happening since 1.x (#5126).
 
 
 

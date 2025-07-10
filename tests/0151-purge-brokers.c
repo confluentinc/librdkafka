@@ -461,7 +461,7 @@ do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb(int action) {
 static rd_bool_t
 do_test_down_then_up_no_rebootstrap_loop_await_after_action_cb(int action) {
         if (action == 1) {
-                rd_sleep(5);
+                rd_sleep(6);
         }
         return rd_false;
 }
@@ -493,16 +493,19 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb,
             do_test_down_then_up_no_rebootstrap_loop_await_after_action_cb);
 
-        /* With connections that go always to the broker without previous
-         * connections (the re-bootstrapped one) we get 5 re-bootstrap
-         * sequences. Given a 90% probability of selecting the learned broker
-         * there's a 10% probability of selecting the bootstrap one.
-         * The expected value is 0.5, we expect <= 3 here. */
+        /* With a rebootstrap every time the bootstrap brokers are removed
+         * we get 6 re-bootstrap sequences.
+         * With the fix we require connection to all learned brokers before
+         * reaching all brokers down again.
+         * In this case we have to connect to the bootstrap broker
+         * and the learned broker, 2s in the slowest case as it depends
+         * on periodic 10s brokers refresh timer too.
+         * We expect 5 or less re-bootstrap sequences. */
         TEST_ASSERT(
             rd_atomic32_get(
                 &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt) <=
-                3,
-            "Expected <= 3 re-bootstrap sequences, got %d",
+                5,
+            "Expected <= 5 re-bootstrap sequences, got %d",
             rd_atomic32_get(
                 &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt));
         SUB_TEST_PASS();

@@ -5695,25 +5695,6 @@ static int rd_kafka_broker_filter_never_connected(rd_kafka_broker_t *rkb,
         return rd_atomic32_get(&rkb->rkb_c.connects);
 }
 
-/**
- * @brief Filter out brokers that aren't learned ones.
- */
-static int rd_kafka_broker_filter_learned(rd_kafka_broker_t *rkb,
-                                          void *opaque) {
-        return rkb->rkb_source != RD_KAFKA_LEARNED;
-}
-
-/**
- * @brief Filter out brokers that aren't learned ones or
- *        that have at least one connection attempt.
- */
-static int
-rd_kafka_broker_filter_learned_never_connected(rd_kafka_broker_t *rkb,
-                                               void *opaque) {
-        return rd_atomic32_get(&rkb->rkb_c.connects) ||
-               rkb->rkb_source != RD_KAFKA_LEARNED;
-}
-
 static void rd_kafka_connect_any_timer_cb(rd_kafka_timers_t *rkts, void *arg) {
         const char *reason = (const char *)arg;
         rd_kafka_t *rk     = rkts->rkts_rk;
@@ -5769,63 +5750,13 @@ void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason) {
                 return;
         }
 
-        /* In case there no learned brokers never connected to,
-         * 90% of times select a learned broker in init state.
-         *
-         * This avoids problems after re-bootstrapping that cause
-         * the bootstrap brokers to be always preferred
-         * given there are learned brokers that already connected and
-         * caused ALL_BROKERS_DOWN.
-         *
-         * If that happens those learned brokers
-         * that already connected are never selected unless
-         * they disappear and re-appear again as new brokers with 0 connects,
-         * so we have to assing a higher probability to it.
-         *
-         * Additionally we cannot always prefer the learned
-         * brokers as their address could have changed and we need to
-         * connect to the bootstrap brokers to know that.
-         * KIP-1102 `metadata.recovery.rebootstrap.trigger.ms` would
-         * be triggered in this case after 5 mins
-         * but it's a long time to wait.
-         */
-
-        /* First pass:  only match learned brokers never connected to
-         *              in state INIT, to try to exhaust
-         *              the available brokers so that an
-         *              ERR_ALL_BROKERS_DOWN error can be raised. */
-        rkb = rd_kafka_broker_random(
-            rk, RD_KAFKA_BROKER_STATE_INIT,
-            rd_kafka_broker_filter_learned_never_connected, NULL);
-
-#if ENABLE_DEVEL == 1
-        if (rkb)
-                rd_dassert(rkb->rkb_source == RD_KAFKA_LEARNED);
-#endif
-
-        if (!rkb && rd_jitter(0, 9) > 0) { /* 0.9 probability */
-                /* Second pass:  only match learned brokers
-                 *               in state INIT. */
-                rkb = rd_kafka_broker_random(rk, RD_KAFKA_BROKER_STATE_INIT,
-                                             rd_kafka_broker_filter_learned,
-                                             NULL);
-
-#if ENABLE_DEVEL == 1
-                if (rkb)
-                        rd_dassert(rkb->rkb_source == RD_KAFKA_LEARNED);
-#endif
-        }
-
-        /* Third pass:  only match brokers never connected to,
+        /* First pass:  only match brokers never connected to,
          *              to try to exhaust the available brokers
-         *              so that an ERR_ALL_BROKERS_DOWN error
-         *              can be raised. */
-        if (!rkb)
-                rkb = rd_kafka_broker_random(
-                    rk, RD_KAFKA_BROKER_STATE_INIT,
-                    rd_kafka_broker_filter_never_connected, NULL);
-
-        /* Fourth pass: match any non-connected/non-connecting broker. */
+         *              so that an ERR_ALL_BROKERS_DOWN error can be raised. */
+        rkb = rd_kafka_broker_random(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                     rd_kafka_broker_filter_never_connected,
+                                     NULL);
+        /* Second pass: match any non-connected/non-connecting broker. */
         if (!rkb)
                 rkb = rd_kafka_broker_random(rk, RD_KAFKA_BROKER_STATE_INIT,
                                              NULL, NULL);

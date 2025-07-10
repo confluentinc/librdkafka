@@ -311,25 +311,6 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
 }
 
 /**
- * @brief Reset broker down reported flag for all brokers.
- *        In case it was set to 1 it will be reset to 0 and
- *        the broker down count will be decremented.
- *
- * @locks none
- * @locks_acquired rd_kafka_rdlock()
- * @locality any
- */
-static void rd_kafka_broker_reset_any_broker_down_reported(rd_kafka_t *rk) {
-        rd_kafka_broker_t *rkb;
-        rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rd_atomic32_set(&rkb->rkb_down_reported, 0) == 1)
-                        rd_atomic32_sub(&rk->rk_broker_down_cnt, 1);
-        }
-        rd_kafka_rdunlock(rk);
-}
-
-/**
  * @brief Set broker state.
  *
  *        \c rkb->rkb_state is the previous state, while
@@ -398,10 +379,10 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                                  * of brokers was restored but they didn't
                                  * attempt a re-connection because of sparse
                                  * broker connections. */
-                                if (rd_atomic32_add(
-                                        &rkb->rkb_rk->rk_broker_up_cnt, 1) == 1)
-                                        rd_kafka_broker_reset_any_broker_down_reported(
-                                            rkb->rkb_rk);
+                                rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
+                                                1);
+                                rd_kafka_reset_any_broker_down_reported(
+                                    rkb->rkb_rk);
                         }
 
                         trigger_monitors = rd_true;

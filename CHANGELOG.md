@@ -3,9 +3,15 @@
 librdkafka v2.11.0 is a feature release:
 
 * [KIP-1102](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1102%3A+Enable+clients+to+rebootstrap+based+on+timeout+or+error+code) Enable clients to rebootstrap based on timeout or error code (#4981).
+* [KIP-1139](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1139%3A+Add+support+for+OAuth+jwt-bearer+grant+type) Add support for OAuth jwt-bearer grant type (#4978).
 * Fix for poll ratio calculation in case the queues are forwarded (#5017).
 * Fix data race when buffer queues are being reset instead of being
   initialized (#4718).
+* Features BROKER_BALANCED_CONSUMER and SASL_GSSAPI don't depend on
+  JoinGroup v0 anymore, missing in AK 4.0 and CP 8.0 (#5131).
+* Improve HTTPS CA certificates configuration by probing several paths
+  when OpenSSL is statically linked and providing a way to customize their location
+  or value (#).
 
 
 ## Fixes
@@ -17,6 +23,13 @@ librdkafka v2.11.0 is a feature release:
   with the statistics callback in main thread gathering the buffer counts.
   Solved by resetting the atomic counters instead of initializing them.
   Happening since 1.x (#4718).
+* Issues: #4948
+  Features BROKER_BALANCED_CONSUMER and SASL_GSSAPI don't depend on
+  JoinGroup v0 anymore, missing in AK 4.0 and CP 8.0. This PR partially
+  fixes the linked issue, a complete fix for all features will follow.
+  Rest of fixes are necessary only for a subsequent Apache Kafka major
+  version (e.g. AK 5.x).
+  Happening since 1.x (#5131).
 
 ### Telemetry fixes
 

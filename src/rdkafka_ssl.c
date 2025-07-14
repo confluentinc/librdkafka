@@ -135,11 +135,14 @@ const char *rd_kafka_ssl_last_error_str(void) {
  *
  * If 'rkb' is non-NULL broker-specific logging will be used,
  * else it will fall back on global 'rk' debugging.
+ *
+ * `ctx_identifier` is a string used to customize the log message.
  */
-static char *rd_kafka_ssl_error(rd_kafka_t *rk,
-                                rd_kafka_broker_t *rkb,
-                                char *errstr,
-                                size_t errstr_size) {
+char *rd_kafka_ssl_error0(rd_kafka_t *rk,
+                          rd_kafka_broker_t *rkb,
+                          const char *ctx_identifier,
+                          char *errstr,
+                          size_t errstr_size) {
         unsigned long l;
         const char *file, *data, *func;
         int line, flags;
@@ -166,9 +169,11 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
                 if (cnt++ > 0) {
                         /* Log last message */
                         if (rkb)
-                                rd_rkb_log(rkb, LOG_ERR, "SSL", "%s", errstr);
+                                rd_rkb_log(rkb, LOG_ERR, "SSL", "%s: %s",
+                                           ctx_identifier, errstr);
                         else
-                                rd_kafka_log(rk, LOG_ERR, "SSL", "%s", errstr);
+                                rd_kafka_log(rk, LOG_ERR, "SSL", "%s: %s",
+                                             ctx_identifier, errstr);
                 }
 
                 ERR_error_string_n(l, buf, sizeof(buf));
@@ -188,12 +193,18 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
 
         if (cnt == 0)
                 rd_snprintf(errstr, errstr_size,
-                            "No further error information available");
+                            "%s: No further error information available",
+                            ctx_identifier);
 
         return errstr;
 }
 
-
+static char *rd_kafka_ssl_error(rd_kafka_t *rk,
+                                rd_kafka_broker_t *rkb,
+                                char *errstr,
+                                size_t errstr_size) {
+        return rd_kafka_ssl_error0(rk, rkb, "kafka", errstr, errstr_size);
+}
 
 /**
  * Set transport IO event polling based on SSL error.
@@ -802,6 +813,7 @@ static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
  * @brief Attempt load CA certificates from a Windows Certificate store.
  */
 static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
+                                            const char *ctx_identifier,
                                             SSL_CTX *ctx,
                                             const char *store_name) {
         HCERTSTORE w_store;
@@ -816,10 +828,11 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         /* Convert store_name to wide-char */
         werr = mbstowcs_s(&wsize, NULL, 0, store_name, strlen(store_name));
         if (werr || wsize < 2 || wsize > 1000) {
-                rd_kafka_log(rk, LOG_ERR, "CERTSTORE",
-                             "Invalid Windows certificate store name: %.*s%s",
-                             30, store_name,
-                             wsize < 2 ? " (empty)" : " (truncated)");
+                rd_kafka_log(
+                    rk, LOG_ERR, "CERTSTORE",
+                    "%s: Invalid Windows certificate store name: %.*s%s",
+                    ctx_identifier, 30, store_name,
+                    wsize < 2 ? " (empty)" : " (truncated)");
                 return -1;
         }
         wstore_name = rd_alloca(sizeof(*wstore_name) * wsize);
@@ -835,9 +848,9 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         if (!w_store) {
                 rd_kafka_log(
                     rk, LOG_ERR, "CERTSTORE",
-                    "Failed to open Windows certificate "
+                    "%s: Failed to open Windows certificate "
                     "%s store: %s",
-                    store_name,
+                    ctx_identifier, store_name,
                     rd_strerror_w32(GetLastError(), errstr, sizeof(errstr)));
                 return -1;
         }
@@ -873,9 +886,9 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         CertCloseStore(w_store, 0);
 
         rd_kafka_dbg(rk, SECURITY, "CERTSTORE",
-                     "%d certificate(s) successfully added from "
+                     "%s: %d certificate(s) successfully added from "
                      "Windows Certificate %s store, %d failed",
-                     cnt, store_name, fail_cnt);
+                     ctx_identifier, cnt, store_name, fail_cnt);
 
         if (cnt == 0 && fail_cnt > 0)
                 return -1;
@@ -888,9 +901,10 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
  *
  * @returns the number of successfully loaded certificates, or -1 on error.
  */
-static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
-                                             SSL_CTX *ctx,
-                                             const char *store_names) {
+int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
+                                      const char *ctx_identifier,
+                                      SSL_CTX *ctx,
+                                      const char *store_names) {
         char *s;
         int cert_cnt = 0, fail_cnt = 0;
 
@@ -924,7 +938,8 @@ static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
                         s = "";
                 }
 
-                r = rd_kafka_ssl_win_load_cert_store(rk, ctx, store_name);
+                r = rd_kafka_ssl_win_load_cert_store(rk, ctx_identifier, ctx,
+                                                     store_name);
                 if (r != -1)
                         cert_cnt += r;
                 else
@@ -938,7 +953,32 @@ static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
 }
 #endif /* MSC_VER */
 
+/**
+ * @brief Probe for a single \p path and if found and not an empty directory,
+ *        set it on the \p ctx.
+ *
+ * @returns 0 if CA location was set with an error, 1 if it was set correctly,
+ *          -1 if path should be skipped.
+ */
+static int rd_kafka_ssl_set_ca_path(rd_kafka_t *rk,
+                                    const char *ctx_identifier,
+                                    const char *path,
+                                    SSL_CTX *ctx,
+                                    rd_bool_t *is_dir) {
+        if (!rd_file_stat(path, is_dir))
+                return -1;
 
+        if (*is_dir && rd_kafka_dir_is_empty(path))
+                return -1;
+
+        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                     "Setting default CA certificate location for %s "
+                     "to \"%s\"",
+                     ctx_identifier, path);
+
+        return SSL_CTX_load_verify_locations(ctx, *is_dir ? NULL : path,
+                                             *is_dir ? path : NULL);
+}
 
 /**
  * @brief Probe for the system's CA certificate location and if found set it
@@ -946,8 +986,9 @@ static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
  *
  * @returns 0 if CA location was set, else -1.
  */
-static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
-                                                          SSL_CTX *ctx) {
+int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
+                                                   const char *ctx_identifier,
+                                                   SSL_CTX *ctx) {
 #if _WIN32
         /* No standard location on Windows, CA certs are in the ROOT store. */
         return -1;
@@ -999,34 +1040,21 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
         int i;
 
         for (i = 0; (path = paths[i]); i++) {
-                struct stat st;
                 rd_bool_t is_dir;
-                int r;
-
-                if (stat(path, &st) != 0)
+                int r = rd_kafka_ssl_set_ca_path(rk, ctx_identifier, path, ctx,
+                                                 &is_dir);
+                if (r == -1)
                         continue;
 
-                is_dir = S_ISDIR(st.st_mode);
-
-                if (is_dir && rd_kafka_dir_is_empty(path))
-                        continue;
-
-                rd_kafka_dbg(rk, SECURITY, "CACERTS",
-                             "Setting default CA certificate location "
-                             "to %s, override with ssl.ca.location",
-                             path);
-
-                r = SSL_CTX_load_verify_locations(ctx, is_dir ? NULL : path,
-                                                  is_dir ? path : NULL);
                 if (r != 1) {
                         char errstr[512];
                         /* Read error and clear the error stack */
                         rd_kafka_ssl_error(rk, NULL, errstr, sizeof(errstr));
                         rd_kafka_dbg(rk, SECURITY, "CACERTS",
                                      "Failed to set default CA certificate "
-                                     "location to %s %s: %s: skipping",
+                                     "location to %s %s for %s: %s: skipping",
                                      is_dir ? "directory" : "file", path,
-                                     errstr);
+                                     ctx_identifier, errstr);
                         continue;
                 }
 
@@ -1035,7 +1063,8 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location(rd_kafka_t *rk,
 
         rd_kafka_dbg(rk, SECURITY, "CACERTS",
                      "Unable to find any standard CA certificate"
-                     "paths: is the ca-certificates package installed?");
+                     "paths for %s: is the ca-certificates package installed?",
+                     ctx_identifier);
         return -1;
 #endif
 }
@@ -1255,7 +1284,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 /* Attempt to load CA root certificates from the
                  * configured Windows certificate stores. */
                 r = rd_kafka_ssl_win_load_cert_stores(
-                    rk, ctx, rk->rk_conf.ssl.ca_cert_stores);
+                    rk, "kafka", ctx, rk->rk_conf.ssl.ca_cert_stores);
                 if (r == 0) {
                         rd_kafka_log(
                             rk, LOG_NOTICE, "CERTSTORE",
@@ -1286,8 +1315,8 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                          * of standard CA certificate paths and use the
                          * first one that is found.
                          * Ignore failures. */
-                        r = rd_kafka_ssl_probe_and_set_default_ca_location(rk,
-                                                                           ctx);
+                        r = rd_kafka_ssl_probe_and_set_default_ca_location(
+                            rk, "kafka", ctx);
                 }
 
                 if (r == -1) {

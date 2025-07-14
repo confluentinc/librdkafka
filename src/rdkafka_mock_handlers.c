@@ -2896,7 +2896,7 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                 }
                         } else {
                                 rd_kafka_mock_cgrp_consumer_member_leave(
-                                    mcgrp, member);
+                                    mcgrp, member, MemberEpoch == -2);
                                 member = NULL;
                         }
                 } else {

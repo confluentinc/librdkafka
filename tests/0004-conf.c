@@ -720,6 +720,75 @@ int main_0004_conf(int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
         }
 
+#if WITH_OAUTHBEARER_OIDC
+        {
+                TEST_SAY(
+                    "Verify that https.ca.location is mutually "
+                    "exclusive with https.ca.pem\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "https.ca.pem",
+                              "-----BEGIN CERTIFICATE-----");
+                test_conf_set(conf, "https.ca.location",
+                              "/path/to/certificate.pem");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                TEST_ASSERT(
+                    !rk, "Expected rd_kafka_new() to fail, but it succeeded");
+                TEST_ASSERT(!strcmp(errstr,
+                                    "`https.ca.location` and "
+                                    "`https.ca.pem` are mutually exclusive"),
+                            "Expected rd_kafka_new() to fail with: "
+                            "\"`https.ca.location` and `https.ca.pem` "
+                            "are mutually exclusive\", got: \"%s\"",
+                            errstr);
+                rd_kafka_conf_destroy(conf);
+        }
+        {
+                TEST_SAY(
+                    "Verify that https.ca.location gives an error when "
+                    "set to an invalid path\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "https.ca.location",
+                              "/?/does/!/not/exist!");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                TEST_ASSERT(
+                    !rk, "Expected rd_kafka_new() to fail, but it succeeded");
+                TEST_ASSERT(!strcmp(errstr,
+                                    "`https.ca.location` must be "
+                                    "an existing file or directory"),
+                            "Expected rd_kafka_new() to fail with: "
+                            "\"`https.ca.location` must be "
+                            "an existing file or directory\", got: \"%s\"",
+                            errstr);
+                rd_kafka_conf_destroy(conf);
+        }
+        {
+                TEST_SAY(
+                    "Verify that https.ca.location doesn't give an error when "
+                    "set to `probe`\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "https.ca.location", "probe");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                TEST_ASSERT(
+                    rk, "Expected rd_kafka_new() not to fail, but it failed");
+
+                rd_kafka_destroy(rk);
+        }
+#endif /* WITH_OAUTHBEARER_OIDC */
+
+        /* Verify that OpenSSL_AppLink is not needed on Windows (#3554) */
+
 #ifdef _WIN32
         {
                 FILE *fp;

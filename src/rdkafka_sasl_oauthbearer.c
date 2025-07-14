@@ -1256,8 +1256,13 @@ static int rd_kafka_sasl_oauthbearer_client_new(rd_kafka_transport_t *rktrans,
                 return -1;
         }
 
-        state->token_value       = rd_strdup(handle->token_value);
-        state->md_principal_name = rd_strdup(handle->md_principal_name);
+        state->token_value = rd_strdup(handle->token_value);
+        if (handle->md_principal_name)
+                state->md_principal_name = rd_strdup(handle->md_principal_name);
+        else
+                state->md_principal_name = NULL;
+
+        rd_list_init_copy(&state->extensions, &handle->extensions);
         rd_list_copy_to(&state->extensions, &handle->extensions,
                         rd_strtup_list_copy, NULL);
 
@@ -1333,13 +1338,14 @@ static int rd_kafka_sasl_oauthbearer_init(rd_kafka_t *rk,
 #if WITH_OAUTHBEARER_OIDC
         if (rk->rk_conf.sasl.oauthbearer.method ==
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
-            rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
-                rd_kafka_oidc_token_refresh_cb) {
+            (rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
+                 rd_kafka_oidc_token_jwt_bearer_refresh_cb ||
+             rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
+                 rd_kafka_oidc_token_client_credentials_refresh_cb)) {
                 handle->internal_refresh = rd_true;
                 rd_kafka_sasl_background_callbacks_enable(rk);
         }
 #endif
-
         /* Otherwise enqueue a refresh callback for the application. */
         rd_kafka_oauthbearer_enqueue_token_refresh(handle);
 

@@ -3369,6 +3369,304 @@ err:
         }
 }
 
+void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
+                                              rd_kafka_broker_t *rkb,
+                                              rd_kafka_resp_err_t err,
+                                              rd_kafka_buf_t *rkbuf,
+                                              rd_kafka_buf_t *request,
+                                              void *opaque) {
+        rd_kafka_cgrp_t *rkcg       = rk->rk_cgrp;
+        const int log_decode_errors = LOG_ERR;
+        int16_t error_code          = 0;
+        int actions                 = 0;
+        rd_kafkap_str_t error_str   = RD_KAFKAP_STR_INITIALIZER_EMPTY;
+        rd_kafkap_str_t member_id;
+        int32_t member_epoch;
+        int32_t heartbeat_interval_ms;
+        int8_t are_assignments_present;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
+
+        rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
+
+        if (rd_kafka_cgrp_will_leave(rkcg))
+                err = RD_KAFKA_RESP_ERR__OUTDATED;
+        if (err)
+                goto err;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+        rd_kafka_buf_read_i16(rkbuf, &error_code);
+        rd_kafka_buf_read_str(rkbuf, &error_str);
+
+        if (error_code) {
+                err = error_code;
+                goto err;
+        }
+
+        rd_kafka_buf_read_str(rkbuf, &member_id);
+        if (!RD_KAFKAP_STR_IS_NULL(&member_id)) {
+                rd_kafka_cgrp_set_member_id(rkcg, member_id.str);
+        }
+
+        rd_kafka_buf_read_i32(rkbuf, &member_epoch);
+        rkcg->rkcg_generation_id = member_epoch;
+
+        rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
+        if (heartbeat_interval_ms > 0) {
+                rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;
+        }
+
+        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
+
+        if (are_assignments_present == 1) {
+                rd_kafka_topic_partition_list_t *assigned_topic_partitions;
+                const rd_kafka_topic_partition_field_t assignments_fields[] = {
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                assigned_topic_partitions = rd_kafka_buf_read_topic_partitions(
+                    rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
+                    assignments_fields);
+
+                rd_kafka_dbg(
+                    rk, CGRP, "HEARTBEAT",
+                    "ShareGroupHeartbeat response received "
+                    "assigned_topic_partitions size %d",
+                    assigned_topic_partitions->cnt);
+
+                if (rd_kafka_is_dbg(rk, CGRP)) {
+                        char assigned_topic_partitions_str[512] = "NULL";
+
+                        if (assigned_topic_partitions) {
+                                rd_kafka_topic_partition_list_str(
+                                    assigned_topic_partitions,
+                                    assigned_topic_partitions_str,
+                                    sizeof(assigned_topic_partitions_str), 0);
+                        }
+
+                        rd_kafka_dbg(
+                            rk, CGRP, "HEARTBEAT",
+                            "ShareGroupHeartbeat response received target "
+                            "assignment \"%s\"",
+                            assigned_topic_partitions_str);
+                }
+
+                if (assigned_topic_partitions) {
+                        RD_IF_FREE(rkcg->rkcg_next_target_assignment,
+                                   rd_kafka_topic_partition_list_destroy);
+                        rkcg->rkcg_next_target_assignment = NULL;
+                        if (rd_kafka_cgrp_consumer_is_new_assignment_different(
+                                rkcg, assigned_topic_partitions)) {
+                                rkcg->rkcg_next_target_assignment =
+                                    assigned_topic_partitions;
+                        } else {
+                                rd_kafka_topic_partition_list_destroy(
+                                    assigned_topic_partitions);
+                                assigned_topic_partitions = NULL;
+                        }
+                }
+        }
+
+        if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY &&
+            (rkcg->rkcg_consumer_flags & RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK) &&
+            rkcg->rkcg_target_assignment) {
+                if (rkcg->rkcg_consumer_flags &
+                    RD_KAFKA_CGRP_CONSUMER_F_SENDING_ACK) {
+                        if (rkcg->rkcg_current_assignment)
+                                rd_kafka_topic_partition_list_destroy(
+                                    rkcg->rkcg_current_assignment);
+                        rkcg->rkcg_current_assignment =
+                            rd_kafka_topic_partition_list_copy(
+                                rkcg->rkcg_target_assignment);
+                        rd_kafka_topic_partition_list_destroy(
+                            rkcg->rkcg_target_assignment);
+                        rkcg->rkcg_target_assignment = NULL;
+                        rkcg->rkcg_consumer_flags &=
+                            ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK;
+
+                        if (rd_kafka_is_dbg(rkcg->rkcg_rk, CGRP)) {
+                                char rkcg_current_assignment_str[512] = "NULL";
+
+                                rd_kafka_topic_partition_list_str(
+                                    rkcg->rkcg_current_assignment,
+                                    rkcg_current_assignment_str,
+                                    sizeof(rkcg_current_assignment_str), 0);
+
+                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+                                             "Target assignment acked, new "
+                                             "current assignment "
+                                             " \"%s\"",
+                                             rkcg_current_assignment_str);
+                        }
+                } else if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) {
+                        /* We've finished reconciliation but we weren't
+                         * sending an ack, need to send a new HB with the ack.
+                         */
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rkcg, "not subscribed anymore");
+                }
+        }
+
+
+        if (rkcg->rkcg_consumer_flags &
+                RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING &&
+            rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                /* TODO: Check if this should be done only for the
+                 * steady state?
+                 */
+                rd_kafka_assignment_serve(rk);
+                rkcg->rkcg_consumer_flags &=
+                    ~RD_KAFKA_CGRP_CONSUMER_F_SERVE_PENDING;
+        }
+
+        if (rkcg->rkcg_next_target_assignment) {
+                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) {
+                        rd_kafka_cgrp_consumer_next_target_assignment_request_metadata(
+                            rk, rkb);
+                } else {
+                        /* Consumer left the group sending an HB request
+                         * while this one was in-flight. */
+                        rd_kafka_topic_partition_list_destroy(
+                            rkcg->rkcg_next_target_assignment);
+                        rkcg->rkcg_next_target_assignment = NULL;
+                }
+        }
+
+        if (rd_kafka_cgrp_consumer_subscription_preconditions_met(rkcg))
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                    rkcg, "send new subscription");
+
+        rkcg->rkcg_consumer_flags &=
+            ~RD_KAFKA_CGRP_CONSUMER_F_SENDING_NEW_SUBSCRIPTION &
+            ~RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
+        rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(rkcg);
+        rkcg->rkcg_last_heartbeat_err         = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rkcg->rkcg_expedite_heartbeat_retries = 0;
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+
+        return;
+
+err_parse:
+        err = rkbuf->rkbuf_err;
+err:
+        rkcg->rkcg_last_heartbeat_err = err;
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+        switch (err) {
+        case RD_KAFKA_RESP_ERR__DESTROY:
+                /* quick cleanup */
+                return;
+
+        case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
+                    "ShareGroupHeartbeat failed due to coordinator (%s) "
+                    "loading in progress: %s: "
+                    "retrying",
+                    rkcg->rkcg_curr_coord
+                        ? rd_kafka_broker_name(rkcg->rkcg_curr_coord)
+                        : "none",
+                    rd_kafka_err2str(err));
+                actions = RD_KAFKA_ERR_ACTION_RETRY;
+                break;
+
+        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
+        case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
+                    "ShareGroupHeartbeat failed due to coordinator (%s) "
+                    "no longer available: %s: "
+                    "re-querying for coordinator",
+                    rkcg->rkcg_curr_coord
+                        ? rd_kafka_broker_name(rkcg->rkcg_curr_coord)
+                        : "none",
+                    rd_kafka_err2str(err));
+                /* Remain in joined state and keep querying for coordinator */
+                actions = RD_KAFKA_ERR_ACTION_REFRESH;
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
+                             "ShareGroupHeartbeat failed due to: %s: "
+                             "will rejoin the group",
+                             rd_kafka_err2str(err));
+                rkcg->rkcg_consumer_flags |=
+                    RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
+                return;
+
+        case RD_KAFKA_RESP_ERR_INVALID_REQUEST:
+        case RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED:
+        case RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION:
+        case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
+        case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
+                actions = RD_KAFKA_ERR_ACTION_FATAL;
+                break;
+
+        default:
+                actions = rd_kafka_err_action(
+                    rkb, err, request,
+
+                    RD_KAFKA_ERR_ACTION_SPECIAL,
+                    RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+
+                    RD_KAFKA_ERR_ACTION_END);
+                break;
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
+                rd_kafka_set_fatal_error(
+                    rkcg->rkcg_rk, err,
+                    "ShareGroupHeartbeat fatal error: %s",
+                    rd_kafka_err2str(err));
+                rd_kafka_cgrp_revoke_all_rejoin_maybe(
+                    rkcg, rd_true, /*assignments lost*/
+                    rd_true,       /*initiating*/
+                    "Fatal error in ShareGroupHeartbeat API response");
+                return;
+        }
+
+        if (!rkcg->rkcg_heartbeat_intvl_ms) {
+                /* When an error happens on first HB, it should be always
+                 * retried, unless fatal, to avoid entering a tight loop
+                 * and to use exponential backoff. */
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rkcg->rkcg_consumer_flags |=
+                    RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
+                rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
+                /* If coordinator changes, HB will be expedited. */
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {
+                rd_ts_t min_error_interval =
+                    RD_MAX(rkcg->rkcg_heartbeat_intvl_ms * 1000,
+                           /* default group.consumer.heartbeat.interval.ms */
+                           5000000);
+                if (rkcg->rkcg_last_err != err ||
+                    (rd_clock() >
+                     rkcg->rkcg_ts_last_err + min_error_interval)) {
+                        rd_kafka_cgrp_set_last_err(rkcg, err);
+                        rd_kafka_consumer_err(
+                            rkcg->rkcg_q, rd_kafka_broker_id(rkb), err, 0, NULL,
+                            NULL, err,
+                            "ShareGroupHeartbeat failed: %s%s%.*s",
+                            rd_kafka_err2str(err),
+                            RD_KAFKAP_STR_LEN(&error_str) ? ": " : "",
+                            RD_KAFKAP_STR_PR(&error_str));
+                }
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
+            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
+            !rd_kafka_cgrp_will_leave(rkcg) &&
+            rd_kafka_buf_retry(rkb, request)) {
+                /* Retry */
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+        }
+}
 
 /**
  * @brief Handle Heartbeat response.
@@ -6150,6 +6448,14 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
         }
 
         rkcg->rkcg_expedite_heartbeat_retries++;
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_kafka_ShareGroupHeartbeatRequest(rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
+                member_epoch, rkcg_client_rack, rkcg_subscription_topics, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+                rd_kafka_cgrp_handle_ShareGroupHeartbeat, NULL);
+                return;
+        }
+
         rd_kafka_ConsumerGroupHeartbeatRequest(
             rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
             member_epoch, rkcg_group_instance_id, rkcg_client_rack,
@@ -6210,6 +6516,15 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_cgrp_revoke_all_rejoin(rkcg, rd_true, rd_true,
                                                 "member fenced - rejoining");
         }
+
+        /* There should be no fencing, hence no rejoining - these asserts are to test only, we don't actually need them. */
+        rd_dassert(!(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+                     (rkcg->rkcg_consumer_flags &
+                      RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN)));
+        rd_dassert(!(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+                     (rkcg->rkcg_consumer_flags &
+                      RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE)));
+
 
         switch (rkcg->rkcg_join_state) {
         case RD_KAFKA_CGRP_JOIN_STATE_INIT:
@@ -6300,6 +6615,7 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
                 /* If member is leaving, new subscription
                  * will be applied after the leave
                  * ConsumerGroupHeartbeat */
+                /* MILIND: how is new subscription applied after heartbeat, check it. */
                 if (!rd_kafka_cgrp_will_leave(rkcg))
                         rd_kafka_cgrp_consumer_apply_next_subscribe(rkcg);
         } else {

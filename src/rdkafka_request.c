@@ -2442,7 +2442,101 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                 rd_kafkap_str_destroy(subscribed_topic_regex_to_send);
 }
 
+void rd_kafka_ShareGroupHeartbeatRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    const rd_kafkap_str_t *member_id,
+    int32_t member_epoch,
+    const rd_kafkap_str_t *rack_id,
+    const rd_kafka_topic_partition_list_t *subscribed_topics,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        size_t rkbuf_size = 0;
 
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ShareGroupHeartbeat, 1, 1, &features);
+
+        rd_rkb_dbg(rkb, CGRP, "SHAREHEARTBEAT",
+                   "ShareGroupHeartbeat version %d for group \"%s\", member id "
+                   "\"%s\", topic count = %d",
+                   ApiVersion, group_id ? group_id->str : "NULL",
+                   member_id ? member_id->str : "NULL",
+                   subscribed_topics ? subscribed_topics->cnt : -1);
+
+        if (ApiVersion == -1) {
+                rd_kafka_cgrp_coord_dead(rkb->rkb_rk->rk_cgrp,
+                                         RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                                         "ShareGroupHeartbeatRequest not "
+                                         "supported by broker");
+                return;
+        }
+
+        // debug log all the fields
+        if (rd_rkb_is_dbg(rkb, CGRP)) {
+                char subscribed_topics_str[512] = "NULL";
+                if (subscribed_topics) {
+                        rd_kafka_topic_partition_list_str(
+                            subscribed_topics, subscribed_topics_str,
+                            sizeof(subscribed_topics_str), 0);
+                }
+                rd_rkb_dbg(rkb, CGRP, "SHAREHEARTBEAT",
+                           "ShareGroupHeartbeat of group id \"%s\", "
+                           "member id \"%s\", member epoch %d, rack id \"%s\""
+                           ", subscribed topics \"%s\"",
+                           group_id ? group_id->str : "NULL",
+                           member_id ? member_id->str : "NULL", member_epoch,
+                           rack_id ? rack_id->str : "NULL",
+                           subscribed_topics_str);
+        }
+
+        if (group_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(group_id);
+        if (member_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(member_id);
+        rkbuf_size += 4; /* MemberEpoch */
+        if (rack_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(rack_id);
+        if (subscribed_topics) {
+                rkbuf_size +=
+                    ((subscribed_topics->cnt * (4 + 50)) + 4 /* array size */);
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ShareGroupHeartbeat, 1, rkbuf_size, rd_true);
+
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+        rd_kafka_buf_write_i32(rkbuf, member_epoch);
+        rd_kafka_buf_write_kstr(rkbuf, rack_id);
+
+        if (subscribed_topics) {
+                int topics_cnt = subscribed_topics->cnt;
+
+                /* write Topics */
+                rd_kafka_buf_write_arraycnt(rkbuf, topics_cnt);
+                while (--topics_cnt >= 0) {
+                        if (rd_rkb_is_dbg(rkb, CGRP))
+                                rd_rkb_dbg(
+                                    rkb, CGRP, "SHAREHEARTBEAT",
+                                    "ShareGroupHeartbeat subscribed "
+                                    "topic %s",
+                                    subscribed_topics->elems[topics_cnt].topic);
+                        rd_kafka_buf_write_str(
+                            rkbuf, subscribed_topics->elems[topics_cnt].topic,
+                            -1);
+                }
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, features);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+}
 
 /**
  * @brief Construct and send ListGroupsRequest to \p rkb

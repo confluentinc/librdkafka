@@ -400,6 +400,17 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque);
 
+void rd_kafka_ShareGroupHeartbeatRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    const rd_kafkap_str_t *member_id,
+    int32_t member_epoch,
+    const rd_kafkap_str_t *rack_id,
+    const rd_kafka_topic_partition_list_t *subscribed_topics,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
 rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const rd_list_t *topics,
                                              rd_list_t *topic_ids,

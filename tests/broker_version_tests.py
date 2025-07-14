@@ -31,7 +31,7 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
     """
 
     cluster = LibrdkafkaTestCluster(version, conf,
-                                    num_brokers=int(conf.get('broker_cnt', 3)),
+                                    num_brokers=int(conf.get('broker_cnt', 1)),
                                     debug=debug, scenario=scenario,
                                     kraft=kraft)
 
@@ -175,7 +175,7 @@ if __name__ == '__main__':
         '--brokers',
         dest='broker_cnt',
         type=int,
-        default=3,
+        default=1,
         help='Number of Kafka brokers')
     parser.add_argument('--ssl', dest='ssl', action='store_true',
                         default=False,

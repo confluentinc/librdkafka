@@ -25,7 +25,7 @@ def version_as_number(version):
 
 def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
                  exec_cnt=1,
-                 root_path='tmp', broker_cnt=3, scenario='default',
+                 root_path='tmp', broker_cnt=1, scenario='default',
                  kraft=False):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \\p version

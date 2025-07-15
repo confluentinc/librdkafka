@@ -5450,15 +5450,13 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_str(reply, &error_msg);
 
+                rd_kafka_buf_skip_tags(reply);
+
                 if (error_code) {
                         if (RD_KAFKAP_STR_LEN(&error_msg) == 0)
                                 errstr = (char *)rd_kafka_err2str(error_code);
                         else
                                 RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
-                }
-
-                if (rd_kafka_buf_ApiVersion(reply) >= 2) {
-                        rd_kafka_buf_skip_tags(reply);
                 }
 
                 acl_res = rd_kafka_acl_result_new(
@@ -5469,9 +5467,7 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
                             acl_res);
         }
 
-        if (rd_kafka_buf_ApiVersion(reply) >= 2) {
-                rd_kafka_buf_skip_tags(reply);
-        }
+        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 
@@ -5628,10 +5624,8 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &khost);
                         rd_kafka_buf_read_i8(reply, &operation);
                         rd_kafka_buf_read_i8(reply, &permission_type);
+                        rd_kafka_buf_skip_tags(reply);
 
-                        if (rd_kafka_buf_ApiVersion(reply) >= 2) {
-                                rd_kafka_buf_skip_tags(reply);
-                        }
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
                         RD_KAFKAP_STR_DUPA(&host, &khost);
 
@@ -5666,14 +5660,10 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                                     acl);
                 }
 
-                if (rd_kafka_buf_ApiVersion(reply) >= 2) {
-                        rd_kafka_buf_skip_tags(reply);
-                }
-        }
-
-        if (rd_kafka_buf_ApiVersion(reply) >= 2) {
                 rd_kafka_buf_skip_tags(reply);
         }
+
+        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 
@@ -6681,10 +6671,7 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &khost);
                         rd_kafka_buf_read_i8(reply, &operation);
                         rd_kafka_buf_read_i8(reply, &permission_type);
-
-                        if (rd_kafka_buf_ApiVersion(reply) >= 2) {
-                                rd_kafka_buf_skip_tags(reply);
-                        }
+                        rd_kafka_buf_skip_tags(reply);
 
                         RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
@@ -6743,17 +6730,13 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                             (void *)matching_acl);
                 }
 
-                if (rd_kafka_buf_ApiVersion(reply) >= 2) {
-                        rd_kafka_buf_skip_tags(reply);
-                }
+                rd_kafka_buf_skip_tags(reply);
 
                 rd_list_add(&rko_result->rko_u.admin_result.results,
                             (void *)result_response);
         }
 
-        if (rd_kafka_buf_ApiVersion(reply) >= 2) {
-                rd_kafka_buf_skip_tags(reply);
-        }
+        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 

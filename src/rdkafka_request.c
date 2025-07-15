@@ -5779,9 +5779,7 @@ rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
 
                 rd_kafka_buf_write_i8(rkbuf, new_acl->permission_type);
 
-                if (ApiVersion >= 2) {
-                        rd_kafka_buf_write_tags_empty(rkbuf);
-                }
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */
@@ -6011,9 +6009,7 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                 /* permission type (rd_kafka_AclPermissionType_t) */
                 rd_kafka_buf_write_i8(rkbuf, acl->permission_type);
 
-                if (ApiVersion >= 2) {
-                        rd_kafka_buf_write_tags_empty(rkbuf);
-                }
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */

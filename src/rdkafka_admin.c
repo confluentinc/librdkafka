@@ -2620,7 +2620,7 @@ rd_kafka_CreatePartitionsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
                 rd_kafka_buf_skip_tags(reply);
-                        
+
 
                 /* For non-blocking CreatePartitionsRequests the broker
                  * will returned REQUEST_TIMED_OUT for topics

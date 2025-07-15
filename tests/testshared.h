@@ -59,6 +59,9 @@ extern int tmout_multip(int msecs);
 /** @brief true if tests should run in quick-mode (faster, less data) */
 extern int test_quick;
 
+/** @brief true if tests should run in K2 cluster mode (acks=-1, higher limits) */
+extern int test_k2_cluster;
+
 /** @brief Broker version to int */
 #define TEST_BRKVER(A, B, C, D) (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
 /** @brief return single version component from int */

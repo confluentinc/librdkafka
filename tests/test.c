@@ -2046,6 +2046,10 @@ int main(int argc, char **argv) {
         if (test_concurrent_max > 1)
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
+        /* K2 clusters may have higher latency and need more time for fetch operations */
+        if (test_k2_cluster)
+                test_timeout_multiplier += 2.0;
+
         TEST_SAY("Tests to run     : %s\n",
                  tests_to_run ? tests_to_run : "all");
         if (subtests_to_run)
@@ -2076,7 +2080,7 @@ int main(int argc, char **argv) {
                 TEST_SAY("Test Idempotent Producer: enabled\n");
         }
         if (test_k2_cluster) {
-                TEST_SAY("Test K2 Cluster: enabled (acks=-1)\n");
+                TEST_SAY("Test K2 Cluster: enabled (acks=-1, +2.0x timeout multiplier)\n");
         }
 
         {

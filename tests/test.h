@@ -77,6 +77,7 @@ extern double test_rusage_cpu_calibration;
 extern double test_timeout_multiplier;
 extern int test_session_timeout_ms; /* Group session timeout */
 extern int test_flags;
+extern int test_k2_cluster;
 extern int test_neg_flags;
 extern int test_idempotent_producer;
 

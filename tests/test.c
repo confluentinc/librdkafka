@@ -65,6 +65,7 @@ int test_broker_version;
 static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
+int test_k2_cluster                        = 0; /**< K2 cluster mode */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -810,6 +811,9 @@ static void test_init(void) {
         if ((tmp = test_getenv("TEST_BROKER_ENABLE_AUTO_CREATE", NULL)))
                 test_auto_create_enabled =
                     !rd_strcasecmp(tmp, "true") || !strcmp(tmp, "1");
+
+        if ((tmp = test_getenv("CLUSTER_TYPE", NULL)))
+                test_k2_cluster = !rd_strcasecmp(tmp, "K2");
 
 #ifdef _WIN32
         test_init_win32();
@@ -1979,6 +1983,7 @@ int main(int argc, char **argv) {
                             "  TEST_LEVEL - Test verbosity level\n"
                             "  TEST_MODE - bare, helgrind, valgrind\n"
                             "  TEST_SEED - random seed\n"
+                            "  CLUSTER_TYPE - K2 for K2 cluster mode (uses acks=-1)\n"
                             "  RDKAFKA_TEST_CONF - test config file "
                             "(test.conf)\n"
                             "  KAFKA_PATH - Path to kafka source dir\n"
@@ -2069,6 +2074,9 @@ int main(int argc, char **argv) {
                             "producer while also enabling idempotency for "
                             "other tests, possible logical inconsistency.\n");
                 TEST_SAY("Test Idempotent Producer: enabled\n");
+        }
+        if (test_k2_cluster) {
+                TEST_SAY("Test K2 Cluster: enabled (acks=-1)\n");
         }
 
         {

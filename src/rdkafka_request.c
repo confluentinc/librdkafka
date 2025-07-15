@@ -5310,15 +5310,11 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
                                             rd_list_get_int32(replicas, ri));
                                 }
 
-                                if (ApiVersion >= 2) {
-                                        rd_kafka_buf_write_tags_empty(rkbuf);
-                                }
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
                 }
 
-                if (ApiVersion >= 2) {
-                        rd_kafka_buf_write_tags_empty(rkbuf);
-                }
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */

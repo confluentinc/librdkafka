@@ -154,6 +154,9 @@ static void do_test_fetch_unauth() {
 
 extern "C" {
 int main_0119_consumer_auth(int argc, char **argv) {
+  if (!test_can_kafka_cmd(1))
+    return 0; /* Skip test if cannot create ACLs with command line */
+
   /* We can't bother passing Java security config to kafka-acls.sh */
   if (test_needs_auth()) {
     Test::Skip("Cluster authentication required\n");

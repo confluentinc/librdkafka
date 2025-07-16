@@ -467,6 +467,9 @@ static void txn_producer(const std::string &brokers,
 
 
 static void do_test_consumer_txn_test(bool use_java_producer) {
+  if (use_java_producer && !test_can_kafka_cmd(0))
+    return;
+
   std::string errstr;
   std::string topic_name;
   RdKafka::KafkaConsumer *c;

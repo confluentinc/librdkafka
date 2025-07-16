@@ -5450,6 +5450,8 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_str(reply, &error_msg);
 
+                rd_kafka_buf_skip_tags(reply);
+
                 if (error_code) {
                         if (RD_KAFKAP_STR_LEN(&error_msg) == 0)
                                 errstr = (char *)rd_kafka_err2str(error_code);
@@ -5464,6 +5466,8 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_list_set(&rko_result->rko_u.admin_result.results, i,
                             acl_res);
         }
+
+        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 
@@ -5620,6 +5624,8 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &khost);
                         rd_kafka_buf_read_i8(reply, &operation);
                         rd_kafka_buf_read_i8(reply, &permission_type);
+                        rd_kafka_buf_skip_tags(reply);
+
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
                         RD_KAFKAP_STR_DUPA(&host, &khost);
 
@@ -5653,7 +5659,11 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_list_add(&rko_result->rko_u.admin_result.results,
                                     acl);
                 }
+
+                rd_kafka_buf_skip_tags(reply);
         }
+
+        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 
@@ -6661,6 +6671,8 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &khost);
                         rd_kafka_buf_read_i8(reply, &operation);
                         rd_kafka_buf_read_i8(reply, &permission_type);
+                        rd_kafka_buf_skip_tags(reply);
+
                         RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
                         RD_KAFKAP_STR_DUPA(&host, &khost);
@@ -6718,9 +6730,13 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                             (void *)matching_acl);
                 }
 
+                rd_kafka_buf_skip_tags(reply);
+
                 rd_list_add(&rko_result->rko_u.admin_result.results,
                             (void *)result_response);
         }
+
+        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 

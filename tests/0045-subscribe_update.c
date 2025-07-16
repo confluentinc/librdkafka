@@ -814,6 +814,7 @@ static void do_test_resubscribe_with_regex() {
 
         rd_free(topic1);
         rd_free(topic2);
+        rd_free(topic_a);
         rd_free(group);
 
         SUB_TEST_PASS();

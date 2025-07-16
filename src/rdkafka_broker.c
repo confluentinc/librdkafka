@@ -311,6 +311,24 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
 }
 
 /**
+ * @brief Check that at least a ApiVersion greater or equal to
+ *        \p minver exists for \p ApiKey.
+ *
+ * @returns `rd_true` if the broker supports \p ApiKey with
+ *          a version greater than or equal to \p minver, else `rd_false`.
+ * @locks none
+ * @locks_acquired rd_kafka_broker_lock()
+ * @locality any
+ */
+rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver) {
+        return rd_kafka_broker_ApiVersion_supported0(
+                   rkb, ApiKey, minver, RD_KAFKAP_RPC_VERSION_MAX, NULL,
+                   rd_true /* do_lock */) != -1;
+}
+
+/**
  * @brief Set broker state.
  *
  *        \c rkb->rkb_state is the previous state, while
@@ -2213,53 +2231,6 @@ rd_kafka_broker_reconnect_backoff(const rd_kafka_broker_t *rkb, rd_ts_t now) {
 
         return (int)(remains / 1000);
 }
-
-
-/**
- * @brief Unittest for reconnect.backoff.ms
- */
-static int rd_ut_reconnect_backoff(void) {
-        rd_kafka_broker_t rkb = RD_ZERO_INIT;
-        rd_kafka_conf_t conf  = {.reconnect_backoff_ms     = 10,
-                                 .reconnect_backoff_max_ms = 90};
-        rd_ts_t now           = 1000000;
-        int backoff;
-
-        rkb.rkb_reconnect_backoff_ms = conf.reconnect_backoff_ms;
-
-        /* broker's backoff is the initial reconnect.backoff.ms=10 */
-        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
-        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 7, 15, "%d");
-
-        /* .. 20 */
-        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
-        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 15, 30, "%d");
-
-        /* .. 40 */
-        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
-        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 30, 60, "%d");
-
-        /* .. 80, the jitter is capped at reconnect.backoff.max.ms=90  */
-        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
-        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 60, conf.reconnect_backoff_max_ms, "%d");
-
-        /* .. 90, capped by reconnect.backoff.max.ms */
-        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
-        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 67, conf.reconnect_backoff_max_ms, "%d");
-
-        /* .. 90, should remain at capped value. */
-        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
-        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 67, conf.reconnect_backoff_max_ms, "%d");
-
-        RD_UT_PASS();
-}
-
 
 /**
  * @brief Initiate asynchronous connection attempt to the next address
@@ -6267,6 +6238,98 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 }
 
 /**
+ * @brief Unittest for reconnect.backoff.ms
+ */
+static int rd_ut_reconnect_backoff(void) {
+        rd_kafka_broker_t rkb = RD_ZERO_INIT;
+        rd_kafka_conf_t conf  = {.reconnect_backoff_ms     = 10,
+                                 .reconnect_backoff_max_ms = 90};
+        rd_ts_t now           = 1000000;
+        int backoff;
+
+        rkb.rkb_reconnect_backoff_ms = conf.reconnect_backoff_ms;
+
+        /* broker's backoff is the initial reconnect.backoff.ms=10 */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 7, 15, "%d");
+
+        /* .. 20 */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 15, 30, "%d");
+
+        /* .. 40 */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 30, 60, "%d");
+
+        /* .. 80, the jitter is capped at reconnect.backoff.max.ms=90  */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 60, conf.reconnect_backoff_max_ms, "%d");
+
+        /* .. 90, capped by reconnect.backoff.max.ms */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 67, conf.reconnect_backoff_max_ms, "%d");
+
+        /* .. 90, should remain at capped value. */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 67, conf.reconnect_backoff_max_ms, "%d");
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Unittest for reconnect.backoff.ms
+ */
+static int rd_ut_ApiVersion_at_least(void) {
+        rd_kafka_broker_t rkb = RD_ZERO_INIT;
+        mtx_init(&rkb.rkb_lock, mtx_plain);
+
+        struct rd_kafka_ApiVersion av = {
+            .ApiKey = RD_KAFKAP_Metadata,
+            .MinVer = 5,
+            .MaxVer = 10,
+        };
+
+        rkb.rkb_ApiVersions_cnt = 1;
+        rkb.rkb_ApiVersions     = &av;
+
+        RD_UT_ASSERT(
+            rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 0),
+            "Metadata API version should be at least 0");
+        RD_UT_ASSERT(
+            rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 3),
+            "Metadata API version should be at least 3");
+        RD_UT_ASSERT(
+            rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 5),
+            "Metadata API version should be at least 5");
+        RD_UT_ASSERT(
+            rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 7),
+            "Metadata API version should be at least 7");
+        RD_UT_ASSERT(
+            rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 10),
+            "Metadata API version should be at least 10");
+        RD_UT_ASSERT(
+            !rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 11),
+            "Metadata API version shouldn't be at least 11");
+
+        rkb.rkb_ApiVersions_cnt = 0;
+        RD_UT_ASSERT(
+            !rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 0),
+            "Metadata API version shouldn't be at least 0");
+        RD_UT_ASSERT(
+            !rd_kafka_broker_ApiVersion_at_least(&rkb, RD_KAFKAP_Metadata, 3),
+            "Metadata API version shouldn't be at least 3");
+
+        mtx_destroy(&rkb.rkb_lock);
+        RD_UT_PASS();
+}
+
+/**
  * @name Unit tests
  * @{
  *
@@ -6275,6 +6338,7 @@ int unittest_broker(void) {
         int fails = 0;
 
         fails += rd_ut_reconnect_backoff();
+        fails += rd_ut_ApiVersion_at_least();
 
         return fails;
 }

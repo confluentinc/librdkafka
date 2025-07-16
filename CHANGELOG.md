@@ -31,7 +31,7 @@ librdkafka v2.11.0 is a feature release:
   JoinGroup v0 anymore, missing in AK 4.0 and CP 8.0 (#5131).
 * Improve HTTPS CA certificates configuration by probing several paths
   when OpenSSL is statically linked and providing a way to customize their location
-  or value (#).
+  or value (#5133).
 
 
 ## Fixes

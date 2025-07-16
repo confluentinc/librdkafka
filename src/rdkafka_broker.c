@@ -324,7 +324,7 @@ rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,
                                               int16_t minver) {
         return rd_kafka_broker_ApiVersion_supported0(
-                   rkb, ApiKey, minver, INT16_MAX, NULL,
+                   rkb, ApiKey, minver, RD_KAFKAP_RPC_VERSION_MAX, NULL,
                    rd_true /* do_lock */) != -1;
 }
 

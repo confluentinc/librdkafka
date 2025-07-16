@@ -123,5 +123,6 @@
 
 #define RD_KAFKAP__NUM 74
 
+#define RD_KAFKAP_RPC_VERSION_MAX INT16_MAX
 
 #endif /* _RDKAFKA_PROTOCOL_H_ */

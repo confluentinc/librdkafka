@@ -259,6 +259,9 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
 extern "C" {
 int main_0109_auto_create_topics(int argc, char **argv) {
+  if (!test_can_kafka_cmd(1))
+    return 0; /* Skip test if cannot create ACLs with command line */
+
   /* Parameters:
    *  allow auto create, with wildcards, test unauthorized topic */
   do_test_consumer(true, false, false);

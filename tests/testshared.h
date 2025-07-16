@@ -72,6 +72,8 @@ extern int test_on_ci;
 
 const char *test_mk_topic_name(const char *suffix, int randomized);
 
+int test_can_kafka_cmd(int skip);
+
 void test_delete_topic(rd_kafka_t *use_rk, const char *topicname);
 
 void test_create_topic(rd_kafka_t *use_rk,

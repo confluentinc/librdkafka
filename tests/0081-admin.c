@@ -3097,7 +3097,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         rd_kafka_resp_err_t err;
         char errstr[512];
         const char *errstr2;
-#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 4
+#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 5
         int known_groups = TEST_DESCRIBE_CONSUMER_GROUPS_CNT - 1;
         int i;
         const int partitions_cnt = 1;
@@ -3118,6 +3118,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
         size_t authorized_operation_cnt;
         rd_bool_t has_group_instance_id =
             test_broker_version >= TEST_BRKVER(2, 4, 0, 0);
+        char *protocols[TEST_DESCRIBE_CONSUMER_GROUPS_CNT] = {
+            "Classic", "Classic", "Classic", "Consumer", "Classic"};
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
@@ -3160,10 +3162,21 @@ static void do_test_DescribeConsumerGroups(const char *what,
                         test_conf_set(conf, "client.id", client_ids[i]);
                         test_conf_set(conf, "group.instance.id",
                                       group_instance_ids[i]);
-                        test_conf_set(conf, "session.timeout.ms", "5000");
+                        if (!strcmp(protocols[i], "Classic")) {
+                                test_conf_set0(conf, "session.timeout.ms",
+                                               "6000", rd_false);
+                        } else {
+                                const char *confs_set_group[] = {
+                                    "consumer.session.timeout.ms", "SET",
+                                    "5000"};
+                                test_IncrementalAlterConfigs_simple(
+                                    rk, RD_KAFKA_RESOURCE_GROUP, group_id,
+                                    confs_set_group, 1);
+                        }
                         test_conf_set(conf, "auto.offset.reset", "earliest");
-                        rks[i] =
-                            test_create_consumer(group_id, NULL, conf, NULL);
+                        test_conf_set(conf, "group.protocol", protocols[i]);
+                        rks[i] = test_create_consumer0(group_id, NULL, conf,
+                                                       NULL, rd_false);
                         test_consumer_subscribe(rks[i], topic);
                         /* Consume messages */
                         test_consumer_poll("consumer", rks[i], testid, -1, -1,
@@ -3236,6 +3249,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     rd_kafka_ConsumerGroupDescription_error(act));
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(act);
+                rd_kafka_consumer_group_type_t type =
+                    rd_kafka_ConsumerGroupDescription_type(act);
                 const rd_kafka_AclOperation_t *authorized_operations =
                     rd_kafka_ConsumerGroupDescription_authorized_operations(
                         act, &authorized_operation_cnt);
@@ -3266,6 +3281,11 @@ static void do_test_DescribeConsumerGroups(const char *what,
                                         RD_KAFKA_CONSUMER_GROUP_STATE_STABLE,
                                     "Expected Stable state, got %s.",
                                     rd_kafka_consumer_group_state_name(state));
+                        TEST_ASSERT(
+                            !strcmp(rd_kafka_consumer_group_type_name(type),
+                                    protocols[i]),
+                            "Expected group type %s, got %s.", protocols[i],
+                            rd_kafka_consumer_group_type_name(type));
 
                         TEST_ASSERT(
                             !rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
@@ -3342,8 +3362,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 rd_kafka_destroy(rks[i]);
         }
 
-        /* Wait session timeout + 1s. Because using static group membership */
-        rd_sleep(6);
+        /* Wait session timeout + 2s. Because using static group membership */
+        rd_sleep(8);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);
@@ -5520,13 +5540,9 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
                                    rd_false);
 
-        /* TODO: check this test after KIP-848 admin operation
-         * implementation */
-        if (test_consumer_group_protocol_classic()) {
-                /* Describe groups */
-                do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
-                do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
-        }
+        /* Describe groups */
+        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
 
         /* Describe topics */
         do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_false);

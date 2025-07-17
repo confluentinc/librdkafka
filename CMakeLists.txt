@@ -116,7 +116,12 @@ else()
 endif()
 option(WITH_SSL "With SSL" ${with_ssl_default})
 if(WITH_SSL)
-  list(APPEND BUILT_WITH "SSL")
+  set(WITH_SASL_SCRAM ON)
+  set(WITH_SASL_OAUTHBEARER ON)
+  list(APPEND BUILT_WITH "SSL SASL_SCRAM SASL_OAUTHBEARER")
+  if(WITH_CURL)
+    set(WITH_OAUTHBEARER_OIDC ON)
+  endif()
 endif()
 # }
 
@@ -124,23 +129,23 @@ endif()
 if(WIN32)
   set(with_sasl_default ON)
 else()
-  if(PkgConfig_FOUND)
+  if(WITH_PKGCONFIG)
     pkg_check_modules(SASL libsasl2)
     if(SASL_FOUND)
       set(with_sasl_default ON)
+    endif()
+  else()
+    try_compile(
+        WITH_SASL_CYRUS_BOOL
+        "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+        "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
+        LINK_LIBRARIES "-lsasl2"
+    )
+    if(WITH_SASL_CYRUS_BOOL)
+      set(with_sasl_default ON)
+      set(SASL_LIBRARIES "-lsasl2")
     else()
-      try_compile(
-          WITH_SASL_CYRUS_BOOL
-          "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-          "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
-          LINK_LIBRARIES "-lsasl2"
-      )
-      if(WITH_SASL_CYRUS_BOOL)
-        set(with_sasl_default ON)
-        set(SASL_LIBRARIES "-lsasl2")
-      else()
-        set(with_sasl_default OFF)
-      endif()
+      set(with_sasl_default OFF)
     endif()
   endif()
 endif()
@@ -149,21 +154,12 @@ if(WITH_SASL)
   if(SASL_FOUND)
     link_directories(${SASL_LIBRARY_DIRS})
   endif()
-  if(WITH_SSL)
-    set(WITH_SASL_SCRAM ON)
-    set(WITH_SASL_OAUTHBEARER ON)
-    list(APPEND BUILT_WITH "SASL_SCRAM SASL_OAUTHBEARER")
-  endif()
   if(NOT WIN32)
     set(WITH_SASL_CYRUS ON)
     list(APPEND BUILT_WITH "SASL_CYRUS")
   endif()
 endif()
 # }
-
-if(WITH_SSL AND WITH_CURL)
-    set(WITH_OAUTHBEARER_OIDC ON)
-endif()
 
 # LZ4 {
 option(ENABLE_LZ4_EXT "Enable external LZ4 library support" ON)

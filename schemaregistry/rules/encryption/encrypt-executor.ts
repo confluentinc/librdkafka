@@ -6,6 +6,7 @@ import {
   MAGIC_BYTE_V0,
   RuleContext,
   RuleError,
+  RuleExecutor,
 } from "../../serde/serde";
 import {RuleMode,} from "../../schemaregistry-client";
 import {DekClient, Dek, DekRegistryClient, Kek} from "./dekregistry/dekregistry-client";
@@ -61,29 +62,29 @@ export class Clock {
   }
 }
 
-export class FieldEncryptionExecutor extends FieldRuleExecutor {
+export class EncryptionExecutor implements RuleExecutor {
+  config: Map<string, string> | null = null
   client: DekClient | null = null
   clock: Clock
 
   /**
    * Register the field encryption executor with the rule registry.
    */
-  static register(): FieldEncryptionExecutor {
+  static register(): EncryptionExecutor {
     return this.registerWithClock(new Clock())
   }
 
-  static registerWithClock(clock: Clock): FieldEncryptionExecutor {
-    const executor = new FieldEncryptionExecutor(clock)
+  static registerWithClock(clock: Clock): EncryptionExecutor {
+    const executor = new EncryptionExecutor(clock)
     RuleRegistry.registerRuleExecutor(executor)
     return executor
   }
 
   constructor(clock: Clock = new Clock()) {
-    super()
     this.clock = clock
   }
 
-  override configure(clientConfig: ClientConfig, config: Map<string, string>) {
+  configure(clientConfig: ClientConfig, config: Map<string, string>) {
     if (this.client != null) {
       if (!deepEqual(this.client.config(), clientConfig)) {
         throw new RuleError('executor already configured')
@@ -110,20 +111,23 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
     }
   }
 
-  override type(): string {
-    return 'ENCRYPT'
+  type(): string {
+    return 'ENCRYPT_PAYLOAD'
   }
 
-  override newTransform(ctx: RuleContext): FieldTransform {
+  async transform(ctx: RuleContext, msg: any): Promise<any> {
+    const transform = this.newTransform(ctx)
+    return await transform.transform(ctx, FieldType.BYTES, msg)
+  }
+
+  newTransform(ctx: RuleContext): EncryptionExecutorTransform {
     const cryptor = this.getCryptor(ctx)
     const kekName = this.getKekName(ctx)
     const dekExpiryDays = this.getDekExpiryDays(ctx)
-    const transform =
-      new FieldEncryptionExecutorTransform(this, cryptor, kekName, dekExpiryDays)
-    return transform
+    return new EncryptionExecutorTransform(this, cryptor, kekName, dekExpiryDays)
   }
 
-  override async close(): Promise<void> {
+  async close(): Promise<void> {
     if (this.client != null) {
       await this.client.close()
     }
@@ -135,8 +139,7 @@ export class FieldEncryptionExecutor extends FieldRuleExecutor {
     if (dekAlgorithmStr != null) {
       dekAlgorithm = DekFormat[dekAlgorithmStr as keyof typeof DekFormat]
     }
-    const cryptor = new Cryptor(dekAlgorithm)
-    return cryptor
+    return new Cryptor(dekAlgorithm)
   }
 
   private getKekName(ctx: RuleContext): string {
@@ -269,15 +272,15 @@ export class Cryptor {
   }
 }
 
-export class FieldEncryptionExecutorTransform implements FieldTransform {
-  private executor: FieldEncryptionExecutor
+export class EncryptionExecutorTransform {
+  private executor: EncryptionExecutor
   private cryptor: Cryptor
   private kekName: string
   private kek: Kek | null = null
   private dekExpiryDays: number
 
   constructor(
-    executor: FieldEncryptionExecutor,
+    executor: EncryptionExecutor,
     cryptor: Cryptor,
     kekName: string,
     dekExpiryDays: number,
@@ -481,15 +484,15 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
       (now - dek.ts!) / MILLIS_IN_DAY >= this.dekExpiryDays
   }
 
-  async transform(ctx: RuleContext, fieldCtx: FieldContext, fieldValue: any): Promise<any> {
+  async transform(ctx: RuleContext, fieldType: FieldType, fieldValue: any): Promise<any> {
     if (fieldValue == null) {
       return null
     }
     switch (ctx.ruleMode) {
       case RuleMode.WRITE: {
-        let plaintext = this.toBytes(fieldCtx.type, fieldValue)
+        let plaintext = this.toBytes(fieldType, fieldValue)
         if (plaintext == null) {
-          throw new RuleError(`type ${fieldCtx.type} not supported for encryption`)
+          throw new RuleError(`type ${fieldType} not supported for encryption`)
         }
         let version: number | null = null
         if (this.isDekRotated()) {
@@ -501,18 +504,18 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
         if (this.isDekRotated()) {
           ciphertext = this.prefixVersion(dek.version!, ciphertext)
         }
-        if (fieldCtx.type === FieldType.STRING) {
+        if (fieldType === FieldType.STRING) {
           return ciphertext.toString('base64')
         } else {
-          return this.toObject(fieldCtx.type, ciphertext)
+          return this.toObject(fieldType, ciphertext)
         }
       }
       case RuleMode.READ: {
         let ciphertext
-        if (fieldCtx.type === FieldType.STRING) {
+        if (fieldType === FieldType.STRING) {
           ciphertext = Buffer.from(fieldValue, 'base64')
         } else {
-          ciphertext = this.toBytes(fieldCtx.type, fieldValue)
+          ciphertext = this.toBytes(fieldType, fieldValue)
         }
         if (ciphertext == null) {
           return fieldValue
@@ -528,7 +531,7 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
         let dek = await this.getOrCreateDek(ctx, version)
         let keyMaterialBytes = await this.executor.client!.getDekKeyMaterialBytes(dek)
         let plaintext = await this.cryptor.decrypt(keyMaterialBytes!, ciphertext)
-        return this.toObject(fieldCtx.type, plaintext)
+        return this.toObject(fieldType, plaintext)
       }
       default:
         throw new RuleError(`unsupported rule mode ${ctx.ruleMode}`)
@@ -586,3 +589,55 @@ function getKmsClient(config: Map<string, string>, kek: Kek): KmsClient {
   }
   return kmsClient
 }
+
+export class FieldEncryptionExecutor extends FieldRuleExecutor {
+  executor: EncryptionExecutor
+
+  /**
+   * Register the field encryption executor with the rule registry.
+   */
+  static register(): FieldEncryptionExecutor {
+    return this.registerWithClock(new Clock())
+  }
+
+  static registerWithClock(clock: Clock): FieldEncryptionExecutor {
+    const executor = new FieldEncryptionExecutor(clock)
+    RuleRegistry.registerRuleExecutor(executor)
+    return executor
+  }
+
+  constructor(clock: Clock = new Clock()) {
+    super()
+    this.executor = new EncryptionExecutor(clock)
+  }
+
+  override configure(clientConfig: ClientConfig, config: Map<string, string>) {
+    this.executor.configure(clientConfig, config)
+  }
+
+  override type(): string {
+    return 'ENCRYPT'
+  }
+
+  override newTransform(ctx: RuleContext): FieldTransform {
+    const executorTransform = this.executor.newTransform(ctx)
+    return new FieldEncryptionExecutorTransform(executorTransform)
+  }
+
+  override async close(): Promise<void> {
+    return this.executor.close()
+  }
+}
+
+export class FieldEncryptionExecutorTransform implements FieldTransform {
+  private executorTransform: EncryptionExecutorTransform
+
+  constructor(executorTransform: EncryptionExecutorTransform) {
+    this.executorTransform = executorTransform
+  }
+
+  async transform(ctx: RuleContext, fieldCtx: FieldContext, fieldValue: any): Promise<any> {
+    return await this.executorTransform.transform(ctx, fieldCtx.type, fieldValue)
+  }
+}
+

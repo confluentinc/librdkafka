@@ -2,7 +2,7 @@ import {match} from './wildcard-matcher';
 import {
   Client,
   Rule,
-  RuleMode,
+  RuleMode, RulePhase,
   RuleSet,
   SchemaInfo,
   SchemaMetadata
@@ -220,8 +220,15 @@ export abstract class Serde {
   }
 
   async executeRules(subject: string, topic: string, ruleMode: RuleMode,
-               source: SchemaInfo | null, target: SchemaInfo | null, msg: any,
-               inlineTags: Map<string, Set<string>> | null): Promise<any> {
+                     source: SchemaInfo | null, target: SchemaInfo | null, msg: any,
+                     inlineTags: Map<string, Set<string>> | null): Promise<any> {
+    return await this.executeRulesWithPhase(
+      subject, topic, RulePhase.DOMAIN, ruleMode, source, target, msg, inlineTags)
+  }
+
+  async executeRulesWithPhase(subject: string, topic: string, rulePhase: RulePhase, ruleMode: RuleMode,
+                              source: SchemaInfo | null, target: SchemaInfo | null, msg: any,
+                              inlineTags: Map<string, Set<string>> | null): Promise<any> {
     if (msg == null || target == null) {
       return msg
     }
@@ -234,7 +241,11 @@ export abstract class Serde {
         rules = source?.ruleSet?.migrationRules?.map(x => x).reverse()
         break
       default:
-        rules = target.ruleSet?.domainRules
+        if (rulePhase === RulePhase.ENCODING) {
+          rules = target.ruleSet?.encodingRules
+        } else {
+          rules = target.ruleSet?.domainRules
+        }
         if (ruleMode === RuleMode.READ) {
           // Execute read rules in reverse order for symmetry
           rules = rules?.map(x => x).reverse()
@@ -509,21 +520,35 @@ export abstract class Deserializer extends Serde {
     return null
   }
 
-  hasRules(ruleSet: RuleSet, mode: RuleMode): boolean {
+  hasRules(ruleSet: RuleSet, phase: RulePhase, mode: RuleMode): boolean {
+    if (ruleSet == null) {
+      return false
+    }
+    let rules: Rule[] | undefined
+    switch (phase) {
+      case RulePhase.MIGRATION:
+        rules = ruleSet.migrationRules
+        break
+      case RulePhase.DOMAIN:
+        rules = ruleSet.domainRules
+        break
+      case RulePhase.ENCODING:
+        rules = ruleSet.encodingRules
+    }
     switch (mode) {
       case RuleMode.UPGRADE:
       case RuleMode.DOWNGRADE:
-        return this.checkRules(ruleSet?.migrationRules, (ruleMode: RuleMode): boolean =>
+        return this.checkRules(rules, (ruleMode: RuleMode): boolean =>
           ruleMode === mode || ruleMode === RuleMode.UPDOWN)
       case RuleMode.UPDOWN:
-        return this.checkRules(ruleSet?.migrationRules, (ruleMode: RuleMode): boolean =>
+        return this.checkRules(rules, (ruleMode: RuleMode): boolean =>
           ruleMode === mode)
       case RuleMode.WRITE:
       case RuleMode.READ:
-        return this.checkRules(ruleSet?.domainRules, (ruleMode: RuleMode): boolean =>
+        return this.checkRules(rules, (ruleMode: RuleMode): boolean =>
           ruleMode === mode || ruleMode === RuleMode.WRITEREAD)
       case RuleMode.WRITEREAD:
-        return this.checkRules(ruleSet?.domainRules, (ruleMode: RuleMode): boolean =>
+        return this.checkRules(rules, (ruleMode: RuleMode): boolean =>
           ruleMode === mode)
     }
   }
@@ -576,7 +601,7 @@ export abstract class Deserializer extends Serde {
         previous = version
         continue
       }
-      if (version.ruleSet != null && this.hasRules(version.ruleSet, migrationMode)) {
+      if (version.ruleSet != null && this.hasRules(version.ruleSet, RulePhase.MIGRATION, migrationMode)) {
         let m: Migration
         if (migrationMode === RuleMode.UPGRADE) {
           m = {
@@ -620,7 +645,9 @@ export abstract class Deserializer extends Serde {
   async executeMigrations(migrations: Migration[], subject: string, topic: string, msg: any): Promise<any> {
     for (let migration of migrations) {
       // TODO fix source, target?
-      msg = await this.executeRules(subject, topic, migration.ruleMode, migration.source, migration.target, msg, null)
+      msg = await this.executeRulesWithPhase(
+        subject, topic, RulePhase.MIGRATION, migration.ruleMode,
+        migration.source, migration.target, msg, null)
     }
     return msg
   }

@@ -7,7 +7,7 @@ import {
   Serializer, SerializerConfig
 } from "./serde";
 import {
-  Client, RuleMode,
+  Client, RuleMode, RulePhase,
   SchemaInfo
 } from "../schemaregistry-client";
 import avro, {ForSchemaOptions, Type, types} from "avsc";
@@ -93,7 +93,9 @@ export class AvroSerializer extends Serializer implements AvroSerde {
     const subject = this.subjectName(topic, info)
     msg = await this.executeRules(
       subject, topic, RuleMode.WRITE, null, info, msg, getInlineTags(info, deps))
-    const msgBytes = avroType.toBuffer(msg)
+    let msgBytes = avroType.toBuffer(msg)
+    msgBytes = await this.executeRulesWithPhase(
+      subject, topic, RulePhase.ENCODING, RuleMode.WRITE, null, info, msgBytes, null)
     return this.serializeSchemaId(topic, msgBytes, schemaId, headers)
   }
 
@@ -186,6 +188,8 @@ export class AvroDeserializer extends Deserializer implements AvroSerde {
     const [info, bytesRead] = await this.getWriterSchema(topic, payload, schemaId, headers)
     payload = payload.subarray(bytesRead)
     const subject = this.subjectName(topic, info)
+    payload = await this.executeRulesWithPhase(
+      subject, topic, RulePhase.ENCODING, RuleMode.READ, null, info, payload, null)
     const readerMeta = await this.getReaderSchema(subject)
     let migrations: Migration[] = []
     if (readerMeta != null) {

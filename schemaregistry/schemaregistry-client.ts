@@ -46,6 +46,12 @@ export interface Rule {
   disabled?: boolean
 }
 
+export enum RulePhase {
+  MIGRATION = 'MIGRATION',
+  DOMAIN = 'DOMAIN',
+  ENCODING = 'ENCODING',
+}
+
 export enum RuleMode {
   UPGRADE = 'UPGRADE',
   DOWNGRADE = 'DOWNGRADE',
@@ -111,6 +117,7 @@ export interface Metadata {
 export interface RuleSet {
   migrationRules?: Rule[];
   domainRules?: Rule[];
+  encodingRules?: Rule[];
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   Serializer, SerializerConfig
 } from "./serde";
 import {
-  Client, RuleMode,
+  Client, RuleMode, RulePhase,
   SchemaInfo
 } from "../schemaregistry-client";
 import Ajv, {ErrorObject} from "ajv";
@@ -109,13 +109,15 @@ export class JsonSerializer extends Serializer implements JsonSerde {
     const [schemaId, info] = await this.getSchemaId(JSON_TYPE, topic, msg, schema)
     const subject = this.subjectName(topic, info)
     msg = await this.executeRules(subject, topic, RuleMode.WRITE, null, info, msg, null)
-    const msgBytes = Buffer.from(JSON.stringify(msg))
     if ((this.conf as JsonSerdeConfig).validate) {
       const validate = await this.toValidateFunction(info)
       if (validate != null && !validate(msg)) {
         throw new SerializationError('Invalid message')
       }
     }
+    let msgBytes = Buffer.from(JSON.stringify(msg))
+    msgBytes = await this.executeRulesWithPhase(
+      subject, topic, RulePhase.ENCODING, RuleMode.WRITE, null, info, msgBytes, null)
     return this.serializeSchemaId(topic, msgBytes, schemaId, headers)
   }
 
@@ -198,6 +200,8 @@ export class JsonDeserializer extends Deserializer implements JsonSerde {
     const [info, bytesRead] = await this.getWriterSchema(topic, payload, schemaId, headers)
     payload = payload.subarray(bytesRead)
     const subject = this.subjectName(topic, info)
+    payload = await this.executeRulesWithPhase(
+      subject, topic, RulePhase.ENCODING, RuleMode.READ, null, info, payload, null)
     const readerMeta = await this.getReaderSchema(subject)
     let migrations: Migration[] = []
     if (readerMeta != null) {

@@ -13,7 +13,7 @@ import {
   SchemaRegistryClient
 } from "../../schemaregistry-client";
 import {LocalKmsDriver} from "../../rules/encryption/localkms/local-driver";
-import {FieldEncryptionExecutor} from "../../rules/encryption/encrypt-executor";
+import {EncryptionExecutor, FieldEncryptionExecutor} from "../../rules/encryption/encrypt-executor";
 import {AuthorSchema, file_test_schemaregistry_serde_example, PizzaSchema} from "./test/example_pb";
 import {create, toBinary} from "@bufbuild/protobuf";
 import {FileDescriptorProtoSchema} from "@bufbuild/protobuf/wkt";
@@ -26,6 +26,7 @@ import {RuleRegistry} from "@confluentinc/schemaregistry/serde/rule-registry";
 import {LinkedListSchema} from "./test/cycle_pb";
 import {clearKmsClients} from "@confluentinc/schemaregistry/rules/encryption/kms-registry";
 
+const encryptionExecutor = EncryptionExecutor.register()
 const fieldEncryptionExecutor = FieldEncryptionExecutor.register()
 LocalKmsDriver.register()
 
@@ -199,7 +200,7 @@ describe('ProtobufSerializer', () => {
     }
     let ser = new ProtobufSerializer(client, SerdeType.VALUE, serConfig)
     ser.registry.add(AuthorSchema)
-    let dekClient = fieldEncryptionExecutor.client!
+    let dekClient = fieldEncryptionExecutor.executor.client!
 
     let encRule: Rule = {
       name: 'test-encrypt',
@@ -249,7 +250,7 @@ describe('ProtobufSerializer', () => {
       }
     }
     let deser = new ProtobufDeserializer(client, SerdeType.VALUE, deserConfig)
-    fieldEncryptionExecutor.client = dekClient
+    fieldEncryptionExecutor.executor.client = dekClient
     let obj2 = await deser.deserialize(topic, bytes)
     expect(obj2).toEqual(obj)
 
@@ -259,5 +260,67 @@ describe('ProtobufSerializer', () => {
     deser = new ProtobufDeserializer(client, SerdeType.VALUE, {}, registry)
     obj2 = await deser.deserialize(topic, bytes)
     expect(obj2).not.toEqual(obj);
+  })
+  it('payload encryption', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: ProtobufSerializerConfig = {
+      useLatestVersion: true,
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let ser = new ProtobufSerializer(client, SerdeType.VALUE, serConfig)
+    ser.registry.add(AuthorSchema)
+    let dekClient = encryptionExecutor.client!
+
+    let encRule: Rule = {
+      name: 'test-encrypt',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'ENCRYPT_PAYLOAD',
+      params: {
+        'encrypt.kek.name': 'kek1',
+        'encrypt.kms.type': 'local-kms',
+        'encrypt.kms.key.id': 'mykey',
+      },
+      onFailure: 'ERROR,NONE'
+    }
+    let ruleSet: RuleSet = {
+      encodingRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'PROTOBUF',
+      schema: Buffer.from(toBinary(FileDescriptorProtoSchema, file_test_schemaregistry_serde_example.proto)).toString('base64'),
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = create(AuthorSchema, {
+      name: 'Kafka',
+      id: 123,
+      picture: Buffer.from([1, 2]),
+      works: ['The Castle', 'The Trial'],
+      piiOneof: {
+        case: 'oneofString',
+        value: 'oneof'
+      }
+    })
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: ProtobufDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new ProtobufDeserializer(client, SerdeType.VALUE, deserConfig)
+    fieldEncryptionExecutor.executor.client = dekClient
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).toEqual(obj)
   })
 })

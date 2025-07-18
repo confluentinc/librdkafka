@@ -9,7 +9,7 @@ import {
   SerializerConfig
 } from "./serde";
 import {
-  Client, Reference, RuleMode,
+  Client, Reference, RuleMode, RulePhase,
   SchemaInfo,
   SchemaMetadata
 } from "../schemaregistry-client";
@@ -165,7 +165,9 @@ export class ProtobufSerializer extends Serializer implements ProtobufSerde {
     const subject = this.subjectName(topic, info)
     msg = await this.executeRules(subject, topic, RuleMode.WRITE, null, info, msg, null)
     schemaId.messageIndexes = this.toMessageIndexArray(messageDesc)
-    const msgBytes = Buffer.from(toBinary(messageDesc, msg))
+    let msgBytes = Buffer.from(toBinary(messageDesc, msg))
+    msgBytes = await this.executeRulesWithPhase(
+      subject, topic, RulePhase.ENCODING, RuleMode.WRITE, null, info, msgBytes, null)
     return this.serializeSchemaId(topic, msgBytes, schemaId, headers)
   }
 
@@ -381,6 +383,8 @@ export class ProtobufDeserializer extends Deserializer implements ProtobufSerde 
     const messageDesc = this.toMessageDescFromIndexes(fd, schemaId.messageIndexes!)
 
     const subject = this.subjectName(topic, info)
+    payload = await this.executeRulesWithPhase(
+      subject, topic, RulePhase.ENCODING, RuleMode.READ, null, info, payload, null)
     const readerMeta = await this.getReaderSchema(subject, 'serialized')
 
     const msgBytes = payload

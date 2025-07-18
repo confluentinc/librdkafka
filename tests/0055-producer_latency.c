@@ -342,24 +342,48 @@ int main_0055_producer_latency(int argc, char **argv) {
                 return 0;
         }
 
+        if (test_k2_cluster) {
+                TEST_SAY("K2 cluster mode: skipping acks=0, idempotence, and transactions tests\n");
+        }
+
         /* Create topic without replicas to keep broker-side latency down */
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
-        for (latconf = latconfs; latconf->name; latconf++)
+        for (latconf = latconfs; latconf->name; latconf++) {
+                /* Skip K2-incompatible configurations when test_k2_cluster is enabled */
+                if (test_k2_cluster && 
+                    (strstr(latconf->name, "no acks") ||
+                     strstr(latconf->name, "idempotence") ||
+                     strstr(latconf->name, "transactions"))) {
+                        TEST_SAY("K2 cluster mode: skipping %s test\n", latconf->name);
+                        continue;
+                }
                 test_producer_latency(topic, latconf);
+        }
 
         TEST_SAY(_C_YEL "Latency tests summary:\n" _C_CLR);
         TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s %8s\n", "Name",
                  "linger.ms", "MinExp", "MaxExp", "RTT", "Min", "Average",
                  "Max", "Wakeups");
 
-        for (latconf = latconfs; latconf->name; latconf++)
+        for (latconf = latconfs; latconf->name; latconf++) {
+                /* Skip K2-incompatible configurations in summary too */
+                if (test_k2_cluster && 
+                    (strstr(latconf->name, "no acks") ||
+                     strstr(latconf->name, "idempotence") ||
+                     strstr(latconf->name, "transactions"))) {
+                        TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s %8s%s\n",
+                                 latconf->name, "-", "SKIP", "SKIP", "-", "-", "-", "-", "-",
+                                 _C_YEL "  SKIPPED");
+                        continue;
+                }
                 TEST_SAY("%-40s %9s  %6d..%-6d  %7g  %9g %9g %9g %8d%s\n",
                          latconf->name, latconf->linger_ms_conf, latconf->min,
                          latconf->max, latconf->rtt, find_min(latconf),
                          latconf->sum / latconf->cnt, find_max(latconf),
                          latconf->wakeups,
                          latconf->passed ? "" : _C_RED "  FAILED");
+        }
 
 
         TEST_LATER_CHECK("");

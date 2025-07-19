@@ -133,7 +133,9 @@ static void do_test_bsearch(void) {
   /* Start with now() - 1h */
   timestamp_ms = std::time(0) * 1000LL - 3600LL * 1000LL;
 
-  test_create_topic_if_auto_create_disabled(p->c_ptr(), topic.c_str(), 1);
+  /* Create topic with CreateTime timestamp type for reliable binary search */
+  const char *topic_configs[] = {"message.timestamp.type", "CreateTime", NULL};
+  test_create_topic_if_auto_create_disabled_with_configs(p->c_ptr(), topic.c_str(), 1, topic_configs);
 
   for (int i = 0; i < msgcnt; i++) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,

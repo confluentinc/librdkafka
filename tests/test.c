@@ -5536,6 +5536,34 @@ void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
 }
 
 /**
+ * @brief Create topic with configs if auto topic creation is not enabled.
+ * @param use_rk The rdkafka handle to use, or NULL to create a new one.
+ * @param topicname The name of the topic to create.
+ * @param partition_cnt The number of partitions to create.
+ * @param configs Topic configurations (key-value pairs), or NULL for defaults.
+ */
+void test_create_topic_if_auto_create_disabled_with_configs(rd_kafka_t *use_rk,
+                                                           const char *topicname,
+                                                           int partition_cnt,
+                                                           const char **configs) {
+        if (test_check_auto_create_topic()) {
+                return;
+        }
+
+        TEST_SAY("Auto topic creation is not enabled, creating topic %s%s\n",
+                 topicname, configs ? " with custom configs" : "");
+
+        /* If auto topic creation is not enabled, create the topic */
+        if (configs) {
+                /* Use admin API with custom configs */
+                test_admin_create_topic(use_rk, topicname, partition_cnt, -1, configs);
+        } else {
+                /* Use existing flow with broker default values */
+                test_create_topic(use_rk, topicname, partition_cnt, -1);
+        }
+}
+
+/**
  * @brief Builds and runs a Java application from the java/ directory.
  *
  *        The application is started in the background, use
@@ -6565,8 +6593,10 @@ rd_kafka_resp_err_t test_CreateTopics_simple(rd_kafka_t *rk,
 
         for (i = 0; i < topic_cnt; i++) {
                 char errstr[512];
+                /* K2 clusters require replication factor 3 */
+                int replication_factor = test_k2_cluster ? 3 : 1;
                 new_topics[i] = rd_kafka_NewTopic_new(
-                    topics[i], num_partitions, 1, errstr, sizeof(errstr));
+                    topics[i], num_partitions, replication_factor, errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],
                             "Failed to NewTopic(\"%s\", %d) #%" PRIusz ": %s",
                             topics[i], num_partitions, i, errstr);

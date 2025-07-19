@@ -641,11 +641,15 @@ static void test_message_single_partition_record_fail(int variation) {
 
         SUB_TEST_QUICK();
 
-        const char *confs_set_append[] = {"cleanup.policy", "APPEND",
-                                          "compact"};
+        // Modified for Confluent Cloud compatibility:
+        // Step 1: Change from default (delete) to compact
+        const char *confs_set_compact[] = {"cleanup.policy", "SET", "compact"};
+        
+        // Step 2: Change from compact to compact,delete  
+        const char *confs_set_mixed[] = {"cleanup.policy", "SET", "compact,delete"};
 
-        const char *confs_delete_subtract[] = {"cleanup.policy", "SUBTRACT",
-                                               "compact"};
+        // Revert back to delete at the end
+        const char *confs_set_delete[] = {"cleanup.policy", "SET", "delete"};
 
         test_conf_init(&conf, &topic_conf, 20);
         if (variation == 1)
@@ -671,10 +675,21 @@ static void test_message_single_partition_record_fail(int variation) {
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
         test_wait_topic_exists(rk, topic_name, 5000);
 
+        // Step 1: delete → compact
+        TEST_SAY("Step 1: Changing cleanup.policy from delete to compact\n");
         test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
-                                            topic_name, confs_set_append, 1);
+                                            topic_name, confs_set_compact, 1);
         rd_sleep(1);
-
+        
+        // Step 2: compact → compact,delete (if supported by the environment)
+        TEST_SAY("Step 2: Attempting to change cleanup.policy to compact,delete\n");
+        rd_kafka_resp_err_t err = test_IncrementalAlterConfigs_simple(
+            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_mixed, 1);
+        
+        // If mixed policy is not supported, fall back to just compact
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+            TEST_SAY("Mixed policy not supported, continuing with compact only\n");
+        }
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
@@ -736,8 +751,9 @@ static void test_message_single_partition_record_fail(int variation) {
         else if (variation == 1)
                 TEST_ASSERT(valid_message_cnt == 90);
 
+        TEST_SAY("Reverting cleanup.policy back to delete\n");
         test_IncrementalAlterConfigs_simple(
-            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_delete_subtract, 1);
+            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_delete, 1);
 
         if (fails)
                 TEST_FAIL("%i failures, see previous errors", fails);

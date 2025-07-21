@@ -165,7 +165,7 @@ static void do_test_static_group_rebalance(void) {
         test_create_topic_wait_exists(NULL, topic, 3, -1, 5000);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
-        test_conf_set(conf, "max.poll.interval.ms", "9000");
+        test_conf_set(conf, "max.poll.interval.ms", tsprintf("%d", tmout_multip(9000)));
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         /* Keep this interval higher than cluster metadata propagation
@@ -251,7 +251,7 @@ static void do_test_static_group_rebalance(void) {
         TIMING_STOP(&t_close);
 
         /* Should complete before `session.timeout.ms` */
-        TIMING_ASSERT(&t_close, 0, 6000);
+        TIMING_ASSERT(&t_close, 0, tmout_multip(6000));
 
 
         TEST_SAY("== Testing subscription expansion ==\n");
@@ -470,7 +470,7 @@ static void do_test_fenced_member_classic(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic(NULL, topic, 3, 1);
+        test_create_topic(NULL, topic, 3, test_k2_cluster ? 3 : 1);
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");
@@ -563,7 +563,7 @@ static void do_test_fenced_member_consumer(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic(NULL, topic, 3, 1);
+        test_create_topic(NULL, topic, 3, test_k2_cluster ? 3 : 1);
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");

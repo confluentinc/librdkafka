@@ -329,25 +329,6 @@ rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
 }
 
 /**
- * @brief Reset broker down reported flag for all brokers.
- *        In case it was set to 1 it will be reset to 0 and
- *        the broker down count will be decremented.
- *
- * @locks none
- * @locks_acquired rd_kafka_rdlock()
- * @locality any
- */
-static void rd_kafka_broker_reset_any_broker_down_reported(rd_kafka_t *rk) {
-        rd_kafka_broker_t *rkb;
-        rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rd_atomic32_set(&rkb->rkb_down_reported, 0) == 1)
-                        rd_atomic32_sub(&rk->rk_broker_down_cnt, 1);
-        }
-        rd_kafka_rdunlock(rk);
-}
-
-/**
  * @brief Set broker state.
  *
  *        \c rkb->rkb_state is the previous state, while
@@ -4350,6 +4331,7 @@ static RD_INLINE void rd_kafka_broker_idle_check(rd_kafka_broker_t *rkb) {
         rd_ts_t ts_recv          = rd_atomic64_get(&rkb->rkb_c.ts_recv);
         rd_ts_t ts_last_activity = RD_MAX(ts_send, ts_recv);
         int idle_ms;
+        const int max_jitter_ms = 2000;
 
         /* If nothing has been sent yet, use the connection time as
          * last activity. */
@@ -4362,11 +4344,9 @@ static RD_INLINE void rd_kafka_broker_idle_check(rd_kafka_broker_t *rkb) {
                 /* Add a different jitter for each broker. */
                 rkb->rkb_c.connection_max_idle_ms =
                     rkb->rkb_rk->rk_conf.connections_max_idle_ms;
-                if (rkb->rkb_c.connection_max_idle_ms >=
-                    2 * rkb->rkb_rk->rk_conf.socket_connection_setup_timeout_ms)
-                        rkb->rkb_c.connection_max_idle_ms -= rd_jitter(
-                            0, rkb->rkb_rk->rk_conf
-                                   .socket_connection_setup_timeout_ms);
+                if (rkb->rkb_c.connection_max_idle_ms >= 2 * max_jitter_ms)
+                        rkb->rkb_c.connection_max_idle_ms -=
+                            rd_jitter(0, max_jitter_ms);
         }
 
         if (likely(idle_ms < rkb->rkb_c.connection_max_idle_ms))

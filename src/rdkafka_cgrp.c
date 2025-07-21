@@ -3422,7 +3422,7 @@ void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
                     assignments_fields);
 
                 rd_kafka_dbg(
-                    rk, CGRP, "SHAREHEARTBEAT",
+                    rk, CGRP, "HEARTBEAT",
                     "ShareGroupHeartbeat response received "
                     "assigned_topic_partitions size %d",
                     assigned_topic_partitions->cnt);
@@ -6442,7 +6442,7 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
 
         rkcg->rkcg_expedite_heartbeat_retries++;
 
-        if (rkcg->rkcg_rk->rk_conf.is_share_consumer) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
                 rd_kafka_ShareGroupHeartbeatRequest(rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
                 member_epoch, rkcg_client_rack, rkcg_subscription_topics, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                 rd_kafka_cgrp_handle_ShareGroupHeartbeat, NULL);
@@ -6511,10 +6511,10 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
         }
 
         /* There should be no fencing, hence no rejoining - these asserts are to test only, we don't actually need them. */
-        rd_dassert(!(rkcg->rkcg_rk->rk_conf.is_share_consumer &&
+        rd_dassert(!(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
                      (rkcg->rkcg_consumer_flags &
                       RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN)));
-        rd_dassert(!(rkcg->rkcg_rk->rk_conf.is_share_consumer &&
+        rd_dassert(!(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
                      (rkcg->rkcg_consumer_flags &
                       RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE)));
 

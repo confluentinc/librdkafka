@@ -108,6 +108,8 @@ class myAvgStatsCb : public RdKafka::EventCb {
 static void do_test_batch_size() {
   std::string topic = Test::mk_topic_name(__FILE__, 0);
 
+  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), -1);
+
   myAvgStatsCb event_cb(topic);
 
   RdKafka::Conf *conf;

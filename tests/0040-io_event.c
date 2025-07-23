@@ -73,6 +73,7 @@ int main_0040_io_event(int argc, char **argv) {
         topic  = test_mk_topic_name(__FUNCTION__, 1);
 
         rk_p  = test_create_producer();
+        test_create_topic_if_auto_create_disabled(rk_p, topic, -1);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
         err   = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
         TEST_ASSERT(!err, "Topic auto creation failed: %s",

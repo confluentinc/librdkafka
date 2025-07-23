@@ -46,22 +46,34 @@ static void do_test_fetch_max_bytes(void) {
   int msgcnt        = 10 * partcnt;
   const int msgsize = 900 * 1024; /* Less than 1 Meg to account
                                    * for batch overhead */
+  
+  Test::Say(tostr() << "Test setup: " << partcnt << " partitions, " << msgcnt 
+           << " messages total (" << msgcnt/partcnt << " per partition), " 
+           << msgsize/1024 << " KB per message");
   std::string errstr;
   RdKafka::ErrorCode err;
 
-  std::string topic = Test::mk_topic_name("0081-fetch_max_bytes", 1);
+  std::string topic = Test::mk_topic_name("0082-fetch_max_bytes", 1);
+
+  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), partcnt);
 
   /* Produce messages to partitions */
-  for (int32_t p = 0; p < (int32_t)partcnt; p++)
+  for (int32_t p = 0; p < (int32_t)partcnt; p++) {
+    if (test_k2_cluster) {
+      Test::Say(tostr() << "K2: Producing " << msgcnt << " messages to partition " << p);
+    }
     test_produce_msgs_easy_size(topic.c_str(), 0, p, msgcnt, msgsize);
+  }
 
   /* Create consumer */
   RdKafka::Conf *conf;
-  Test::conf_init(&conf, NULL, 10);
+  /* K2 clusters may need more time due to higher latency and larger fetch sizes */
+  int timeout_multiplier = test_k2_cluster ? 3 : 1;
+  Test::conf_init(&conf, NULL, 10 * timeout_multiplier);
   Test::conf_set(conf, "group.id", topic);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
-  /* We try to fetch 20 Megs per partition, but only allow 1 Meg as total
-   * response size, this ends up serving the first batch from the
+  /* We try to fetch 20 Megs per partition, but only allow 1 Meg (or 4 Meg for K2)
+   * as total response size, this ends up serving the first batch from the
    * first partition.
    * receive.message.max.bytes is set low to trigger the original bug,
    * but this value is now adjusted upwards automatically by rd_kafka_new()
@@ -77,10 +89,23 @@ static void do_test_fetch_max_bytes(void) {
    * value is no longer over-written:
    * receive.message.max.bytes must be configured to be at least 512 bytes
    * larger than fetch.max.bytes.
+   * 
+   * K2 clusters have a higher minimum requirement for receive.message.max.bytes
+   * (4MB vs 1MB), so we adjust all fetch limits proportionally for K2 clusters.
    */
+  /* K2 clusters require higher receive.message.max.bytes minimum (4MB vs 1MB) */
   Test::conf_set(conf, "max.partition.fetch.bytes", "20000000"); /* ~20MB */
-  Test::conf_set(conf, "fetch.max.bytes", "1000000");            /* ~1MB */
-  Test::conf_set(conf, "receive.message.max.bytes", "1000512");  /* ~1MB+512 */
+  if (test_k2_cluster) {
+    Test::Say("K2 cluster mode: using 5MB fetch limits, increased timeouts\n");
+    Test::conf_set(conf, "fetch.max.bytes", "5000000");            /* ~5MB */
+    Test::conf_set(conf, "receive.message.max.bytes", "5000512");  /* ~5MB+512 */
+  } else {
+    Test::Say("Standard mode: using 1MB fetch limits\n");
+    Test::conf_set(conf, "fetch.max.bytes", "1000000");            /* ~1MB */
+    Test::conf_set(conf, "receive.message.max.bytes", "1000512");  /* ~1MB+512 */
+  }
+
+
 
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)
@@ -96,14 +121,23 @@ static void do_test_fetch_max_bytes(void) {
   /* Start consuming */
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
+  /* K2 clusters may need more time per message due to larger fetch sizes */
+  int consume_timeout = test_k2_cluster ? tmout_multip(5000) : tmout_multip(1000);
+  Test::Say(tostr() << "Using consume timeout: " << consume_timeout << " ms");
   while (cnt < msgcnt) {
-    RdKafka::Message *msg = c->consume(tmout_multip(1000));
+    RdKafka::Message *msg = c->consume(consume_timeout);
     switch (msg->err()) {
     case RdKafka::ERR__TIMED_OUT:
+      if (test_k2_cluster && cnt > 0) {
+        Test::Say(tostr() << "K2 timeout: consumed " << cnt << "/" << msgcnt << " messages so far, continuing...");
+      }
       break;
 
     case RdKafka::ERR_NO_ERROR:
       cnt++;
+      if (test_k2_cluster && (cnt % 5 == 0 || cnt == msgcnt)) {
+        Test::Say(tostr() << "K2 progress: consumed " << cnt << "/" << msgcnt << " messages");
+      }
       break;
 
     default:
@@ -113,7 +147,7 @@ static void do_test_fetch_max_bytes(void) {
 
     delete msg;
   }
-  Test::Say("Done\n");
+  Test::Say(tostr() << "Done - consumed " << cnt << " messages successfully");
 
   c->close();
   delete c;

@@ -184,7 +184,7 @@ static void destroy_flags(int local_mode) {
         /* Create the topic to avoid not-yet-auto-created-topics being
          * subscribed to (and thus raising an error). */
         if (!local_mode) {
-                test_create_topic(NULL, topic, 3, 1);
+                test_create_topic(NULL, topic, 3, -1);
                 test_wait_topic_exists(NULL, topic, 5000);
         }
 

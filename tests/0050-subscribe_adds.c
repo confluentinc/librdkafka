@@ -73,6 +73,7 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
         for (i = 0; i < TOPIC_CNT; i++) {
                 rd_kafka_topic_t *rkt;
 
+                test_create_topic_if_auto_create_disabled(rk, topic[i], -1);
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
 
                 test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,

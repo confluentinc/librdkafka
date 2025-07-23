@@ -67,6 +67,8 @@ int main_0051_assign_adds(int argc, char **argv) {
         for (i = 0; i < TOPIC_CNT; i++) {
                 rd_kafka_topic_t *rkt;
 
+                test_create_topic_if_auto_create_disabled(rk, topic[i], -1);
+
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
                 test_wait_topic_exists(rk, topic[i], 5000);
 

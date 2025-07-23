@@ -212,6 +212,11 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
 extern "C" {
 int main_0109_auto_create_topics(int argc, char **argv) {
+  if (!test_check_auto_create_topic()) {
+    Test::Say("Skipping test since broker does not support "
+              "auto.create.topics.enable\n");
+    return 0;
+  }
   /* Parameters:
    *  allow auto create, with wildcards */
   do_test_consumer(true, false);

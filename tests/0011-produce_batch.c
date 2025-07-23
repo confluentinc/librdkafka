@@ -91,6 +91,8 @@ static void test_single_partition(void) {
         int i;
         rd_kafka_message_t *rkmessages;
         char client_id[271];
+        const char *topic;
+
         SUB_TEST_QUICK();
 
         msgid_next = 0;
@@ -114,7 +116,10 @@ static void test_single_partition(void) {
         TEST_SAY("test_single_partition: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        topic = test_mk_topic_name("0011", 0);
+        test_create_topic_if_auto_create_disabled(rk, topic, 3);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -230,6 +235,7 @@ static void test_partitioner(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+        const char *topic;
 
         SUB_TEST_QUICK();
 
@@ -244,7 +250,10 @@ static void test_partitioner(void) {
         TEST_SAY("test_partitioner: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        topic = test_mk_topic_name("0011_partitioner", 1);
+        test_create_topic_if_auto_create_disabled(rk, topic, 3);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -366,7 +375,7 @@ static void test_per_message_partition_flag(void) {
         TEST_SAY("test_per_message_partition_flag: Created kafka instance %s\n",
                  rd_kafka_name(rk));
         topic_name = test_mk_topic_name("0011_per_message_flag", 1);
-        test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, 1,
+        test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
                                       5000);
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
@@ -491,6 +500,7 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
+        const char *topic;
 
         SUB_TEST_QUICK();
 
@@ -507,7 +517,10 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         TEST_SAY("test_partitioner: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
+        topic = test_mk_topic_name("0011", 0);
+        test_create_topic_if_auto_create_disabled(rk, topic, 3);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -628,11 +641,15 @@ static void test_message_single_partition_record_fail(int variation) {
 
         SUB_TEST_QUICK();
 
-        const char *confs_set_append[] = {"cleanup.policy", "APPEND",
-                                          "compact"};
+        // Modified for Confluent Cloud compatibility:
+        // Step 1: Change from default (delete) to compact
+        const char *confs_set_compact[] = {"cleanup.policy", "SET", "compact"};
+        
+        // Step 2: Change from compact to compact,delete  
+        const char *confs_set_mixed[] = {"cleanup.policy", "SET", "compact,delete"};
 
-        const char *confs_delete_subtract[] = {"cleanup.policy", "SUBTRACT",
-                                               "compact"};
+        // Revert back to delete at the end
+        const char *confs_set_delete[] = {"cleanup.policy", "SET", "delete"};
 
         test_conf_init(&conf, &topic_conf, 20);
         if (variation == 1)
@@ -651,15 +668,28 @@ static void test_message_single_partition_record_fail(int variation) {
             "%s\n",
             rd_kafka_name(rk));
 
+        test_create_topic_if_auto_create_disabled(rk, topic_name, -1);
+
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
         test_wait_topic_exists(rk, topic_name, 5000);
 
+        // Step 1: delete → compact
+        TEST_SAY("Step 1: Changing cleanup.policy from delete to compact\n");
         test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
-                                            topic_name, confs_set_append, 1);
+                                            topic_name, confs_set_compact, 1);
         rd_sleep(1);
-
+        
+        // Step 2: compact → compact,delete (if supported by the environment)
+        TEST_SAY("Step 2: Attempting to change cleanup.policy to compact,delete\n");
+        rd_kafka_resp_err_t err = test_IncrementalAlterConfigs_simple(
+            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_mixed, 1);
+        
+        // If mixed policy is not supported, fall back to just compact
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+            TEST_SAY("Mixed policy not supported, continuing with compact only\n");
+        }
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
@@ -721,8 +751,9 @@ static void test_message_single_partition_record_fail(int variation) {
         else if (variation == 1)
                 TEST_ASSERT(valid_message_cnt == 90);
 
+        TEST_SAY("Reverting cleanup.policy back to delete\n");
         test_IncrementalAlterConfigs_simple(
-            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_delete_subtract, 1);
+            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_delete, 1);
 
         if (fails)
                 TEST_FAIL("%i failures, see previous errors", fails);

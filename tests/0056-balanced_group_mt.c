@@ -221,6 +221,7 @@ int main_0056_balanced_group_mt(int argc, char **argv) {
 
         /* Produce messages */
         rk_p  = test_create_producer();
+        test_create_topic_if_auto_create_disabled(rk_p, topic, 2);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
         test_wait_topic_exists(rk_p, topic, 5000);
 

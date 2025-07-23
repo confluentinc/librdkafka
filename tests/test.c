@@ -50,6 +50,7 @@ int test_seed  = 0;
 
 char test_mode[64]                                  = "bare";
 char test_scenario[64]                              = "default";
+int test_scenario_set                               = 0;
 static volatile sig_atomic_t test_exit              = 0;
 static char test_topic_prefix[128]                  = "rdkafkatest";
 static int test_topic_random                        = 0;
@@ -64,6 +65,7 @@ int test_broker_version;
 static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
+int test_k2_cluster                        = 0; /**< K2 cluster mode */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -82,6 +84,8 @@ static const char *skip_tests_till = NULL; /* all */
 static const char *subtests_to_run = NULL; /* all */
 static const char *tests_to_skip   = NULL; /* none */
 int test_write_report              = 0;    /**< Write test report file */
+int test_auto_create_enabled =
+    -1; /**< Cached knowledge of it auto create is enabled, -1: yet to detect */
 
 static int show_summary = 1;
 static int test_summary(int do_lock);
@@ -188,6 +192,7 @@ _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
+_TEST_DECL(0076_produce_retry_idempotent);
 _TEST_DECL(0076_produce_retry_mock);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
@@ -201,6 +206,7 @@ _TEST_DECL(0084_destroy_flags);
 _TEST_DECL(0085_headers);
 _TEST_DECL(0086_purge_local);
 _TEST_DECL(0086_purge_remote);
+_TEST_DECL(0086_purge_remote_idempotent);
 _TEST_DECL(0088_produce_metadata_timeout);
 _TEST_DECL(0089_max_poll_interval);
 _TEST_DECL(0090_idempotence);
@@ -254,6 +260,7 @@ _TEST_DECL(0134_ssl_provider);
 _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
 _TEST_DECL(0137_barrier_batch_consume);
+_TEST_DECL(0137_barrier_batch_consume_idempotent);
 _TEST_DECL(0138_admin_mock);
 _TEST_DECL(0139_offset_validation_mock);
 _TEST_DECL(0140_commit_metadata);
@@ -400,7 +407,7 @@ struct test tests[] = {
     _TEST(0058_log, TEST_F_LOCAL),
     _TEST(0059_bsearch, 0, TEST_BRKVER(0, 10, 0, 0)),
     _TEST(0060_op_prio, 0, TEST_BRKVER(0, 9, 0, 0)),
-    _TEST(0061_consumer_lag, 0),
+    _TEST(0061_consumer_lag, TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0062_stats_event, TEST_F_LOCAL),
     _TEST(0063_clusterid, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0064_interceptors, 0, TEST_BRKVER(0, 9, 0, 0)),
@@ -424,6 +431,8 @@ struct test tests[] = {
     _TEST(0075_retry, TEST_F_SOCKEM),
 #endif
     _TEST(0076_produce_retry, TEST_F_SOCKEM),
+    _TEST(0076_produce_retry_idempotent,
+          TEST_F_SOCKEM | TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0076_produce_retry_mock, TEST_F_LOCAL),
     _TEST(0077_compaction,
           0,
@@ -443,35 +452,42 @@ struct test tests[] = {
     _TEST(0085_headers, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0086_purge_local, TEST_F_LOCAL),
     _TEST(0086_purge_remote, 0),
+    _TEST(0086_purge_remote_idempotent, TEST_F_IDEMPOTENT_PRODUCER),
 #if WITH_SOCKEM
     _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
 #endif
     _TEST(0089_max_poll_interval, 0, TEST_BRKVER(0, 10, 1, 0)),
-    _TEST(0090_idempotence, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0090_idempotence,
+          TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0091_max_poll_interval_timeout, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0092_mixed_msgver, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0093_holb_consumer, 0, TEST_BRKVER(0, 10, 1, 0)),
 #if WITH_SOCKEM
     _TEST(0094_idempotence_msg_timeout,
-          TEST_F_SOCKEM,
+          TEST_F_SOCKEM | TEST_F_IDEMPOTENT_PRODUCER,
           TEST_BRKVER(0, 11, 0, 0)),
 #endif
     _TEST(0095_all_brokers_down, TEST_F_LOCAL),
     _TEST(0097_ssl_verify, 0),
     _TEST(0097_ssl_verify_local, TEST_F_LOCAL),
-    _TEST(0098_consumer_txn, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0098_consumer_txn,
+          TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0099_commit_metadata, 0),
     _TEST(0100_thread_interceptors, TEST_F_LOCAL),
     _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2, 3, 0, 0)),
     _TEST(0102_static_group_rebalance_mock, TEST_F_LOCAL),
-    _TEST(0103_transactions_local, TEST_F_LOCAL),
+    _TEST(0103_transactions_local, TEST_F_LOCAL | TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0103_transactions,
-          0,
+          TEST_F_IDEMPOTENT_PRODUCER,
           TEST_BRKVER(0, 11, 0, 0),
           .scenario = "default,ak23"),
     _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
-    _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0105_transactions_mock,
+          TEST_F_LOCAL | TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0107_topic_recreate,
           0,
@@ -504,7 +520,9 @@ struct test tests[] = {
     _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 1, 0, 0)),
     _TEST(0127_fetch_queue_backoff, 0),
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
-    _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0129_fetch_aborted_msgs,
+          TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0130_store_offsets, 0),
     _TEST(0131_connect_timeout, TEST_F_LOCAL),
     _TEST(0132_strategy_ordering, 0, TEST_BRKVER(2, 4, 0, 0)),
@@ -513,15 +531,16 @@ struct test tests[] = {
     _TEST(0135_sasl_credentials, 0),
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
+    _TEST(0137_barrier_batch_consume_idempotent, TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
-    _TEST(0139_offset_validation_mock, 0),
+    _TEST(0139_offset_validation_mock, TEST_F_LOCAL),
     _TEST(0140_commit_metadata, 0),
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
-    _TEST(0150_telemetry_mock, 0),
+    _TEST(0150_telemetry_mock, TEST_F_LOCAL),
 
 
     /* Manual tests */
@@ -756,8 +775,10 @@ static void test_init(void) {
                 test_level = atoi(tmp);
         if ((tmp = test_getenv("TEST_MODE", NULL)))
                 strncpy(test_mode, tmp, sizeof(test_mode) - 1);
-        if ((tmp = test_getenv("TEST_SCENARIO", NULL)))
+        if ((tmp = test_getenv("TEST_SCENARIO", NULL))) {
                 strncpy(test_scenario, tmp, sizeof(test_scenario) - 1);
+                test_scenario_set = 1;
+        }
         if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
                 test_sockem_conf = tmp;
         if ((tmp = test_getenv("TEST_SEED", NULL)))
@@ -777,6 +798,12 @@ static void test_init(void) {
         test_consumer_group_protocol_str =
             test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
 
+        if ((tmp = test_getenv("TEST_BROKER_ENABLE_AUTO_CREATE", NULL)))
+                test_auto_create_enabled =
+                    !rd_strcasecmp(tmp, "true") || !strcmp(tmp, "1");
+
+        if ((tmp = test_getenv("CLUSTER_TYPE", NULL)))
+                test_k2_cluster = !rd_strcasecmp(tmp, "K2");
 
 #ifdef _WIN32
         test_init_win32();
@@ -1391,7 +1418,8 @@ static void run_tests(int argc, char **argv) {
                         skip_reason = tmp;
                 }
 
-                if (!strstr(scenario, test_scenario)) {
+                /* Only care about scenarios if user has set them explicitly. */
+                if (test_scenario_set && !strstr(scenario, test_scenario)) {
                         rd_snprintf(tmp, sizeof(tmp),
                                     "requires test scenario %s", scenario);
                         skip_silent = rd_true;
@@ -1775,12 +1803,17 @@ int main(int argc, char **argv) {
                         test_neg_flags |= TEST_F_KNOWN_ISSUE;
                 else if (!strcmp(argv[i], "-E"))
                         test_neg_flags |= TEST_F_SOCKEM;
+                else if (!strcmp(argv[i], "-i"))
+                        test_flags |= TEST_F_IDEMPOTENT_PRODUCER;
+                else if (!strcmp(argv[i], "-I"))
+                        test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
                 else if (!strcmp(argv[i], "-V") && i + 1 < argc)
                         test_broker_version_str = argv[++i];
-                else if (!strcmp(argv[i], "-s") && i + 1 < argc)
+                else if (!strcmp(argv[i], "-s") && i + 1 < argc) {
                         strncpy(test_scenario, argv[++i],
                                 sizeof(test_scenario) - 1);
-                else if (!strcmp(argv[i], "-S"))
+                        test_scenario_set = 1;
+                } else if (!strcmp(argv[i], "-S"))
                         show_summary = 0;
                 else if (!strcmp(argv[i], "-D"))
                         test_delete_topics_between = 1;
@@ -1817,6 +1850,8 @@ int main(int argc, char **argv) {
                             "needed)\n"
                             "  -k/-K  Only/dont run tests with known issues\n"
                             "  -E     Don't run sockem tests\n"
+                            "  -i/-I   Only/don't run tests using "
+                            "idempotent/transactional producer\n"
                             "  -a     Assert on failures\n"
                             "  -r     Write test_report_...json file.\n"
                             "  -S     Dont show test summary\n"
@@ -1849,6 +1884,7 @@ int main(int argc, char **argv) {
                             "  TEST_LEVEL - Test verbosity level\n"
                             "  TEST_MODE - bare, helgrind, valgrind\n"
                             "  TEST_SEED - random seed\n"
+                            "  CLUSTER_TYPE - K2 for K2 cluster mode (uses acks=-1)\n"
                             "  RDKAFKA_TEST_CONF - test config file "
                             "(test.conf)\n"
                             "  KAFKA_PATH - Path to kafka source dir\n"
@@ -1911,6 +1947,10 @@ int main(int argc, char **argv) {
         if (test_concurrent_max > 1)
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
+        /* K2 clusters may have higher latency and need more time for fetch operations */
+        if (test_k2_cluster)
+                test_timeout_multiplier += 2.0;
+
         TEST_SAY("Tests to run     : %s\n",
                  tests_to_run ? tests_to_run : "all");
         if (subtests_to_run)
@@ -1921,7 +1961,8 @@ int main(int argc, char **argv) {
                 TEST_SAY("Skip tests before: %s\n", skip_tests_till);
         TEST_SAY("Test mode    : %s%s%s\n", test_quick ? "quick, " : "",
                  test_mode, test_on_ci ? ", CI" : "");
-        TEST_SAY("Test scenario: %s\n", test_scenario);
+        if (test_scenario_set)
+                TEST_SAY("Test scenario: %s\n", test_scenario);
         TEST_SAY("Test filter  : %s\n", (test_flags & TEST_F_LOCAL)
                                             ? "local tests only"
                                             : "no filter");
@@ -1931,8 +1972,17 @@ int main(int argc, char **argv) {
         if (test_rusage)
                 TEST_SAY("Test rusage : yes (%.2fx CPU calibration)\n",
                          test_rusage_cpu_calibration);
-        if (test_idempotent_producer)
+        if (test_idempotent_producer) {
+                if (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)
+                        TEST_WARN(
+                            "Skipping tests that require an idempotent "
+                            "producer while also enabling idempotency for "
+                            "other tests, possible logical inconsistency.\n");
                 TEST_SAY("Test Idempotent Producer: enabled\n");
+        }
+        if (test_k2_cluster) {
+                TEST_SAY("Test K2 Cluster: enabled (acks=-1, +2.0x timeout multiplier)\n");
+        }
 
         {
                 char cwd[512], *pcwd;
@@ -2155,6 +2205,12 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
 
         test_conf_init(NULL, &topic_conf, 0);
 
+        /* Make sure all replicas are in-sync after producing
+         * so that consume test wont fail - this is overriden if the user sets
+         * a different value explicitly. */
+        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
+                                errstr, sizeof(errstr));
+
         va_start(ap, topic);
         while ((name = va_arg(ap, const char *)) &&
                (val = va_arg(ap, const char *))) {
@@ -2163,12 +2219,6 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
                         TEST_FAIL("Conf failed: %s\n", errstr);
         }
         va_end(ap);
-
-        /* Make sure all replicas are in-sync after producing
-         * so that consume test wont fail. */
-        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
-                                errstr, sizeof(errstr));
-
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -5229,28 +5279,105 @@ test_auto_create_topic(rd_kafka_t *rk, const char *name, int timeout_ms) {
         return err;
 }
 
-
+static int verify_topics_in_metadata(rd_kafka_t *rk,
+                                     rd_kafka_metadata_topic_t *topics,
+                                     size_t topic_cnt,
+                                     rd_kafka_metadata_topic_t *not_topics,
+                                     size_t not_topic_cnt);
 /**
- * @brief Check if topic auto creation works.
+ * @brief Check if topic auto creation works. The result is cached.
  * @returns 1 if it does, else 0.
  */
 int test_check_auto_create_topic(void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t err;
-        const char *topic = test_mk_topic_name("autocreatetest", 1);
+        const char *topic;
+        rd_kafka_metadata_topic_t mdt;
+        int fails;
+
+        if (test_auto_create_enabled != -1)
+                return test_auto_create_enabled;
+
+        topic = test_mk_topic_name("autocreatetest", 1);
+        mdt.topic = (char *)topic;
 
         test_conf_init(&conf, NULL, 0);
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         err = test_auto_create_topic(rk, topic, tmout_multip(5000));
+        TEST_SAY("test_auto_create_topic() returned %s\n",
+                 rd_kafka_err2str(err));
         if (err)
                 TEST_SAY("Auto topic creation of \"%s\" failed: %s\n", topic,
                          rd_kafka_err2str(err));
+
+        /* Actually check if the topic exists or not. Errors only denote errors
+         * in topic creation, and not non-existence. */
+        fails = verify_topics_in_metadata(rk, &mdt, 1, NULL, 0);
+        if (fails > 0)
+                TEST_SAY(
+                    "Auto topic creation of \"%s\" failed as the topic does "
+                    "not exist.\n",
+                    topic);
+
         rd_kafka_destroy(rk);
 
-        return err ? 0 : 1;
+        if (fails == 0 && !err)
+                test_auto_create_enabled = 1;
+        else
+                test_auto_create_enabled = 0;
+
+        return test_auto_create_enabled;
 }
 
+/**
+ * @brief Create topic if auto topic creation is not enabled.
+ * @param use_rk The rdkafka handle to use, or NULL to create a new one.
+ * @param topicname The name of the topic to create.
+ * @param partition_cnt The number of partitions to create.
+ */
+void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
+                                               const char *topicname,
+                                               int partition_cnt) {
+        if (test_check_auto_create_topic()) {
+                return;
+        }
+
+        TEST_SAY("Auto topic creation is not enabled, creating topic %s\n",
+                 topicname);
+
+        /* If auto topic creation is not enabled, we create the topic with
+         * broker default values */
+        test_create_topic(use_rk, topicname, partition_cnt, -1);
+}
+
+/**
+ * @brief Create topic with configs if auto topic creation is not enabled.
+ * @param use_rk The rdkafka handle to use, or NULL to create a new one.
+ * @param topicname The name of the topic to create.
+ * @param partition_cnt The number of partitions to create.
+ * @param configs Topic configurations (key-value pairs), or NULL for defaults.
+ */
+void test_create_topic_if_auto_create_disabled_with_configs(rd_kafka_t *use_rk,
+                                                           const char *topicname,
+                                                           int partition_cnt,
+                                                           const char **configs) {
+        if (test_check_auto_create_topic()) {
+                return;
+        }
+
+        TEST_SAY("Auto topic creation is not enabled, creating topic %s%s\n",
+                 topicname, configs ? " with custom configs" : "");
+
+        /* If auto topic creation is not enabled, create the topic */
+        if (configs) {
+                /* Use admin API with custom configs */
+                test_admin_create_topic(use_rk, topicname, partition_cnt, -1, configs);
+        } else {
+                /* Use existing flow with broker default values */
+                test_create_topic(use_rk, topicname, partition_cnt, -1);
+        }
+}
 
 /**
  * @brief Builds and runs a Java application from the java/ directory.
@@ -5864,7 +5991,7 @@ void test_wait_metadata_update(rd_kafka_t *rk,
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
-        abs_timeout = test_clock() + ((int64_t)tmout * 1000);
+        abs_timeout = test_clock() + ((int64_t)tmout_multip(tmout) * 1000);
 
         TEST_SAY("Waiting for up to %dms for metadata update\n", tmout);
 
@@ -6278,8 +6405,10 @@ rd_kafka_resp_err_t test_CreateTopics_simple(rd_kafka_t *rk,
 
         for (i = 0; i < topic_cnt; i++) {
                 char errstr[512];
+                /* K2 clusters require replication factor 3 */
+                int replication_factor = test_k2_cluster ? 3 : 1;
                 new_topics[i] = rd_kafka_NewTopic_new(
-                    topics[i], num_partitions, 1, errstr, sizeof(errstr));
+                    topics[i], num_partitions, replication_factor, errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],
                             "Failed to NewTopic(\"%s\", %d) #%" PRIusz ": %s",
                             topics[i], num_partitions, i, errstr);

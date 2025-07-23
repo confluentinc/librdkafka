@@ -235,7 +235,7 @@ static void do_test_non_exist_and_partchange(void) {
         await_no_rebalance("#1: empty", rk, queue, 10000);
 
         TEST_SAY("#1: creating topic %s\n", topic_a);
-        test_create_topic_wait_exists(NULL, topic_a, 2, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
 
         await_assignment("#1: proper", rk, queue, 1, topic_a, 2);
 
@@ -245,7 +245,7 @@ static void do_test_non_exist_and_partchange(void) {
          * - Increase the partition count
          * - Verify updated assignment
          */
-        test_kafka_topics("--alter --topic %s --partitions 4", topic_a);
+        test_create_partitions(rk, topic_a, 4);
         await_revoke("#2", rk, queue);
 
         await_assignment("#2: more partitions", rk, queue, 1, topic_a, 4);
@@ -295,7 +295,7 @@ static void do_test_regex(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_b);
-        test_create_topic_wait_exists(NULL, topic_b, 2, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_b, 2, -1, 5000);
 
         TEST_SAY("Regex: Subscribing to %s & %s & %s\n", topic_b, topic_d,
                  topic_e);
@@ -305,13 +305,13 @@ static void do_test_regex(void) {
                          2);
 
         TEST_SAY("Regex: creating topic %s (not subscribed)\n", topic_c);
-        test_create_topic_wait_exists(NULL, topic_c, 4, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_c, 4, -1, 5000);
 
         /* Should not see a rebalance since no topics are matched. */
         await_no_rebalance("Regex: empty", rk, queue, 10000);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
-        test_create_topic_wait_exists(NULL, topic_d, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_d, 1, -1, 5000);
 
         if (test_consumer_group_protocol_classic())
                 await_revoke("Regex: rebalance after topic creation", rk,
@@ -376,10 +376,10 @@ static void do_test_topic_remove(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
-        test_create_topic_wait_exists(NULL, topic_f, parts_f, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_f, parts_f, -1, 5000);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
-        test_create_topic_wait_exists(NULL, topic_g, parts_g, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_g, parts_g, -1, 5000);
 
         TEST_SAY("Topic removal: Subscribing to %s & %s\n", topic_f, topic_g);
         topics = rd_kafka_topic_partition_list_new(2);
@@ -396,7 +396,7 @@ static void do_test_topic_remove(void) {
                          topic_f, parts_f, topic_g, parts_g);
 
         TEST_SAY("Topic removal: removing %s\n", topic_f);
-        test_kafka_topics("--delete --topic %s", topic_f);
+        test_delete_topic(rk, topic_f);
 
         await_revoke("Topic removal: rebalance after topic removal", rk, queue);
 
@@ -404,7 +404,7 @@ static void do_test_topic_remove(void) {
                          topic_g, parts_g);
 
         TEST_SAY("Topic removal: removing %s\n", topic_g);
-        test_kafka_topics("--delete --topic %s", topic_g);
+        test_delete_topic(rk, topic_g);
 
         await_revoke("Topic removal: rebalance after 2nd topic removal", rk,
                      queue);
@@ -725,13 +725,13 @@ static void do_test_resubscribe_with_regex() {
          */
 
         TEST_SAY("Creating topic %s\n", topic1);
-        test_create_topic_wait_exists(NULL, topic1, 4, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic1, 4, -1, 5000);
 
         TEST_SAY("Creating topic %s\n", topic2);
-        test_create_topic_wait_exists(NULL, topic2, 4, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic2, 4, -1, 5000);
 
         TEST_SAY("Creating topic %s\n", topic_a);
-        test_create_topic_wait_exists(NULL, topic_a, 2, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
 
         test_conf_init(&conf, NULL, 60);
 

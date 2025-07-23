@@ -59,6 +59,9 @@ extern int tmout_multip(int msecs);
 /** @brief true if tests should run in quick-mode (faster, less data) */
 extern int test_quick;
 
+/** @brief true if tests should run in K2 cluster mode (acks=-1, higher limits) */
+extern int test_k2_cluster;
+
 /** @brief Broker version to int */
 #define TEST_BRKVER(A, B, C, D) (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
 /** @brief return single version component from int */
@@ -412,5 +415,19 @@ const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
 
+void test_admin_create_topic(rd_kafka_t *use_rk,
+                             const char *topicname,
+                             int partition_cnt,
+                             int replication_factor,
+                             const char **configs);
+
+int test_check_auto_create_topic(void);
+void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
+                                               const char *topicname,
+                                               int partition_cnt);
+void test_create_topic_if_auto_create_disabled_with_configs(rd_kafka_t *use_rk,
+                                                           const char *topicname,
+                                                           int partition_cnt,
+                                                           const char **configs);
 
 #endif /* _TESTSHARED_H_ */

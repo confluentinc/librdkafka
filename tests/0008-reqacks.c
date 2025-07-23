@@ -96,7 +96,16 @@ int main_0008_reqacks(int argc, char **argv) {
             "all brokers!\033[0m\n");
 
         /* Try different request.required.acks settings (issue #75) */
-        for (reqacks = -1; reqacks <= 1; reqacks++) {
+        /* For K2 clusters, only use acks=-1 */
+        int start_acks = test_k2_cluster ? -1 : -1;
+        int end_acks = test_k2_cluster ? -1 : 1;
+        
+        if (test_k2_cluster) {
+                TEST_SAY("K2 cluster mode: testing only acks=-1\n");
+        } else {
+                TEST_SAY("Standard mode: testing acks=-1, 0, 1\n");
+        }
+        for (reqacks = start_acks; reqacks <= end_acks; reqacks++) {
                 char tmp[10];
 
                 test_conf_init(&conf, &topic_conf, 10);
@@ -129,6 +138,8 @@ int main_0008_reqacks(int argc, char **argv) {
                     "Created    kafka instance %s with required acks %d, "
                     "expecting status %d\n",
                     rd_kafka_name(rk), reqacks, exp_status);
+
+                test_create_topic_if_auto_create_disabled(rk, topic, 1);
 
                 rkt = rd_kafka_topic_new(rk, topic, topic_conf);
                 if (!rkt)

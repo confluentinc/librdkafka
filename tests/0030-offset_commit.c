@@ -539,6 +539,7 @@ static void do_nonexist_commit(void) {
 int main_0030_offset_commit(int argc, char **argv) {
 
         topic  = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
 
         do_empty_commit();

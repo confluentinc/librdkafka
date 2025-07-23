@@ -261,6 +261,9 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
+        if (remote)
+                test_create_topic_if_auto_create_disabled(rk, topic, -1);
+
         TEST_SAY("Producing %d messages to topic %s\n", msgcnt, topic);
 
         for (i = 0; i < msgcnt; i++) {
@@ -346,21 +349,26 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
 
 
 int main_0086_purge_remote(int argc, char **argv) {
-        const rd_bool_t has_idempotence =
-            test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
-
         do_test_purge("remote", 1 /*remote*/, 0 /*idempotence*/,
                       0 /*!gapless*/);
-
-        if (has_idempotence) {
-                do_test_purge("remote,idempotence", 1 /*remote*/,
-                              1 /*idempotence*/, 0 /*!gapless*/);
-                do_test_purge("remote,idempotence,gapless", 1 /*remote*/,
-                              1 /*idempotence*/, 1 /*!gapless*/);
-        }
         return 0;
 }
 
+int main_0086_purge_remote_idempotent(int argc, char **argv) {
+        const rd_bool_t has_idempotence =
+            test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
+
+        if (!has_idempotence) {
+                TEST_SKIP("Idempotence not supported by this broker version\n");
+                return 0;
+        }
+
+        do_test_purge("remote,idempotence", 1 /*remote*/, 1 /*idempotence*/,
+                      0 /*!gapless*/);
+        do_test_purge("remote,idempotence,gapless", 1 /*remote*/,
+                      1 /*idempotence*/, 1 /*!gapless*/);
+        return 0;
+}
 
 int main_0086_purge_local(int argc, char **argv) {
         do_test_purge("local", 0 /*local*/, 0, 0);

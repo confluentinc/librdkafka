@@ -89,12 +89,13 @@ static void do_test_null_empty(bool api_version_request) {
                  api_version_request ? "true" : "false");
   Test::conf_set(conf, "acks", "all");
 
-
   std::string errstr;
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)
     Test::Fail("Failed to create Producer: " + errstr);
   delete conf;
+
+  Test::create_topic_wait_exists(p, topic.c_str(), -1, -1, 5000);
 
   const int msgcnt                    = 8;
   static const char *msgs[msgcnt * 2] = {NULL,   NULL, "key2", NULL, "key3",

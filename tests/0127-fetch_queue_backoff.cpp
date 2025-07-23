@@ -153,6 +153,8 @@ int main_0127_fetch_queue_backoff(int argc, char **argv) {
                        << ": Failed to create producer: " << errstr);
   delete conf;
 
+  test_create_topic_if_auto_create_disabled(p->c_ptr(), topic.c_str(), -1);
+
   Test::produce_msgs(p, topic, 0, 100, 10000, true /*flush*/);
   delete p;
 

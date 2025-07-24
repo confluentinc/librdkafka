@@ -1568,7 +1568,24 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 PKCS12_free(p12);
                 BIO_free(bio);
 
+#ifdef OPENSSL_IS_BORINGSSL
+                /* BoringSSL doesn't have SSL_CTX_use_cert_and_key, 
+                 * use individual functions instead */
+                r = SSL_CTX_use_certificate(ctx, cert);
+                if (r == 1 && pkey != NULL) {
+                        r = SSL_CTX_use_PrivateKey(ctx, pkey);
+                }
+                if (r == 1 && ca != NULL && sk_X509_num(ca) > 0) {
+                        r = SSL_CTX_set0_chain(ctx, ca);
+                        if (r == 1) {
+                                /* SSL_CTX_set0_chain takes ownership of ca,
+                                 * so don't free it below */
+                                ca = NULL;
+                        }
+                }
+#else
                 r = SSL_CTX_use_cert_and_key(ctx, cert, pkey, ca, 1);
+#endif
                 RD_IF_FREE(cert, X509_free);
                 RD_IF_FREE(pkey, EVP_PKEY_free);
                 if (ca != NULL)

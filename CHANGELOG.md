@@ -4,6 +4,8 @@ librdkafka v2.11.1 is a maintenance release:
 
 * Made the conditions for enabling the features future proof (#5130).
 * Avoid returning an all brokers down error on planned disconnections (#5126).
+* An "all brokers down" error isn't returned when we haven't tried to connect
+  to all brokers since last successful connection (#5126).
 
 
 ## Fixes
@@ -23,8 +25,12 @@ librdkafka v2.11.1 is a maintenance release:
   disconnections, broker host change and similar as events that can cause
   the client to reach the "all brokers down" state, returning an error and
   since 2.10.0 possibly starting a re-bootstrap sequence.
-  Also avoids the same error just after connecting and disconnecting from
-  a single broker, rest of brokers need to be tried again in that case.
+* Issues: #5142.
+  An "all brokers down" error isn't returned when we haven't tried to connect
+  to all brokers since last successful connection. It happened because the down
+  state is cached and can be stale when a connection isn't needed to that
+  particular broker. Solved by resetting the cached broker down state when any
+  broker successfully connects, so that broker needs to be tried again.
   Happening since 1.x (#5126).
 
 

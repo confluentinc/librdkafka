@@ -806,6 +806,7 @@ static void do_test_resubscribe_with_regex() {
         /* Cleanup */
         test_delete_topic(rk, topic1);
         test_delete_topic(rk, topic2);
+        test_delete_topic(rk, topic_a);
 
         test_consumer_close(rk);
         rd_kafka_queue_destroy(queue);

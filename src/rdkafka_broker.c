@@ -469,7 +469,7 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
                                       va_list ap) {
         char errstr[512];
         char extra[128];
-        size_t of = 0, of_message, ofe;
+        size_t of = 0, ofe;
         rd_bool_t identical, suppress;
         int state_duration_ms = (int)((rd_clock() - rkb->rkb_ts_state) / 1000);
 
@@ -487,7 +487,6 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
                                  * itself is more important. */
         }
         rd_kafka_broker_unlock(rkb);
-        of_message = of;
 
         ofe = (size_t)rd_vsnprintf(errstr + of, sizeof(errstr) - of, fmt, ap);
         if (ofe > sizeof(errstr) - of)
@@ -496,7 +495,7 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
 
         /* Provide more meaningful error messages in certain cases */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&
-            rd_kafka_transport_error_disconnected(&errstr[of_message])) {
+            rd_kafka_transport_error_disconnected(fmt)) {
                 if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY) {
                         /* A disconnect while requesting ApiVersion typically
                          * means we're connecting to a SSL-listener as
@@ -593,7 +592,7 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
                    identical ? ": identical to last error" : "",
                    suppress ? ": error log suppressed" : "");
 
-        if (level <= LOG_WARNING && (level <= LOG_CRIT || !suppress)) {
+        if (level <= LOG_CRIT || (level <= LOG_INFO && !suppress)) {
                 rd_kafka_log(rkb->rkb_rk, level, "FAIL", "%s: %s",
                              rkb->rkb_name, errstr);
 

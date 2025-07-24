@@ -283,7 +283,7 @@ static ssize_t rd_kafka_transport_socket_recvmsg(rd_kafka_transport_t *rktrans,
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size,
                                     "Disconnected: connection closed by "
-                                    "peer");
+                                    "peer: receive 0 after POLLIN");
                         return -1;
                 } else if (r == -1 && rd_socket_errno == ECONNRESET) {
                         rd_snprintf(errstr, errstr_size,
@@ -344,7 +344,7 @@ static ssize_t rd_kafka_transport_socket_recv0(rd_kafka_transport_t *rktrans,
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size,
                                     "Disconnected: connection closed by "
-                                    "peer");
+                                    "peer: receive 0 after POLLIN");
                         return -1;
                 }
 
@@ -768,7 +768,7 @@ static void rd_kafka_transport_io_event(rd_kafka_transport_t *rktrans,
                         rd_kafka_broker_conn_closed(
                             rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
                             "Disconnected: connection closed by "
-                            "peer");
+                            "peer: POLLHUP");
                         return;
                 }
 

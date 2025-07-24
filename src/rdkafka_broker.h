@@ -495,6 +495,10 @@ rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,
                                               int16_t minver);
 
+rd_bool_t rd_kafka_broker_ApiVersion_at_least_no_lock(rd_kafka_broker_t *rkb,
+                                                      int16_t ApiKey,
+                                                      int16_t minver);
+
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
                                                       int line,
                                                       rd_kafka_t *rk,

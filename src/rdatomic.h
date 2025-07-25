@@ -111,6 +111,10 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
 #endif
 }
 
+/**
+ * @brief Set the atomic value to \p v and return the previous value to
+ *        that can be used to determine if the value was changed.
+ */
 static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra,
                                                    int32_t v) {
 #ifdef _WIN32
@@ -118,15 +122,14 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra,
 #elif !HAVE_ATOMICS_32
         int32_t r;
         mtx_lock(&ra->lock);
-        r = ra->val = v;
+        r       = rd->val;
+        ra->val = v;
         mtx_unlock(&ra->lock);
         return r;
 #elif HAVE_ATOMICS_32_ATOMIC
-        __atomic_store_n(&ra->val, v, __ATOMIC_SEQ_CST);
-        return v;
+        return __atomic_exchange_n(&ra->val, v, __ATOMIC_SEQ_CST);
 #elif HAVE_ATOMICS_32_SYNC
-        (void)__sync_lock_test_and_set(&ra->val, v);
-        return v;
+        return __sync_lock_test_and_set(&ra->val, v);
 #else
         return ra->val = v;  // FIXME
 #endif
@@ -200,7 +203,10 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 #endif
 }
 
-
+/**
+ * @brief Set the atomic value to \p v and return the previous value to
+ *        that can be used to determine if the value was changed.
+ */
 static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra,
                                                    int64_t v) {
 #ifdef _WIN32
@@ -208,16 +214,14 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra,
 #elif !HAVE_ATOMICS_64
         int64_t r;
         mtx_lock(&ra->lock);
-        ra->val = v;
         r       = ra->val;
+        ra->val = v;
         mtx_unlock(&ra->lock);
         return r;
 #elif HAVE_ATOMICS_64_ATOMIC
-        __atomic_store_n(&ra->val, v, __ATOMIC_SEQ_CST);
-        return v;
+        return __atomic_exchange_n(&ra->val, v, __ATOMIC_SEQ_CST);
 #elif HAVE_ATOMICS_64_SYNC
-        (void)__sync_lock_test_and_set(&ra->val, v);
-        return v;
+        return __sync_lock_test_and_set(&ra->val, v);
 #else
         return ra->val = v;  // FIXME
 #endif

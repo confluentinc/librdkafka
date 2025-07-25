@@ -52,7 +52,7 @@
 static int
 rd_kafka_filter_broker_by_GetTelemetrySubscription(rd_kafka_broker_t *rkb,
                                                    void *opaque) {
-        if (rd_kafka_broker_ApiVersion_at_least(
+        if (rd_kafka_broker_ApiVersion_at_least_no_lock(
                 rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0))
                 return 0;
         return 1;

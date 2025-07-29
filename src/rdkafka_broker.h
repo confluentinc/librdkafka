@@ -187,8 +187,27 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_atomic64_t reqtype[RD_KAFKAP__NUM]; /**< Per request-type
                                                         *   counter */
 
-                rd_atomic64_t ts_send; /**< Timestamp of last send */
-                rd_atomic64_t ts_recv; /**< Timestamp of last receive */
+                rd_atomic64_t ts_send;       /**< Timestamp of last send */
+                rd_atomic64_t ts_recv;       /**< Timestamp of last receive */
+                rd_bool_t skip_broker_down;  /**< Avoid reporting the
+                                              *   broker down on next
+                                              *   state change.
+                                              *   Useful for a planned
+                                              *   disconnection to avoid
+                                              *   reaching the all
+                                              *   brokers down state. */
+                int connections_max_idle_ms; /**< Maximum idle time
+                                              *   for this broker connections.
+                                              *   jitter is different for
+                                              *   each broker to avoid the
+                                              *   ALL_BROKERS_DOWN error.
+                                              *   Initial value is `-1` as
+                                              *   `connections.max.idle.ms=0`
+                                              *   means disabled, but must
+                                              *   never be used when
+                                              *   `connections.max.idle.ms=0`
+                                              *   for the same reason
+                                              *   (an assert is present). */
         } rkb_c;
 
         struct {
@@ -331,7 +350,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         rd_kafka_secproto_t rkb_proto;
 
-        int rkb_down_reported; /* Down event reported */
+        /** Down event was reported for this broker
+         *  after last connection to any broker. */
+        rd_atomic32_t rkb_down_reported;
 #if WITH_SASL_CYRUS
         rd_kafka_timer_t rkb_sasl_kinit_refresh_tmr;
 #endif
@@ -480,6 +501,10 @@ int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
 rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
                                               int16_t ApiKey,
                                               int16_t minver);
+
+rd_bool_t rd_kafka_broker_ApiVersion_at_least_no_lock(rd_kafka_broker_t *rkb,
+                                                      int16_t ApiKey,
+                                                      int16_t minver);
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
                                                       int line,

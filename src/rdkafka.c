@@ -2061,6 +2061,25 @@ static void rd_kafka_1s_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 }
 
 /**
+ * @brief Reset broker down reported flag for all brokers.
+ *        In case it was set to 1 it will be reset to 0 and
+ *        the broker down count will be decremented.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_rdlock()
+ * @locality any
+ */
+void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_atomic32_set(&rkb->rkb_down_reported, 0) == 1)
+                        rd_atomic32_sub(&rk->rk_broker_down_cnt, 1);
+        }
+        rd_kafka_rdunlock(rk);
+}
+
+/**
  * @brief Re-bootstrap timer callback.
  *
  * @locality rdkafka main thread
@@ -2087,6 +2106,9 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 
         rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
 
+        rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 1);
+        rd_kafka_reset_any_broker_down_reported(rk);
+
         if (rk->rk_conf.brokerlist) {
                 rd_kafka_brokers_add0(
                         rk,
@@ -2098,7 +2120,7 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_rdlock(rk);
         if (rd_list_cnt(&rk->additional_brokerlists) == 0) {
                 rd_kafka_rdunlock(rk);
-                return;
+                goto done;
         }
 
         rd_list_init_copy(&additional_brokerlists, &rk->additional_brokerlists);
@@ -2113,6 +2135,8 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
                          * names even if requested */);
         }
         rd_list_destroy(&additional_brokerlists);
+done:
+        rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 0);
 }
 
 static void rd_kafka_stats_emit_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
@@ -2377,6 +2401,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_atomic32_init(&rk->rk_logical_broker_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_up_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_down_cnt, 0);
+        rd_atomic32_init(&rk->rk_rebootstrap_in_progress, 0);
 
         rk->rk_rep             = rd_kafka_q_new(rk);
         rk->rk_ops             = rd_kafka_q_new(rk);
@@ -2814,9 +2839,15 @@ void rd_kafka_rebootstrap(rd_kafka_t *rk) {
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return;
 
-        rd_kafka_timer_start_oneshot(&rk->rk_timers, &rk->rebootstrap_tmr,
-                                     rd_true /*restart*/, 0,
-                                     rd_kafka_rebootstrap_tmr_cb, NULL);
+        if (rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 1) == 0) {
+                /* Only when not already in progress 0 -> 1.
+                 * After setting down a learned broker it could reconnect and
+                 * disconnect again before previous reboostrap completes,
+                 * causing a new re-bootstrap. */
+                rd_kafka_timer_start_oneshot(
+                    &rk->rk_timers, &rk->rebootstrap_tmr, rd_true /*restart*/,
+                    0, rd_kafka_rebootstrap_tmr_cb, NULL);
+        }
 }
 
 /**

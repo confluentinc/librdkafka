@@ -4339,6 +4339,7 @@ static RD_INLINE void rd_kafka_broker_idle_check(rd_kafka_broker_t *rkb) {
         rd_ts_t ts_last_activity = RD_MAX(ts_send, ts_recv);
         int idle_ms;
         const int max_jitter_ms = 2000;
+        rd_dassert(rkb->rkb_rk->rk_conf.connections_max_idle_ms > 0);
 
         /* If nothing has been sent yet, use the connection time as
          * last activity. */
@@ -4347,16 +4348,16 @@ static RD_INLINE void rd_kafka_broker_idle_check(rd_kafka_broker_t *rkb) {
 
         idle_ms = (int)((rd_clock() - ts_last_activity) / 1000);
 
-        if (!rkb->rkb_c.connection_max_idle_ms) {
+        if (unlikely(rkb->rkb_c.connections_max_idle_ms == -1)) {
                 /* Add a different jitter for each broker. */
-                rkb->rkb_c.connection_max_idle_ms =
+                rkb->rkb_c.connections_max_idle_ms =
                     rkb->rkb_rk->rk_conf.connections_max_idle_ms;
-                if (rkb->rkb_c.connection_max_idle_ms >= 2 * max_jitter_ms)
-                        rkb->rkb_c.connection_max_idle_ms -=
+                if (rkb->rkb_c.connections_max_idle_ms >= 2 * max_jitter_ms)
+                        rkb->rkb_c.connections_max_idle_ms -=
                             rd_jitter(0, max_jitter_ms);
         }
 
-        if (likely(idle_ms < rkb->rkb_c.connection_max_idle_ms))
+        if (likely(idle_ms < rkb->rkb_c.connections_max_idle_ms))
                 return;
 
         rd_kafka_broker_planned_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
@@ -4894,13 +4895,14 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                 rd_snprintf(rkb->rkb_name, sizeof(rkb->rkb_name), "%s", name);
         }
 
-        rkb->rkb_source   = source;
-        rkb->rkb_rk       = rk;
-        rkb->rkb_ts_state = rd_clock();
-        rkb->rkb_nodeid   = nodeid;
-        rkb->rkb_proto    = proto;
-        rkb->rkb_port     = port;
-        rkb->rkb_origname = rd_strdup(name);
+        rkb->rkb_source                    = source;
+        rkb->rkb_rk                        = rk;
+        rkb->rkb_ts_state                  = rd_clock();
+        rkb->rkb_nodeid                    = nodeid;
+        rkb->rkb_proto                     = proto;
+        rkb->rkb_port                      = port;
+        rkb->rkb_origname                  = rd_strdup(name);
+        rkb->rkb_c.connections_max_idle_ms = -1;
 
         mtx_init(&rkb->rkb_lock, mtx_plain);
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);

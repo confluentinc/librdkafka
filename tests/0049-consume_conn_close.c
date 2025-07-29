@@ -98,6 +98,7 @@ int main_0049_consume_conn_close(int argc, char **argv) {
         msgcnt = (msgcnt / (int)test_timeout_multiplier) & ~1;
 
         testid = test_id_generate();
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
 

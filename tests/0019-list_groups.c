@@ -164,6 +164,8 @@ static void do_test_list_groups(void) {
         /* Handle for group listings */
         rk = test_create_producer();
 
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
+
         /* Produce messages so that topic is auto created */
         rkt = test_create_topic_object(rk, topic, NULL);
         test_produce_msgs(rk, rkt, 0, 0, 0, 10, NULL, 64);

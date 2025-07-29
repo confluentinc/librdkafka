@@ -60,6 +60,10 @@ static void do_test_consume_batch(void) {
         /* Produce messages */
         for (i = 0; i < topic_cnt; i++) {
                 topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+
+                test_create_topic_if_auto_create_disabled(NULL, topics[i],
+                                                          partition_cnt);
+
                 for (p = 0; p < partition_cnt; p++)
                         test_produce_msgs_easy(topics[i], testid, p,
                                                msgcnt / topic_cnt /

@@ -563,6 +563,14 @@ static void test_socket_add(struct test *test, sockem_t *skm) {
         TEST_UNLOCK();
 }
 
+void *test_socket_find(struct test *test, sockem_t *skm) {
+        void *ret;
+        TEST_LOCK();
+        ret = rd_list_find(&test->sockets, skm, rd_list_cmp_ptr);
+        TEST_UNLOCK();
+        return ret;
+}
+
 static void test_socket_del(struct test *test, sockem_t *skm, int do_lock) {
         if (do_lock)
                 TEST_LOCK();

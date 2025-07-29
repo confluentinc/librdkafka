@@ -623,7 +623,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "If this property is left at its default value some heuristics are "
      "performed to determine a suitable default value, this is currently "
      "limited to identifying brokers on Azure "
-     "(see librdkafka issue #3109 for more info).",
+     "(see librdkafka issue #3109 for more info). "
+     "Actual value can be lower, up to 2s lower, "
+     "only if `connections.max.idle.ms` >= 4s, "
+     "as jitter is added to avoid disconnecting all brokers at the same time.",
      0, INT_MAX, 0},
     {_RK_GLOBAL | _RK_MED | _RK_HIDDEN, "enable.sparse.connections", _RK_C_BOOL,
      _RK(sparse_connections),

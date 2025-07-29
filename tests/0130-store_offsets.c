@@ -44,6 +44,7 @@ static void do_test_store_unassigned(void) {
 
         SUB_TEST_QUICK();
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
         test_produce_msgs_easy(topic, 0, 0, 1000);
 
         test_conf_init(&conf, NULL, 30);

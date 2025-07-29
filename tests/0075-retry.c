@@ -242,6 +242,7 @@ static void do_test_low_socket_timeout(const char *topic) {
 
 int main_0075_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0075_retry", 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         do_test_low_socket_timeout(topic);
 

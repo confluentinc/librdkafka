@@ -105,9 +105,9 @@ static void do_test_producer(bool timeout_too_short) {
   while (test_clock() < end_wait)
     p->poll(1000);
 
-  Test::create_topic(NULL, topic.c_str(), 1, 3);
+  Test::create_topic(NULL, topic.c_str(), 1, -1);
 
-  p->flush(10 * 1000);
+  p->flush(tmout_multip(10 * 1000));
 
   if (!dr_cb.ok)
     Test::Fail("Did not get delivery report for message");

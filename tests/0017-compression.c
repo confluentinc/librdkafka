@@ -71,6 +71,7 @@ int main_0017_compression(int argc, char **argv) {
                 rd_kafka_topic_t *rkt_p;
 
                 topics[i] = rd_strdup(test_mk_topic_name(codecs[i], 1));
+                test_create_topic_if_auto_create_disabled(rk_p, topics[i], -1);
                 TEST_SAY(
                     "Produce %d messages with %s compression to "
                     "topic %s\n",

@@ -25,6 +25,8 @@ librdkafka v2.11.1 is a maintenance release:
   disconnections, broker host change and similar as events that can cause
   the client to reach the "all brokers down" state, returning an error and
   since 2.10.0 possibly starting a re-bootstrap sequence.
+  Happening since 1.x (#5126).
+
 * Issues: #5142.
   An "all brokers down" error isn't returned when we haven't tried to connect
   to all brokers since last successful connection. It happened because the down

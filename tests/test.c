@@ -268,6 +268,7 @@ _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0153_rebalance_performance);
 _TEST_DECL(0154_rebalance_performance_single_consumer);
+_TEST_DECL(0156_chaos_testing_consumer_group);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -532,7 +533,7 @@ struct test tests[] = {
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0153_rebalance_performance, TEST_BRKVER(4, 0, 0, 0)),
     _TEST(0154_rebalance_performance_single_consumer, TEST_BRKVER(4, 0, 0, 0)),
-
+    _TEST(0156_chaos_testing_consumer_group, 0, TEST_BRKVER(4, 0, 0, 0)),
 
 
     /* Manual tests */

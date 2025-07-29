@@ -142,6 +142,7 @@ set(
     0151-purge-brokers.c
     0153-rebalance-performance.c
     0154-rebalance-performance-single-consumer.c
+    0156-chaos-testing-consumer-group.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

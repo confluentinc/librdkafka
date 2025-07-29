@@ -57,7 +57,7 @@ typedef struct producer_s {
     char* topic;
 } producer_t;
 
-long long int max(long long int a, long long int b) {
+static long long int max(long long int a, long long int b) {
     return (a > b) ? a : b;
 }
 
@@ -96,7 +96,7 @@ static int producer_thread(void *arg) {
     return 0;
 }
 
-rd_kafka_topic_partition_list_t *list_diff(rd_kafka_topic_partition_list_t *a,
+static rd_kafka_topic_partition_list_t *list_diff(rd_kafka_topic_partition_list_t *a,
                                       rd_kafka_topic_partition_list_t *b) {
     rd_kafka_topic_partition_list_t *result = rd_kafka_topic_partition_list_new(0);
     int i;

@@ -70,6 +70,8 @@ static void do_test_failed_partitioning(void) {
         rd_kafka_topic_conf_set_partitioner_cb(tconf, my_invalid_partitioner);
         test_topic_conf_set(tconf, "message.timeout.ms",
                             tsprintf("%d", tmout_multip(10000)));
+
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
         rkt = rd_kafka_topic_new(rk, topic, tconf);
         TEST_ASSERT(rkt != NULL, "%s", rd_kafka_err2str(rd_kafka_last_error()));
 
@@ -267,7 +269,7 @@ static void do_test_partitioners(void) {
         int pi;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
-        test_create_topic(NULL, topic, part_cnt, 1);
+        test_create_topic(NULL, topic, part_cnt, -1);
 
         for (pi = 0; ptest[pi].partitioner; pi++) {
                 do_test_partitioner(topic, ptest[pi].partitioner, _MSG_CNT,

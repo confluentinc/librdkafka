@@ -62,7 +62,7 @@ static void consume_pause(void) {
         test_conf_set(conf, "enable.partition.eof", "true");
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic(NULL, topic, partition_cnt, -1);
 
         /* Produce messages */
         testid =
@@ -258,7 +258,7 @@ static void consume_pause_resume_after_reassign(void) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(NULL, topic, (int)partition + 1, 1);
+        test_create_topic(NULL, topic, (int)partition + 1, -1);
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
@@ -415,7 +415,7 @@ static void consume_subscribe_assign_pause_resume(void) {
 
         test_conf_init(&conf, NULL, 20);
 
-        test_create_topic(NULL, topic, (int)partition + 1, 1);
+        test_create_topic(NULL, topic, (int)partition + 1, -1);
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);

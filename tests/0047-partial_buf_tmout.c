@@ -78,7 +78,7 @@ int main_0047_partial_buf_tmout(int argc, char **argv) {
         test_conf_set(conf, "queue.buffering.max.messages", "10000000");
         rd_kafka_conf_set_error_cb(conf, my_error_cb);
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
         rkt = test_create_producer_topic(rk, topic, "message.timeout.ms", "300",
                                          NULL);
 

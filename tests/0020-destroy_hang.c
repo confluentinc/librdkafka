@@ -55,6 +55,8 @@ static int nonexist_part(void) {
         int i;
         int it, iterations = 5;
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
         /* Produce messages */
         testid =
             test_produce_msgs_easy(topic, 0, RD_KAFKA_PARTITION_UA, msgcnt);

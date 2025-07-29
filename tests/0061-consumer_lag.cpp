@@ -177,6 +177,7 @@ static void do_test_consumer_lag(bool with_txns) {
 
   topic = Test::mk_topic_name("0061-consumer_lag", 1);
 
+  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), 1);
   test_produce_msgs_easy(topic.c_str(), 0, 0, msgcnt);
 
   if (with_txns) {

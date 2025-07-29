@@ -61,13 +61,16 @@ static int verify_offset(const RdKafka::TopicPartition *tp,
 
 static void test_offset_time(void) {
   std::vector<RdKafka::TopicPartition *> query_parts;
+  struct timeval ts;
+  rd_gettimeofday(&ts, NULL);
+  int64_t current_time = (int64_t)ts.tv_sec * 1000 + ts.tv_usec / 1000;
   std::string topic = Test::mk_topic_name("0054-offset_time", 1);
   RdKafka::Conf *conf, *tconf;
   int64_t timestamps[] = {
       /* timestamp, expected offset */
-      1234,
+      current_time,
       0,
-      999999999999,
+      current_time + 500,
       1,
   };
   const int timestamp_cnt = 2;
@@ -106,6 +109,8 @@ static void test_offset_time(void) {
         "offsetsForTimes #1 should have failed with UNKNOWN_PARTITION, "
         "not " +
         RdKafka::err2str(err));
+
+  Test::create_topic(p, topic.c_str(), 4, -1);
 
   Test::Say("Producing to " + topic + "\n");
   for (int partition = 0; partition < 2; partition++) {

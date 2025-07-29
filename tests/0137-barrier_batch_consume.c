@@ -125,7 +125,7 @@ static void do_test_consume_batch_with_seek(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic(NULL, topic, partition_cnt, -1);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -215,7 +215,7 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic(NULL, topic, partition_cnt, -1);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -320,7 +320,7 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic(NULL, topic, partition_cnt, -1);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -416,7 +416,7 @@ static void do_test_consume_batch_store_offset(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic(NULL, topic, partition_cnt, -1);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -497,7 +497,7 @@ static void do_test_consume_batch_control_msgs(void) {
 
         producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic(producer, topic, partition_cnt, 1);
+        test_create_topic(producer, topic, partition_cnt, -1);
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(producer, 30 * 1000));
 
@@ -602,7 +602,12 @@ int main_0137_barrier_batch_consume(int argc, char **argv) {
         do_test_consume_batch_store_offset();
         do_test_consume_batch_with_pause_and_resume_different_batch();
         do_test_consume_batch_with_pause_and_resume_same_batch();
-        do_test_consume_batch_control_msgs();
 
+        return 0;
+}
+
+
+int main_0137_barrier_batch_consume_idempotent(int argc, char **argv) {
+        do_test_consume_batch_control_msgs();
         return 0;
 }

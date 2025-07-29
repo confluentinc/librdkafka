@@ -318,15 +318,19 @@ static int do_test(const char *assignor) {
             groupid);
 
         /* Produce messages to topics to ensure creation. */
-        for (i = 0; i < topic_cnt; i++)
+        for (i = 0; i < topic_cnt; i++) {
+                test_create_topic_if_auto_create_disabled(NULL, topics[i], 1);
                 test_produce_msgs_easy(topics[i], testid, RD_KAFKA_PARTITION_UA,
                                        msgcnt);
+        }
 
         test_conf_init(&conf, NULL, 20);
         test_conf_set(conf, "partition.assignment.strategy", assignor);
         /* Speed up propagation of new topics */
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
-        test_conf_set(conf, "allow.auto.create.topics", "true");
+
+        if (test_check_auto_create_topic())
+                test_conf_set(conf, "allow.auto.create.topics", "true");
 
         /* Create a single consumer to handle all subscriptions.
          * Has the nice side affect of testing multiple subscriptions. */

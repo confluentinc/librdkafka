@@ -216,6 +216,8 @@ static void do_test_produce_timeout(const char *topic, const int msgrate) {
 int main_0094_idempotence_msg_timeout(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
         do_test_produce_timeout(topic, 10);
 
         if (test_quick) {

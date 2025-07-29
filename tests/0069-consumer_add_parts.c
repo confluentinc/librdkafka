@@ -79,7 +79,7 @@ int main_0069_consumer_add_parts(int argc, char **argv) {
         c2 = test_create_consumer(topic, rebalance_cb, NULL, NULL);
 
         TEST_SAY("Creating topic %s with 2 partitions\n", topic);
-        test_create_topic(c1, topic, 2, 1);
+        test_create_topic(c1, topic, 2, -1);
 
         test_wait_topic_exists(c1, topic, 10 * 1000);
 

@@ -165,6 +165,11 @@ typedef enum {
 } rd_kafka_oauthbearer_assertion_algorithm_t;
 
 typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
+        RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE,
+} rd_kafka_oauthbearer_metadata_authentication_type_t;
+
+typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_NONE,
         RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, /**< RFC2818 */
 } rd_kafka_ssl_endpoint_id_t;
@@ -359,7 +364,15 @@ struct rd_kafka_conf_s {
 
                         } assertion;
 
+                        struct {
+                                rd_kafka_oauthbearer_metadata_authentication_type_t
+                                    type;
+                                const char *params;
+                        } metadata_authentication;
+
+
                         char *extensions_str;
+                        rd_bool_t builtin_token_refresh_cb;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,
                                                  const char *oauthbearer_config,

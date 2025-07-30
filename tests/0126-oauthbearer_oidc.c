@@ -170,8 +170,6 @@ static void do_test_produce_consumer_with_OIDC_should_fail(
                 return;
         }
 
-        conf = rd_kafka_conf_dup(base_conf);
-
         error_seen = rd_false;
 
         conf = rd_kafka_conf_dup(base_conf);

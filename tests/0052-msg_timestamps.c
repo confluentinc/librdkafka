@@ -144,8 +144,13 @@ static void test_timestamps(const char *broker_tstype,
             test_mk_topic_name(tsprintf("0052_msg_timestamps_%s_%s_%s",
                                         broker_tstype, broker_version, codec),
                                1);
-        const int msgcnt = 20;
-        uint64_t testid  = test_id_generate();
+        const int msgcnt            = 20;
+        uint64_t testid             = test_id_generate();
+        const char *topic_configs[] = {
+            "message.timestamp.type",
+            broker_tstype,
+            NULL,
+        };
 
         if ((!strncmp(broker_version, "0.9", 3) ||
              !strncmp(broker_version, "0.8", 3)) &&
@@ -161,11 +166,7 @@ static void test_timestamps(const char *broker_tstype,
         TEST_SAY(_C_MAG "Timestamp test using %s\n", topic);
         test_timeout_set(30);
 
-        test_kafka_topics(
-            "--create --topic \"%s\" "
-            "--replication-factor 1 --partitions 1 "
-            "--config message.timestamp.type=%s",
-            topic, broker_tstype);
+        test_admin_create_topic(NULL, topic, 1, -1, topic_configs);
         test_wait_topic_exists(NULL, topic, 5000);
 
         TEST_SAY(_C_MAG "Producing %d messages to %s\n", msgcnt, topic);

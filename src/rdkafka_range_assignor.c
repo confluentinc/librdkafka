@@ -373,6 +373,9 @@ static void rd_kafka_assign_ranges(
                         member->rkgm_member_id,
                         rktas->member_to_assigned_partitions);
 
+		if (member_assignment == NULL)
+			continue;
+
                 maximum_assignable_to_consumer =
                     rktas->num_partitions_per_consumer +
                     (rktas->remaining_consumers_with_extra_partition > 0) -

@@ -1000,6 +1000,118 @@ done:
 }
 
 /**
+ * @brief Implementation of Oauth/OIDC token refresh callback function,
+ *        will receive the JSON response after HTTP call to token provider,
+ *        then extract the jwt from the JSON response, and forward it to
+ *        the broker.
+ */
+void rd_kafka_oidc_token_metadata_azure_refresh_cb(
+    rd_kafka_t *rk,
+    const char *oauthbearer_config,
+    void *opaque) {
+        const int timeout_s = 20;
+        const int retries   = 4;
+        const int retry_ms  = 5 * 1000;
+
+        double exp;
+
+        cJSON *json = NULL;
+
+        rd_http_error_t *herr;
+
+        char *jwt_token;
+
+        struct curl_slist *headers = NULL;
+
+        char *token_endpoint_url = NULL;
+        char *sub                = NULL;
+
+        size_t extension_cnt;
+        size_t extension_key_value_cnt = 0;
+
+        char set_token_errstr[512];
+
+        char **extensions          = NULL;
+        char **extension_key_value = NULL;
+        char *headers_array[]      = {"Metadata: true"};
+
+        if (rd_kafka_terminating(rk))
+                return;
+
+        if (rk->rk_conf.sasl.oauthbearer_config &&
+            !rk->rk_conf.sasl.oauthbearer.metadata_authentication.params) {
+                size_t i, oauthbearer_config_cnt;
+                char **config_pairs =
+                    rd_string_split(rk->rk_conf.sasl.oauthbearer_config, ',',
+                                    rd_true, &oauthbearer_config_cnt);
+                for (i = 0; i < oauthbearer_config_cnt; i++) {
+                        char *config_pair = config_pairs[i];
+                        char *params_pos  = strstr(config_pair, "params=");
+                        if (params_pos == config_pair) {
+                                rk->rk_conf.sasl.oauthbearer
+                                    .metadata_authentication.params =
+                                    params_pos + strlen("params=");
+                                break;
+                        }
+                }
+                if (!rk->rk_conf.sasl.oauthbearer.metadata_authentication
+                         .params)
+                        rk->rk_conf.sasl.oauthbearer.metadata_authentication
+                            .params = '\0';
+        }
+
+        token_endpoint_url = rd_http_get_params_append(
+            rk->rk_conf.sasl.oauthbearer.token_endpoint_url,
+            rk->rk_conf.sasl.oauthbearer.metadata_authentication.params);
+
+        herr = rd_http_get_json(rk, token_endpoint_url, headers_array, 1,
+                                timeout_s, retries, retry_ms, &json);
+
+        if (unlikely(herr != NULL)) {
+                rd_kafka_log(rk, LOG_ERR, "OIDC",
+                             "Failed to retrieve OIDC "
+                             "token from \"%s\": %s (%d)",
+                             token_endpoint_url, herr->errstr, herr->code);
+                rd_kafka_oauthbearer_set_token_failure(rk, herr->errstr);
+                rd_http_error_destroy(herr);
+                goto done;
+        }
+
+        jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
+                                                     &exp, set_token_errstr,
+                                                     sizeof(set_token_errstr));
+        if (!jwt_token) {
+                rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
+                goto done;
+        }
+
+        if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
+                extensions =
+                    rd_string_split(rk->rk_conf.sasl.oauthbearer.extensions_str,
+                                    ',', rd_true, &extension_cnt);
+
+                extension_key_value = rd_kafka_conf_kv_split(
+                    (const char **)extensions, extension_cnt,
+                    &extension_key_value_cnt);
+        }
+
+        if (rd_kafka_oauthbearer_set_token(
+                rk, jwt_token, (int64_t)exp * 1000, sub,
+                (const char **)extension_key_value, extension_key_value_cnt,
+                set_token_errstr,
+                sizeof(set_token_errstr)) != RD_KAFKA_RESP_ERR_NO_ERROR)
+                rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
+
+done:
+        RD_IF_FREE(sub, rd_free);
+        RD_IF_FREE(json, cJSON_Delete);
+        RD_IF_FREE(headers, curl_slist_free_all);
+        RD_IF_FREE(extensions, rd_free);
+        RD_IF_FREE(extension_key_value, rd_free);
+        RD_IF_FREE(token_endpoint_url, rd_free);
+}
+
+/**
  * @brief Make sure the jwt is able to be extracted from HTTP(S) response.
  *        The JSON response after HTTP(S) call to token provider will be in
  *        rd_http_req_t.hreq_buf and jwt is the value of field "access_token",

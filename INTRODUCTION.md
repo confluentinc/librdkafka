@@ -1232,6 +1232,42 @@ either through the template or with the `claim` properties.
   it's possible to dynamically customize the JWT claims with these or to
   skip the template file and use only these properties.
 
+<a name="oauthbearer-oidc-metadata-authentication"></a>
+##### Metadata based authentication
+
+Some cloud providers added the ability to authenticate clients based on
+OAUTHBEARER/OIDC tokens returned from endpoints that can only be called from
+a given instance. Such endpoints are served on a specific IP address (169.254.169.254)
+that is a link-local metadata endpoint.
+
+
+While there is no standard for that still, librdkafka has support for
+some metadata based OAUTHBEARER authentication types.
+
+
+Currently these authentication types are supported:
+
+###### Azure UAMI
+
+to use this method you set:
+
+* `sasl.oauthbearer.metadata.authentication.type=azure` this make that ` sasl.oauthbearer.client.id`
+and `sasl.oauthbearer.client.secret` aren't required
+* `sasl.oauthbearer.config` is a general purpose configuration property
+  In this case it's accepts comma-separated `key=value` pairs.
+  The `params` key is required and its value is the GET query string to append
+  to the token endpoint URL. Such query string contains params required by
+  Azure UAMI such as `client_id` (the UAMI), `resource` for determining the
+  target audience and `api-version` for the API version to be used by the endpoint
+* `sasl.oauthbearer.token.endpoint.url` (optional) is set automatically
+  when chosing `sasl.oauthbearer.metadata.authentication.type=azure` but can
+  be customized
+
+
+_Example:_  `sasl.oauthbearer.metadata.authentication.type=azure` and
+`sasl.oauthbearer.config=params=api-version=2018-02-01&resource=api://<App registration client id>&client_id=<UAMI client id>`
+
+
 <a name="sparse-connections"></a>
 #### Sparse connections
 

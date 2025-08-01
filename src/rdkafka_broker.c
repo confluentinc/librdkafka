@@ -407,8 +407,12 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                                  * broker connections. */
                                 rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
                                                 1);
+                                rd_kafka_broker_unlock(rkb);
+                                /* Releases rkb->rkb_lock to respect
+                                 * lock ordering and avoid deadlocks */
                                 rd_kafka_reset_any_broker_down_reported(
                                     rkb->rkb_rk);
+                                rd_kafka_broker_lock(rkb);
                         }
 
                         trigger_monitors = rd_true;

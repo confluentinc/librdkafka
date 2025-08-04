@@ -1222,10 +1222,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         "through `sasl.oauthbearer.config`.",
         _UNSUPPORTED_OIDC,
         .vdef = RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
-        .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
-                  "none"},
-                 {RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE,
-                  "azure_imds"}},
+        .s2i =
+            {{RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
+              "none"},
+             {RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS,
+              "azure_imds"}},
     },
 
     /* Plugins */
@@ -4066,10 +4067,10 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
                        "mutually exclusive";
 
         if (conf->sasl.oauthbearer.metadata_authentication.type ==
-                RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE &&
+                RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS &&
             !conf->sasl.oauthbearer.token_endpoint_url) {
                 conf->sasl.oauthbearer.token_endpoint_url =
-                    "http://169.254.169.254/metadata/identity/oauth2/token";
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_URL_AZURE_IMDS;
         }
 
         if (!conf->sasl.oauthbearer.token_endpoint_url) {

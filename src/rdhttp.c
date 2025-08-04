@@ -276,6 +276,8 @@ static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
  *          otherwise return rd_false.
  *
  * @locality Any thread.
+ * @locks None.
+ * @locks_acquired None.
  */
 static rd_bool_t rd_http_is_failure_temporary(int error_code) {
         switch (error_code) {

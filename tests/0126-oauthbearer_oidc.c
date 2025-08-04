@@ -467,6 +467,7 @@ static rd_kafka_conf_t *oidc_configuration_metadata_authentication(
         return conf;
 }
 
+/* Test metadata-based authentication cases against Trivup. */
 void do_test_produce_consumer_with_OIDC_metadata_authentication(
     rd_kafka_conf_t *conf) {
         rd_kafka_conf_t *metadata_authentication_conf;

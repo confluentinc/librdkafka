@@ -166,8 +166,13 @@ typedef enum {
 
 typedef enum {
         RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
-        RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE,
+        RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS,
 } rd_kafka_oauthbearer_metadata_authentication_type_t;
+
+
+#define RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_URL_AZURE_IMDS       \
+        "http://169.254.169.254/metadata/identity/oauth2/token"
+
 
 typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_NONE,

@@ -2461,10 +2461,10 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 rk->rk_conf.sasl.oauthbearer.builtin_token_refresh_cb = rd_true;
 
                 if (rk->rk_conf.sasl.oauthbearer.metadata_authentication.type ==
-                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE) {
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS) {
                         rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                             &rk->rk_conf,
-                            rd_kafka_oidc_token_metadata_azure_refresh_cb);
+                            rd_kafka_oidc_token_metadata_azure_imds_refresh_cb);
                 } else if (
                     rk->rk_conf.sasl.oauthbearer.grant_type ==
                     RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS) {

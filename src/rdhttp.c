@@ -367,14 +367,32 @@ const char *rd_http_req_get_content_type(rd_http_req_t *hreq) {
 
 /**
  * @brief Perform a blocking HTTP(S) request to \p url.
+ *        Retries the request \p retries times with linear backoff.
+ *        Interval of \p retry_ms milliseconds is used between retries.
  *
- * Returns the response (even if there's a HTTP error code returned)
- * in \p *rbufp.
+ * @param url The URL to perform the request to.
+ * @param headers_array Array of HTTP(S) headers to set, each element
+ *                      is a string in the form "key: value"
+ * @param headers_array_cnt Number of elements in \p headers_array.
+ * @param timeout_s Timeout in seconds for the request, 0 means default
+ *                  `rd_http_req_init()` timeout.
+ * @param retries Number of retries to perform on failure.
+ * @param retry_ms Milliseconds to wait between retries.
+ * @param rbufp (out) Pointer to a buffer that will be filled with the response.
+ * @param content_type (out, optional) Pointer to a string that will be filled
+ * with the content type of the response, if not NULL.
+ * @param response_code (out, optional) Pointer to an integer that will be
+ * filled with the HTTP response code, if not NULL.
  *
- * Returns NULL on success (HTTP response code < 400), or an error
- * object on transport or HTTP error - this error object must be destroyed
- * by calling rd_http_error_destroy(). In case of HTTP error the \p *rbufp
- * may be filled with the error response.
+ * @return Returns NULL on success (HTTP response code < 400), or an error
+ * object on transport or HTTP error.
+ *
+ * @remark Returned error object, when non-NULL, must be destroyed
+ *         by calling rd_http_error_destroy().
+ *
+ * @locality Any thread.
+ * @locks None.
+ * @locks_acquired None.
  */
 rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                              const char *url,
@@ -409,6 +427,8 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                         headers = curl_slist_append(headers, header);
         }
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
+        if (timeout_s > 0)
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
 
         for (i = 0; i <= retries; i++) {
                 if (rd_kafka_terminating(rk)) {

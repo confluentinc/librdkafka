@@ -1000,12 +1000,13 @@ done:
 }
 
 /**
- * @brief Implementation of Oauth/OIDC token refresh callback function,
- *        will receive the JSON response after HTTP call to token provider,
- *        then extract the jwt from the JSON response, and forward it to
- *        the broker.
+ * @brief Implementation of Oauth/OIDC token refresh callback function
+ *        for Azure IMDS,
+ *        will receive the JSON response after HTTP(S) GET call to token
+ * provider, then extract the jwt from the JSON response, and forward it to the
+ * broker.
  */
-void rd_kafka_oidc_token_metadata_azure_refresh_cb(
+void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
     rd_kafka_t *rk,
     const char *oauthbearer_config,
     void *opaque) {

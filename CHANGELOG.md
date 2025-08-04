@@ -3,7 +3,7 @@
 librdkafka v2.12.0 is a feature release:
 
 * Support for OAUTHBEARER metadata based authentication types,
-  starting with Azure UAMI. [Introduction available](INTRODUCTION.md#oauthbearer-oidc-metadata-authentication) (#5155).
+  starting with Azure IMDS. [Introduction available](INTRODUCTION.md#oauthbearer-oidc-metadata-authentication) (#5155).
 
 
 

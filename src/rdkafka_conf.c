@@ -1214,7 +1214,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         _RK_C_S2I,
         _RK(sasl.oauthbearer.metadata_authentication.type),
         "Type of metadata based authentication to use for OAUTHBEARER/OIDC "
-        "`azure` authenticates using the Azure UAMI endpoint. "
+        "`azure_imds` authenticates using the Azure IMDS endpoint. "
         "Sets a default value for `sasl.oauthbearer.token.endpoint.url` if "
         "missing. "
         "Configuration values specific of chosen authentication type can be "
@@ -1225,7 +1225,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
                   "none"},
                  {RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE,
-                  "azure"}},
+                  "azure_imds"}},
     },
 
     /* Plugins */

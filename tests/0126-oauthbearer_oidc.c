@@ -388,30 +388,30 @@ void do_test_produce_consumer_with_OIDC_jwt_bearer(rd_kafka_conf_t *conf) {
 
 
 typedef enum oidc_configuration_metadata_authentication_variation_t {
-        /** Azure UAMI. Successful case. */
-        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_SUCCESS,
-        /** Azure UAMI. Missing client ID. */
-        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_MISSING_CLIENT_ID,
-        /** Azure UAMI. Missing resource parameter. */
-        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_MISSING_RESOURCE,
-        /** Azure UAMI. Missing API version. */
-        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_MISSING_API_VERSION,
+        /** Azure IMDS. Successful case. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS,
+        /** Azure IMDS. Missing client ID. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_CLIENT_ID,
+        /** Azure IMDS. Missing resource parameter. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_RESOURCE,
+        /** Azure IMDS. Missing API version. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_API_VERSION,
         OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT
 } oidc_configuration_metadata_authentication_variation_t;
 
 #define OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__FIRST_FAILING    \
-        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_MISSING_CLIENT_ID
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_CLIENT_ID
 
 static const char *oidc_configuration_metadata_authentication_variation_name(
     oidc_configuration_metadata_authentication_variation_t variation) {
         rd_assert(
             variation >=
-                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_SUCCESS &&
+                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS &&
             variation <
                 OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT);
         static const char *names[] = {
-            "Azure UAMI: success", "Azure UAMI: missing client ID",
-            "Azure UAMI: missing resource", "Azure UAMI: missing API version"};
+            "Azure IMDS: success", "Azure IMDS: missing client ID",
+            "Azure IMDS: missing resource", "Azure IMDS: missing API version"};
         return names[variation];
 }
 
@@ -420,41 +420,45 @@ static rd_kafka_conf_t *oidc_configuration_metadata_authentication(
     oidc_configuration_metadata_authentication_variation_t variation) {
         conf = rd_kafka_conf_dup(conf);
         switch (variation) {
-        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_SUCCESS:
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS:
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
-                              "azure");
-                test_conf_set(conf, "sasl.oauthbearer.config",
-                              "params=__metadata_authentication_type=azure&"
-                              "api-version=2018-02-01&resource="
-                              "api://external_resource_id&client_id=client_id");
+                              "azure_imds");
+                test_conf_set(
+                    conf, "sasl.oauthbearer.config",
+                    "params=__metadata_authentication_type=azure_imds&"
+                    "api-version=2018-02-01&resource="
+                    "api://external_resource_id&client_id=client_id");
                 break;
-        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_MISSING_CLIENT_ID:
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_CLIENT_ID:
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
-                              "azure");
-                test_conf_set(conf, "sasl.oauthbearer.config",
-                              "params=__metadata_authentication_type=azure&"
-                              "api-version=2018-02-01&resource="
-                              "api://external_resource_id");
+                              "azure_imds");
+                test_conf_set(
+                    conf, "sasl.oauthbearer.config",
+                    "params=__metadata_authentication_type=azure_imds&"
+                    "api-version=2018-02-01&resource="
+                    "api://external_resource_id");
                 break;
-        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_MISSING_RESOURCE:
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_RESOURCE:
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
-                              "azure");
-                test_conf_set(conf, "sasl.oauthbearer.config",
-                              "params=__metadata_authentication_type=azure&"
-                              "api-version=2018-02-01&"
-                              "client_id=client_id");
+                              "azure_imds");
+                test_conf_set(
+                    conf, "sasl.oauthbearer.config",
+                    "params=__metadata_authentication_type=azure_imds&"
+                    "api-version=2018-02-01&"
+                    "client_id=client_id");
                 break;
-        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_MISSING_API_VERSION:
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_API_VERSION:
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
-                              "azure");
-                test_conf_set(conf, "sasl.oauthbearer.config",
-                              "params=__metadata_authentication_type=azure&"
-                              "resource="
-                              "api://external_resource_id&client_id=client_id");
+                              "azure_imds");
+                test_conf_set(
+                    conf, "sasl.oauthbearer.config",
+                    "params=__metadata_authentication_type=azure_imds&"
+                    "resource="
+                    "api://external_resource_id&client_id=client_id");
                 break;
         default:
                 TEST_ASSERT(rd_false,
@@ -469,7 +473,7 @@ void do_test_produce_consumer_with_OIDC_metadata_authentication(
         oidc_configuration_metadata_authentication_variation_t variation;
         for (
             variation =
-                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_SUCCESS;
+                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS;
             variation <
             OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT;
             variation++) {

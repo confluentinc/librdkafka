@@ -2967,7 +2967,7 @@ void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         /* In some cases, failed Produce requests do not increment the retry
          * count, see rd_kafka_handle_Produce_error. */
         if (rkbuf->rkbuf_retries > 0)
-                backoff = (1 << (rkbuf->rkbuf_retries - 1)) *
+                backoff = ((int64_t)1 << (rkbuf->rkbuf_retries - 1)) *
                           (rkb->rkb_rk->rk_conf.retry_backoff_ms);
         else
                 backoff = rkb->rkb_rk->rk_conf.retry_backoff_ms;

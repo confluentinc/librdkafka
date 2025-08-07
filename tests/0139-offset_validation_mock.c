@@ -353,8 +353,8 @@ static void do_test_store_offset_without_leader_epoch(void) {
         leader_epoch =
             rd_kafka_topic_partition_get_leader_epoch(&rktpars->elems[0]);
 
-        /* OffsetFetch returns the leader epoch even if not set. */
-        TEST_ASSERT(leader_epoch == 1, "expected %d, got %" PRId32, 1,
+        /* OffsetFetch returns the leader epoch used when committing. */
+        TEST_ASSERT(leader_epoch == -1, "expected %d, got %" PRId32, 1,
                     leader_epoch);
         rd_kafka_topic_partition_list_destroy(rktpars);
 
@@ -375,8 +375,8 @@ static void do_test_store_offset_without_leader_epoch(void) {
                     5, rktpars->elems[0].offset);
         leader_epoch =
             rd_kafka_topic_partition_get_leader_epoch(&rktpars->elems[0]);
-        /* OffsetFetch returns the leader epoch even if not set. */
-        TEST_ASSERT(leader_epoch == 1, "expected %d, got %" PRId32, 1,
+        /* OffsetFetch returns the leader epoch used when committing. */
+        TEST_ASSERT(leader_epoch == -1, "expected %d, got %" PRId32, -1,
                     leader_epoch);
         rd_kafka_topic_partition_list_destroy(rktpars);
 
@@ -993,7 +993,7 @@ static void do_test_offset_validation_on_partition_assignment(
         int msg_count = 5, leader = 2;
         uint64_t testid = test_id_generate();
         size_t matching_requests;
-        rd_kafka_topic_partition_list_t *to_commit, *to_assign;
+        rd_kafka_topic_partition_list_t *to_commit, *to_assign = NULL;
         rd_bool_t use_leader_epoch =
             commit_variation ==
                 OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_LEADER_EPOCH ||

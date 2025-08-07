@@ -299,6 +299,7 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                 RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
                 RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
                 RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
+                RD_KAFKA_TOPPAR_FETCH_VALIDATE_SEEK,
                 RD_KAFKA_TOPPAR_FETCH_ACTIVE,
         } rktp_fetch_state; /* Broker thread's state */
 

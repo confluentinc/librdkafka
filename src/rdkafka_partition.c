@@ -38,10 +38,10 @@
 
 #include "rdunittest.h"
 
-const char *rd_kafka_fetch_states[] = {"none",        "stopping",
-                                       "stopped",     "offset-query",
-                                       "offset-wait", "validate-epoch-wait",
-                                       "active"};
+const char *rd_kafka_fetch_states[] = {"none",          "stopping",
+                                       "stopped",       "offset-query",
+                                       "offset-wait",   "validate-epoch-wait",
+                                       "validate-seek", "active"};
 
 
 static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,

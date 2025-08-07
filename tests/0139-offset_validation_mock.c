@@ -1144,15 +1144,25 @@ static void do_test_offset_validation_on_partition_assignment(
 
 static void do_test_offset_validation_on_partition_assignment_variations(void) {
         offset_validation_on_partition_assignment_assign_variation_t
-            assign_variation;
+            assign_variation,
+            max_assign_variation =
+                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION__CNT;
         offset_validation_on_partition_assignment_commit_variation_t
-            commit_variation;
+            commit_variation,
+            max_commit_variation =
+                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION__CNT;
+
+        if (test_quick) {
+                max_assign_variation =
+                    OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_SUBSCRIBE_REBALANCE_CALLBACK;
+                max_commit_variation =
+                    OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_STORE_LEADER_EPOCH;
+        }
+
         for (
             assign_variation =
                 OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_SUBSCRIBE;
-            assign_variation <
-            OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION__CNT;
-            assign_variation++) {
+            assign_variation < max_assign_variation; assign_variation++) {
                 rd_bool_t incremental;
                 for (incremental = rd_false; incremental <= rd_true;
                      incremental++) {
@@ -1160,8 +1170,7 @@ static void do_test_offset_validation_on_partition_assignment_variations(void) {
                         for (
                             commit_variation =
                                 OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_LEADER_EPOCH;
-                            commit_variation <
-                            OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION__CNT;
+                            commit_variation < max_commit_variation;
                             commit_variation++) {
                                 if (assign_variation ==
                                         OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_ASSIGN &&

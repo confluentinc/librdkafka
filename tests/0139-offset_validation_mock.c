@@ -785,6 +785,7 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                 int64_t low, high;
                 rd_kafka_resp_err_t list_offsets_err =
                     RD_KAFKA_RESP_ERR_NO_ERROR;
+                rd_kafka_topic_partition_list_t *rktpars_list_offsets;
 
                 TEST_ASSERT(partitions->cnt == 1,
                             "Expected 1 assigned partition, got %d",
@@ -794,23 +795,29 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                 rd_kafka_mock_partition_set_leader(test->mcluster, test->topic,
                                                    0, 2);
 
+                /* Set a wrong leader epoch that should not be used
+                 * for listing offsets. */
+                rktpars_list_offsets =
+                    rd_kafka_topic_partition_list_copy(partitions);
+                rktpars_list_offsets->elems[0].offset = 1;
+                rd_kafka_topic_partition_set_leader_epoch(
+                    &rktpars_list_offsets->elems[0], 1234);
                 do {
-                        /* Set a wrong leader epoch that should not be used
-                         * for listing offsets. */
-                        rd_kafka_topic_partition_set_leader_epoch(
-                            &partitions->elems[0], 1234);
+
 
                         if (test->variation == 0) {
-                                partitions->elems[0].offset = 1;
                                 list_offsets_err = rd_kafka_offsets_for_times(
-                                    rk, partitions, 1000);
+                                    rk, rktpars_list_offsets, 1000);
                         } else {
                                 list_offsets_err =
                                     rd_kafka_query_watermark_offsets(
-                                        rk, partitions->elems[0].topic,
-                                        partitions->elems[0].partition, &low,
-                                        &high, 1000);
+                                        rk,
+                                        rktpars_list_offsets->elems[0].topic,
+                                        rktpars_list_offsets->elems[0]
+                                            .partition,
+                                        &low, &high, 1000);
                         }
+
                         retries++;
                         if (retries == 1) {
                                 TEST_ASSERT(
@@ -821,7 +828,7 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                         }
                         if (retries > 2)
                                 TEST_FAIL(
-                                    "Offsets for times failed %d times "
+                                    "Failed %d times "
                                     " during the rebalance callback",
                                     retries);
                 } while (list_offsets_err != RD_KAFKA_RESP_ERR_NO_ERROR);
@@ -836,11 +843,13 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                         /* Mock handler currently returns
                          * RD_KAFKA_OFFSET_SPEC_LATEST
                          * in the offsets for times case */
-                        TEST_ASSERT(partitions->elems[0].offset ==
+                        TEST_ASSERT(rktpars_list_offsets->elems[0].offset ==
                                         RD_KAFKA_OFFSET_SPEC_LATEST,
                                     "Expected offset for times LATEST,"
                                     " got %" PRId64,
-                                    partitions->elems[0].offset);
+                                    rktpars_list_offsets->elems[0].offset);
+                        partitions->elems[0].offset =
+                            RD_KAFKA_OFFSET_SPEC_LATEST;
                 } else {
                         TEST_ASSERT(0 == low,
                                     "Expected low offset 0"
@@ -852,6 +861,7 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                                     high);
                         partitions->elems[0].offset = high;
                 }
+                rd_kafka_topic_partition_list_destroy(rktpars_list_offsets);
 
                 test_consumer_assign_by_rebalance_protocol("rebalance", rk,
                                                            partitions);

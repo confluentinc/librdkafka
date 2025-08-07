@@ -742,6 +742,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                         int32_t MaxNumOffsets;
                         rd_kafka_mock_partition_t *mpart = NULL;
                         rd_kafka_resp_err_t err          = all_err;
+                        int32_t LeaderEpoch              = -1;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
 
@@ -807,7 +808,6 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4) {
                                 /* Response: LeaderEpoch */
                                 const rd_kafka_mock_msgset_t *mset = NULL;
-                                int32_t leader_epoch               = -1;
                                 rd_bool_t on_follower              = rd_false;
 
                                 if (mpart) {
@@ -818,12 +818,12 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                                         if (Offset >= 0 &&
                                             (mset = rd_kafka_mock_msgset_find(
                                                  mpart, Offset, on_follower))) {
-                                                leader_epoch =
+                                                LeaderEpoch =
                                                     mset->leader_epoch;
                                         }
                                 }
 
-                                rd_kafka_buf_write_i32(resp, leader_epoch);
+                                rd_kafka_buf_write_i32(resp, LeaderEpoch);
                         }
 
                         /* Response: Partition tags */
@@ -835,7 +835,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                                      "offset %" PRId64 " (leader epoch %" PRId32
                                      ") for %s: %s",
                                      RD_KAFKAP_STR_PR(&Topic), Partition,
-                                     Offset, mpart ? mpart->leader_epoch : -1,
+                                     Offset, LeaderEpoch,
                                      rd_kafka_offset2str(Timestamp),
                                      rd_kafka_err2str(err));
                 }

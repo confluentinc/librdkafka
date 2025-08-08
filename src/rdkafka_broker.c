@@ -346,8 +346,9 @@ rd_bool_t rd_kafka_broker_ApiVersion_at_least_no_lock(rd_kafka_broker_t *rkb,
  * @locality broker thread
  */
 void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
-        rd_bool_t trigger_monitors = rd_false,
-                  skip_broker_down = rkb->rkb_c.skip_broker_down;
+        rd_bool_t trigger_monitors               = rd_false,
+                  reset_any_broker_down_reported = rd_false,
+                  skip_broker_down               = rkb->rkb_c.skip_broker_down;
 
         if ((int)rkb->rkb_state == state)
                 return;
@@ -397,6 +398,9 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                     !rd_kafka_broker_state_is_up(rkb->rkb_state)) {
                         /* ~Up -> Up */
                         if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
+                                rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
+                                                1);
+
                                 /* If at least one broker connects we reset
                                  * the down counter to try again with rest of
                                  * brokers. Otherwise, a single broker
@@ -405,10 +409,7 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                                  * of brokers was restored but they didn't
                                  * attempt a re-connection because of sparse
                                  * broker connections. */
-                                rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
-                                                1);
-                                rd_kafka_reset_any_broker_down_reported(
-                                    rkb->rkb_rk);
+                                reset_any_broker_down_reported = rd_true;
                         }
 
                         trigger_monitors = rd_true;
@@ -435,6 +436,14 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
 
         rkb->rkb_state    = state;
         rkb->rkb_ts_state = rd_clock();
+
+        if (reset_any_broker_down_reported) {
+                rd_kafka_broker_unlock(rkb);
+                /* Releases rkb->rkb_lock to respect
+                 * lock ordering and avoid deadlocks */
+                rd_kafka_reset_any_broker_down_reported(rkb->rkb_rk);
+                rd_kafka_broker_lock(rkb);
+        }
 
         if (trigger_monitors)
                 rd_kafka_broker_trigger_monitors(rkb);

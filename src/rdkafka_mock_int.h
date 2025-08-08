@@ -296,7 +296,7 @@ typedef struct rd_kafka_mock_committed_offset_s {
         /**< mpart.committed_offsets */
         TAILQ_ENTRY(rd_kafka_mock_committed_offset_s) link;
         char *group;               /**< Allocated along with the struct */
-        int64_t offset;            /**< Committed offset */
+        rd_kafka_fetch_pos_t pos;  /**< Committed position */
         rd_kafkap_str_t *metadata; /**< Metadata, allocated separately */
 } rd_kafka_mock_committed_offset_t;
 
@@ -552,7 +552,7 @@ rd_kafka_mock_committed_offset_find(const rd_kafka_mock_partition_t *mpart,
 rd_kafka_mock_committed_offset_t *
 rd_kafka_mock_commit_offset(rd_kafka_mock_partition_t *mpart,
                             const rd_kafkap_str_t *group,
-                            int64_t offset,
+                            rd_kafka_fetch_pos_t pos,
                             const rd_kafkap_str_t *metadata);
 
 const rd_kafka_mock_msgset_t *

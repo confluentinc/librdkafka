@@ -1,3 +1,27 @@
+# librdkafka v2.12.0
+
+librdkafka v2.12.0 is a feature release:
+
+* Additional KIP-320 related validation: when assigning the offset is validated
+  if leader epoch is specified (#4931).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #5158.
+  Additional KIP-320 related validation: when assigning the offset is validated
+  if a leader epoch is specified. A committed offset could have been truncated
+  in case of unclean leader election and, when a different member starts
+  fetching from it on the new leader, it could get an offset out of range
+  and a subsequent offset reset. The assigned offset is now validated before
+  we start fetching from it and, in case it was truncated, fetching starts
+  from last available offset of given leader epoch.
+  Happens since 2.1.0 (#4931).
+
+
+
 # librdkafka v2.11.1
 
 librdkafka v2.11.1 is a maintenance release:

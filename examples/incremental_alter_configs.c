@@ -146,6 +146,31 @@ static void print_alter_configs_result(
         }
 }
 
+/**
+ * @brief Parse a ConfigResourceType string and return the corresponding enum
+ *        value.
+ *
+ * @param restype_id The resource type string, e.g., "TOPIC", "BROKER", etc.
+ * @return The corresponding rd_kafka_ResourceType_t enum value, or
+ *         RD_KAFKA_RESOURCE_UNKNOWN if the string is invalid.
+ */
+static rd_kafka_ResourceType_t
+parse_ConfigResourceType(const char *restype_id) {
+        size_t i;
+        static const char *restype_ids[] = {"TOPIC", "BROKER", "GROUP",
+                                            "BROKER_LOGGER", "CLIENT_METRICS"};
+        static const rd_kafka_ResourceType_t restype_values[] = {
+            RD_KAFKA_RESOURCE_TOPIC, RD_KAFKA_RESOURCE_BROKER,
+            RD_KAFKA_RESOURCE_GROUP, RD_KAFKA_RESOURCE_BROKER_LOGGER,
+            RD_KAFKA_RESOURCE_CLIENT_METRICS};
+
+        for (i = 0; i < sizeof(restype_ids) / sizeof(restype_ids[0]); i++) {
+                if (!strcmp(restype_id, restype_ids[i])) {
+                        return restype_values[i];
+                }
+        }
+        return RD_KAFKA_RESOURCE_UNKNOWN;
+}
 
 /**
  * @brief Call rd_kafka_IncrementalAlterConfigs() with a list of
@@ -183,10 +208,7 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                 rd_kafka_ConfigResource_t *config;
                 rd_kafka_AlterConfigOpType_t op_type;
                 rd_kafka_ResourceType_t restype =
-                    !strcmp(restype_s, "TOPIC")    ? RD_KAFKA_RESOURCE_TOPIC
-                    : !strcmp(restype_s, "BROKER") ? RD_KAFKA_RESOURCE_BROKER
-                    : !strcmp(restype_s, "GROUP")  ? RD_KAFKA_RESOURCE_GROUP
-                                                   : RD_KAFKA_RESOURCE_UNKNOWN;
+                    parse_ConfigResourceType(restype_s);
 
                 if (restype == RD_KAFKA_RESOURCE_UNKNOWN) {
                         usage("Invalid resource type: %s", restype_s);

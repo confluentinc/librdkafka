@@ -4956,7 +4956,7 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                                 rd_snprintf(errstr, errstr_size,
                                             "Default partition count (KIP-464) "
                                             "not supported by broker, "
-                                            "requires broker version <= 2.4.0");
+                                            "requires broker version >= 2.4.0");
                                 rd_kafka_replyq_destroy(&replyq);
                                 rd_kafka_buf_destroy(rkbuf);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
@@ -4968,7 +4968,7 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                                             "Default replication factor "
                                             "(KIP-464) "
                                             "not supported by broker, "
-                                            "requires broker version <= 2.4.0");
+                                            "requires broker version >= 2.4.0");
                                 rd_kafka_replyq_destroy(&replyq);
                                 rd_kafka_buf_destroy(rkbuf);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;

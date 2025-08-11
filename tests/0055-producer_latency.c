@@ -552,6 +552,13 @@ static void test_producer_latency_first_message(int case_number) {
 }
 
 int main_0055_producer_latency_mock(int argc, char **argv) {
+        // Skip mock broker tests in K2 environment - mock brokers are PLAINTEXT-only but K2 requires SSL/SASL
+        if (test_k2_cluster) {
+                TEST_SKIP("Mock broker tests skipped in K2 environment - "
+                          "mock brokers are PLAINTEXT-only but K2 requires SSL/SASL");
+                return 0;
+        }
+
         int case_number;
         for (case_number = 0; case_number < 4; case_number++) {
                 test_producer_latency_first_message(case_number);

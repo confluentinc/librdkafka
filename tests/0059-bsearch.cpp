@@ -27,6 +27,7 @@
  */
 
 #include <iostream>
+#include <ctime>
 #include "testcpp.h"
 
 /**
@@ -202,41 +203,41 @@ static void do_test_bsearch(void) {
       Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
                          << " at offset " << msg->offset());
 
-    Test::Say(1, tostr() << "Message at offset " << msg->offset()
-                         << " with timestamp " << ts.timestamp << "\n");
+     Test::Say(1, tostr() << "Message at offset " << msg->offset()
+                          << " with timestamp " << ts.timestamp << "\n");
 
-    if (ts.timestamp == golden_timestamp) {
-      Test::Say(1, tostr() << "Found golden timestamp " << ts.timestamp
-                           << " at offset " << msg->offset() << " in "
-                           << itcnt + 1 << " iterations\n");
-      delete msg;
-      break;
-    }
+     if (ts.timestamp == golden_timestamp) {
+       Test::Say(1, tostr() << "Found golden timestamp " << ts.timestamp
+                            << " at offset " << msg->offset() << " in "
+                            << itcnt + 1 << " iterations\n");
+       delete msg;
+       break;
+     }
 
-    if (low == high) {
-      Test::Fail(tostr() << "Search exhausted at offset " << msg->offset()
-                         << " with timestamp " << ts.timestamp
-                         << " without finding golden timestamp "
-                         << golden_timestamp << " at offset " << golden_offset);
+     if (low == high) {
+       Test::Fail(tostr() << "Search exhausted at offset " << msg->offset()
+                          << " with timestamp " << ts.timestamp
+                          << " without finding golden timestamp "
+                          << golden_timestamp << " at offset " << golden_offset);
 
-    } else if (ts.timestamp < golden_timestamp)
-      low = msg->offset() + 1;
-    else if (ts.timestamp > golden_timestamp)
-      high = msg->offset() - 1;
+     } else if (ts.timestamp < golden_timestamp)
+       low = msg->offset() + 1;
+     else if (ts.timestamp > golden_timestamp)
+       high = msg->offset() - 1;
 
-    delete msg;
-    itcnt++;
-  } while (true);
-  TIMING_STOP(&t_bsearch);
+     delete msg;
+     itcnt++;
+   } while (true);
+   TIMING_STOP(&t_bsearch);
 
-  c->close();
+   c->close();
 
-  delete c;
-}
+   delete c;
+ }
 
-extern "C" {
-int main_0059_bsearch(int argc, char **argv) {
-  do_test_bsearch();
-  return 0;
-}
-}
+ extern "C" {
+ int main_0059_bsearch(int argc, char **argv) {
+   do_test_bsearch();
+   return 0;
+ }
+ }

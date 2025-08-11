@@ -1041,7 +1041,7 @@ static void do_test_offset_validation_on_partition_assignment(
                                  "batch.num.messages", "1", NULL);
 
         TEST_SAY("Consuming messages\n");
-        test_conf_init(&conf, NULL, 10);
+        test_conf_init(&conf, NULL, 30);
 
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");

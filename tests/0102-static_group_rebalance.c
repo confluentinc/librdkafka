@@ -164,7 +164,7 @@ static void do_test_static_group_rebalance(void) {
         test_create_topic_wait_exists(NULL, topic, 3, -1, 30000);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
-        test_conf_set(conf, "max.poll.interval.ms", "60000");  /* 60 seconds for max poll violation test */
+        test_conf_set(conf, "max.poll.interval.ms", "10000");  /* 10 seconds for max poll violation test */
         test_conf_set(conf, "session.timeout.ms", "30000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");

@@ -27,6 +27,7 @@
  */
 
 #include <iostream>
+#include <ctime>
 #include "testcpp.h"
 
 /**

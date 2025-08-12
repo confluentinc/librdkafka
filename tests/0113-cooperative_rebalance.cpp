@@ -3121,8 +3121,14 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
   p = test_create_producer();
 
   test_create_topic(p, topic, partition_cnt, 1);
+  /* K2 clusters need longer timeouts for topic metadata propagation */
+  int topic_timeout_ms = test_k2_cluster ? 30000 : 5000;
+  test_create_topic_wait_exists(p, topic, partition_cnt, -1, topic_timeout_ms);
 
-  test_wait_topic_exists(p, topic, 5000);
+  /* Additional wait for K2 environments to ensure all partition metadata is fully propagated */
+  if (test_k2_cluster) {
+    rd_sleep(10);
+  }
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3189,7 +3195,9 @@ static void x_incremental_rebalances(void) {
   SUB_TEST();
   test_conf_init(&conf, NULL, 60);
 
-  test_create_topic(NULL, topic, 6, -1);
+  /* K2 clusters need longer timeouts for topic metadata propagation */
+  int topic_timeout_ms2 = test_k2_cluster ? 30000 : 5000;
+  test_create_topic_wait_exists(NULL, topic, 6, -1, topic_timeout_ms2);
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {
@@ -3309,14 +3317,10 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
     t_max_poll_interval_exceeded(i);
   /* Run all 2*3 variations of the u_.. test */
   for (i = 0; i < 3; i++) {
-    if (test_consumer_group_protocol_generic()) {
-      /* FIXME: check this test, it should fail because of the callback number
-       */
-      u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
-      u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
-    }
+    u_multiple_subscription_changes(true /*with rebalance_cb*/, i);
+    u_multiple_subscription_changes(false /*without rebalance_cb*/, i);
   }
-  v_commit_during_rebalance(true /*with rebalance callback*/,
+    v_commit_during_rebalance(true /*with rebalance callback*/,
                             true /*auto commit*/);
   v_commit_during_rebalance(false /*without rebalance callback*/,
                             true /*auto commit*/);

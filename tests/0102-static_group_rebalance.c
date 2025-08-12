@@ -163,8 +163,8 @@ static void do_test_static_group_rebalance(void) {
         test_create_topic(NULL, topic, 3, -1);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
-        test_conf_set(conf, "max.poll.interval.ms", tsprintf("%d", tmout_multip(9000)));
-        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "max.poll.interval.ms", "10000");  /* 10 seconds for max poll violation test */
+        test_conf_set(conf, "session.timeout.ms", "30000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
         test_conf_set(conf, "metadata.max.age.ms", "5000");

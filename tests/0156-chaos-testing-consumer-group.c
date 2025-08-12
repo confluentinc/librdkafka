@@ -40,7 +40,6 @@
  #define TOPIC_CNT 1
  #define ITERATIONS 10
  #define CONSUMER_POOL_SIZE (CONSUMER_CNT * ITERATIONS)
- #define ITERATIONS 10
  #define ITERATION_TIME_IN_US 10000000 /* 10 second */
 
 static atomic_int run = 0;
@@ -136,8 +135,8 @@ static int consumer_thread(void *arg) {
                 }
 
                 if (different) {
-                        TEST_SAY_YELLOW("Consumer %d assignment changed: prev_cnt=%d, curr_cnt=%d\n",
-                                consumer_args->consumer_id, consumer_args->prev_assignment->cnt, current_assignment->cnt);
+                        // TEST_SAY_YELLOW("Consumer %d assignment changed: prev_cnt=%d, curr_cnt=%d\n",
+                        //         consumer_args->consumer_id, consumer_args->prev_assignment->cnt, current_assignment->cnt);
                         rd_kafka_topic_partition_list_destroy(consumer_args->prev_assignment);
                         consumer_args->prev_assignment = rd_kafka_topic_partition_list_copy(current_assignment);
                 }
@@ -253,10 +252,10 @@ int do_test_chaos_testing_consumer_group() {
         for (int iter = 0; iter < ITERATIONS; iter++) {
                 rd_usleep(ITERATION_TIME_IN_US, NULL); // Sleep for the iterations to complete
 
+                TEST_SAY_RED("Iteration %d: Rebalancing consumers...\n", iter);
                 // Calculate current running consumers
                 int running_count = last_running - first_running + 1;
-                if (running_count >= 1)
-                {
+                if (running_count >= 1) {
                         // Randomly decide how many consumers to stop (at least 1, at most running_count)
                         int to_stop = (running_count > 1) ? (rand() % running_count) + 1 : 1;
                         TEST_SAY_MAGENTA("Stopping %d consumers out of %d running consumers\n", to_stop, running_count);
@@ -279,6 +278,7 @@ int do_test_chaos_testing_consumer_group() {
 
                 // Randomly decide how many consumers to start (at least 1, at most can_start)
                 int to_start = (can_start > 1) ? (rand() % can_start) + 1 : 1;
+                TEST_SAY_MAGENTA("Starting %d consumers out of %d available slots\n", to_start, can_start);
                 for (int s = 0; s < to_start; s++) {
                         if (pool_next >= CONSUMER_POOL_SIZE)
                                 break; // No more available in pool
@@ -296,7 +296,11 @@ int do_test_chaos_testing_consumer_group() {
                 }
         }
 
+        TEST_SAY_MAGENTA("All iterations completed, waiting for consumers to finish...\n");
+
         rd_usleep(ITERATION_TIME_IN_US, NULL); // Sleep for the iterations to complete
+
+        TEST_SAY_MAGENTA("Stopping all consumers...\n");
 
         run = 0; // Stop all producers and consumers
         end_time        = rd_uclock();
@@ -336,6 +340,7 @@ int do_test_chaos_testing_consumer_group() {
 }
 
 int main_0156_chaos_testing_consumer_group(int argc, char **argv) {
+        test_timeout_set(450);
         if(test_consumer_group_protocol_classic()) {
                 TEST_SKIP("Skipping test for classic consumer group protocol\n");
                 return 0;

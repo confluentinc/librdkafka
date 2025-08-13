@@ -1033,6 +1033,7 @@ static void do_test_offset_validation_on_partition_assignment(
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        rd_kafka_mock_group_initial_rebalance_delay_ms(mcluster, 1);
 
         TEST_SAY("Producing messages\n");
         /* Seed the topic with messages */

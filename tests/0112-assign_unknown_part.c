@@ -52,7 +52,10 @@ int main_0112_assign_unknown_part(int argc, char **argv) {
 
         TEST_SAY("Creating topic %s with 1 partition\n", topic);
         test_create_topic(c, topic, 1, -1);
-        test_wait_topic_exists(c, topic, 10 * 1000);
+        test_wait_topic_exists(c, topic, 30 * 1000); /* 30 seconds for cloud environments */
+
+        /* Additional sleep for cloud environments to ensure topic stability */
+        rd_sleep(10); /* 10 seconds for extra cloud propagation */
 
         TEST_SAY("Producing message to partition 0\n");
         test_produce_msgs_easy(topic, testid, 0, 1);

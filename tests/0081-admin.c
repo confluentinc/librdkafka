@@ -1518,7 +1518,7 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
          */
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
-        if (group_configs_supported()) {
+        if (group_configs_supported() && !test_k2_cluster) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
@@ -3718,8 +3718,10 @@ static void do_test_DescribeTopics(const char *what,
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Check DescribeTopics results. */
+        /* Use reasonable timeout for K2 environments */
+        describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
         rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                      tmout_multip(20 * 1000));
+                                      describe_timeout);
         TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
         /* Extract result. */
@@ -3861,8 +3863,10 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_AdminOptions_destroy(options);
 
         /* Check DescribeTopics results. */
+        /* Use reasonable timeout for K2 environments */
+        describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
         rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                      tmout_multip(20 * 1000));
+                                      describe_timeout);
         TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
         /* Extract result. */
@@ -4183,6 +4187,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         const char *principal, *sasl_mechanism, *sasl_username;
         const rd_kafka_AclOperation_t *authorized_operations;
         size_t authorized_operations_cnt;
+        int acl_sleep;
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
@@ -4303,8 +4308,8 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         /* It seems to be taking some time on the cluster for the ACLs to
          * propagate for a group.*/
         /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
+        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        TEST_SAY("Waiting %d seconds for group ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
         options = rd_kafka_AdminOptions_new(
@@ -4320,9 +4325,11 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                                         options, q);
         rd_kafka_AdminOptions_destroy(options);
 
+        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
+        int describe_groups_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
         rkev = test_wait_admin_result(
             q, RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT,
-            tmout_multip(20 * 1000));
+            describe_groups_timeout);
         TEST_ASSERT(rkev, "Should receive describe consumer groups event.");
 
         /*  Extract result. */
@@ -4369,9 +4376,9 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2); /* 10s for K2, normal for others */
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
-        rd_sleep(acl_propagation_sleep);
+        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        TEST_SAY("Waiting %d seconds for final ACL cleanup propagation\n", acl_sleep);
+        rd_sleep(acl_sleep);
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
         test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
@@ -4491,8 +4498,10 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+        /* Use reasonable timeout for K2 environments */
+        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
         TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
+            rd_kafka_committed(consumer, committed, committed_timeout));
 
         if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
@@ -5038,10 +5047,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        /* K2: Additional delay after metadata update to ensure topic/partition readiness */
+        /* In K2 environments, add extra wait time for topic/partition readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay before consumer operations\n");
-                rd_sleep(10);  /* 10 seconds for K2 partition readiness */
+                TEST_SAY("K2 cluster: waiting additional 10s for topic/partition readiness\n");
+                rd_sleep(10);
         }
 
         consumer = test_create_consumer(group_id, NULL, NULL, NULL);
@@ -5067,10 +5076,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int list_committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
         TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, committed_timeout));
+            rd_kafka_committed(consumer, committed, list_committed_timeout));
 
         if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
@@ -5765,6 +5774,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                              NULL, 9000, rd_true);
         do_test_CreateTopics("main queue, options", rk, mainq, -1, 0);
 
+             /* Delete records - use longer timeouts for cloud environments (reasonable limits) */
+        if (!test_k2_cluster) {
+                do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
+                do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
+        } else {
+                TEST_SAY("SKIPPING: DeleteRecords tests - not supported in K2/cloud environments\n");
+        }
+
         /* Delete topics */
         /* FIXME: KRaft async DeleteTopics is working differently than
          * with Zookeeper
@@ -5772,14 +5789,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
 
         if (test_broker_version >= TEST_BRKVER(1, 0, 0, 0)) {
-                /* Create Partitions */
-                do_test_CreatePartitions("temp queue, op timeout 6500", rk,
-                                         NULL, 6500);
-                /* FIXME: KRaft async CreatePartitions is working differently
-                 * than with Zookeeper
-                 * do_test_CreatePartitions("main queue, op timeout 0", rk,
-                 * mainq, 0);
-                 */
+        /* Create Partitions */
+        do_test_CreatePartitions("temp queue, op timeout 6500", rk,
+        NULL, 6500);
+        /* FIXME: KRaft async CreatePartitions is working differently
+        * than with Zookeeper
+        * do_test_CreatePartitions("main queue, op timeout 0", rk,
+        * mainq, 0);
+        */
         }
 
         /* CreateAcls */

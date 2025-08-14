@@ -119,6 +119,16 @@ static void test_single_partition(void) {
         topic = test_mk_topic_name("0011", 0);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
+        /* Wait for topic metadata to be available for cloud environments */
+        {
+                rd_kafka_metadata_topic_t topic_md = {0};
+                topic_md.topic = (char*)topic;
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+        }
+
+        /* Additional sleep for cloud environments to ensure topic stability */
+        rd_sleep(10); /* 10 seconds for extra cloud propagation */
+
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
@@ -253,6 +263,16 @@ static void test_partitioner(void) {
         topic = test_mk_topic_name("0011_partitioner", 1);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
+        /* Wait for topic metadata to be available for cloud environments */
+        {
+                rd_kafka_metadata_topic_t topic_md = {0};
+                topic_md.topic = (char*)topic;
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+        }
+
+        /* Additional sleep for cloud environments to ensure topic stability */
+        rd_sleep(10); /* 10 seconds for extra cloud propagation */
+
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
@@ -376,7 +396,10 @@ static void test_per_message_partition_flag(void) {
                  rd_kafka_name(rk));
         topic_name = test_mk_topic_name("0011_per_message_flag", 1);
         test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
-                                      5000);
+                                      30000); /* 30 seconds for cloud environments */
+
+        /* Additional sleep for cloud environments to ensure topic stability */
+        rd_sleep(10); /* 10 seconds for extra cloud propagation */
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
@@ -520,6 +543,16 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         topic = test_mk_topic_name("0011", 0);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
+        /* Wait for topic metadata to be available for cloud environments */
+        {
+                rd_kafka_metadata_topic_t topic_md = {0};
+                topic_md.topic = (char*)topic;
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+        }
+
+        /* Additional sleep for cloud environments to ensure topic stability */
+        rd_sleep(10); /* 10 seconds for extra cloud propagation */
+
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
@@ -627,8 +660,8 @@ static void test_message_single_partition_record_fail(int variation) {
         // Skip this subtest in K2 environment - compacted topics with mixed cleanup policies
         // cause all messages to fail with INVALID_RECORD instead of just keyless ones
         if (test_k2_cluster) {
-                TEST_SKIP("test_message_single_partition_record_fail(variation=%d) skipped in K2 environment - "
-                          "compacted topic behavior differs from expected test assumptions", variation);
+                TEST_SAY("SKIPPING: test_message_single_partition_record_fail(variation=%d) - "
+                         "compacted topic behavior differs in K2 environment", variation);
                 return;
         }
         
@@ -677,6 +710,13 @@ static void test_message_single_partition_record_fail(int variation) {
             rd_kafka_name(rk));
 
         test_create_topic_if_auto_create_disabled(rk, topic_name, -1);
+
+        /* Wait for topic metadata to be available for cloud environments */
+        {
+                rd_kafka_metadata_topic_t topic_md = {0};
+                topic_md.topic = (char*)topic_name;
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+        }
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)

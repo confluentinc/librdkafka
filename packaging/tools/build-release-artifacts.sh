@@ -13,7 +13,7 @@
 #   quay.io/pypa/manylinux_2_28_x86_64  (centos8)
 #
 # Usage:
-# packaging/tools/build-release-artifacts.sh [--disable-gssapi] <docker-image> <relative-output-tarball-path.tgz>
+# packaging/tools/build-release-artifacts.sh <docker-image> <relative-output-tarball-path.tgz>
 #
 # The output path must be a relative path and inside the librdkafka directory
 # structure.
@@ -24,23 +24,7 @@ set -e
 docker_image=""
 extra_pkgs_rpm=""
 extra_pkgs_apk=""
-extra_config_args=""
-expected_features="gzip snappy ssl sasl regex lz4 sasl_plain sasl_scram plugins zstd sasl_oauthbearer http oidc"
-
-# Since cyrus-sasl is the only non-statically-linkable dependency,
-# we provide a --disable-gssapi option so that two different libraries
-# can be built: one with GSSAPI/Kerberos support, and one without, depending
-# on this option.
-if [ "$1" = "--disable-gssapi" ]; then
-    extra_config_args="${extra_config_args} --disable-gssapi"
-    disable_gssapi="$1"
-    shift
-else
-    extra_pkgs_rpm="${extra_pkgs_rpm} cyrus-sasl cyrus-sasl-devel"
-    extra_pkgs_apk="${extra_pkgs_apk} cyrus-sasl cyrus-sasl-dev"
-    expected_features="${expected_features} sasl_gssapi"
-    disable_gssapi=""
-fi
+expected_features="gzip snappy ssl sasl regex lz4 sasl_gssapi sasl_plain sasl_scram plugins zstd sasl_oauthbearer http oidc"
 
 # Check if we're running on the host or the (docker) build target.
 if [ "$1" = "--in-docker" -a $# -eq 2 ]; then
@@ -49,13 +33,13 @@ elif [ $# -eq 2 ]; then
     docker_image="$1"
     output="$2"
 else
-    echo "Usage: $0 [--disable-gssapi] <manylinux-docker-image> <output-path.tgz>"
+    echo "Usage: $0 <manylinux-docker-image> <output-path.tgz>"
     exit 1
 fi
 
 if [ -n "$docker_image" ]; then
     # Running on the host, spin up the docker builder.
-    exec docker run -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh $disable_gssapi --in-docker "/v/$output"
+    exec docker run -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh --in-docker "/v/$output"
     # Only reached on exec error
     exit $?
 fi

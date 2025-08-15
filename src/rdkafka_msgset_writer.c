@@ -427,44 +427,18 @@ static void rd_kafka_msgset_writer_write_MessageSet_v2_header(
 
 
 /**
- * @brief Write ProduceRequest headers.
+ * @brief Write MessageSet header.
  *        When this function returns the msgset is ready for
  *        writing individual messages.
  *        msetw_MessageSetSize will have been set to the messageset header.
  */
 static void
-rd_kafka_msgset_writer_write_Produce_header(rd_kafka_msgset_writer_t *msetw) {
+rd_kafka_msgset_writer_write_MessageSet_header(rd_kafka_msgset_writer_t *msetw) {
 
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
-        rd_kafka_t *rk        = msetw->msetw_rkb->rkb_rk;
-        rd_kafka_topic_t *rkt = msetw->msetw_rktp->rktp_rkt;
-
-        /* V3: TransactionalId */
-        if (msetw->msetw_ApiVersion >= 3)
-                rd_kafka_buf_write_kstr(rkbuf, rk->rk_eos.transactional_id);
-
-        /* RequiredAcks */
-        rd_kafka_buf_write_i16(rkbuf, rkt->rkt_conf.required_acks);
-
-        /* Timeout */
-        rd_kafka_buf_write_i32(rkbuf, rkt->rkt_conf.request_timeout_ms);
-
-        /* TopicArrayCnt */
-        rd_kafka_buf_write_arraycnt(rkbuf, 1);
-
-        /* Insert topic */
-        rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
-
-        /* PartitionArrayCnt */
-        rd_kafka_buf_write_arraycnt(rkbuf, 1);
-
-        /* Partition */
-        rd_kafka_buf_write_i32(rkbuf, msetw->msetw_rktp->rktp_partition);
 
         /* MessageSetSize: Will be finalized later*/
         msetw->msetw_of_MessageSetSize = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-
-        rkbuf->rkbuf_u.Produce.batch_start_pos = msetw->msetw_of_MessageSetSize;
 
         if (msetw->msetw_MsgVersion == 2) {
                 /* MessageSet v2 header */
@@ -478,14 +452,14 @@ rd_kafka_msgset_writer_write_Produce_header(rd_kafka_msgset_writer_t *msetw) {
 
 
 /**
- * @brief Initialize a ProduceRequest MessageSet writer for
+ * @brief Initialize a MessageSet writer for
  *        the given broker and partition.
  *
  *        A new buffer will be allocated to fit the pending messages in queue.
  *
  * @returns the number of messages to enqueue
  *
- * @remark This currently constructs the entire ProduceRequest, containing
+ * @remark This currently constructs
  *         a single outer MessageSet for a single partition.
  *
  * @locality broker thread
@@ -522,8 +496,8 @@ static int rd_kafka_msgset_writer_init(rd_kafka_msgset_writer_t *msetw,
         /* Allocate backing buffer */
         rd_kafka_msgset_writer_alloc_buf(msetw);
 
-        /* Construct first part of Produce header + MessageSet header */
-        rd_kafka_msgset_writer_write_Produce_header(msetw);
+        /* Construct first part of MessageSet header */
+        rd_kafka_msgset_writer_write_MessageSet_header(msetw);
 
         /* The current buffer position is now where the first message
          * is located.
@@ -1328,7 +1302,7 @@ static void rd_kafka_msgset_writer_finalize_MessageSet_v2_header(
 
 
 /**
- * @brief Finalize the MessageSet header, if applicable.
+ * @brief Finalize the MessageSet, if applicable.
  */
 static void
 rd_kafka_msgset_writer_finalize_MessageSet(rd_kafka_msgset_writer_t *msetw) {
@@ -1403,15 +1377,6 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
         /* Finalize MessageSet header fields */
         rd_kafka_msgset_writer_finalize_MessageSet(msetw);
 
-        /* Partition tags */
-        rd_kafka_buf_write_tags_empty(rkbuf);
-
-        rkbuf->rkbuf_u.Produce.batch_end_pos =
-            rd_buf_write_pos(&rkbuf->rkbuf_buf);
-
-        /* Topics tags */
-        rd_kafka_buf_write_tags_empty(rkbuf);
-
         /* Return final MessageSetSize */
         *MessageSetSizep = msetw->msetw_MessageSetSize;
 
@@ -1442,7 +1407,7 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
 
 
 /**
- * @brief Create ProduceRequest containing as many messages from
+ * @brief Create MessageSet containing as many messages from
  *        the toppar's transmit queue as possible, limited by configuration,
  *        size, etc.
  *
@@ -1455,7 +1420,7 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
  *
  * @locality broker thread
  */
-rd_kafka_buf_t *rd_kafka_msgset_create_ProduceRequest(rd_kafka_broker_t *rkb,
+rd_kafka_buf_t *rd_kafka_msgset_create(rd_kafka_broker_t *rkb,
                                                       rd_kafka_toppar_t *rktp,
                                                       rd_kafka_msgq_t *rkmq,
                                                       const rd_kafka_pid_t pid,

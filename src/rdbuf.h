@@ -213,6 +213,8 @@ void rd_buf_write_ensure_contig(rd_buf_t *rbuf, size_t size);
 
 void rd_buf_write_ensure(rd_buf_t *rbuf, size_t min_size, size_t max_size);
 
+void rd_buf_write_to_buf(const rd_buf_t *rbuf_src, const rd_buf_t *rbuf_dst);
+
 size_t rd_buf_get_write_iov(const rd_buf_t *rbuf,
                             struct iovec *iovs,
                             size_t *iovcntp,

@@ -61,12 +61,12 @@ void rd_kafka_aborted_txns_add(rd_kafka_aborted_txns_t *aborted_txns,
 /**
  * @name MessageSet writers
  */
-rd_kafka_buf_t *rd_kafka_msgset_create_ProduceRequest(rd_kafka_broker_t *rkb,
-                                                      rd_kafka_toppar_t *rktp,
-                                                      rd_kafka_msgq_t *rkmq,
-                                                      const rd_kafka_pid_t pid,
-                                                      uint64_t epoch_base_msgid,
-                                                      size_t *MessageSetSizep);
+rd_kafka_buf_t *rd_kafka_msgset_create(rd_kafka_broker_t *rkb,
+                                       rd_kafka_toppar_t *rktp,
+                                       rd_kafka_msgq_t *rkmq,
+                                       const rd_kafka_pid_t pid,
+                                       uint64_t epoch_base_msgid,
+                                       size_t *MessageSetSizep);
 
 /**
  * @name MessageSet readers

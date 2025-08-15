@@ -478,6 +478,26 @@ unsigned int rd_bytes_hash(unsigned char *bytes, size_t len);
              ((RMAP)->key = (void *)(RMAP)->elem->key, (K) = (RMAP)->key,      \
              rd_map_iter_next(&(RMAP)->elem), rd_true);)
 
+/**
+ * @brief Typed hash map: Iterate over all value in the map.
+ *
+ * @warning The current or previous elements may be removed, but the next
+ *          element after the current one MUST NOT be modified during the loop.
+ *
+ * @warning RD_MAP_FOREACH_VALUE() only supports one simultaneous invocation,
+ *          that is, special care must be taken not to call FOREACH_VALUE() from
+ *          within a FOREACH() or FOREACH_KEY() or FOREACH_VALUE() loop
+ *          on the same map.
+ *          This is due to how RMAP->elem is used as the iterator.
+ *          This restriction is unfortunately not enforced at build or run time.
+ *
+ * @remark The \p RMAP may not be const.
+ */
+#define RD_MAP_FOREACH_VALUE(V, RMAP)                                            \
+        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem), (V) = NULL;      \
+             rd_map_iter(&(RMAP)->elem) &&                                     \
+             ((RMAP)->value = (void *)(RMAP)->elem->value, (V) = (RMAP)->value,      \
+             rd_map_iter_next(&(RMAP)->elem), rd_true);)
 
 /**
  * @returns the number of elements in the map.

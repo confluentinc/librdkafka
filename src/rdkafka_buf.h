@@ -409,10 +409,6 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_kafka_msgbatch_t batch; /**< MessageSet/batch */
 
                         map_topic_partition_msgbatch_t batch_map;
-                        size_t batch_start_pos; /* Pos where Record batch
-                                                 * starts in the buf */
-                        size_t batch_end_pos;   /* Pos after Record batch +
-                                                 * Partition tags in the buf */
                 } Produce;
                 struct {
                         rd_bool_t commit; /**< true = txn commit,
@@ -1136,6 +1132,25 @@ static RD_INLINE size_t rd_kafka_buf_write_i16(rd_kafka_buf_t *rkbuf,
                                                int16_t v) {
         v = htobe16(v);
         return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
+}
+
+/**
+ * Write rd buffer \p rbuf to rdkafka buffer \p rkbuf.
+ * By using `rd_kafka_buf_write` it updates the CRC when needed.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_buf(rd_kafka_buf_t *rkbuf,
+                                               rd_buf_t *rbuf) {
+        rd_slice_t rbuf_slice;
+        size_t rbuf_len = rd_buf_len(rbuf),
+               r;
+        rd_assert(rbuf_len > 0);
+        rd_slice_init_full(&rbuf_slice, rbuf);
+        char *p = rd_malloc(rbuf_len);
+        rd_slice_read(&rbuf_slice, p, rbuf_len);
+
+        r = rd_kafka_buf_write(rkbuf, p, rbuf_len);
+        rd_free(p);
+        return r;
 }
 
 /**

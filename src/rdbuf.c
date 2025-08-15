@@ -234,6 +234,16 @@ rd_segment_t *rd_buf_get_segment_at_offset(const rd_buf_t *rbuf,
         return NULL;
 }
 
+/**
+ * @brief Write source buffer \p rbuf_src to destination buffer \p rbuf_dst .
+ */
+void rd_buf_write_to_buf(const rd_buf_t *rbuf_src, const rd_buf_t *rbuf_dst) {
+        rd_slice_t rkbuf_reader;
+        rd_assert(rd_buf_len(rbuf_src) > 0);
+        rd_slice_init_full(&rkbuf_reader, rbuf_src);
+        rd_slice_read_into_buf(&rkbuf_reader, rbuf_dst,
+                rd_slice_remains(&rkbuf_reader));
+}
 
 /**
  * @brief Split segment \p seg at absolute offset \p absof, appending
@@ -938,30 +948,21 @@ size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size) {
         return size;
 }
 
-// TODO: Dedupe the code
-size_t rd_slice_read_into_buf(rd_slice_t *slice, rd_buf_t *rbuf, size_t size) {
-        size_t remains = size;
-        size_t rlen;
-        const void *p;
-        size_t orig_end = slice->end;
-
-        if (unlikely(rd_slice_remains(slice) < size))
+/**
+ * @brief See `rd_slice_read`. Reads into a buffer instead of a generic
+ *        memory region.
+ */
+size_t rd_slice_read_into_buf(rd_slice_t *slice, rd_buf_t *dst, size_t size) {
+        size_t rlen, read = 0;
+        rd_assert(size > 0);
+        char *p = rd_malloc(size);
+        if (!rd_slice_read(slice, p, size)) {
+                rd_free(p);
                 return 0;
-
-        /* Temporarily shrink slice to offset + \p size */
-        slice->end = rd_slice_abs_offset(slice) + size;
-
-        while ((rlen = rd_slice_reader(slice, &p))) {
-                rd_dassert(remains >= rlen);
-                rd_buf_write(rbuf, p, rlen);
-                remains -= rlen;
         }
 
-        rd_dassert(remains == 0);
-
-        /* Restore original size */
-        slice->end = orig_end;
-
+        rd_buf_write(dst, p, size);
+        rd_free(p);
         return size;
 }
 

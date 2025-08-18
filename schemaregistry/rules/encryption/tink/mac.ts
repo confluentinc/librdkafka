@@ -21,7 +21,7 @@ export abstract class Mac {
    * @param data - the data to compute MAC
    * @returns the MAC tag
    */
-  abstract computeMac(data: Uint8Array): Promise<Uint8Array>;
+  abstract computeMac(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>>;
 
   /**
    * Verifies whether `tag` is a correct authentication code for `data`.
@@ -29,5 +29,5 @@ export abstract class Mac {
    * @param tag - the MAC tag
    * @param data - the data to compute MAC
    */
-  abstract verifyMac(tag: Uint8Array, data: Uint8Array): Promise<boolean>;
+  abstract verifyMac(tag: Uint8Array<ArrayBuffer>, data: Uint8Array<ArrayBuffer>): Promise<boolean>;
 }

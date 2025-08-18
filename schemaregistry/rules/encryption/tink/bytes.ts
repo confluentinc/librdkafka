@@ -11,7 +11,7 @@ import {InvalidArgumentsException} from './exception/invalid_arguments_exception
  * @param ba2 - The second bytearray to check.
  * @returns If the array are equal.
  */
-export function isEqual(ba1: Uint8Array, ba2: Uint8Array): boolean {
+export function isEqual(ba1: Uint8Array<ArrayBuffer>, ba2: Uint8Array<ArrayBuffer>): boolean {
   if (ba1.length !== ba2.length) {
     return false;
   }
@@ -25,7 +25,7 @@ export function isEqual(ba1: Uint8Array, ba2: Uint8Array): boolean {
 /**
  * Returns a new array that is the result of joining the arguments.
  */
-export function concat(...var_args: Uint8Array[]): Uint8Array {
+export function concat(...var_args: Uint8Array<ArrayBuffer>[]): Uint8Array<ArrayBuffer> {
   let length = 0;
   for (let i = 0; i < arguments.length; i++) {
     // eslint-disable-next-line prefer-rest-params
@@ -48,7 +48,7 @@ export function concat(...var_args: Uint8Array[]): Uint8Array {
  * @returns The number as a big-endian byte array.
  * @throws {@link InvalidArgumentsException}
  */
-export function fromNumber(value: number): Uint8Array {
+export function fromNumber(value: number): Uint8Array<ArrayBuffer> {
   if (Number.isNaN(value) || value % 1 !== 0) {
     throw new InvalidArgumentsException('cannot convert non-integer value');
   }
@@ -81,7 +81,7 @@ export function fromNumber(value: number): Uint8Array {
  * @returns the byte array output
  * @throws {@link InvalidArgumentsException}
  */
-export function fromHex(hex: string): Uint8Array {
+export function fromHex(hex: string): Uint8Array<ArrayBuffer> {
   if (hex.length % 2 != 0) {
     throw new InvalidArgumentsException(
         'Hex string length must be multiple of 2');
@@ -99,7 +99,7 @@ export function fromHex(hex: string): Uint8Array {
  * @param bytes - the byte array input
  * @returns hex the output
  */
-export function toHex(bytes: Uint8Array): string {
+export function toHex(bytes: Uint8Array<ArrayBuffer>): string {
   let result = '';
   for (let i = 0; i < bytes.length; i++) {
     const hexByte = bytes[i].toString(16);
@@ -116,7 +116,7 @@ export function toHex(bytes: Uint8Array): string {
  *     alphabet, which does not require escaping for use in URLs.
  * @returns the byte array output
  */
-export function fromBase64(encoded: string, opt_webSafe?: boolean): Uint8Array {
+export function fromBase64(encoded: string, opt_webSafe?: boolean): Uint8Array<ArrayBuffer> {
   if (opt_webSafe) {
     const normalBase64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
     return fromByteString(window.atob(normalBase64));
@@ -132,7 +132,7 @@ export function fromBase64(encoded: string, opt_webSafe?: boolean): Uint8Array {
  *     alphabet, which does not require escaping for use in URLs.
  * @returns base64 output
  */
-export function toBase64(bytes: Uint8Array, opt_webSafe?: boolean): string {
+export function toBase64(bytes: Uint8Array<ArrayBuffer>, opt_webSafe?: boolean): string {
   const encoded = window
                       .btoa(
                           /* padding */
@@ -151,7 +151,7 @@ export function toBase64(bytes: Uint8Array, opt_webSafe?: boolean): string {
  * @param str - the input
  * @returns the byte array output
  */
-export function fromByteString(str: string): Uint8Array {
+export function fromByteString(str: string): Uint8Array<ArrayBuffer> {
   const output = [];
   let p = 0;
   for (let i = 0; i < str.length; i++) {
@@ -170,7 +170,7 @@ export function fromByteString(str: string): Uint8Array {
  *     characters.
  * @returns Stringification of the array.
  */
-export function toByteString(bytes: Uint8Array): string {
+export function toByteString(bytes: Uint8Array<ArrayBuffer>): string {
   let str = '';
   for (let i = 0; i < bytes.length; i += 1) {
     str += String.fromCharCode(bytes[i]);

@@ -28,8 +28,8 @@ import * as Validators from './validators';
  * @returns Output keying material (okm).
  */
 export async function compute(
-    size: number, hash: string, ikm: Uint8Array, info: Uint8Array,
-    opt_salt?: Uint8Array): Promise<Uint8Array> {
+    size: number, hash: string, ikm: Uint8Array<ArrayBuffer>, info: Uint8Array<ArrayBuffer>,
+    opt_salt?: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   let digestSize;
   if (!Number.isInteger(size)) {
     throw new InvalidArgumentsException('size must be an integer');

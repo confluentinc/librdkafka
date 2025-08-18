@@ -29,8 +29,8 @@ export abstract class Aead {
    * @returns resulting ciphertext
    *
    */
-  abstract encrypt(plaintext: Uint8Array, opt_associatedData?: Uint8Array|null):
-      Promise<Uint8Array>;
+  abstract encrypt(plaintext: Uint8Array<ArrayBuffer>, opt_associatedData?: Uint8Array<ArrayBuffer>|null):
+      Promise<Uint8Array<ArrayBuffer>>;
 
   /**
    * Decrypts ciphertext with associated authenticated data.
@@ -46,6 +46,6 @@ export abstract class Aead {
    * @returns resulting plaintext
    */
   abstract decrypt(
-      ciphertext: Uint8Array,
-      opt_associatedData?: Uint8Array|null): Promise<Uint8Array>;
+      ciphertext: Uint8Array<ArrayBuffer>,
+      opt_associatedData?: Uint8Array<ArrayBuffer>|null): Promise<Uint8Array<ArrayBuffer>>;
 }

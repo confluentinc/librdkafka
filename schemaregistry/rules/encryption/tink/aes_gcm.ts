@@ -34,8 +34,8 @@ export class AesGcm extends Aead {
 
   /**
    */
-  async encrypt(plaintext: Uint8Array, associatedData?: Uint8Array):
-      Promise<Uint8Array> {
+  async encrypt(plaintext: Uint8Array<ArrayBuffer>, associatedData?: Uint8Array<ArrayBuffer>):
+      Promise<Uint8Array<ArrayBuffer>> {
     Validators.requireUint8Array(plaintext);
     if (associatedData != null) {
       Validators.requireUint8Array(associatedData);
@@ -56,8 +56,8 @@ export class AesGcm extends Aead {
 
   /**
    */
-  async decrypt(ciphertext: Uint8Array, associatedData?: Uint8Array):
-      Promise<Uint8Array> {
+  async decrypt(ciphertext: Uint8Array<ArrayBuffer>, associatedData?: Uint8Array<ArrayBuffer>):
+      Promise<Uint8Array<ArrayBuffer>> {
     Validators.requireUint8Array(ciphertext);
     if (ciphertext.length < IV_SIZE_IN_BYTES + TAG_SIZE_IN_BITS / 8) {
       throw new SecurityException('ciphertext too short');
@@ -88,7 +88,7 @@ export class AesGcm extends Aead {
   }
 }
 
-export async function fromRawKey(key: Uint8Array): Promise<Aead> {
+export async function fromRawKey(key: Uint8Array<ArrayBuffer>): Promise<Aead> {
   Validators.requireUint8Array(key);
   Validators.validateAesKeySize(key.length);
   const webCryptoKey = await crypto.subtle.importKey(

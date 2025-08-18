@@ -33,7 +33,7 @@ export class Hmac extends Mac {
 
   /**
    */
-  async computeMac(data: Uint8Array): Promise<Uint8Array> {
+  async computeMac(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
     Validators.requireUint8Array(data);
     const tag = await crypto.subtle.sign(
         {'name': 'HMAC', 'hash': {'name': this.hash}}, this.key, data);
@@ -42,7 +42,7 @@ export class Hmac extends Mac {
 
   /**
    */
-  async verifyMac(tag: Uint8Array, data: Uint8Array): Promise<boolean> {
+  async verifyMac(tag: Uint8Array<ArrayBuffer>, data: Uint8Array<ArrayBuffer>): Promise<boolean> {
     Validators.requireUint8Array(tag);
     Validators.requireUint8Array(data);
     const computedTag = await this.computeMac(data);
@@ -55,7 +55,7 @@ export class Hmac extends Mac {
  * @param tagSize - the size of the tag
  */
 export async function fromRawKey(
-    hash: string, key: Uint8Array, tagSize: number): Promise<Mac> {
+    hash: string, key: Uint8Array<ArrayBuffer>, tagSize: number): Promise<Mac> {
   Validators.requireUint8Array(key);
   if (!Number.isInteger(tagSize)) {
     throw new InvalidArgumentsException('invalid tag size, must be an integer');

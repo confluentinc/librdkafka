@@ -16,7 +16,7 @@ import * as crypto from 'crypto';
  * @param n - number of bytes to generate
  * @returns the random bytes
  */
-export function randBytes(n: number): Uint8Array {
+export function randBytes(n: number): Uint8Array<ArrayBuffer> {
   if (!Number.isInteger(n) || n < 0) {
     throw new InvalidArgumentsException('n must be a nonnegative integer');
   }

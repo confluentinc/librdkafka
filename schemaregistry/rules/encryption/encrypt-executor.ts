@@ -170,7 +170,7 @@ export class EncryptionExecutor implements RuleExecutor {
 }
 
 export class Cryptor {
-  static readonly EMPTY_AAD = Buffer.from([])
+  static readonly EMPTY_AAD: Uint8Array<ArrayBuffer> = new Uint8Array(0)
 
   dekFormat: DekFormat
   isDeterministic: boolean
@@ -222,13 +222,13 @@ export class Cryptor {
     switch (this.dekFormat) {
       case DekFormat.AES256_SIV:
         const aesSivKey = fromBinary(AesSivKeySchema, dek)
-        rawKey = aesSivKey.keyValue
-        return Buffer.from(await this.encryptWithAesSiv(rawKey, plaintext))
+        rawKey = new Uint8Array(aesSivKey.keyValue)
+        return Buffer.from(await this.encryptWithAesSiv(rawKey as Uint8Array<ArrayBuffer>, new Uint8Array(plaintext)))
       case DekFormat.AES128_GCM:
       case DekFormat.AES256_GCM:
         const aesGcmKey = fromBinary(AesGcmKeySchema, dek)
-        rawKey = aesGcmKey.keyValue
-        return Buffer.from(await this.encryptWithAesGcm(rawKey, plaintext))
+        rawKey = new Uint8Array(aesGcmKey.keyValue)
+        return Buffer.from(await this.encryptWithAesGcm(rawKey as Uint8Array<ArrayBuffer>, new Uint8Array(plaintext)))
       default:
         throw new RuleError('unsupported dek format')
     }
@@ -239,34 +239,34 @@ export class Cryptor {
     switch (this.dekFormat) {
       case DekFormat.AES256_SIV:
         const aesSivKey = fromBinary(AesSivKeySchema, dek)
-        rawKey = aesSivKey.keyValue
-        return Buffer.from(await this.decryptWithAesSiv(rawKey, ciphertext))
+        rawKey = new Uint8Array(aesSivKey.keyValue)
+        return Buffer.from(await this.decryptWithAesSiv(rawKey as Uint8Array<ArrayBuffer>, new Uint8Array(ciphertext)))
       case DekFormat.AES128_GCM:
       case DekFormat.AES256_GCM:
         const aesGcmKey = fromBinary(AesGcmKeySchema, dek)
-        rawKey = aesGcmKey.keyValue
-        return Buffer.from(await this.decryptWithAesGcm(rawKey, ciphertext))
+        rawKey = new Uint8Array(aesGcmKey.keyValue)
+        return Buffer.from(await this.decryptWithAesGcm(rawKey as Uint8Array<ArrayBuffer>, new Uint8Array(ciphertext)))
       default:
         throw new RuleError('unsupported dek format')
     }
   }
 
-  async encryptWithAesSiv(key: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> {
+  async encryptWithAesSiv(key: Uint8Array<ArrayBuffer>, plaintext: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
     const aead = await aesSivFromRawKey(key)
     return aead.encrypt(plaintext, Cryptor.EMPTY_AAD)
   }
 
-  async decryptWithAesSiv(key: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
+  async decryptWithAesSiv(key: Uint8Array<ArrayBuffer>, ciphertext: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
     const aead = await aesSivFromRawKey(key)
     return aead.decrypt(ciphertext, Cryptor.EMPTY_AAD)
   }
 
-  async encryptWithAesGcm(key: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> {
+  async encryptWithAesGcm(key: Uint8Array<ArrayBuffer>, plaintext: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
     const aead = await aesGcmFromRawKey(key)
     return aead.encrypt(plaintext, Cryptor.EMPTY_AAD)
   }
 
-  async decryptWithAesGcm(key: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
+  async decryptWithAesGcm(key: Uint8Array<ArrayBuffer>, ciphertext: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
     const aead = await aesGcmFromRawKey(key)
     return aead.decrypt(ciphertext, Cryptor.EMPTY_AAD)
   }

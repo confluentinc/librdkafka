@@ -25,7 +25,7 @@ export function validateAesKeySize(n: number) {
  *
  * @throws {@link InvalidArgumentsException}
  */
-export function requireUint8Array(input: Uint8Array) {
+export function requireUint8Array(input: Uint8Array<ArrayBuffer>) {
   if (input == null || !(input instanceof Uint8Array)) {
     throw new InvalidArgumentsException('input must be a non null Uint8Array');
   }

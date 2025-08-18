@@ -28,7 +28,7 @@ global_job_config:
       - git submodule update --init --recursive
       - cd deps/librdkafka
       - git fetch origin
-      - git checkout v2.11.1-RC2
+      - git checkout v2.11.1
       - cd ../../
       - cache clear
 

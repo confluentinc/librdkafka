@@ -395,8 +395,8 @@ static void test_per_message_partition_flag(void) {
         TEST_SAY("test_per_message_partition_flag: Created kafka instance %s\n",
                  rd_kafka_name(rk));
         topic_name = test_mk_topic_name("0011_per_message_flag", 1);
-        test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
-                                      30000); /* 30 seconds for cloud environments */
+        test_create_topic(rk, topic_name, topic_num_partitions, -1);
+        test_wait_topic_exists(rk, topic_name, 30000); /* 30 seconds for cloud environments */
 
         /* Additional sleep for cloud environments to ensure topic stability */
         rd_sleep(10); /* 10 seconds for extra cloud propagation */

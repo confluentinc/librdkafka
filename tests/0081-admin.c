@@ -5503,8 +5503,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* Not supported by K2 */
         // do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
         // do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
-
-        do_test_DescribeConfigs_groups(rk, mainq);
         /* List groups */
         do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
         do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);

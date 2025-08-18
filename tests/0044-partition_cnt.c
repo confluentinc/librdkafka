@@ -60,29 +60,14 @@ static void test_producer_partition_cnt_change(void) {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        /* K2 clusters require much longer timeouts for topic creation and metadata propagation */
-        int topic_wait_timeout = test_k2_cluster ? 180000 : 5000;  /* 3 minutes for K2 */
-        test_create_topic_wait_exists(rk, topic, partition_cnt / 2, -1, topic_wait_timeout);
-
-        if (test_k2_cluster) {
-                test_create_topic(rk, topic, partition_cnt / 2, -1);
-                test_wait_topic_exists(rk, topic, topic_wait_timeout);
-        } else {
-                test_create_topic_wait_exists(rk, topic, partition_cnt / 2, -1, topic_wait_timeout);
-        }
-
-        /* Additional verification for K2 clusters */
-        if (test_k2_cluster) {
-                test_wait_topic_exists(rk, topic, 30000);  /* Extra 30s verification */
-                rd_sleep(10);  /* Extra wait for topic to be fully ready */
-        }
+        test_create_topic(rk, topic, partition_cnt / 2, -1);
 
         /* K2 clusters require higher timeouts due to SSL/SASL overhead and
          * potential metadata refresh delays during partition count changes */
         int msg_timeout_ms = test_k2_cluster ? 300000 : 10000;  /* 5 minutes for K2 */
 
         rkt =
-            test_create_topic_object(rk, topic, "message.timeout.ms",
+            test_create_topic_object(rk, __FUNCTION__, "message.timeout.ms",
                                      tsprintf("%d", tmout_multip(msg_timeout_ms)), NULL);
 
         test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,

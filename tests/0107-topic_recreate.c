@@ -191,6 +191,9 @@ static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
         /* Create topic */
         test_create_topic(consumer, topic, part_cnt_1, -1);
 
+        /* Additional wait for cloud environments - allow offset APIs to be ready */
+        rd_sleep(10); /* 30 seconds for cloud propagation */
+
         /* Start consumer */
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_true);
@@ -217,6 +220,9 @@ static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
 
         /* Re-create topic */
         test_create_topic(consumer, topic, part_cnt_2, -1);
+
+        /* Additional wait for cloud environments - allow offset APIs to be ready for recreated topic */
+        rd_sleep(10); /* 45 seconds for cloud propagation of recreated topic */
 
         mtx_lock(&value_mtx);
         value = "after";

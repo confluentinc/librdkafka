@@ -606,8 +606,9 @@ rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
         if (coordtype != RD_KAFKA_COORD_GROUP && ApiVersion < 1)
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_FindCoordinator, 1,
-                                         1 + 2 + strlen(coordkey), ApiVersion >= 3);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_FindCoordinator,
+                                                 1, 1 + 2 + strlen(coordkey),
+                                                 ApiVersion >= 3);
 
         rd_kafka_buf_write_str(rkbuf, coordkey, -1);
 
@@ -2003,7 +2004,8 @@ void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,
                 RD_KAFKAP_STR_SIZE(member_id) +
                 RD_KAFKAP_STR_SIZE(group_instance_id) +
                 4 /* array size group_assignment */ +
-                (assignment_cnt * 100 /*guess*/), ApiVersion >= 4);
+                (assignment_cnt * 100 /*guess*/),
+            ApiVersion >= 4);
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
@@ -2066,7 +2068,8 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                 RD_KAFKAP_STR_SIZE(group_instance_id) +
                 RD_KAFKAP_STR_SIZE(protocol_type) +
                 4 /* array count GroupProtocols */ +
-                (rd_list_cnt(topics) * 100), ApiVersion >= 6 /*flexver*/);
+                (rd_list_cnt(topics) * 100),
+            ApiVersion >= 6 /*flexver*/);
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.group_session_timeout_ms);
         if (ApiVersion >= 1)
@@ -2252,10 +2255,11 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
                    "Heartbeat for group \"%s\" generation id %" PRId32,
                    group_id->str, generation_id);
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Heartbeat, 1,
-                                         RD_KAFKAP_STR_SIZE(group_id) +
-                                             4 /* GenerationId */ +
-                                             RD_KAFKAP_STR_SIZE(member_id), ApiVersion >= 4);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_Heartbeat, 1,
+            RD_KAFKAP_STR_SIZE(group_id) + 4 /* GenerationId */ +
+                RD_KAFKAP_STR_SIZE(member_id),
+            ApiVersion >= 4);
 
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
@@ -3418,9 +3422,10 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-                rkb, RD_KAFKAP_SaslAuthenticate, 0, 2, &features);
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 2, &features);
 
-        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_SaslAuthenticate, 0, 0, ApiVersion >= 2);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 0, ApiVersion >= 2);
 
         /* Should be sent before any other requests since it is part of
          * the initial connection handshake. */

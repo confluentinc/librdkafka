@@ -1,4 +1,4 @@
-// ====== Generated from librdkafka 2.11.0 file CONFIGURATION.md ======
+// ====== Generated from librdkafka 2.11.1-RC2 file CONFIGURATION.md ======
 // Code that generated this is a derivative work of the code from Nam Nguyen
 // https://gist.github.com/ntgn81/066c2c8ec5b4238f85d1e9168a04e3fb
 
@@ -199,7 +199,7 @@ export interface GlobalConfig {
     "socket.connection.setup.timeout.ms"?: number;
 
     /**
-     * Close broker connections after the specified time of inactivity. Disable with 0. If this property is left at its default value some heuristics are performed to determine a suitable default value, this is currently limited to identifying brokers on Azure (see librdkafka issue #3109 for more info).
+     * Close broker connections after the specified time of inactivity. Disable with 0. If this property is left at its default value some heuristics are performed to determine a suitable default value, this is currently limited to identifying brokers on Azure (see librdkafka issue #3109 for more info). Actual value can be lower, up to 2s lower, only if `connections.max.idle.ms` >= 4s, as jitter is added to avoid disconnecting all brokers at the same time.
      *
      * @default 0
      */

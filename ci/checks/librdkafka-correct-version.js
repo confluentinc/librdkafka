@@ -60,9 +60,14 @@ function versionAsString(version) {
 
 const librdkafkaVersion = parseLibrdkafkaVersion(defines.RD_KAFKA_VERSION);
 const versionString = versionAsString(librdkafkaVersion);
+let pjsLibrdkafka = pjs.librdkafka;
+const pjsIsRC = pjsLibrdkafka.match(/(.+)-RC[0-9]+$/);
+if (pjsIsRC) {
+  pjsLibrdkafka = pjsIsRC[1];
+}
 
 // If our version is a devel (early access) version, we might be on master.
-if (pjs.librdkafka !== versionString && !pjs.version.includes('devel')) {
+if (pjsLibrdkafka !== versionString && !pjs.version.includes('devel')) {
   console.error(`Librdkafka version of ${versionString} does not match package json: ${pjs.librdkafka}`);
   process.exit(1);
 }

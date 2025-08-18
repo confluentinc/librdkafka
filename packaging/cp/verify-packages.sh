@@ -54,8 +54,6 @@ verify_debian_distros() {
     local platform=$1
     local version=$2
     echo "#### Verifying Debian packages for $platform ####"
-    # Last Debian 10 version is 2.5.0
-    verify_debian debian:10 "2.5.0"
     verify_debian debian:11 $version
     verify_debian debian:12 $version
     verify_debian ubuntu:20.04 $version

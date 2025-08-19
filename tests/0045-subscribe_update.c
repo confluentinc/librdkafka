@@ -364,10 +364,10 @@ static void do_test_topic_remove(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
-        test_create_topic(NULL, topic_f, parts_f, 1);
+        test_create_topic(NULL, topic_f, parts_f, -1);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
-        test_create_topic(NULL, topic_g, parts_g, 1);
+        test_create_topic(NULL, topic_g, parts_g, -1);
 
         rd_sleep(1);  // FIXME: do check&wait loop instead
 

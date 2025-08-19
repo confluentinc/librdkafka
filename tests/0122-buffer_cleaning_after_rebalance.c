@@ -157,6 +157,10 @@ static void do_test_consume_batch(const char *strategy) {
 
         test_create_topic_if_auto_create_disabled(NULL, topic, partition_cnt);
 
+        /* Wait for topic metadata to propagate to avoid race conditions */
+        test_wait_topic_exists(NULL, topic, tmout_multip(10000));
+        rd_sleep(2);  /* Additional timing safety for K2 cluster */
+
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
                                        produce_msg_cnt / partition_cnt);

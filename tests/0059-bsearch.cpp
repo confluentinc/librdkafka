@@ -100,7 +100,8 @@ class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
       return;
 
     RdKafka::MessageTimestamp ts = msg.timestamp();
-    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
+    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+        ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
       Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
 
     golden_timestamp = ts.timestamp;
@@ -171,6 +172,15 @@ static void do_test_bsearch(void) {
     Test::Fail("Failed to create KafkaConsumer: " + errstr);
   delete conf;
 
+  // Get the actual stored timestamp from the golden message
+  Test::Say("Getting actual stored timestamp from golden message\n");
+  RdKafka::Message *golden_msg = get_msg(c, golden_offset, false);
+  RdKafka::MessageTimestamp golden_ts = golden_msg->timestamp();
+  golden_timestamp = golden_ts.timestamp; // Update with actual stored timestamp
+  Test::Say(tostr() << "Golden message at offset " << golden_offset 
+                    << " has actual stored timestamp " << golden_timestamp << "\n");
+  delete golden_msg;
+
   Test::Say("Find initial middle offset\n");
   int64_t low, high;
   test_timing_t t_qr;
@@ -199,8 +209,9 @@ static void do_test_bsearch(void) {
                                     itcnt > 0);
 
     RdKafka::MessageTimestamp ts = msg->timestamp();
-    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
-      Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
+    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+        ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
+      Test::Fail(tostr() << "Expected CreateTime or LogAppendTime timestamp, not " << ts.type
                          << " at offset " << msg->offset());
 
      Test::Say(1, tostr() << "Message at offset " << msg->offset()

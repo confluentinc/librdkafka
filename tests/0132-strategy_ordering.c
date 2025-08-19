@@ -126,6 +126,11 @@ static void do_test_stragety_ordering(const char *assignor,
 
         topic = test_mk_topic_name("0132-strategy_ordering", 1);
         test_create_topic(NULL, topic, _PART_CNT, -1);
+
+        /* Wait for topic metadata to propagate to avoid race conditions */
+        test_wait_topic_exists(NULL, topic, tmout_multip(10000));
+        rd_sleep(2);  /* Additional timing safety for K2 cluster */
+
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_init(&conf, NULL, 30);

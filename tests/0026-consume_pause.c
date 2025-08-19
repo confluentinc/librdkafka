@@ -263,6 +263,7 @@ static void consume_pause_resume_after_reassign(void) {
         test_create_topic(NULL, topic, (int)partition + 1, -1);
 
         test_wait_topic_exists(NULL, topic, 10 * 1000);
+        rd_sleep(2);  /* Additional timing safety for K2 cluster subscription */
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
@@ -472,7 +473,7 @@ static void consume_seek_pause_resume(void) {
 
         test_conf_init(&conf, NULL, 20);
 
-        test_create_topic(NULL, topic, (int)partition + 1, 1);
+        test_create_topic(NULL, topic, (int)partition + 1, -1);
 
         test_wait_topic_exists(NULL, topic, 10 * 1000);
 

@@ -166,6 +166,10 @@ int main_0099_commit_metadata(int argc, char **argv) {
 
         test_create_topic(NULL, topic, 1, -1);
 
+        /* Wait for topic metadata to propagate to avoid race conditions */
+        test_wait_topic_exists(NULL, topic, tmout_multip(10000));
+        rd_sleep(2);  /* Additional timing safety for K2 cluster */
+
         origin_toppar = rd_kafka_topic_partition_list_new(1);
 
         rd_kafka_topic_partition_list_add(origin_toppar, topic, 0);

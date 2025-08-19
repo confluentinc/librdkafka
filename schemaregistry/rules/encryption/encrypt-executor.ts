@@ -33,6 +33,8 @@ const ENCRYPT_KMS_TYPE = 'encrypt.kms.type'
 const ENCRYPT_DEK_ALGORITHM = 'encrypt.dek.algorithm'
 // EncryptDekExpiryDays represents dek expiry days
 const ENCRYPT_DEK_EXPIRY_DAYS = 'encrypt.dek.expiry.days'
+// EncryptAlternateKmsKeyIds represents alternate kms key IDs
+const ENCRYPT_ALTERNATE_KMS_KEY_IDS = 'encrypt.alternate.kms.key.ids'
 
 // MillisInDay represents number of milliseconds in a day
 const MILLIS_IN_DAY = 24 * 60 * 60 * 1000
@@ -387,7 +389,7 @@ export class EncryptionExecutorTransform {
       }
       let encryptedDek: Buffer | null = null
       if (!kek.shared) {
-        kmsClient = getKmsClient(this.executor.config!, kek)
+        kmsClient = new KmsClientWrapper(this.executor.config!, kek)
         // Generate new dek
         const rawDek = this.cryptor.generateKey()
         encryptedDek = await kmsClient.encrypt(rawDek)
@@ -407,7 +409,7 @@ export class EncryptionExecutorTransform {
     const keyMaterialBytes = await this.executor.client!.getDekKeyMaterialBytes(dek)
     if (keyMaterialBytes == null) {
       if (kmsClient == null) {
-        kmsClient = getKmsClient(this.executor.config!, kek)
+        kmsClient = new KmsClientWrapper(this.executor.config!, kek)
       }
       const encryptedKeyMaterialBytes = await this.executor.client!.getDekEncryptedKeyMaterialBytes(dek)
       const rawDek = await kmsClient.decrypt(encryptedKeyMaterialBytes!)
@@ -579,8 +581,8 @@ export class EncryptionExecutorTransform {
   }
 }
 
-function getKmsClient(config: Map<string, string>, kek: Kek): KmsClient {
-  let keyUrl = kek.kmsType + '://' + kek.kmsKeyId
+function getKmsClient(config: Map<string, string>, kmsType: string, kmsKeyId: string): KmsClient {
+  let keyUrl = kmsType + '://' + kmsKeyId
   let kmsClient = Registry.getKmsClient(keyUrl)
   if (kmsClient == null) {
     let kmsDriver = Registry.getKmsDriver(keyUrl)
@@ -638,6 +640,67 @@ export class FieldEncryptionExecutorTransform implements FieldTransform {
 
   async transform(ctx: RuleContext, fieldCtx: FieldContext, fieldValue: any): Promise<any> {
     return await this.executorTransform.transform(ctx, fieldCtx.type, fieldValue)
+  }
+}
+
+export class KmsClientWrapper implements KmsClient {
+  private config: Map<string, string>
+  private kek: Kek
+  private kekId: string
+  private kmsKeyIds: string[]
+
+  constructor(config: Map<string, string>, kek: Kek) {
+    this.config = config
+    this.kek = kek
+    this.kekId = kek.kmsType + '://' + kek.kmsKeyId
+    this.kmsKeyIds = this.getKmsKeyIds()
+  }
+
+  getKmsKeyIds(): string[] {
+    let kmsKeyIds = [this.kek.kmsKeyId!]
+    let alternateKmsKeyIds: string | undefined
+    if (this.kek.kmsProps != null) {
+      alternateKmsKeyIds = this.kek.kmsProps[ENCRYPT_ALTERNATE_KMS_KEY_IDS]
+    }
+    if (alternateKmsKeyIds == null) {
+      alternateKmsKeyIds = this.config.get(ENCRYPT_ALTERNATE_KMS_KEY_IDS)
+    }
+    if (alternateKmsKeyIds != null) {
+      kmsKeyIds = kmsKeyIds.concat(alternateKmsKeyIds.split(',').map(id => id.trim()))
+    }
+    return kmsKeyIds
+  }
+
+  supported(keyUri: string): boolean {
+    return this.kekId === keyUri
+  }
+
+  async encrypt(rawKey: Buffer): Promise<Buffer> {
+    for (let i = 0; i < this.kmsKeyIds.length; i++) {
+      try {
+        let kmsClient = getKmsClient(this.config, this.kek.kmsType!, this.kmsKeyIds[i])
+        return await kmsClient.encrypt(rawKey)
+      } catch (e) {
+        if (i === this.kmsKeyIds.length - 1) {
+          throw new RuleError(`failed to encrypt key with all KMS keys: ${e}`)
+        }
+      }
+    }
+    throw new RuleError('no KEK found for encryption')
+  }
+
+  async decrypt(encryptedKey: Buffer): Promise<Buffer> {
+    for (let i = 0; i < this.kmsKeyIds.length; i++) {
+      try {
+        let kmsClient = getKmsClient(this.config, this.kek.kmsType!, this.kmsKeyIds[i])
+        return await kmsClient.decrypt(encryptedKey)
+      } catch (e) {
+        if (i === this.kmsKeyIds.length - 1) {
+          throw new RuleError(`failed to decrypt key with all KMS keys: ${e}`)
+        }
+      }
+    }
+    throw new RuleError('no KEK found for decryption')
   }
 }
 

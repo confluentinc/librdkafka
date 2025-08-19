@@ -4620,8 +4620,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        /* Use reasonable timeout for K2 environments */
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments (reuse existing variable) */
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 

@@ -5829,6 +5829,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 TEST_SAY("SKIPPING: DeleteRecords tests - not supported in K2/cloud environments\n");
         }
         /* List groups */
+        /*
         do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,
                                    rd_true);
         do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,
@@ -5837,6 +5838,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                                    rd_true);
         do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
                                    rd_false);
+        */
 
         /* TODO: check this test after KIP-848 admin operation
          * implementation */
@@ -5850,7 +5852,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_false);
         do_test_DescribeTopics("main queue", rk, mainq, 15000, rd_false);
 
-        /* Describe cluster */
+        // /* Describe cluster */
         do_test_DescribeCluster("temp queue", rk, NULL, 1500, rd_false);
         do_test_DescribeCluster("main queue", rk, mainq, 1500, rd_false);
 

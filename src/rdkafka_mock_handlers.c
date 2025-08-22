@@ -2183,7 +2183,8 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_kstr(resp, &Topic);
 
                 /* #Partitions */
-                rd_kafka_buf_read_arraycnt(rkbuf, &PartsCnt, RD_KAFKAP_PARTITIONS_MAX);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartsCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
                 /* Response: #Partitions */
                 rd_kafka_buf_write_arraycnt(resp, PartsCnt);
 

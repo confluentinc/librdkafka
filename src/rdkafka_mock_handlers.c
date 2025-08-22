@@ -2207,6 +2207,10 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);
                 }
+
+                rd_kafka_buf_skip_tags(rkbuf);
+
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -3013,12 +3017,12 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_LeaveGroup] = {0, 4, 4, rd_kafka_mock_handle_LeaveGroup},
         [RD_KAFKAP_SyncGroup]  = {0, 4, 4, rd_kafka_mock_handle_SyncGroup},
         [RD_KAFKAP_AddPartitionsToTxn] =
-            {0, 1, -1, rd_kafka_mock_handle_AddPartitionsToTxn},
-        [RD_KAFKAP_AddOffsetsToTxn] = {0, 1, -1,
+            {0, 3, 3, rd_kafka_mock_handle_AddPartitionsToTxn},
+        [RD_KAFKAP_AddOffsetsToTxn] = {0, 3, 3,
                                        rd_kafka_mock_handle_AddOffsetsToTxn},
         [RD_KAFKAP_TxnOffsetCommit] = {0, 3, 3,
                                        rd_kafka_mock_handle_TxnOffsetCommit},
-        [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
+        [RD_KAFKAP_EndTxn]          = {0, 3, 3, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =

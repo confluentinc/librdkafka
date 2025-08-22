@@ -6322,7 +6322,7 @@ rd_kafka_AddPartitionsToTxnRequest(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_kstr(rkbuf,
                                                 rktp->rktp_rkt->rkt_topic);
                         /* Partition count, updated later */
-                        of_PartCnt = rd_kafka_buf_write_arraycnt(rkbuf, 0);
+                        of_PartCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
                         PartCnt = 0;
                         TopicCnt++;

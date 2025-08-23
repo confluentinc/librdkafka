@@ -1,3 +1,10 @@
+# librdkafka v2.11.2 (unreleased)
+
+## Fixes
+
+* C++ docs: Clarify ownership of `RdKafka::Conf::dump()` return value (#5166, @aryanrahar)
+
+
 # librdkafka v2.11.1
 
 librdkafka v2.11.1 is a maintenance release:

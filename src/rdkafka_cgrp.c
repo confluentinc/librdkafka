@@ -555,12 +555,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
                     rk->rk_conf.auto_commit_interval_ms * 1000ll,
                     rd_kafka_cgrp_offset_commit_tmr_cb, rkcg);
 
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                rd_kafka_log(rk, LOG_WARNING, "CGRP",
-                             "KIP-848 Consumer Group Protocol is in 'Preview' "
-                             "and MUST NOT be used in production");
-        }
-
         return rkcg;
 }
 

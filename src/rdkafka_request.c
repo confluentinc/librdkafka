@@ -2018,9 +2018,7 @@ void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,
 
                 rd_kafka_buf_write_kstr(rkbuf, rkgm->rkgm_member_id);
                 rd_kafka_group_MemberState_consumer_write(rkbuf, rkgm);
-                if (ApiVersion >= 4) {
-                        rd_kafka_buf_write_tags_empty(rkbuf);
-                }
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* This is a blocking request */
@@ -2090,9 +2088,7 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                     rk->rk_cgrp->rkcg_group_assignment,
                     rk->rk_conf.client_rack);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
-                if (ApiVersion >= 6) {
-                        rd_kafka_buf_write_tags_empty(rkbuf);
-                }
+                rd_kafka_buf_write_tags_empty(rkbuf);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
 

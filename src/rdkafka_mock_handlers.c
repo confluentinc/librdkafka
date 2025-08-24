@@ -1586,7 +1586,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 5)
                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
         rd_kafka_buf_read_str(rkbuf, &ProtocolType);
-        rd_kafka_buf_read_i32(rkbuf, &ProtocolCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &ProtocolCnt, 10000);
 
         if (ProtocolCnt > 1000) {
                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
@@ -1608,9 +1608,6 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
                 protos[i].name     = rd_kafkap_str_copy(&ProtocolName);
                 protos[i].metadata = rd_kafkap_bytes_copy(&Metadata);
         }
-
-        /* Request: Struct tags */
-        rd_kafka_buf_skip_tags(rkbuf);
 
         /*
          * Construct response
@@ -1659,7 +1656,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_write_str(resp, NULL, -1); /* ProtocolName */
         rd_kafka_buf_write_str(resp, NULL, -1); /* LeaderId */
         rd_kafka_buf_write_kstr(resp, NULL);    /* MemberId */
-        rd_kafka_buf_write_i32(resp, 0);        /* MemberCnt */
+        rd_kafka_buf_write_arraycnt(resp, 0);        /* MemberCnt */
         rd_kafka_buf_write_tags_empty(resp);    /* Response: Struct tags */
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -1695,7 +1692,6 @@ static int rd_kafka_mock_handle_Heartbeat(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &MemberId);
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3)
                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
-        rd_kafka_buf_skip_tags(rkbuf); /* Request: Struct tags */
 
         /*
          * Construct response
@@ -1844,8 +1840,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &MemberId);
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3)
                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
-        rd_kafka_buf_read_i32(rkbuf, &AssignmentCnt);
-        rd_kafka_buf_skip_tags(rkbuf); /* Request: Struct tags */
+        rd_kafka_buf_read_arraycnt(rkbuf, &AssignmentCnt, RD_KAFKAP_PARTITIONS_MAX);
 
         /*
          * Construct response
@@ -1905,6 +1900,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
 
                 rd_kafka_buf_read_str(rkbuf, &MemberId2);
                 rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
+                rd_kafka_buf_skip_tags(rkbuf); /* Request: Struct tags */
 
                 if (err)
                         continue;

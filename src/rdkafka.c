@@ -2154,6 +2154,11 @@ static void rd_kafka_metadata_refresh_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
         rd_kafka_resp_err_t err;
 
+        /* Restart the rebootstrap timer only if it's the first
+         * metadata refresh request after last successful response,
+         * so the timer is not reset if already scheduled. */
+        rd_kafka_rebootstrap_tmr_restart(rk);
+
         /* High-level consumer:
          * We need to query both locally known topics and subscribed topics
          * so that we can detect locally known topics changing partition
@@ -2833,6 +2838,10 @@ fail:
 
 /**
  * Schedules a rebootstrap of the cluster immediately.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_timers_lock()
+ * @locality any
  */
 void rd_kafka_rebootstrap(rd_kafka_t *rk) {
         if (rk->rk_conf.metadata_recovery_strategy ==
@@ -2851,9 +2860,11 @@ void rd_kafka_rebootstrap(rd_kafka_t *rk) {
 }
 
 /**
- * Restarts rebootstrap timer with the configured interval.
+ * Restarts rebootstrap timer with the configured interval. Only if not
+ * started or stopped.
  *
  * @locks none
+ * @locks_acquired rd_kafka_timers_lock()
  * @locality any
  */
 void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk) {
@@ -2862,9 +2873,27 @@ void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk) {
                 return;
 
         rd_kafka_timer_start_oneshot(
-            &rk->rk_timers, &rk->rebootstrap_tmr, rd_true /*restart*/,
+            &rk->rk_timers, &rk->rebootstrap_tmr, rd_false /*don't restart*/,
             rk->rk_conf.metadata_recovery_rebootstrap_trigger_ms * 1000LL,
             rd_kafka_rebootstrap_tmr_cb, NULL);
+}
+
+/**
+ * Stops rebootstrap timer, for example after a successful metadata response.
+ *
+ * @return 1 if the timer was started (before being stopped), else 0.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_timers_lock()
+ * @locality any
+ */
+int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk) {
+        if (rk->rk_conf.metadata_recovery_strategy ==
+            RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
+                return 0;
+
+        return rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr,
+                                   rd_true /* lock */);
 }
 
 /**

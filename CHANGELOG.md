@@ -4,13 +4,23 @@ librdkafka v2.12.0 is a feature release:
 
 * Fix compression types read issue in GetTelemetrySubscriptions response
   for big-endian architectures (#5183, @paravoid).
+* Fix for KIP-1102 time based re-bootstrap condition (#5177).
+* Fix for discarding the member epoch in a consumer group heartbeat response when leaving with an inflight HB (#4672).
+* Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
 
 
 ## Fixes
 
 ### General fixes
-* Fix for discarding the member epoch in a consumer group heartbeat response when leaving with an inflight HB (#4672).
-* Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
+
+* Issues: #5178.
+  Fix for KIP-1102 time based re-bootstrap condition.
+  Re-bootstrap is now triggered only after `metadata.recovery.rebootstrap.trigger.ms`
+  have passed since first metadata refresh request after last successful
+  metadata response. The calculation was since last successful metadata response
+  so it's possible it did overlap with the periodic `topic.metadata.refresh.interval.ms`
+  and cause a re-bootstrap even if not needed.
+  Happening since 2.11.0 (#5177).
 
 ### Telemetry fixes
 

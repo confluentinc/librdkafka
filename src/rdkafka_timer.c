@@ -340,6 +340,8 @@ void rd_kafka_timers_run(rd_kafka_timers_t *rkts, int timeout_us) {
                 while ((rtmr = TAILQ_FIRST(&rkts->rkts_timers)) &&
                        rtmr->rtmr_next <= now) {
                         rd_bool_t oneshot;
+                        void (*callback)(rd_kafka_timers_t *rkts, void *arg);
+                        void *arg;
 
                         rd_kafka_timer_unschedule(rkts, rtmr);
 
@@ -352,8 +354,8 @@ void rd_kafka_timers_run(rd_kafka_timers_t *rkts, int timeout_us) {
                         if ((oneshot = rtmr->rtmr_oneshot))
                                 rtmr->rtmr_interval = 0;
 
-                        void (*callback)(rd_kafka_timers_t *rkts, void *arg) = rtmr->rtmr_callback;
-                        void *arg = rtmr->rtmr_arg;
+                        callback = rtmr->rtmr_callback;
+                        arg      = rtmr->rtmr_arg;
 
                         rd_kafka_timers_unlock(rkts);
 

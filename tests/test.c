@@ -535,13 +535,9 @@ struct test tests[] = {
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
-<<<<<<< HEAD
-    _TEST(0154_resolve_connect_callbacks, TEST_F_LOCAL),
-=======
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
->>>>>>> master
-
+    _TEST(0154_resolve_connect_callbacks, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

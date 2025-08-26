@@ -266,7 +266,7 @@ _TEST_DECL(0146_metadata_mock);
 _TEST_DECL(0149_broker_same_host_port_mock);
 _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
-_TEST_DECL(0152_resolve_connect_callbacks);
+_TEST_DECL(0154_resolve_connect_callbacks);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -529,7 +529,7 @@ struct test tests[] = {
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
-    _TEST(0152_resolve_connect_callbacks, TEST_F_LOCAL),
+    _TEST(0154_resolve_connect_callbacks, TEST_F_LOCAL),
 
 
     /* Manual tests */

@@ -169,6 +169,7 @@ _TEST_DECL(0053_stats_timing);
 _TEST_DECL(0053_stats);
 _TEST_DECL(0054_offset_time);
 _TEST_DECL(0055_producer_latency);
+_TEST_DECL(0055_producer_latency_mock);
 _TEST_DECL(0056_balanced_group_mt);
 _TEST_DECL(0057_invalid_topic);
 _TEST_DECL(0058_log);
@@ -263,9 +264,12 @@ _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
+_TEST_DECL(0147_consumer_group_consumer_mock);
 _TEST_DECL(0149_broker_same_host_port_mock);
 _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
+_TEST_DECL(0152_rebootstrap_local);
+_TEST_DECL(0153_memberid);
 _TEST_DECL(0154_resolve_connect_callbacks);
 
 /* Manual tests */
@@ -400,6 +404,7 @@ struct test tests[] = {
     _TEST(0053_stats, 0),
     _TEST(0054_offset_time, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
+    _TEST(0055_producer_latency_mock, TEST_F_LOCAL),
     _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0057_invalid_topic, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0058_log, TEST_F_LOCAL),
@@ -526,10 +531,16 @@ struct test tests[] = {
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
+    _TEST(0147_consumer_group_consumer_mock, TEST_F_LOCAL),
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
+<<<<<<< HEAD
     _TEST(0154_resolve_connect_callbacks, TEST_F_LOCAL),
+=======
+    _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
+    _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
+>>>>>>> master
 
 
     /* Manual tests */
@@ -552,6 +563,14 @@ static void test_socket_add(struct test *test, sockem_t *skm) {
         TEST_LOCK();
         rd_list_add(&test->sockets, skm);
         TEST_UNLOCK();
+}
+
+void *test_socket_find(struct test *test, sockem_t *skm) {
+        void *ret;
+        TEST_LOCK();
+        ret = rd_list_find(&test->sockets, skm, rd_list_cmp_ptr);
+        TEST_UNLOCK();
+        return ret;
 }
 
 static void test_socket_del(struct test *test, sockem_t *skm, int do_lock) {
@@ -1108,19 +1127,23 @@ test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
         rd_kafka_conf_set_log_cb(conf, test_conf_log_interceptor_log_cb);
 
         if (!test_debug || !strstr(test_debug, "all")) {
-                char debug_with_contexts[512];
-                rd_snprintf(debug_with_contexts, sizeof(debug_with_contexts),
-                            "%s", test_debug ? test_debug : "");
+                char debug_with_contexts[256] = {0};
+                size_t i                      = rd_snprintf(debug_with_contexts,
+                                                            sizeof(debug_with_contexts), "%s",
+                                       test_debug ? test_debug : "");
                 /* Add all debug contexts and set debug configuration */
-                while (*debug_contexts) {
+                while (
+                    *debug_contexts &&
+                    i + strlen(*debug_contexts) +
+                            (i > 0 ? 2 : 1) /* 1 for the comma + 1 for the \0 */
+                        <= sizeof(debug_with_contexts)) {
                         if (!strstr(debug_with_contexts, *debug_contexts)) {
-                                rd_snprintf(debug_with_contexts,
-                                            sizeof(debug_with_contexts),
-                                            "%.*s%s%s",
-                                            (int)strlen(debug_with_contexts),
-                                            debug_with_contexts,
-                                            debug_with_contexts[0] ? "," : "",
-                                            *debug_contexts);
+                                if (i > 0)
+                                        debug_with_contexts[i++] = ',';
+                                i +=
+                                    rd_snprintf(&debug_with_contexts[i],
+                                                sizeof(debug_with_contexts) - i,
+                                                "%s", *debug_contexts);
                         }
                         debug_contexts++;
                 }
@@ -1134,7 +1157,7 @@ static RD_INLINE unsigned int test_rand(void) {
 #ifdef _WIN32
         rand_s(&r);
 #else
-        r     = rand();
+        r = rand();
 #endif
         return r;
 }
@@ -2032,7 +2055,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
                 pcwd = _getcwd(cwd, sizeof(cwd) - 1);
 #else
-                pcwd   = getcwd(cwd, sizeof(cwd) - 1);
+                pcwd = getcwd(cwd, sizeof(cwd) - 1);
 #endif
                 if (pcwd)
                         TEST_SAY("Current directory: %s\n", cwd);
@@ -4633,9 +4656,29 @@ void test_flush(rd_kafka_t *rk, int timeout_ms) {
                           rd_kafka_outq_len(rk));
 }
 
+int test_is_forbidden_conf_group_protocol_consumer(const char *name) {
+        char *forbidden_conf[] = {
+            "session.timeout.ms", "partition.assignment.strategy",
+            "heartbeat.interval.ms", "group.protocol.type", NULL};
+        int i;
+        if (test_consumer_group_protocol_classic())
+                return 0;
+        for (i = 0; forbidden_conf[i]; i++) {
+                if (!strcmp(name, forbidden_conf[i]))
+                        return 1;
+        }
+        return 0;
+}
 
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
         char errstr[512];
+        if (test_is_forbidden_conf_group_protocol_consumer(name)) {
+                TEST_SAY(
+                    "Skipping setting forbidden configuration %s for CONSUMER "
+                    "protocol.\n",
+                    name);
+                return;
+        }
         if (rd_kafka_conf_set(conf, name, val, errstr, sizeof(errstr)) !=
             RD_KAFKA_CONF_OK)
                 TEST_FAIL("Failed to set config \"%s\"=\"%s\": %s\n", name, val,
@@ -7393,7 +7436,7 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
  *        received by mock cluster \p mcluster, matching
  *        function \p match , called with opaque \p opaque .
  */
-static size_t test_mock_get_matching_request_cnt(
+size_t test_mock_get_matching_request_cnt(
     rd_kafka_mock_cluster_t *mcluster,
     rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
     void *opaque) {

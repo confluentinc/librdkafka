@@ -292,13 +292,14 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int32_t rktp_fetch_version; /* Op version of curr fetch.
                                        (broker thread) */
 
-        enum { RD_KAFKA_TOPPAR_FETCH_NONE = 0,
-               RD_KAFKA_TOPPAR_FETCH_STOPPING,
-               RD_KAFKA_TOPPAR_FETCH_STOPPED,
-               RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
-               RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
-               RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
-               RD_KAFKA_TOPPAR_FETCH_ACTIVE,
+        enum {
+                RD_KAFKA_TOPPAR_FETCH_NONE = 0,
+                RD_KAFKA_TOPPAR_FETCH_STOPPING,
+                RD_KAFKA_TOPPAR_FETCH_STOPPED,
+                RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
+                RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
+                RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
+                RD_KAFKA_TOPPAR_FETCH_ACTIVE,
         } rktp_fetch_state; /* Broker thread's state */
 
 #define RD_KAFKA_TOPPAR_FETCH_IS_STARTED(fetch_state)                          \

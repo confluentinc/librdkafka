@@ -2638,12 +2638,18 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
         goto done;
 
 err:
-        actions = rd_kafka_err_action(rkb, err, request,
+        actions = rd_kafka_err_action(
+            rkb, err, request,
 
-                                      RD_KAFKA_ERR_ACTION_RETRY,
-                                      RD_KAFKA_RESP_ERR__PARTIAL,
+            RD_KAFKA_ERR_ACTION_SPECIAL, RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED,
 
-                                      RD_KAFKA_ERR_ACTION_END);
+            RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR__PARTIAL,
+
+            RD_KAFKA_ERR_ACTION_END);
+
+        if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {
+                rd_kafka_rebootstrap(rk);
+        }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 /* In case it's a brokers full refresh call,
@@ -2765,7 +2771,7 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
         int *full_incr                 = NULL;
         void *handler_arg              = NULL;
         rd_kafka_resp_cb_t *handler_cb = rd_kafka_handle_Metadata;
-        int16_t metadata_max_version   = 12;
+        int16_t metadata_max_version   = 13;
         rd_kafka_replyq_t use_replyq   = replyq;
 
         /* In case we want cluster authorized operations in the Metadata
@@ -3326,6 +3332,9 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
         rd_kafkap_str_t error_str;
         rd_kafkap_bytes_t auth_data;
         char errstr[512];
+
+        if (rd_kafka_broker_is_any_err_destroy(err))
+                return;
 
         if (err) {
                 rd_snprintf(errstr, sizeof(errstr),
@@ -5342,7 +5351,9 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 int ei;
 
                 /* ResourceType */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
+                               config->restype));
 
                 /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -5424,7 +5435,9 @@ rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
                 int ei;
 
                 /* ResourceType */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
+                               config->restype));
 
                 /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -5518,7 +5531,9 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 int ei;
 
                 /* resource_type */
-                rd_kafka_buf_write_i8(rkbuf, config->restype);
+                rd_kafka_buf_write_i8(
+                    rkbuf, rd_kafka_ResourceType_to_ConfigResourceType(
+                               config->restype));
 
                 /* resource_name */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
@@ -6056,6 +6071,61 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+
+/**
+ * @brief Construct and send ConsumerGroupDescribe requests
+ *        to \p rkb with the groups (const char *) in \p groups.
+ *        Uses \p include_authorized_operations to get
+ *        group ACL authorized operations.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ */
+rd_kafka_error_t *
+rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                      char **groups,
+                                      size_t group_cnt,
+                                      rd_bool_t include_authorized_operations,
+                                      rd_kafka_replyq_t replyq,
+                                      rd_kafka_resp_cb_t *resp_cb,
+                                      void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        size_t i;
+
+        int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ConsumerGroupDescribe, 0, 0, NULL);
+
+        if (ApiVersion == -1) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                    "ConsumerGroupDescribe (KIP-848) "
+                    "not supported by broker, "
+                    "requires broker version >= 4.0.0");
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ConsumerGroupDescribe, 1,
+            4 /* rd_kafka_buf_write_arraycnt_pos */ +
+                1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
+                32 * group_cnt /* Groups */,
+            rd_true /* flexver */);
+
+        rd_kafka_buf_write_arraycnt(rkbuf, group_cnt);
+
+        for (i = 0; i < group_cnt; i++) {
+                rd_kafka_buf_write_str(rkbuf, groups[i], -1);
+        }
+
+        rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return NULL;
+}
+
 /**
  * @brief Parses and handles an InitProducerId reply.
  *
@@ -6457,6 +6527,8 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_bool(rkbuf, terminating);
         rd_kafka_buf_write_i8(rkbuf, compression_type);
 
+        rd_dassert(metrics != NULL);
+        rd_dassert(metrics_size >= 0);
         rd_kafkap_bytes_t *metric_bytes =
             rd_kafkap_bytes_new(metrics, metrics_size);
         rd_kafka_buf_write_kbytes(rkbuf, metric_bytes);
@@ -6561,7 +6633,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                         rd_kafkap_str_t Metric;
                         rd_kafka_buf_read_str(rkbuf, &Metric);
                         rk->rk_telemetry.requested_metrics[i] =
-                            rd_strdup(Metric.str);
+                            RD_KAFKAP_STR_DUP(&Metric);
                 }
         }
 
@@ -6887,12 +6959,92 @@ static int unittest_idempotent_producer(void) {
 }
 
 /**
+ * @brief Test for the GetTelemetrySubscriptions response handling.
+ *
+ * @returns 1 on failure, 0 on success.
+ */
+static int unittest_handle_GetTelemetrySubscriptions(void) {
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_buf_t *rkbuf;
+
+        RD_UT_SAY("Verifying GetTelemetrySubscriptions response handling");
+
+        rk  = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, NULL, 0);
+        rkb = rd_kafka_broker_add_logical(rk, "unittest");
+
+        rkbuf            = rd_kafka_buf_new(0, 0);
+        rkbuf->rkbuf_rkb = rkb;
+        rd_kafka_buf_write_i32(rkbuf, 0); /* ThrottleTime */
+        rd_kafka_buf_write_i16(rkbuf, 0); /* ErrorCode */
+
+        rd_kafka_buf_write_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
+
+        rd_kafka_buf_write_i32(rkbuf, 0); /* SubscriptionId */
+
+        rd_kafka_buf_write_arraycnt(rkbuf, 2); /* #AcceptedCompressionTypes */
+        /* AcceptedCompressionTypes[0] */
+        rd_kafka_buf_write_i8(rkbuf, RD_KAFKA_COMPRESSION_GZIP);
+        /* AcceptedCompressionTypes[1] */
+        rd_kafka_buf_write_i8(rkbuf, RD_KAFKA_COMPRESSION_LZ4);
+
+        rd_kafka_buf_write_i32(rkbuf, 0);  /* PushIntervalMs */
+        rd_kafka_buf_write_i32(rkbuf, 0);  /* TelemetryMaxBytes */
+        rd_kafka_buf_write_bool(rkbuf, 0); /* DeltaTemporality */
+
+        rd_kafka_buf_write_arraycnt(rkbuf, 2); /* #RequestedMetrics */
+        /* RequestedMetrics[0] */
+        rd_kafka_buf_write_str(rkbuf, "metric1", -1);
+        /* RequestedMetrics[1] */
+        rd_kafka_buf_write_str(rkbuf, "metric2", -1);
+
+        /* Set up a buffer reader for sending the buffer. */
+        rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
+
+        /* Handle the response */
+        rd_kafka_handle_GetTelemetrySubscriptions(
+            rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, rkbuf, NULL, NULL);
+
+
+        RD_UT_ASSERT(rk->rk_telemetry.accepted_compression_types_cnt == 2,
+                     "Expected 2 accepted compression types, got %" PRIusz,
+                     rk->rk_telemetry.accepted_compression_types_cnt);
+        RD_UT_ASSERT(rk->rk_telemetry.accepted_compression_types[0] ==
+                         RD_KAFKA_COMPRESSION_GZIP,
+                     "Expected 'gzip' compression type, got '%s'",
+                     rd_kafka_compression2str(
+                         rk->rk_telemetry.accepted_compression_types[0]));
+        RD_UT_ASSERT(rk->rk_telemetry.accepted_compression_types[1] ==
+                         RD_KAFKA_COMPRESSION_LZ4,
+                     "Expected 'lz4' compression type, got '%s'",
+                     rd_kafka_compression2str(
+                         rk->rk_telemetry.accepted_compression_types[1]));
+
+        RD_UT_ASSERT(rk->rk_telemetry.requested_metrics_cnt == 2,
+                     "Expected 2 requested metrics, got %" PRIusz,
+                     rk->rk_telemetry.requested_metrics_cnt);
+        RD_UT_ASSERT(
+            rd_strcmp(rk->rk_telemetry.requested_metrics[0], "metric1") == 0,
+            "Expected 'metric1', got '%s'",
+            rk->rk_telemetry.requested_metrics[0]);
+        RD_UT_ASSERT(
+            rd_strcmp(rk->rk_telemetry.requested_metrics[1], "metric2") == 0,
+            "Expected 'metric2', got '%s'",
+            rk->rk_telemetry.requested_metrics[1]);
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_destroy(rk);
+        return 0;
+}
+
+/**
  * @brief Request/response unit tests
  */
 int unittest_request(void) {
         int fails = 0;
 
         fails += unittest_idempotent_producer();
+        fails += unittest_handle_GetTelemetrySubscriptions();
 
         return fails;
 }

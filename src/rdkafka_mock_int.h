@@ -101,11 +101,12 @@ typedef struct rd_kafka_mock_cgrp_classic_s {
         char *protocol_name;                     /**< Elected protocol name */
         int32_t generation_id;                   /**< Generation Id */
         int session_timeout_ms;                  /**< Session timeout */
-        enum { RD_KAFKA_MOCK_CGRP_STATE_EMPTY,   /* No members */
-               RD_KAFKA_MOCK_CGRP_STATE_JOINING, /* Members are joining */
-               RD_KAFKA_MOCK_CGRP_STATE_SYNCING, /* Syncing assignments */
-               RD_KAFKA_MOCK_CGRP_STATE_REBALANCING, /* Rebalance triggered */
-               RD_KAFKA_MOCK_CGRP_STATE_UP,          /* Group is operational */
+        enum {
+                RD_KAFKA_MOCK_CGRP_STATE_EMPTY,       /* No members */
+                RD_KAFKA_MOCK_CGRP_STATE_JOINING,     /* Members are joining */
+                RD_KAFKA_MOCK_CGRP_STATE_SYNCING,     /* Syncing assignments */
+                RD_KAFKA_MOCK_CGRP_STATE_REBALANCING, /* Rebalance triggered */
+                RD_KAFKA_MOCK_CGRP_STATE_UP,          /* Group is operational */
         } state;                        /**< Consumer group state */
         rd_kafka_timer_t session_tmr;   /**< Session timeout timer */
         rd_kafka_timer_t rebalance_tmr; /**< Rebalance state timer */
@@ -169,6 +170,9 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
         rd_list_t *subscribed_topic_names; /**< Subscribed topic names received
                                               in the heartbeat */
         char *subscribed_topic_regex;      /**< Subscribed regex */
+
+        rd_bool_t left_static_membership;        /**< Member left the group
+                                                  *   with static membership. */
         struct rd_kafka_mock_connection_s *conn; /**< Connection, may be NULL
                                                   *   if there is no ongoing
                                                   *   request. */
@@ -469,7 +473,7 @@ struct rd_kafka_mock_cluster_s {
         struct {
                 rd_kafka_mock_io_handler_t *cb; /**< Callback */
                 void *opaque;                   /**< Callbacks' opaque */
-        } * handlers;
+        } *handlers;
 
         /**< Per-protocol request error stack. */
         rd_kafka_mock_error_stack_head_t errstacks;
@@ -674,7 +678,8 @@ rd_kafka_mock_cgrp_consumer_get(rd_kafka_mock_cluster_t *mcluster,
 
 void rd_kafka_mock_cgrp_consumer_member_leave(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,
-    rd_kafka_mock_cgrp_consumer_member_t *member);
+    rd_kafka_mock_cgrp_consumer_member_t *member,
+    rd_bool_t static_leave);
 
 void rd_kafka_mock_cgrp_consumer_member_fenced(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,

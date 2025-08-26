@@ -167,7 +167,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION 0x020a00ff
+#define RD_KAFKA_VERSION 0x020b01ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -3231,7 +3231,7 @@ void *rd_kafka_topic_opaque(const rd_kafka_topic_t *rkt);
  * The unassigned partition is used by the producer API for messages
  * that should be partitioned using the configured or default partitioner.
  */
-#define RD_KAFKA_PARTITION_UA ((int32_t)-1)
+#define RD_KAFKA_PARTITION_UA ((int32_t) - 1)
 
 
 /**
@@ -5315,9 +5315,9 @@ rd_kafka_consumer_group_type_name(rd_kafka_consumer_group_type_t type);
  *
  * @param name The group type name.
  *
- * @remark The comparison is case-insensitive.
- *
  * @return The group type value corresponding to the provided group type name.
+ *
+ * @remark The comparison is case-insensitive.
  */
 RD_EXPORT
 rd_kafka_consumer_group_type_t
@@ -7787,6 +7787,8 @@ typedef enum rd_kafka_ConfigSource_t {
         /** Built-in default configuration for configs that have a
          *  default value */
         RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG = 5,
+        /** Group config that is configured for a specific group */
+        RD_KAFKA_CONFIG_SOURCE_GROUP_CONFIG = 8,
 
         /** Number of source types defined */
         RD_KAFKA_CONFIG_SOURCE__CNT,
@@ -8899,6 +8901,17 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
+ * @brief Gets type for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return A group type.
+ */
+RD_EXPORT
+rd_kafka_consumer_group_type_t rd_kafka_ConsumerGroupDescription_type(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+/**
  * @brief Gets the members count of \p grpdesc group.
  *
  * @param grpdesc The group description.
@@ -9009,6 +9022,21 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
 RD_EXPORT
 const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
     const rd_kafka_MemberAssignment_t *assignment);
+
+/**
+ * @brief Gets target assignment of \p member.
+ *
+ * @param member The group member.
+ *
+ * @return The target assignment for `consumer` group types.
+ *         Returns NULL for the `classic` group types.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+RD_EXPORT
+const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_target_assignment(
+    const rd_kafka_MemberDescription_t *member);
 
 /**@}*/
 

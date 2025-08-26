@@ -172,6 +172,7 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
             [RD_KAFKAP_ListTransactions]          = "ListTransactions",
             [RD_KAFKAP_AllocateProducerIds]       = "AllocateProducerIds",
             [RD_KAFKAP_ConsumerGroupHeartbeat]    = "ConsumerGroupHeartbeat",
+            [RD_KAFKAP_ConsumerGroupDescribe]     = "ConsumerGroupDescribe",
             [RD_KAFKAP_GetTelemetrySubscriptions] = "GetTelemetrySubscriptions",
             [RD_KAFKAP_PushTelemetry]             = "PushTelemetry",
 
@@ -622,7 +623,7 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
 
 rd_kafka_Uuid_t rd_kafka_Uuid_random();
 
-const char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
+char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
 
 unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid);
 

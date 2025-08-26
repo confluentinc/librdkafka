@@ -2630,9 +2630,9 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
     /* Verify consumer assignments */
     int counts[N_CONSUMERS];
     map<Toppar, RdKafka::KafkaConsumer *> all_assignments;
-    Test::Say(tostr() << "Consumer assignments "
-                      << "(subscription_variation " << subscription_variation
-                      << ")" << (stabilized ? " (stabilized)" : "")
+    Test::Say(tostr() << "Consumer assignments " << "(subscription_variation "
+                      << subscription_variation << ")"
+                      << (stabilized ? " (stabilized)" : "")
                       << (use_rebalance_cb ? " (use_rebalance_cb)"
                                            : " (no rebalance cb)")
                       << ":\n");
@@ -2679,9 +2679,8 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
       Test::Say(tostr() << (counts[i] == exp_parts ? "" : _C_YEL) << "Consumer "
                         << consumers[i]->name() << " has " << counts[i]
                         << " assigned partitions (" << consumer_topics[i].size()
-                        << " subscribed topic(s))"
-                        << ", expecting " << exp_parts
-                        << " assigned partitions\n");
+                        << " subscribed topic(s))" << ", expecting "
+                        << exp_parts << " assigned partitions\n");
 
       if (counts[i] != exp_parts)
         done = false;

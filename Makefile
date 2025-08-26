@@ -9,6 +9,7 @@ DOC_FILES+=	LICENSE LICENSES.txt INTRODUCTION.md README.md \
 
 PKGNAME?=	librdkafka
 VERSION?=	$(shell python3 packaging/get_version.py src/rdkafka.h)
+SHELL	=	bash
 
 # Jenkins CI integration
 BUILD_NUMBER ?= 1

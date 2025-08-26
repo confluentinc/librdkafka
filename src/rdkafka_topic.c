@@ -539,7 +539,7 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk,
 
         /* Query for the topic leader (async) */
         if (!existing)
-                rd_kafka_topic_leader_query(rk, rkt);
+                rd_kafka_topic_fast_leader_query(rk, rd_true /* force */);
 
         /* Drop our reference since there is already/now an app refcnt */
         rd_kafka_topic_destroy0(rkt);
@@ -2048,7 +2048,7 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
 /**
  * Destroy/free topic_info
  */
-void rd_kafka_topic_info_destroy(rd_kafka_topic_info_t *ti) {
+void rd_kafka_topic_info_destroy_free(void *ti) {
         rd_free(ti);
 }
 
@@ -2139,8 +2139,8 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
         rd_kafka_metadata_partition_internal_t *partitions =
             rd_calloc(partition_cnt, sizeof(*partitions));
         struct rd_kafka_metadata_topic mdt      = {.topic =
-                                                  (char *)rkt->rkt_topic->str,
-                                              .partition_cnt = partition_cnt};
+                                                       (char *)rkt->rkt_topic->str,
+                                                   .partition_cnt = partition_cnt};
         rd_kafka_metadata_topic_internal_t mdit = {.partitions = partitions};
         int i;
 

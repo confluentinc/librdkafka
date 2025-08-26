@@ -323,7 +323,7 @@ struct test_msgver_s {
 
         const char *msgid_hdr; /**< msgid string is in header by this name,
                                 * rather than in the payload (default). */
-};                             /* test_msgver_t; */
+}; /* test_msgver_t; */
 
 /* Message */
 struct test_mv_m {
@@ -709,6 +709,7 @@ void test_consumer_close(rd_kafka_t *rk);
 
 void test_flush(rd_kafka_t *rk, int timeout_ms);
 
+int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_topic_conf_get(const rd_kafka_topic_conf_t *tconf, const char *name);
 int test_conf_match(rd_kafka_conf_t *conf, const char *name, const char *val);
@@ -777,6 +778,7 @@ void test_prepare_msg(uint64_t testid,
 
 #if WITH_SOCKEM
 void test_socket_enable(rd_kafka_conf_t *conf);
+void *test_socket_find(struct test *test, sockem_t *skm);
 void test_socket_close_all(struct test *test, int reinit);
 int test_socket_sockem_set_all(const char *key, int val);
 void test_socket_sockem_set(int s, const char *key, int value);
@@ -876,6 +878,12 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
                                                const char **bootstraps);
+
+size_t test_mock_get_matching_request_cnt(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque);
+
 size_t test_mock_wait_matching_requests(
     rd_kafka_mock_cluster_t *mcluster,
     size_t num,

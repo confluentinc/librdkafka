@@ -80,14 +80,10 @@ static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
                                            size_t size,
                                            void *ic_opaque) {
 
-        /* Save socket fd to limit ProduceRequest */
-        if (ApiKey == RD_KAFKAP_ApiVersion) {
-                test_sockfd = sockfd;
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
-        }
         if (ApiKey == RD_KAFKAP_Produce) {
                 mtx_lock(&produce_sent_req_lock);
                 produce_sent_req_cnt++;
+                test_sockfd = sockfd;
                 if (produce_sent_req_cnt > 1)
                         cnd_broadcast(&produce_sent_req_cnd);
                 mtx_unlock(&produce_sent_req_lock);
@@ -260,6 +256,10 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
         }
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        if (remote)
+                /* Pre-create the topic to avoid unknown topic errors
+                 * because of metadata propagation */
+                test_create_topic_wait_exists(NULL, topic, 3, -1, 5000);
 
         TEST_SAY("Producing %d messages to topic %s\n", msgcnt, topic);
 
@@ -285,10 +285,9 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
                             rd_kafka_err2str(err));
 
                 waitmsgs.exp_err[i] =
-                    (remote && i < 10
-                         ? RD_KAFKA_RESP_ERR_NO_ERROR
-                         : remote && i < 20 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
-                                            : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
+                    (remote && i < 10   ? RD_KAFKA_RESP_ERR_NO_ERROR
+                     : remote && i < 20 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
+                                        : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
 
                 waitmsgs.cnt++;
         }

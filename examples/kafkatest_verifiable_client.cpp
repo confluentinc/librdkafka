@@ -194,14 +194,11 @@ static void errorString(const std::string &name,
                         const std::string &topic,
                         const std::string *key,
                         const std::string &value) {
-  std::cout << "{ "
-            << "\"name\": \"" << name << "\", "
-            << "\"_time\": \"" << now() << "\", "
-            << "\"message\": \"" << errmsg << "\", "
-            << "\"topic\": \"" << topic << "\", "
-            << "\"key\": \"" << (key ? *key : "NULL") << "\", "
-            << "\"value\": \"" << value << "\" "
-            << "}" << std::endl;
+  std::cout << "{ " << "\"name\": \"" << name << "\", " << "\"_time\": \""
+            << now() << "\", " << "\"message\": \"" << errmsg << "\", "
+            << "\"topic\": \"" << topic << "\", " << "\"key\": \""
+            << (key ? *key : "NULL") << "\", " << "\"value\": \"" << value
+            << "\" " << "}" << std::endl;
 }
 
 
@@ -211,15 +208,12 @@ static void successString(const std::string &name,
                           int64_t offset,
                           const std::string *key,
                           const std::string &value) {
-  std::cout << "{ "
-            << "\"name\": \"" << name << "\", "
-            << "\"_time\": \"" << now() << "\", "
-            << "\"topic\": \"" << topic << "\", "
+  std::cout << "{ " << "\"name\": \"" << name << "\", " << "\"_time\": \""
+            << now() << "\", " << "\"topic\": \"" << topic << "\", "
             << "\"partition\": " << partition << ", "
-            << "\"offset\": " << offset << ", "
-            << "\"key\": \"" << (key ? *key : "NULL") << "\", "
-            << "\"value\": \"" << value << "\" "
-            << "}" << std::endl;
+            << "\"offset\": " << offset << ", " << "\"key\": \""
+            << (key ? *key : "NULL") << "\", " << "\"value\": \"" << value
+            << "\" " << "}" << std::endl;
 }
 
 
@@ -231,15 +225,11 @@ static void offsetStatus(bool success,
                          const std::string &errstr) {
   std::cout << "{ "
                "\"name\": \"offsets_committed\", "
-            << "\"success\": " << success << ", "
-            << "\"offsets\": [ "
-            << " { "
+            << "\"success\": " << success << ", " << "\"offsets\": [ " << " { "
             << " \"topic\": \"" << topic << "\", "
             << " \"partition\": " << partition << ", "
-            << " \"offset\": " << (int)offset << ", "
-            << " \"error\": \"" << errstr << "\" "
-            << " } "
-            << "] }" << std::endl;
+            << " \"offset\": " << (int)offset << ", " << " \"error\": \""
+            << errstr << "\" " << " } " << "] }" << std::endl;
 }
 #endif
 
@@ -341,8 +331,7 @@ static void report_records_consumed(int immediate) {
             << "\"count\": "
             << (state.consumer.consumedMessages -
                 state.consumer.consumedMessagesLastReported)
-            << ", "
-            << "\"partitions\": [ ";
+            << ", " << "\"partitions\": [ ";
 
   for (std::map<std::string, Assignment>::iterator ii = assignments->begin();
        ii != assignments->end(); ii++) {
@@ -352,8 +341,7 @@ static void report_records_consumed(int immediate) {
               << " \"topic\": \"" << a->topic << "\", "
               << " \"partition\": " << a->partition << ", "
               << " \"minOffset\": " << a->minOffset << ", "
-              << " \"maxOffset\": " << a->maxOffset << " "
-              << " } ";
+              << " \"maxOffset\": " << a->maxOffset << " " << " } ";
     a->minOffset = -1;
   }
 
@@ -378,8 +366,7 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
      */
     report_records_consumed(1);
 
-    std::cout << "{ "
-              << "\"name\": \"offsets_committed\", "
+    std::cout << "{ " << "\"name\": \"offsets_committed\", "
               << "\"success\": " << (err ? "false" : "true") << ", "
               << "\"error\": \"" << (err ? RdKafka::err2str(err) : "") << "\", "
               << "\"_autocommit\": "
@@ -387,15 +374,14 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
               << "\"offsets\": [ ";
     assert(offsets.size() > 0);
     for (unsigned int i = 0; i < offsets.size(); i++) {
-      std::cout << (i == 0 ? "" : ", ") << "{ "
-                << " \"topic\": \"" << offsets[i]->topic() << "\", "
+      std::cout << (i == 0 ? "" : ", ") << "{ " << " \"topic\": \""
+                << offsets[i]->topic() << "\", "
                 << " \"partition\": " << offsets[i]->partition() << ", "
                 << " \"offset\": " << (int)offsets[i]->offset() << ", "
                 << " \"error\": \""
                 << (offsets[i]->err() ? RdKafka::err2str(offsets[i]->err())
                                       : "")
-                << "\" "
-                << " }";
+                << "\" " << " }";
     }
     std::cout << " ] }" << std::endl;
   }
@@ -427,8 +413,8 @@ static void do_commit(RdKafka::KafkaConsumer *consumer, int immediate) {
   RdKafka::ErrorCode err;
   err = consumer->commitSync(&ex_offset_commit_cb);
 
-  std::cerr << now() << ": "
-            << "sync commit returned " << RdKafka::err2str(err) << std::endl;
+  std::cerr << now() << ": " << "sync commit returned " << RdKafka::err2str(err)
+            << std::endl;
 
   state.consumer.consumedMessagesAtLastCommit = state.consumer.consumedMessages;
 }
@@ -526,8 +512,8 @@ class ExampleRebalanceCb : public RdKafka::RebalanceCb {
       const std::vector<RdKafka::TopicPartition *> &partitions) {
     std::ostringstream out;
     for (unsigned int i = 0; i < partitions.size(); i++)
-      out << (i == 0 ? "" : ", ") << "{ "
-          << " \"topic\": \"" << partitions[i]->topic() << "\", "
+      out << (i == 0 ? "" : ", ") << "{ " << " \"topic\": \""
+          << partitions[i]->topic() << "\", "
           << " \"partition\": " << partitions[i]->partition() << " }";
     return out.str();
   }
@@ -549,13 +535,11 @@ class ExampleRebalanceCb : public RdKafka::RebalanceCb {
       consumer->unassign();
     }
 
-    std::cout << "{ "
-              << "\"name\": \"partitions_"
+    std::cout << "{ " << "\"name\": \"partitions_"
               << (err == RdKafka::ERR__ASSIGN_PARTITIONS ? "assigned"
                                                          : "revoked")
-              << "\", "
-              << "\"partitions\": [ " << part_list_json(partitions) << "] }"
-              << std::endl;
+              << "\", " << "\"partitions\": [ " << part_list_json(partitions)
+              << "] }" << std::endl;
   }
 };
 

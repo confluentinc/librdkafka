@@ -503,7 +503,7 @@ static void do_test_replica_rack_change_mock(const char *assignment_strategy,
         const char *topic        = "topic";
         const char *test_name    = tsprintf(
             "Replica rack changes (%s, subscription = \"%s\", %s client.rack, "
-            "%s replica.rack)",
+               "%s replica.rack)",
             assignment_strategy, subscription,
             use_client_rack ? "with" : "without",
             use_replica_rack ? "with" : "without");
@@ -806,6 +806,7 @@ static void do_test_resubscribe_with_regex() {
         /* Cleanup */
         test_delete_topic(rk, topic1);
         test_delete_topic(rk, topic2);
+        test_delete_topic(rk, topic_a);
 
         test_consumer_close(rk);
         rd_kafka_queue_destroy(queue);
@@ -814,6 +815,7 @@ static void do_test_resubscribe_with_regex() {
 
         rd_free(topic1);
         rd_free(topic2);
+        rd_free(topic_a);
         rd_free(group);
 
         SUB_TEST_PASS();

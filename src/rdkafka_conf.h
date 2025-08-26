@@ -151,8 +151,18 @@ typedef enum {
 
 typedef enum {
         RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
-        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC
+        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC,
 } rd_kafka_oauthbearer_method_t;
+
+typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS,
+        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER,
+} rd_kafka_oauthbearer_grant_type_t;
+
+typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256,
+        RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_ES256,
+} rd_kafka_oauthbearer_assertion_algorithm_t;
 
 typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_NONE,
@@ -176,7 +186,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 35)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -207,6 +217,7 @@ struct rd_kafka_conf_s {
         int msg_copy_max_size;
         int recv_max_msg_size;
         int max_inflight;
+        int metadata_recovery_rebootstrap_trigger_ms;
         int metadata_request_timeout_ms;
         int metadata_refresh_interval_ms;
         int metadata_refresh_fast_cnt;
@@ -288,6 +299,11 @@ struct rd_kafka_conf_s {
         } ssl;
 
         struct {
+                char *ca_location;
+                char *ca_pem;
+        } https;
+
+        struct {
                 const struct rd_kafka_sasl_provider *provider;
                 char *principal;
                 char *mechanisms;
@@ -316,10 +332,33 @@ struct rd_kafka_conf_s {
                 int enable_callback_queue;
                 struct {
                         rd_kafka_oauthbearer_method_t method;
+                        rd_kafka_oauthbearer_grant_type_t grant_type;
                         char *token_endpoint_url;
                         char *client_id;
                         char *client_secret;
                         char *scope;
+                        struct {
+                                rd_kafka_oauthbearer_assertion_algorithm_t
+                                    algorithm;
+                                char *file;
+                                char *jwt_template_file;
+
+                                struct {
+                                        char *subject;
+                                        char *audience;
+                                        char *issuer;
+                                        rd_bool_t jti_include;
+                                        int not_before_s;
+                                        int expiration_s;
+                                } claim;
+                                struct {
+                                        char *file;
+                                        char *passphrase;
+                                        char *pem;
+                                } private_key;
+
+                        } assertion;
+
                         char *extensions_str;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,

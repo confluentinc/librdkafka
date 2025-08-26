@@ -1,7 +1,7 @@
 /*
- * librdkafka - The Apache Kafka C/C++ library
+ * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2023 Confluent Inc.
+ * Copyright (c) 2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,18 +26,34 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "test.h"
 
-#ifndef _RDBASE64_H_
-#define _RDBASE64_H_
+/**
+ * @brief Verify the case where there are no bootstrap servers
+ *        and the client is re-bootstrapped after brokers were added
+ *        manually.
+ */
+static void
+do_test_rebootstrap_local_no_bootstrap_servers(rd_kafka_type_t rk_type) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
 
-#include "rd.h"
+        SUB_TEST_QUICK("%s",
+                       rk_type == RD_KAFKA_PRODUCER ? "producer" : "consumer");
+        test_conf_init(&conf, NULL, 30);
+        rk = test_create_handle(rk_type, conf);
+        rd_kafka_brokers_add(rk, "localhost:9999");
 
-void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out);
+        /* Give it time to trigger ALL_BROKERS_DOWN */
+        rd_sleep(1);
+        rd_kafka_destroy(rk);
+        SUB_TEST_PASS();
+}
 
-char *rd_base64_encode_str(const rd_chariov_t *in);
+int main_0152_rebootstrap_local(int argc, char **argv) {
 
-char *rd_base64_encode_str_urlsafe(const rd_chariov_t *in);
+        do_test_rebootstrap_local_no_bootstrap_servers(RD_KAFKA_PRODUCER);
+        do_test_rebootstrap_local_no_bootstrap_servers(RD_KAFKA_CONSUMER);
 
-int rd_base64_decode(const rd_chariov_t *in, rd_chariov_t *out);
-
-#endif /* _RDBASE64_H_ */
+        return 0;
+}

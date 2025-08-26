@@ -2620,6 +2620,7 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
         if (err)
                 goto err;
 
+        rd_kafka_rebootstrap_tmr_stop(rk);
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */

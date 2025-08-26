@@ -188,8 +188,7 @@ Questions and discussions are welcome on the [Discussions](https://github.com/co
   * PHP: [php-simple-kafka-client](https://github.com/php-kafka/php-simple-kafka-client)
   * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
-  * Ruby: [Hermann](https://github.com/reiseburo/hermann)
-  * Ruby: [rdkafka-ruby](https://github.com/appsignal/rdkafka-ruby)
+  * Ruby: [rdkafka-ruby](https://github.com/karafka/rdkafka-ruby)
   * Rust: [rust-rdkafka](https://github.com/fede1024/rust-rdkafka)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
   * Shell: [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka command line tool

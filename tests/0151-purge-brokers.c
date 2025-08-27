@@ -619,32 +619,60 @@ static void do_test_add_same_broker_id(void) {
         SUB_TEST_PASS();
 }
 
+typedef enum do_test_kip899_rebootstrap_cases_variation_t {
+        /* re-bootstrap is enabled and triggered. */
+        DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_ENABLED = 0,
+        /* re-bootstrap is disabled, no re-bootstrap is executed. */
+        DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_DISABLED = 1,
+        /* same as #0 with brokers added after initial configuration. */
+        DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_ENABLED_ADDITIONAL_BROKERS =
+            2,
+        DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION__CNT
+} do_test_kip899_rebootstrap_cases_variation_t;
+
+static const char *do_test_kip899_rebootstrap_cases_variation_name(
+    do_test_kip899_rebootstrap_cases_variation_t variation) {
+        rd_assert(
+            variation >=
+                DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_ENABLED &&
+            variation < DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION__CNT);
+        static const char *names[] = {
+            "`metadata.recovery.strategy=rebootstrap`",
+            "`metadata.recovery.strategy=none`",
+            "`metadata.recovery.strategy=rebootstrap` "
+            "with additional brokers"};
+        return names[variation];
+}
+
 /**
  * @brief `do_test_kip899_rebootstrap_cases` test variation.
  */
-static int do_test_kip899_rebootstrap_cases_variation;
+static do_test_kip899_rebootstrap_cases_variation_t
+    do_test_kip899_rebootstrap_cases_variation;
 
 /**
- * @brief Addition brokers to set in variation 2
+ * @brief Addition brokers to set in variation
+ * REBOOTSTRAP_ENABLED_ADDITIONAL_BROKERS
  */
 static char *do_test_kip899_rebootstrap_cases_additional_brokers;
 
 /**
  * @brief Edit configuration by:
  *        - setting `metadata.recovery.strategy` to `none` to
- *          avoid re-bootstrapping when variation == 1
+ *          avoid re-bootstrapping when variation == REBOOTSTRAP_DISABLED
  *        - setting `bootstrap.servers` to the last two brokers
- *          when variation == 2 and adding first three after the first action
+ *          when variation == REBOOTSTRAP_ENABLED_ADDITIONAL_BROKERS and adding
+ * first three after the first action
  */
 static rd_kafka_type_t
 do_test_kip899_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
         char *bootstraps = test_conf_get(conf, "bootstrap.servers");
         switch (do_test_kip899_rebootstrap_cases_variation) {
-        case 1:
+        case DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_DISABLED:
                 TEST_SAY("Disabling re-bootstrapping\n");
                 test_conf_set(conf, "metadata.recovery.strategy", "none");
                 break;
-        case 2: {
+        case DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_ENABLED_ADDITIONAL_BROKERS: {
                 int i = 0;
                 do_test_kip899_rebootstrap_cases_additional_brokers =
                     rd_strdup(bootstraps);
@@ -706,20 +734,12 @@ do_test_kip899_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp, int action) {
  *        This must trigger a re-bootstrapping of the client or a fatal
  *        error depending on the configuration.
  *
- *        Variations 2 and 3: the first three brokers aren't present
- *        in initial configuration but added afterwards.
- *
- *        - variation 0: re-bootstrap is enabled and triggered.
- *        - variation 1: re-bootstrap is disabled, no re-bootstrap is executed.
- *        - variation 2: same as #0 with brokers added after initial
- *                       configuration.
+ * @sa `do_test_kip899_rebootstrap_cases_variation_t`
  */
-static void do_test_kip899_rebootstrap_cases(int variation) {
+static void do_test_kip899_rebootstrap_cases(
+    do_test_kip899_rebootstrap_cases_variation_t variation) {
         SUB_TEST_QUICK(
-            "%s", variation == 0   ? "`metadata.recovery.strategy=rebootstrap`"
-                  : variation == 1 ? "`metadata.recovery.strategy=none`"
-                                   : "`metadata.recovery.strategy=rebootstrap` "
-                                     "with additional brokers");
+            "%s", do_test_kip899_rebootstrap_cases_variation_name(variation));
 
         do_test_kip899_rebootstrap_cases_variation          = variation;
         do_test_kip899_rebootstrap_cases_additional_brokers = NULL;
@@ -753,7 +773,8 @@ static void do_test_kip899_rebootstrap_cases(int variation) {
             {TEST_ACTION_SET_UP_BROKER, 2},
             {TEST_ACTION_SET_UP_BROKER, 3},
         };
-        if (variation == 1) {
+        if (variation ==
+            DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_DISABLED) {
                 /* If not re-bootstraping we've to start from the
                  * last broker seen */
                 actions[7][1]              = 5;
@@ -779,10 +800,25 @@ static void do_test_kip899_rebootstrap_cases(int variation) {
         SUB_TEST_PASS();
 }
 
+typedef enum do_test_kip1102_rebootstrap_cases_variation_t {
+        /* An `UNKNOWN` error is returned from each metadata call. */
+        DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR = 0,
+        /* A `REBOOTSTRAP_REQUIRED` error is returned from each metadata call.
+         */
+        DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED = 1,
+        /* Same as TRANSPORT_ERROR but broker isn't restarted. */
+        DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR_NO_RESTART =
+            2,
+        /* Same as REBOOTSTRAP_REQUIRED but broker isn't restarted. */
+        DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED_NO_RESTART =
+            3,
+        DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION__CNT
+} do_test_kip1102_rebootstrap_cases_variation_t;
 /**
  * @brief `do_test_kip1102_rebootstrap_cases` test variation.
  */
-static int do_test_kip1102_rebootstrap_cases_variation;
+static do_test_kip1102_rebootstrap_cases_variation_t
+    do_test_kip1102_rebootstrap_cases_variation;
 
 /**
  * @brief Number of re-bootstrap sequences started.
@@ -805,7 +841,7 @@ do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
         const char *debug_contexts[2] = {"conf", NULL};
         /* This is 2 seconds less of the metadata refresh sequence expected
          * total duration.
-         * ERR_UNKNOWN is returned as a top level error
+         * ERR__TRANSPORT is returned
          * so the rebootstrap timer isn't reset. */
         test_conf_set(conf, "metadata.recovery.rebootstrap.trigger.ms", "5000");
         /* Avoid Head Of Line blocking from fetch requests for predictable
@@ -817,8 +853,8 @@ do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
 }
 
 static rd_kafka_resp_err_t
-    do_test_kip1102_rebootstrap_cases_allowed_errors_unknown[] = {
-        RD_KAFKA_RESP_ERR_UNKNOWN,
+    do_test_kip1102_rebootstrap_cases_allowed_errors_transport[] = {
+        RD_KAFKA_RESP_ERR__TRANSPORT,
         RD_KAFKA_RESP_ERR_NO_ERROR,
 };
 static rd_kafka_resp_err_t
@@ -842,7 +878,7 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                 TEST_ASSERT(cluster != NULL);
                 allowed_errors =
                     do_test_kip1102_rebootstrap_cases_variation % 2 == 0
-                        ? do_test_kip1102_rebootstrap_cases_allowed_errors_unknown
+                        ? do_test_kip1102_rebootstrap_cases_allowed_errors_transport
                         : do_test_kip1102_rebootstrap_cases_allowed_errors_rebootstrap_required;
                 /* A request is made every 100 ms: 7s */
                 for (i = 0; i < 70; i++)
@@ -854,10 +890,10 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                  * enough re-bootstrap logs are seen. */
                 int rebootstrap_cnt, min_rebootstrap_cnt = 0;
                 switch (do_test_kip1102_rebootstrap_cases_variation) {
-                case 2:
+                case DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR_NO_RESTART:
                         min_rebootstrap_cnt = 1;
                         break;
-                case 3:
+                case DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED_NO_RESTART:
                         min_rebootstrap_cnt = 65;
                         break;
                 default:
@@ -882,13 +918,10 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
  *        and the number of brokers returned by the metadata call should
  *        eventually be the initial one when broker is restarted.
  *
- *        - variation 0: an `UNKNOWN` error is returned from each metadata call.
- *        - variation 1: a `REBOOTSTRAP_REQUIRED` error is returned from
- *                       each metadata call.
- *        - variation 2: same as #0 but broker isn't restarted.
- *        - variation 3: same as #1 but broker isn't restarted.
+ * @sa `do_test_kip1102_rebootstrap_cases_variation_t`
  */
-static void do_test_kip1102_rebootstrap_cases(int variation) {
+static void do_test_kip1102_rebootstrap_cases(
+    do_test_kip1102_rebootstrap_cases_variation_t variation) {
         int rebootstrap_cnt = 0, expected_rebootstrap_cnt = 1,
             expected_min_rebootstrap_cnt = expected_rebootstrap_cnt;
 
@@ -901,7 +934,9 @@ static void do_test_kip1102_rebootstrap_cases(int variation) {
         do_test_kip1102_rebootstrap_cases_variation = variation;
         rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_rebootstrap_cnt, 0);
         if (variation % 2 == 1) {
-                /* It's possible multiple consecutive error responses cause a
+                /* REBOOTSTRAP_REQUIRED error code cases:
+                 * A re-bootstrap is expected for each error response.
+                 * It's possible multiple consecutive error responses cause a
                  * single re-bootstrap sequence because of the
                  * timer activation. */
                 expected_min_rebootstrap_cnt = 65;
@@ -943,8 +978,29 @@ static void do_test_kip1102_rebootstrap_cases(int variation) {
         SUB_TEST_PASS();
 }
 
-int main_0151_purge_brokers_mock(int argc, char **argv) {
+/**
+ * @brief Run all KIP-899 re-bootstrap cases variations.
+ */
+static void do_test_kip899_rebootstrap_cases_variations(void) {
         int i;
+        for (i = DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_ENABLED;
+             i < DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION__CNT; i++) {
+                do_test_kip899_rebootstrap_cases(i);
+        }
+}
+
+/**
+ * @brief Run all KIP-1102 re-bootstrap cases variations.
+ */
+static void do_test_kip1102_rebootstrap_cases_variations(void) {
+        int i;
+        for (i = DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR;
+             i < DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION__CNT; i++) {
+                do_test_kip1102_rebootstrap_cases(i);
+        }
+}
+
+int main_0151_purge_brokers_mock(int argc, char **argv) {
 
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -961,13 +1017,9 @@ int main_0151_purge_brokers_mock(int argc, char **argv) {
 
         do_test_down_then_up_no_rebootstrap_loop();
 
-        for (i = 0; i < 3; i++) {
-                do_test_kip899_rebootstrap_cases(i);
-        }
+        do_test_kip899_rebootstrap_cases_variations();
 
-        for (i = 0; i < 4; i++) {
-                do_test_kip1102_rebootstrap_cases(i);
-        }
+        do_test_kip1102_rebootstrap_cases_variations();
 
         return 0;
 }

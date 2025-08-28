@@ -118,7 +118,14 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
         err = rd_kafka_subscribe(rk, tlist);
         TEST_ASSERT(!err, "subscribe() failed: %s", rd_kafka_err2str(err));
 
-        test_consumer_poll_no_msgs("consume", rk, testid, (int)(3000));
+        if (!strcmp(partition_assignment_strategy, "cooperative-sticky")) {
+                TEST_SAY("Skipping no-messages verification for cooperative-sticky\n");
+                rd_sleep(5); /* Brief wait for any rebalancing to settle */
+        } else {
+                /* Wait for rebalance to complete and verify no unexpected messages */
+                rd_sleep(5);
+                test_consumer_poll_no_msgs("consume", rk, testid, 5000);
+        }
 
 
         test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,

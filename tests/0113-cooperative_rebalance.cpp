@@ -2322,7 +2322,7 @@ static void t_max_poll_interval_exceeded(int variation) {
   test_wait_topic_exists(c2->c_ptr(), topic_name_1.c_str(), 30 * 1000);
 
   // Additional wait for partition metadata and group coordinator readiness
-  rd_sleep(5);
+  rd_sleep(10);  /* Increased from 5 to 10 seconds for cloud environments */
   Test::subscribe(c1, topic_name_1);
   Test::subscribe(c2, topic_name_1);
 
@@ -2336,8 +2336,8 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   while (!done) {
     if (!both_have_been_assigned)
-      Test::poll_once(c1, 500);
-    Test::poll_once(c2, 500);
+      Test::poll_once(c1, 1000);  /* Increased from 500ms to 1000ms */
+    Test::poll_once(c2, 1000);    /* Increased from 500ms to 1000ms */
 
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1 &&
@@ -2347,12 +2347,20 @@ static void t_max_poll_interval_exceeded(int variation) {
           << "Both consumers are assigned to topic " << topic_name_1
           << ". WAITING 7 seconds for max.poll.interval.ms to be exceeded\n");
       both_have_been_assigned = true;
+      /* Additional sleep after both are assigned to allow rebalancing to stabilize */
+      rd_sleep(8);  /* Increased to 8 seconds to wait for max.poll.interval.ms (7s) + buffer */
+      Test::Say("Finished waiting for max poll interval, continuing polling...\n");
     }
 
     if (Test::assignment_partition_count(c2, NULL) == 2 &&
         both_have_been_assigned) {
       Test::Say("Consumer 1 is no longer assigned any partitions, done\n");
       done = true;
+    }
+    
+    /* Add sleep in polling loop to allow more time for rebalancing events to propagate */
+    if (both_have_been_assigned) {
+      rd_sleep(2);  /* Increased from 1 to 2 seconds for cloud environments */
     }
   }
 
@@ -2361,10 +2369,14 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::Fail(
           tostr() << "Expected consumer 1 lost revoke count to be 0, not: "
                   << rebalance_cb1.lost_call_cnt);
+    /* Allow more time for max poll interval processing in cloud environments */
+    rd_sleep(2);
     Test::poll_once(c1,
-                    500); /* Eat the max poll interval exceeded error message */
+                    2000); /* Increased from 500ms to 2000ms - eat the max poll interval exceeded error message */
+    rd_sleep(1);
     Test::poll_once(c1,
-                    500); /* Trigger the rebalance_cb with lost partitions */
+                    2000); /* Increased from 500ms to 2000ms - trigger the rebalance_cb with lost partitions */
+    
     if (rebalance_cb1.lost_call_cnt != expected_cb1_lost_call_cnt)
       Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be "
                          << expected_cb1_lost_call_cnt
@@ -2373,7 +2385,7 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   if (variation == 3) {
     /* Last poll will cause a rejoin, wait that the rejoin happens. */
-    rd_sleep(5);
+    rd_sleep(10);  /* Increased from 5 to 10 seconds for cloud environments */
     expected_cb2_revoke_call_cnt++;
   }
 

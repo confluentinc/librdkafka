@@ -324,6 +324,9 @@ static int do_test(const char *assignor) {
         /* Produce messages to topics to ensure creation. */
         for (i = 0; i < topic_cnt; i++) {
                 test_create_topic_if_auto_create_disabled(NULL, topics[i], 1);
+                /* Wait for topic metadata to propagate to avoid race conditions */
+                test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
+                rd_sleep(test_k2_cluster ? 5 : 2);  /* Additional timing safety for K2 cluster */
                 test_produce_msgs_easy(topics[i], testid, RD_KAFKA_PARTITION_UA,
                                        msgcnt);
         }

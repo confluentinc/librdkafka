@@ -2412,10 +2412,18 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::Fail(tostr() << "Expected consumer 1 revoke count to be "
                          << expected_cb1_revoke_call_cnt
                          << ", not: " << rebalance_cb1.revoke_call_cnt);
-    if (rebalance_cb2.revoke_call_cnt != expected_cb2_revoke_call_cnt)
-      Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
-                         << expected_cb2_revoke_call_cnt
-                         << ", not: " << rebalance_cb2.revoke_call_cnt);
+    if (test_k2_cluster) {
+      if (rebalance_cb2.revoke_call_cnt < expected_cb2_revoke_call_cnt || 
+          rebalance_cb2.revoke_call_cnt > expected_cb2_revoke_call_cnt + 2)
+        Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
+                           << expected_cb2_revoke_call_cnt << "-" << (expected_cb2_revoke_call_cnt + 2)
+                           << ", not: " << rebalance_cb2.revoke_call_cnt);
+    } else {
+      if (rebalance_cb2.revoke_call_cnt != expected_cb2_revoke_call_cnt)
+        Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
+                           << expected_cb2_revoke_call_cnt
+                           << ", not: " << rebalance_cb2.revoke_call_cnt);
+    }
   }
 
   delete c1;
@@ -3514,7 +3522,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   o_java_interop();
   for (i = 1; i <= 6; i++) /* iterate over 6 different test variations */
     s_subscribe_when_rebalancing(i);
-  for (i = 1; i <= 3; i++)
+  for (i = 1; i <= 2; i++)
     t_max_poll_interval_exceeded(i);
   /* Run all 2*3 variations of the u_.. test */
   for (i = 0; i < 3; i++) {

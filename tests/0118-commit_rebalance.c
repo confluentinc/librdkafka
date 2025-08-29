@@ -103,6 +103,11 @@ int main_0118_commit_rebalance(int argc, char **argv) {
 
         test_create_topic_if_auto_create_disabled(NULL, topic, 3);
 
+        if (test_k2_cluster) {
+                TEST_SAY("K2 environment: Waiting for topic/partition readiness before producing\n");
+                rd_sleep(10);
+        }
+
         test_produce_msgs_easy_v(topic, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, 10,
                                  NULL);
 

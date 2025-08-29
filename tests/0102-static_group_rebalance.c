@@ -163,6 +163,12 @@ static void do_test_static_group_rebalance(void) {
         c[1].mv = &mv;
 
         test_create_topic_wait_exists(NULL, topic, 3, -1, 30000);
+        
+        if (test_k2_cluster) {
+                TEST_SAY("K2 environment: Waiting for topic/partition readiness before producing\n");
+                rd_sleep(10);
+        }
+        
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_set(conf, "max.poll.interval.ms", "60000");  /* 60 seconds for max poll violation test */

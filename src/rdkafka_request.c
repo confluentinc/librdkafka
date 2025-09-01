@@ -6590,10 +6590,12 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                 rk->rk_telemetry.accepted_compression_types =
                     rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
 
-                for (i = 0; i < (size_t)arraycnt; i++)
-                        rd_kafka_buf_read_i8(
-                            rkbuf,
-                            &rk->rk_telemetry.accepted_compression_types[i]);
+                for (i = 0; i < (size_t)arraycnt; i++) {
+                        int8_t AcceptedCompressionType;
+                        rd_kafka_buf_read_i8(rkbuf, &AcceptedCompressionType);
+                        rk->rk_telemetry.accepted_compression_types[i] =
+                            AcceptedCompressionType;
+                }
         } else {
                 rk->rk_telemetry.accepted_compression_types_cnt = 1;
                 rk->rk_telemetry.accepted_compression_types =

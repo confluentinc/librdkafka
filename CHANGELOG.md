@@ -3,7 +3,7 @@
 librdkafka v2.12.0 is a feature release:
 
 * Fix compression types read issue in GetTelemetrySubscriptions response
-  for big-endian architectures (#).
+  for big-endian architectures (#5183, @paravoid).
 
 
 ## Fixes
@@ -15,7 +15,7 @@ librdkafka v2.12.0 is a feature release:
   architectures where wrong values are read as
   accepted compression types causing the metrics to be sent uncompressed.
   Happening since 2.5.0. Since 2.10.1 unit tests are failing when run on
-  big-endian architectures (#).
+  big-endian architectures (#5183, @paravoid).
 
 
 

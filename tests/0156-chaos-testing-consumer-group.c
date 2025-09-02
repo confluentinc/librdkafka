@@ -38,9 +38,9 @@
  #define PARTITION_CNT 120
  #define CONSUMER_CNT 60
  #define TOPIC_CNT 1
- #define ITERATIONS 10
+ #define ITERATIONS 50
  #define CONSUMER_POOL_SIZE (CONSUMER_CNT * ITERATIONS)
- #define ITERATION_TIME_IN_US 10000000 /* 10 second */
+ #define ITERATION_TIME_IN_US 15000000 /* 15 second */
 
 static atomic_int run = 0;
 static int64_t offsets[PARTITION_CNT];
@@ -80,7 +80,7 @@ static int producer_thread(void *arg) {
                 rkt, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
                 payload, strlen(payload),
                 NULL, 0, NULL);
-            rd_usleep(1000, NULL); /* 1ms */
+            rd_usleep(50000, NULL); /* 50ms */
             i++;
             i %= 2147483643;
     }
@@ -101,7 +101,7 @@ static int consumer_thread(void *arg) {
 
     test_conf_init(&conf, NULL, 60);
     test_conf_set(conf, "auto.offset.reset", "earliest");
-    test_conf_set(conf, "auto.commit.interval.ms", "100");
+    test_conf_set(conf, "auto.commit.interval.ms", "10000");
 
 
     TEST_SAY_GREEN("Consumer %d started with group id %s\n",
@@ -341,10 +341,10 @@ int do_test_chaos_testing_consumer_group() {
 
 int main_0156_chaos_testing_consumer_group(int argc, char **argv) {
         test_timeout_set(450);
-        if(test_consumer_group_protocol_classic()) {
-                TEST_SKIP("Skipping test for classic consumer group protocol\n");
-                return 0;
-        }
+        // if(test_consumer_group_protocol_classic()) {
+        //         TEST_SKIP("Skipping test for classic consumer group protocol\n");
+        //         return 0;
+        // }
         do_test_chaos_testing_consumer_group();
         return 0;
 }

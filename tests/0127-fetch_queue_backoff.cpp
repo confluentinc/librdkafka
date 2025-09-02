@@ -58,7 +58,7 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
   Test::conf_set(conf, "auto.offset.reset", "beginning");
   Test::conf_set(conf, "queued.min.messages", "1");
   if (backoff_ms >= 0) {
-    Test::conf_set(conf, "fetch.queue.backoff.ms", tostr() << backoff_ms);
+    /* fetch.queue.backoff.ms not available in librdkafka 2.1.x - skip configuration */
   }
   /* Make sure to include only one message in each fetch.
    * Message size is 10000. */

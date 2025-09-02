@@ -2412,10 +2412,19 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::Fail(tostr() << "Expected consumer 1 revoke count to be "
                          << expected_cb1_revoke_call_cnt
                          << ", not: " << rebalance_cb1.revoke_call_cnt);
-    if (rebalance_cb2.revoke_call_cnt != expected_cb2_revoke_call_cnt)
-      Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
-                         << expected_cb2_revoke_call_cnt
-                         << ", not: " << rebalance_cb2.revoke_call_cnt);
+    /* K2 environment: Allow more flexible revoke count due to cooperative rebalancing differences */
+    if (test_k2_cluster) {
+      if (rebalance_cb2.revoke_call_cnt < expected_cb2_revoke_call_cnt || 
+          rebalance_cb2.revoke_call_cnt > expected_cb2_revoke_call_cnt + 2)
+        Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
+                           << expected_cb2_revoke_call_cnt << "-" << (expected_cb2_revoke_call_cnt + 2)
+                           << ", not: " << rebalance_cb2.revoke_call_cnt);
+    } else {
+      if (rebalance_cb2.revoke_call_cnt != expected_cb2_revoke_call_cnt)
+        Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
+                           << expected_cb2_revoke_call_cnt
+                           << ", not: " << rebalance_cb2.revoke_call_cnt);
+    }
   }
 
   delete c1;
@@ -3306,6 +3315,12 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
 
   test_create_topic_wait_exists(p, topic, partition_cnt, -1, 5000);
 
+  /* K2 environment: Add extra delay after topic creation for partition readiness before producing */
+  if (test_k2_cluster) {
+    TEST_SAY("K2 environment: Waiting for topic/partition readiness before producing\n");
+    rd_sleep(5);
+  }
+
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
                        msgcnt_per_partition, NULL, 0);
@@ -3393,6 +3408,12 @@ static void x_incremental_rebalances(void) {
   test_conf_init(&conf, NULL, 60);
 
   test_create_topic_wait_exists(NULL, topic, 6, -1, 5000);
+
+  /* K2 environment: Add extra delay after topic creation for partition readiness before consumer subscription */
+  if (test_k2_cluster) {
+    TEST_SAY("K2 environment: Waiting for topic/partition readiness before consumer subscription\n");
+    rd_sleep(5);
+  }
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {

@@ -6517,15 +6517,14 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         }
 
         size_t len = sizeof(rd_kafka_Uuid_t) + sizeof(int32_t) +
-                     sizeof(rd_bool_t) + sizeof(compression_type) +
-                     metrics_size;
+                     sizeof(rd_bool_t) + sizeof(int8_t) + metrics_size;
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_PushTelemetry,
                                                  1, len, rd_true);
 
         rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
         rd_kafka_buf_write_i32(rkbuf, subscription_id);
         rd_kafka_buf_write_bool(rkbuf, terminating);
-        rd_kafka_buf_write_i8(rkbuf, compression_type);
+        rd_kafka_buf_write_i8(rkbuf, (int8_t)compression_type);
 
         rd_dassert(metrics != NULL);
         rd_dassert(metrics_size >= 0);
@@ -6590,10 +6589,12 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                 rk->rk_telemetry.accepted_compression_types =
                     rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
 
-                for (i = 0; i < (size_t)arraycnt; i++)
-                        rd_kafka_buf_read_i8(
-                            rkbuf,
-                            &rk->rk_telemetry.accepted_compression_types[i]);
+                for (i = 0; i < (size_t)arraycnt; i++) {
+                        int8_t AcceptedCompressionType;
+                        rd_kafka_buf_read_i8(rkbuf, &AcceptedCompressionType);
+                        rk->rk_telemetry.accepted_compression_types[i] =
+                            AcceptedCompressionType;
+                }
         } else {
                 rk->rk_telemetry.accepted_compression_types_cnt = 1;
                 rk->rk_telemetry.accepted_compression_types =

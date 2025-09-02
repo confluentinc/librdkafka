@@ -128,6 +128,11 @@ static int verify_latency(struct latconf *latconf) {
             latconf->rtt + 5.0 /* broker ProduceRequest handling time, maybe */;
 
         ext_overhead *= test_timeout_multiplier;
+        
+        /* K2 environment: Add significant additional overhead for cloud infrastructure */
+        if (test_k2_cluster) {
+                ext_overhead += 1000.0; /* Add 1000ms extra overhead for K2 */
+        }
 
         avg = latconf->sum / (float)latconf->cnt;
 

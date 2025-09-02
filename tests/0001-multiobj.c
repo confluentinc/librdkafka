@@ -93,9 +93,13 @@ int main_0001_multiobj(int argc, char **argv) {
                 TIMING_STOP(&t_full);
 
                 /* Topic is created on the first iteration. */
-                if (i > 0)
-                        TIMING_ASSERT(&t_full, 0, 999);
-                else
+                if (i > 0) {
+                        /* K2 environment: Allow more time for create-produce-destroy cycle */
+                        if (test_k2_cluster)
+                                TIMING_ASSERT(&t_full, 0, 2000);
+                        else
+                                TIMING_ASSERT(&t_full, 0, 999);
+                } else
                         /* Allow metadata propagation. */
                         rd_sleep(1);
         }

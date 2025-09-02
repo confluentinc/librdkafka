@@ -1,3 +1,24 @@
+# librdkafka v2.12.0
+
+librdkafka v2.12.0 is a feature release:
+
+* Fix for KIP-1102 time based re-bootstrap condition (#5177).
+
+## Fixes
+
+### General fixes
+
+* Issues: #5178.
+  Fix for KIP-1102 time based re-bootstrap condition.
+  Re-bootstrap is now triggered only after `metadata.recovery.rebootstrap.trigger.ms`
+  have passed since first metadata refresh request after last successful
+  metadata response. The calculation was since last successful metadata response
+  so it's possible it did overlap with the periodic `topic.metadata.refresh.interval.ms`
+  and cause a re-bootstrap even if not needed.
+  Happening since 2.11.0 (#5177).
+
+
+
 # librdkafka v2.11.1
 
 librdkafka v2.11.1 is a maintenance release:

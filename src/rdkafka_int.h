@@ -1253,6 +1253,8 @@ void rd_kafka_rebootstrap(rd_kafka_t *rk);
 
 void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk);
 
+int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk);
+
 void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_INT_H_ */

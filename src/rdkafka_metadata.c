@@ -1033,7 +1033,6 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rkb->rkb_rk);
 
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
-        rd_kafka_rebootstrap_tmr_restart(rkb->rkb_rk);
 
         /* Update cached cluster id. */
         if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&

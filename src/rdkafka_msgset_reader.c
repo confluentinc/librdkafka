@@ -1381,29 +1381,9 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 } else if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
-                        rktp->rktp_fetch_msg_max_bytes *= 2;
-                        rd_rkb_dbg(msetr->msetr_rkb, FETCH, "CONSUME",
-                                   "Topic %s [%" PRId32
-                                   "]: Increasing "
-                                   "max fetch bytes to %" PRId32,
-                                   rktp->rktp_rkt->rkt_topic->str,
-                                   rktp->rktp_partition,
-                                   rktp->rktp_fetch_msg_max_bytes);
-
+                        /* Noop */
                         if (err == RD_KAFKA_RESP_ERR__UNDERFLOW)
                                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
-
-                } else if (!err && msetr->msetr_aborted_cnt == 0) {
-                        rd_kafka_consumer_err(
-                            &msetr->msetr_rkq, msetr->msetr_broker_id,
-                            RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
-                            msetr->msetr_tver->version, NULL, rktp,
-                            rktp->rktp_offsets.fetch_pos.offset,
-                            "Message at offset %" PRId64
-                            " might be too large to fetch, try increasing "
-                            "receive.message.max.bytes",
-                            rktp->rktp_offsets.fetch_pos.offset);
-
                 } else if (msetr->msetr_aborted_cnt > 0) {
                         /* Noop */
                         if (err == RD_KAFKA_RESP_ERR__UNDERFLOW)

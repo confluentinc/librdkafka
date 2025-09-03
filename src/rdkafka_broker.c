@@ -1218,10 +1218,7 @@ static void rd_kafka_buf_finalize(rd_kafka_t *rk, rd_kafka_buf_t *rkbuf) {
 
         rd_assert(!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_NEED_MAKE));
 
-        if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
-                /* Empty struct tags */
-                rd_kafka_buf_write_i8(rkbuf, 0);
-        }
+        rd_kafka_buf_write_tags_empty(rkbuf);
 
         /* Calculate total request buffer length. */
         totsize = rd_buf_len(&rkbuf->rkbuf_buf) - 4;

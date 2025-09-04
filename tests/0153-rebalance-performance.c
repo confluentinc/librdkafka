@@ -35,6 +35,16 @@
  #include "rdkafka.h" /* for Kafka driver */
  #include "rdtime.h"
 
+ #if defined(__linux__)
+    #define SET_THREAD_NAME(name) do { \
+        char thread_name[32]; \
+        snprintf(thread_name, sizeof(thread_name), "%s", name); \
+        pthread_setname_np(pthread_self(), thread_name); \
+    } while (0)
+#else
+    #define SET_THREAD_NAME(name) do {} while (0)
+#endif
+
 static int number_of_test_runs = 1;
 static int partition_cnt = 30;
 static int topic_cnt = 2;
@@ -241,11 +251,9 @@ int do_test_performance_multiple_consumer() {
                         fprintf(stderr, "Failed to create producer thread\n");
                         return 1;
                 }
-#if defined(__linux__)
                 char thread_name[32];
                 snprintf(thread_name, sizeof(thread_name), "producer-%d", i);
-                pthread_setname_np((pthread_t)producer_thread_ids[i], thread_name);
-#endif
+                SET_THREAD_NAME(thread_name);
         }
 
         start_time      = rd_uclock();
@@ -269,11 +277,9 @@ int do_test_performance_multiple_consumer() {
                                 fprintf(stderr, "Failed to create consumer thread\n");
                                 return 1;
                         }
-                    #if defined(__linux__)
                         char thread_name[32];
                         snprintf(thread_name, sizeof(thread_name), "consumer-%d", consumer_index);
-                        pthread_setname_np((pthread_t)consumer_thread_ids[consumer_index], thread_name);
-                    #endif
+                        SET_THREAD_NAME(thread_name);
                 }
                 batch_end_time = 0;
                 int didnt_find_end_time = 1;
@@ -366,13 +372,7 @@ int do_test_performance_multiple_consumer() {
 int main_0153_rebalance_performance(int argc, char **argv) {
     int avg_rebalance_time_ms = 0;
     int current_run = 1;
-    #if defined(__linux__)
-        {
-            char thread_name[32];
-            snprintf(thread_name, sizeof(thread_name), "main-0153");
-            pthread_setname_np(pthread_self(), thread_name);
-        }
-    #endif
+    SET_THREAD_NAME("main-0153");
     for (current_run = 1; current_run <= number_of_test_runs; current_run++) {
         TEST_SAY_RED("Starting run %d of %d\n", current_run, number_of_test_runs);
         avg_rebalance_time_ms += do_test_performance_multiple_consumer();

@@ -192,14 +192,17 @@ struct test {
 #define TEST_SAY_COLOR(LVL, COLOR, ...)                                                    \
         do {                                                                   \
                 if (test_level >= LVL) {                                       \
+                        char thread_name[32] = {0};                            \
+                        pthread_getname_np(pthread_self(), thread_name, sizeof(thread_name)); \
                         fprintf(stderr, "\033[%sm", COLOR);                    \
                         fprintf(                                               \
-                            stderr, "[%-28s/%7.3fs] ",                         \
+                            stderr, "[%-28s/%7.3fs/%s] ",                      \
                             test_curr->name,                                   \
                             test_curr->start                                   \
                                 ? ((float)(test_clock() - test_curr->start) /  \
                                    1000000.0f)                                 \
-                                : 0);                                          \
+                                : 0,                                           \
+                            thread_name);                                      \
                         fprintf(stderr, __VA_ARGS__);                          \
                         fprintf(stderr, "\033[0m");                            \
                 }                                                              \

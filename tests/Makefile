@@ -124,7 +124,7 @@ rdlist.o: ../src/rdlist.c
 
 
 clean:
-	rm -f *.test $(OBJS) $(BIN)
+	rm -f *.test $(OBJS) $(BIN) $(GCNOS) $(GCDAS) coverage.json
 	$(MAKE) -C interceptor_test clean
 
 # Remove test reports, temporary test files, crash dumps, etc.

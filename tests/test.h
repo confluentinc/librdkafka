@@ -778,6 +778,7 @@ void test_prepare_msg(uint64_t testid,
 
 #if WITH_SOCKEM
 void test_socket_enable(rd_kafka_conf_t *conf);
+void *test_socket_find(struct test *test, sockem_t *skm);
 void test_socket_close_all(struct test *test, int reinit);
 int test_socket_sockem_set_all(const char *key, int val);
 void test_socket_sockem_set(int s, const char *key, int value);
@@ -877,6 +878,12 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
                                                const char **bootstraps);
+
+size_t test_mock_get_matching_request_cnt(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
+    void *opaque);
+
 size_t test_mock_wait_matching_requests(
     rd_kafka_mock_cluster_t *mcluster,
     size_t num,

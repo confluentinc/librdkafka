@@ -407,13 +407,7 @@ static void rd_kafka_parse_Metadata_update_topic(
  * @locality rdkafka main thread
  */
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
-        int features;
-        int16_t ApiVersion = 0;
-
-        ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
-
-        return ApiVersion >= 9;
+        return rd_kafka_broker_ApiVersion_at_least(rkb, RD_KAFKAP_Metadata, 9);
 }
 
 /* Populates the topic partition to rack mapping for the the topic given by
@@ -572,6 +566,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         int broker_changes            = 0;
         int cache_changes             = 0;
         int cgrp_subscription_version = -1;
+        int16_t ErrorCode             = 0;
 
         /* If client rack is present, the metadata cache (topic or full) needs
          * to contain the partition to rack map. */
@@ -872,7 +867,20 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                     ClusterAuthorizedOperations;
         }
 
+        if (ApiVersion >= 13) {
+                rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        }
+
         rd_kafka_buf_skip_tags(rkbuf);
+
+        if (ErrorCode) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Metadata response: received top level "
+                           "error code %" PRId16 ": %s",
+                           ErrorCode, rd_kafka_err2str(ErrorCode));
+                err = ErrorCode;
+                goto err;
+        }
 
         /* Entire Metadata response now parsed without errors:
          * update our internal state according to the response. */
@@ -1025,6 +1033,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rkb->rkb_rk);
 
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
+        rd_kafka_rebootstrap_tmr_restart(rkb->rkb_rk);
 
         /* Update cached cluster id. */
         if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&

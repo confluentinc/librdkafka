@@ -1,3 +1,107 @@
+# librdkafka v2.12.0
+
+librdkafka v2.12.0 is a feature release:
+
+* Fix compression types read issue in GetTelemetrySubscriptions response
+  for big-endian architectures (#5183, @paravoid).
+
+
+## Fixes
+
+### Telemetry fixes
+
+* Issues: #5179 .
+  Fix issue in GetTelemetrySubscriptions with big-endian
+  architectures where wrong values are read as
+  accepted compression types causing the metrics to be sent uncompressed.
+  Happening since 2.5.0. Since 2.10.1 unit tests are failing when run on
+  big-endian architectures (#5183, @paravoid).
+
+
+
+# librdkafka v2.11.1
+
+librdkafka v2.11.1 is a maintenance release:
+
+* Made the conditions for enabling the features future proof (#5130).
+* Avoid returning an all brokers down error on planned disconnections (#5126).
+* An "all brokers down" error isn't returned when we haven't tried to connect
+  to all brokers since last successful connection (#5126).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #4948, #4956.
+  Made the conditions for enabling the features future proof, allowing to
+  remove RPC versions in a subsequent Apache Kafka version without disabling
+  features. The existing checks were matching a single version instead of
+  a range and were failing if the older version was removed.
+  Happening since 1.x (#5130).
+
+* Issues: #5142.
+  Avoid returning an all brokers down error on planned disconnections.
+  This is done by avoiding to count planned disconnections, such as idle
+  disconnections, broker host change and similar as events that can cause
+  the client to reach the "all brokers down" state, returning an error and
+  since 2.10.0 possibly starting a re-bootstrap sequence.
+  Happening since 1.x (#5126).
+
+* Issues: #5142.
+  An "all brokers down" error isn't returned when we haven't tried to connect
+  to all brokers since last successful connection. It happened because the down
+  state is cached and can be stale when a connection isn't needed to that
+  particular broker. Solved by resetting the cached broker down state when any
+  broker successfully connects, so that broker needs to be tried again.
+  Happening since 1.x (#5126).
+
+
+
+# librdkafka v2.11.0
+
+librdkafka v2.11.0 is a feature release:
+
+* [KIP-1102](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1102%3A+Enable+clients+to+rebootstrap+based+on+timeout+or+error+code) Enable clients to rebootstrap based on timeout or error code (#4981).
+* [KIP-1139](https://cwiki.apache.org/confluence/display/KAFKA/KIP-1139%3A+Add+support+for+OAuth+jwt-bearer+grant+type) Add support for OAuth jwt-bearer grant type (#4978).
+* Fix for poll ratio calculation in case the queues are forwarded (#5017).
+* Fix data race when buffer queues are being reset instead of being
+  initialized (#4718).
+* Features BROKER_BALANCED_CONSUMER and SASL_GSSAPI don't depend on
+  JoinGroup v0 anymore, missing in AK 4.0 and CP 8.0 (#5131).
+* Improve HTTPS CA certificates configuration by probing several paths
+  when OpenSSL is statically linked and providing a way to customize their location
+  or value (#5133).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #4522.
+  A data race happened when emptying buffers of a failing broker, in its thread,
+  with the statistics callback in main thread gathering the buffer counts.
+  Solved by resetting the atomic counters instead of initializing them.
+  Happening since 1.x (#4718).
+* Issues: #4948
+  Features BROKER_BALANCED_CONSUMER and SASL_GSSAPI don't depend on
+  JoinGroup v0 anymore, missing in AK 4.0 and CP 8.0. This PR partially
+  fixes the linked issue, a complete fix for all features will follow.
+  Rest of fixes are necessary only for a subsequent Apache Kafka major
+  version (e.g. AK 5.x).
+  Happening since 1.x (#5131).
+
+### Telemetry fixes
+
+* Issues: #5109
+  Fix for poll ratio calculation in case the queues are forwarded.
+  Poll ratio is now calculated per-queue instead of per-instance and
+  it allows to avoid calculation problems linked to using the same
+  field.
+  Happens since 2.6.0 (#5017).
+
+
+
 # librdkafka v2.10.1
 
 librdkafka v2.10.1 is a maintenance release:
@@ -104,8 +208,22 @@ librdkafka v2.10.0 is a feature release:
 > The [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) consumer is currently in **Preview** and should not be used in production environments. Implementation is feature complete but contract could have minor changes before General Availability.
 
 
+ ## Upgrade considerations
+
+
+  Starting from this version, brokers not reported in Metadata RPC call are
+  removed along with their threads. Brokers and their threads are added back
+  when they appear in a Metadata RPC response again. When no brokers are left
+  or they're not reachable, the client will start a re-bootstrap sequence
+  by default. `metadata.recovery.strategy` controls this, 
+  which defaults to `rebootstrap`.
+  Setting `metadata.recovery.strategy` to `none` avoids any re-bootstrapping and
+  leaves only the broker received in last successful metadata response.
+
+
  ## Enhancements and Fixes
 
+ * [KIP-899](https://cwiki.apache.org/confluence/display/KAFKA/KIP-899%3A+Allow+producer+and+consumer+clients+to+rebootstrap) Allow producer and consumer clients to rebootstrap
  * Identify brokers only by broker id (#4557, @mfleming)
  * Remove unavailable brokers and their thread (#4557, @mfleming)
  * Commits during a cooperative incremental rebalance aren't causing
@@ -155,7 +273,7 @@ librdkafka v2.10.0 is a feature release:
    and connection.
    Happens since 1.x (#4557, @mfleming).
  * Issues: #4557
-   Remove brokers not reported in a metadata call, along with their thread.
+   Remove brokers not reported in a metadata call, along with their threads.
    Avoids that unavailable brokers are selected for a new connection when
    there's no one available. We cannot tell if a broker was removed
    temporarily or permanently so we always remove it and it'll be added back when

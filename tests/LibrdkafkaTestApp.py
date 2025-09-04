@@ -88,12 +88,28 @@ class LibrdkafkaTestApp(App):
                     self.env_add(
                         'EXPIRED_TOKEN_OIDC_URL',
                         oidc.conf.get('expired_url'))
+                    self.env_add(
+                        'EXPIRED_TOKEN_OIDC_URL',
+                        oidc.conf.get('expired_url'))
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY'] = \
+                        oidc.conf['sasl_oauthbearer_client_private_key_path']
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY_ENCRYPTED'] = \
+                        oidc.conf[
+                            'sasl_oauthbearer_client_private_key_encrypted_path']  # noqa: E501
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY_PASSWORD'] = \
+                        oidc.conf[
+                            'sasl_oauthbearer_client_private_key_password']
                 else:
                     conf_blob.append(
                         'enable.sasl.oauthbearer.unsecure.jwt=true\n')
-                    conf_blob.append(
-                        'sasl.oauthbearer.config=%s\n' %
-                        self.conf.get('sasl_oauthbearer_config'))
+                    if not self.conf.get('sasl_oauthbearer_config'):
+                        conf_blob.append(
+                            'sasl.oauthbearer.config=scope=requiredScope'
+                            ' principal=admin\n')
+                    else:
+                        conf_blob.append(
+                            'sasl.oauthbearer.config=%s\n' %
+                            self.conf.get('sasl_oauthbearer_config'))
 
             elif mech == 'GSSAPI':
                 self.security_protocol = 'SASL_PLAINTEXT'

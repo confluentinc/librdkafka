@@ -56,6 +56,10 @@
 #include <windows.h>
 #endif
 
+#ifdef WITH_OAUTHBEARER_OIDC
+#include <curl/curl.h>
+#endif
+
 struct rd_kafka_property {
         rd_kafka_conf_scope_t scope;
         const char *name;
@@ -196,6 +200,15 @@ struct rd_kafka_property {
 #define _UNSUPPORTED_OIDC                                                      \
         .unsupported =                                                         \
             "OAuth/OIDC depends on libcurl and OpenSSL which were not "        \
+            "available at build time"
+#endif
+
+#if WITH_OAUTHBEARER_OIDC
+#define _UNSUPPORTED_HTTPS .unsupported = NULL
+#else
+#define _UNSUPPORTED_HTTPS                                                     \
+        .unsupported =                                                         \
+            "HTTPS calls depend on libcurl and OpenSSL which were not "        \
             "available at build time"
 #endif
 
@@ -441,18 +454,31 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "metadata.recovery.strategy", _RK_C_S2I,
      _RK(metadata_recovery_strategy),
      "Controls how the client recovers when none of the brokers known to it "
-     "is available. If set to `none`, the client fails with a fatal error. "
+     "is available. If set to `none`, the client doesn't re-bootstrap. "
      "If set to `rebootstrap`, the client repeats the bootstrap process "
      "using `bootstrap.servers` and brokers added through "
      "`rd_kafka_brokers_add()`. Rebootstrapping is useful when a client "
      "communicates with brokers so infrequently that the set of brokers "
      "may change entirely before the client refreshes metadata. "
      "Metadata recovery is triggered when all last-known brokers appear "
-     "unavailable simultaneously.",
+     "unavailable simultaneously or the client cannot refresh metadata within "
+     "`metadata.recovery.rebootstrap.trigger.ms` or it's requested in a "
+     "metadata response.",
      .vdef = RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP,
      .s2i  = {{RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE, "none"},
               {RD_KAFKA_METADATA_RECOVERY_STRATEGY_REBOOTSTRAP, "rebootstrap"},
               {0, NULL}}},
+    {_RK_GLOBAL, "metadata.recovery.rebootstrap.trigger.ms", _RK_C_INT,
+     _RK(metadata_recovery_rebootstrap_trigger_ms),
+     "If a client configured to rebootstrap using "
+     "`metadata.recovery.strategy=rebootstrap` "
+     "is unable to obtain metadata from any "
+     "of the brokers for this interval, "
+     "client repeats the bootstrap process using "
+     "`bootstrap.servers` configuration "
+     "and brokers added through "
+     "`rd_kafka_brokers_add()`.",
+     0, INT_MAX, 300000},
     {_RK_GLOBAL | _RK_DEPRECATED | _RK_HIDDEN, "metadata.request.timeout.ms",
      _RK_C_INT, _RK(metadata_request_timeout_ms), "Not used.", 10, 900 * 1000,
      10},
@@ -597,7 +623,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "If this property is left at its default value some heuristics are "
      "performed to determine a suitable default value, this is currently "
      "limited to identifying brokers on Azure "
-     "(see librdkafka issue #3109 for more info).",
+     "(see librdkafka issue #3109 for more info). "
+     "Actual value can be lower, up to 2s lower, "
+     "only if `connections.max.idle.ms` >= 4s, "
+     "as jitter is added to avoid disconnecting all brokers at the same time.",
      0, INT_MAX, 0},
     {_RK_GLOBAL | _RK_MED | _RK_HIDDEN, "enable.sparse.connections", _RK_C_BOOL,
      _RK(sparse_connections),
@@ -847,6 +876,29 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "If OpenSSL is dynamically linked the OpenSSL library's default "
      "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
      _UNSUPPORTED_SSL},
+    {_RK_GLOBAL, "https.ca.location", _RK_C_STR, _RK(https.ca_location),
+     "File or directory path to CA certificate(s) for verifying "
+     "HTTPS endpoints, like `sasl.oauthbearer.token.endpoint.url` used for "
+     "OAUTHBEARER/OIDC authentication. "
+     "Mutually exclusive with `https.ca.pem`. "
+     "Defaults: "
+     "On Windows the system's CA certificates are automatically looked "
+     "up in the Windows Root certificate store. "
+     "On Mac OSX this configuration defaults to `probe`. "
+     "It is recommended to install openssl using Homebrew, "
+     "to provide CA certificates. "
+     "On Linux install the distribution's ca-certificates package. "
+     "If OpenSSL is statically linked or `https.ca.location` is set to "
+     "`probe` a list of standard paths will be probed and the first one "
+     "found will be used as the default CA certificate location path. "
+     "If OpenSSL is dynamically linked the OpenSSL library's default "
+     "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
+     _UNSUPPORTED_HTTPS},
+    {_RK_GLOBAL, "https.ca.pem", _RK_C_STR, _RK(https.ca_pem),
+     "CA certificate string (PEM format) for verifying HTTPS endpoints. "
+     "Mutually exclusive with `https.ca.location`. "
+     "Optional: see `https.ca.location`.",
+     _UNSUPPORTED_HTTPS},
     {_RK_GLOBAL | _RK_SENSITIVE, "ssl.ca.pem", _RK_C_STR, _RK(ssl.ca_pem),
      "CA certificate string (PEM format) for verifying the broker's key.",
      _UNSUPPORTED_SSL},
@@ -1040,7 +1092,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "authorization server handles. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.client.secret", _RK_C_STR,
+    {_RK_GLOBAL, "sasl.oauthbearer.client.credentials.client.id", _RK_C_ALIAS,
+     .sdef = "sasl.oauthbearer.client.id"},
+    {_RK_GLOBAL, "sasl.oauthbearer.client.credentials.client.secret",
+     _RK_C_ALIAS, .sdef = "sasl.oauthbearer.client.secret"},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.client.secret", _RK_C_STR,
      _RK(sasl.oauthbearer.client_secret),
      "Client secret only known to the application and the "
      "authorization server. This should be a sufficiently random string "
@@ -1065,6 +1121,94 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
+    {
+        _RK_GLOBAL,
+        "sasl.oauthbearer.grant.type",
+        _RK_C_S2I,
+        _RK(sasl.oauthbearer.grant_type),
+        "OAuth grant type to use when communicating with the identity "
+        "provider.",
+        _UNSUPPORTED_OIDC,
+        .vdef = RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS,
+        .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS,
+                  "client_credentials"},
+                 {RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER,
+                  "urn:ietf:params:oauth:grant-type:jwt-bearer"}},
+    },
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.algorithm", _RK_C_S2I,
+     _RK(sasl.oauthbearer.assertion.algorithm),
+     "Algorithm the client should use to sign the assertion sent "
+     "to the identity provider and in the OAuth alg header in the JWT "
+     "assertion.",
+     _UNSUPPORTED_OIDC,
+     .vdef = RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256,
+     .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_RS256, "RS256"},
+              {RD_KAFKA_SASL_OAUTHBEARER_ASSERTION_ALGORITHM_ES256, "ES256"}}},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.assertion.private.key.file",
+     _RK_C_STR, _RK(sasl.oauthbearer.assertion.private_key.file),
+     "Path to client's private key (PEM) used for authentication "
+     "when using the JWT assertion.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL | _RK_SENSITIVE,
+     "sasl.oauthbearer.assertion.private.key.passphrase", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.private_key.passphrase),
+     "Private key passphrase for `sasl.oauthbearer.assertion.private.key.file`"
+     " or `sasl.oauthbearer.assertion.private.key.pem`.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.assertion.private.key.pem",
+     _RK_C_STR, _RK(sasl.oauthbearer.assertion.private_key.pem),
+     "Client's private key (PEM) used for authentication "
+     "when using the JWT assertion.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.file", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.file),
+     "Path to the assertion file. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.aud", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.claim.audience),
+     "JWT audience claim. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.exp.seconds", _RK_C_INT,
+     _RK(sasl.oauthbearer.assertion.claim.expiration_s),
+     "Assertion expiration time in seconds. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     1, INT_MAX, 300, _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.iss", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.claim.issuer),
+     "JWT issuer claim. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.jti.include", _RK_C_BOOL,
+     _RK(sasl.oauthbearer.assertion.claim.jti_include),
+     "JWT ID claim. When set to `true`, a random UUID is generated. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     0, 1, 0, _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.nbf.seconds", _RK_C_INT,
+     _RK(sasl.oauthbearer.assertion.claim.not_before_s),
+     "Assertion not before time in seconds. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     0, INT_MAX, 60, _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.claim.sub", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.claim.subject),
+     "JWT subject claim. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.assertion.jwt.template.file", _RK_C_STR,
+     _RK(sasl.oauthbearer.assertion.jwt_template_file),
+     "Path to the JWT template file. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\" and JWT "
+     "assertion is needed.",
+     _UNSUPPORTED_OIDC},
+
 
     /* Plugins */
     {_RK_GLOBAL, "plugin.library.paths", _RK_C_STR, _RK(plugin_paths),
@@ -1403,7 +1547,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_PRODUCER | _RK_HIGH, "queue.buffering.max.messages",
      _RK_C_INT, _RK(queue_buffering_max_msgs),
      "Maximum number of messages allowed on the producer queue. "
-     "This queue is shared by all topics and partitions. A value of 0 disables "
+     "This queue is shared by all topics and partitions. A value of 0 "
+     "disables "
      "this limit.",
      0, INT_MAX, 100000},
     {_RK_GLOBAL | _RK_PRODUCER | _RK_HIGH, "queue.buffering.max.kbytes",
@@ -1441,7 +1586,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
     {_RK_GLOBAL | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
      _RK(retry_backoff_max_ms),
-     "The max backoff time in milliseconds before retrying a protocol request, "
+     "The max backoff time in milliseconds before retrying a protocol "
+     "request, "
      "this is the atmost backoff allowed for exponentially backed off "
      "requests.",
      1, 300 * 1000, 1000},
@@ -1510,7 +1656,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      0, 900000, 10},
     {_RK_GLOBAL, "client.dns.lookup", _RK_C_S2I, _RK(client_dns_lookup),
      "Controls how the client uses DNS lookups. By default, when the lookup "
-     "returns multiple IP addresses for a hostname, they will all be attempted "
+     "returns multiple IP addresses for a hostname, they will all be "
+     "attempted "
      "for connection before the connection is considered failed. This applies "
      "to both bootstrap and advertised servers. If the value is set to "
      "`resolve_canonical_bootstrap_servers_only`, each entry will be resolved "
@@ -1596,7 +1743,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "`murmur2_random` - Java Producer compatible Murmur2 hash of key "
      "(NULL keys are randomly partitioned. This is functionally equivalent "
      "to the default partitioner in the Java Producer.), "
-     "`fnv1a` - FNV-1a hash of key (NULL keys are mapped to single partition), "
+     "`fnv1a` - FNV-1a hash of key (NULL keys are mapped to single "
+     "partition), "
      "`fnv1a_random` - FNV-1a hash of key (NULL keys are randomly "
      "partitioned).",
      .sdef     = "consistent_random",
@@ -3814,10 +3962,33 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
         if (conf->ssl.ca && (conf->ssl.ca_location || conf->ssl.ca_pem))
                 return "`ssl.ca.location` or `ssl.ca.pem`, and memory-based "
                        "set_ssl_cert(CERT_CA) are mutually exclusive.";
+
+#if WITH_OAUTHBEARER_OIDC
+        if (conf->https.ca_location && conf->https.ca_pem)
+                return "`https.ca.location` and `https.ca.pem` "
+                       "are mutually exclusive";
+
+        if (conf->https.ca_location &&
+            rd_strcmp(conf->https.ca_location, "probe") &&
+            !rd_file_stat(conf->https.ca_location, NULL))
+                return "`https.ca.location` must be "
+                       "an existing file or directory";
+
+#if !CURL_AT_LEAST_VERSION(7, 77, 0)
+        if (conf->https.ca_pem)
+                return "`https.ca.pem` requires libcurl 7.77.0 or later";
+#endif
+#endif
+
+
 #ifdef __APPLE__
         else if (!conf->ssl.ca && !conf->ssl.ca_location && !conf->ssl.ca_pem)
                 /* Default ssl.ca.location to 'probe' on OSX */
                 rd_kafka_conf_set(conf, "ssl.ca.location", "probe", NULL, 0);
+
+        /* Default https.ca.location to 'probe' on OSX */
+        if (!conf->https.ca_location && !conf->https.ca_pem)
+                rd_kafka_conf_set(conf, "https.ca.location", "probe", NULL, 0);
 #endif
 #endif
 
@@ -3837,7 +4008,17 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                "mutually exclusive";
 
                 if (conf->sasl.oauthbearer.method ==
-                    RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC) {
+                        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+                    !conf->sasl.oauthbearer.token_endpoint_url) {
+                        return "`sasl.oauthbearer.token.endpoint.url` "
+                               "is mandatory when "
+                               "`sasl.oauthbearer.method=oidc` is set";
+                }
+
+                if (conf->sasl.oauthbearer.method ==
+                        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+                    conf->sasl.oauthbearer.grant_type ==
+                        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS) {
                         if (!conf->sasl.oauthbearer.client_id)
                                 return "`sasl.oauthbearer.client.id` is "
                                        "mandatory when "
@@ -3848,13 +4029,149 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                        "mandatory when "
                                        "`sasl.oauthbearer.method=oidc` is set";
                         }
+                }
+                if (conf->sasl.oauthbearer.method ==
+                        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+                    conf->sasl.oauthbearer.grant_type ==
+                        RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_JWT_BEARER) {
+                        if (conf->sasl.oauthbearer.assertion.file) {
+                                if (conf->sasl.oauthbearer.assertion.private_key
+                                        .file)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.file` cannot both be set";
 
-                        if (!conf->sasl.oauthbearer.token_endpoint_url) {
-                                return "`sasl.oauthbearer.token.endpoint.url` "
-                                       "is mandatory when "
-                                       "`sasl.oauthbearer.method=oidc` is set";
+                                if (conf->sasl.oauthbearer.assertion.private_key
+                                        .pem)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.pem` cannot both be set";
+
+                                if (conf->sasl.oauthbearer.assertion.private_key
+                                        .passphrase)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.passphrase` cannot both be "
+                                               "set";
+
+                                if (conf->sasl.oauthbearer.assertion
+                                        .jwt_template_file)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "jwt.template.file` cannot both "
+                                               "be set";
+
+                                if (conf->sasl.oauthbearer.assertion.claim
+                                        .subject)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.sub` cannot both be set";
+
+                                if (conf->sasl.oauthbearer.assertion.claim
+                                        .audience)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.aud` cannot both be set";
+
+                                if (conf->sasl.oauthbearer.assertion.claim
+                                        .issuer)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.iss` cannot both be set";
+
+                                if (rd_kafka_conf_is_modified(
+                                        conf,
+                                        "sasl.oauthbearer."
+                                        "assertion.claim.jti.include"))
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.jti.include` cannot both "
+                                               "be set";
+
+                                if (rd_kafka_conf_is_modified(
+                                        conf,
+                                        "sasl.oauthbearer."
+                                        "assertion.claim.exp.seconds"))
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.exp.seconds` cannot both "
+                                               "be set";
+
+
+                                if (rd_kafka_conf_is_modified(
+                                        conf,
+                                        "sasl.oauthbearer."
+                                        "assertion.claim.nbf.seconds"))
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "claim.nbf.seconds` cannot both "
+                                               "be set";
+                        } else {
+                                if (conf->sasl.oauthbearer.assertion.private_key
+                                        .file &&
+                                    conf->sasl.oauthbearer.assertion.private_key
+                                        .pem)
+                                        return "Mutually exclusive properties "
+                                               "set. "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.file` and "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.pem` cannot both be set";
+
+                                if (!conf->sasl.oauthbearer.assertion
+                                         .private_key.file &&
+                                    !conf->sasl.oauthbearer.assertion
+                                         .private_key.pem)
+                                        return "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.file` or "
+                                               "`sasl.oauthbearer.assertion."
+                                               "private."
+                                               "key.pem` is mandatory when "
+                                               "`sasl.oauthbearer.grant.type` "
+                                               "is set to "
+                                               "`urn:ietf:params:oauth:grant-"
+                                               "type:jwt-"
+                                               "bearer`";
                         }
                 }
+
+
 
                 /* Enable background thread for the builtin OIDC handler,
                  * unless a refresh callback has been set. */

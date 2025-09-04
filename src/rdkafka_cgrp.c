@@ -654,6 +654,9 @@ static int rd_kafka_cgrp_coord_update(rd_kafka_cgrp_t *rkcg, int32_t coord_id) {
                 /* Clear previous broker handle, if any */
                 if (rkcg->rkcg_curr_coord)
                         rd_kafka_cgrp_coord_clear_broker(rkcg);
+
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                    rkcg, "coordinator changed");
         }
 
 
@@ -788,6 +791,8 @@ err:
 
             RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
 
+            RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+
             RD_KAFKA_ERR_ACTION_END);
 
 
@@ -805,6 +810,12 @@ err:
 
                         /* Suppress repeated errors */
                         rd_kafka_cgrp_set_last_err(rkcg, ErrorCode);
+                }
+
+                if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY_BROKER) {
+                        /* This error is one-time and should cause
+                         * an immediate retry. */
+                        rd_interval_reset(&rkcg->rkcg_coord_query_intvl);
                 }
 
                 /* Retries are performed by the timer-intervalled
@@ -3320,8 +3331,7 @@ err:
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_SEND_FULL_REQUEST;
                 rd_kafka_cgrp_coord_query(rkcg, rd_kafka_err2str(err));
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                    rkcg, "coordinator query");
+                /* If coordinator changes, HB will be expedited. */
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {
@@ -6389,24 +6399,10 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_cgrp_consumer_incr_unassign_done(rkcg);
                 break;
 
-        case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                    rkcg, "back to steady state");
+        case RD_KAFKA_CGRP_JOIN_STATE_INIT:
+        case RD_KAFKA_CGRP_JOIN_STATE_STEADY: {
 
-                if (rkcg->rkcg_rebalance_rejoin) {
-                        rkcg->rkcg_rebalance_rejoin = rd_false;
-                        rd_kafka_cgrp_rejoin(
-                            rkcg,
-                            "rejoining group to redistribute "
-                            "previously owned partitions to other "
-                            "group members");
-                        break;
-                }
-
-                /* FALLTHRU */
-
-        case RD_KAFKA_CGRP_JOIN_STATE_INIT: {
-                rd_bool_t still_in_group = rd_true;
+                rd_bool_t not_in_group = rd_false;
                 /*
                  * There maybe a case when there are no assignments are
                  * assigned to this consumer. In this case, while terminating
@@ -6414,18 +6410,38 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                  * to intermediate state. In this scenario, last leave call is
                  * done from here.
                  */
-                still_in_group &= !rd_kafka_cgrp_leave_maybe(rkcg);
+                not_in_group |= rd_kafka_cgrp_leave_maybe(rkcg);
 
                 /* Check if cgrp is trying to terminate, which is safe to do
                  * in these two states. Otherwise we'll need to wait for
                  * the current state to decommission. */
-                still_in_group &= !rd_kafka_cgrp_try_terminate(rkcg);
+                not_in_group |= rd_kafka_cgrp_try_terminate(rkcg);
 
-                if (still_in_group)
+                if (not_in_group)
+                        break;
+
+                if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT) {
                         rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                            rkcg, "back to init state");
+                            rkcg, "Assignment Done: in init state");
+                } else if (rkcg->rkcg_rebalance_rejoin) {
+                        /* No need to expedite the HB here as it's being
+                         * expedited in the rejoin call.*/
+                        rkcg->rkcg_rebalance_rejoin = rd_false;
+                        rd_kafka_cgrp_rejoin(
+                            rkcg,
+                            "Assignment Done: rejoining group to redistribute "
+                            "previously owned partitions to other "
+                            "group members");
+                } else if (rkcg->rkcg_consumer_flags &
+                           RD_KAFKA_CGRP_CONSUMER_F_WAIT_ACK) {
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rkcg,
+                            "Assignment Done: in steady state, waiting for "
+                            "ack");
+                }
                 break;
         }
+
         default:
                 break;
         }

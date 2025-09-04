@@ -264,10 +264,12 @@ _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
+_TEST_DECL(0147_consumer_group_consumer_mock);
 _TEST_DECL(0149_broker_same_host_port_mock);
 _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0152_rebootstrap_local);
+_TEST_DECL(0153_memberid);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -528,10 +530,12 @@ struct test tests[] = {
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
+    _TEST(0147_consumer_group_consumer_mock, TEST_F_LOCAL),
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
+    _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
 
 
     /* Manual tests */
@@ -554,6 +558,14 @@ static void test_socket_add(struct test *test, sockem_t *skm) {
         TEST_LOCK();
         rd_list_add(&test->sockets, skm);
         TEST_UNLOCK();
+}
+
+void *test_socket_find(struct test *test, sockem_t *skm) {
+        void *ret;
+        TEST_LOCK();
+        ret = rd_list_find(&test->sockets, skm, rd_list_cmp_ptr);
+        TEST_UNLOCK();
+        return ret;
 }
 
 static void test_socket_del(struct test *test, sockem_t *skm, int do_lock) {
@@ -7419,7 +7431,7 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
  *        received by mock cluster \p mcluster, matching
  *        function \p match , called with opaque \p opaque .
  */
-static size_t test_mock_get_matching_request_cnt(
+size_t test_mock_get_matching_request_cnt(
     rd_kafka_mock_cluster_t *mcluster,
     rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
     void *opaque) {

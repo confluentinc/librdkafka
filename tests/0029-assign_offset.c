@@ -105,6 +105,12 @@ static void rebalance_cb(rd_kafka_t *rk,
 }
 
 int main_0029_assign_offset(int argc, char **argv) {
+        if (rd_kafka_version() < 0x020100ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.1.0 (leader epoch APIs), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return 0;
+        }
+
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;

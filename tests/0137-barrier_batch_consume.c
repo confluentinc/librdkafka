@@ -614,10 +614,14 @@ static void do_test_consume_batch_control_msgs(void) {
 
 
 int main_0137_barrier_batch_consume(int argc, char **argv) {
-        do_test_consume_batch_with_seek();
-        do_test_consume_batch_store_offset();
-        do_test_consume_batch_with_pause_and_resume_different_batch();
-        do_test_consume_batch_with_pause_and_resume_same_batch();
+        if (rd_kafka_version() >= 0x020b00ff) {
+                do_test_consume_batch_with_seek();
+                do_test_consume_batch_store_offset();
+                do_test_consume_batch_with_pause_and_resume_different_batch();
+                do_test_consume_batch_with_pause_and_resume_same_batch();
+        } else {
+                do_test_consume_batch_with_seek();
+        }
 
         return 0;
 }

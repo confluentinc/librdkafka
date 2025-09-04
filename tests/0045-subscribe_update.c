@@ -40,6 +40,40 @@
  *  - replica rack changes (using mock broker)
  */
 
+/**
+ * @brief Version-aware partition list printing that avoids leader epoch APIs 
+ *        on older versions
+ */
+static void safe_print_partition_list(
+    const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
+                                 ") %s%s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 partitions->elems[i].offset,
+                                 rd_kafka_topic_partition_get_leader_epoch(
+                                     &partitions->elems[i]),
+                                 partitions->elems[i].err ? ": " : "",
+                                 partitions->elems[i].err
+                                     ? rd_kafka_err2str(partitions->elems[i].err)
+                                     : "");
+                } else {
+                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 partitions->elems[i].offset,
+                                 partitions->elems[i].err ? ": " : "",
+                                 partitions->elems[i].err
+                                     ? rd_kafka_err2str(partitions->elems[i].err)
+                                     : "");
+                }
+        }
+}
+
 
 
 /**
@@ -71,7 +105,7 @@ static void await_assignment(const char *pfx,
         tps = rd_kafka_event_topic_partition_list(rkev);
 
         TEST_SAY("%s: assignment:\n", pfx);
-        test_print_partition_list(tps);
+        safe_print_partition_list(tps);
 
         va_start(ap, topic_cnt);
         for (i = 0; i < topic_cnt; i++) {
@@ -375,11 +409,22 @@ static void do_test_topic_remove(void) {
         rk = test_create_consumer(test_str_id_generate_tmp(), NULL, conf, NULL);
         queue = rd_kafka_queue_get_consumer(rk);
 
-        TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
-        test_create_topic_wait_exists(NULL, topic_f, parts_f, -1, 5000);
+        if (rd_kafka_version() >= 0x020100ff) {
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
+                test_create_topic_wait_exists(NULL, topic_f, parts_f, -1, 5000);
 
-        TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
-        test_create_topic_wait_exists(NULL, topic_g, parts_g, -1, 5000);
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
+                test_create_topic_wait_exists(NULL, topic_g, parts_g, -1, 5000);
+        } else {
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
+                test_create_topic(NULL, topic_f, parts_f, -1);
+
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
+                test_create_topic(NULL, topic_g, parts_g, -1);
+
+                /* librdkafka 2.0 needs more time for both topics to be available in cloud */
+                rd_sleep(test_k2_cluster ? 15 : 5);
+        }
 
         TEST_SAY("Topic removal: Subscribing to %s & %s\n", topic_f, topic_g);
         topics = rd_kafka_topic_partition_list_new(2);
@@ -392,13 +437,30 @@ static void do_test_topic_remove(void) {
                     rd_kafka_err2str(err));
         rd_kafka_topic_partition_list_destroy(topics);
 
+        /* Version-specific wait for assignment */
+        if (rd_kafka_version() >= 0x020100ff) {
+                /* Allow time for subscription and rebalancing to assign partitions from both topics */
+                rd_sleep(10);
+        }
+
         await_assignment("Topic removal: both topics exist", rk, queue, 2,
                          topic_f, parts_f, topic_g, parts_g);
 
         TEST_SAY("Topic removal: removing %s\n", topic_f);
         test_delete_topic(rk, topic_f);
 
+        /* Version-specific wait for topic deletion propagation */
+        if (rd_kafka_version() >= 0x020100ff) {
+                /* Allow time for topic deletion to propagate */
+                rd_sleep(test_k2_cluster ? 20 : 8);
+        }
+
         await_revoke("Topic removal: rebalance after topic removal", rk, queue);
+
+        /* Version-specific wait for consumer group to recognize topic deletion */
+        if (rd_kafka_version() >= 0x020100ff) {
+                rd_sleep(10);
+        }
 
         await_assignment("Topic removal: one topic exists", rk, queue, 1,
                          topic_g, parts_g);
@@ -406,8 +468,20 @@ static void do_test_topic_remove(void) {
         TEST_SAY("Topic removal: removing %s\n", topic_g);
         test_delete_topic(rk, topic_g);
 
+        /* Version-specific wait for second topic deletion propagation */
+        if (rd_kafka_version() >= 0x020100ff) {
+                /* Allow time for topic deletion to propagate */
+                rd_sleep(test_k2_cluster ? 20 : 8);
+        }
+
         await_revoke("Topic removal: rebalance after 2nd topic removal", rk,
                      queue);
+
+        /* Version-specific final cleanup and propagation wait */
+        if (rd_kafka_version() >= 0x020100ff) {
+                /* Allow extra time for final cleanup and metadata propagation */
+                rd_sleep(test_k2_cluster ? 10 : 5);
+        }
 
         /* Should not see another rebalance since all topics now removed */
         await_no_rebalance("Topic removal: empty", rk, queue, 10000);

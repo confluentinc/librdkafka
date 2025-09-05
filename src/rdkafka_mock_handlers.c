@@ -2696,6 +2696,7 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_kafka_Uuid_t ClientInstanceId;
         int32_t SubscriptionId;
         rd_bool_t terminating;
+        int8_t CompressionType;
         rd_kafka_compression_t compression_type = RD_KAFKA_COMPRESSION_NONE;
         rd_kafkap_bytes_t metrics;
         rd_kafka_resp_err_t err;
@@ -2703,7 +2704,8 @@ static int rd_kafka_mock_handle_PushTelemetry(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_uuid(rkbuf, &ClientInstanceId);
         rd_kafka_buf_read_i32(rkbuf, &SubscriptionId);
         rd_kafka_buf_read_bool(rkbuf, &terminating);
-        rd_kafka_buf_read_i8(rkbuf, &compression_type);
+        rd_kafka_buf_read_i8(rkbuf, &CompressionType);
+        compression_type = CompressionType;
         rd_kafka_buf_read_kbytes(rkbuf, &metrics);
 
         void *uncompressed_payload      = NULL;

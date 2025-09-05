@@ -11,6 +11,8 @@ rdkafka*.pc
 *.dylib
 *.a
 *.d
+*.gcno
+*.gcda
 librdkafka*.lds
 core
 vgcore.*
@@ -23,10 +25,13 @@ gmon.out
 *.bz2
 *.deb
 *.rpm
+coverage/json/*
+coverage/html/*
 staging-docs
 tmp
 stats*.json
 test_report*.json
+tests/coverage.json
 cov-int
 gdbrun*.gdb
 TAGS

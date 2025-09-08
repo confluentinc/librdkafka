@@ -981,6 +981,13 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
 
         SUB_TEST_QUICK();
 
+        /* Skip test if running against librdkafka < 2.2.0 due to missing rd_kafka_ConfigResource_add_incremental_config function */
+        if (rd_kafka_version() < 0x020200ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.2.0 (IncrementalAlterConfigs API), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return;
+        }
+
         /*
          * Only create one topic, the others will be non-existent.
          */
@@ -3315,6 +3322,13 @@ static void do_test_DescribeConsumerGroups(const char *what,
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
 
+        /* Skip test if running against librdkafka < 2.10.0 due to missing rd_kafka_ConsumerGroupDescription_authorized_operations function */
+        if (rd_kafka_version() < 0x020a00ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.10.0 (ConsumerGroupDescription authorized_operations API), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return;
+        }
+
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         if (request_timeout != -1) {
@@ -3642,6 +3656,13 @@ static void do_test_DescribeTopics(const char *what,
             "%s authorized operations",
             rd_kafka_name(rk), what, request_timeout,
             include_authorized_operations ? "with" : "without");
+
+        /* Skip test if running against librdkafka < 2.3.0 due to missing DescribeTopics API */
+        if (rd_kafka_version() < 0x020300ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.3.0 (DescribeTopics API), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return;
+        }
 
         q = rkqu ? rkqu : rd_kafka_queue_new(rk);
 
@@ -3977,6 +3998,13 @@ static void do_test_DescribeCluster(const char *what,
             rd_kafka_name(rk), what, request_timeout,
             include_authorized_operations ? "with" : "without");
 
+        /* Skip test if running against librdkafka < 2.3.0 due to missing DescribeCluster API */
+        if (rd_kafka_version() < 0x020300ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.3.0 (DescribeCluster API), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return;
+        }
+
         q = rkqu ? rkqu : rd_kafka_queue_new(rk);
 
         /* Call DescribeCluster. */
@@ -4191,6 +4219,13 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
+
+        /* Skip test if running against librdkafka < 2.10.0 due to missing rd_kafka_ConsumerGroupDescription_authorized_operations function */
+        if (rd_kafka_version() < 0x020a00ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.10.0 (ConsumerGroupDescription authorized_operations API), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return;
+        }
 
         if (!test_needs_auth())
                 SUB_TEST_SKIP("Test requires authorization to be setup.");
@@ -5245,6 +5280,13 @@ static void do_test_UserScramCredentials(const char *what,
 
         SUB_TEST_QUICK("%s, null bytes: %s", what, RD_STR_ToF(null_bytes));
 
+        /* Skip test if running against librdkafka < 2.2.0 due to missing UserScramCredentials API */
+        if (rd_kafka_version() < 0x020200ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.2.0 (UserScramCredentials API), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return;
+        }
+
         queue = useq ? useq : rd_kafka_queue_new(rk);
 
         rd_kafka_AdminOptions_t *options = rd_kafka_AdminOptions_new(
@@ -5581,6 +5623,13 @@ static void do_test_ListOffsets(const char *what,
             "request_timeout %d",
             rd_kafka_name(rk), what, req_timeout_ms);
 
+        /* Skip test if running against librdkafka < 2.3.0 due to missing ListOffsets API */
+        if (rd_kafka_version() < 0x020300ff) {
+                TEST_SKIP("Test requires librdkafka >= 2.3.0 (ListOffsets API), "
+                         "current version: %s\n", rd_kafka_version_str());
+                return;
+        }
+
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         test_CreateTopics_simple(rk, NULL, (char **)&topic, 1, 1, NULL);
@@ -5813,9 +5862,13 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* AlterConfigs */
         do_test_AlterConfigs(rk, mainq);
 
-        if (test_broker_version >= TEST_BRKVER(2, 3, 0, 0)) {
+        if (test_broker_version >= TEST_BRKVER(2, 3, 0, 0) && 
+            rd_kafka_version() >= 0x020200ff) {
                 /* IncrementalAlterConfigs */
                 do_test_IncrementalAlterConfigs(rk, mainq);
+        } else if (rd_kafka_version() < 0x020200ff) {
+                TEST_SAY("SKIPPING: IncrementalAlterConfigs test - requires librdkafka >= 2.2.0, "
+                        "current version: %s\n", rd_kafka_version_str());
         }
 
         /* DescribeConfigs */
@@ -5887,8 +5940,13 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         if (test_broker_version >= TEST_BRKVER(2, 5, 0, 0)) {
                 /* ListOffsets */
-                do_test_ListOffsets("temp queue", rk, NULL, -1);
-                do_test_ListOffsets("main queue", rk, mainq, 1500);
+                if (rd_kafka_version() >= 0x020300ff) {
+                        do_test_ListOffsets("temp queue", rk, NULL, -1);
+                        do_test_ListOffsets("main queue", rk, mainq, 1500);
+                } else {
+                        TEST_SAY("SKIPPING: ListOffsets tests - require librdkafka >= 2.3.0, "
+                                "current version: %s\n", rd_kafka_version_str());
+                }
 
                 /* Alter committed offsets */
                 do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
@@ -5925,10 +5983,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                     rd_true /*with subscribing consumer*/, rd_true);
         }
 
-        if (test_broker_version >= TEST_BRKVER(2, 7, 0, 0)) {
+        if (test_broker_version >= TEST_BRKVER(2, 7, 0, 0) && 
+            rd_kafka_version() >= 0x020200ff) {
                 do_test_UserScramCredentials("main queue", rk, mainq, rd_false);
                 do_test_UserScramCredentials("temp queue", rk, NULL, rd_false);
                 do_test_UserScramCredentials("main queue", rk, mainq, rd_true);
+        } else if (rd_kafka_version() < 0x020200ff) {
+                TEST_SAY("SKIPPING: UserScramCredentials tests - require librdkafka >= 2.2.0, "
+                        "current version: %s\n", rd_kafka_version_str());
         }
 
         rd_kafka_queue_destroy(mainq);

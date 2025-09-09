@@ -2969,9 +2969,8 @@ void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         if (rkbuf->rkbuf_retries > 0) {
                 int shift = rkbuf->rkbuf_retries - 1;
 
-                /* Cap the shift at 62 to avoid undefined behavior for
-                 * shifts >= 64 and to prevent signed overflow for a shift of 63,
-                 * which would result in a negative backoff. */
+                /* Cap shift at 62 to avoid undefined behavior.
+                 * shift=63 sets sign bit, shift>=64 exceeds type width. */
                 if (shift > 62)
                         shift = 62;
 

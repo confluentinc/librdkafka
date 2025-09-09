@@ -2970,7 +2970,8 @@ void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
                 int shift = rkbuf->rkbuf_retries - 1;
 
                 /* Cap shift at 34 to prevent overflow in final calculation.
-                 * Accounts for multiplication by retry_backoff_ms (max 300000) and jitter (max 1200). */
+                 * Accounts for multiplication by retry_backoff_ms (max 300000)
+                 * and jitter (max 1200). */
                 if (shift > 34)
                         shift = 34;
 

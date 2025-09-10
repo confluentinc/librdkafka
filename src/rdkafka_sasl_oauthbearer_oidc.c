@@ -1032,9 +1032,9 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
 
         char set_token_errstr[512];
 
-        char **extensions          = NULL;
-        char **extension_key_value = NULL;
-        char *headers_array[]      = {"Metadata: true"};
+        char **extensions            = NULL;
+        char **extension_key_value   = NULL;
+        static char *headers_array[] = {"Metadata: true"};
 
         if (rd_kafka_terminating(rk))
                 return;
@@ -1058,7 +1058,7 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
                 if (!rk->rk_conf.sasl.oauthbearer.metadata_authentication
                          .params)
                         rk->rk_conf.sasl.oauthbearer.metadata_authentication
-                            .params = '\0';
+                            .params = "";
         }
 
         token_endpoint_url = rd_http_get_params_append(

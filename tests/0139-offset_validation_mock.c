@@ -354,7 +354,7 @@ static void do_test_store_offset_without_leader_epoch(void) {
             rd_kafka_topic_partition_get_leader_epoch(&rktpars->elems[0]);
 
         /* OffsetFetch returns the leader epoch used when committing. */
-        TEST_ASSERT(leader_epoch == -1, "expected %d, got %" PRId32, 1,
+        TEST_ASSERT(leader_epoch == -1, "expected %d, got %" PRId32, -1,
                     leader_epoch);
         rd_kafka_topic_partition_list_destroy(rktpars);
 

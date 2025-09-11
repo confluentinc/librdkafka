@@ -464,6 +464,8 @@ rd_kafka_msgset_writer_write_Produce_header(rd_kafka_msgset_writer_t *msetw) {
         /* MessageSetSize: Will be finalized later*/
         msetw->msetw_of_MessageSetSize = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
+        rkbuf->rkbuf_u.Produce.batch_start_pos = msetw->msetw_of_MessageSetSize;
+
         if (msetw->msetw_MsgVersion == 2) {
                 /* MessageSet v2 header */
                 rd_kafka_msgset_writer_write_MessageSet_v2_header(msetw);
@@ -1403,6 +1405,10 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
 
         /* Partition tags */
         rd_kafka_buf_write_tags_empty(rkbuf);
+
+        rkbuf->rkbuf_u.Produce.batch_end_pos =
+            rd_buf_write_pos(&rkbuf->rkbuf_buf);
+
         /* Topics tags */
         rd_kafka_buf_write_tags_empty(rkbuf);
 

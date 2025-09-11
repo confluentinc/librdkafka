@@ -8,6 +8,8 @@ MKL_BLUE?=	\033[034m
 MKL_CLR_RESET?=	\033[0m
 
 DEPS=		$(OBJS:%.o=%.d)
+GCNOS=		$(OBJS:%.o=%.gcno)
+GCDAS=		$(OBJS:%.o=%.gcda)
 
 # TOPDIR is "TOPDIR/mklove/../" i.e., TOPDIR.
 # We do it with two dir calls instead of /.. to support mklove being symlinked.
@@ -316,7 +318,7 @@ doc-uninstall:
 	rmdir $$DESTDIR$(docdir) || true
 
 generic-clean:
-	rm -f $(OBJS) $(DEPS)
+	rm -f $(OBJS) $(DEPS) $(GCNOS) $(GCDAS)
 
 lib-clean: generic-clean lib-clean-pkg-config
 	rm -f $(LIBNAME)*.a $(LIBFILENAME) $(LIBFILENAMEDBG) \

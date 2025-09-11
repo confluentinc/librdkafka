@@ -2925,7 +2925,7 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
                 rd_kafka_Uuid_t request_topic_id =
                     rd_kafka_topic_partition_get_topic_id(
                         &assignment->elems[i]);
-                int partition = assignment->elems[i].partition;
+                int partition             = assignment->elems[i].partition;
                 rd_bool_t partition_found = rd_false;
 
                 rd_kafka_rdlock(rk);
@@ -2934,9 +2934,11 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
 
                 if (rkmce) {
                         topic_name = rd_strdup(rkmce->rkmce_mtopic.topic);
-                        //Check if partition exists in metadata
-                        for (int j = 0; j < rkmce->rkmce_mtopic.partition_cnt; j++) {
-                                if (rkmce->rkmce_mtopic.partitions[j].id == partition) {
+                        // Check if partition exists in metadata
+                        for (int j = 0; j < rkmce->rkmce_mtopic.partition_cnt;
+                             j++) {
+                                if (rkmce->rkmce_mtopic.partitions[j].id ==
+                                    partition) {
                                         partition_found = rd_true;
                                         break;
                                 }

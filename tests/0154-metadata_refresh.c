@@ -91,8 +91,7 @@ static void test_metadata_log_cb(const rd_kafka_t *rk,
 
 static rd_kafka_t *create_consumer(
     const char *topic,
-    const char *group,
-    void (*log_cb)(const rd_kafka_t *, int, const char *, const char *)) {
+    const char *group) {
         rd_kafka_conf_t *conf;
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "group.id", group);
@@ -117,8 +116,8 @@ static void setup_and_run_metadata_refresh_test(void) {
         test_create_topic(NULL, topic, initial_partitions, 1);
 
         TEST_SAY("Creating consumers\n");
-        c1 = create_consumer(topic, group, test_metadata_log_cb);
-        c2 = create_consumer(topic, group, test_metadata_log_cb);
+        c1 = create_consumer(topic, group);
+        c2 = create_consumer(topic, group);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 

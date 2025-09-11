@@ -75,6 +75,18 @@ const demoSchema = `
   ]
 }
 `
+const nameSchema = `
+{
+  "type": "record",
+  "namespace": "examples",
+  "name": "NameSchema",
+  "fields": [
+    { "name": "fullName", "type": "string" },
+    { "name": "lastName", "type": "string" }
+  ],
+  "version": "1"
+}
+`
 const demoSchemaSingleTag = `
 {
   "name": "DemoSchema",
@@ -368,6 +380,24 @@ describe('AvroSerializer', () => {
     expect(obj2.stringField).toEqual(obj.stringField);
     expect(obj2.boolField).toEqual(obj.boolField);
     expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('bad serialization', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new AvroSerializer(client, SerdeType.VALUE, {useLatestVersion: true})
+    let info = {
+      schemaType: 'AVRO',
+      schema: nameSchema
+    }
+    await client.register(subject, info, false)
+    try {
+      await ser.serialize(topic, { lastName: "lastName" })
+    } catch (err) {
+      expect(err).toBeInstanceOf(SerializationError)
+    }
   })
   it('guid in header', async () => {
     let conf: ClientConfig = {

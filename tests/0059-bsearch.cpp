@@ -32,8 +32,8 @@
 #include "testcpp.h"
 
 /**
-* binary search by timestamp: excercices KafkaConsumer's seek() API.
-*/
+ * binary search by timestamp: excercices KafkaConsumer's seek() API.
+ */
 
 
 static std::string topic;
@@ -42,20 +42,20 @@ static int64_t golden_timestamp = -1;
 static int64_t golden_offset    = -1;
 
 /**
-* @brief Seek to offset and consume that message.
-*
-* Asserts on failure.
-*/
+ * @brief Seek to offset and consume that message.
+ *
+ * Asserts on failure.
+ */
 static RdKafka::Message *get_msg(RdKafka::KafkaConsumer *c,
-                                int64_t offset,
-                                bool use_seek) {
+                                 int64_t offset,
+                                 bool use_seek) {
   RdKafka::TopicPartition *next =
       RdKafka::TopicPartition::create(topic, partition, offset);
   RdKafka::ErrorCode err;
 
   /* Since seek() can only be used to change the currently consumed
-  * offset we need to start consuming the first time we run this
-  * loop by calling assign() */
+   * offset we need to start consuming the first time we run this
+   * loop by calling assign() */
 
   test_timing_t t_seek;
   TIMING_START(&t_seek, "seek");
@@ -86,13 +86,13 @@ static RdKafka::Message *get_msg(RdKafka::KafkaConsumer *c,
 
   if (msg->offset() != offset)
     Test::Fail(tostr() << "seek()ed to offset " << offset
-                      << " but consume() returned offset " << msg->offset());
+                       << " but consume() returned offset " << msg->offset());
 
   return msg;
 }
 
 class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
-public:
+ public:
   void dr_cb(RdKafka::Message &msg) {
     if (msg.err())
       Test::Fail("Delivery failed: " + msg.errstr());
@@ -100,9 +100,14 @@ public:
     if (!msg.msg_opaque())
       return;
         RdKafka::MessageTimestamp ts = msg.timestamp();
-  if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
-      ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
-    Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
+    if (test_k2_cluster) {
+      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+          ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
+        Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
+    } else {
+      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
+        Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
+    }
     golden_timestamp = ts.timestamp;
     golden_offset    = msg.offset();
   }
@@ -138,8 +143,8 @@ static void do_test_bsearch(void) {
 
   for (int i = 0; i < msgcnt; i++) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
-                    (void *)topic.c_str(), topic.size(), NULL, 0, timestamp_ms,
-                    i == 357 ? (void *)1 /*golden*/ : NULL);
+                     (void *)topic.c_str(), topic.size(), NULL, 0, timestamp_ms,
+                     i == 357 ? (void *)1 /*golden*/ : NULL);
     if (err != RdKafka::ERR_NO_ERROR)
       Test::Fail("Produce failed: " + RdKafka::err2str(err));
     timestamp_ms += 100 + (i % 10);
@@ -155,8 +160,8 @@ static void do_test_bsearch(void) {
   delete p;
 
   /*
-  * Now find the golden message using bsearch
-  */
+   * Now find the golden message using bsearch
+   */
 
   /* Create consumer */
   Test::conf_init(&conf, NULL, 10);
@@ -185,7 +190,7 @@ static void do_test_bsearch(void) {
   test_timing_t t_qr;
   TIMING_START(&t_qr, "query_watermark_offsets");
   err = c->query_watermark_offsets(topic, partition, &low, &high,
-                                  tmout_multip(5000));
+                                   tmout_multip(5000));
   TIMING_STOP(&t_qr);
   if (err)
     Test::Fail("query_watermark_offsets failed: " + RdKafka::err2str(err));
@@ -200,34 +205,41 @@ static void do_test_bsearch(void) {
     mid = low + ((high - low) / 2);
 
     Test::Say(1, tostr() << "Get message at mid point of " << low << ".."
-                        << high << " -> " << mid << "\n");
+                         << high << " -> " << mid << "\n");
 
     RdKafka::Message *msg = get_msg(c, mid,
                                     /* use assign() on first iteration,
-                                    * then seek() */
+                                     * then seek() */
                                     itcnt > 0);
 
     RdKafka::MessageTimestamp ts = msg->timestamp();
-  if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
-    Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
-                        << " at offset " << msg->offset());
+    if (test_k2_cluster) {
+      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+          ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
+        Test::Fail(tostr() << "Expected CreateTime or LogAppendTime timestamp, not " << ts.type
+                             << " at offset " << msg->offset());
+    } else {
+      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
+        Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
+                             << " at offset " << msg->offset());
+    }
                         
     Test::Say(1, tostr() << "Message at offset " << msg->offset()
-                        << " with timestamp " << ts.timestamp << "\n");
+                         << " with timestamp " << ts.timestamp << "\n");
 
     if (ts.timestamp == golden_timestamp) {
       Test::Say(1, tostr() << "Found golden timestamp " << ts.timestamp
-                          << " at offset " << msg->offset() << " in "
-                          << itcnt + 1 << " iterations\n");
+                           << " at offset " << msg->offset() << " in "
+                           << itcnt + 1 << " iterations\n");
       delete msg;
       break;
     }
 
     if (low == high) {
       Test::Fail(tostr() << "Search exhausted at offset " << msg->offset()
-                        << " with timestamp " << ts.timestamp
-                        << " without finding golden timestamp "
-                        << golden_timestamp << " at offset " << golden_offset);
+                         << " with timestamp " << ts.timestamp
+                         << " without finding golden timestamp "
+                         << golden_timestamp << " at offset " << golden_offset);
 
     } else if (ts.timestamp < golden_timestamp)
       low = msg->offset() + 1;

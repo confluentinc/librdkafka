@@ -1,3 +1,10 @@
+
+# librdkafka v2.11.2 (unreleased)
+
+## Fixes
+
+* C++ docs: Clarify ownership of `RdKafka::Conf::dump()` return value (#5166, @aryanrahar)
+=======
 # librdkafka v2.12.0
 
 librdkafka v2.12.0 is a feature release:
@@ -16,6 +23,7 @@ librdkafka v2.12.0 is a feature release:
   accepted compression types causing the metrics to be sent uncompressed.
   Happening since 2.5.0. Since 2.10.1 unit tests are failing when run on
   big-endian architectures (#5183, @paravoid).
+
 
 
 

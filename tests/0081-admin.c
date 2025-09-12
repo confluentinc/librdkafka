@@ -121,9 +121,11 @@ static void do_test_CreateTopics(const char *what,
                             new_topics[i], "compression.type", "lz4");
                         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-                        // err = rd_kafka_NewTopic_set_config(
-                        //     new_topics[i], "delete.retention.ms", "900");
-                        // TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                        if (!test_k2_cluster) {
+                                err = rd_kafka_NewTopic_set_config(
+                                    new_topics[i], "delete.retention.ms", "900");
+                                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                        }
                 }
 
                 if (add_invalid_config) {
@@ -1826,8 +1828,8 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 2, NULL);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */    
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -2251,8 +2253,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 3, NULL);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -2276,8 +2278,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -2588,14 +2590,14 @@ static void do_test_DeleteRecords(const char *what,
         test_CreateTopics_simple(rk, NULL, topics, MY_DEL_RECORDS_CNT,
                                  partitions_cnt /*num_partitions*/, NULL);
 
-        /* Verify that topics are reported by metadata - use longer timeout for K2/cloud environments */
+        /* Verify that topics are reported by metadata */
+        int metadata_timeout_update = test_k2_cluster ? 60000 : tmout_multip(60000); 
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
-                                  tmout_multip(60000));
+                                  metadata_timeout_update);
 
         /* K2: Additional delay for topic readiness after metadata propagation */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay for topic readiness before producing\n");
-                rd_sleep(15);  /* 15 seconds for K2 topic setup */
+                rd_sleep(5);  
         }
 
         /* Produce 100 msgs / partition */
@@ -2629,8 +2631,8 @@ static void do_test_DeleteRecords(const char *what,
         rd_kafka_topic_partition_list_add(offsets, topics[2], 1)->offset =
             msgs_cnt + 1;
 
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int metadata_timeout = test_k2_cluster ? 60000 : tmout_multip(60000); /* 60s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int metadata_timeout = test_k2_cluster ? 60000 : tmout_multip(60000); 
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
             metadata_timeout);
 
@@ -2638,8 +2640,7 @@ static void do_test_DeleteRecords(const char *what,
 
         /* K2: Additional delay after message production for data consistency */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay before DeleteRecords for data consistency\n");
-                rd_sleep(10);  /* 10 seconds for K2 data consistency */
+                rd_sleep(5);  
         }
 
         TIMING_START(&timing, "DeleteRecords");
@@ -2656,7 +2657,7 @@ static void do_test_DeleteRecords(const char *what,
          * (typically generic Error events). */
         while (1) {
                 /* Use much longer timeouts for K2/cloud environments */
-                int poll_timeout = test_k2_cluster ? 1800 * 1000 : 900 * 1000;  /* 30 minutes for K2, 15 minutes otherwise */
+                int poll_timeout = test_k2_cluster ? 1800 * 1000 : 900 * 1000;  
                 rkev = rd_kafka_queue_poll(q, tmout_multip(poll_timeout));
                 TEST_SAY("DeleteRecords: got %s in %.3fms\n",
                          rd_kafka_event_name(rkev),
@@ -2677,8 +2678,7 @@ static void do_test_DeleteRecords(const char *what,
 
         /* K2: Additional delay after message production for data consistency */
         if (test_k2_cluster) {
-            TEST_SAY("K2 environment: Adding extra delay before DeleteRecords for data consistency\n");
-            rd_sleep(10);  /* 10 seconds for K2 data consistency */
+            rd_sleep(5);  
         }   
         /* Convert event to proper result */
         res = rd_kafka_event_DeleteRecords_result(rkev);
@@ -2714,8 +2714,7 @@ static void do_test_DeleteRecords(const char *what,
                     offsets->cnt, results->cnt);
         /* K2: Additional delay after message production for data consistency */
         if (test_k2_cluster) {
-            TEST_SAY("K2 environment: Adding extra delay before DeleteRecords for data consistency\n");
-            rd_sleep(10);  /* 10 seconds for K2 data consistency */
+            rd_sleep(5);  
     }
 
         for (i = 0; i < results->cnt; i++) {
@@ -2786,7 +2785,7 @@ static void do_test_DeleteRecords(const char *what,
                         }
 
                         /* Use longer timeouts for K2/cloud environments */
-                        int watermark_timeout = test_k2_cluster ? 1200000 : 600000;  /* 20 minutes for K2, 10 minutes otherwise */
+                        int watermark_timeout = test_k2_cluster ? 1200000 : 600000;  
                         err = rd_kafka_query_watermark_offsets(
                             rk, topics[i], partition, &low, &high,
                             tmout_multip(watermark_timeout));
@@ -2893,7 +2892,7 @@ static void do_test_DeleteGroups(const char *what,
         /* Create the topics first. */
         test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
 
-        /* Verify that topics are reported by metadata - use longer timeout for K2/cloud environments */
+        /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
 
         /* Produce 100 msgs */
@@ -2901,8 +2900,7 @@ static void do_test_DeleteGroups(const char *what,
 
         /* K2: Additional delay after production to ensure topic/partition readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay before consumer operations\n");
-                rd_sleep(10);  /* 10 seconds for K2 partition readiness */
+                rd_sleep(5);  
         }
 
         for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
@@ -3217,8 +3215,7 @@ static void do_test_ListConsumerGroups(const char *what,
 
         /* K2: Additional delay for consumer subscription readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay before consumer subscription\n");
-                rd_sleep(10);
+                rd_sleep(5);
         }
 
         for (i = 0; i < TEST_LIST_CONSUMER_GROUPS_CNT; i++) {
@@ -3338,8 +3335,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
 
         /* Additional wait for cloud environments to ensure topic stability for consumers */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay for topic readiness before consuming\n");
-                rd_sleep(15); /* 15 seconds for cloud propagation */
+                rd_sleep(5); 
         }
 
         /* Produce 100 msgs */
@@ -3656,20 +3652,17 @@ static void do_test_DescribeTopics(const char *what,
 
         test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);
         
-        /* Wait for topic metadata to propagate before describing topics.
-         * This is especially important for K2/cloud environments with higher latency. */
+        /* Wait for topic metadata to propagate before describing topics.*/
         {
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
-                TEST_SAY("Waiting for topic %s to appear in metadata\n", topic_names[0]);
                 test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
         }
 
         /* K2: Additional metadata wait for DescribeTopics API consistency */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Additional metadata verification before DescribeTopics API call\n");
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
                 test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(3000));
-                rd_sleep(2);  /* Small additional delay for API consistency */
+                rd_sleep(2);  
         }
 
         options =
@@ -3686,8 +3679,8 @@ static void do_test_DescribeTopics(const char *what,
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Check DescribeTopics results. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); 
         rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
                                       describe_timeout);
         TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
@@ -3742,9 +3735,7 @@ static void do_test_DescribeTopics(const char *what,
 
         /* Check if topics[0] succeeded. */
         error = rd_kafka_TopicDescription_error(result_topics[0]);
-        /* In K2 environments, accept UNKNOWN_TOPIC_OR_PART as it may take time for topics to be fully available */
         if (test_k2_cluster && rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
-                TEST_SAY("K2 environment: accepting UNKNOWN_TOPIC_OR_PART for topic description (topic may need more time to be fully available)\n");
         } else {
                 TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_NO_ERROR,
                             "Expected no error, not %s\n",
@@ -3841,8 +3832,8 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2); /* 10s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
         rd_sleep(acl_propagation_sleep);
 
@@ -3918,8 +3909,8 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_cleanup_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_cleanup_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_cleanup_sleep);
         rd_sleep(acl_cleanup_sleep);
 
@@ -4074,8 +4065,8 @@ static void do_test_DescribeCluster(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -4141,8 +4132,8 @@ static void do_test_DescribeCluster(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings_delete);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -4204,11 +4195,9 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         /* Create the topic. */
         test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
         
-        /* Wait for topic metadata to propagate before describing consumer groups.
-         * This is especially important for K2/cloud environments with higher latency. */
+        /* Wait for topic metadata to propagate before describing consumer groups.*/
         {
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic};
-                TEST_SAY("Waiting for topic %s to appear in metadata\n", topic);
                 test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
         }
 
@@ -4217,8 +4206,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* K2: Additional delay for consumer subscription readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay before consumer subscription\n");
-                rd_sleep(10);
+                rd_sleep(5);
         }
 
         /* Create and consumer (and consumer group). */
@@ -4302,8 +4290,8 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* It seems to be taking some time on the cluster for the ACLs to
          * propagate for a group.*/
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -4368,8 +4356,8 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2); /* 10s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
         rd_sleep(acl_propagation_sleep);
 
@@ -4467,10 +4455,9 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        /* In K2 environments, add extra wait time for topic/partition readiness */
+        /* K2: Additional delay for topic/partition readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 cluster: waiting additional 10s for topic/partition readiness\n");
-                rd_sleep(10);
+                rd_sleep(5);
         }
 
         consumer = test_create_consumer(groupid, NULL, NULL, NULL);
@@ -4612,7 +4599,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
         /* Use reasonable timeout for K2 environments */
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
+        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); 
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 
@@ -4750,10 +4737,9 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt,
                                           NULL, 0, 15 * 1000);
 
-                /* In K2 environments, add extra wait time for topic/partition readiness */
+                /* K2: Additional delay for topic/partition readiness */
                 if (test_k2_cluster) {
-                        TEST_SAY("K2 cluster: waiting additional 10s for topic/partition readiness\n");
-                        rd_sleep(10);
+                        rd_sleep(5);
                 }
 
                 consumer = test_create_consumer(group_id, NULL, NULL, NULL);
@@ -5038,10 +5024,8 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        /* K2: Additional delay after metadata update to ensure topic/partition readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay before consumer operations\n");
-                rd_sleep(10);  /* 10 seconds for K2 partition readiness */
+                rd_sleep(5);  
         }
 
         consumer = test_create_consumer(group_id, NULL, NULL, NULL);
@@ -5067,8 +5051,8 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); 
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 
@@ -5353,8 +5337,8 @@ static void do_test_UserScramCredentials(const char *what,
 #endif
 
         /* Wait for user propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for user propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -5471,8 +5455,8 @@ final_checks:
 #endif
 
         /* Wait for user propagation. */
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int acl_sleep_final = test_k2_cluster ? 5 : tmout_multip(2); /* 5s for K2, normal for others */
+        /* Use reasonable timeout for K2 environments */
+        int acl_sleep_final = test_k2_cluster ? 5 : tmout_multip(2); 
         TEST_SAY("Waiting %d seconds for user propagation\n", acl_sleep_final);
         rd_sleep(acl_sleep_final);
 
@@ -5579,10 +5563,9 @@ static void do_test_ListOffsets(const char *what,
 
         test_wait_topic_exists(rk, topic, 5000);
 
-        /* In K2 environments, add extra wait time for topic/partition readiness */
+        /* K2: Additional delay for topic/partition readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 cluster: waiting additional 10s for topic/partition readiness before producing\n");
-                rd_sleep(10);
+                rd_sleep(5);
         }
 
         p = test_create_producer();

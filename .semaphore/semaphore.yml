@@ -16,6 +16,19 @@ global_job_config:
       - checkout
       - mkdir artifacts
       - mkdir dest
+  env_vars:
+    - name: CACHE_TAG
+      value: '6'
+    - name: CI
+      value: 'true'
+    - name: KAFKA_VERSION
+      value: '4.0.0'
+    - name: CP_VERSION
+      value: '8.0.0'
+    # Shows plain output from docker build (no progress bars)
+    - name: BUILDKIT_PROGRESS
+      value: plain
+
 blocks:
   - name: 'OSX arm64/m1'
     dependencies: []
@@ -78,32 +91,27 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-amd64-1
+          type: s1-prod-ubuntu24-04-arm64-00
       jobs:
         - name: 'Style check'
           commands:
-            - sudo apt update
-            - sudo apt install -y clang-format-18 python3 python3-pip python3-setuptools
-            - python3 -m pip install -r packaging/tools/requirements.txt
-            - make style-check
-
+            - packaging/tools/run-in-docker.sh test-runner-arm64-${CACHE_TAG} packaging/tools/run-style-check.sh
 
   - name: 'Build documentation'
     dependencies: []
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-amd64-1
+          type: s1-prod-ubuntu24-04-arm64-1
       jobs:
         - name: 'Generate documentation'
           commands:
-            - NEEDRESTART_MODE=a sudo -E apt install -y doxygen graphviz
-            - make docs
+            - packaging/tools/run-in-docker.sh test-runner-arm64-${CACHE_TAG} make docs
             - (cd staging-docs && tar cvzf ../artifacts/librdkafka-docs.tgz .)
             - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/librdkafka-docs.tgz --destination artifacts/librdkafka-docs.tgz'
 
 
-  - name: 'Linux Ubuntu arm64: source build'
+  - name: 'Linux Ubuntu amd64: source build'
     dependencies: []
     skip:
       # Skip for release tags, we don't want flaky CI tests
@@ -112,67 +120,31 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-arm64-1
+          type: s1-prod-ubuntu24-04-amd64-1
       env_vars:
         - name: CFLAGS
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
-          - sem-version java 17
       jobs:
         - name: 'Build configuration checks'
           commands:
-            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-            - sudo dpkg -i rapidjson-dev.deb
-            - python3 -m pip install -U pip
-            - ./packaging/tools/build-configurations-checks.sh
+            - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG} ./packaging/tools/build-configurations-checks.sh
         - name: 'Build and integration tests with "classic" protocol'
           commands:
-            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-            - sudo dpkg -i rapidjson-dev.deb
-            - python3 -m pip install -U pip
-            - python3 -m pip -V
-            - (cd tests && python3 -m pip install -r requirements.txt)
-            - ./configure --install-deps --enable-werror --enable-devel
-            # split these up
-            - ./packaging/tools/rdutcoverage.sh
-            - make copyright-check
-            - make -j all examples check
-            - echo "Verifying that CONFIGURATION.md does not have manual changes"
-            - git diff --exit-code CONFIGURATION.md
-            - examples/rdkafka_example -X builtin.features
-            - ldd src/librdkafka.so.1
-            - ldd src-cpp/librdkafka++.so.1
-            - make -j -C tests build
-            - make -C tests run_local_quick
-            - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.9.0 --cpversion 7.9.0 --cmd 'make quick')
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG}
+              ./packaging/tools/run-integration-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION} classic
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
         - name: 'Build and integration tests with "consumer" protocol'
           commands:
-            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-            - sudo dpkg -i rapidjson-dev.deb
-            - python3 -m pip install -U pip
-            - python3 -m pip -V
-            - (cd tests && python3 -m pip install -r requirements.txt)
-            - ./configure --install-deps --enable-werror --enable-devel
-            # split these up
-            - ./packaging/tools/rdutcoverage.sh
-            - make copyright-check
-            - make -j all examples check
-            - echo "Verifying that CONFIGURATION.md does not have manual changes"
-            - git diff --exit-code CONFIGURATION.md
-            - examples/rdkafka_example -X builtin.features
-            - ldd src/librdkafka.so.1
-            - ldd src-cpp/librdkafka++.so.1
-            - make -j -C tests build
-            - make -C tests run_local_quick
-            - DESTDIR="$PWD/dest" make install
-            - export TEST_KAFKA_VERSION=4.0.0
-            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft --version '4.0.0'
-              --cpversion 7.9.0
-              --cmd 'make quick')
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG}
+              ./packaging/tools/run-integration-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION} consumer
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
 
   - name: 'Linux x64: release artifact docker builds'

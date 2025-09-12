@@ -1043,6 +1043,7 @@ static void do_test_setup_and_run_metadata_refresh_test(void) {
         test_consumer_close(c2);
         rd_kafka_destroy(c1);
         rd_kafka_destroy(c2);
+        rd_kafka_destroy(rk);
 
         SUB_TEST_PASS();
 }

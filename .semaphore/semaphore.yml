@@ -262,8 +262,8 @@ blocks:
 
   - name: 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    # run:
+    #   when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -279,9 +279,6 @@ blocks:
           # Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
           - cd librdkafka
-          - ..\vcpkg\vcpkg integrate install
-          # Install required packages.
-          - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
       epilogue:
         commands:
           - Get-ChildItem . -include *.dll -recurse
@@ -355,7 +352,7 @@ blocks:
             - echo Thank you
 
 promotions:
-  - name: Run integration tests and local tests on all architectures
+  - name: Run local tests on all architectures and integration tests
     pipeline_file: semaphore-integration.yml
     auto_promote_on:
       - result: passed

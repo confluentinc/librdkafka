@@ -202,9 +202,6 @@ blocks:
           # Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
           - cd librdkafka
-          - ..\vcpkg\vcpkg integrate install
-          # Install required packages.
-          - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
       epilogue:
         commands:
           - Get-ChildItem . -include *.dll -recurse

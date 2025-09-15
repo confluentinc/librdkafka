@@ -358,3 +358,19 @@ promotions:
       - result: passed
         branch:
         - "master"
+  - name: Run all tests on master commits
+    pipeline_file: run-all-tests.yml
+    parameters:
+      env_vars:
+        - required: true
+          name: TEST_KAFKA_GIT_REF
+          default_value: 4.0.0
+        - required: true
+          name: TEST_TYPE
+          default_value: plaintext,ssl
+        - required: true
+          name: TEST_ARCHES
+          default_value: x86_64,aarch64
+        - required: true
+          name: TEST_PARALLEL
+          default_value: "1"

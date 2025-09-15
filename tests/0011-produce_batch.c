@@ -123,11 +123,12 @@ static void test_single_partition(void) {
         {
                 rd_kafka_metadata_topic_t topic_md = {0};
                 topic_md.topic = (char*)topic;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000);
         }
 
-        /* Additional sleep for cloud environments to ensure topic stability */
-        rd_sleep(10); /* 10 seconds for extra cloud propagation */
+        if (test_k2_cluster) {
+                rd_sleep(5); 
+        }
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -263,15 +264,15 @@ static void test_partitioner(void) {
         topic = test_mk_topic_name("0011_partitioner", 1);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
-        /* Wait for topic metadata to be available for cloud environments */
         {
                 rd_kafka_metadata_topic_t topic_md = {0};
                 topic_md.topic = (char*)topic;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000);
         }
 
-        /* Additional sleep for cloud environments to ensure topic stability */
-        rd_sleep(10); /* 10 seconds for extra cloud propagation */
+        if (test_k2_cluster) {
+                rd_sleep(5); 
+        }
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -396,10 +397,11 @@ static void test_per_message_partition_flag(void) {
                  rd_kafka_name(rk));
         topic_name = test_mk_topic_name("0011_per_message_flag", 1);
         test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
-                                      30000); /* 30 seconds for cloud environments */
+                                      30000); 
 
-        /* Additional sleep for cloud environments to ensure topic stability */
-        rd_sleep(10); /* 10 seconds for extra cloud propagation */
+        if (test_k2_cluster) {
+                rd_sleep(5); 
+        }
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
@@ -547,11 +549,12 @@ static void test_message_partitioner_wo_per_message_flag(void) {
         {
                 rd_kafka_metadata_topic_t topic_md = {0};
                 topic_md.topic = (char*)topic;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000);
         }
 
-        /* Additional sleep for cloud environments to ensure topic stability */
-        rd_sleep(10); /* 10 seconds for extra cloud propagation */
+        if (test_k2_cluster) {
+                rd_sleep(5); 
+        }
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -711,11 +714,10 @@ static void test_message_single_partition_record_fail(int variation) {
 
         test_create_topic_if_auto_create_disabled(rk, topic_name, -1);
 
-        /* Wait for topic metadata to be available for cloud environments */
         {
                 rd_kafka_metadata_topic_t topic_md = {0};
                 topic_md.topic = (char*)topic_name;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
+                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000);
         }
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);

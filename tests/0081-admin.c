@@ -1311,8 +1311,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
         
-        /* Wait for topic metadata to propagate before describing configs.
-         * This is especially important for K2/cloud environments with higher latency. */
+        /* Wait for topic metadata to propagate before describing configs. */
         {
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topics[0]};
                 TEST_SAY("Waiting for topic %s to appear in metadata\n", topics[0]);
@@ -2583,10 +2582,8 @@ static void do_test_DeleteRecords(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   tmout_multip(60000));
 
-        /* K2: Additional delay for topic readiness after metadata propagation */
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Adding extra delay for topic readiness before producing\n");
-                rd_sleep(15);  /* 15 seconds for K2 topic setup */
+                rd_sleep(5);  
         }
 
         /* Produce 100 msgs / partition */
@@ -5567,10 +5564,8 @@ static void do_test_ListOffsets(const char *what,
 
         test_wait_topic_exists(rk, topic, 5000);
 
-        /* In K2 environments, add extra wait time for topic/partition readiness */
         if (test_k2_cluster) {
-                TEST_SAY("K2 cluster: waiting additional 10s for topic/partition readiness before producing\n");
-                rd_sleep(10);
+                rd_sleep(5);
         }
 
         p = test_create_producer();
@@ -5753,14 +5748,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                              NULL, 9000, rd_true);
         do_test_CreateTopics("main queue, options", rk, mainq, -1, 0);
 
-             /* Delete records - use longer timeouts for cloud environments (reasonable limits) */
-        if (!test_k2_cluster) {
-                do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
-                do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
-        } else {
-                TEST_SAY("SKIPPING: DeleteRecords tests - not supported in K2/cloud environments\n");
-        }
-
         /* Delete topics */
         /* FIXME: KRaft async DeleteTopics is working differently than
          * with Zookeeper
@@ -5768,14 +5755,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
 
         if (test_broker_version >= TEST_BRKVER(1, 0, 0, 0)) {
-        /* Create Partitions */
-        do_test_CreatePartitions("temp queue, op timeout 6500", rk,
-        NULL, 6500);
-        /* FIXME: KRaft async CreatePartitions is working differently
-        * than with Zookeeper
-        * do_test_CreatePartitions("main queue, op timeout 0", rk,
-        * mainq, 0);
-        */
+            /* Create Partitions */
+            do_test_CreatePartitions("temp queue, op timeout 6500", rk,
+            NULL, 6500);
+            /* FIXME: KRaft async CreatePartitions is working differently
+            * than with Zookeeper
+            * do_test_CreatePartitions("main queue, op timeout 0", rk,
+            * mainq, 0);
+            */
         }
 
         /* CreateAcls */
@@ -5801,6 +5788,16 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* DescribeConfigs */
         do_test_DescribeConfigs(rk, mainq);
         do_test_DescribeConfigs_groups(rk, mainq);
+
+        /* Delete records - use longer timeouts for cloud environments (reasonable limits) */
+        if (!test_k2_cluster) {
+            do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
+            do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
+        } else {
+            TEST_SAY("SKIPPING: DeleteRecords tests - not supported in K2/cloud environments\n");
+        }
+
+
         /* List groups */
         do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,
                                    rd_true);

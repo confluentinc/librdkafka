@@ -75,10 +75,11 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
 
                 test_create_topic_if_auto_create_disabled(rk, topic[i], -1);
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
-                test_wait_topic_exists(rk, topic[i], 30000); /* 30 seconds for cloud environments */
+                test_wait_topic_exists(rk, topic[i], 30000); 
 
-                /* Additional sleep for cloud environments to ensure topic stability */
-                rd_sleep(10); /* 10 seconds for extra cloud propagation */
+                if (test_k2_cluster) {
+                        rd_sleep(5); 
+                }
 
                 test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
                                   (msgcnt / TOPIC_CNT) * i,

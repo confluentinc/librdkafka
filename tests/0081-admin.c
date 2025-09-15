@@ -241,12 +241,12 @@ static void do_test_CreateTopics(const char *what,
                          rd_kafka_topic_result_name(terr),
                          rd_kafka_err2name(rd_kafka_topic_result_error(terr)),
                          rd_kafka_topic_result_error_string(terr));
-                
-                /* For invalid config topics, accept either INVALID_CONFIG or POLICY_VIOLATION 
-                 * since cloud/managed environments may have policies that convert invalid 
+
+                /* For invalid config topics, accept either INVALID_CONFIG or POLICY_VIOLATION
+                 * since cloud/managed environments may have policies that convert invalid
                  * configs to policy violations */
                 if (exp_topicerr[i] == RD_KAFKA_RESP_ERR_INVALID_CONFIG) {
-                        if (rd_kafka_topic_result_error(terr) != RD_KAFKA_RESP_ERR_INVALID_CONFIG && 
+                        if (rd_kafka_topic_result_error(terr) != RD_KAFKA_RESP_ERR_INVALID_CONFIG &&
                             rd_kafka_topic_result_error(terr) != RD_KAFKA_RESP_ERR_POLICY_VIOLATION) {
                                 TEST_FAIL_LATER("Expected INVALID_CONFIG or POLICY_VIOLATION, not %d: %s",
                                                 rd_kafka_topic_result_error(terr),
@@ -784,7 +784,7 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
                 if (test_k2_cluster) {
                         /*
-                         * Skip broker configs for K2 environments that don't allow 
+                         * Skip broker configs for K2 environments that don't allow
                          * mixed topic and broker resources in the same AlterConfigs request
                          */
                         TEST_WARN(
@@ -816,7 +816,7 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
          * ConfigResource #2: valid topic config, non-existent topic
          */
         configs[ci] =
-            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, 
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC,
                                        test_k2_cluster ? topics[2] : topics[ci]);
 
         err = rd_kafka_ConfigResource_set_config(configs[ci],
@@ -928,9 +928,9 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* For topic configs in K2 environments, accept UNKNOWN_TOPIC_OR_PART 
+                        /* For topic configs in K2 environments, accept UNKNOWN_TOPIC_OR_PART
                          * even for existing topics since K2 may restrict topic config alterations */
-                        if (test_k2_cluster && 
+                        if (test_k2_cluster &&
                             rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
@@ -1072,7 +1072,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
                 if (test_k2_cluster) {
                         /*
-                         * Skip broker configs for K2 environments that don't allow 
+                         * Skip broker configs for K2 environments that don't allow
                          * mixed topic and broker resources in the same AlterConfigs request
                          */
                         TEST_WARN(
@@ -1104,7 +1104,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
          * ConfigResource #2: valid topic config, non-existent topic
          */
         configs[ci] =
-            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, 
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC,
                                        test_k2_cluster ? topics[2] : topics[ci]);
 
         error = rd_kafka_ConfigResource_add_incremental_config(
@@ -1126,7 +1126,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
          */
         if (test_k2_cluster) {
                 /*
-                 * Skip group configs for K2 environments that don't allow 
+                 * Skip group configs for K2 environments that don't allow
                  * mixed topic and group resources in the same IncrementalAlterConfigs request
                  */
                 TEST_WARN(
@@ -1246,9 +1246,9 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* For topic configs in K2 environments, accept UNKNOWN_TOPIC_OR_PART 
+                        /* For topic configs in K2 environments, accept UNKNOWN_TOPIC_OR_PART
                          * even for existing topics since K2 may restrict topic config alterations */
-                        if (test_k2_cluster && 
+                        if (test_k2_cluster &&
                             rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
@@ -1312,7 +1312,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                            test_mk_topic_name("DescribeConfigs_notexist", 1));
 
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
-        
+
         /* Wait for topic metadata to propagate before describing configs.
          * This is especially important for K2/cloud environments with higher latency. */
         {
@@ -1334,7 +1334,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
          */
         if (test_k2_cluster) {
                 /*
-                 * Skip broker configs for K2 environments that don't allow 
+                 * Skip broker configs for K2 environments that don't allow
                  * mixed topic and broker resources in the same DescribeConfigs request
                  */
                 TEST_WARN(
@@ -1352,7 +1352,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
          * ConfigResource #2: topic config, non-existent topic, no config entr.
          */
         configs[ci] =
-            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, 
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC,
                                        test_k2_cluster ? topics[2] : topics[ci]);
         /* FIXME: This is a bug in the broker (<v2.0.0), it returns a full
          * response for unknown topics.
@@ -1520,7 +1520,7 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
          */
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
-        if (group_configs_supported()) {
+        if (group_configs_supported() && !test_k2_cluster) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
@@ -1828,8 +1828,8 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 2, NULL);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */    
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        /* Use reasonable timeout for K2 environments */
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -2254,7 +2254,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -2279,7 +2279,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments */
-        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -2591,13 +2591,13 @@ static void do_test_DeleteRecords(const char *what,
                                  partitions_cnt /*num_partitions*/, NULL);
 
         /* Verify that topics are reported by metadata */
-        int metadata_timeout_update = test_k2_cluster ? 60000 : tmout_multip(60000); 
+        int metadata_timeout_update = test_k2_cluster ? 60000 : tmout_multip(60000);
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   metadata_timeout_update);
 
         /* K2: Additional delay for topic readiness after metadata propagation */
         if (test_k2_cluster) {
-                rd_sleep(5);  
+                rd_sleep(5);
         }
 
         /* Produce 100 msgs / partition */
@@ -2632,7 +2632,7 @@ static void do_test_DeleteRecords(const char *what,
             msgs_cnt + 1;
 
         /* Use reasonable timeout for K2 environments */
-        int metadata_timeout = test_k2_cluster ? 60000 : tmout_multip(60000); 
+        int metadata_timeout = test_k2_cluster ? 60000 : tmout_multip(60000);
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
             metadata_timeout);
 
@@ -2640,7 +2640,7 @@ static void do_test_DeleteRecords(const char *what,
 
         /* K2: Additional delay after message production for data consistency */
         if (test_k2_cluster) {
-                rd_sleep(5);  
+                rd_sleep(5);
         }
 
         TIMING_START(&timing, "DeleteRecords");
@@ -2657,7 +2657,7 @@ static void do_test_DeleteRecords(const char *what,
          * (typically generic Error events). */
         while (1) {
                 /* Use much longer timeouts for K2/cloud environments */
-                int poll_timeout = test_k2_cluster ? 1800 * 1000 : 900 * 1000;  
+                int poll_timeout = test_k2_cluster ? 1800 * 1000 : 900 * 1000;
                 rkev = rd_kafka_queue_poll(q, tmout_multip(poll_timeout));
                 TEST_SAY("DeleteRecords: got %s in %.3fms\n",
                          rd_kafka_event_name(rkev),
@@ -2678,8 +2678,8 @@ static void do_test_DeleteRecords(const char *what,
 
         /* K2: Additional delay after message production for data consistency */
         if (test_k2_cluster) {
-            rd_sleep(5);  
-        }   
+            rd_sleep(5);
+        }
         /* Convert event to proper result */
         res = rd_kafka_event_DeleteRecords_result(rkev);
         TEST_ASSERT(res, "expected DeleteRecords_result, not %s",
@@ -2714,7 +2714,7 @@ static void do_test_DeleteRecords(const char *what,
                     offsets->cnt, results->cnt);
         /* K2: Additional delay after message production for data consistency */
         if (test_k2_cluster) {
-            rd_sleep(5);  
+            rd_sleep(5);
     }
 
         for (i = 0; i < results->cnt; i++) {
@@ -3335,7 +3335,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
 
         /* Additional wait for cloud environments to ensure topic stability for consumers */
         if (test_k2_cluster) {
-                rd_sleep(5); 
+                rd_sleep(5);
         }
 
         /* Produce 100 msgs */
@@ -3651,7 +3651,7 @@ static void do_test_DescribeTopics(const char *what,
         empty_topics = rd_kafka_TopicCollection_of_topic_names(NULL, 0);
 
         test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);
-        
+
         /* Wait for topic metadata to propagate before describing topics.*/
         {
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
@@ -3662,7 +3662,7 @@ static void do_test_DescribeTopics(const char *what,
         if (test_k2_cluster) {
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
                 test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(3000));
-                rd_sleep(2);  
+                rd_sleep(2);
         }
 
         options =
@@ -3680,7 +3680,7 @@ static void do_test_DescribeTopics(const char *what,
 
         /* Check DescribeTopics results. */
         /* Use reasonable timeout for K2 environments */
-        int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); 
+        int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
         rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
                                       describe_timeout);
         TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
@@ -3711,8 +3711,10 @@ static void do_test_DescribeTopics(const char *what,
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Check DescribeTopics results. */
+        /* Use reasonable timeout for K2 environments */
+        describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
         rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                      tmout_multip(20 * 1000));
+                                      describe_timeout);
         TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
         /* Extract result. */
@@ -3833,7 +3835,7 @@ static void do_test_DescribeTopics(const char *what,
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments */
-        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2); 
+        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
         rd_sleep(acl_propagation_sleep);
 
@@ -3852,8 +3854,9 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_AdminOptions_destroy(options);
 
         /* Check DescribeTopics results. */
+        describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
         rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                      tmout_multip(20 * 1000));
+                                      describe_timeout);
         TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
         /* Extract result. */
@@ -3910,7 +3913,7 @@ static void do_test_DescribeTopics(const char *what,
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments */
-        int acl_cleanup_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        int acl_cleanup_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_cleanup_sleep);
         rd_sleep(acl_cleanup_sleep);
 
@@ -4066,7 +4069,7 @@ static void do_test_DescribeCluster(const char *what,
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -4133,7 +4136,7 @@ static void do_test_DescribeCluster(const char *what,
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments */
-        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -4174,6 +4177,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         const char *principal, *sasl_mechanism, *sasl_username;
         const rd_kafka_AclOperation_t *authorized_operations;
         size_t authorized_operations_cnt;
+        int acl_sleep;
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
@@ -4194,7 +4198,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* Create the topic. */
         test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
-        
+
         /* Wait for topic metadata to propagate before describing consumer groups.*/
         {
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic};
@@ -4291,7 +4295,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         /* It seems to be taking some time on the cluster for the ACLs to
          * propagate for a group.*/
         /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -4308,9 +4312,11 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                                         options, q);
         rd_kafka_AdminOptions_destroy(options);
 
+        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
+        int describe_groups_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
         rkev = test_wait_admin_result(
             q, RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT,
-            tmout_multip(20 * 1000));
+            describe_groups_timeout);
         TEST_ASSERT(rkev, "Should receive describe consumer groups event.");
 
         /*  Extract result. */
@@ -4357,7 +4363,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* Wait for ACL propagation. */
         /* Use reasonable timeout for K2 environments */
-        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2); 
+        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
         rd_sleep(acl_propagation_sleep);
 
@@ -4478,8 +4484,10 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+        /* Use reasonable timeout for K2 environments */
+        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
         TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
+            rd_kafka_committed(consumer, committed, committed_timeout));
 
         if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
@@ -4599,7 +4607,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
         /* Use reasonable timeout for K2 environments */
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); 
+        committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000);
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 
@@ -5025,7 +5033,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
                                   15 * 1000);
 
         if (test_k2_cluster) {
-                rd_sleep(5);  
+                rd_sleep(5);
         }
 
         consumer = test_create_consumer(group_id, NULL, NULL, NULL);
@@ -5052,7 +5060,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
         /* Use reasonable timeout for K2 environments */
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); 
+        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000);
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 
@@ -5338,7 +5346,7 @@ static void do_test_UserScramCredentials(const char *what,
 
         /* Wait for user propagation. */
         /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2); 
+        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for user propagation\n", acl_sleep);
         rd_sleep(acl_sleep);
 
@@ -5456,7 +5464,7 @@ final_checks:
 
         /* Wait for user propagation. */
         /* Use reasonable timeout for K2 environments */
-        int acl_sleep_final = test_k2_cluster ? 5 : tmout_multip(2); 
+        int acl_sleep_final = test_k2_cluster ? 5 : tmout_multip(2);
         TEST_SAY("Waiting %d seconds for user propagation\n", acl_sleep_final);
         rd_sleep(acl_sleep_final);
 

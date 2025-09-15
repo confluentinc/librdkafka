@@ -227,8 +227,8 @@ blocks:
 
   - name: 'Windows x64: MinGW-w64'
     dependencies: []
-    # run:
-    #   when: "tag =~ '^v[0-9]\\.'"
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -262,8 +262,8 @@ blocks:
 
   - name: 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     dependencies: []
-    # run:
-    #   when: "tag =~ '^v[0-9]\\.'"
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -358,7 +358,9 @@ promotions:
       - result: passed
         branch:
         - "master"
-  - name: Run all tests on master commits
+  # Manual promotion only, the auto promotion on master happens after 
+  # integration tests pass.
+  - name: Run all tests
     pipeline_file: run-all-tests.yml
     parameters:
       env_vars:

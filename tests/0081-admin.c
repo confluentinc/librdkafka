@@ -121,7 +121,7 @@ static void do_test_CreateTopics(const char *what,
                             new_topics[i], "compression.type", "lz4");
                         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-                        if (!test_k2_cluster) {
+                        if (test_k2_cluster) {
                                 err = rd_kafka_NewTopic_set_config(
                                     new_topics[i], "delete.retention.ms", "900");
                                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));

@@ -916,9 +916,10 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   RdKafka::KafkaConsumer *c2 = make_consumer(
       "C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 25);
   
-  // Wait for topic metadata to be available
-  test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 30 * 1000);
-  rd_sleep(5);
+  if (test_k2_cluster) {
+    test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 30 * 1000);
+    rd_sleep(5);
+  }
 
   Test::subscribe(c1, topic_name);
 

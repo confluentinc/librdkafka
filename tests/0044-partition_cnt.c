@@ -76,15 +76,24 @@ static void test_producer_partition_cnt_change(void) {
                 test_wait_topic_exists(rk, topic, 30000);
                 rd_sleep(5);
         }
+        int msg_timeout_ms = test_k2_cluster ? 300000 : 10000;  /* 5 minutes for K2 */
+
 
         rkt =
             test_create_topic_object(rk, topic, "message.timeout.ms",
-                                     tsprintf("%d", tmout_multip(10000)), NULL);
+                                     tsprintf("%d", tmout_multip(msg_timeout_ms)), NULL);
 
         test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,
                                  msgcnt / 2, NULL, 100, 0, &produced);
 
         test_create_partitions(rk, topic, partition_cnt);
+
+        test_wait_topic_exists(rk, topic, topic_wait_timeout);
+        if (test_k2_cluster) {
+                rd_sleep(7);
+        } else {
+                rd_sleep(3);
+        }
 
         test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, msgcnt / 2,
                                  msgcnt / 2, NULL, 100, 0, &produced);

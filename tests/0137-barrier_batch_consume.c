@@ -138,6 +138,10 @@ static void do_test_consume_batch_with_seek(void) {
 
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
 
+        if (test_k2_cluster){
+            rd_sleep(5);
+        }
+
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
                                        produce_msg_cnt / partition_cnt);
@@ -227,6 +231,10 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
+
+        if (test_k2_cluster){
+            rd_sleep(5);
+        }
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -331,7 +339,16 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
+        test_create_topic(NULL, topic, partition_cnt, -1);
+
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
+
+        if (test_k2_cluster) {
+                rd_sleep(10);  /* K2 clusters need much longer time */
+        } else {
+                rd_sleep(2);
+        }
+
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -428,6 +445,10 @@ static void do_test_consume_batch_store_offset(void) {
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
+
+        if (test_k2_cluster) {
+            rd_sleep(5);
+        }
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,

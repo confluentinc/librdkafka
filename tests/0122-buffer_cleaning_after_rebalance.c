@@ -157,6 +157,10 @@ static void do_test_consume_batch(const char *strategy) {
 
         test_create_topic_if_auto_create_disabled(NULL, topic, partition_cnt);
 
+        if (test_k2_cluster){
+            rd_sleep(2);
+        }
+
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
                                        produce_msg_cnt / partition_cnt);

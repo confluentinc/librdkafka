@@ -3411,6 +3411,10 @@ static void x_incremental_rebalances(void) {
   int topic_timeout_ms2 = test_k2_cluster ? 30000 : 5000;
   test_create_topic_wait_exists(NULL, topic, 6, -1, topic_timeout_ms2);
 
+  if (test_k2_cluster){
+    rd_sleep(5);
+  }
+
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {
     char clientid[32];

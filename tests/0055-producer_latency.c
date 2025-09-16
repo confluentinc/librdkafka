@@ -351,7 +351,7 @@ int main_0055_producer_latency(int argc, char **argv) {
 
         for (latconf = latconfs; latconf->name; latconf++) {
                 /* Skip K2-incompatible configurations when test_k2_cluster is enabled */
-                if (test_k2_cluster && 
+                if (test_k2_cluster &&
                     (strstr(latconf->name, "no acks") ||
                      strstr(latconf->name, "idempotence") ||
                      strstr(latconf->name, "transactions"))) {
@@ -368,7 +368,7 @@ int main_0055_producer_latency(int argc, char **argv) {
 
         for (latconf = latconfs; latconf->name; latconf++) {
                 /* Skip K2-incompatible configurations in summary too */
-                if (test_k2_cluster && 
+                if (test_k2_cluster &&
                     (strstr(latconf->name, "no acks") ||
                      strstr(latconf->name, "idempotence") ||
                      strstr(latconf->name, "transactions"))) {

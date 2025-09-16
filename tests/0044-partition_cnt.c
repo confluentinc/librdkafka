@@ -61,7 +61,21 @@ static void test_producer_partition_cnt_change(void) {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic_wait_exists(rk, topic, partition_cnt / 2, -1, 5000);
+        int topic_wait_timeout = test_k2_cluster ? 180000 : 5000;
+        test_create_topic_wait_exists(rk, topic, partition_cnt / 2, -1, topic_wait_timeout);
+
+        if (test_k2_cluster) {
+                test_create_topic(rk, topic, partition_cnt / 2, -1);
+                test_wait_topic_exists(rk, topic, topic_wait_timeout);
+        } else {
+                test_create_topic_wait_exists(rk, topic, partition_cnt / 2, -1, topic_wait_timeout);
+        }
+
+        /* Additional verification for K2 clusters */
+        if (test_k2_cluster) {
+                test_wait_topic_exists(rk, topic, 30000);
+                rd_sleep(5);
+        }
 
         rkt =
             test_create_topic_object(rk, topic, "message.timeout.ms",

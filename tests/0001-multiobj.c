@@ -93,11 +93,11 @@ int main_0001_multiobj(int argc, char **argv) {
                 TIMING_STOP(&t_full);
 
                 /* Topic is created on the first iteration. */
-                if (i > 0)
-                        TIMING_ASSERT(&t_full, 0, 999);
-                else
-                        /* Allow metadata propagation. */
-                        rd_sleep(1);
+                if (i > 0) {
+                        /* K2 clusters require higher timeouts due to SSL/SASL overhead */
+                        int max_duration_ms = test_k2_cluster ? 5000 : 999;
+                        TIMING_ASSERT(&t_full, 0, max_duration_ms);
+                }
         }
 
         return 0;

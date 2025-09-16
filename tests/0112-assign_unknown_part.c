@@ -55,7 +55,7 @@ int main_0112_assign_unknown_part(int argc, char **argv) {
         if (test_k2_cluster) {
             rd_sleep(5);
         }
-        
+
         TEST_SAY("Producing message to partition 0\n");
         test_produce_msgs_easy(topic, testid, 0, 1);
 
@@ -70,7 +70,7 @@ int main_0112_assign_unknown_part(int argc, char **argv) {
         TEST_SAY("Changing partition count for topic %s\n", topic);
         test_create_partitions(NULL, topic, 2);
 
-    
+
         if (test_k2_cluster) {
             rd_sleep(5);
         }

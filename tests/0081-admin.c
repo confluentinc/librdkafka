@@ -916,10 +916,10 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                 }
 
 
-                /* For broker configs, accept either NO_ERROR or POLICY_VIOLATION 
+                /* For broker configs, accept either NO_ERROR or POLICY_VIOLATION
                  * since cloud environments may or may not allow broker config alterations */
                 if (rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_BROKER) {
-                        if (err != RD_KAFKA_RESP_ERR_NO_ERROR && 
+                        if (err != RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err != RD_KAFKA_RESP_ERR_POLICY_VIOLATION) {
                                 TEST_FAIL_LATER(
                                     "ConfigResource #%d (BROKER): "
@@ -1234,10 +1234,10 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                 }
 
 
-                /* For broker configs, accept either NO_ERROR or POLICY_VIOLATION 
+                /* For broker configs, accept either NO_ERROR or POLICY_VIOLATION
                  * since cloud environments may or may not allow broker config alterations */
                 if (rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_BROKER) {
-                        if (err != RD_KAFKA_RESP_ERR_NO_ERROR && 
+                        if (err != RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err != RD_KAFKA_RESP_ERR_POLICY_VIOLATION) {
                                 TEST_FAIL_LATER(
                                     "ConfigResource #%d (BROKER): "
@@ -2785,7 +2785,7 @@ static void do_test_DeleteRecords(const char *what,
                         }
 
                         /* Use longer timeouts for K2/cloud environments */
-                        int watermark_timeout = test_k2_cluster ? 1200000 : 600000;  
+                        int watermark_timeout = test_k2_cluster ? 1200000 : 600000;
                         err = rd_kafka_query_watermark_offsets(
                             rk, topics[i], partition, &low, &high,
                             tmout_multip(watermark_timeout));
@@ -2900,7 +2900,7 @@ static void do_test_DeleteGroups(const char *what,
 
         /* K2: Additional delay after production to ensure topic/partition readiness */
         if (test_k2_cluster) {
-                rd_sleep(5);  
+                rd_sleep(5);
         }
 
         for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
@@ -3571,12 +3571,12 @@ test_match_authorized_operations(const rd_kafka_AclOperation_t *expected,
                                  const rd_kafka_AclOperation_t *actual,
                                  size_t actual_cnt) {
         size_t i, j;
-        
+
         /* For cloud environments: verify expected operations are present, but allow additional ones
          * Cloud Kafka services often return more operations than expected due to richer ACL models */
         TEST_SAY("Checking authorized operations: expected %" PRIusz ", got %" PRIusz "\n",
                 expected_cnt, actual_cnt);
-        
+
         /* Verify all expected operations are present in the actual list */
         for (i = 0; i < expected_cnt; i++) {
                 for (j = 0; j < actual_cnt; j++)
@@ -3589,7 +3589,7 @@ test_match_authorized_operations(const rd_kafka_AclOperation_t *expected,
                             "result %s\n",
                             rd_kafka_AclOperation_name(expected[i]));
         }
-        
+
         /* Log what we actually got for debugging */
         TEST_SAY("Found all %" PRIusz " expected operations in cloud environment's %" PRIusz " operations\n",
                 expected_cnt, actual_cnt);

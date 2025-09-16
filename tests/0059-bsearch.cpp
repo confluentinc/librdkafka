@@ -182,7 +182,7 @@ static void do_test_bsearch(void) {
   RdKafka::Message *golden_msg = get_msg(c, golden_offset, false);
   RdKafka::MessageTimestamp golden_ts = golden_msg->timestamp();
   golden_timestamp = golden_ts.timestamp; // Update with actual stored timestamp
-  Test::Say(tostr() << "Golden message at offset " << golden_offset 
+  Test::Say(tostr() << "Golden message at offset " << golden_offset
                     << " has actual stored timestamp " << golden_timestamp << "\n");
   delete golden_msg;
   Test::Say("Find initial middle offset\n");
@@ -223,7 +223,7 @@ static void do_test_bsearch(void) {
         Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
                              << " at offset " << msg->offset());
     }
-                        
+
     Test::Say(1, tostr() << "Message at offset " << msg->offset()
                          << " with timestamp " << ts.timestamp << "\n");
 

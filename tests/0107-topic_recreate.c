@@ -193,7 +193,7 @@ static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
 
         if (test_k2_cluster) {
                 rd_sleep(10);
-        } 
+        }
 
         /* Start consumer */
         test_consumer_subscribe(consumer, topic);
@@ -224,7 +224,7 @@ static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
 
         if (test_k2_cluster) {
                 rd_sleep(10);
-        } 
+        }
 
         mtx_lock(&value_mtx);
         value = "after";

@@ -207,7 +207,7 @@ static void do_test_static_group_rebalance(void) {
                 c[0].curr_line = __LINE__;
                 test_consumer_poll_once(c[0].rk, &mv, 0);
         }
-        
+
         /* Consumer 1 (which got all partitions) should revoke them */
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         while (!static_member_wait_rebalance(&c[1], rebalance_start,
@@ -220,14 +220,14 @@ static void do_test_static_group_rebalance(void) {
         /* Both consumers should now get balanced assignments */
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        
+
         /* Wait for both to get their new assignments */
         while (!static_member_wait_rebalance(&c[0], rebalance_start,
                                              &c[0].assigned_at, 10000)) {
                 c[1].curr_line = __LINE__;
                 test_consumer_poll_once(c[1].rk, &mv, 0);
         }
-        
+
         static_member_expect_rebalance(&c[1], rebalance_start,
                                        &c[1].assigned_at, 10000);
 
@@ -237,7 +237,7 @@ static void do_test_static_group_rebalance(void) {
         test_consumer_poll_once(c[0].rk, &mv, 1000);
         test_consumer_poll_once(c[1].rk, &mv, 1000);
         /*
-         * Messages were already consumed during settlement phase, 
+         * Messages were already consumed during settlement phase,
          * just do a quick verification poll
          */
         c[0].curr_line = __LINE__;
@@ -283,9 +283,10 @@ static void do_test_static_group_rebalance(void) {
          */
         test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 1, -1,
                                       30000);
-        
-        /* Additional wait to ensure topic metadata is fully propagated */
-        rd_sleep(5);
+        if (test_k2_cluster){
+            /* Additional wait to ensure topic metadata is fully propagated */
+            rd_sleep(5);
+        }
 
         /* Await revocation */
         rebalance_start        = test_clock();

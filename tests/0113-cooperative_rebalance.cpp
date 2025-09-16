@@ -915,11 +915,11 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   DefaultRebalanceCb rebalance_cb2;
   RdKafka::KafkaConsumer *c2 = make_consumer(
       "C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 25);
-  
+
   if (test_k2_cluster) {
     test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 30 * 1000);
     rd_sleep(5);
-  } 
+  }
 
   Test::subscribe(c1, topic_name);
 
@@ -950,7 +950,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
       if (c2_subscribed)
         rd_sleep(1);
     }
-    
+
   }
 
   /* Sequence of events:
@@ -1105,7 +1105,7 @@ static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 20);
   RdKafka::KafkaConsumer *c2 =
       make_consumer("C_2", group_name, "cooperative-sticky", NULL, NULL, 20);
-  
+
 
   if (test_k2_cluster) {
     // Ensure topic metadata is fully propagated before subscribing
@@ -1131,7 +1131,7 @@ static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
       Test::Say("Consumer 1 and 2 are both assigned to single partition.\n");
       done = true;
     }
-    
+
     if (test_k2_cluster) {
       // Additional delay in polling loop to allow rebalance events to fully propagate
       if (c2_subscribed && !done) {
@@ -1180,7 +1180,7 @@ static void d_change_subscription_add_topic(rd_bool_t close_consumer) {
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -1239,11 +1239,11 @@ static void e_change_subscription_remove_topic(rd_bool_t close_consumer) {
 
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
-  
+
   // Ensure topic metadata is fully propagated before subscribing
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -1362,7 +1362,7 @@ static void f_assign_call_cooperative() {
       make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf,
                     &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -1472,7 +1472,7 @@ static void g_incremental_assign_call_eager() {
   RdKafka::KafkaConsumer *c = make_consumer(
       "C_1", group_name, "roundrobin", &additional_conf, &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -1520,7 +1520,7 @@ static void h_delete_topic() {
                     &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -1701,7 +1701,7 @@ static void k_add_partition() {
       make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf,
                     &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -1784,7 +1784,7 @@ static void l_unsubscribe() {
       "C_1", group_name, "cooperative-sticky", NULL, &rebalance_cb1, 30);
   test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 30 * 1000);
   test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -2276,7 +2276,7 @@ static void s_subscribe_when_rebalancing(int variation) {
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_3.c_str(), 30 * 1000);
-  
+
   if (test_k2_cluster) {
     // Additional wait for partition metadata and group coordinator readiness
     rd_sleep(5);
@@ -3318,7 +3318,12 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
    */
   p = test_create_producer();
 
-  test_create_topic_wait_exists(p, topic, partition_cnt, -1, 5000);
+  int topic_timeout_ms = test_k2_cluster ? 30000 : 5000;
+  test_create_topic_wait_exists(p, topic, partition_cnt, -1, topic_timeout_ms);
+
+  if (test_k2_cluster) {
+    rd_sleep(5);
+  }
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3402,7 +3407,9 @@ static void x_incremental_rebalances(void) {
   SUB_TEST();
   test_conf_init(&conf, NULL, 60);
 
-  test_create_topic_wait_exists(NULL, topic, 6, -1, 5000);
+  /* K2 clusters need longer timeouts for topic metadata propagation */
+  int topic_timeout_ms2 = test_k2_cluster ? 30000 : 5000;
+  test_create_topic_wait_exists(NULL, topic, 6, -1, topic_timeout_ms2);
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {

@@ -689,8 +689,8 @@ static void test_message_single_partition_record_fail(int variation) {
         // Modified for Confluent Cloud compatibility:
         // Step 1: Change from default (delete) to compact
         const char *confs_set_compact[] = {"cleanup.policy", "SET", "compact"};
-        
-        // Step 2: Change from compact to compact,delete  
+
+        // Step 2: Change from compact to compact,delete
         const char *confs_set_mixed[] = {"cleanup.policy", "SET", "compact,delete"};
 
         // Revert back to delete at the end
@@ -732,12 +732,12 @@ static void test_message_single_partition_record_fail(int variation) {
         test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
                                             topic_name, confs_set_compact, 1);
         rd_sleep(1);
-        
+
         // Step 2: compact → compact,delete (if supported by the environment)
         TEST_SAY("Step 2: Attempting to change cleanup.policy to compact,delete\n");
         rd_kafka_resp_err_t err = test_IncrementalAlterConfigs_simple(
             rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_mixed, 1);
-        
+
         // If mixed policy is not supported, fall back to just compact
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
             TEST_SAY("Mixed policy not supported, continuing with compact only\n");

@@ -9,8 +9,8 @@ librdkafka v2.12.0 is a feature release:
 ## Fixes
 
 ### General fixes
-* Fix discarding consumer group heartbeat response without epoch update when leaving during inflight HB. (#4672)
-* Fix a condition where error was being raised in commit due to old error in the topic partition. (#4672)
+* Fix for discarding the member epoch in a consumer group heartbeat response when leaving with an inflight HB (#4672).
+* Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
 
 ### Telemetry fixes
 

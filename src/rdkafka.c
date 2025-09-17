@@ -2154,11 +2154,6 @@ static void rd_kafka_metadata_refresh_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
         rd_kafka_resp_err_t err;
 
-        /* Restart the rebootstrap timer only if it's the first
-         * metadata refresh request after last successful response,
-         * so the timer is not reset if already scheduled. */
-        rd_kafka_rebootstrap_tmr_restart(rk);
-
         /* High-level consumer:
          * We need to query both locally known topics and subscribed topics
          * so that we can detect locally known topics changing partition

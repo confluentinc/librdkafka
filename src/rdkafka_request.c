@@ -2878,8 +2878,22 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 rkbuf->rkbuf_u.Metadata.decr = full_incr;
                 rkbuf->rkbuf_u.Metadata.decr_lock =
                     &rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock;
+        } else if (!resp_cb) {
+                /* In case it's a full request, forced or not, it won't be
+                 * retried on the same broker to avoid blocking metadata
+                 * requests, because of the lock, when that broker isn't
+                 * available. We don't start the timer as we cannot ensure the
+                 * request is retried for the duration of
+                 * `metadata.recovery.rebootstrap.trigger.ms`.
+                 *
+                 * Same reasoning applies when we use a custom callback, for the
+                 * AdminClient requests for example.
+                 *
+                 * Restart the rebootstrap timer only if it's the first
+                 * metadata refresh request after last successful response,
+                 * so the timer is not reset if already scheduled. */
+                rd_kafka_rebootstrap_tmr_restart(rkb->rkb_rk);
         }
-
 
         if (topic_cnt > 0) {
                 char *topic;

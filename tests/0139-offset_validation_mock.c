@@ -1114,13 +1114,13 @@ static void do_test_offset_validation_on_partition_assignment(
          * validation, otherwise there's a reprocessing. */
         test_consumer_poll("MSG_EOF", c1, testid, 1, 0, expected_msg_cnt, NULL);
 
-        // TEST_SAY("Pause and resume\n");
-        // /* Pause the consumer */
-        // test_consumer_pause_resume_partition(c1, topic, 0, rd_true);
-        // rd_usleep(1 * 1000, NULL);
-        // /* Resume the consumer, it should not validate the offset
-        //  * once more. */
-        // test_consumer_pause_resume_partition(c1, topic, 0, rd_false);
+        TEST_SAY("Pause and resume\n");
+        /* Pause the consumer */
+        test_consumer_pause_resume_partition(c1, topic, 0, rd_true);
+        rd_usleep(1 * 1000, NULL);
+        /* Resume the consumer, it should not validate the offset
+         * once more. */
+        test_consumer_pause_resume_partition(c1, topic, 0, rd_false);
 
         TEST_SAY("Await %" PRIusz " OffsetForLeaderEpoch requests\n",
                  expected_validation_requests);

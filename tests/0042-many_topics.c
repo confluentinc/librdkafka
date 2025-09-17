@@ -239,6 +239,12 @@ int main_0042_many_topics(int argc, char **argv) {
                 test_create_topic_if_auto_create_disabled(NULL, topics[i], -1);
         }
 
+        /* Wait for all topics to exist in metadata - K2 timing fix */
+        for (i = 0; i < topic_cnt; i++) {
+                test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
+        }
+        rd_sleep(test_k2_cluster ? 5 : 2);
+
         produce_many(topics, topic_cnt, testid);
         legacy_consume_many(topics, topic_cnt, testid);
         if (test_broker_version >= TEST_BRKVER(0, 9, 0, 0)) {

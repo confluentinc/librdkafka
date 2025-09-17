@@ -3038,22 +3038,28 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_AlterUserScramCredentials("main queue", rk, mainq);
         do_test_AlterUserScramCredentials("temp queue", rk, NULL);
 
-        do_test_ElectLeaders("main queue, options, Preffered Elections", rk,
-                             mainq, 1, RD_KAFKA_ELECTION_TYPE_PREFERRED);
-        do_test_ElectLeaders("main queue, options, Unclean Elections", rk,
-                             mainq, 1, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
-        do_test_ElectLeaders("main queue, no options, Preffered Elections", rk,
-                             mainq, 0, RD_KAFKA_ELECTION_TYPE_PREFERRED);
-        do_test_ElectLeaders("main queue, no options, Unclean Elections", rk,
-                             mainq, 0, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
-        do_test_ElectLeaders("temp queue, options, Preffered Elections", rk,
-                             NULL, 1, RD_KAFKA_ELECTION_TYPE_PREFERRED);
-        do_test_ElectLeaders("temp queue, options, Unclean Elections", rk, NULL,
-                             1, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
-        do_test_ElectLeaders("temp queue, no options, Preffered Elections", rk,
-                             NULL, 0, RD_KAFKA_ELECTION_TYPE_PREFERRED);
-        do_test_ElectLeaders("temp queue, no options, Unclean Elections", rk,
-                             NULL, 0, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+        /* ElectLeaders tests - requires librdkafka version > 2.5.3 and broker version >= 2.4.0 */
+        if (rd_kafka_version() > 0x02050300 && test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
+                do_test_ElectLeaders("main queue, options, Preffered Elections", rk,
+                                     mainq, 1, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+                do_test_ElectLeaders("main queue, options, Unclean Elections", rk,
+                                     mainq, 1, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+                do_test_ElectLeaders("main queue, no options, Preffered Elections", rk,
+                                     mainq, 0, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+                do_test_ElectLeaders("main queue, no options, Unclean Elections", rk,
+                                     mainq, 0, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+                do_test_ElectLeaders("temp queue, options, Preffered Elections", rk,
+                                     NULL, 1, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+                do_test_ElectLeaders("temp queue, options, Unclean Elections", rk, NULL,
+                                     1, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+                do_test_ElectLeaders("temp queue, no options, Preffered Elections", rk,
+                                     NULL, 0, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+                do_test_ElectLeaders("temp queue, no options, Unclean Elections", rk,
+                                     NULL, 0, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+        } else {
+                TEST_SAY("SKIPPING: ElectLeaders tests - requires librdkafka version > 2.5.3 and broker version >= 2.4.0 (current librdkafka: 0x%08x)\n", 
+                         rd_kafka_version());
+        }
 
         do_test_mix(rk, mainq);
 

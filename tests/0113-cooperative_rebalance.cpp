@@ -3251,15 +3251,16 @@ static void v_rebalance_cb(rd_kafka_t *rk,
     if (!*auto_commitp) {
       rd_kafka_resp_err_t commit_err;
 
-      TEST_SAY("Attempting manual commit after unassign, in 2 seconds..\n");
+      TEST_SAY("Attempting manual commit after unassign, in %d seconds..\n", 
+               test_k2_cluster ? 3 : 2);
       /* Sleep enough to have the generation-id bumped by rejoin. */
-      rd_sleep(2);
+      rd_sleep(test_k2_cluster ? 3 : 2);
       commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/);
-      TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
-                      commit_err == RD_KAFKA_RESP_ERR__DESTROY ||
-                      commit_err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
-                  "%s: manual commit failed: %s", rd_kafka_name(rk),
-                  rd_kafka_err2str(commit_err));
+              TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
+                        commit_err == RD_KAFKA_RESP_ERR__DESTROY ||
+                        commit_err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                    "%s: manual commit failed: %s", rd_kafka_name(rk),
+                    rd_kafka_err2str(commit_err));
     }
 
     /* Unassign must be done after manual commit. */
@@ -3369,8 +3370,8 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
   for (i = 0; i < 10; i++) {
     int poll_result1, poll_result2;
     do {
-      poll_result1 = test_consumer_poll_once(c1, NULL, 1000);
-      poll_result2 = test_consumer_poll_once(c2, NULL, 1000);
+      poll_result1 = test_consumer_poll_once(c1, NULL, test_k2_cluster ? 5000 : 1000);
+      poll_result2 = test_consumer_poll_once(c2, NULL, test_k2_cluster ? 5000 : 1000);
 
       if (poll_result1 == 1 && !auto_commit) {
         rd_kafka_resp_err_t err;
@@ -3379,6 +3380,9 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
         TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
                     "Expected not error or ILLEGAL_GENERATION, got: %s",
                     rd_kafka_err2str(err));
+        if (test_k2_cluster) {
+          rd_sleep(5); 
+        }
       }
     } while (poll_result1 == 0 || poll_result2 == 0);
   }

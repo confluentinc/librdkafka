@@ -5804,14 +5804,19 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 TEST_SAY("SKIPPING: DeleteRecords tests - not supported in K2/cloud environments\n");
         }
         /* List groups */
-        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,
-                                   rd_true);
-        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,
-                                   rd_false);
-        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
-                                   rd_true);
-        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
-                                   rd_false);
+        if (rd_kafka_version() > 0x02050300) {  /* Only run if librdkafka version > 2.5.3 */
+                do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,
+                                           rd_true);
+                do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,
+                                           rd_false);
+                do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
+                                           rd_true);
+                do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
+                                           rd_false);
+        } else {
+                TEST_SAY("SKIPPING: ListConsumerGroups tests - requires librdkafka version > 2.5.3 (current: 0x%08x)\n", 
+                         rd_kafka_version());
+        }
 
         /* TODO: check this test after KIP-848 admin operation
          * implementation */

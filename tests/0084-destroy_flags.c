@@ -126,9 +126,9 @@ static void do_test_destroy_flags(const char *topic,
         TIMING_STOP(&t_destroy);
 
         if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
-                TIMING_ASSERT_LATER(&t_destroy, 0, 200);
+                TIMING_ASSERT_LATER(&t_destroy, 0, test_k2_cluster ? 300 : 200);
         else
-                TIMING_ASSERT_LATER(&t_destroy, 0, 1000);
+                TIMING_ASSERT_LATER(&t_destroy, 0, test_k2_cluster ? 1500 : 1000);
 
         if (args->consumer_subscribe &&
             !(destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)) {

@@ -53,6 +53,7 @@ static void do_test_clusterid(void) {
 
   /*
    * Create client with lacking protocol support.
+   * K2 clusters no longer support legacy protocol configurations
    */
   if (test_k2_cluster) {
     Test::Say("K2 cluster: Skipping legacy client test - api.version.request=false incompatible with SASL/SSL requirements\n");
@@ -129,17 +130,20 @@ static void do_test_controllerid(void) {
 
   /*
    * Create client with lacking protocol support.
+   * K2 clusters no longer support legacy protocol configurations (July/August 2025)
    */
+  RdKafka::Producer *p_bad = NULL;
   if (test_k2_cluster) {
-    Test::Say("K2 cluster: Skipping legacy client test - api.version.request=false incompatible with SASL/SSL requirements\n");
+    Test::Say("K2 cluster: Skipping legacy client test - api.version.request=false and broker.version.fallback removed in K2 security hardening\n");
   } else {
     Test::conf_init(&conf, NULL, 10);
     Test::conf_set(conf, "api.version.request", "false");
     Test::conf_set(conf, "broker.version.fallback", "0.9.0");
-    RdKafka::Producer *p_bad = RdKafka::Producer::create(conf, errstr);
+    p_bad = RdKafka::Producer::create(conf, errstr);
     if (!p_bad)
       Test::Fail("Failed to create client: " + errstr);
     delete conf;
+  }
 
     /*
      * good producer, give the first call a timeout to allow time
@@ -162,9 +166,10 @@ static void do_test_controllerid(void) {
       Test::Fail(tostr() << "Good Controllerid mismatch: " << controllerid_good_1
                          << " != " << controllerid_good_2);
 
-    /*
-     * Try bad producer, should return -1
-     */
+  /*
+   * Try bad producer, should return -1
+   */
+  if (!test_k2_cluster) {
     int32_t controllerid_bad_1 = p_bad->controllerid(tmout_multip(2000));
     if (controllerid_bad_1 != -1)
       Test::Fail(
@@ -174,11 +179,11 @@ static void do_test_controllerid(void) {
     if (controllerid_bad_2 != -1)
       Test::Fail(tostr() << "bad producer(0): Controllerid should be -1, not "
                          << controllerid_bad_2);
-
-    delete p_bad;
   }
 
   delete p_good;
+  if (p_bad)
+    delete p_bad;
 }
 
 extern "C" {

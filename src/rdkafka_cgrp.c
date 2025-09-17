@@ -2958,8 +2958,8 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
 
                 if (!partition_found && topic_name != NULL)
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
-                                     "Found new partition for topic %s. "
-                                     "Updating metadata.",
+                                     "Found new partition for topic \"%s\". "
+                                     "Updating metadata",
                                      topic_name);
 
                 if (missing_topic_ids) {

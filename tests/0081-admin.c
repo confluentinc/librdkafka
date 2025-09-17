@@ -3431,16 +3431,18 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     rd_kafka_ConsumerGroupDescription_error(act));
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(act);
-                const rd_kafka_AclOperation_t *authorized_operations =
-                    rd_kafka_ConsumerGroupDescription_authorized_operations(
-                        act, &authorized_operation_cnt);
-                TEST_ASSERT(
-                    authorized_operation_cnt == 0,
-                    "Authorized operation count should be 0, is %" PRIusz,
-                    authorized_operation_cnt);
-                TEST_ASSERT(
-                    authorized_operations == NULL,
-                    "Authorized operations should be NULL when not requested");
+                if (rd_kafka_version() >= 0x02020000) {  /* authorized_operations available since librdkafka 2.2.0 */
+                        const rd_kafka_AclOperation_t *authorized_operations =
+                            rd_kafka_ConsumerGroupDescription_authorized_operations(
+                                act, &authorized_operation_cnt);
+                        TEST_ASSERT(
+                            authorized_operation_cnt == 0,
+                            "Authorized operation count should be 0, is %" PRIusz,
+                            authorized_operation_cnt);
+                        TEST_ASSERT(
+                            authorized_operations == NULL,
+                            "Authorized operations should be NULL when not requested");
+                }
                 TEST_ASSERT(
                     strcmp(exp->group_id,
                            rd_kafka_ConsumerGroupDescription_group_id(act)) ==
@@ -3646,284 +3648,291 @@ static void do_test_DescribeTopics(const char *what,
                 rd_strdupa(&topic_names[i],
                            test_mk_topic_name(__FUNCTION__, 1));
         }
-        topics = rd_kafka_TopicCollection_of_topic_names(
-            (const char **)topic_names, TEST_DESCRIBE_TOPICS_CNT);
-        empty_topics = rd_kafka_TopicCollection_of_topic_names(NULL, 0);
+        if (rd_kafka_version() >= 0x02020100) {  /* DescribeTopics available since librdkafka 2.2.1 */
+            topics = rd_kafka_TopicCollection_of_topic_names(
+                (const char **)topic_names, TEST_DESCRIBE_TOPICS_CNT);
+            empty_topics = rd_kafka_TopicCollection_of_topic_names(NULL, 0);
 
-        test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);
+            test_CreateTopics_simple(rk, NULL, topic_names, 1, 1, NULL);
 
-        /* Wait for topic metadata to propagate before describing topics.*/
-        {
-                rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
-                test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
-        }
+            /* Wait for topic metadata to propagate before describing topics.*/
+            {
+                    rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
+                    test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
+            }
 
-        /* K2: Additional metadata wait for DescribeTopics API consistency */
-        if (test_k2_cluster) {
-                rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
-                test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(3000));
-                rd_sleep(2);
-        }
+            /* K2: Additional metadata wait for DescribeTopics API consistency */
+            if (test_k2_cluster) {
+                    rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
+                    test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(3000));
+                    rd_sleep(2);
+            }
 
-        options =
-            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
-        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
-            options, request_timeout, errstr, sizeof(errstr)));
-        TEST_CALL_ERROR__(
-            rd_kafka_AdminOptions_set_include_authorized_operations(
-                options, include_authorized_operations));
+            options =
+                rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
+            TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                options, request_timeout, errstr, sizeof(errstr)));
+            TEST_CALL_ERROR__(
+                rd_kafka_AdminOptions_set_include_authorized_operations(
+                    options, include_authorized_operations));
 
-        /* Call DescribeTopics with empty topics. */
-        TIMING_START(&timing, "DescribeTopics empty");
-        rd_kafka_DescribeTopics(rk, empty_topics, options, q);
-        TIMING_ASSERT_LATER(&timing, 0, 50);
+            /* Call DescribeTopics with empty topics. */
+            TIMING_START(&timing, "DescribeTopics empty");
+            rd_kafka_DescribeTopics(rk, empty_topics, options, q);
+            TIMING_ASSERT_LATER(&timing, 0, 50);
 
-        /* Check DescribeTopics results. */
-        /* Use reasonable timeout for K2 environments */
-        int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
-        rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                      describe_timeout);
-        TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
+            /* Check DescribeTopics results. */
+            /* Use reasonable timeout for K2 environments */
+            int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
+            rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
+                                        describe_timeout);
+            TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
-        /* Extract result. */
-        res = rd_kafka_event_DescribeTopics_result(rkev);
-        TEST_ASSERT(res, "Expected DescribeTopics result, not %s",
-                    rd_kafka_event_name(rkev));
+            /* Extract result. */
+            res = rd_kafka_event_DescribeTopics_result(rkev);
+            TEST_ASSERT(res, "Expected DescribeTopics result, not %s",
+                        rd_kafka_event_name(rkev));
 
-        err     = rd_kafka_event_error(rkev);
-        errstr2 = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(!err, "Expected success, not %s: %s",
-                    rd_kafka_err2name(err), errstr2);
+            err     = rd_kafka_event_error(rkev);
+            errstr2 = rd_kafka_event_error_string(rkev);
+            TEST_ASSERT(!err, "Expected success, not %s: %s",
+                        rd_kafka_err2name(err), errstr2);
 
-        result_topics =
-            rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
+            result_topics =
+                rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
 
-        /* Check no result is received. */
-        TEST_ASSERT((int)result_topics_cnt == 0,
-                    "Expected 0 topics in result, got %d",
-                    (int)result_topics_cnt);
+            /* Check no result is received. */
+            TEST_ASSERT((int)result_topics_cnt == 0,
+                        "Expected 0 topics in result, got %d",
+                        (int)result_topics_cnt);
 
-        rd_kafka_event_destroy(rkev);
+            rd_kafka_event_destroy(rkev);
 
-        /* Call DescribeTopics with all of them. */
-        TIMING_START(&timing, "DescribeTopics all");
-        rd_kafka_DescribeTopics(rk, topics, options, q);
-        TIMING_ASSERT_LATER(&timing, 0, 50);
+            /* Call DescribeTopics with all of them. */
+            TIMING_START(&timing, "DescribeTopics all");
+            rd_kafka_DescribeTopics(rk, topics, options, q);
+            TIMING_ASSERT_LATER(&timing, 0, 50);
 
-        /* Check DescribeTopics results. */
-        /* Use reasonable timeout for K2 environments */
-        describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
-        rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                      describe_timeout);
-        TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
+            /* Check DescribeTopics results. */
+            /* Use reasonable timeout for K2 environments */
+            describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
+            rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
+                                        describe_timeout);
+            TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
-        /* Extract result. */
-        res = rd_kafka_event_DescribeTopics_result(rkev);
-        TEST_ASSERT(res, "Expected DescribeTopics result, not %s",
-                    rd_kafka_event_name(rkev));
+            /* Extract result. */
+            res = rd_kafka_event_DescribeTopics_result(rkev);
+            TEST_ASSERT(res, "Expected DescribeTopics result, not %s",
+                        rd_kafka_event_name(rkev));
 
-        err     = rd_kafka_event_error(rkev);
-        errstr2 = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(!err, "Expected success, not %s: %s",
-                    rd_kafka_err2name(err), errstr2);
+            err     = rd_kafka_event_error(rkev);
+            errstr2 = rd_kafka_event_error_string(rkev);
+            TEST_ASSERT(!err, "Expected success, not %s: %s",
+                        rd_kafka_err2name(err), errstr2);
 
-        result_topics =
-            rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
+            result_topics =
+                rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
 
-        /* Check if results have been received for all topics. */
-        TEST_ASSERT((int)result_topics_cnt == TEST_DESCRIBE_TOPICS_CNT,
-                    "Expected %d topics in result, got %d",
-                    TEST_DESCRIBE_TOPICS_CNT, (int)result_topics_cnt);
+            /* Check if results have been received for all topics. */
+            TEST_ASSERT((int)result_topics_cnt == TEST_DESCRIBE_TOPICS_CNT,
+                        "Expected %d topics in result, got %d",
+                        TEST_DESCRIBE_TOPICS_CNT, (int)result_topics_cnt);
 
-        /* Check if topics[0] succeeded. */
-        error = rd_kafka_TopicDescription_error(result_topics[0]);
-        if (test_k2_cluster && rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+            /* Check if topics[0] succeeded. */
+            error = rd_kafka_TopicDescription_error(result_topics[0]);
+            if (test_k2_cluster && rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+            } else {
+                    TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                "Expected no error, not %s\n",
+                                rd_kafka_error_string(error));
+            }
+
+            /*
+            * Check whether the topics which are non-existent have
+            * RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART error.
+            */
+            for (i = 1; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
+                    error = rd_kafka_TopicDescription_error(result_topics[i]);
+                    TEST_ASSERT(rd_kafka_error_code(error) ==
+                                    RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+                                "Expected unknown Topic or partition, not %s\n",
+                                rd_kafka_error_string(error));
+            }
+
+            /* Check fields inside the first (existent) topic. */
+            TEST_ASSERT(strcmp(rd_kafka_TopicDescription_name(result_topics[0]),
+                            topic_names[0]) == 0,
+                        "Expected topic name %s, got %s", topic_names[0],
+                        rd_kafka_TopicDescription_name(result_topics[0]));
+
+            topic_id = rd_kafka_TopicDescription_topic_id(result_topics[0]);
+
+            TEST_ASSERT(topic_id, "Expected Topic Id to present.");
+
+            partitions = rd_kafka_TopicDescription_partitions(result_topics[0],
+                                                            &partitions_cnt);
+
+            TEST_ASSERT(partitions_cnt == 1, "Expected %d partitions, got %" PRIusz,
+                        1, partitions_cnt);
+
+            TEST_ASSERT(rd_kafka_TopicPartitionInfo_partition(partitions[0]) == 0,
+                        "Expected partion id to be %d, got %d", 0,
+                        rd_kafka_TopicPartitionInfo_partition(partitions[0]));
+
+            authorized_operations = rd_kafka_TopicDescription_authorized_operations(
+                result_topics[0], &authorized_operations_cnt);
+            if (include_authorized_operations) {
+                    const rd_kafka_AclOperation_t expected[] = {
+                        RD_KAFKA_ACL_OPERATION_ALTER,
+                        RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS,
+                        RD_KAFKA_ACL_OPERATION_CREATE,
+                        RD_KAFKA_ACL_OPERATION_DELETE,
+                        RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                        RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
+                        RD_KAFKA_ACL_OPERATION_READ,
+                        RD_KAFKA_ACL_OPERATION_WRITE};
+
+                    test_match_authorized_operations(expected, 8,
+                                                    authorized_operations,
+                                                    authorized_operations_cnt);
+            } else {
+                    TEST_ASSERT(
+                        authorized_operations_cnt == 0,
+                        "Authorized operation count should be 0, is %" PRIusz,
+                        authorized_operations_cnt);
+                    TEST_ASSERT(
+                        authorized_operations == NULL,
+                        "Authorized operations should be NULL when not requested");
+            }
+
+            rd_kafka_AdminOptions_destroy(options);
+            rd_kafka_event_destroy(rkev);
+
+            /* If we don't have authentication/authorization set up in our
+            * broker, the following test doesn't make sense, since we're
+            * testing ACLs and authorized operations for our principal. The
+            * same goes for `include_authorized_operations`, if it's not
+            * true, it doesn't make sense to change the ACLs and check. We
+            * limit ourselves to SASL_PLAIN and SASL_SCRAM.*/
+            if (!test_needs_auth() || !include_authorized_operations)
+                    goto done;
+
+            sasl_mechanism = test_conf_get(NULL, "sasl.mechanism");
+            if (strcmp(sasl_mechanism, "PLAIN") != 0 &&
+                strncmp(sasl_mechanism, "SCRAM", 5) != 0)
+                    goto done;
+
+            sasl_username = test_conf_get(NULL, "sasl.username");
+            principal     = tsprintf("User:%s", sasl_username);
+
+            /* Change authorized operations for the principal which we're
+            * using to connect to the broker. */
+            acl_bindings[0] = rd_kafka_AclBinding_new(
+                RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
+                RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
+                RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
+                NULL, 0);
+            TEST_CALL_ERR__(
+                test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL));
+            rd_kafka_AclBinding_destroy(acl_bindings[0]);
+
+            /* Wait for ACL propagation. */
+            /* Use reasonable timeout for K2 environments */
+            int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2);
+            TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
+            rd_sleep(acl_propagation_sleep);
+
+            /* Call DescribeTopics. */
+            options =
+                rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
+            TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                options, request_timeout, errstr, sizeof(errstr)));
+            TEST_CALL_ERROR__(
+                rd_kafka_AdminOptions_set_include_authorized_operations(options,
+                                                                        1));
+
+            TIMING_START(&timing, "DescribeTopics");
+            rd_kafka_DescribeTopics(rk, topics, options, q);
+            TIMING_ASSERT_LATER(&timing, 0, 50);
+            rd_kafka_AdminOptions_destroy(options);
+
+            /* Check DescribeTopics results. */
+            describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
+            rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
+                                        describe_timeout);
+            TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
+
+            /* Extract result. */
+            res = rd_kafka_event_DescribeTopics_result(rkev);
+            TEST_ASSERT(res, "Expected DescribeTopics result, not %s",
+                        rd_kafka_event_name(rkev));
+
+            err     = rd_kafka_event_error(rkev);
+            errstr2 = rd_kafka_event_error_string(rkev);
+            TEST_ASSERT(!err, "Expected success, not %s: %s",
+                        rd_kafka_err2name(err), errstr2);
+
+            result_topics =
+                rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
+
+            /* Check if results have been received for all topics. */
+            TEST_ASSERT((int)result_topics_cnt == TEST_DESCRIBE_TOPICS_CNT,
+                        "Expected %d topics in result, got %d",
+                        TEST_DESCRIBE_TOPICS_CNT, (int)result_topics_cnt);
+
+            /* Check if topics[0] succeeded. */
+            error = rd_kafka_TopicDescription_error(result_topics[0]);
+            TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                        "Expected no error, not %s\n",
+                        rd_kafka_error_string(error));
+
+            /* Check if ACLs changed. */
+            {
+                    const rd_kafka_AclOperation_t expected[] = {
+                        RD_KAFKA_ACL_OPERATION_READ,
+                        RD_KAFKA_ACL_OPERATION_DESCRIBE};
+                    authorized_operations =
+                        rd_kafka_TopicDescription_authorized_operations(
+                            result_topics[0], &authorized_operations_cnt);
+
+                    test_match_authorized_operations(expected, 2,
+                                                    authorized_operations,
+                                                    authorized_operations_cnt);
+            }
+            rd_kafka_event_destroy(rkev);
+
+            /*
+            * Remove create ACLs to allow deletion
+            * of the created topic.
+            */
+            acl_bindings[0] = rd_kafka_AclBinding_new(
+                RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
+                RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
+                RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
+                NULL, 0);
+            TEST_CALL_ERR__(
+                test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL));
+            rd_kafka_AclBinding_destroy(acl_bindings[0]);
+
+            /* Wait for ACL propagation. */
+            /* Use reasonable timeout for K2 environments */
+            int acl_cleanup_sleep = test_k2_cluster ? 5 : tmout_multip(2);
+            TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_cleanup_sleep);
+            rd_sleep(acl_cleanup_sleep);
         } else {
-                TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Expected no error, not %s\n",
-                            rd_kafka_error_string(error));
+                TEST_SAY("SKIPPING: DescribeTopics function - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                         rd_kafka_version());
         }
-
-        /*
-         * Check whether the topics which are non-existent have
-         * RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART error.
-         */
-        for (i = 1; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
-                error = rd_kafka_TopicDescription_error(result_topics[i]);
-                TEST_ASSERT(rd_kafka_error_code(error) ==
-                                RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
-                            "Expected unknown Topic or partition, not %s\n",
-                            rd_kafka_error_string(error));
-        }
-
-        /* Check fields inside the first (existent) topic. */
-        TEST_ASSERT(strcmp(rd_kafka_TopicDescription_name(result_topics[0]),
-                           topic_names[0]) == 0,
-                    "Expected topic name %s, got %s", topic_names[0],
-                    rd_kafka_TopicDescription_name(result_topics[0]));
-
-        topic_id = rd_kafka_TopicDescription_topic_id(result_topics[0]);
-
-        TEST_ASSERT(topic_id, "Expected Topic Id to present.");
-
-        partitions = rd_kafka_TopicDescription_partitions(result_topics[0],
-                                                          &partitions_cnt);
-
-        TEST_ASSERT(partitions_cnt == 1, "Expected %d partitions, got %" PRIusz,
-                    1, partitions_cnt);
-
-        TEST_ASSERT(rd_kafka_TopicPartitionInfo_partition(partitions[0]) == 0,
-                    "Expected partion id to be %d, got %d", 0,
-                    rd_kafka_TopicPartitionInfo_partition(partitions[0]));
-
-        authorized_operations = rd_kafka_TopicDescription_authorized_operations(
-            result_topics[0], &authorized_operations_cnt);
-        if (include_authorized_operations) {
-                const rd_kafka_AclOperation_t expected[] = {
-                    RD_KAFKA_ACL_OPERATION_ALTER,
-                    RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_CREATE,
-                    RD_KAFKA_ACL_OPERATION_DELETE,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_READ,
-                    RD_KAFKA_ACL_OPERATION_WRITE};
-
-                test_match_authorized_operations(expected, 8,
-                                                 authorized_operations,
-                                                 authorized_operations_cnt);
-        } else {
-                TEST_ASSERT(
-                    authorized_operations_cnt == 0,
-                    "Authorized operation count should be 0, is %" PRIusz,
-                    authorized_operations_cnt);
-                TEST_ASSERT(
-                    authorized_operations == NULL,
-                    "Authorized operations should be NULL when not requested");
-        }
-
-        rd_kafka_AdminOptions_destroy(options);
-        rd_kafka_event_destroy(rkev);
-
-        /* If we don't have authentication/authorization set up in our
-         * broker, the following test doesn't make sense, since we're
-         * testing ACLs and authorized operations for our principal. The
-         * same goes for `include_authorized_operations`, if it's not
-         * true, it doesn't make sense to change the ACLs and check. We
-         * limit ourselves to SASL_PLAIN and SASL_SCRAM.*/
-        if (!test_needs_auth() || !include_authorized_operations)
-                goto done;
-
-        sasl_mechanism = test_conf_get(NULL, "sasl.mechanism");
-        if (strcmp(sasl_mechanism, "PLAIN") != 0 &&
-            strncmp(sasl_mechanism, "SCRAM", 5) != 0)
-                goto done;
-
-        sasl_username = test_conf_get(NULL, "sasl.username");
-        principal     = tsprintf("User:%s", sasl_username);
-
-        /* Change authorized operations for the principal which we're
-         * using to connect to the broker. */
-        acl_bindings[0] = rd_kafka_AclBinding_new(
-            RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
-            RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
-            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
-            NULL, 0);
-        TEST_CALL_ERR__(
-            test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL));
-        rd_kafka_AclBinding_destroy(acl_bindings[0]);
-
-        /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
-        rd_sleep(acl_propagation_sleep);
-
-        /* Call DescribeTopics. */
-        options =
-            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
-        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
-            options, request_timeout, errstr, sizeof(errstr)));
-        TEST_CALL_ERROR__(
-            rd_kafka_AdminOptions_set_include_authorized_operations(options,
-                                                                    1));
-
-        TIMING_START(&timing, "DescribeTopics");
-        rd_kafka_DescribeTopics(rk, topics, options, q);
-        TIMING_ASSERT_LATER(&timing, 0, 50);
-        rd_kafka_AdminOptions_destroy(options);
-
-        /* Check DescribeTopics results. */
-        describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
-        rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                      describe_timeout);
-        TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
-
-        /* Extract result. */
-        res = rd_kafka_event_DescribeTopics_result(rkev);
-        TEST_ASSERT(res, "Expected DescribeTopics result, not %s",
-                    rd_kafka_event_name(rkev));
-
-        err     = rd_kafka_event_error(rkev);
-        errstr2 = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(!err, "Expected success, not %s: %s",
-                    rd_kafka_err2name(err), errstr2);
-
-        result_topics =
-            rd_kafka_DescribeTopics_result_topics(res, &result_topics_cnt);
-
-        /* Check if results have been received for all topics. */
-        TEST_ASSERT((int)result_topics_cnt == TEST_DESCRIBE_TOPICS_CNT,
-                    "Expected %d topics in result, got %d",
-                    TEST_DESCRIBE_TOPICS_CNT, (int)result_topics_cnt);
-
-        /* Check if topics[0] succeeded. */
-        error = rd_kafka_TopicDescription_error(result_topics[0]);
-        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Expected no error, not %s\n",
-                    rd_kafka_error_string(error));
-
-        /* Check if ACLs changed. */
-        {
-                const rd_kafka_AclOperation_t expected[] = {
-                    RD_KAFKA_ACL_OPERATION_READ,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE};
-                authorized_operations =
-                    rd_kafka_TopicDescription_authorized_operations(
-                        result_topics[0], &authorized_operations_cnt);
-
-                test_match_authorized_operations(expected, 2,
-                                                 authorized_operations,
-                                                 authorized_operations_cnt);
-        }
-        rd_kafka_event_destroy(rkev);
-
-        /*
-         * Remove create ACLs to allow deletion
-         * of the created topic.
-         */
-        acl_bindings[0] = rd_kafka_AclBinding_new(
-            RD_KAFKA_RESOURCE_TOPIC, topic_names[0],
-            RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, "*",
-            RD_KAFKA_ACL_OPERATION_READ, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
-            NULL, 0);
-        TEST_CALL_ERR__(
-            test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL));
-        rd_kafka_AclBinding_destroy(acl_bindings[0]);
-
-        /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_cleanup_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_cleanup_sleep);
-        rd_sleep(acl_cleanup_sleep);
 
 done:
         test_DeleteTopics_simple(rk, NULL, topic_names, 1, NULL);
         if (!rkqu)
                 rd_kafka_queue_destroy(q);
 
-        rd_kafka_TopicCollection_destroy(topics);
-        rd_kafka_TopicCollection_destroy(empty_topics);
+        if (rd_kafka_version() >= 0x02020100) {
+                rd_kafka_TopicCollection_destroy(topics);
+                rd_kafka_TopicCollection_destroy(empty_topics);
+        }
 
 
         TEST_LATER_CHECK();
@@ -3974,9 +3983,11 @@ static void do_test_DescribeCluster(const char *what,
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER);
         TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
             options, request_timeout, errstr, sizeof(errstr)));
-        TEST_CALL_ERROR__(
-            rd_kafka_AdminOptions_set_include_authorized_operations(
-                options, include_authorized_operations));
+        if (rd_kafka_version() >= 0x02020100) {  /* include_authorized_operations available since librdkafka 2.2.1 */
+                TEST_CALL_ERROR__(
+                    rd_kafka_AdminOptions_set_include_authorized_operations(
+                        options, include_authorized_operations));
+        }
 
         TIMING_START(&timing, "DescribeCluster");
         rd_kafka_DescribeCluster(rk, options, q);
@@ -4267,17 +4278,19 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                     RD_KAFKA_ACL_OPERATION_READ,
                     RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
                     RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS};
-                authorized_operations =
-                    rd_kafka_ConsumerGroupDescription_authorized_operations(
-                        results[0], &authorized_operations_cnt);
-                if (test_broker_version < TEST_BRKVER(4, 0, 0, 0))
-                        test_match_authorized_operations(
-                            expected_ak3, 3, authorized_operations,
-                            authorized_operations_cnt);
-                else
-                        test_match_authorized_operations(
-                            expected_ak4, 5, authorized_operations,
-                            authorized_operations_cnt);
+                if (rd_kafka_version() >= 0x02020100) {  /* authorized_operations available since librdkafka 2.2.1 */
+                        authorized_operations =
+                            rd_kafka_ConsumerGroupDescription_authorized_operations(
+                                results[0], &authorized_operations_cnt);
+                        if (test_broker_version < TEST_BRKVER(4, 0, 0, 0))
+                                test_match_authorized_operations(
+                                    expected_ak3, 3, authorized_operations,
+                                    authorized_operations_cnt);
+                        else
+                                test_match_authorized_operations(
+                                    expected_ak4, 5, authorized_operations,
+                                    authorized_operations_cnt);
+                }
         }
 
         rd_kafka_event_destroy(rkev);
@@ -4339,16 +4352,18 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                     rd_kafka_error_string(error));
 
 
-        {
-                const rd_kafka_AclOperation_t expected[] = {
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
-                    RD_KAFKA_ACL_OPERATION_READ};
-                authorized_operations =
-                    rd_kafka_ConsumerGroupDescription_authorized_operations(
-                        results[0], &authorized_operations_cnt);
-                test_match_authorized_operations(expected, 2,
-                                                 authorized_operations,
-                                                 authorized_operations_cnt);
+        if (rd_kafka_version() >= 0x02020100) {  /* authorized_operations available since librdkafka 2.2.1 */
+                {
+                        const rd_kafka_AclOperation_t expected[] = {
+                            RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                            RD_KAFKA_ACL_OPERATION_READ};
+                        authorized_operations =
+                            rd_kafka_ConsumerGroupDescription_authorized_operations(
+                                results[0], &authorized_operations_cnt);
+                        test_match_authorized_operations(expected, 2,
+                                                         authorized_operations,
+                                                         authorized_operations_cnt);
+                }
         }
 
         rd_kafka_event_destroy(rkev);
@@ -5826,26 +5841,38 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
         }
 
-        /* Describe topics */
-        do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_false);
-        do_test_DescribeTopics("main queue", rk, mainq, 15000, rd_false);
+        if (rd_kafka_version() >= 0x02020100) {  /* DescribeTopics available since librdkafka 2.2.1 */
+                do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_false);
+                do_test_DescribeTopics("main queue", rk, mainq, 15000, rd_false);
+        } else {
+                TEST_SAY("SKIPPING: DescribeTopics tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
 
-        /* Describe cluster */
-        do_test_DescribeCluster("temp queue", rk, NULL, 1500, rd_false);
-        do_test_DescribeCluster("main queue", rk, mainq, 1500, rd_false);
+        if (rd_kafka_version() >= 0x02020100) {  /* DescribeCluster available since librdkafka 2.2.1 */
+                do_test_DescribeCluster("temp queue", rk, NULL, 1500, rd_false);
+                do_test_DescribeCluster("main queue", rk, mainq, 1500, rd_false);
+        } else {
+                TEST_SAY("SKIPPING: DescribeCluster tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
 
         if (test_broker_version >= TEST_BRKVER(2, 3, 0, 0)) {
-                /* Describe topics */
-                do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_true);
-                do_test_DescribeTopics("main queue", rk, mainq, 15000, rd_true);
+                if (rd_kafka_version() >= 0x02020100) {  /* DescribeTopics with authorized ops available since librdkafka 2.2.1 */
+                        do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_true);
+                        do_test_DescribeTopics("main queue", rk, mainq, 15000, rd_true);
 
-                do_test_DescribeCluster("temp queue", rk, NULL, 1500, rd_true);
-                do_test_DescribeCluster("main queue", rk, mainq, 1500, rd_true);
+                        do_test_DescribeCluster("temp queue", rk, NULL, 1500, rd_true);
+                        do_test_DescribeCluster("main queue", rk, mainq, 1500, rd_true);
 
-                do_test_DescribeConsumerGroups_with_authorized_ops(
-                    "temp queue", rk, NULL, 1500);
-                do_test_DescribeConsumerGroups_with_authorized_ops(
-                    "main queue", rk, mainq, 1500);
+                        do_test_DescribeConsumerGroups_with_authorized_ops(
+                            "temp queue", rk, NULL, 1500);
+                        do_test_DescribeConsumerGroups_with_authorized_ops(
+                            "main queue", rk, mainq, 1500);
+                } else {
+                        TEST_SAY("SKIPPING: DescribeTopics/DescribeCluster/DescribeConsumerGroups with authorized ops tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                                 rd_kafka_version());
+                }
         }
 
         /* Delete groups */
@@ -5864,43 +5891,50 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         }
 
         if (test_broker_version >= TEST_BRKVER(2, 5, 0, 0)) {
-                /* ListOffsets */
-                do_test_ListOffsets("temp queue", rk, NULL, -1);
-                do_test_ListOffsets("main queue", rk, mainq, 1500);
+                if (rd_kafka_version() >= 0x02050000) {  /* ListOffsets and AlterConsumerGroupOffsets available since librdkafka 2.5.0 */
+                        do_test_ListOffsets("temp queue", rk, NULL, -1);
+                        do_test_ListOffsets("main queue", rk, mainq, 1500);
 
-                /* Alter committed offsets */
-                do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
-                                                  rd_false, rd_true);
-                do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
-                                                  rd_false, rd_true);
-                do_test_AlterConsumerGroupOffsets(
-                    "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
-                    rd_false /* don't create topics */);
+                        do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                          rd_false, rd_true);
+                        do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                          rd_false, rd_true);
+                        do_test_AlterConsumerGroupOffsets(
+                            "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
+                            rd_false);
 
-                do_test_AlterConsumerGroupOffsets(
-                    "main queue", rk, mainq, 1500,
-                    rd_true, /*with subscribing consumer*/
-                    rd_true);
+                        do_test_AlterConsumerGroupOffsets(
+                            "main queue", rk, mainq, 1500,
+                            rd_true,
+                            rd_true);
+                } else {
+                        TEST_SAY("SKIPPING: ListOffsets and AlterConsumerGroupOffsets tests - requires librdkafka version >= 2.5.0 (current: 0x%08x)\n",
+                                 rd_kafka_version());
+                }
         }
 
         if (test_broker_version >= TEST_BRKVER(2, 0, 0, 0)) {
-                /* List committed offsets */
-                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
-                                                 rd_false, rd_false);
-                do_test_ListConsumerGroupOffsets(
-                    "main queue, op timeout "
-                    "1500",
-                    rk, mainq, 1500, rd_false, rd_false);
-                do_test_ListConsumerGroupOffsets(
-                    "main queue", rk, mainq, 1500,
-                    rd_true /*with subscribing consumer*/, rd_false);
-                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
-                                                 rd_false, rd_true);
-                do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
-                                                 rd_false, rd_true);
-                do_test_ListConsumerGroupOffsets(
-                    "main queue", rk, mainq, 1500,
-                    rd_true /*with subscribing consumer*/, rd_true);
+                if (rd_kafka_version() >= 0x02020100) {  /* ListConsumerGroupOffsets available since librdkafka 2.2.1 */
+                        do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                         rd_false, rd_false);
+                        do_test_ListConsumerGroupOffsets(
+                            "main queue, op timeout "
+                            "1500",
+                            rk, mainq, 1500, rd_false, rd_false);
+                        do_test_ListConsumerGroupOffsets(
+                            "main queue", rk, mainq, 1500,
+                            rd_true, rd_false);
+                        do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                         rd_false, rd_true);
+                        do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                         rd_false, rd_true);
+                        do_test_ListConsumerGroupOffsets(
+                            "main queue", rk, mainq, 1500,
+                            rd_true, rd_true);
+                } else {
+                        TEST_SAY("SKIPPING: ListConsumerGroupOffsets tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                                 rd_kafka_version());
+                }
         }
 
         if (test_broker_version >= TEST_BRKVER(2, 7, 0, 0)) {

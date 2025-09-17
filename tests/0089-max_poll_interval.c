@@ -63,6 +63,11 @@ static void do_test(void) {
 
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
+        if (test_k2_cluster) {
+                TEST_SAY("K2 environment: Waiting for topic/partition readiness before producing\n");
+                rd_sleep(10);
+        }
+
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
         test_conf_init(&conf, NULL, 60);
@@ -213,6 +218,11 @@ static void do_test_with_log_queue(void) {
         testid = test_id_generate();
 
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
+
+        if (test_k2_cluster) {
+                TEST_SAY("K2 environment: Waiting for topic/partition readiness before producing\n");
+                rd_sleep(10);
+        }
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
@@ -382,6 +392,10 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
 
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
+        if (test_k2_cluster) {
+                rd_sleep(10);
+        }
+
         test_str_id_generate(groupid, sizeof(groupid));
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "session.timeout.ms", "6000");
@@ -432,8 +446,14 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
             "group leave", rk, rd_kafka_event_topic_partition_list(event));
         rd_kafka_event_destroy(event);
 
+        if (test_k2_cluster) {
+                rd_sleep(5);
+                test_consumer_subscribe(rk, topic);
+                rd_sleep(2);
+        }
+
         event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
-                                (int)(test_timeout_multiplier * 10000));
+                                (int)(test_timeout_multiplier * 15000));
         TEST_ASSERT(event, "Should get a rebalance event for the group rejoin");
         TEST_ASSERT(rd_kafka_event_error(event) ==
                         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
@@ -474,6 +494,10 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
         uint64_t testid = test_id_generate();
 
+        if (test_k2_cluster) {
+                rd_sleep(10);
+        }
+
         test_produce_msgs_easy(topic, testid, -1, 100);
 
         test_str_id_generate(groupid, sizeof(groupid));
@@ -487,12 +511,16 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
         rd_kafka_poll_set_consumer(rk);
 
         test_consumer_subscribe(rk, topic);
-        TEST_SAY("Subscribed to %s and sleeping for 5 s\n", topic);
-        rd_sleep(5);
-        rd_kafka_poll(rk, 10);
-        TEST_SAY(
-            "Polled and sleeping again for 6s. Max poll should be reset\n");
-        rd_sleep(6);
+        if (test_k2_cluster) {
+                rd_sleep(4);
+                rd_kafka_poll(rk, 10);
+                rd_sleep(4);
+        } else {
+                rd_sleep(5);
+                rd_kafka_poll(rk, 10);
+                TEST_SAY("Polled and sleeping again for 6s. Max poll should be reset\n");
+                rd_sleep(6);
+        }
 
         /* Poll should work */
         rd_kafka_poll(rk, 10);

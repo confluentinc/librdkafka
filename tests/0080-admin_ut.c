@@ -549,22 +549,24 @@ static void do_test_ListConsumerGroups(const char *what,
                             " got no error");
                 rd_kafka_error_destroy(error);
 
-                /* Test duplicate error on match group types */
-                error = rd_kafka_AdminOptions_set_match_consumer_group_types(
-                    options, duplicate_types, 2);
-                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
-                            "Expected error on duplicate group types,"
-                            " got no error");
-                rd_kafka_error_destroy(error);
+                if (rd_kafka_version() >= 0x02020100) {  /* consumer group types available since librdkafka 2.2.1 */
+                        /* Test duplicate error on match group types */
+                        error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                            options, duplicate_types, 2);
+                        TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                                    "Expected error on duplicate group types,"
+                                    " got no error");
+                        rd_kafka_error_destroy(error);
 
-                /* Test invalid args error on setting UNKNOWN group type in
-                 * match group types */
-                error = rd_kafka_AdminOptions_set_match_consumer_group_types(
-                    options, unknown_type, 1);
-                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
-                            "Expected error on Unknown group type,"
-                            " got no error");
-                rd_kafka_error_destroy(error);
+                        /* Test invalid args error on setting UNKNOWN group type in
+                         * match group types */
+                        error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                            options, unknown_type, 1);
+                        TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                                    "Expected error on Unknown group type,"
+                                    " got no error");
+                        rd_kafka_error_destroy(error);
+                }
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
@@ -681,16 +683,18 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
-                if ((error =
-                         rd_kafka_AdminOptions_set_include_authorized_operations(
-                             options, 0))) {
-                        fprintf(stderr,
-                                "%% Failed to set require authorized "
-                                "operations: %s\n",
-                                rd_kafka_error_string(error));
-                        rd_kafka_error_destroy(error);
-                        TEST_FAIL(
-                            "Failed to set include authorized operations\n");
+                if (rd_kafka_version() >= 0x02020100) {  /* authorized_operations available since librdkafka 2.2.1 */
+                        if ((error =
+                                 rd_kafka_AdminOptions_set_include_authorized_operations(
+                                     options, 0))) {
+                                fprintf(stderr,
+                                        "%% Failed to set require authorized "
+                                        "operations: %s\n",
+                                        rd_kafka_error_string(error));
+                                rd_kafka_error_destroy(error);
+                                TEST_FAIL(
+                                    "Failed to set include authorized operations\n");
+                        }
                 }
 
                 if (useq) {
@@ -822,8 +826,10 @@ static void do_test_DescribeTopics(const char *what,
                 topic_names[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         }
 
-        topics = rd_kafka_TopicCollection_of_topic_names(
-            topic_names, TEST_DESCRIBE_TOPICS_CNT);
+        if (rd_kafka_version() >= 0x02020100) {  /* TopicCollection available since librdkafka 2.2.1 */
+                topics = rd_kafka_TopicCollection_of_topic_names(
+                    topic_names, TEST_DESCRIBE_TOPICS_CNT);
+        }
 
         if (with_options) {
                 options = rd_kafka_AdminOptions_new(
@@ -833,16 +839,18 @@ static void do_test_DescribeTopics(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
-                if ((error =
-                         rd_kafka_AdminOptions_set_include_authorized_operations(
-                             options, 0))) {
-                        fprintf(stderr,
-                                "%% Failed to set topic authorized operations: "
-                                "%s\n",
-                                rd_kafka_error_string(error));
-                        rd_kafka_error_destroy(error);
-                        TEST_FAIL(
-                            "Failed to set topic authorized operations\n");
+                if (rd_kafka_version() >= 0x02020100) {  /* authorized_operations available since librdkafka 2.2.1 */
+                        if ((error =
+                                 rd_kafka_AdminOptions_set_include_authorized_operations(
+                                     options, 0))) {
+                                fprintf(stderr,
+                                        "%% Failed to set topic authorized operations: "
+                                        "%s\n",
+                                        rd_kafka_error_string(error));
+                                rd_kafka_error_destroy(error);
+                                TEST_FAIL(
+                                    "Failed to set topic authorized operations\n");
+                        }
                 }
 
                 if (useq) {
@@ -892,7 +900,9 @@ static void do_test_DescribeTopics(const char *what,
         for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
                 rd_free((char *)topic_names[i]);
         }
-        rd_kafka_TopicCollection_destroy(topics);
+        if (rd_kafka_version() >= 0x02020100) {  /* TopicCollection cleanup */
+                rd_kafka_TopicCollection_destroy(topics);
+        }
 
         if (options)
                 rd_kafka_AdminOptions_destroy(options);
@@ -939,16 +949,18 @@ static void do_test_DescribeCluster(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
-                if ((error =
-                         rd_kafka_AdminOptions_set_include_authorized_operations(
-                             options, 0))) {
-                        fprintf(stderr,
-                                "%% Failed to set cluster authorized "
-                                "operations: %s\n",
-                                rd_kafka_error_string(error));
-                        rd_kafka_error_destroy(error);
-                        TEST_FAIL(
-                            "Failed to set cluster authorized operations\n");
+                if (rd_kafka_version() >= 0x02020100) {  /* authorized_operations available since librdkafka 2.2.1 */
+                        if ((error =
+                                 rd_kafka_AdminOptions_set_include_authorized_operations(
+                                     options, 0))) {
+                                fprintf(stderr,
+                                        "%% Failed to set cluster authorized "
+                                        "operations: %s\n",
+                                        rd_kafka_error_string(error));
+                                rd_kafka_error_destroy(error);
+                                TEST_FAIL(
+                                    "Failed to set cluster authorized operations\n");
+                        }
                 }
 
                 if (useq) {
@@ -2973,13 +2985,23 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DescribeConsumerGroups("main queue, options", rk, mainq, 1,
                                        rd_false);
 
-        do_test_DescribeTopics("temp queue, no options", rk, NULL, 0);
-        do_test_DescribeTopics("temp queue, options", rk, NULL, 1);
-        do_test_DescribeTopics("main queue, options", rk, mainq, 1);
+        if (rd_kafka_version() >= 0x02020100) {  /* DescribeTopics available since librdkafka 2.2.1 */
+                do_test_DescribeTopics("temp queue, no options", rk, NULL, 0);
+                do_test_DescribeTopics("temp queue, options", rk, NULL, 1);
+                do_test_DescribeTopics("main queue, options", rk, mainq, 1);
+        } else {
+                TEST_SAY("SKIPPING: DescribeTopics tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
 
-        do_test_DescribeCluster("temp queue, no options", rk, NULL, 0);
-        do_test_DescribeCluster("temp queue, options", rk, NULL, 1);
-        do_test_DescribeCluster("main queue, options", rk, mainq, 1);
+        if (rd_kafka_version() >= 0x02020100) {  /* DescribeCluster available since librdkafka 2.2.1 */
+                do_test_DescribeCluster("temp queue, no options", rk, NULL, 0);
+                do_test_DescribeCluster("temp queue, options", rk, NULL, 1);
+                do_test_DescribeCluster("main queue, options", rk, mainq, 1);
+        } else {
+                TEST_SAY("SKIPPING: DescribeCluster tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
 
         do_test_DeleteGroups("temp queue, no options", rk, NULL, 0, rd_false);
         do_test_DeleteGroups("temp queue, options", rk, NULL, 1, rd_false);
@@ -3014,23 +3036,33 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteAcls("temp queue, options", rk, NULL, rd_false, rd_true);
         do_test_DeleteAcls("main queue, options", rk, mainq, rd_false, rd_true);
 
-        do_test_AlterConsumerGroupOffsets("temp queue, no options", rk, NULL,
-                                          0);
-        do_test_AlterConsumerGroupOffsets("temp queue, options", rk, NULL, 1);
-        do_test_AlterConsumerGroupOffsets("main queue, options", rk, mainq, 1);
+        if (rd_kafka_version() >= 0x02020100) {  /* AlterConsumerGroupOffsets available since librdkafka 2.2.1 */
+                do_test_AlterConsumerGroupOffsets("temp queue, no options", rk, NULL,
+                                                  0);
+                do_test_AlterConsumerGroupOffsets("temp queue, options", rk, NULL, 1);
+                do_test_AlterConsumerGroupOffsets("main queue, options", rk, mainq, 1);
+        } else {
+                TEST_SAY("SKIPPING: AlterConsumerGroupOffsets tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
 
-        do_test_ListConsumerGroupOffsets("temp queue, no options", rk, NULL, 0,
-                                         rd_false);
-        do_test_ListConsumerGroupOffsets("temp queue, options", rk, NULL, 1,
-                                         rd_false);
-        do_test_ListConsumerGroupOffsets("main queue, options", rk, mainq, 1,
-                                         rd_false);
-        do_test_ListConsumerGroupOffsets("temp queue, no options", rk, NULL, 0,
-                                         rd_true);
-        do_test_ListConsumerGroupOffsets("temp queue, options", rk, NULL, 1,
-                                         rd_true);
-        do_test_ListConsumerGroupOffsets("main queue, options", rk, mainq, 1,
-                                         rd_true);
+        if (rd_kafka_version() >= 0x02020100) {  /* ListConsumerGroupOffsets available since librdkafka 2.2.1 */
+                do_test_ListConsumerGroupOffsets("temp queue, no options", rk, NULL, 0,
+                                                 rd_false);
+                do_test_ListConsumerGroupOffsets("temp queue, options", rk, NULL, 1,
+                                                 rd_false);
+                do_test_ListConsumerGroupOffsets("main queue, options", rk, mainq, 1,
+                                                 rd_false);
+                do_test_ListConsumerGroupOffsets("temp queue, no options", rk, NULL, 0,
+                                                 rd_true);
+                do_test_ListConsumerGroupOffsets("temp queue, options", rk, NULL, 1,
+                                                 rd_true);
+                do_test_ListConsumerGroupOffsets("main queue, options", rk, mainq, 1,
+                                                 rd_true);
+        } else {
+                TEST_SAY("SKIPPING: ListConsumerGroupOffsets tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
 
         do_test_DescribeUserScramCredentials("main queue", rk, mainq);
         do_test_DescribeUserScramCredentials("temp queue", rk, NULL);

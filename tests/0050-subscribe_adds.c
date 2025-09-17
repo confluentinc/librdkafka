@@ -118,14 +118,14 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
         err = rd_kafka_subscribe(rk, tlist);
         TEST_ASSERT(!err, "subscribe() failed: %s", rd_kafka_err2str(err));
 
-        /* Only run test_consumer_poll_no_msgs if broker version > 2.3.0 */
-        if (test_broker_version > TEST_BRKVER(2, 3, 0, 0)) {
+        /* Only run test_consumer_poll_no_msgs if librdkafka version > 2.3.0 */
+        if (rd_kafka_version() > 0x02030000) {
                 if (test_k2_cluster) {
                         rd_sleep(5);
                 }
                 test_consumer_poll_no_msgs("consume", rk, testid, 5000);
         } else {
-                TEST_SAY("Skipping no-messages verification: requires broker version > 2.3.0\n");
+                TEST_SAY("Skipping no-messages verification: requires librdkafka version > 2.3.0\n");
         }
 
 

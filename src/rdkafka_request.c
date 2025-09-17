@@ -2620,6 +2620,7 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
         if (err)
                 goto err;
 
+        rd_kafka_rebootstrap_tmr_stop(rk);
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
@@ -2744,6 +2745,18 @@ done:
  *
  * @sa rd_kafka_MetadataRequest().
  * @sa rd_kafka_MetadataRequest_resp_cb().
+ *
+ * @locality any
+ * @locks none
+ * @locks_acquired
+ *  - mtx_lock(&rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock) in
+ *    this function
+ *  - rd_kafka_broker_lock() in
+ *    rd_kafka_broker_ApiVersion_supported()
+ *  - rd_kafka_timers_lock() in
+ *    rd_kafka_rebootstrap_tmr_start_maybe()
+ *  - mtx_lock(&rkq->rkq_lock) in
+ *    rd_kafka_broker_buf_enq_replyq()
  */
 static rd_kafka_resp_err_t
 rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
@@ -2877,8 +2890,27 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 rkbuf->rkbuf_u.Metadata.decr = full_incr;
                 rkbuf->rkbuf_u.Metadata.decr_lock =
                     &rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock;
+        } else if (!resp_cb) {
+                /*
+                 * Conditions for starting the rebootstrap timer:
+                 *
+                 * !full_incr:
+                 * In case it's a full request, forced or not, it won't be
+                 * retried on the same broker to avoid blocking metadata
+                 * requests, because of the lock, when that broker isn't
+                 * available. We don't start the timer as we cannot ensure the
+                 * request is retried for the duration of
+                 * `metadata.recovery.rebootstrap.trigger.ms`.
+                 *
+                 * !resp_cb:
+                 * Same reasoning applies when we use a custom callback, for the
+                 * AdminClient requests for example.
+                 *
+                 * Start the rebootstrap timer only if it's the first
+                 * metadata refresh request after last successful response,
+                 * so the timer is not reset if already scheduled. */
+                rd_kafka_rebootstrap_tmr_start_maybe(rkb->rkb_rk);
         }
-
 
         if (topic_cnt > 0) {
                 char *topic;

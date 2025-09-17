@@ -2935,18 +2935,12 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
                 if (rkmce) {
                         topic_name = rd_strdup(rkmce->rkmce_mtopic.topic);
                         // Check if partition exists in metadata
-                        int pcnt = rkmce->rkmce_mtopic.partition_cnt;
-                        for (j = 0; j < pcnt; j++) {
-                                if (rkmce->rkmce_mtopic.partitions[j].id ==
-                                    partition) {
-                                        partition_found = rd_true;
-                                        break;
-                                }
-                        }
+                        int pcnt        = rkmce->rkmce_mtopic.partition_cnt;
+                        partition_found = (partition < pcnt);
                 }
                 rd_kafka_rdunlock(rk);
 
-                if (unlikely(!topic_name)) {
+                if (!topic_name) {
                         rktpar = rd_kafka_topic_partition_list_find_topic_by_id(
                             rkcg->rkcg_current_assignment, request_topic_id);
                         if (rktpar)
@@ -2954,7 +2948,7 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
                 }
 
                 // If topic name is found and partition exists in metadata
-                if (likely(topic_name != NULL) && partition_found) {
+                if (topic_name != NULL && partition_found) {
                         rd_kafka_topic_partition_list_add_with_topic_name_and_id(
                             assignment_with_metadata, request_topic_id,
                             topic_name, assignment->elems[i].partition);
@@ -2962,15 +2956,11 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
                         continue;
                 }
 
-                if (!partition_found)
-                        rd_kafka_dbg(
-                            rkcg->rkcg_rk, CGRP, "HEARTBEAT",
-                            "Partition assigned to this consumer is not "
-                            "present in cached metadata for topic id: %s. "
-                            "This may indicate that the topic's partition "
-                            "count has increased and metadata needs to be "
-                            "refreshed. ",
-                            rd_kafka_Uuid_base64str(&request_topic_id));
+                if (!partition_found && topic_name != NULL)
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+                                     "Found new partition for topic %s. "
+                                     "Updating metadata.",
+                                     topic_name);
 
                 if (missing_topic_ids) {
                         if (unlikely(!*missing_topic_ids))

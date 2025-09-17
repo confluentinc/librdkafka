@@ -982,9 +982,7 @@ static void test_metadata_log_cb(const rd_kafka_t *rk,
                 seen_heartbeat_resp = 1;
         }
         if (seen_heartbeat_resp &&
-            strstr(buf,
-                   "Partition assigned to this consumer is not present in "
-                   "cached metadata")) {
+            strstr(buf, "Found new partition for topic")) {
                 seen_metadata_log = 1;
         }
 }

@@ -2914,7 +2914,7 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
     rd_kafka_cgrp_t *rkcg,
     rd_kafka_topic_partition_list_t *assignment,
     rd_list_t **missing_topic_ids) {
-        int i, j;
+        int i;
         rd_kafka_t *rk = rkcg->rkcg_rk;
         rd_kafka_topic_partition_list_t *assignment_with_metadata =
             rd_kafka_topic_partition_list_new(assignment->cnt);

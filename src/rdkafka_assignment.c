@@ -368,12 +368,6 @@ static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
                         rk->rk_consumer.assignment.wait_stop_cnt++;
                 }
 
-                /* Reset the (lib) pause flag which may have been set by
-                 * the cgrp when scheduling the rebalance callback. */
-                rd_kafka_toppar_op_pause_resume(rktp, rd_false /*resume*/,
-                                                RD_KAFKA_TOPPAR_F_LIB_PAUSE,
-                                                RD_KAFKA_NO_REPLYQ);
-
                 rd_kafka_toppar_lock(rktp);
 
                 /* Save the currently stored offset and epoch on .removed
@@ -521,14 +515,6 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                                     "%s [%" PRId32 "] at %s",
                                     rktpar->topic, rktpar->partition,
                                     rd_kafka_fetch_pos2str(pos));
-
-                                /* Reset the (lib) pause flag which may have
-                                 * been set by the cgrp when scheduling the
-                                 * rebalance callback. */
-                                rd_kafka_toppar_op_pause_resume(
-                                    rktp, rd_false /*resume*/,
-                                    RD_KAFKA_TOPPAR_F_LIB_PAUSE,
-                                    RD_KAFKA_NO_REPLYQ);
 
                                 /* Start the fetcher */
                                 rktp->rktp_started = rd_true;

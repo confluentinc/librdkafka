@@ -234,6 +234,8 @@ struct rd_kafka_ConfigEntry_s {
         } a;
 
         rd_list_t synonyms; /**< Type (rd_kafka_configEntry *) */
+        rd_kafka_ConfigType_t type; /**< Config type */
+        char *documentation;        /**< Config documentation */
 };
 
 /**

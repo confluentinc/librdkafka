@@ -2855,14 +2855,14 @@ void rd_kafka_rebootstrap(rd_kafka_t *rk) {
 }
 
 /**
- * Restarts rebootstrap timer with the configured interval. Only if not
+ * Starts rebootstrap timer with the configured interval. Only if not
  * started or stopped.
  *
  * @locks none
  * @locks_acquired rd_kafka_timers_lock()
  * @locality any
  */
-void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk) {
+void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk) {
         if (rk->rk_conf.metadata_recovery_strategy ==
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return;

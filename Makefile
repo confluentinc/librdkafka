@@ -97,6 +97,17 @@ TAGS: .PHONY
 		cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp ; \
 	fi)
 
+gcovr-build:
+	@(export CFLAGS="$$CFLAGS -O0 -fprofile-arcs -ftest-coverage" LDFLAGS="-lgcov --coverage" && \
+	  make libs && make -C tests build)
+
+gcovr-report:
+	@(gcovr --json tests/coverage.json --gcov-ignore-parse-errors \
+	--exclude src/nanopb/ \
+	--exclude src/cJSON\.c \
+	--exclude src/crc32c\.c \
+	--exclude src/snappy\.c ./src)
+
 coverity: Makefile.config
 	@(which cov-build >/dev/null 2>&1 || echo "Make sure coverity../bin is in your PATH")
 	@(cd src && \

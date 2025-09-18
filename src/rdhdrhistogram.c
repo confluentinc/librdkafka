@@ -89,6 +89,7 @@ rd_hdr_histogram_t *rd_hdr_histogram_new(int64_t minValue,
         int64_t largestValueWithSingleUnitResolution;
         int32_t subBucketCountMagnitude;
         int32_t subBucketHalfCountMagnitude;
+        double potentialUnitMagnitude;
         int32_t unitMagnitude;
         int32_t subBucketCount;
         int32_t subBucketHalfCount;
@@ -109,7 +110,8 @@ rd_hdr_histogram_t *rd_hdr_histogram_new(int64_t minValue,
 
         subBucketHalfCountMagnitude = RD_MAX(subBucketCountMagnitude, 1) - 1;
 
-        unitMagnitude = (int32_t)RD_MAX(floor(log2((double)minValue)), 0);
+        potentialUnitMagnitude = minValue == 0 ? 0 : log2((double)minValue);
+        unitMagnitude = (int32_t)RD_MAX(floor(potentialUnitMagnitude), 0);
 
         subBucketCount =
             (int32_t)pow(2, (double)subBucketHalfCountMagnitude + 1.0);

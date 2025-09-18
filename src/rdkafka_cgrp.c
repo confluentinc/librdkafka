@@ -4430,6 +4430,9 @@ static void rd_kafka_cgrp_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
                              "unassign",
                              rkcg->rkcg_group_id->str);
                 rd_kafka_cgrp_unassign(rkcg);
+
+                /* Leave group, if desired. */
+                rd_kafka_cgrp_leave_maybe(rkcg);
                 return;
         }
 

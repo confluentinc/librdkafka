@@ -7213,6 +7213,9 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms) {
         char errstr[256];
         int64_t abs_timeout = test_clock() + ((int64_t)timeout_ms * 1000);
 
+        if (test_flags & TEST_F_LOCAL)
+                return RD_KAFKA_RESP_ERR_NO_ERROR; /* No topics to delete */
+
         rk = test_create_producer();
 
         err = test_get_all_test_topics(rk, &topics, &topic_cnt);

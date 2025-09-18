@@ -245,6 +245,9 @@ void rd_kafka_OffsetForLeaderEpochRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque);
 
+int rd_kafka_handle_OffsetFetch_err_action(rd_kafka_broker_t *rkb,
+                                           rd_kafka_resp_err_t err,
+                                           rd_kafka_buf_t *request);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,

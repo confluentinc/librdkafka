@@ -165,12 +165,15 @@ _TEST_DECL(0049_consume_conn_close);
 _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
 _TEST_DECL(0052_msg_timestamps);
+#ifdef _CXX
 _TEST_DECL(0053_stats_timing);
 _TEST_DECL(0053_stats);
 _TEST_DECL(0054_offset_time);
+#endif
 _TEST_DECL(0055_producer_latency);
 _TEST_DECL(0055_producer_latency_mock);
 _TEST_DECL(0056_balanced_group_mt);
+#ifdef _CXX
 _TEST_DECL(0057_invalid_topic);
 _TEST_DECL(0058_log);
 _TEST_DECL(0059_bsearch);
@@ -178,13 +181,18 @@ _TEST_DECL(0060_op_prio);
 _TEST_DECL(0061_consumer_lag);
 _TEST_DECL(0062_stats_event);
 _TEST_DECL(0063_clusterid);
+#endif
 _TEST_DECL(0064_interceptors);
+#ifdef _CXX
 _TEST_DECL(0065_yield);
 _TEST_DECL(0066_plugins);
 _TEST_DECL(0067_empty_topic);
+#endif
 _TEST_DECL(0068_produce_timeout);
 _TEST_DECL(0069_consumer_add_parts);
+#ifdef _CXX
 _TEST_DECL(0070_null_empty);
+#endif
 _TEST_DECL(0072_headers_ut);
 _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
@@ -192,15 +200,21 @@ _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0076_produce_retry_mock);
 _TEST_DECL(0077_compaction);
+#ifdef _CXX
 _TEST_DECL(0078_c_from_cpp);
+#endif
 _TEST_DECL(0079_fork);
 _TEST_DECL(0080_admin_ut);
 _TEST_DECL(0081_admin);
+#ifdef _CXX
 _TEST_DECL(0082_fetch_max_bytes);
+#endif
 _TEST_DECL(0083_cb_event);
 _TEST_DECL(0084_destroy_flags_local);
 _TEST_DECL(0084_destroy_flags);
+#ifdef _CXX
 _TEST_DECL(0085_headers);
+#endif
 _TEST_DECL(0086_purge_local);
 _TEST_DECL(0086_purge_remote);
 _TEST_DECL(0088_produce_metadata_timeout);
@@ -210,6 +224,7 @@ _TEST_DECL(0091_max_poll_interval_timeout);
 _TEST_DECL(0092_mixed_msgver);
 _TEST_DECL(0093_holb_consumer);
 _TEST_DECL(0094_idempotence_msg_timeout);
+#ifdef _CXX
 _TEST_DECL(0095_all_brokers_down);
 _TEST_DECL(0097_ssl_verify);
 _TEST_DECL(0097_ssl_verify_local);
@@ -217,6 +232,7 @@ _TEST_DECL(0098_consumer_txn);
 _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(0101_fetch_from_follower);
+#endif
 _TEST_DECL(0102_static_group_rebalance);
 _TEST_DECL(0102_static_group_rebalance_mock);
 _TEST_DECL(0103_transactions_local);
@@ -225,18 +241,24 @@ _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
 _TEST_DECL(0107_topic_recreate);
+#ifdef _CXX
 _TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
 _TEST_DECL(0111_delay_create_topics);
+#endif
 _TEST_DECL(0112_assign_unknown_part);
+#ifdef _CXX
 _TEST_DECL(0113_cooperative_rebalance_local);
 _TEST_DECL(0113_cooperative_rebalance);
 _TEST_DECL(0114_sticky_partitioning);
 _TEST_DECL(0115_producer_auth);
 _TEST_DECL(0116_kafkaconsumer_close);
+#endif
 _TEST_DECL(0117_mock_errors);
 _TEST_DECL(0118_commit_rebalance);
+#ifdef _CXX
 _TEST_DECL(0119_consumer_auth);
+#endif
 _TEST_DECL(0120_asymmetric_subscription);
 _TEST_DECL(0121_clusterid);
 _TEST_DECL(0122_buffer_cleaning_after_rebalance);
@@ -245,20 +267,26 @@ _TEST_DECL(0124_openssl_invalid_engine);
 _TEST_DECL(0125_immediate_flush);
 _TEST_DECL(0125_immediate_flush_mock);
 _TEST_DECL(0126_oauthbearer_oidc);
+#ifdef _CXX
 _TEST_DECL(0127_fetch_queue_backoff);
 _TEST_DECL(0128_sasl_callback_queue);
+#endif
 _TEST_DECL(0129_fetch_aborted_msgs);
 _TEST_DECL(0130_store_offsets);
 _TEST_DECL(0131_connect_timeout);
 _TEST_DECL(0132_strategy_ordering);
 _TEST_DECL(0133_ssl_keys);
 _TEST_DECL(0134_ssl_provider);
+#ifdef _CXX
 _TEST_DECL(0135_sasl_credentials);
+#endif
 _TEST_DECL(0136_resolve_cb);
 _TEST_DECL(0137_barrier_batch_consume);
 _TEST_DECL(0138_admin_mock);
 _TEST_DECL(0139_offset_validation_mock);
+#ifdef _CXX
 _TEST_DECL(0140_commit_metadata);
+#endif
 _TEST_DECL(0142_reauthentication);
 _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
@@ -272,7 +300,9 @@ _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
 
 /* Manual tests */
+#ifdef _CXX
 _TEST_DECL(8000_idle);
+#endif
 _TEST_DECL(8001_fetch_from_follower_mock_manual);
 
 
@@ -399,12 +429,15 @@ struct test tests[] = {
     _TEST(0050_subscribe_adds, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0051_assign_adds, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0052_msg_timestamps, 0, TEST_BRKVER(0, 10, 0, 0)),
+#ifdef _CXX
     _TEST(0053_stats_timing, TEST_F_LOCAL),
     _TEST(0053_stats, 0),
     _TEST(0054_offset_time, 0, TEST_BRKVER(0, 10, 1, 0)),
+#endif
     _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
     _TEST(0055_producer_latency_mock, TEST_F_LOCAL),
     _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0, 9, 0, 0)),
+#ifdef _CXX
     _TEST(0057_invalid_topic, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0058_log, TEST_F_LOCAL),
     _TEST(0059_bsearch, 0, TEST_BRKVER(0, 10, 0, 0)),
@@ -412,20 +445,25 @@ struct test tests[] = {
     _TEST(0061_consumer_lag, 0),
     _TEST(0062_stats_event, TEST_F_LOCAL),
     _TEST(0063_clusterid, 0, TEST_BRKVER(0, 10, 1, 0)),
+#endif
     _TEST(0064_interceptors, 0, TEST_BRKVER(0, 9, 0, 0)),
+#ifdef _CXX
     _TEST(0065_yield, 0),
     _TEST(0066_plugins,
           TEST_F_LOCAL | TEST_F_KNOWN_ISSUE_WIN32 | TEST_F_KNOWN_ISSUE_OSX,
           .extra =
               "dynamic loading of tests might not be fixed for this platform"),
     _TEST(0067_empty_topic, 0),
+#endif
 #if WITH_SOCKEM
     _TEST(0068_produce_timeout, TEST_F_SOCKEM),
 #endif
     _TEST(0069_consumer_add_parts,
           TEST_F_KNOWN_ISSUE_WIN32,
           TEST_BRKVER(1, 0, 0, 0)),
+#ifdef _CXX
     _TEST(0070_null_empty, 0),
+#endif
     _TEST(0072_headers_ut, TEST_F_LOCAL),
     _TEST(0073_headers, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0074_producev, TEST_F_LOCAL),
@@ -438,18 +476,24 @@ struct test tests[] = {
           0,
           /* The test itself requires message headers */
           TEST_BRKVER(0, 11, 0, 0)),
+#ifdef _CXX
     _TEST(0078_c_from_cpp, TEST_F_LOCAL),
+#endif
     _TEST(0079_fork,
           TEST_F_LOCAL | TEST_F_KNOWN_ISSUE,
           .extra = "using a fork():ed rd_kafka_t is not supported and will "
                    "most likely hang"),
     _TEST(0080_admin_ut, TEST_F_LOCAL),
     _TEST(0081_admin, 0, TEST_BRKVER(0, 10, 2, 0)),
+#ifdef _CXX
     _TEST(0082_fetch_max_bytes, 0, TEST_BRKVER(0, 10, 1, 0)),
+#endif
     _TEST(0083_cb_event, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0084_destroy_flags_local, TEST_F_LOCAL),
     _TEST(0084_destroy_flags, 0),
+#ifdef _CXX
     _TEST(0085_headers, 0, TEST_BRKVER(0, 11, 0, 0)),
+#endif
     _TEST(0086_purge_local, TEST_F_LOCAL),
     _TEST(0086_purge_remote, 0),
 #if WITH_SOCKEM
@@ -465,6 +509,7 @@ struct test tests[] = {
           TEST_F_SOCKEM,
           TEST_BRKVER(0, 11, 0, 0)),
 #endif
+#ifdef _CXX
     _TEST(0095_all_brokers_down, TEST_F_LOCAL),
     _TEST(0097_ssl_verify, 0),
     _TEST(0097_ssl_verify_local, TEST_F_LOCAL),
@@ -472,6 +517,7 @@ struct test tests[] = {
     _TEST(0099_commit_metadata, 0),
     _TEST(0100_thread_interceptors, TEST_F_LOCAL),
     _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2, 4, 0, 0)),
+#endif
     _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2, 3, 0, 0)),
     _TEST(0102_static_group_rebalance_mock, TEST_F_LOCAL),
     _TEST(0103_transactions_local, TEST_F_LOCAL),
@@ -486,13 +532,16 @@ struct test tests[] = {
           0,
           TEST_BRKVER_TOPIC_ADMINAPI,
           .scenario = "noautocreate"),
+#ifdef _CXX
     _TEST(0109_auto_create_topics, 0),
     _TEST(0110_batch_size, 0),
     _TEST(0111_delay_create_topics,
           0,
           TEST_BRKVER_TOPIC_ADMINAPI,
           .scenario = "noautocreate"),
+#endif
     _TEST(0112_assign_unknown_part, 0),
+#ifdef _CXX
     _TEST(0113_cooperative_rebalance_local,
           TEST_F_LOCAL,
           TEST_BRKVER(2, 4, 0, 0)),
@@ -500,9 +549,12 @@ struct test tests[] = {
     _TEST(0114_sticky_partitioning, 0),
     _TEST(0115_producer_auth, 0, TEST_BRKVER(2, 1, 0, 0)),
     _TEST(0116_kafkaconsumer_close, TEST_F_LOCAL),
+#endif
     _TEST(0117_mock_errors, TEST_F_LOCAL),
     _TEST(0118_commit_rebalance, 0),
+#ifdef _CXX
     _TEST(0119_consumer_auth, 0, TEST_BRKVER(2, 1, 0, 0)),
+#endif
     _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
     _TEST(0121_clusterid, TEST_F_LOCAL),
     _TEST(0122_buffer_cleaning_after_rebalance, 0, TEST_BRKVER(2, 4, 0, 0)),
@@ -511,20 +563,26 @@ struct test tests[] = {
     _TEST(0125_immediate_flush, 0),
     _TEST(0125_immediate_flush_mock, TEST_F_LOCAL),
     _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 1, 0, 0)),
+#ifdef _CXX
     _TEST(0127_fetch_queue_backoff, 0),
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
+#endif
     _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0130_store_offsets, 0),
     _TEST(0131_connect_timeout, TEST_F_LOCAL),
     _TEST(0132_strategy_ordering, 0, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0133_ssl_keys, TEST_F_LOCAL),
     _TEST(0134_ssl_provider, TEST_F_LOCAL),
+#ifdef _CXX
     _TEST(0135_sasl_credentials, 0),
+#endif
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0139_offset_validation_mock, 0),
+#ifdef _CXX
     _TEST(0140_commit_metadata, 0),
+#endif
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
@@ -539,7 +597,9 @@ struct test tests[] = {
 
 
     /* Manual tests */
+#ifdef _CXX
     _TEST(8000_idle, TEST_F_MANUAL),
+#endif
     _TEST(8001_fetch_from_follower_mock_manual, TEST_F_MANUAL),
 
     {NULL}};

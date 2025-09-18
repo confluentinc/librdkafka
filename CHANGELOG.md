@@ -21,6 +21,7 @@ librdkafka v2.12.0 is a feature release:
   so it's possible it did overlap with the periodic `topic.metadata.refresh.interval.ms`
   and cause a re-bootstrap even if not needed.
   Happening since 2.11.0 (#5177).
+* Issues: #4949: Prevent an FPE in rd_hdr_histogram_new.
 
 ### Telemetry fixes
 

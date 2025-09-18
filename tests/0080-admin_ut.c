@@ -765,11 +765,13 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     rd_kafka_error_string(
                         rd_kafka_ConsumerGroupDescription_error(resgroups[i])));
 
-                rd_kafka_ConsumerGroupDescription_authorized_operations(
-                    resgroups[i], &authorized_operation_cnt);
-                TEST_ASSERT(authorized_operation_cnt == 0,
-                            "Got authorized operations"
-                            "when not requested");
+                if (rd_kafka_version() >= 0x02020000) {  /* rd_kafka_ConsumerGroupDescription_authorized_operations available since librdkafka 2.2.0 */
+                        rd_kafka_ConsumerGroupDescription_authorized_operations(
+                            resgroups[i], &authorized_operation_cnt);
+                        TEST_ASSERT(authorized_operation_cnt == 0,
+                                    "Got authorized operations"
+                                    "when not requested");
+                }
         }
 
         rd_kafka_event_destroy(rkev);
@@ -3016,8 +3018,13 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteConsumerGroupOffsets("temp queue, options", rk, NULL, 1);
         do_test_DeleteConsumerGroupOffsets("main queue, options", rk, mainq, 1);
 
-        do_test_AclBinding();
-        do_test_AclBindingFilter();
+        if (rd_kafka_version() >= 0x02050300) {  /* ACL Binding tests available since librdkafka 2.5.3 */
+                do_test_AclBinding();
+                do_test_AclBindingFilter();
+        } else {
+                TEST_SAY("SKIPPING: ACL Binding tests - requires librdkafka version >= 2.5.3 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
 
         do_test_CreateAcls("temp queue, no options", rk, NULL, rd_false,
                            rd_false);
@@ -3063,13 +3070,16 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 TEST_SAY("SKIPPING: ListConsumerGroupOffsets tests - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
                          rd_kafka_version());
         }
+        if (rd_kafka_version() >= 0x02050300) {  /* UserScramCredentials available since librdkafka 2.5.3 */
+                do_test_DescribeUserScramCredentials("main queue", rk, mainq);
+                do_test_DescribeUserScramCredentials("temp queue", rk, NULL);
 
-        do_test_DescribeUserScramCredentials("main queue", rk, mainq);
-        do_test_DescribeUserScramCredentials("temp queue", rk, NULL);
-
-        do_test_AlterUserScramCredentials("main queue", rk, mainq);
-        do_test_AlterUserScramCredentials("temp queue", rk, NULL);
-
+                do_test_AlterUserScramCredentials("main queue", rk, mainq);
+                do_test_AlterUserScramCredentials("temp queue", rk, NULL);
+        } else {
+                TEST_SAY("SKIPPING: UserScramCredentials tests - requires librdkafka version >= 2.5.3 (current: 0x%08x)\n",
+                         rd_kafka_version());
+        }
         /* ElectLeaders tests - requires librdkafka version > 2.5.3 and broker version >= 2.4.0 */
         if (rd_kafka_version() > 0x02050300 && test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
                 do_test_ElectLeaders("main queue, options, Preffered Elections", rk,
@@ -3089,7 +3099,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 do_test_ElectLeaders("temp queue, no options, Unclean Elections", rk,
                                      NULL, 0, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
         } else {
-                TEST_SAY("SKIPPING: ElectLeaders tests - requires librdkafka version > 2.5.3 and broker version >= 2.4.0 (current librdkafka: 0x%08x)\n", 
+                TEST_SAY("SKIPPING: ElectLeaders tests - requires librdkafka version > 2.5.3 and broker version >= 2.4.0 (current librdkafka: 0x%08x)\n",
                          rd_kafka_version());
         }
 

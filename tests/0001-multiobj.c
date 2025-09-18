@@ -94,9 +94,11 @@ int main_0001_multiobj(int argc, char **argv) {
 
                 /* Topic is created on the first iteration. */
                 if (i > 0) {
-                        /* K2 clusters require higher timeouts due to SSL/SASL overhead */
-                        int max_duration_ms = test_k2_cluster ? 5000 : 999;
-                        TIMING_ASSERT(&t_full, 0, max_duration_ms);
+                        /* K2 environment: Allow more time for create-produce-destroy cycle */
+                        if (test_k2_cluster)
+                                TIMING_ASSERT(&t_full, 0, 2000);
+                        else
+                                TIMING_ASSERT(&t_full, 0, 999);
                 }
         }
 

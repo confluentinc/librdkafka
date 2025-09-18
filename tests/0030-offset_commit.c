@@ -546,43 +546,45 @@ int main_0030_offset_commit(int argc, char **argv) {
 
         do_nonexist_commit();
 
-        do_offset_test("AUTO.COMMIT & AUTO.STORE", 1 /* enable.auto.commit */,
-                       1 /* enable.auto.offset.store */, 0 /* not used. */,
-                       1 /* use subscribe */);
+        if (rd_kafka_version() >= 0x020100ff) {
+                do_offset_test("AUTO.COMMIT & AUTO.STORE", 1 /* enable.auto.commit */,
+                               1 /* enable.auto.offset.store */, 0 /* not used. */,
+                               1 /* use subscribe */);
 
-        do_offset_test("MANUAL.COMMIT.ASYNC & AUTO.STORE",
-                       0 /* enable.auto.commit */,
-                       1 /* enable.auto.offset.store */, 1 /* async */,
-                       1 /* use subscribe */);
+                do_offset_test("MANUAL.COMMIT.ASYNC & AUTO.STORE",
+                               0 /* enable.auto.commit */,
+                               1 /* enable.auto.offset.store */, 1 /* async */,
+                               1 /* use subscribe */);
 
-        do_offset_test("AUTO.COMMIT.ASYNC & AUTO.STORE & ASSIGN",
-                       1 /* enable.auto.commit */,
-                       1 /* enable.auto.offset.store */, 0 /* not used. */,
-                       0 /* use assign */);
+                do_offset_test("AUTO.COMMIT.ASYNC & AUTO.STORE & ASSIGN",
+                               1 /* enable.auto.commit */,
+                               1 /* enable.auto.offset.store */, 0 /* not used. */,
+                               0 /* use assign */);
 
-        if (test_quick) {
-                rd_free(topic);
-                return 0;
+                if (!test_quick) {
+                        do_offset_test("AUTO.COMMIT & MANUAL.STORE", 1 /* enable.auto.commit */,
+                                       0 /* enable.auto.offset.store */, 0 /* not used */,
+                                       1 /* use subscribe */);
+
+                        do_offset_test("MANUAL.COMMIT.SYNC & AUTO.STORE",
+                                       0 /* enable.auto.commit */,
+                                       1 /* enable.auto.offset.store */, 0 /* async */,
+                                       1 /* use subscribe */);
+
+                        do_offset_test("MANUAL.COMMIT.ASYNC & MANUAL.STORE",
+                                       0 /* enable.auto.commit */,
+                                       0 /* enable.auto.offset.store */, 1 /* sync */,
+                                       1 /* use subscribe */);
+
+                        do_offset_test("MANUAL.COMMIT.SYNC & MANUAL.STORE",
+                                       0 /* enable.auto.commit */,
+                                       0 /* enable.auto.offset.store */, 0 /* sync */,
+                                       1 /* use subscribe */);
+                }
+        } else {
+                TEST_SAY("Skipping offset tests (require librdkafka >= 2.1.0 due to leader epoch APIs), "
+                         "current version: %s\n", rd_kafka_version_str());
         }
-
-        do_offset_test("AUTO.COMMIT & MANUAL.STORE", 1 /* enable.auto.commit */,
-                       0 /* enable.auto.offset.store */, 0 /* not used */,
-                       1 /* use subscribe */);
-
-        do_offset_test("MANUAL.COMMIT.SYNC & AUTO.STORE",
-                       0 /* enable.auto.commit */,
-                       1 /* enable.auto.offset.store */, 0 /* async */,
-                       1 /* use subscribe */);
-
-        do_offset_test("MANUAL.COMMIT.ASYNC & MANUAL.STORE",
-                       0 /* enable.auto.commit */,
-                       0 /* enable.auto.offset.store */, 1 /* sync */,
-                       1 /* use subscribe */);
-
-        do_offset_test("MANUAL.COMMIT.SYNC & MANUAL.STORE",
-                       0 /* enable.auto.commit */,
-                       0 /* enable.auto.offset.store */, 0 /* sync */,
-                       1 /* use subscribe */);
 
         rd_free(topic);
 

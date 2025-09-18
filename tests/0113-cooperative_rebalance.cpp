@@ -918,15 +918,18 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
 
   if (test_k2_cluster) {
     test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 30 * 1000);
-    rd_sleep(5);
+    rd_sleep(10);
   }
 
   Test::subscribe(c1, topic_name);
 
   bool c2_subscribed = false;
   while (true) {
-    Test::poll_once(c1, 500);
-    Test::poll_once(c2, 500);
+    /* Version-specific poll timeouts for cooperative rebalancing */
+    int poll_timeout = (rd_kafka_version() >= 0x020100ff) ? 500 :
+                       (test_k2_cluster ? 2000 : 1000);
+    Test::poll_once(c1, poll_timeout);
+    Test::poll_once(c2, poll_timeout);
 
     /* Start c2 after c1 has received initial assignment */
     if (!c2_subscribed && rebalance_cb1.nonempty_assign_call_cnt > 0) {
@@ -948,7 +951,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
       // Additional delay in polling loop to allow rebalance events to fully propagate
       // This prevents the rapid-fire rebalancing that causes assignment confusion
       if (c2_subscribed)
-        rd_sleep(1);
+        rd_sleep(5);
     }
 
   }
@@ -2816,6 +2819,28 @@ static rd_bool_t rebalance_exp_lost;
 extern void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions);
 
+/* Safe version of test_print_partition_list that works with older librdkafka versions */
+static void safe_print_partition_list(const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                const rd_kafka_topic_partition_t *p = &partitions->elems[i];
+                int64_t leader_epoch = -1;
+
+                /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(p);
+                }
+
+                if (leader_epoch != -1) {
+                        TEST_SAY("  %s [%d] offset %"PRId64" leader epoch %"PRId64"\n",
+                                p->topic, p->partition, p->offset, leader_epoch);
+                } else {
+                        TEST_SAY("  %s [%d] offset %"PRId64"\n",
+                                p->topic, p->partition, p->offset);
+                }
+        }
+}
+
 
 static void rebalance_cb(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
@@ -2825,7 +2850,7 @@ static void rebalance_cb(rd_kafka_t *rk,
   TEST_SAY("Rebalance #%d: %s: %d partition(s)\n", rebalance_cnt,
            rd_kafka_err2name(err), parts->cnt);
 
-  test_print_partition_list(parts);
+  safe_print_partition_list(parts);
 
   TEST_ASSERT(err == rebalance_exp_event ||
                   rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -3262,7 +3287,7 @@ static void v_rebalance_cb(rd_kafka_t *rk,
            rd_kafka_err2name(err), parts->cnt,
            rd_kafka_assignment_lost(rk) ? " - assignment lost" : "");
 
-  test_print_partition_list(parts);
+  safe_print_partition_list(parts);
 
   if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
     test_consumer_incremental_assign("assign", rk, parts);

@@ -28,6 +28,54 @@
  */
 
 #include "test.h"
+
+/* Safe version of safe_partition_list_and_offsets_cmp that works with older librdkafka versions */
+static int safe_partition_list_and_offsets_cmp(const rd_kafka_topic_partition_list_t *al,
+                                               const rd_kafka_topic_partition_list_t *bl) {
+        int i;
+        if (al->cnt != bl->cnt)
+                return al->cnt - bl->cnt;
+
+        for (i = 0; i < al->cnt; i++) {
+                const rd_kafka_topic_partition_t *a = &al->elems[i];
+                const rd_kafka_topic_partition_t *b = &bl->elems[i];
+                int64_t a_leader_epoch = -1, b_leader_epoch = -1;
+
+                /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        a_leader_epoch = rd_kafka_topic_partition_get_leader_epoch(a);
+                        b_leader_epoch = rd_kafka_topic_partition_get_leader_epoch(b);
+                }
+
+                if (a->partition != b->partition ||
+                    strcmp(a->topic, b->topic) || a->offset != b->offset ||
+                    a_leader_epoch != b_leader_epoch)
+                        return -1;
+        }
+        return 0;
+}
+
+/* Safe version of safe_print_partition_list that works with older librdkafka versions */
+static void safe_print_partition_list(const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                const rd_kafka_topic_partition_t *p = &partitions->elems[i];
+                int64_t leader_epoch = -1;
+
+                /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(p);
+                }
+
+                if (leader_epoch != -1) {
+                        TEST_SAY("  %s [%d] offset %"PRId64" leader epoch %"PRId64"\n",
+                                p->topic, p->partition, p->offset, leader_epoch);
+                } else {
+                        TEST_SAY("  %s [%d] offset %"PRId64"\n",
+                                p->topic, p->partition, p->offset);
+                }
+        }
+}
 #include "rdkafka.h"
 #include "../src/rdstring.h"
 
@@ -2711,9 +2759,9 @@ static void do_test_DeleteRecords(const char *what,
         rd_kafka_topic_partition_list_sort(results, NULL, NULL);
 
         TEST_SAY("Input partitions:\n");
-        test_print_partition_list(offsets);
+        safe_print_partition_list(offsets);
         TEST_SAY("Result partitions:\n");
-        test_print_partition_list(results);
+        safe_print_partition_list(results);
 
         TEST_ASSERT(offsets->cnt == results->cnt,
                     "expected DeleteRecords_result_offsets to return %d items, "
@@ -3534,7 +3582,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
                             rd_kafka_MemberDescription_host(member));
                         /* This is just to make sure the returned memory
                          * is valid. */
-                        test_print_partition_list(partitions);
+                        safe_print_partition_list(partitions);
                 } else {
                         TEST_ASSERT(state == RD_KAFKA_CONSUMER_GROUP_STATE_DEAD,
                                     "Expected Dead state, got %s.",
@@ -4303,17 +4351,17 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                     rd_kafka_error_string(error));
 
         {
-                const rd_kafka_AclOperation_t expected_ak3[] = {
-                    RD_KAFKA_ACL_OPERATION_DELETE,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
-                    RD_KAFKA_ACL_OPERATION_READ};
-                const rd_kafka_AclOperation_t expected_ak4[] = {
-                    RD_KAFKA_ACL_OPERATION_DELETE,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
-                    RD_KAFKA_ACL_OPERATION_READ,
-                    RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
-                    RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS};
-                if (rd_kafka_version() >= 0x02020100) {  /* authorized_operations available since librdkafka 2.2.1 */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        const rd_kafka_AclOperation_t expected_ak3[] = {
+                            RD_KAFKA_ACL_OPERATION_DELETE,
+                            RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                            RD_KAFKA_ACL_OPERATION_READ};
+                        const rd_kafka_AclOperation_t expected_ak4[] = {
+                            RD_KAFKA_ACL_OPERATION_DELETE,
+                            RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                            RD_KAFKA_ACL_OPERATION_READ,
+                            RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS,
+                            RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS};
                         authorized_operations =
                             rd_kafka_ConsumerGroupDescription_authorized_operations(
                                 results[0], &authorized_operations_cnt);
@@ -4325,6 +4373,8 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                                 test_match_authorized_operations(
                                     expected_ak4, 5, authorized_operations,
                                     authorized_operations_cnt);
+                } else {
+                        TEST_SAY("Skipping authorized operations check (requires librdkafka >= 2.1.0)\n");
                 }
         }
 
@@ -4539,11 +4589,11 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 
-        if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
+        if (safe_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
-                test_print_partition_list(orig_offsets);
+                safe_print_partition_list(orig_offsets);
                 TEST_SAY("committed() list:\n");
-                test_print_partition_list(committed);
+                safe_print_partition_list(committed);
                 TEST_FAIL("committed offsets don't match");
         }
 
@@ -4626,11 +4676,11 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         deleted = rd_kafka_topic_partition_list_copy(
             rd_kafka_group_result_partitions(gres[0]));
 
-        if (test_partition_list_and_offsets_cmp(deleted, to_delete)) {
+        if (safe_partition_list_and_offsets_cmp(deleted, to_delete)) {
                 TEST_SAY("Result list:\n");
-                test_print_partition_list(deleted);
+                safe_print_partition_list(deleted);
                 TEST_SAY("Partitions passed to DeleteConsumerGroupOffsets:\n");
-                test_print_partition_list(to_delete);
+                safe_print_partition_list(to_delete);
                 TEST_FAIL("deleted/requested offsets don't match");
         }
 
@@ -4662,20 +4712,20 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
             rd_kafka_committed(consumer, committed, committed_timeout));
 
         TEST_SAY("Original committed offsets:\n");
-        test_print_partition_list(orig_offsets);
+        safe_print_partition_list(orig_offsets);
 
         TEST_SAY("Committed offsets after delete:\n");
-        test_print_partition_list(committed);
+        safe_print_partition_list(committed);
 
         rd_kafka_topic_partition_list_t *expected = offsets;
         if (sub_consumer)
                 expected = orig_offsets;
 
-        if (test_partition_list_and_offsets_cmp(committed, expected)) {
+        if (safe_partition_list_and_offsets_cmp(committed, expected)) {
                 TEST_SAY("expected list:\n");
-                test_print_partition_list(expected);
+                safe_print_partition_list(expected);
                 TEST_SAY("committed() list:\n");
-                test_print_partition_list(committed);
+                safe_print_partition_list(committed);
                 TEST_FAIL("committed offsets don't match");
         }
 
@@ -4819,7 +4869,9 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                     orig_offsets, topics[i / partitions_cnt],
                     i % partitions_cnt);
                 rktpar->offset = (i + 1) * 10;
-                rd_kafka_topic_partition_set_leader_epoch(rktpar, 1);
+                if (rd_kafka_version() >= 0x020100ff) {
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 1);
+                }
         }
 
         /* Commit some offsets, if topics exists */
@@ -4832,12 +4884,12 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
                                                    tmout_multip(5 * 1000)));
 
-                if (test_partition_list_and_offsets_cmp(committed,
+                if (safe_partition_list_and_offsets_cmp(committed,
                                                         orig_offsets)) {
                         TEST_SAY("commit() list:\n");
-                        test_print_partition_list(orig_offsets);
+                        safe_print_partition_list(orig_offsets);
                         TEST_SAY("committed() list:\n");
-                        test_print_partition_list(committed);
+                        safe_print_partition_list(committed);
                         TEST_FAIL("committed offsets don't match");
                 }
                 rd_kafka_topic_partition_list_destroy(committed);
@@ -4853,20 +4905,26 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                             offsets, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
                         rktpar->offset = orig_offsets->elems[i].offset;
-                        rd_kafka_topic_partition_set_leader_epoch(
-                            rktpar, rd_kafka_topic_partition_get_leader_epoch(
-                                        &orig_offsets->elems[i]));
+                        if (rd_kafka_version() >= 0x020100ff) {
+                                rd_kafka_topic_partition_set_leader_epoch(
+                                    rktpar, rd_kafka_topic_partition_get_leader_epoch(
+                                                &orig_offsets->elems[i]));
+                        }
                 } else {
                         rktpar = rd_kafka_topic_partition_list_add(
                             to_alter, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
                         rktpar->offset = 5;
-                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                        if (rd_kafka_version() >= 0x020100ff) {
+                                rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                        }
                         rktpar = rd_kafka_topic_partition_list_add(
                             offsets, orig_offsets->elems[i].topic,
                             orig_offsets->elems[i].partition);
                         rktpar->offset = 5;
-                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                        if (rd_kafka_version() >= 0x020100ff) {
+                                rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                        }
                 }
         }
 
@@ -4924,11 +4982,11 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         alterd = rd_kafka_topic_partition_list_copy(
             rd_kafka_group_result_partitions(gres[0]));
 
-        if (test_partition_list_and_offsets_cmp(alterd, to_alter)) {
+        if (safe_partition_list_and_offsets_cmp(alterd, to_alter)) {
                 TEST_SAY("Result list:\n");
-                test_print_partition_list(alterd);
+                safe_print_partition_list(alterd);
                 TEST_SAY("Partitions passed to AlterConsumerGroupOffsets:\n");
-                test_print_partition_list(to_alter);
+                safe_print_partition_list(to_alter);
                 TEST_FAIL("altered/requested offsets don't match");
         }
 
@@ -4964,16 +5022,16 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                         expected = orig_offsets;
                 }
                 TEST_SAY("Original committed offsets:\n");
-                test_print_partition_list(orig_offsets);
+                safe_print_partition_list(orig_offsets);
 
                 TEST_SAY("Committed offsets after alter:\n");
-                test_print_partition_list(committed);
+                safe_print_partition_list(committed);
 
-                if (test_partition_list_and_offsets_cmp(committed, expected)) {
+                if (safe_partition_list_and_offsets_cmp(committed, expected)) {
                         TEST_SAY("expected list:\n");
-                        test_print_partition_list(expected);
+                        safe_print_partition_list(expected);
                         TEST_SAY("committed() list:\n");
-                        test_print_partition_list(committed);
+                        safe_print_partition_list(committed);
                         TEST_FAIL("committed offsets don't match");
                 }
                 rd_kafka_topic_partition_list_destroy(committed);
@@ -5102,7 +5160,9 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
                     orig_offsets, topics[i / 2],
                     i % TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT);
                 rktpar->offset = (i + 1) * 10;
-                rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                if (rd_kafka_version() >= 0x020100ff) {
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar, 2);
+                }
         }
 
         TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/));
@@ -5114,11 +5174,11 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 
-        if (test_partition_list_and_offsets_cmp(committed, orig_offsets)) {
+        if (safe_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
-                test_print_partition_list(orig_offsets);
+                safe_print_partition_list(orig_offsets);
                 TEST_SAY("committed() list:\n");
-                test_print_partition_list(committed);
+                safe_print_partition_list(committed);
                 TEST_FAIL("committed offsets don't match");
         }
 
@@ -5191,11 +5251,11 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         listd = rd_kafka_topic_partition_list_copy(
             rd_kafka_group_result_partitions(gres[0]));
 
-        if (test_partition_list_and_offsets_cmp(listd, orig_offsets)) {
+        if (safe_partition_list_and_offsets_cmp(listd, orig_offsets)) {
                 TEST_SAY("Result list:\n");
-                test_print_partition_list(listd);
+                safe_print_partition_list(listd);
                 TEST_SAY("Partitions passed to ListConsumerGroupOffsets:\n");
-                test_print_partition_list(orig_offsets);
+                safe_print_partition_list(orig_offsets);
                 TEST_FAIL("listd/requested offsets don't match");
         }
 
@@ -5889,9 +5949,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         /* TODO: check this test after KIP-848 admin operation
          * implementation */
         if (test_consumer_group_protocol_classic()) {
-                /* Describe groups */
-                do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
-                do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
+                /* Describe groups - skip on older librdkafka due to authorized operations API usage */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+                        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
+                } else {
+                        TEST_SAY("Skipping DescribeConsumerGroups tests (requires librdkafka >= 2.1.0 due to authorized operations APIs), current version: %s\n",
+                                 rd_kafka_version_str());
+                }
         }
 
         if (rd_kafka_version() >= 0x02020100) {  /* DescribeTopics available since librdkafka 2.2.1 */

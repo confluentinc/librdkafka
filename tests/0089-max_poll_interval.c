@@ -529,11 +529,17 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
 }
 
 int main_0089_max_poll_interval(int argc, char **argv) {
-        do_test();
-        do_test_with_log_queue();
-        do_test_rejoin_after_interval_expire(rd_false, rd_false);
-        do_test_rejoin_after_interval_expire(rd_true, rd_false);
-        do_test_rejoin_after_interval_expire(rd_false, rd_true);
-        do_test_max_poll_reset_with_consumer_cb();
+     
+        if (rd_kafka_version() >= 0x020100ff) {
+                do_test();
+                do_test_with_log_queue();
+                do_test_rejoin_after_interval_expire(rd_false, rd_false);
+                do_test_rejoin_after_interval_expire(rd_true, rd_false);
+                do_test_rejoin_after_interval_expire(rd_false, rd_true);
+                do_test_max_poll_reset_with_consumer_cb();
+        } else {
+                do_test();
+        }
+        
         return 0;
 }

@@ -114,6 +114,40 @@ static void expect_match(struct expect *exp,
         }
 }
 
+/**
+ * @brief Version-aware partition list printing that avoids leader epoch APIs 
+ *        on older versions
+ */
+static void safe_print_partition_list(
+    const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
+                                 ") %s%s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 partitions->elems[i].offset,
+                                 rd_kafka_topic_partition_get_leader_epoch(
+                                     &partitions->elems[i]),
+                                 partitions->elems[i].err ? ": " : "",
+                                 partitions->elems[i].err
+                                     ? rd_kafka_err2str(partitions->elems[i].err)
+                                     : "");
+                } else {
+                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 partitions->elems[i].offset,
+                                 partitions->elems[i].err ? ": " : "",
+                                 partitions->elems[i].err
+                                     ? rd_kafka_err2str(partitions->elems[i].err)
+                                     : "");
+                }
+        }
+}
+
 static void rebalance_cb(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
                          rd_kafka_topic_partition_list_t *parts,
@@ -124,7 +158,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 
         TEST_SAY("rebalance_cb: %s with %d partition(s)\n",
                  rd_kafka_err2str(err), parts->cnt);
-        test_print_partition_list(parts);
+        safe_print_partition_list(parts);
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
@@ -179,11 +213,13 @@ static void consumer_poll_once(rd_kafka_t *rk) {
 
         } else if (rkmessage->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
                 /* Test segfault associated with this call is solved */
-                int32_t leader_epoch = rd_kafka_message_leader_epoch(rkmessage);
-                TEST_ASSERT(leader_epoch == -1,
-                            "rd_kafka_message_leader_epoch should be -1"
-                            ", got %" PRId32,
-                            leader_epoch);
+                if (rd_kafka_version() >= 0x020100ff) {
+                        int32_t leader_epoch = rd_kafka_message_leader_epoch(rkmessage);
+                        TEST_ASSERT(leader_epoch == -1,
+                                    "rd_kafka_message_leader_epoch should be -1"
+                                    ", got %" PRId32,
+                                    leader_epoch);
+                }
 
                 if (strstr(rd_kafka_topic_name(rkmessage->rkt), "NONEXIST"))
                         TEST_SAY("%s: %s: error is expected for this topic\n",

@@ -2535,7 +2535,7 @@ rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
         size_t of_GroupsArrayCnt;
 
         if (max_ApiVersion < 0)
-                max_ApiVersion = 4;
+                max_ApiVersion = 5;
 
         if (max_ApiVersion > ApiVersion) {
                 /* Remark: don't check if max_ApiVersion is zero.
@@ -2556,7 +2556,7 @@ rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
             4 /* rd_kafka_buf_write_arraycnt_pos */ +
                 1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
                 32 * group_cnt /* Groups */,
-            rd_false);
+            ApiVersion >= 5 /* is_flexver */);
 
         /* write Groups */
         of_GroupsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
@@ -5118,7 +5118,7 @@ rd_kafka_DeleteTopicsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DeleteTopics, 0, 1, &features);
+            rkb, RD_KAFKAP_DeleteTopics, 0, 4, &features);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "Topic Admin API (KIP-4) not supported "
@@ -5127,13 +5127,13 @@ rd_kafka_DeleteTopicsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf =
-            rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteTopics, 1,
-                                     /* FIXME */
-                                     4 + (rd_list_cnt(del_topics) * 100) + 4);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DeleteTopics, 1,
+            /* FIXME */
+            4 + (rd_list_cnt(del_topics) * 100) + 4, ApiVersion >= 4);
 
         /* #topics */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(del_topics));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(del_topics));
 
         while ((delt = rd_list_elem(del_topics, i++)))
                 rd_kafka_buf_write_str(rkbuf, delt->topic, -1);
@@ -5187,7 +5187,7 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
         partitions = rd_list_elem(offsets_list, 0);
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DeleteRecords, 0, 1, &features);
+            rkb, RD_KAFKAP_DeleteRecords, 0, 2, &features);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "DeleteRecords Admin API (KIP-107) not supported "
@@ -5195,8 +5195,9 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteRecords, 1,
-                                         4 + (partitions->cnt * 100) + 4);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DeleteRecords, 1, 4 + (partitions->cnt * 100) + 4,
+            ApiVersion >= 2);
 
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
@@ -5257,7 +5258,7 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_CreatePartitions, 0, 0, NULL);
+            rkb, RD_KAFKAP_CreatePartitions, 0, 2, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "CreatePartitions (KIP-195) not supported "
@@ -5266,12 +5267,12 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreatePartitions, 1,
-                                         4 + (rd_list_cnt(new_parts) * 200) +
-                                             4 + 1);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_CreatePartitions, 1,
+            4 + (rd_list_cnt(new_parts) * 200) + 4 + 1, ApiVersion >= 2);
 
         /* #topics */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_parts));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(new_parts));
 
         while ((newp = rd_list_elem(new_parts, i++))) {
                 /* topic */
@@ -5282,21 +5283,21 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
 
                 /* #replica_assignment */
                 if (rd_list_empty(&newp->replicas)) {
-                        rd_kafka_buf_write_i32(rkbuf, -1);
+                        rd_kafka_buf_write_arraycnt(rkbuf, -1);
                 } else {
                         const rd_list_t *replicas;
                         int pi = -1;
 
-                        rd_kafka_buf_write_i32(rkbuf,
-                                               rd_list_cnt(&newp->replicas));
+                        rd_kafka_buf_write_arraycnt(
+                            rkbuf, rd_list_cnt(&newp->replicas));
 
                         while (
                             (replicas = rd_list_elem(&newp->replicas, ++pi))) {
                                 int ri = 0;
 
                                 /* replica count */
-                                rd_kafka_buf_write_i32(rkbuf,
-                                                       rd_list_cnt(replicas));
+                                rd_kafka_buf_write_arraycnt(
+                                    rkbuf, rd_list_cnt(replicas));
 
                                 /* replica */
                                 for (ri = 0; ri < rd_list_cnt(replicas); ri++) {
@@ -5304,8 +5305,12 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
                                             rkbuf,
                                             rd_list_get_int32(replicas, ri));
                                 }
+
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
                 }
+
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* timeout */
@@ -5633,7 +5638,7 @@ rd_kafka_DeleteGroupsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_DeleteGroup_t *delt;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DeleteGroups, 0, 1, &features);
+            rkb, RD_KAFKAP_DeleteGroups, 0, 2, &features);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "DeleteGroups Admin API (KIP-229) not supported "
@@ -5642,12 +5647,12 @@ rd_kafka_DeleteGroupsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf =
-            rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteGroups, 1,
-                                     4 + (rd_list_cnt(del_groups) * 100) + 4);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DeleteGroups, 1,
+            4 + (rd_list_cnt(del_groups) * 100) + 4, ApiVersion >= 2);
 
         /* #groups */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(del_groups));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(del_groups));
 
         while ((delt = rd_list_elem(del_groups, i++)))
                 rd_kafka_buf_write_str(rkbuf, delt->group, -1);

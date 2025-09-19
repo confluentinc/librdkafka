@@ -73,7 +73,7 @@ static int static_member_wait_rebalance0(int line,
                         c->curr_line = 0;
                         return 1;
                 }
-                test_consumer_poll_once(c->rk, c->mv, 1000);
+                test_consumer_poll_once(c->rk, c->mv, 2000);  /* Increased for cloud latency */
         }
         TIMING_STOP(&t_time);
 
@@ -165,14 +165,14 @@ static void do_test_static_group_rebalance(void) {
         test_create_topic_wait_exists(NULL, topic, 3, 3, 5000);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
-        test_conf_set(conf, "max.poll.interval.ms", "9000");
-        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "max.poll.interval.ms", "30000");
+        test_conf_set(conf, "session.timeout.ms", "20000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         /* Keep this interval higher than cluster metadata propagation
          * time to make sure no additional rebalances are triggered
          * when refreshing the full metadata with a regex subscription. */
-        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "2000");
-        test_conf_set(conf, "metadata.max.age.ms", "5000");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
+        test_conf_set(conf, "metadata.max.age.ms", "10000");
         test_conf_set(conf, "enable.partition.eof", "true");
         test_conf_set(conf, "group.instance.id", "consumer1");
 
@@ -201,7 +201,7 @@ static void do_test_static_group_rebalance(void) {
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].assigned_at, 1000)) {
+                                             &c[0].assigned_at, 5000)) {  /* Increased for cloud latency */
                 /* keep consumer 2 alive while consumer 1 awaits
                  * its assignment
                  */
@@ -243,14 +243,14 @@ static void do_test_static_group_rebalance(void) {
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         rebalance_start        = test_clock();
         while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                             &c[1].assigned_at, 1000)) {
+                                             &c[1].assigned_at, 5000)) {  /* Increased for cloud latency */
                 c[0].curr_line = __LINE__;
                 test_consumer_poll_once(c[0].rk, &mv, 0);
         }
         TIMING_STOP(&t_close);
 
         /* Should complete before `session.timeout.ms` */
-        TIMING_ASSERT(&t_close, 0, 6000);
+        TIMING_ASSERT(&t_close, 0, 20000);  /* Updated for increased session timeout */
 
 
         TEST_SAY("== Testing subscription expansion ==\n");
@@ -267,7 +267,7 @@ static void do_test_static_group_rebalance(void) {
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].revoked_at, 1000)) {
+                                             &c[0].revoked_at, 5000)) {  /* Increased for cloud latency */
                 c[1].curr_line = __LINE__;
                 test_consumer_poll_once(c[1].rk, &mv, 0);
         }
@@ -279,7 +279,7 @@ static void do_test_static_group_rebalance(void) {
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].assigned_at, 1000)) {
+                                             &c[0].assigned_at, 5000)) {  /* Increased for cloud latency */
                 c[1].curr_line = __LINE__;
                 test_consumer_poll_once(c[1].rk, &mv, 0);
         }
@@ -321,7 +321,7 @@ static void do_test_static_group_rebalance(void) {
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                             &c[1].assigned_at, 1000)) {
+                                             &c[1].assigned_at, 5000)) {  /* Increased for cloud latency */
                 c[0].curr_line = __LINE__;
                 test_consumer_poll_once(c[0].rk, &mv, 0);
         }
@@ -352,12 +352,12 @@ static void do_test_static_group_rebalance(void) {
         rebalance_start        = test_clock();
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         c[1].curr_line         = __LINE__;
-        test_consumer_poll_expect_err(c[1].rk, testid, 1000,
+        test_consumer_poll_expect_err(c[1].rk, testid, 2000,  /* Increased for cloud latency */
                                       RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED);
 
         /* Await revocation */
         while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].revoked_at, 1000)) {
+                                             &c[0].revoked_at, 5000)) {  /* Increased for cloud latency */
                 c[1].curr_line = __LINE__;
                 test_consumer_poll_once(c[1].rk, &mv, 0);
         }
@@ -369,7 +369,7 @@ static void do_test_static_group_rebalance(void) {
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                             &c[1].assigned_at, 1000)) {
+                                             &c[1].assigned_at, 5000)) {  /* Increased for cloud latency */
                 c[0].curr_line = __LINE__;
                 test_consumer_poll_once(c[0].rk, &mv, 0);
         }
@@ -387,18 +387,18 @@ static void do_test_static_group_rebalance(void) {
 
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
-                                       2 * 7000);
+                                       2 * 20000);  /* Increased for cloud session timeout */
 
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         static_member_expect_rebalance(&c[1], rebalance_start,
-                                       &c[1].assigned_at, 2000);
+                                       &c[1].assigned_at, 10000);  /* Increased for cloud latency */
 
         /* Should take at least as long as `session.timeout.ms` but less than
          * `max.poll.interval.ms`, but since we can't really know when
          * the last Heartbeat or SyncGroup request was sent we need to
-         * allow some leeway on the minimum side (4s), and also some on
-         * the maximum side (1s) for slow runtimes. */
-        TIMING_ASSERT(&t_close, 6000 - 4000, 9000 + 1000);
+         * allow some leeway on the minimum side (10s), and also some on
+         * the maximum side (5s) for slow cloud runtimes. */
+        TIMING_ASSERT(&t_close, 20000 - 10000, 30000 + 5000);  /* Updated for cloud timeouts */
 
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         test_consumer_close(c[1].rk);

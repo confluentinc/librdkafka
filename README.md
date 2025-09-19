@@ -181,7 +181,7 @@ Questions and discussions are welcome on the [Discussions](https://github.com/co
   * Haskell (kafka, conduit, avro, schema registry): [hw-kafka](https://github.com/haskell-works/hw-kafka)
   * Kotlin Native: [Kafka-Kotlin-Native](https://github.com/icemachined/kafka-kotlin-native)
   * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
-  * Node.js: [node-rdkafka](https://github.com/Blizzard/node-rdkafka)
+  * Node.js: [confluent-kafka-javascript](https://github.com/confluentinc/confluent-kafka-javascript)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * Perl: [Net::Kafka](https://github.com/bookingcom/perl-Net-Kafka)
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)

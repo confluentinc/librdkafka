@@ -656,9 +656,9 @@ static void a_assign_tests() {
   const int msgsize2 = 200;
 
   std::string topic1_str = Test::mk_topic_name("0113-a1", 1);
-  test_create_topic(NULL, topic1_str.c_str(), 1, -1);
+  test_create_topic(NULL, topic1_str.c_str(), 1, 3);
   std::string topic2_str = Test::mk_topic_name("0113-a2", 1);
-  test_create_topic(NULL, topic2_str.c_str(), 1, -1);
+  test_create_topic(NULL, topic2_str.c_str(), 1, 3);
 
   test_wait_topic_exists(NULL, topic1_str.c_str(), 10 * 1000);
   test_wait_topic_exists(NULL, topic2_str.c_str(), 10 * 1000);
@@ -907,7 +907,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
-  test_create_topic(NULL, topic_name.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name.c_str(), 2, 3);
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer(
@@ -1088,7 +1088,7 @@ static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
-  test_create_topic(NULL, topic_name.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name.c_str(), 2, 3);
 
   RdKafka::KafkaConsumer *c1 =
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 20);
@@ -1144,10 +1144,10 @@ static void d_change_subscription_add_topic(rd_bool_t close_consumer) {
 
   std::string topic_name_1 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_1.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 3);
   std::string topic_name_2 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_2.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name_2.c_str(), 2, 3);
 
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1200,10 +1200,10 @@ static void e_change_subscription_remove_topic(rd_bool_t close_consumer) {
 
   std::string topic_name_1 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_1.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 3);
   std::string topic_name_2 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_2.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name_2.c_str(), 2, 3);
 
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1313,7 +1313,7 @@ static void f_assign_call_cooperative() {
   SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name.c_str(), 1, 3);
 
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1419,7 +1419,7 @@ static void g_incremental_assign_call_eager() {
   }
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name.c_str(), 1, 3);
 
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1457,10 +1457,10 @@ static void h_delete_topic() {
 
   std::string topic_name_1 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_1.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 3);
   std::string topic_name_2 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_2.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name_2.c_str(), 1, 3);
 
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1530,7 +1530,7 @@ static void i_delete_topic_2() {
 
   std::string topic_name_1 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_1.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 3);
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -1587,7 +1587,7 @@ static void j_delete_topic_no_rb_callback() {
 
   std::string topic_name_1 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name_1.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 3);
 
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1637,7 +1637,7 @@ static void k_add_partition() {
   SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name.c_str(), 1, 3);
 
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1720,8 +1720,8 @@ static void l_unsubscribe() {
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
-  test_create_topic(NULL, topic_name_1.c_str(), 2, -1);
-  test_create_topic(NULL, topic_name_2.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 3);
+  test_create_topic(NULL, topic_name_2.c_str(), 2, 3);
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer(
@@ -1848,7 +1848,7 @@ static void m_unsubscribe_2() {
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
-  test_create_topic(NULL, topic_name.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name.c_str(), 2, 3);
 
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
@@ -1941,8 +1941,8 @@ static void n_wildcard() {
         Test::assignment_partition_count(c2, NULL) == 0 && !created_topics) {
       Test::Say(
           "Creating two topics with 2 partitions each that match regex\n");
-      test_create_topic(NULL, topic_name_1.c_str(), 2, -1);
-      test_create_topic(NULL, topic_name_2.c_str(), 2, -1);
+      test_create_topic(NULL, topic_name_1.c_str(), 2, 3);
+      test_create_topic(NULL, topic_name_2.c_str(), 2, 3);
       test_wait_topic_exists(NULL, topic_name_1.c_str(), 5000);
       test_wait_topic_exists(NULL, topic_name_2.c_str(), 5000);
       /* The consumers should autonomously discover these topics and start
@@ -2096,8 +2096,8 @@ static void o_java_interop() {
   std::string topic_name_1 = Test::mk_topic_name("0113_o_2", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113_o_6", 1);
   std::string group_name   = Test::mk_unique_group_name("0113_o");
-  test_create_topic(NULL, topic_name_1.c_str(), 2, -1);
-  test_create_topic(NULL, topic_name_2.c_str(), 6, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 3);
+  test_create_topic(NULL, topic_name_2.c_str(), 6, 3);
 
   DefaultRebalanceCb rebalance_cb;
   RdKafka::KafkaConsumer *c = make_consumer(
@@ -2204,9 +2204,9 @@ static void s_subscribe_when_rebalancing(int variation) {
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
-  test_create_topic(NULL, topic_name_1.c_str(), 1, -1);
-  test_create_topic(NULL, topic_name_2.c_str(), 1, -1);
-  test_create_topic(NULL, topic_name_3.c_str(), 1, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 3);
+  test_create_topic(NULL, topic_name_2.c_str(), 1, 3);
+  test_create_topic(NULL, topic_name_3.c_str(), 1, 3);
 
   DefaultRebalanceCb rebalance_cb;
   RdKafka::KafkaConsumer *c = make_consumer(
@@ -2259,7 +2259,7 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
       Test::mk_unique_group_name("0113-cooperative_rebalance");
-  test_create_topic(NULL, topic_name_1.c_str(), 2, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 3);
 
   std::vector<std::pair<std::string, std::string> > additional_conf;
   additional_conf.push_back(std::pair<std::string, std::string>(
@@ -2416,8 +2416,8 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
   string topic_name_2 = Test::mk_topic_name("0113u_2", 1);
   string group_name   = Test::mk_unique_group_name("0113u");
 
-  test_create_topic(NULL, topic_name_1.c_str(), N_PARTS_PER_TOPIC, -1);
-  test_create_topic(NULL, topic_name_2.c_str(), N_PARTS_PER_TOPIC, -1);
+  test_create_topic(NULL, topic_name_1.c_str(), N_PARTS_PER_TOPIC, 3);
+  test_create_topic(NULL, topic_name_2.c_str(), N_PARTS_PER_TOPIC, 3);
 
   Test::Say("Creating consumers\n");
   DefaultRebalanceCb rebalance_cbs[N_CONSUMERS];
@@ -3247,7 +3247,7 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
    */
   p = test_create_producer();
 
-  test_create_topic_wait_exists(p, topic, partition_cnt, -1, 5000);
+  test_create_topic_wait_exists(p, topic, partition_cnt, 3, 5000);
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3331,7 +3331,7 @@ static void x_incremental_rebalances(void) {
   SUB_TEST();
   test_conf_init(&conf, NULL, 60);
 
-  test_create_topic_wait_exists(NULL, topic, 6, -1, 5000);
+  test_create_topic_wait_exists(NULL, topic, 6, 3, 5000);
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {

@@ -343,7 +343,7 @@ int main_0055_producer_latency(int argc, char **argv) {
         }
 
         /* Create topic without replicas to keep broker-side latency down */
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, 3, 5000);
 
         for (latconf = latconfs; latconf->name; latconf++)
                 test_producer_latency(topic, latconf);

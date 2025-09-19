@@ -125,7 +125,7 @@ static void do_test_strategy_ordering(const char *assignor,
         testid = test_id_generate();
 
         topic = test_mk_topic_name("0132-strategy_ordering", 1);
-        test_create_topic_wait_exists(NULL, topic, _PART_CNT, -1, 5000);
+        test_create_topic_wait_exists(NULL, topic, _PART_CNT, 3, 5000);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_init(&conf, NULL, 30);

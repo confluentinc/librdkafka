@@ -130,7 +130,7 @@ static void do_test_implicit_ack(const char *what,
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic_wait_exists(rk, topic, 1, -1, 5000);
+        test_create_topic_wait_exists(rk, topic, 1, 3, 5000);
 
         rkt = test_create_producer_topic(rk, topic, NULL);
 

@@ -1,3 +1,10 @@
+
+# librdkafka v2.11.2 (unreleased)
+
+## Fixes
+
+* C++ docs: Clarify ownership of `RdKafka::Conf::dump()` return value (#5166, @aryanrahar)
+=======
 # librdkafka v2.12.0
 
 librdkafka v2.12.0 is a feature release:
@@ -44,6 +51,7 @@ librdkafka v2.12.0 is a feature release:
   we start fetching from it and, in case it was truncated, fetching starts
   from last available offset of given leader epoch.
   Happens since 2.1.0 (#4931).
+
 
 
 

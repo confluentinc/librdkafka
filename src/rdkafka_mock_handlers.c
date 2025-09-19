@@ -1656,7 +1656,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_write_str(resp, NULL, -1); /* ProtocolName */
         rd_kafka_buf_write_str(resp, NULL, -1); /* LeaderId */
         rd_kafka_buf_write_kstr(resp, NULL);    /* MemberId */
-        rd_kafka_buf_write_arraycnt(resp, 0);        /* MemberCnt */
+        rd_kafka_buf_write_arraycnt(resp, 1);        /* MemberCnt */
         rd_kafka_buf_write_tags_empty(resp);    /* Response: Struct tags */
 
         rd_kafka_mock_connection_send_response(mconn, resp);

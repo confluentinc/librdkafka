@@ -35,7 +35,10 @@
 
 static mtx_t log_lock;
 static cnd_t log_cnd;
-static rd_bool_t revocation_done = rd_false;
+static rd_bool_t revocation_done        = rd_false;
+static int got_stale_member_epoch_error = 0;
+static rd_bool_t trigger_consumer_close = rd_false;
+static int ack_target_assignment_count  = 0;
 
 static void
 log_cb(const rd_kafka_t *rk, int level, const char *fac, const char *buf) {
@@ -362,6 +365,149 @@ void do_test_OffsetCommit_automatic_stale_member_epoch_error(
         SUB_TEST_PASS();
 }
 
+static void log_cb_closing_issue(const rd_kafka_t *rk,
+                                 int level,
+                                 const char *fac,
+                                 const char *buf) {
+        if (strstr(buf, "Acknowledging target assignment")) {
+                mtx_lock(&log_lock);
+                ack_target_assignment_count++;
+                if (ack_target_assignment_count == 2) {
+                        trigger_consumer_close = rd_true;
+                        cnd_signal(&log_cnd);
+                }
+                mtx_unlock(&log_lock);
+        }
+        if (strstr(buf, "unable to OffsetCommit") &&
+            strstr(buf, "Broker: The member epoch is stale")) {
+                mtx_lock(&log_lock);
+                got_stale_member_epoch_error++;
+                mtx_unlock(&log_lock);
+        }
+}
+
+/**
+ * In the last heartbeat before leaving the group, if the
+ * revocation is being acknowledged from the consumer side
+ * and before recieving the response, consumer starts leaving
+ * the group then the response of the inflight heartbeat request
+ * should update the member epoch and not cause a stale member
+ * epoch error in the subsequent commit requests.
+ */
+void do_test_consumer_group_heartbeat_ack_assignment_close(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *bootstraps) {
+
+        char topic1[256], topic2[256];
+        rd_kafka_t *producer, *consumer;
+        rd_kafka_conf_t *conf, *producer_conf;
+        uint64_t testid  = test_id_generate();
+        const int msgcnt = 5;
+        test_msgver_t mv;
+        const char *debug_contexts[3] = {"cgrp", NULL};
+        int64_t close_start, close_end;
+        const int session_timeout_ms = 3000;
+        const int heartbeat_rtt_ms   = 200;
+
+        SUB_TEST_QUICK();
+
+        mtx_init(&log_lock, mtx_plain);
+        cnd_init(&log_cnd);
+
+        strcpy(topic1, test_mk_topic_name("topic1", 1));
+        strcpy(topic2, test_mk_topic_name("topic2", 1));
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.protocol", "consumer");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "true");
+        test_conf_set(conf, "auto.commit.interval.ms", "2000");
+        test_conf_set(conf, "fetch.wait.max.ms", "100");
+        test_conf_set_log_interceptor(conf, log_cb_closing_issue,
+                                      debug_contexts);
+
+        rd_kafka_mock_coordinator_set(mcluster, "group", topic1, 1);
+        rd_kafka_mock_set_group_consumer_session_timeout_ms(mcluster,
+                                                            session_timeout_ms);
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 500);
+
+        // Producer Initialization
+        producer_conf = rd_kafka_conf_dup(conf);
+        rd_kafka_conf_set_dr_msg_cb(producer_conf, test_dr_msg_cb);
+        producer = test_create_handle(RD_KAFKA_PRODUCER, producer_conf);
+
+        // Create topic1 and produce few messages
+        rd_kafka_mock_topic_create(mcluster, topic1, 1, 1);
+        test_produce_msgs2(producer, topic1, testid, 0, 0, msgcnt, NULL, 0);
+        rd_kafka_flush(producer, -1);
+
+        // Create topic2 and produce few messages
+        rd_kafka_mock_topic_create(mcluster, topic2, 1, 1);
+        test_produce_msgs2(producer, topic2, testid, 0, 0, msgcnt, NULL, 0);
+        rd_kafka_flush(producer, -1);
+
+        // Consumer: subscribe to both topics
+        TEST_SAY("Group id: %s\n", topic1);
+        consumer =
+            test_create_consumer(topic1, NULL, rd_kafka_conf_dup(conf), NULL);
+        test_consumer_subscribe_multi(consumer, 2, topic1, topic2);
+
+        // Poll and verify messages priduced to both topics
+        test_msgver_init(&mv, testid);
+        test_consumer_poll("read from both topics", consumer, testid, -1, 0,
+                           2 * msgcnt, &mv);
+        test_msgver_clear(&mv);
+
+        // Change subscription to only topic1 to trigger revocation
+        test_consumer_subscribe(consumer, topic1);
+
+        // Set ConsumerGroupHeartbeat RTT to heartbeat_rtt_ms
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 2,
+            RD_KAFKA_RESP_ERR_NO_ERROR, heartbeat_rtt_ms,
+            RD_KAFKA_RESP_ERR_NO_ERROR, heartbeat_rtt_ms);
+
+        // Produce few more messages to topic1 so that we can trigger
+        // auto-commit later which will give stale member epoch error
+        test_produce_msgs2(producer, topic1, testid, 0, 0, msgcnt, NULL, 0);
+        rd_kafka_flush(producer, -1);
+
+        // Wait for log callback to trigger consumer close after second
+        // "Acknowledging target assignment"
+        mtx_lock(&log_lock);
+        while (!trigger_consumer_close)
+                cnd_timedwait_ms(&log_cnd, &log_lock, 500);
+        mtx_unlock(&log_lock);
+
+        // Poll and verify the produced messages
+        test_msgver_init(&mv, testid);
+        test_consumer_poll("read topic1", consumer, testid, -1, 0, msgcnt, &mv);
+        test_msgver_clear(&mv);
+
+        // Close consumer and assert it closes within 2s
+        close_start = test_clock();
+        test_consumer_close(consumer);
+        close_end = test_clock();
+
+        mtx_lock(&log_lock);
+        TEST_ASSERT(got_stale_member_epoch_error == 1,
+                    "Expected 1 stale member epoch error, got %d",
+                    got_stale_member_epoch_error);
+        mtx_unlock(&log_lock);
+        TEST_ASSERT((close_end - close_start) < session_timeout_ms * 1000,
+                    "Consumer did not close within 2s, took %" PRId64 " us",
+                    (close_end - close_start));
+
+        rd_kafka_destroy(consumer);
+        rd_kafka_destroy(producer);
+
+        mtx_destroy(&log_lock);
+        cnd_destroy(&log_cnd);
+
+        SUB_TEST_PASS();
+}
+
 int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
@@ -392,6 +538,9 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
         for (i = 0; i < TEST_ERROR_VARIATION_CASE__CNT; i++)
                 do_test_OffsetCommit_automatic_stale_member_epoch_error(
                     mcluster, bootstraps, i);
+
+        do_test_consumer_group_heartbeat_ack_assignment_close(mcluster,
+                                                              bootstraps);
 
         test_mock_cluster_destroy(mcluster);
 

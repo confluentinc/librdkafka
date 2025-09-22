@@ -845,4 +845,66 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
         await waitFor(() => (messagesConsumed === messages.length || batchesCountExceeds1), () => { }, 100);
         expect(batchesCountExceeds1).toBe(false);
     });
+
+    it('shows the correct high watermark and lag for partition', async () => {
+        await producer.connect();
+
+        let messages0 = Array(10).fill().map(() => {
+            const value = secureRandom();
+            return { value: `value-${value}`, partition: 0 };
+        });
+        let partition0ProducedMessages = messages0.length;
+
+        const messages1 = Array(5).fill().map(() => {
+            const value = secureRandom();
+            return { value: `value-${value}`, partition: 1 };
+        });
+
+        const messages2 = Array(2).fill().map(() => {
+            const value = secureRandom();
+            return { value: `value-${value}`, partition: 2 };
+        });
+
+        for (const messages of [messages0, messages1, messages2]) {
+            await producer.send({
+                topic: topicName,
+                messages: messages,
+            });
+        }
+
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName });
+
+        let messagesConsumed = 0;
+        consumer.run({
+            partitionsConsumedConcurrently,
+            eachBatch: async ({ batch }) => {
+                if (batch.partition === 0) {
+                    expect(batch.highWatermark).toEqual(String(partition0ProducedMessages));
+                } else if (batch.partition === 1) {
+                    expect(batch.highWatermark).toEqual(String(messages1.length));
+                } else if (batch.partition === 2) {
+                    expect(batch.highWatermark).toEqual(String(messages2.length));
+                }
+                expect(batch.offsetLag()).toEqual(String(+batch.highWatermark - 1 - +batch.lastOffset()));
+                expect(batch.offsetLagLow()).toEqual(String(+batch.highWatermark - 1 - +batch.firstOffset()));
+                messagesConsumed += batch.messages.length;
+            }
+        });
+        await waitFor(() => (messagesConsumed === (partition0ProducedMessages + messages1.length + messages2.length)), () => { }, 100);
+
+        /* Add some more messages to partition 0 to make sure high watermark is updated. */
+        messages0 = Array(15).fill().map(() => {
+            const value = secureRandom();
+            return { value: `value-${value}`, partition: 0 };
+        });
+        partition0ProducedMessages += messages0.length;
+        await producer.send({
+            topic: topicName,
+            messages: messages0,
+        });
+
+        await waitFor(() => (messagesConsumed === (partition0ProducedMessages + messages1.length + messages2.length)), () => { }, 100);
+    });
+
 });

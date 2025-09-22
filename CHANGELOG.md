@@ -2,9 +2,15 @@
 
 v1.5.0 is a feature release. It is supported for all usage.
 
+### Enhancements
+
+1. Adds support for `highWatermark`, `offsetLag()`, and `offsetLagLow()` in `eachBatch` callback (#317).
+
+
 ## Fixes
 
 1. Fix issue of delay of up to 5s in receiving messages after pause and resume, or seek (#285, #363).
+
 
 # confluent-kafka-javascript v1.4.1
 

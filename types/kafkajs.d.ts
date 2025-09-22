@@ -280,6 +280,8 @@ export type Batch = {
   isEmpty(): boolean
   firstOffset(): string | null
   lastOffset(): string
+  offsetLag(): string
+  offsetLagLow(): string
 }
 
 export type KafkaMessage = MessageSetEntry | RecordBatchEntry

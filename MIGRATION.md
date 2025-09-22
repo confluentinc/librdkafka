@@ -308,7 +308,7 @@ producerRun().then(consumerRun).catch(console.error);
     to change.
     The property `eachBatchAutoResolve` is supported.
     Within the `eachBatch` callback, use of `uncommittedOffsets` is unsupported,
-    and within the returned batch, `offsetLag` and `offsetLagLow` are unsupported.
+    and within the returned batch, `offsetLag` and `offsetLagLow` are supported.
 * `commitOffsets`:
   - Does not yet support sending metadata for topic partitions being committed.
   - If called with no arguments, it commits all offsets passed to the user (or the stored offsets, if manually handling offset storage using `consumer.storeOffsets`).

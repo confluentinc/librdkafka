@@ -252,6 +252,21 @@ rd_kafka_resp_err_t rd_kafka_mock_cgrp_classic_member_sync_set(
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Member left the group
+ *        either explicitly or due to a timeout.
+ *        Trigger rebalance if there are still members left.
+ *        If this was the last member, mark the group as empty.
+ */
+void rd_kafka_mock_cgrp_classic_member_leave_rebalance_maybe(
+    rd_kafka_mock_cgrp_classic_t *mcgrp,
+    const char *reason) {
+        if (mcgrp->member_cnt > 0)
+                rd_kafka_mock_cgrp_classic_rebalance(mcgrp, reason);
+        else
+                rd_kafka_mock_cgrp_classic_set_state(
+                    mcgrp, RD_KAFKA_MOCK_CGRP_STATE_EMPTY, reason);
+}
 
 /**
  * @brief Member is explicitly leaving the group (through LeaveGroupRequest)
@@ -265,7 +280,8 @@ rd_kafka_resp_err_t rd_kafka_mock_cgrp_classic_member_leave(
 
         rd_kafka_mock_cgrp_classic_member_destroy(mcgrp, member);
 
-        rd_kafka_mock_cgrp_classic_rebalance(mcgrp, "explicit member leave");
+        rd_kafka_mock_cgrp_classic_member_leave_rebalance_maybe(
+            mcgrp, "explicit member leave");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -633,7 +649,8 @@ static void rd_kafka_mock_cgrp_classic_session_tmr_cb(rd_kafka_timers_t *rkts,
         }
 
         if (timeout_cnt)
-                rd_kafka_mock_cgrp_classic_rebalance(mcgrp, "member timeout");
+                rd_kafka_mock_cgrp_classic_member_leave_rebalance_maybe(
+                    mcgrp, "member timeout");
 }
 
 

@@ -387,12 +387,12 @@ static void log_cb_closing_issue(const rd_kafka_t *rk,
 }
 
 /**
- * In the last heartbeat before leaving the group, if the
- * revocation is being acknowledged from the consumer side
- * and before recieving the response, consumer starts leaving
- * the group then the response of the inflight heartbeat request
- * should update the member epoch and not cause a stale member
- * epoch error in the subsequent commit requests.
+ * @brief This test checks that when a consumer acknowledges revocations and
+ * sends a heartbeat just before leaving the group, the heartbeat response may
+ * still be in flight while the leave process begins. In this scenario, the
+ * heartbeat response must update the member epoch rather than being discarded.
+ * Otherwise, subsequent commit requests (which will be required for leaving)
+ * may fail with a stale member epoch error.
  */
 void do_test_consumer_group_heartbeat_ack_assignment_close(
     rd_kafka_mock_cluster_t *mcluster,
@@ -485,7 +485,7 @@ void do_test_consumer_group_heartbeat_ack_assignment_close(
         test_consumer_poll("read topic1", consumer, testid, -1, 0, msgcnt, &mv);
         test_msgver_clear(&mv);
 
-        // Close consumer and assert it closes within 2s
+        // Close consumer and assert it closes within session_timeout_ms
         close_start = test_clock();
         test_consumer_close(consumer);
         close_end = test_clock();

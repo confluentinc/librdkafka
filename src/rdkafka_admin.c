@@ -3746,7 +3746,6 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                 for (ci = 0; ci < (int)entry_cnt; ci++) {
                         rd_kafkap_str_t config_name, config_value,
                             documentation;
-                        rd_kafkap_str_t config_name, config_value;
                         int8_t config_type;
                         int32_t syn_cnt;
                         int si;

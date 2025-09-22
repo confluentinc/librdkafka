@@ -682,7 +682,8 @@ static void test_print_ConfigEntry_array(const rd_kafka_ConfigEntry_t **entries,
                     "%s#%" PRIusz "/%" PRIusz
                     ": Source %s (%d): \"%s\"=\"%s\" "
                     "[is read-only=%s, default=%s, sensitive=%s, "
-                    "synonym=%s] with %" PRIusz " synonym(s) ConfigType: (%d) "
+                    "synonym=%s] with %" PRIusz
+                    " synonym(s) ConfigType: (%d) "
                     "Documentation: %s\n",
                     indent, ei, entry_cnt,
                     rd_kafka_ConfigSource_name(rd_kafka_ConfigEntry_source(e)),

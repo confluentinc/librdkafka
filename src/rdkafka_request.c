@@ -5545,7 +5545,8 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                         rd_kafka_buf_write_arraycnt(rkbuf, -1);
                 } else {
                         /* Get requested configs only */
-                        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(&config->config));
+                        rd_kafka_buf_write_arraycnt(
+                            rkbuf, rd_list_cnt(&config->config));
                 }
 
                 RD_LIST_FOREACH(entry, &config->config, ei) {

@@ -3741,7 +3741,8 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         config->errstr = rd_strdup(this_errstr);
 
                 /* #config_entries */
-                rd_kafka_buf_read_arraycnt(reply, &entry_cnt, RD_KAFKAP_CONFIGS_MAX);
+                rd_kafka_buf_read_arraycnt(reply, &entry_cnt,
+                                           RD_KAFKAP_CONFIGS_MAX);
 
                 for (ci = 0; ci < (int)entry_cnt; ci++) {
                         rd_kafkap_str_t config_name, config_value,
@@ -3784,7 +3785,8 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
                         if (rd_kafka_buf_ApiVersion(reply) >= 1) {
                                 /* #config_synonyms (ApiVersion 1) */
-                                rd_kafka_buf_read_arraycnt(reply, &syn_cnt, RD_KAFKAP_CONFIGS_MAX);
+                                rd_kafka_buf_read_arraycnt(
+                                    reply, &syn_cnt, RD_KAFKAP_CONFIGS_MAX);
 
                                 if (syn_cnt > 100000)
                                         rd_kafka_buf_parse_fail(

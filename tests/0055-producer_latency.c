@@ -347,22 +347,32 @@ int main_0055_producer_latency(int argc, char **argv) {
                 return 0;
         }
 
-        if (test_k2_cluster) {
-                TEST_SAY("K2 cluster mode: skipping acks=0, idempotence, and transactions tests\n");
+        /* Display what acks values are supported */
+        if (test_supported_acks) {
+                TEST_SAY("Supported acks values: %s\n", test_supported_acks);
         }
 
         /* Create topic without replicas to keep broker-side latency down */
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
         for (latconf = latconfs; latconf->name; latconf++) {
-                /* Skip K2-incompatible configurations when test_k2_cluster is enabled */
-                if (test_k2_cluster &&
-                    (strstr(latconf->name, "no acks") ||
-                     strstr(latconf->name, "idempotence") ||
-                     strstr(latconf->name, "transactions"))) {
-                        TEST_SAY("K2 cluster mode: skipping %s test\n", latconf->name);
+                if (strstr(latconf->name, "no acks") && !test_is_acks_supported("0")) {
+                        TEST_SAY("Skipping %s test (acks=0 not supported)\n", latconf->name);
                         continue;
                 }
+                
+                /* Skip idempotence tests if idempotent producer tests are disabled */
+                if (strstr(latconf->name, "idempotence") && (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
+                        TEST_SAY("Skipping %s test (idempotent producer tests disabled)\n", latconf->name);
+                        continue;
+                }
+                
+                /* Skip transaction tests if idempotent producer tests are disabled */
+                if (strstr(latconf->name, "transactions") && (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
+                        TEST_SAY("Skipping %s test (idempotent producer tests disabled)\n", latconf->name);
+                        continue;
+                }
+                
                 test_producer_latency(topic, latconf);
         }
 

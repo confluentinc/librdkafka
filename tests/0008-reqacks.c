@@ -96,17 +96,20 @@ int main_0008_reqacks(int argc, char **argv) {
             "all brokers!\033[0m\n");
 
         /* Try different request.required.acks settings (issue #75) */
-        /* For K2 clusters, only use acks=-1 */
-        int start_acks = test_k2_cluster ? -1 : -1;
-        int end_acks = test_k2_cluster ? -1 : 1;
+        /* Test all standard acks values, but skip unsupported ones */
+        int start_acks = -1;
+        int end_acks = 1;
         
-        if (test_k2_cluster) {
-                TEST_SAY("K2 cluster mode: testing only acks=-1\n");
-        } else {
-                TEST_SAY("Standard mode: testing acks=-1, 0, 1\n");
-        }
+        TEST_SAY("Testing acks values -1, 0, 1 (skipping unsupported ones)\n");
         for (reqacks = start_acks; reqacks <= end_acks; reqacks++) {
                 char tmp[10];
+                
+                /* Convert acks value to string and check if supported */
+                rd_snprintf(tmp, sizeof(tmp), "%d", reqacks);
+                if (!test_is_acks_supported(tmp)) {
+                        TEST_SAY("Skipping acks=%d (not supported by cluster)\n", reqacks);
+                        continue;
+                }
 
                 test_conf_init(&conf, &topic_conf, 10);
 

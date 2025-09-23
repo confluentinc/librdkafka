@@ -59,8 +59,12 @@ int main_0038_performance(int argc, char **argv) {
 
         msgcnt = totsize / msgsize;
 
-        /* For K2 clusters, use acks=-1, otherwise use acks=1 */
-        const char *acks_value = test_k2_cluster ? "-1" : "1";
+        /* Use acks=1 for performance test */
+        if (!test_is_acks_supported("1")) {
+                TEST_SKIP("acks=1 not supported by this cluster\n");
+                return 0;
+        }
+        const char *acks_value = "1";
         
         TEST_SAY("Producing %d messages of size %d to %s [%d] with acks=%s\n", msgcnt,
                  (int)msgsize, topic, partition, acks_value);

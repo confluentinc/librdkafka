@@ -62,6 +62,9 @@ extern int test_quick;
 /** @brief true if tests should run in K2 cluster mode (acks=-1, higher limits) */
 extern int test_k2_cluster;
 
+/** @brief Supported acks values configuration */
+extern char *test_supported_acks;
+
 /** @brief Broker version to int */
 #define TEST_BRKVER(A, B, C, D) (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
 /** @brief return single version component from int */
@@ -190,6 +193,8 @@ void test_SKIP(const char *file, int line, const char *str);
 void test_timeout_set(int timeout);
 int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 int test_set_special_conf(const char *name, const char *val, int *timeoutp);
+int test_is_acks_supported(const char *acks_value);
+const char *test_get_available_acks(const char *wanted_acks);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
 const char *test_getenv(const char *env, const char *def);

@@ -18,6 +18,16 @@
 # Write test results to sqlite3 database
 #test.sql.command=sqlite3 rdktests
 
+# Skip tests that require idempotent producer
+#test.skip.idempotent=true
+
+# Configure which acks values are supported by the cluster
+# Tests using unsupported acks values will be skipped.
+# Examples:
+#test.supported.acks=-1         
+#test.supported.acks=-1,0,1      
+#test.supported.acks=0           
+
 # Bootstrap broker(s)
 metadata.broker.list=localhost:9092
 

@@ -66,6 +66,7 @@ static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
 int test_k2_cluster                        = 0; /**< K2 cluster mode */
+char *test_supported_acks                   = NULL; /**< Supported acks values */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -880,10 +881,75 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
                         rd_free(test_sql_cmd);
                 test_sql_cmd = rd_strdup(val);
                 TEST_UNLOCK();
+        } else if (!strcmp(name, "test.skip.idempotent")) {
+                if (!strcmp(val, "true") || !strcmp(val, "1"))
+                        test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
+                else
+                        test_neg_flags &= ~TEST_F_IDEMPOTENT_PRODUCER;
+        } else if (!strcmp(name, "test.supported.acks")) {
+                TEST_LOCK();
+                if (test_supported_acks)
+                        rd_free(test_supported_acks);
+                test_supported_acks = rd_strdup(val);
+                TEST_UNLOCK();
         } else
                 return 0;
 
         return 1;
+}
+
+/**
+ * @brief Check if an acks value is supported
+ * @param acks_value The acks value to check (as string, e.g., "0", "1", "-1")
+ * @returns 1 if supported, 0 if not supported
+ */
+int test_is_acks_supported(const char *acks_value) {
+        char *supported_list, *token, *saveptr;
+        int is_supported = 0;
+        
+        if (!test_supported_acks) {
+                /* If no supported acks configured, assume all standard values are supported */
+                return (!strcmp(acks_value, "-1") || 
+                        !strcmp(acks_value, "0") || 
+                        !strcmp(acks_value, "1"));
+        }
+        
+        /* Parse the comma-separated list of supported acks values */
+        supported_list = rd_strdup(test_supported_acks);
+        token = strtok_r(supported_list, ",", &saveptr);
+        
+        while (token != NULL) {
+                /* Trim whitespace */
+                while (*token == ' ' || *token == '\t') token++;
+                char *end = token + strlen(token) - 1;
+                while (end > token && (*end == ' ' || *end == '\t')) *end-- = '\0';
+                
+                if (!strcmp(token, acks_value)) {
+                        is_supported = 1;
+                        break;
+                }
+                token = strtok_r(NULL, ",", &saveptr);
+        }
+        
+        rd_free(supported_list);
+        return is_supported;
+}
+
+/**
+ * @brief Check if test should run with the requested acks value
+ * @param wanted_acks The acks value the test wants (e.g., "1", "0", "-1", "all")
+ * @returns The acks value to use, or NULL if test should be skipped
+ */
+const char *test_get_available_acks(const char *wanted_acks) {
+        /* Handle "all" as equivalent to "-1" */
+        if (!strcmp(wanted_acks, "all"))
+                wanted_acks = "-1";
+                
+        if (test_is_acks_supported(wanted_acks))
+                return wanted_acks;
+        
+        /* Not supported - test should be skipped */
+        return NULL;
 }
 
 /**
@@ -1908,8 +1974,6 @@ int main(int argc, char **argv) {
                         test_neg_flags |= TEST_F_SOCKEM;
                 else if (!strcmp(argv[i], "-i"))
                         test_flags |= TEST_F_IDEMPOTENT_PRODUCER;
-                else if (!strcmp(argv[i], "-I"))
-                        test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
                 else if (!strcmp(argv[i], "-V") && i + 1 < argc)
                         test_broker_version_str = argv[++i];
                 else if (!strcmp(argv[i], "-s") && i + 1 < argc) {
@@ -1953,7 +2017,7 @@ int main(int argc, char **argv) {
                             "needed)\n"
                             "  -k/-K  Only/dont run tests with known issues\n"
                             "  -E     Don't run sockem tests\n"
-                            "  -i/-I   Only/don't run tests using "
+                            "  -i      Only run tests using "
                             "idempotent/transactional producer\n"
                             "  -a     Assert on failures\n"
                             "  -r     Write test_report_...json file.\n"
@@ -1987,7 +2051,7 @@ int main(int argc, char **argv) {
                             "  TEST_LEVEL - Test verbosity level\n"
                             "  TEST_MODE - bare, helgrind, valgrind\n"
                             "  TEST_SEED - random seed\n"
-                            "  CLUSTER_TYPE - K2 for K2 cluster mode (uses acks=-1)\n"
+                            "  CLUSTER_TYPE - K2 for K2 cluster mode\n"
                             "  RDKAFKA_TEST_CONF - test config file "
                             "(test.conf)\n"
                             "  KAFKA_PATH - Path to kafka source dir\n"
@@ -2083,8 +2147,15 @@ int main(int argc, char **argv) {
                             "other tests, possible logical inconsistency.\n");
                 TEST_SAY("Test Idempotent Producer: enabled\n");
         }
+        if (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)
+                TEST_SAY("Test Idempotent Producer: skipping idempotent tests\n");
+        if (test_supported_acks) {
+                TEST_SAY("Test supported acks: %s\n", test_supported_acks);
+        } else {
+                TEST_SAY("Test supported acks: -1,0,1 (default - all standard values)\n");
+        }
         if (test_k2_cluster) {
-                TEST_SAY("Test K2 Cluster: enabled (acks=-1, +2.0x timeout multiplier)\n");
+                TEST_SAY("Test K2 Cluster: enabled (+2.0x timeout multiplier)\n");
         }
 
         {

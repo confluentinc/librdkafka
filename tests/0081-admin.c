@@ -832,11 +832,10 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
                 if (test_k2_cluster) {
                         /*
-                         * Skip broker configs for K2 environments that don't allow
                          * mixed topic and broker resources in the same AlterConfigs request
                          */
                         TEST_WARN(
-                            "Skipping RESOURCE_BROKER AlterConfigs test for K2 "
+                            "Skipping RESOURCE_BROKER AlterConfigs test for cloud"
                             "environment (mixed resource types not supported)\n");
                 } else {
                         /*
@@ -976,13 +975,13 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* For topic configs in K2 environments, accept UNKNOWN_TOPIC_OR_PART
-                         * even for existing topics since K2 may restrict topic config alterations */
+                        /* For topic configs in cloud environments, accept UNKNOWN_TOPIC_OR_PART
+                         * even for existing topics since cloud may restrict topic config alterations */
                         if (test_k2_cluster &&
                             rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
-                                TEST_SAY("K2 environment: accepting UNKNOWN_TOPIC_OR_PART for topic config "
+                                TEST_SAY("cloud environment: accepting UNKNOWN_TOPIC_OR_PART for topic config "
                                         "(topic config alterations may be restricted)\n");
                         } else {
                                 TEST_FAIL_LATER(
@@ -1127,11 +1126,10 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
                 if (test_k2_cluster) {
                         /*
-                         * Skip broker configs for K2 environments that don't allow
                          * mixed topic and broker resources in the same AlterConfigs request
                          */
                         TEST_WARN(
-                            "Skipping RESOURCE_BROKER IncrementalAlterConfigs test for K2 "
+                            "Skipping RESOURCE_BROKER IncrementalAlterConfigs test for cloud "
                             "environment (mixed resource types not supported)\n");
                 } else {
                         /*
@@ -1181,11 +1179,11 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
          */
         if (test_k2_cluster) {
                 /*
-                 * Skip group configs for K2 environments that don't allow
+                 * Skip group configs for cloud environments that don't allow
                  * mixed topic and group resources in the same IncrementalAlterConfigs request
                  */
                 TEST_WARN(
-                    "Skipping RESOURCE_GROUP IncrementalAlterConfigs test for K2 "
+                    "Skipping RESOURCE_GROUP IncrementalAlterConfigs test for cloud "
                     "environment (mixed resource types not supported)\n");
         } else {
                 configs[ci] =
@@ -1301,13 +1299,13 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* For topic configs in K2 environments, accept UNKNOWN_TOPIC_OR_PART
-                         * even for existing topics since K2 may restrict topic config alterations */
+                        /* For topic configs in cloud environments, accept UNKNOWN_TOPIC_OR_PART
+                         * even for existing topics since cloud may restrict topic config alterations */
                         if (test_k2_cluster &&
                             rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
-                                TEST_SAY("K2 environment: accepting UNKNOWN_TOPIC_OR_PART for topic config "
+                                TEST_SAY("cloud environment: accepting UNKNOWN_TOPIC_OR_PART for topic config "
                                         "(topic config alterations may be restricted)\n");
                         } else {
                                 TEST_FAIL_LATER(
@@ -1352,8 +1350,8 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         const char *errstr2;
         int ci = 0;
         int i;
-        int fails              = 0;
-        /* Increase max retries for K2/cloud environments */
+        int fails = 0;
+        /* Increase max retries for cloud environments */
         int max_retry_describe = test_k2_cluster ? 10 : 3;
 
         SUB_TEST_QUICK();
@@ -1369,7 +1367,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
 
         /* Wait for topic metadata to propagate before describing configs.
-         * This is especially important for K2/cloud environments with higher latency. */
+         * This is especially important for cloud environments with higher latency. */
         {
                 rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topics[0]};
                 TEST_SAY("Waiting for topic %s to appear in metadata\n", topics[0]);
@@ -1389,11 +1387,11 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
          */
         if (test_k2_cluster) {
                 /*
-                 * Skip broker configs for K2 environments that don't allow
+                 * Skip broker configs for cloud environments that don't allow
                  * mixed topic and broker resources in the same DescribeConfigs request
                  */
                 TEST_WARN(
-                    "Skipping RESOURCE_BROKER DescribeConfigs test for K2 "
+                    "Skipping RESOURCE_BROKER DescribeConfigs test for cloud "
                     "environment (mixed resource types not supported)\n");
         } else {
                 configs[ci] = rd_kafka_ConfigResource_new(
@@ -1508,19 +1506,18 @@ retry_describe:
                 if (err != exp_err[i]) {
                         if (err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART &&
                             max_retry_describe-- > 0) {
-                                /* Longer delay for K2/cloud environments */
-                                int retry_delay = test_k2_cluster ? 3 : 1;
+                                /* Longer delay for cloud environments */
                                 TEST_WARN(
                                     "ConfigResource #%d: "
                                     "expected %s (%d), got %s (%s): "
                                     "this is typically a temporary "
                                     "error while the new resource "
-                                    "is propagating: retrying in %ds",
+                                    "is propagating: retrying",
                                     i, rd_kafka_err2name(exp_err[i]),
                                     exp_err[i], rd_kafka_err2name(err),
-                                    errstr2 ? errstr2 : "", retry_delay);
+                                    errstr2 ? errstr2 : "");
                                 rd_kafka_event_destroy(rkev);
-                                rd_sleep(retry_delay);
+                                test_sleep(1);
                                 goto retry_describe;
                         }
 
@@ -1716,7 +1713,7 @@ do_test_CreateAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         if (test_k2_cluster) {
                 SUB_TEST_SKIP(
-                    "Skipping CREATE_ACLS test on K2/cloud environments "
+                    "Skipping CREATE_ACLS test on cloud environments "
                     "(ACL operations not reliable)\n");
                 return;
         }
@@ -1856,8 +1853,8 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         if (test_k2_cluster) {
                 SUB_TEST_SKIP(
-                    "Skipping DESCRIBE_ACLS test on K2/cloud environments "
-                    "(ACL operations not reliable)\n");
+                    "Skipping DESCRIBE_ACLS test on cloud environments "
+                    "(ACL operations not reliable)\n"); 
                 return;
         }
 
@@ -2260,7 +2257,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         if (test_k2_cluster) {
                 SUB_TEST_SKIP(
-                    "Skipping DELETE_ACLS test on K2/cloud environments "
+                    "Skipping DELETE_ACLS test on cloud environments "
                     "(ACL propagation and consistency issues)\n");
                 return;
         }
@@ -2641,7 +2638,6 @@ static void do_test_DeleteRecords(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   metadata_timeout_update);
 
-        /* K2: Additional delay for topic readiness after metadata propagation */
         test_sleep(5);
 
         /* Produce 100 msgs / partition */
@@ -2675,14 +2671,12 @@ static void do_test_DeleteRecords(const char *what,
         rd_kafka_topic_partition_list_add(offsets, topics[2], 1)->offset =
             msgs_cnt + 1;
 
-        /* Use reasonable timeout for K2 environments */
         int metadata_timeout = test_k2_cluster ? 60000 : tmout_multip(60000);
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
             metadata_timeout);
 
         del_records = rd_kafka_DeleteRecords_new(offsets);
 
-        /* K2: Additional delay after message production for data consistency */
         test_sleep(5);
 
         TIMING_START(&timing, "DeleteRecords");
@@ -2698,7 +2692,6 @@ static void do_test_DeleteRecords(const char *what,
          * Print but otherwise ignore other event types
          * (typically generic Error events). */
         while (1) {
-                /* Use much longer timeouts for K2/cloud environments */
                 int poll_timeout = test_k2_cluster ? 1800 * 1000 : 900 * 1000;
                 rkev = rd_kafka_queue_poll(q, tmout_multip(poll_timeout));
                 TEST_SAY("DeleteRecords: got %s in %.3fms\n",
@@ -2718,7 +2711,6 @@ static void do_test_DeleteRecords(const char *what,
                 rd_kafka_event_destroy(rkev);
         }
 
-        /* K2: Additional delay after message production for data consistency */
         test_sleep(3);
         /* Convert event to proper result */
         res = rd_kafka_event_DeleteRecords_result(rkev);
@@ -2752,7 +2744,6 @@ static void do_test_DeleteRecords(const char *what,
                     "expected DeleteRecords_result_offsets to return %d items, "
                     "not %d",
                     offsets->cnt, results->cnt);
-        /* K2: Additional delay after message production for data consistency */
         test_sleep(5);
 
         for (i = 0; i < results->cnt; i++) {
@@ -2822,7 +2813,6 @@ static void do_test_DeleteRecords(const char *what,
                                 expected_low = del->offset;
                         }
 
-                        /* Use longer timeouts for K2/cloud environments */
                         int watermark_timeout = test_k2_cluster ? 1200000 : 600000;
                         err = rd_kafka_query_watermark_offsets(
                             rk, topics[i], partition, &low, &high,
@@ -2936,7 +2926,6 @@ static void do_test_DeleteGroups(const char *what,
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
-        /* K2: Additional delay after production to ensure topic/partition readiness */
         test_sleep(3);
 
         for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
@@ -3249,7 +3238,6 @@ static void do_test_ListConsumerGroups(const char *what,
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
-        /* K2: Additional delay for consumer subscription readiness */
         test_sleep(3);
 
         for (i = 0; i < TEST_LIST_CONSUMER_GROUPS_CNT; i++) {
@@ -3707,7 +3695,6 @@ static void do_test_DescribeTopics(const char *what,
                     test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
             }
 
-            /* K2: Additional metadata wait for DescribeTopics API consistency */
             if (test_k2_cluster) {
                     rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
                     test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(3000));
@@ -3728,7 +3715,6 @@ static void do_test_DescribeTopics(const char *what,
             TIMING_ASSERT_LATER(&timing, 0, 50);
 
             /* Check DescribeTopics results. */
-            /* Use reasonable timeout for K2 environments */
             int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
             rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
                                         describe_timeout);
@@ -3760,8 +3746,7 @@ static void do_test_DescribeTopics(const char *what,
             TIMING_ASSERT_LATER(&timing, 0, 50);
 
             /* Check DescribeTopics results. */
-            /* Use reasonable timeout for K2 environments */
-            describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
+            describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); 
             rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
                                         describe_timeout);
             TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
@@ -3883,10 +3868,7 @@ static void do_test_DescribeTopics(const char *what,
             rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
             /* Wait for ACL propagation. */
-            /* Use reasonable timeout for K2 environments */
-            int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2);
-            TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
-            rd_sleep(acl_propagation_sleep);
+            test_sleep(3);
 
             /* Call DescribeTopics. */
             options =
@@ -3961,10 +3943,7 @@ static void do_test_DescribeTopics(const char *what,
             rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
             /* Wait for ACL propagation. */
-            /* Use reasonable timeout for K2 environments */
-            int acl_cleanup_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-            TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_cleanup_sleep);
-            rd_sleep(acl_cleanup_sleep);
+            test_sleep(3);
         } else {
                 TEST_SAY("SKIPPING: DescribeTopics function - requires librdkafka version >= 2.2.1 (current: 0x%08x)\n",
                          rd_kafka_version());
@@ -4271,7 +4250,6 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
-        /* K2: Additional delay for consumer subscription readiness */
         test_sleep(3);
 
         /* Create and consumer (and consumer group). */
@@ -4374,8 +4352,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                                         options, q);
         rd_kafka_AdminOptions_destroy(options);
 
-        /* Use reasonable timeout for K2 environments - don't let tmout_multip make it too long */
-        int describe_groups_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); /* 60s for K2, normal for others */
+        int describe_groups_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); 
         rkev = test_wait_admin_result(
             q, RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT,
             describe_groups_timeout);
@@ -4426,10 +4403,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_propagation_sleep = test_k2_cluster ? 10 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_propagation_sleep);
-        rd_sleep(acl_propagation_sleep);
+        test_sleep(2);
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
         test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
@@ -4525,7 +4499,6 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        /* K2: Additional delay for topic/partition readiness */
         test_sleep(3);
 
         consumer = test_create_consumer(groupid, NULL, NULL, NULL);
@@ -4546,8 +4519,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        /* Use reasonable timeout for K2 environments */
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); /* 30s for K2, normal for others */
+        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); 
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
 
@@ -4668,7 +4640,6 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        /* Use reasonable timeout for K2 environments */
         committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000);
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
@@ -4807,7 +4778,6 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt,
                                           NULL, 0, 15 * 1000);
 
-                /* K2: Additional delay for topic/partition readiness */
                 test_sleep(3);
 
                 consumer = test_create_consumer(group_id, NULL, NULL, NULL);
@@ -5127,7 +5097,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        /* Use reasonable timeout for K2 environments */
         int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000);
         TEST_CALL_ERR__(
             rd_kafka_committed(consumer, committed, committed_timeout));
@@ -5647,7 +5616,6 @@ static void do_test_ListOffsets(const char *what,
 
         test_wait_topic_exists(rk, topic, 5000);
 
-        /* K2: Additional delay for topic/partition readiness */
         test_sleep(3);
 
         p = test_create_producer();
@@ -5879,7 +5847,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
             do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
             do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
         } else {
-                TEST_SAY("SKIPPING: DeleteRecords tests - not supported in K2/cloud environments\n");
+                TEST_SAY("SKIPPING: DeleteRecords tests - not supported in cloud environments\n");
         }
         /* List groups */
         if (rd_kafka_version() > 0x02050300) {  /* Only run if librdkafka version > 2.5.3 */

@@ -9,7 +9,7 @@ librdkafka v2.12.0 is a feature release:
 * Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
 * Additional KIP-320 related validation: when assigning the offset is validated
   if leader epoch is specified (#4931).
-* Fix double free of headers in rd_kafka_produceva method (@blindspotbounty, #4628).
+* Fix double free of headers in `rd_kafka_produceva` method (@blindspotbounty, #4628).
 * Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry (#5201).
 
 

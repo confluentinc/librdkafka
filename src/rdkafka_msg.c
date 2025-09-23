@@ -491,6 +491,8 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
                                            rd_kafka_err2str(err));
                 goto err;
         }
+        /* 'hdrs' is now owned by 'rkm' */
+        hdrs = NULL;
 
         /* Partition the message */
         err = rd_kafka_msg_partitioner(rkt, rkm, 1);

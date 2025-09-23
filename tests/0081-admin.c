@@ -2762,9 +2762,7 @@ static void do_test_DeleteRecords(const char *what,
                     "not %d",
                     offsets->cnt, results->cnt);
         /* K2: Additional delay after message production for data consistency */
-        if (test_k2_cluster) {
-            rd_sleep(5);
-    }
+        test_sleep(5);
 
         for (i = 0; i < results->cnt; i++) {
                 const rd_kafka_topic_partition_t *input  = &offsets->elems[i];

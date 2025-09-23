@@ -396,9 +396,7 @@ static void test_per_message_partition_flag(void) {
         test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
                                       30000);
 
-         if (test_k2_cluster){
-            rd_sleep(5);
-         }
+         test_sleep(3);
 
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
@@ -550,9 +548,7 @@ static void test_message_partitioner_wo_per_message_flag(void) {
                 test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000);
         }
 
-         if (test_k2_cluster){
-            rd_sleep(5);
-         }
+         test_sleep(3);
 
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -728,7 +724,7 @@ static void test_message_single_partition_record_fail(int variation) {
         TEST_SAY("Step 1: Changing cleanup.policy from delete to compact\n");
         test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
                                             topic_name, confs_set_compact, 1);
-        rd_sleep(1);
+        test_sleep(1);
 
         // Step 2: compact → compact,delete (if supported by the environment)
         TEST_SAY("Step 2: Attempting to change cleanup.policy to compact,delete\n");

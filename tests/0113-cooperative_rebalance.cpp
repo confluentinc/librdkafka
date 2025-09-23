@@ -2360,7 +2360,7 @@ static void t_max_poll_interval_exceeded(int variation) {
     }
 
     if (both_have_been_assigned) {
-      rd_sleep(2);
+      test_sleep(2);
     }
   }
 
@@ -2385,7 +2385,7 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   if (variation == 3) {
     /* Last poll will cause a rejoin, wait that the rejoin happens. */
-    rd_sleep(10);
+    test_sleep(10);
     expected_cb2_revoke_call_cnt++;
   }
 
@@ -3455,7 +3455,7 @@ static void x_incremental_rebalances(void) {
   TEST_SAY("%s: joining\n", rd_kafka_name(c[1]));
   test_consumer_subscribe(c[1], topic);
   test_consumer_wait_assignment(c[1], rd_true /*poll*/);
-  rd_sleep(3);
+  test_sleep(3);
   if (test_consumer_group_protocol_classic()) {
     test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 3,
                                     topic, 4, topic, 5, NULL);
@@ -3472,7 +3472,7 @@ static void x_incremental_rebalances(void) {
   TEST_SAY("%s: joining\n", rd_kafka_name(c[2]));
   test_consumer_subscribe(c[2], topic);
   test_consumer_wait_assignment(c[2], rd_true /*poll*/);
-  rd_sleep(3);
+  test_sleep(3);
   if (test_consumer_group_protocol_classic()) {
     test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 4,
                                     topic, 5, NULL);

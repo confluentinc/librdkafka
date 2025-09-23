@@ -438,7 +438,7 @@ static void do_test_topic_remove(void) {
 
         /* Version-specific wait for assignment */
         if (rd_kafka_version() >= 0x020100ff) {
-                rd_sleep(10);
+                test_sleep(5);
         }
 
         await_assignment("Topic removal: both topics exist", rk, queue, 2,
@@ -456,7 +456,7 @@ static void do_test_topic_remove(void) {
 
         /* Version-specific wait for consumer group to recognize topic deletion */
         if (rd_kafka_version() >= 0x020100ff) {
-                rd_sleep(10);
+                test_sleep(5);
         }
 
         await_assignment("Topic removal: one topic exists", rk, queue, 1,
@@ -846,7 +846,7 @@ static void do_test_resubscribe_with_regex() {
         if (!test_consumer_group_protocol_classic()) {
                 /** Regex matching is async on the broker side for KIP-848
                  * protocol. */
-                rd_sleep(5);
+                test_sleep(3);
         }
         /* Wait for assignment */
         await_assignment("Assignment for topic1 and topic2", rk, queue, 2,

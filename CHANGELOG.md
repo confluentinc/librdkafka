@@ -26,8 +26,7 @@ librdkafka v2.12.0 is a feature release:
 * Issues: #4627.
   Fix double free of headers in rd_kafka_produceva method. (#4628, @blindspotbounty)
 * Issues: #4878
-  Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout even for values less than 1000ms.
-  Short timeouts now correctly result in operation timeout instead of waiting for the next 1s interval as before.
+  Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry.
   Happening since 2.3.0. (#5201).
 
 ### Telemetry fixes

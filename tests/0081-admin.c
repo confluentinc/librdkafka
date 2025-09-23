@@ -2651,9 +2651,7 @@ static void do_test_DeleteRecords(const char *what,
                                   metadata_timeout_update);
 
         /* K2: Additional delay for topic readiness after metadata propagation */
-        if (test_k2_cluster) {
-                rd_sleep(10);
-        }
+        test_sleep(5);
 
         /* Produce 100 msgs / partition */
         for (i = 0; i < MY_DEL_RECORDS_CNT; i++) {
@@ -2694,9 +2692,7 @@ static void do_test_DeleteRecords(const char *what,
         del_records = rd_kafka_DeleteRecords_new(offsets);
 
         /* K2: Additional delay after message production for data consistency */
-        if (test_k2_cluster) {
-                rd_sleep(5);
-        }
+        test_sleep(5);
 
         TIMING_START(&timing, "DeleteRecords");
         TEST_SAY("Call DeleteRecords\n");
@@ -2732,9 +2728,7 @@ static void do_test_DeleteRecords(const char *what,
         }
 
         /* K2: Additional delay after message production for data consistency */
-        if (test_k2_cluster) {
-            rd_sleep(5);
-        }
+        test_sleep(3);
         /* Convert event to proper result */
         res = rd_kafka_event_DeleteRecords_result(rkev);
         TEST_ASSERT(res, "expected DeleteRecords_result, not %s",
@@ -2954,9 +2948,7 @@ static void do_test_DeleteGroups(const char *what,
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
         /* K2: Additional delay after production to ensure topic/partition readiness */
-        if (test_k2_cluster) {
-                rd_sleep(5);
-        }
+        test_sleep(3);
 
         for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
                 char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
@@ -3269,9 +3261,7 @@ static void do_test_ListConsumerGroups(const char *what,
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
         /* K2: Additional delay for consumer subscription readiness */
-        if (test_k2_cluster) {
-                rd_sleep(5);
-        }
+        test_sleep(3);
 
         for (i = 0; i < TEST_LIST_CONSUMER_GROUPS_CNT; i++) {
                 char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
@@ -3396,9 +3386,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
 
         /* Additional wait for cloud environments to ensure topic stability for consumers */
-        if (test_k2_cluster) {
-                rd_sleep(10);
-        }
+        test_sleep(5);
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
@@ -3734,7 +3722,7 @@ static void do_test_DescribeTopics(const char *what,
             if (test_k2_cluster) {
                     rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
                     test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(3000));
-                    rd_sleep(2);
+                    test_sleep(2);
             }
 
             options =
@@ -4303,9 +4291,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
         /* K2: Additional delay for consumer subscription readiness */
-        if (test_k2_cluster) {
-                rd_sleep(5);
-        }
+        test_sleep(3);
 
         /* Create and consumer (and consumer group). */
         group_id = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
@@ -4562,9 +4548,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
                                   15 * 1000);
 
         /* K2: Additional delay for topic/partition readiness */
-        if (test_k2_cluster) {
-                rd_sleep(5);
-        }
+        test_sleep(3);
 
         consumer = test_create_consumer(groupid, NULL, NULL, NULL);
 
@@ -4846,9 +4830,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                                           NULL, 0, 15 * 1000);
 
                 /* K2: Additional delay for topic/partition readiness */
-                if (test_k2_cluster) {
-                        rd_sleep(5);
-                }
+                test_sleep(3);
 
                 consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -5140,9 +5122,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        if (test_k2_cluster) {
-                rd_sleep(5);
-        }
+        test_sleep(3);
 
         consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -5696,9 +5676,7 @@ static void do_test_ListOffsets(const char *what,
         test_wait_topic_exists(rk, topic, 5000);
 
         /* K2: Additional delay for topic/partition readiness */
-        if (test_k2_cluster) {
-                rd_sleep(5);
-        }
+        test_sleep(3);
 
         p = test_create_producer();
         for (i = 0; i < RD_ARRAY_SIZE(timestamps); i++) {

@@ -154,9 +154,7 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
 
         /* Only run test_consumer_poll_no_msgs if librdkafka version > 2.3.0 */
         if (rd_kafka_version() > 0x02030000) {
-                if (test_k2_cluster) {
-                        rd_sleep(5);
-                }
+                test_sleep(3);
                 test_consumer_poll_no_msgs("consume", rk, testid, 5000);
         } else {
                 TEST_SAY("Skipping no-messages verification: requires librdkafka version > 2.3.0\n");

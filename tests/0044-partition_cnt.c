@@ -72,10 +72,8 @@ static void test_producer_partition_cnt_change(void) {
         }
 
         /* Additional verification for K2 clusters */
-        if (test_k2_cluster) {
-                test_wait_topic_exists(rk, topic, 30000);
-                rd_sleep(5);
-        }
+        test_wait_topic_exists(rk, topic, 30000);
+        test_sleep(3);
         int msg_timeout_ms = test_k2_cluster ? 300000 : 10000;  /* 5 minutes for K2 */
 
 
@@ -89,11 +87,7 @@ static void test_producer_partition_cnt_change(void) {
         test_create_partitions(rk, topic, partition_cnt);
 
         test_wait_topic_exists(rk, topic, topic_wait_timeout);
-        if (test_k2_cluster) {
-                rd_sleep(7);
-        } else {
-                rd_sleep(3);
-        }
+        test_sleep(3);
 
         test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, msgcnt / 2,
                                  msgcnt / 2, NULL, 100, 0, &produced);

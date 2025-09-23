@@ -117,6 +117,7 @@ For guidelines on contributing please see [CONTRIBUTING.md](CONTRIBUTING.md)
 | 1.3.2                      | 2.10.1     |
 | 1.4.0                      | 2.11.0     |
 | 1.4.1                      | 2.11.1     |
+| 1.5.0                      | 2.11.1     |
 
 This mapping is applicable if you're using a pre-built binary. Otherwise, you can check the librdkafka version with the following command:
 

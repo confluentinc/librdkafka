@@ -28,6 +28,10 @@
 #test.supported.acks=-1,0,1      
 #test.supported.acks=0           
 
+# Configure sleep time multiplier for tests (default: 0 - no extra sleep)
+#test.sleep.multiplier=2.0      (cloud)
+#test.sleep.multiplier=0         
+
 # Bootstrap broker(s)
 metadata.broker.list=localhost:9092
 

@@ -67,6 +67,7 @@ int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
 int test_k2_cluster                        = 0; /**< K2 cluster mode */
 char *test_supported_acks                   = NULL; /**< Supported acks values */
+static double test_sleep_multiplier         = 0.0; /**< Sleep time multiplier */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -892,6 +893,10 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
                         rd_free(test_supported_acks);
                 test_supported_acks = rd_strdup(val);
                 TEST_UNLOCK();
+        } else if (!strcmp(name, "test.sleep.multiplier")) {
+                TEST_LOCK();
+                test_sleep_multiplier = strtod(val, NULL);
+                TEST_UNLOCK();
         } else
                 return 0;
 
@@ -950,6 +955,18 @@ const char *test_get_available_acks(const char *wanted_acks) {
         
         /* Not supported - test should be skipped */
         return NULL;
+}
+
+/**
+ * @brief Sleep with configurable multiplier (only if multiplier > 0)
+ * @param base_sleep_ms Base sleep time in milliseconds
+ */
+void test_sleep(int base_sleep_ms) {
+        if (test_sleep_multiplier > 0.0) {
+                int sleep_time = (int)(base_sleep_ms * test_sleep_multiplier);
+                rd_sleep(sleep_time);
+        }
+        /* If multiplier is 0, don't sleep at all */
 }
 
 /**
@@ -2153,6 +2170,9 @@ int main(int argc, char **argv) {
                 TEST_SAY("Test supported acks: %s\n", test_supported_acks);
         } else {
                 TEST_SAY("Test supported acks: -1,0,1 (default - all standard values)\n");
+        }
+        if (test_sleep_multiplier > 0.0) {
+                TEST_SAY("Test sleep multiplier: %.1fx\n", test_sleep_multiplier);
         }
         if (test_k2_cluster) {
                 TEST_SAY("Test K2 Cluster: enabled (+2.0x timeout multiplier)\n");

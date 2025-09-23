@@ -125,9 +125,7 @@ static void test_single_partition(void) {
                 topic_md.topic = (char*)topic;
                 test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
         }
-        if (test_k2_cluster){
-            rd_sleep(5);
-        }
+        test_sleep(3);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -270,9 +268,7 @@ static void test_partitioner(void) {
                 test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
         }
 
-        if (test_k2_cluster){
-            rd_sleep(5);
-        }
+        test_sleep(3);
 
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);

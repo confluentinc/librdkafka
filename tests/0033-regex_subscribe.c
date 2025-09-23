@@ -361,7 +361,7 @@ static int do_test(const char *assignor) {
         for (i = 0; i < topic_cnt; i++) {
                 test_create_topic_if_auto_create_disabled(NULL, topics[i], 1);
                 test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
-                rd_sleep(test_k2_cluster ? 5 : 2);
+                test_sleep(3);
                 test_produce_msgs_easy(topics[i], testid, RD_KAFKA_PARTITION_UA,
                                        msgcnt);
         }

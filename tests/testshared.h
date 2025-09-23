@@ -195,6 +195,7 @@ int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 int test_set_special_conf(const char *name, const char *val, int *timeoutp);
 int test_is_acks_supported(const char *acks_value);
 const char *test_get_available_acks(const char *wanted_acks);
+void test_sleep(int base_sleep_ms);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
 const char *test_getenv(const char *env, const char *def);

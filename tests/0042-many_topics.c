@@ -243,7 +243,7 @@ int main_0042_many_topics(int argc, char **argv) {
         for (i = 0; i < topic_cnt; i++) {
                 test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
         }
-        rd_sleep(test_k2_cluster ? 5 : 2);
+        test_sleep(3);
 
         produce_many(topics, topic_cnt, testid);
         legacy_consume_many(topics, topic_cnt, testid);

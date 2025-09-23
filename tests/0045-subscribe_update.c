@@ -422,7 +422,7 @@ static void do_test_topic_remove(void) {
                 TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
                 test_create_topic(NULL, topic_g, parts_g, -1);
 
-                rd_sleep(test_k2_cluster ? 10 : 5);
+                test_sleep(3);
         }
 
         TEST_SAY("Topic removal: Subscribing to %s & %s\n", topic_f, topic_g);
@@ -449,7 +449,7 @@ static void do_test_topic_remove(void) {
 
         /* Version-specific wait for topic deletion propagation */
         if (rd_kafka_version() >= 0x020100ff) {
-                rd_sleep(test_k2_cluster ? 15 : 8);
+                test_sleep(8);
         }
 
         await_revoke("Topic removal: rebalance after topic removal", rk, queue);
@@ -467,7 +467,7 @@ static void do_test_topic_remove(void) {
 
         /* Version-specific wait for second topic deletion propagation */
         if (rd_kafka_version() >= 0x020100ff) {
-                rd_sleep(test_k2_cluster ? 15 : 8);
+                test_sleep(8);
         }
 
         await_revoke("Topic removal: rebalance after 2nd topic removal", rk,
@@ -475,7 +475,7 @@ static void do_test_topic_remove(void) {
 
         /* Version-specific final cleanup and propagation wait */
         if (rd_kafka_version() >= 0x020100ff) {
-                rd_sleep(test_k2_cluster ? 10 : 5);
+                test_sleep(5);
         }
 
         /* Should not see another rebalance since all topics now removed */
@@ -808,7 +808,7 @@ static void do_test_resubscribe_with_regex() {
         test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
         
         /* Allow extra time for topic_a metadata to propagate before mixed subscription test */
-        rd_sleep(test_k2_cluster ? 3 : 2);
+        test_sleep(2);
 
         test_conf_init(&conf, NULL, 60);
 
@@ -859,7 +859,7 @@ static void do_test_resubscribe_with_regex() {
         await_revoke("Revocation after unsubscribing", rk, queue);
 
         /* Ensure topic_a is visible before mixed subscription */
-        rd_sleep(test_k2_cluster ? 3 : 2);
+        test_sleep(2);
 
         /* Subscribe to regex and topic_a literal */
         TEST_SAY("Subscribing to regex %s and topic_a\n", topic_regex_pattern);

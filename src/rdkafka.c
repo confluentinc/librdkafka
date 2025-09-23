@@ -3858,7 +3858,7 @@ rd_kafka_resp_err_t rd_kafka_query_watermark_offsets(rd_kafka_t *rk,
                         break;
                 }
                 rd_kafka_q_serve(rkq, tmout, 0, RD_KAFKA_Q_CB_CALLBACK,
-                        rd_kafka_poll_cb, NULL);
+                                 rd_kafka_poll_cb, NULL);
         }
 
         rd_kafka_q_destroy_owner(rkq);

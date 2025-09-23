@@ -62,7 +62,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 
                 /* Give the closing consumer some time to handle the
                  * unassignment and leave so that the coming commit fails. */
-                rd_sleep(5);
+                test_sleep(3);
 
                 /* Committing after unassign will trigger an
                  * Illegal generation error from the broker, which would

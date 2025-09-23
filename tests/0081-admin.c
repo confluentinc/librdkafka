@@ -1883,10 +1883,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 2, NULL);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
-        rd_sleep(acl_sleep);
+        test_sleep(2);
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -2308,10 +2305,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 3, NULL);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
-        rd_sleep(acl_sleep);
+        test_sleep(2);
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -2333,10 +2327,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
-        rd_sleep(acl_sleep);
+        test_sleep(2);
 
         /*
          * Wait for result
@@ -2455,7 +2446,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        rd_sleep(1);
+        test_sleep(1);
 
         /*
          * Wait for result
@@ -3588,7 +3579,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         }
 
         /* Wait session timeout + 1s. Because using static group membership */
-        rd_sleep(6);
+        test_sleep(3);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);
@@ -4140,11 +4131,7 @@ static void do_test_DescribeCluster(const char *what,
         test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
-        /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
-        rd_sleep(acl_sleep);
+        test_sleep(3);
 
         /* Call DescribeCluster. */
         options =
@@ -4207,11 +4194,7 @@ static void do_test_DescribeCluster(const char *what,
         test_DeleteAcls_simple(rk, NULL, &acl_bindings_delete, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings_delete);
 
-        /* Wait for ACL propagation. */
-        /* Use reasonable timeout for K2 environments */
-        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL cleanup propagation\n", acl_sleep);
-        rd_sleep(acl_sleep);
+        test_sleep(3);
 
 done:
         TEST_LATER_CHECK();
@@ -4376,10 +4359,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* It seems to be taking some time on the cluster for the ACLs to
          * propagate for a group.*/
-        /* Use reasonable timeout for K2 environments */
-        acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for ACL propagation\n", acl_sleep);
-        rd_sleep(acl_sleep);
+        test_sleep(3);
 
         options = rd_kafka_AdminOptions_new(
             rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
@@ -5440,10 +5420,7 @@ static void do_test_UserScramCredentials(const char *what,
 #endif
 
         /* Wait for user propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_sleep = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for user propagation\n", acl_sleep);
-        rd_sleep(acl_sleep);
+        test_sleep(3);
 
         /* Credential should be retrieved */
         options = rd_kafka_AdminOptions_new(
@@ -5558,10 +5535,7 @@ final_checks:
 #endif
 
         /* Wait for user propagation. */
-        /* Use reasonable timeout for K2 environments */
-        int acl_sleep_final = test_k2_cluster ? 5 : tmout_multip(2);
-        TEST_SAY("Waiting %d seconds for user propagation\n", acl_sleep_final);
-        rd_sleep(acl_sleep_final);
+        test_sleep(3);
 
         /* Credential doesn't exist anymore for this user */
 

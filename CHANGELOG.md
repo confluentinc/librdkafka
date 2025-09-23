@@ -23,6 +23,12 @@ librdkafka v2.12.0 is a feature release:
   so it's possible it did overlap with the periodic `topic.metadata.refresh.interval.ms`
   and cause a re-bootstrap even if not needed.
   Happening since 2.11.0 (#5177).
+* Issues: #4627.
+  Fix double free of headers in rd_kafka_produceva method. (#4628, @blindspotbounty)
+* Issues: #4878
+  Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout even for values less than 1000ms.
+  Short timeouts now correctly result in operation timeout instead of waiting for the next 1s interval as before.
+  Happening since 2.3.0. (#5201).
 
 ### Telemetry fixes
 

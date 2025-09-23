@@ -761,11 +761,15 @@ static void do_test_replica_rack_change_leader_no_rack_mock(
  * unsubcribe with regular topic names and regex.
  */
 static void do_test_resubscribe_with_regex() {
-        char *topic1  = rd_strdup(test_mk_topic_name("topic_regex1", 1));
-        char *topic2  = rd_strdup(test_mk_topic_name("topic_regex2", 1));
+        /* Generate unique test run ID for topic isolation */
+        char *test_run_id = rd_strdup(test_str_id_generate_tmp());
+        char *topic1  = rd_strdup(test_mk_topic_name(tsprintf("topic_regex1_%s", test_run_id), 1));
+        char *topic2  = rd_strdup(test_mk_topic_name(tsprintf("topic_regex2_%s", test_run_id), 1));
         char *topic_a = rd_strdup(test_mk_topic_name("topic_a", 1));
         char *group   = rd_strdup(
             tsprintf("group_test_sub_regex_%s", test_str_id_generate_tmp()));
+        /* Create regex pattern specific to this test run */
+        char *topic_regex_pattern = rd_strdup(tsprintf("^.*topic_regex[12]_%s.*", test_run_id));
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_queue_t *queue;
@@ -774,6 +778,7 @@ static void do_test_resubscribe_with_regex() {
 
         /**
          * Topic resubscribe with regex test:
+         * - Create unique test run ID (added as suffix to topic names)
          * - Create topic topic_regex1 & topic_regex2
          * - Subscribe to topic_regex1
          * - Verify topic_regex1 assignment
@@ -801,6 +806,9 @@ static void do_test_resubscribe_with_regex() {
 
         TEST_SAY("Creating topic %s\n", topic_a);
         test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
+        
+        /* Allow extra time for topic_a metadata to propagate before mixed subscription test */
+        rd_sleep(test_k2_cluster ? 3 : 2);
 
         test_conf_init(&conf, NULL, 60);
 
@@ -832,9 +840,9 @@ static void do_test_resubscribe_with_regex() {
         /* Wait for revocation */
         await_revoke("Revocation after unsubscribing", rk, queue);
 
-        /* Subscribe to regex ^.*topic_regex.* */
-        TEST_SAY("Subscribing to regex ^.*topic_regex.*\n");
-        test_consumer_subscribe(rk, "^.*topic_regex.*");
+        /* Subscribe to regex specific to this test run */
+        TEST_SAY("Subscribing to regex %s\n", topic_regex_pattern);
+        test_consumer_subscribe(rk, topic_regex_pattern);
         if (!test_consumer_group_protocol_classic()) {
                 /** Regex matching is async on the broker side for KIP-848
                  * protocol. */
@@ -844,15 +852,18 @@ static void do_test_resubscribe_with_regex() {
         await_assignment("Assignment for topic1 and topic2", rk, queue, 2,
                          topic1, 4, topic2, 4);
 
-        /* Unsubscribe from regex ^.*topic_regex.* */
-        TEST_SAY("Unsubscribing from regex ^.*topic_regex.*\n");
+        /* Unsubscribe from regex */
+        TEST_SAY("Unsubscribing from regex %s\n", topic_regex_pattern);
         rd_kafka_unsubscribe(rk);
         /* Wait for revocation */
         await_revoke("Revocation after unsubscribing", rk, queue);
 
-        /* Subscribe to regex ^.*topic_regex.* and topic_a literal */
-        TEST_SAY("Subscribing to regex ^.*topic_regex.* and topic_a\n");
-        test_consumer_subscribe_multi(rk, 2, "^.*topic_regex.*", topic_a);
+        /* Ensure topic_a is visible before mixed subscription */
+        rd_sleep(test_k2_cluster ? 3 : 2);
+
+        /* Subscribe to regex and topic_a literal */
+        TEST_SAY("Subscribing to regex %s and topic_a\n", topic_regex_pattern);
+        test_consumer_subscribe_multi(rk, 2, topic_regex_pattern, topic_a);
         /* Wait for assignment */
         if (test_consumer_group_protocol_classic()) {
                 await_assignment("Assignment for topic1, topic2 and topic_a",
@@ -883,7 +894,10 @@ static void do_test_resubscribe_with_regex() {
 
         rd_free(topic1);
         rd_free(topic2);
+        rd_free(topic_a);
         rd_free(group);
+        rd_free(test_run_id);
+        rd_free(topic_regex_pattern);
 
         SUB_TEST_PASS();
 }

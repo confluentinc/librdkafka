@@ -339,23 +339,23 @@ static int do_test(const char *assignor) {
 
         testid = test_id_generate();
         test_str_id_generate(groupid, sizeof(groupid));
+        
+        /* Generate unique test run ID for topic isolation to prevent
+         * cross-test contamination from leftover topics */
+        char *test_run_id = rd_strdup(test_str_id_generate_tmp());
 
-        rd_snprintf(topics[0], sizeof(topics[0]), "%s_%s",
-                    test_mk_topic_name("regex_subscribe_TOPIC_0001_UNO", 0),
-                    groupid);
-        rd_snprintf(topics[1], sizeof(topics[1]), "%s_%s",
-                    test_mk_topic_name("regex_subscribe_topic_0002_dup", 0),
-                    groupid);
-        rd_snprintf(topics[2], sizeof(topics[2]), "%s_%s",
-                    test_mk_topic_name("regex_subscribe_TOOTHPIC_0003_3", 0),
-                    groupid);
+        rd_snprintf(topics[0], sizeof(topics[0]), "%s",
+                    test_mk_topic_name(tsprintf("regex_subscribe_TOPIC_0001_UNO_%s", test_run_id), 0));
+        rd_snprintf(topics[1], sizeof(topics[1]), "%s", 
+                    test_mk_topic_name(tsprintf("regex_subscribe_topic_0002_dup_%s", test_run_id), 0));
+        rd_snprintf(topics[2], sizeof(topics[2]), "%s",
+                    test_mk_topic_name(tsprintf("regex_subscribe_TOOTHPIC_0003_3_%s", test_run_id), 0));
 
         /* To avoid auto topic creation to kick in we use
          * an invalid topic name. */
         rd_snprintf(
-            nonexist_topic, sizeof(nonexist_topic), "%s_%s",
-            test_mk_topic_name("regex_subscribe_NONEXISTENT_0004_IV#!", 0),
-            groupid);
+            nonexist_topic, sizeof(nonexist_topic), "%s",
+            test_mk_topic_name(tsprintf("regex_subscribe_NONEXISTENT_0004_IV#!_%s", test_run_id), 0));
 
         /* Produce messages to topics to ensure creation. */
         for (i = 0; i < topic_cnt; i++) {
@@ -406,7 +406,7 @@ static int do_test(const char *assignor) {
         {
                 struct expect expect = {
                     .name = rd_strdup(tsprintf("%s: regex all", assignor)),
-                    .sub  = {rd_strdup(tsprintf("^.*_%s", groupid)), NULL},
+                    .sub  = {rd_strdup(tsprintf("^.*_%s", test_run_id)), NULL},
                     .exp  = {topics[0], topics[1], topics[2], NULL}};
 
                 fails += test_subscribe(rk, &expect);
@@ -418,7 +418,7 @@ static int do_test(const char *assignor) {
                 struct expect expect = {
                     .name = rd_strdup(tsprintf("%s: regex 0&1", assignor)),
                     .sub  = {rd_strdup(tsprintf(
-                                "^.*[tToOpPiIcC]_0+[12]_[^_]+_%s", groupid)),
+                                "^.*[tToOpPiIcC]_0+[12]_[^_]+_%s", test_run_id)),
                              NULL},
                     .exp  = {topics[0], topics[1], NULL}};
 
@@ -431,7 +431,7 @@ static int do_test(const char *assignor) {
                 struct expect expect = {
                     .name = rd_strdup(tsprintf("%s: regex 2", assignor)),
                     .sub  = {rd_strdup(
-                                tsprintf("^.*TOOTHPIC_000._._%s", groupid)),
+                                tsprintf("^.*TOOTHPIC_000._._%s", test_run_id)),
                              NULL},
                     .exp  = {topics[2], NULL}};
 
@@ -445,7 +445,7 @@ static int do_test(const char *assignor) {
                     .name = rd_strdup(tsprintf("%s: regex 2 and "
                                                "nonexistent(not seen)",
                                                assignor)),
-                    .sub  = {rd_strdup(tsprintf("^.*_000[34]_..?_%s", groupid)),
+                    .sub  = {rd_strdup(tsprintf("^.*_000[34]_..?_%s", test_run_id)),
                              NULL},
                     .exp  = {topics[2], NULL}};
 
@@ -470,12 +470,14 @@ static int do_test(const char *assignor) {
                 struct expect expect = {
                     .name = rd_strdup(
                         tsprintf("%s: multiple regex 1&2 matches", assignor)),
-                    .sub = {"^.*regex_subscribe_to.*",
-                            "^.*regex_subscribe_TOO.*", NULL},
+                    .sub = {rd_strdup(tsprintf("^.*regex_subscribe_to.*_%s", test_run_id)),
+                            rd_strdup(tsprintf("^.*regex_subscribe_TOO.*_%s", test_run_id)), NULL},
                     .exp = {topics[1], topics[2], NULL}};
 
                 fails += test_subscribe(rk, &expect);
                 rd_free(expect.name);
+                rd_free((void *)expect.sub[0]);
+                rd_free((void *)expect.sub[1]);
         }
 
         test_consumer_close(rk);
@@ -484,6 +486,8 @@ static int do_test(const char *assignor) {
                 test_delete_topic(rk, topics[i]);
 
         rd_kafka_destroy(rk);
+        
+        rd_free(test_run_id);
 
         if (fails)
                 TEST_FAIL("See %d previous failures", fails);

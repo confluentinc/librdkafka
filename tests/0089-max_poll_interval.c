@@ -64,7 +64,6 @@ static void do_test(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Waiting for topic/partition readiness before producing\n");
                 rd_sleep(10);
         }
 
@@ -220,7 +219,6 @@ static void do_test_with_log_queue(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
         if (test_k2_cluster) {
-                TEST_SAY("K2 environment: Waiting for topic/partition readiness before producing\n");
                 rd_sleep(10);
         }
 

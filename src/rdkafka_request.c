@@ -1163,6 +1163,11 @@ void rd_kafka_OffsetForLeaderEpochRequest(
 }
 
 
+int rd_kafka_handle_OffsetFetch_err_action(rd_kafka_broker_t *rkb,
+                                           rd_kafka_resp_err_t err,
+                                           rd_kafka_buf_t *request) {
+        return rd_kafka_err_action(rkb, err, request, RD_KAFKA_ERR_ACTION_END);
+}
 
 /**
  * Generic handler for OffsetFetch responses.
@@ -1362,8 +1367,7 @@ err:
                            seen_cnt, (*offsets)->cnt, retry_unstable,
                            rd_kafka_err2str(err));
 
-        actions =
-            rd_kafka_err_action(rkb, err, request, RD_KAFKA_ERR_ACTION_END);
+        actions = rd_kafka_handle_OffsetFetch_err_action(rkb, err, request);
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */

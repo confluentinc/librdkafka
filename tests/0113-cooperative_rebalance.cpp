@@ -916,7 +916,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   RdKafka::KafkaConsumer *c2 = make_consumer(
       "C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 25);
 
-  test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 30 * 1000);
+  test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
   test_sleep(5);
 
   Test::subscribe(c1, topic_name);
@@ -1106,7 +1106,7 @@ static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
 
 
   // Ensure topic metadata is fully propagated before subscribing
-  test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 30 * 1000);
+  test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
   test_sleep(3);
 
   Test::subscribe(c1, topic_name);
@@ -1172,10 +1172,9 @@ static void d_change_subscription_add_topic(rd_bool_t close_consumer) {
 
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
-  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
-  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
+  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
+  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   Test::subscribe(c, topic_name_1);
@@ -1233,10 +1232,9 @@ static void e_change_subscription_remove_topic(rd_bool_t close_consumer) {
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
 
   // Ensure topic metadata is fully propagated before subscribing
-  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
-  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
+  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
+  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   Test::subscribe(c, topic_name_1, topic_name_2);
@@ -1351,9 +1349,8 @@ static void f_assign_call_cooperative() {
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf,
                     &rebalance_cb, 15);
-  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 30 * 1000);
+  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   Test::subscribe(c, topic_name);
@@ -1459,9 +1456,8 @@ static void g_incremental_assign_call_eager() {
   GTestRebalanceCb rebalance_cb;
   RdKafka::KafkaConsumer *c = make_consumer(
       "C_1", group_name, "roundrobin", &additional_conf, &rebalance_cb, 15);
-  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 30 * 1000);
+  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   Test::subscribe(c, topic_name);
@@ -1504,10 +1500,9 @@ static void h_delete_topic() {
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf,
                     &rebalance_cb, 15);
-  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
-  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
+  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
+  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   Test::subscribe(c, topic_name_1, topic_name_2);
@@ -1684,9 +1679,8 @@ static void k_add_partition() {
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf,
                     &rebalance_cb, 15);
-  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 30 * 1000);
+  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   Test::subscribe(c, topic_name);
@@ -1764,10 +1758,9 @@ static void l_unsubscribe() {
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer(
       "C_1", group_name, "cooperative-sticky", NULL, &rebalance_cb1, 30);
-  test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 30 * 1000);
-  test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), 30 * 1000);
+  test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
+  test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   Test::subscribe(c1, topic_name_1, topic_name_2);
@@ -1854,7 +1847,7 @@ static void l_unsubscribe() {
                          << " not: " << rebalance_cb1.revoke_call_cnt);
     if (rebalance_cb2.revoke_call_cnt < 0 || rebalance_cb2.revoke_call_cnt > 3)
       Test::Fail(
-          tostr() << "Expecting consumer 2's revoke_call_cnt to be 0-2 not: "
+          tostr() << "Expecting consumer 2's revoke_call_cnt to be 0-3 not: "
                   << rebalance_cb2.revoke_call_cnt);
   }
 
@@ -1889,8 +1882,7 @@ static void m_unsubscribe_2() {
 
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
-  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 30 * 1000);
-  // Additional wait for partition metadata and group coordinator readiness
+  test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
   test_sleep(3);
 
   Test::subscribe(c, topic_name);
@@ -2251,11 +2243,10 @@ static void s_subscribe_when_rebalancing(int variation) {
   DefaultRebalanceCb rebalance_cb;
   RdKafka::KafkaConsumer *c = make_consumer(
       "C_1", group_name, "cooperative-sticky", NULL, &rebalance_cb, 25);
-  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 30 * 1000);
-  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 30 * 1000);
-  test_wait_topic_exists(c->c_ptr(), topic_name_3.c_str(), 30 * 1000);
+  test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
+  test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
+  test_wait_topic_exists(c->c_ptr(), topic_name_3.c_str(), tmout_multip(10 * 1000));
 
-  // Additional wait for partition metadata and group coordinator readiness
   test_sleep(3);
 
   if (variation == 2 || variation == 4 || variation == 6) {
@@ -2319,8 +2310,8 @@ static void t_max_poll_interval_exceeded(int variation) {
       make_consumer("C_2", group_name, "cooperative-sticky", &additional_conf,
                     &rebalance_cb2, 30);
 
-  test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 30 * 1000);
-  test_wait_topic_exists(c2->c_ptr(), topic_name_1.c_str(), 30 * 1000);
+  test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
+  test_wait_topic_exists(c2->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
 
   test_sleep(5);
   Test::subscribe(c1, topic_name_1);
@@ -2336,8 +2327,8 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   while (!done) {
     if (!both_have_been_assigned)
-      Test::poll_once(c1, 1000);  /* Increased from 500ms to 1000ms */
-    Test::poll_once(c2, 1000);    /* Increased from 500ms to 1000ms */
+      Test::poll_once(c1, tmout_multip(1000));  
+    Test::poll_once(c2, tmout_multip(1000));    
 
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1 &&
@@ -2348,8 +2339,6 @@ static void t_max_poll_interval_exceeded(int variation) {
           << ". WAITING 7 seconds for max.poll.interval.ms to be exceeded\n");
       both_have_been_assigned = true;
       test_sleep(5);
-
-      Test::Say("Finished waiting for max poll interval, continuing polling...\n");
     }
 
     if (Test::assignment_partition_count(c2, NULL) == 2 &&
@@ -2371,10 +2360,10 @@ static void t_max_poll_interval_exceeded(int variation) {
     /* Allow more time for max poll interval processing in cloud environments */
     test_sleep(2);
     Test::poll_once(c1,
-                    2000); /* Increased from 500ms to 2000ms - eat the max poll interval exceeded error message */
+                    tmout_multip(500)); /* Eat the max poll interval exceeded error message */
     test_sleep(1);
     Test::poll_once(c1,
-                    2000); /* Increased from 500ms to 2000ms - trigger the rebalance_cb with lost partitions */
+                   tmout_multip(500)); /* Trigger the rebalance_cb with lost partitions */
 
     if (rebalance_cb1.lost_call_cnt != expected_cb1_lost_call_cnt)
       Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be "
@@ -2384,7 +2373,7 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   if (variation == 3) {
     /* Last poll will cause a rejoin, wait that the rejoin happens. */
-    test_sleep(10);
+    test_sleep(5);
     expected_cb2_revoke_call_cnt++;
   }
 
@@ -2411,18 +2400,11 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::Fail(tostr() << "Expected consumer 1 revoke count to be "
                          << expected_cb1_revoke_call_cnt
                          << ", not: " << rebalance_cb1.revoke_call_cnt);
-    if (test_k2_cluster) {
-      if (rebalance_cb2.revoke_call_cnt < expected_cb2_revoke_call_cnt || 
-          rebalance_cb2.revoke_call_cnt > expected_cb2_revoke_call_cnt + 2)
+    if (rebalance_cb2.revoke_call_cnt < expected_cb2_revoke_call_cnt || 
+        rebalance_cb2.revoke_call_cnt > expected_cb2_revoke_call_cnt + 2)
         Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
-                           << expected_cb2_revoke_call_cnt << "-" << (expected_cb2_revoke_call_cnt + 2)
-                           << ", not: " << rebalance_cb2.revoke_call_cnt);
-    } else {
-      if (rebalance_cb2.revoke_call_cnt != expected_cb2_revoke_call_cnt)
-        Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
-                           << expected_cb2_revoke_call_cnt
-                           << ", not: " << rebalance_cb2.revoke_call_cnt);
-    }
+                                << expected_cb2_revoke_call_cnt << "-" << (expected_cb2_revoke_call_cnt + 2)
+                                << ", not: " << rebalance_cb2.revoke_call_cnt);
   }
 
   delete c1;

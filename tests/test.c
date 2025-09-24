@@ -6736,8 +6736,8 @@ rd_kafka_resp_err_t test_CreateTopics_simple(rd_kafka_t *rk,
 
         for (i = 0; i < topic_cnt; i++) {
                 char errstr[512];
-                /* K2 clusters require replication factor 3 */
-                int replication_factor = test_k2_cluster ? 3 : 1;
+                /* Use broker default replication factor (-1) */
+                int replication_factor = -1;
                 new_topics[i] = rd_kafka_NewTopic_new(
                     topics[i], num_partitions, replication_factor, errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],

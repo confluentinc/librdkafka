@@ -355,8 +355,6 @@ int main_0086_purge_remote(int argc, char **argv) {
 }
 
 int main_0086_purge_remote_idempotent(int argc, char **argv) {
-        /* Skip idempotent tests in K2 environment due to API version incompatibility
-         * with InitProducerIdRequest in librdkafka 2.11 */
 
         const rd_bool_t has_idempotence =
             test_broker_version >= TEST_BRKVER(0, 11, 0, 0);

@@ -90,9 +90,6 @@ int main_0068_produce_timeout(int argc, char **argv) {
         rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
         rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
 
-        /* Skip sockem tests in K2 environment - sockem uses PLAINTEXT connections
-         * but K2 requires SSL/SASL which is incompatible with socket mocking */
-
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL, 60);

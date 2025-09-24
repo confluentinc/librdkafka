@@ -383,11 +383,17 @@ int main_0055_producer_latency(int argc, char **argv) {
                  "Max", "Wakeups");
 
         for (latconf = latconfs; latconf->name; latconf++) {
-                /* Skip K2-incompatible configurations in summary too */
-                if (test_k2_cluster &&
-                    (strstr(latconf->name, "no acks") ||
-                     strstr(latconf->name, "idempotence") ||
-                     strstr(latconf->name, "transactions"))) {
+                /* Skip configurations based on test configuration */
+                int should_skip = 0;
+                
+                if (strstr(latconf->name, "no acks") && !test_is_acks_supported("0")) {
+                        should_skip = 1;
+                } else if ((strstr(latconf->name, "idempotence") || strstr(latconf->name, "transactions")) &&
+                           (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
+                        should_skip = 1;
+                }
+                
+                if (should_skip) {
                         TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s %8s%s\n",
                                  latconf->name, "-", "SKIP", "SKIP", "-", "-", "-", "-", "-",
                                  _C_YEL "  SKIPPED");
@@ -568,7 +574,6 @@ static void test_producer_latency_first_message(int case_number) {
 }
 
 int main_0055_producer_latency_mock(int argc, char **argv) {
-
         int case_number;
         for (case_number = 0; case_number < 4; case_number++) {
                 test_producer_latency_first_message(case_number);

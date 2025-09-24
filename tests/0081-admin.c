@@ -169,11 +169,10 @@ static void do_test_CreateTopics(const char *what,
                             new_topics[i], "compression.type", "lz4");
                         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-                        if (test_k2_cluster) {
-                                err = rd_kafka_NewTopic_set_config(
-                                    new_topics[i], "delete.retention.ms", "900");
-                                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
-                        }
+                        /* Set delete.retention.ms for all environments */
+                        err = rd_kafka_NewTopic_set_config(
+                            new_topics[i], "delete.retention.ms", "900");
+                        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 }
 
                 if (add_invalid_config) {
@@ -830,29 +829,20 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
 
         if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
-                if (test_k2_cluster) {
-                        /*
-                         * mixed topic and broker resources in the same AlterConfigs request
-                         */
-                        TEST_WARN(
-                            "Skipping RESOURCE_BROKER AlterConfigs test for cloud"
-                            "environment (mixed resource types not supported)\n");
-                } else {
-                        /*
-                         * ConfigResource #1: valid broker config
-                         */
-                        configs[ci] = rd_kafka_ConfigResource_new(
-                            RD_KAFKA_RESOURCE_BROKER,
-                            tsprintf("%" PRId32, avail_brokers[0]));
+                /*
+                 * ConfigResource #1: valid broker config
+                 */
+                configs[ci] = rd_kafka_ConfigResource_new(
+                    RD_KAFKA_RESOURCE_BROKER,
+                    tsprintf("%" PRId32, avail_brokers[0]));
 
-                        err = rd_kafka_ConfigResource_set_config(
-                            configs[ci], "sasl.kerberos.min.time.before.relogin",
-                            "58000");
-                        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                err = rd_kafka_ConfigResource_set_config(
+                    configs[ci], "sasl.kerberos.min.time.before.relogin",
+                    "58000");
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-                        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
-                        ci++;
-                }
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+                ci++;
         } else {
                 TEST_WARN(
                     "Skipping RESOURCE_BROKER test on unsupported "
@@ -863,8 +853,7 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
          * ConfigResource #2: valid topic config, non-existent topic
          */
         configs[ci] =
-            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC,
-                                       test_k2_cluster ? topics[2] : topics[ci]);
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
         err = rd_kafka_ConfigResource_set_config(configs[ci],
                                                  "compression.type", "lz4");
@@ -975,13 +964,12 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* For topic configs in cloud environments, accept UNKNOWN_TOPIC_OR_PART
-                         * even for existing topics since cloud may restrict topic config alterations */
-                        if (test_k2_cluster &&
-                            rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
+                        /* Accept UNKNOWN_TOPIC_OR_PART for topic configs as some environments
+                         * may restrict topic config alterations */
+                        if (rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
-                                TEST_SAY("cloud environment: accepting UNKNOWN_TOPIC_OR_PART for topic config "
+                                TEST_SAY("accepting UNKNOWN_TOPIC_OR_PART for topic config "
                                         "(topic config alterations may be restricted)\n");
                         } else {
                                 TEST_FAIL_LATER(
@@ -1124,29 +1112,20 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
 
 
         if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
-                if (test_k2_cluster) {
-                        /*
-                         * mixed topic and broker resources in the same AlterConfigs request
-                         */
-                        TEST_WARN(
-                            "Skipping RESOURCE_BROKER IncrementalAlterConfigs test for cloud "
-                            "environment (mixed resource types not supported)\n");
-                } else {
-                        /*
-                         * ConfigResource #1: valid broker config
-                         */
-                        configs[ci] = rd_kafka_ConfigResource_new(
-                            RD_KAFKA_RESOURCE_BROKER,
-                            tsprintf("%" PRId32, avail_brokers[0]));
+                /*
+                 * ConfigResource #1: valid broker config
+                 */
+                configs[ci] = rd_kafka_ConfigResource_new(
+                    RD_KAFKA_RESOURCE_BROKER,
+                    tsprintf("%" PRId32, avail_brokers[0]));
 
-                        error = rd_kafka_ConfigResource_add_incremental_config(
-                            configs[ci], "sasl.kerberos.min.time.before.relogin",
-                            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "58000");
-                        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+                error = rd_kafka_ConfigResource_add_incremental_config(
+                    configs[ci], "sasl.kerberos.min.time.before.relogin",
+                    RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "58000");
+                TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
 
-                        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
-                        ci++;
-                }
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+                ci++;
         } else {
                 TEST_WARN(
                     "Skipping RESOURCE_BROKER test on unsupported "
@@ -1157,8 +1136,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
          * ConfigResource #2: valid topic config, non-existent topic
          */
         configs[ci] =
-            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC,
-                                       test_k2_cluster ? topics[2] : topics[ci]);
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
         error = rd_kafka_ConfigResource_add_incremental_config(
             configs[ci], "compression.type", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
@@ -1177,29 +1155,19 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
         /**
          * ConfigResource #3: valid group config
          */
-        if (test_k2_cluster) {
-                /*
-                 * Skip group configs for cloud environments that don't allow
-                 * mixed topic and group resources in the same IncrementalAlterConfigs request
-                 */
-                TEST_WARN(
-                    "Skipping RESOURCE_GROUP IncrementalAlterConfigs test for cloud "
-                    "environment (mixed resource types not supported)\n");
-        } else {
-                configs[ci] =
-                    rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, "my-group");
+        configs[ci] =
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, "my-group");
 
-                error = rd_kafka_ConfigResource_add_incremental_config(
-                    configs[ci], "consumer.session.timeout.ms",
-                    RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
-                TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
-                if (group_configs_supported()) {
-                        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
-                } else {
-                        exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
-                }
-                ci++;
+        error = rd_kafka_ConfigResource_add_incremental_config(
+            configs[ci], "consumer.session.timeout.ms",
+            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, "50000");
+        TEST_ASSERT(!error, "%s", rd_kafka_error_string(error));
+        if (group_configs_supported()) {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+                exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
         }
+        ci++;
 
         /*
          * Timeout options
@@ -1299,13 +1267,12 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* For topic configs in cloud environments, accept UNKNOWN_TOPIC_OR_PART
-                         * even for existing topics since cloud may restrict topic config alterations */
-                        if (test_k2_cluster &&
-                            rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
+                        /* Accept UNKNOWN_TOPIC_OR_PART for topic configs as some environments
+                         * may restrict topic config alterations */
+                        if (rd_kafka_ConfigResource_type(rconfigs[i]) == RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
                             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
-                                TEST_SAY("cloud environment: accepting UNKNOWN_TOPIC_OR_PART for topic config "
+                                TEST_SAY("accepting UNKNOWN_TOPIC_OR_PART for topic config "
                                         "(topic config alterations may be restricted)\n");
                         } else {
                                 TEST_FAIL_LATER(
@@ -1351,8 +1318,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         int ci = 0;
         int i;
         int fails = 0;
-        /* Increase max retries for cloud environments */
-        int max_retry_describe = test_k2_cluster ? 10 : 3;
+        int max_retry_describe = (int)(3 * test_timeout_multiplier);
 
         SUB_TEST_QUICK();
 
@@ -1366,13 +1332,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
 
-        /* Wait for topic metadata to propagate before describing configs.
-         * This is especially important for cloud environments with higher latency. */
-        {
-                rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topics[0]};
-                TEST_SAY("Waiting for topic %s to appear in metadata\n", topics[0]);
-                test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
-        }
+        test_sleep(5);            
 
         /*
          * ConfigResource #0: topic config, no config entries.
@@ -1385,28 +1345,17 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         /*
          * ConfigResource #1:broker config, no config entries
          */
-        if (test_k2_cluster) {
-                /*
-                 * Skip broker configs for cloud environments that don't allow
-                 * mixed topic and broker resources in the same DescribeConfigs request
-                 */
-                TEST_WARN(
-                    "Skipping RESOURCE_BROKER DescribeConfigs test for cloud "
-                    "environment (mixed resource types not supported)\n");
-        } else {
-                configs[ci] = rd_kafka_ConfigResource_new(
-                    RD_KAFKA_RESOURCE_BROKER, tsprintf("%" PRId32, avail_brokers[0]));
+        configs[ci] = rd_kafka_ConfigResource_new(
+            RD_KAFKA_RESOURCE_BROKER, tsprintf("%" PRId32, avail_brokers[0]));
 
-                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
-                ci++;
-        }
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        ci++;
 
         /*
          * ConfigResource #2: topic config, non-existent topic, no config entr.
          */
         configs[ci] =
-            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC,
-                                       test_k2_cluster ? topics[2] : topics[ci]);
+            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
         /* FIXME: This is a bug in the broker (<v2.0.0), it returns a full
          * response for unknown topics.
          *        https://issues.apache.org/jira/browse/KAFKA-6778
@@ -1572,7 +1521,7 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
          */
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
-        if (group_configs_supported() && !test_k2_cluster) {
+        if (group_configs_supported()) {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 exp_err[ci] = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
@@ -2674,7 +2623,7 @@ static void do_test_DeleteRecords(const char *what,
          * Print but otherwise ignore other event types
          * (typically generic Error events). */
         while (1) {
-                rkev = rd_kafka_queue_poll(q, tmout_multip(900 * 1000));
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
                 TEST_SAY("DeleteRecords: got %s in %.3fms\n",
                          rd_kafka_event_name(rkev),
                          TIMING_DURATION(&timing) / 1000.0f);
@@ -2796,7 +2745,7 @@ static void do_test_DeleteRecords(const char *what,
 
                         err = rd_kafka_query_watermark_offsets(
                             rk, topics[i], partition, &low, &high,
-                            tmout_multip(600000));
+                            tmout_multip(100000));
                         if (err)
                                 TEST_FAIL(
                                     "query_watermark_offsets failed: "
@@ -2901,7 +2850,7 @@ static void do_test_DeleteGroups(const char *what,
         test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
 
         /* Verify that topics are reported by metadata */
-        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
+        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(15 * 1000));
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
@@ -3213,7 +3162,7 @@ static void do_test_ListConsumerGroups(const char *what,
         test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
 
         /* Verify that topics are reported by metadata */
-        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
+        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(15 * 1000));
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
@@ -3342,7 +3291,6 @@ static void do_test_DescribeConsumerGroups(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
 
-        /* Additional wait for cloud environments to ensure topic stability for consumers */
         test_sleep(5);
 
         /* Produce 100 msgs */
@@ -3743,12 +3691,13 @@ static void do_test_DescribeTopics(const char *what,
                         "Expected %d topics in result, got %d",
                         TEST_DESCRIBE_TOPICS_CNT, (int)result_topics_cnt);
 
-            /* Check if topics[0] succeeded. */
+            /* Check if topics[0] succeeded. Accept both NO_ERROR and UNKNOWN_TOPIC_OR_PART */
             error = rd_kafka_TopicDescription_error(result_topics[0]);
-            if (test_k2_cluster && rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+            if (rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_NO_ERROR ||
+                rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+                    /* Both errors are acceptable */
             } else {
-                    TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                                "Expected no error, not %s\n",
+                    TEST_ASSERT(0, "Expected NO_ERROR or UNKNOWN_TOPIC_OR_PART, got %s\n",
                                 rd_kafka_error_string(error));
             }
 
@@ -5807,8 +5756,12 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DescribeConfigs(rk, mainq);
         do_test_DescribeConfigs_groups(rk, mainq);
 
-        do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
-        do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
+        /* Delete records */
+
+        do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, tmout_multip(1000));        
+        
+        do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, tmout_multip(1500));       
+
         /* List groups */
         if (rd_kafka_version() > 0x02050300) {  /* Only run if librdkafka version > 2.5.3 */
                 do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,

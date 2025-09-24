@@ -443,7 +443,7 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
         test_sleep(2);
 
         event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
-                                (int)(test_timeout_multiplier * 15000));
+                                (int)(test_timeout_multiplier * tmout_multip(10000)));
         TEST_ASSERT(event, "Should get a rebalance event for the group rejoin");
         TEST_ASSERT(rd_kafka_event_error(event) ==
                         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,

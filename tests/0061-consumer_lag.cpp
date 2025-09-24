@@ -289,7 +289,7 @@ static void do_test_consumer_lag(bool with_txns) {
 extern "C" {
 int main_0061_consumer_lag(int argc, char **argv) {
   do_test_consumer_lag(false /*no txns*/);
-  if (test_broker_version >= TEST_BRKVER(0, 11, 0, 0) && !test_k2_cluster)
+  if (test_broker_version >= TEST_BRKVER(0, 11, 0, 0))
     do_test_consumer_lag(true /*txns*/);
   return 0;
 }

@@ -53,7 +53,6 @@ static void do_test_clusterid(void) {
 
   /*
    * Create client with lacking protocol support.
-   * K2 clusters no longer support legacy protocol configurations
    */
   {
     Test::conf_init(&conf, NULL, 10);
@@ -128,7 +127,6 @@ static void do_test_controllerid(void) {
 
   /*
    * Create client with lacking protocol support.
-   * K2 clusters no longer support legacy protocol configurations (July/August 2025)
    */
   RdKafka::Producer *p_bad = NULL;
   {

@@ -2162,6 +2162,7 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
                 rd_kafka_toppar_lock(rktp);
 
                 if (rko->rko_err) {
+                        int actions;
                         rd_kafka_dbg(
                             rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
                             "Failed to fetch offset for "
@@ -2176,10 +2177,15 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
                         rd_kafka_toppar_unlock(rktp);
 
 
-                        /* Propagate error to application */
+                        actions = rd_kafka_handle_OffsetFetch_err_action(
+                            NULL, rko->rko_err, NULL);
+                        /* Propagate error to application. Exclude
+                         * permanent errors that caused a coordinator
+                         * refresh like `NOT_COORDINATOR` */
                         if (rko->rko_err != RD_KAFKA_RESP_ERR__WAIT_COORD &&
                             rko->rko_err !=
-                                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT)
+                                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT &&
+                            !(actions & RD_KAFKA_ERR_ACTION_REFRESH))
                                 rd_kafka_consumer_err(
                                     rktp->rktp_fetchq, RD_KAFKA_NODEID_UA,
                                     rko->rko_err, 0, NULL, rktp,

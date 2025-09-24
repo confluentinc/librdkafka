@@ -2185,8 +2185,9 @@ void test_dr_msg_cb(rd_kafka_t *rk,
                 test_curr->produce_sync_err = rkmessage->err;
 }
 
-
-rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
+rd_kafka_t *test_create_handle0(int mode,
+                                rd_kafka_conf_t *conf,
+                                rd_bool_t environment_group_protocol) {
         rd_kafka_t *rk;
         char errstr[512];
 
@@ -2201,7 +2202,8 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
                         test_conf_set(conf, "client.id", test_curr->name);
         }
 
-        if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str) {
+        if (environment_group_protocol && mode == RD_KAFKA_CONSUMER &&
+            test_consumer_group_protocol_str) {
                 test_conf_set(conf, "group.protocol",
                               test_consumer_group_protocol_str);
         }
@@ -2214,6 +2216,11 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
         TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
         return rk;
+}
+
+
+rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
+        return test_create_handle0(mode, conf, rd_true);
 }
 
 
@@ -2691,15 +2698,15 @@ void test_rebalance_cb(rd_kafka_t *rk,
         }
 }
 
-
-rd_kafka_t *test_create_consumer(
+rd_kafka_t *test_create_consumer0(
     const char *group_id,
     void (*rebalance_cb)(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
                          rd_kafka_topic_partition_list_t *partitions,
                          void *opaque),
     rd_kafka_conf_t *conf,
-    rd_kafka_topic_conf_t *default_topic_conf) {
+    rd_kafka_topic_conf_t *default_topic_conf,
+    rd_bool_t environment_group_protocol) {
         rd_kafka_t *rk;
         char tmp[64];
 
@@ -2709,8 +2716,17 @@ rd_kafka_t *test_create_consumer(
         if (group_id) {
                 test_conf_set(conf, "group.id", group_id);
 
-                rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
-                test_conf_set(conf, "session.timeout.ms", tmp);
+                char *group_protocol = test_conf_get(conf, "group.protocol");
+                int is_classic_protocol =
+                    (group_protocol &&
+                     strcmp(group_protocol, "classic") == 0) ||
+                    (!group_protocol && test_consumer_group_protocol_classic());
+
+                if (is_classic_protocol) {
+                        rd_snprintf(tmp, sizeof(tmp), "%d",
+                                    test_session_timeout_ms);
+                        test_conf_set(conf, "session.timeout.ms", tmp);
+                }
 
                 if (rebalance_cb)
                         rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
@@ -2722,12 +2738,30 @@ rd_kafka_t *test_create_consumer(
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
 
         /* Create kafka instance */
-        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        if (!environment_group_protocol) {
+                rk = test_create_handle0(RD_KAFKA_CONSUMER, conf,
+                                         environment_group_protocol);
+        } else {
+                rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        }
 
         if (group_id)
                 rd_kafka_poll_set_consumer(rk);
 
         return rk;
+}
+
+rd_kafka_t *test_create_consumer(
+    const char *group_id,
+    void (*rebalance_cb)(rd_kafka_t *rk,
+                         rd_kafka_resp_err_t err,
+                         rd_kafka_topic_partition_list_t *partitions,
+                         void *opaque),
+    rd_kafka_conf_t *conf,
+    rd_kafka_topic_conf_t *default_topic_conf) {
+        return test_create_consumer0(group_id, rebalance_cb, conf,
+                                     default_topic_conf,
+                                     rd_true /* environment_group_protocol */);
 }
 
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk,
@@ -4665,9 +4699,13 @@ int test_is_forbidden_conf_group_protocol_consumer(const char *name) {
         return 0;
 }
 
-void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
+void test_conf_set0(rd_kafka_conf_t *conf,
+                    const char *name,
+                    const char *val,
+                    rd_bool_t environment_group_protocol) {
         char errstr[512];
-        if (test_is_forbidden_conf_group_protocol_consumer(name)) {
+        if (environment_group_protocol &&
+            test_is_forbidden_conf_group_protocol_consumer(name)) {
                 TEST_SAY(
                     "Skipping setting forbidden configuration %s for CONSUMER "
                     "protocol.\n",
@@ -4678,6 +4716,11 @@ void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
             RD_KAFKA_CONF_OK)
                 TEST_FAIL("Failed to set config \"%s\"=\"%s\": %s\n", name, val,
                           errstr);
+}
+
+void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
+        return test_conf_set0(conf, name, val,
+                              rd_true /* environment_group_protocol */);
 }
 
 /**

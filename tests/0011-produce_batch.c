@@ -119,13 +119,7 @@ static void test_single_partition(void) {
         topic = test_mk_topic_name("0011", 0);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
-        /* Wait for topic metadata to be available for cloud environments */
-        {
-                rd_kafka_metadata_topic_t topic_md = {0};
-                topic_md.topic = (char*)topic;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
-        }
-        test_sleep(3);
+        test_sleep(5);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -261,14 +255,7 @@ static void test_partitioner(void) {
         topic = test_mk_topic_name("0011_partitioner", 1);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
-        /* Wait for topic metadata to be available for cloud environments */
-        {
-                rd_kafka_metadata_topic_t topic_md = {0};
-                topic_md.topic = (char*)topic;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000); /* 30 seconds timeout */
-        }
-
-        test_sleep(3);
+        test_sleep(5);
 
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -540,16 +527,7 @@ static void test_message_partitioner_wo_per_message_flag(void) {
 
         topic = test_mk_topic_name("0011", 0);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
-
-        /* Wait for topic metadata to be available for cloud environments */
-        {
-                rd_kafka_metadata_topic_t topic_md = {0};
-                topic_md.topic = (char*)topic;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000);
-        }
-
-         test_sleep(3);
-
+         test_sleep(5);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -707,14 +685,7 @@ static void test_message_single_partition_record_fail(int variation) {
             rd_kafka_name(rk));
 
         test_create_topic_if_auto_create_disabled(rk, topic_name, -1);
-
-        /* Wait for topic metadata to be available for cloud environments */
-        {
-                rd_kafka_metadata_topic_t topic_md = {0};
-                topic_md.topic = (char*)topic_name;
-                test_wait_metadata_update(rk, &topic_md, 1, NULL, 0, 30000);
-        }
-
+        test_sleep(5);
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));

@@ -924,10 +924,9 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   bool c2_subscribed = false;
   while (true) {
     /* Version-specific poll timeouts for cooperative rebalancing */
-    int poll_timeout = (rd_kafka_version() >= 0x020100ff) ? 500 :
-                       (test_k2_cluster ? 2000 : 1000);
-    Test::poll_once(c1, poll_timeout);
-    Test::poll_once(c2, poll_timeout);
+    int poll_timeout = (rd_kafka_version() >= 0x020100ff) ? tmout_multip(500) : tmout_multip(1000);
+    Test::poll_once(c1, tmout_multip(poll_timeout));
+    Test::poll_once(c2, tmout_multip(poll_timeout));
 
     /* Start c2 after c1 has received initial assignment */
     if (!c2_subscribed && rebalance_cb1.nonempty_assign_call_cnt > 0) {
@@ -3266,8 +3265,7 @@ static void v_rebalance_cb(rd_kafka_t *rk,
     if (!*auto_commitp) {
       rd_kafka_resp_err_t commit_err;
 
-      TEST_SAY("Attempting manual commit after unassign, in %d seconds..\n", 
-               test_k2_cluster ? 3 : 2);
+      TEST_SAY("Attempting manual commit after unassign, in 2 seconds..\n");
       /* Sleep enough to have the generation-id bumped by rejoin. */
       test_sleep(2);
       commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/);
@@ -3334,12 +3332,9 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
    */
   p = test_create_producer();
 
-  int topic_timeout_ms = test_k2_cluster ? 30000 : 5000;
-  test_create_topic_wait_exists(p, topic, partition_cnt, -1, topic_timeout_ms);
+  test_create_topic_wait_exists(p, topic, partition_cnt, -1, tmout_multip(5000));
 
-  if (test_k2_cluster) {
-    test_sleep(3);
-  }
+  test_sleep(3);
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3385,8 +3380,8 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
   for (i = 0; i < 10; i++) {
     int poll_result1, poll_result2;
     do {
-      poll_result1 = test_consumer_poll_once(c1, NULL, test_k2_cluster ? 5000 : 1000);
-      poll_result2 = test_consumer_poll_once(c2, NULL, test_k2_cluster ? 5000 : 1000);
+      poll_result1 = test_consumer_poll_once(c1, NULL, tmout_multip(1000));
+      poll_result2 = test_consumer_poll_once(c2, NULL, tmout_multip(1000));
 
       if (poll_result1 == 1 && !auto_commit) {
         rd_kafka_resp_err_t err;
@@ -3395,9 +3390,8 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
         TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
                     "Expected not error or ILLEGAL_GENERATION, got: %s",
                     rd_kafka_err2str(err));
-        if (test_k2_cluster) {
-          test_sleep(3);
-        }
+        test_sleep(3);
+        
       }
     } while (poll_result1 == 0 || poll_result2 == 0);
   }
@@ -3426,9 +3420,7 @@ static void x_incremental_rebalances(void) {
   SUB_TEST();
   test_conf_init(&conf, NULL, 60);
 
-  /* K2 clusters need longer timeouts for topic metadata propagation */
-  int topic_timeout_ms2 = test_k2_cluster ? 30000 : 5000;
-  test_create_topic_wait_exists(NULL, topic, 6, -1, topic_timeout_ms2);
+  test_create_topic_wait_exists(NULL, topic, 6, -1, tmout_multip(5000));
 
   test_sleep(3);
 

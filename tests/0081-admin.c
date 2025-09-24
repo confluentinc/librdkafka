@@ -2634,7 +2634,7 @@ static void do_test_DeleteRecords(const char *what,
                                  partitions_cnt /*num_partitions*/, NULL);
 
         /* Verify that topics are reported by metadata */
-        int metadata_timeout_update = test_k2_cluster ? 60000 : tmout_multip(60000);
+        int metadata_timeout_update = tmout_multip(60000);
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   metadata_timeout_update);
 
@@ -2671,7 +2671,7 @@ static void do_test_DeleteRecords(const char *what,
         rd_kafka_topic_partition_list_add(offsets, topics[2], 1)->offset =
             msgs_cnt + 1;
 
-        int metadata_timeout = test_k2_cluster ? 60000 : tmout_multip(60000);
+        int metadata_timeout = tmout_multip(60000);
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
             metadata_timeout);
 
@@ -2692,8 +2692,7 @@ static void do_test_DeleteRecords(const char *what,
          * Print but otherwise ignore other event types
          * (typically generic Error events). */
         while (1) {
-                int poll_timeout = test_k2_cluster ? 1800 * 1000 : 900 * 1000;
-                rkev = rd_kafka_queue_poll(q, tmout_multip(poll_timeout));
+                rkev = rd_kafka_queue_poll(q, tmout_multip(900 * 1000));
                 TEST_SAY("DeleteRecords: got %s in %.3fms\n",
                          rd_kafka_event_name(rkev),
                          TIMING_DURATION(&timing) / 1000.0f);
@@ -2813,10 +2812,9 @@ static void do_test_DeleteRecords(const char *what,
                                 expected_low = del->offset;
                         }
 
-                        int watermark_timeout = test_k2_cluster ? 1200000 : 600000;
                         err = rd_kafka_query_watermark_offsets(
                             rk, topics[i], partition, &low, &high,
-                            tmout_multip(watermark_timeout));
+                            tmout_multip(600000));
                         if (err)
                                 TEST_FAIL(
                                     "query_watermark_offsets failed: "
@@ -3695,11 +3693,7 @@ static void do_test_DescribeTopics(const char *what,
                     test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
             }
 
-            if (test_k2_cluster) {
-                    rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic_names[0]};
-                    test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(3000));
-                    test_sleep(2);
-            }
+            test_sleep(2);
 
             options =
                 rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
@@ -3715,9 +3709,8 @@ static void do_test_DescribeTopics(const char *what,
             TIMING_ASSERT_LATER(&timing, 0, 50);
 
             /* Check DescribeTopics results. */
-            int describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
             rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                        describe_timeout);
+                                        tmout_multip(20 * 1000));
             TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
             /* Extract result. */
@@ -3746,9 +3739,8 @@ static void do_test_DescribeTopics(const char *what,
             TIMING_ASSERT_LATER(&timing, 0, 50);
 
             /* Check DescribeTopics results. */
-            describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); 
             rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                        describe_timeout);
+                                        tmout_multip(20 * 1000));
             TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
             /* Extract result. */
@@ -3885,9 +3877,8 @@ static void do_test_DescribeTopics(const char *what,
             rd_kafka_AdminOptions_destroy(options);
 
             /* Check DescribeTopics results. */
-            describe_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000);
             rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
-                                        describe_timeout);
+                                        tmout_multip(20 * 1000));
             TEST_ASSERT(rkev, "Expected DescribeTopicsResult on queue");
 
             /* Extract result. */
@@ -4212,7 +4203,6 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         const char *principal, *sasl_mechanism, *sasl_username;
         const rd_kafka_AclOperation_t *authorized_operations;
         size_t authorized_operations_cnt;
-        int acl_sleep;
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
@@ -4241,11 +4231,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         /* Create the topic. */
         test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
 
-        /* Wait for topic metadata to propagate before describing consumer groups.*/
-        {
-                rd_kafka_metadata_topic_t exp_mdtopic = {.topic = topic};
-                test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, tmout_multip(5000));
-        }
+        test_sleep(5);
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
@@ -4352,10 +4338,9 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                                         options, q);
         rd_kafka_AdminOptions_destroy(options);
 
-        int describe_groups_timeout = test_k2_cluster ? 60000 : tmout_multip(20 * 1000); 
         rkev = test_wait_admin_result(
             q, RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT,
-            describe_groups_timeout);
+            tmout_multip(20 * 1000));
         TEST_ASSERT(rkev, "Should receive describe consumer groups event.");
 
         /*  Extract result. */
@@ -4519,9 +4504,8 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000); 
         TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, committed_timeout));
+            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
 
         if (safe_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
@@ -4640,9 +4624,8 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000);
         TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, committed_timeout));
+            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
 
         TEST_SAY("Original committed offsets:\n");
         safe_print_partition_list(orig_offsets);
@@ -5097,9 +5080,8 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        int committed_timeout = test_k2_cluster ? 30000 : tmout_multip(5 * 1000);
         TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, committed_timeout));
+            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
 
         if (safe_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");

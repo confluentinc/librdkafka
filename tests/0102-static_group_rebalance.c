@@ -545,7 +545,7 @@ static void do_test_fenced_member_classic(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic_wait_exists(NULL, topic, 3, test_k2_cluster ? 3 : 1, 60000);
+        test_create_topic_wait_exists(NULL, topic, 3, 1, tmout_multip(60000));
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");
@@ -638,7 +638,7 @@ static void do_test_fenced_member_consumer(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic_wait_exists(NULL, topic, 3, test_k2_cluster ? 3 : 1, 60000);
+        test_create_topic_wait_exists(NULL, topic, 3, 1, tmout_multip(60000));
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");

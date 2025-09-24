@@ -68,9 +68,7 @@ static void do_test_fetch_max_bytes(void) {
 
   /* Create consumer */
   RdKafka::Conf *conf;
-  /* K2 clusters may need more time due to higher latency and larger fetch sizes */
-  int timeout_multiplier = test_k2_cluster ? 3 : 1;
-  Test::conf_init(&conf, NULL, 10 * timeout_multiplier);
+  Test::conf_init(&conf, NULL, tmout_multip(10));
   Test::conf_set(conf, "group.id", topic);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
   /* We try to fetch 20 Megs per partition, but only allow 1 Meg (or 4 Meg for K2)
@@ -125,8 +123,7 @@ static void do_test_fetch_max_bytes(void) {
   /* Start consuming */
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
-  /* K2 clusters may need more time per message due to larger fetch sizes */
-  int consume_timeout = test_k2_cluster ? tmout_multip(5000) : tmout_multip(1000);
+  int consume_timeout = tmout_multip(1000);
   Test::Say(tostr() << "Using consume timeout: " << consume_timeout << " ms");
   while (cnt < msgcnt) {
     RdKafka::Message *msg = c->consume(consume_timeout);

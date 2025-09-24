@@ -68,6 +68,7 @@ int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
 int test_k2_cluster                        = 0; /**< K2 cluster mode */
 char *test_supported_acks                   = NULL; /**< Supported acks values */
 static double test_sleep_multiplier         = 0.0; /**< Sleep time multiplier */
+static char *test_skip_numbers              = NULL; /**< Comma-separated list of test numbers to skip */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -897,10 +898,52 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
                 TEST_LOCK();
                 test_sleep_multiplier = strtod(val, NULL);
                 TEST_UNLOCK();
+        } else if (!strcmp(name, "test.skip.numbers")) {
+                TEST_LOCK();
+                if (test_skip_numbers)
+                        rd_free(test_skip_numbers);
+                test_skip_numbers = rd_strdup(val);
+                TEST_UNLOCK();
         } else
                 return 0;
 
         return 1;
+}
+
+/**
+ * @brief Check if a test should be skipped based on test.skip.numbers config
+ * @param test_number The test number to check (e.g., "0011", "0055")
+ * @returns 1 if test should be skipped, 0 otherwise
+ */
+int test_should_skip_number(const char *test_number) {
+        char *skip_list, *token, *saveptr;
+        int should_skip = 0;
+        
+        if (!test_skip_numbers || !*test_skip_numbers)
+                return 0;
+        
+        TEST_LOCK();
+        skip_list = rd_strdup(test_skip_numbers);
+        TEST_UNLOCK();
+        
+        token = strtok_r(skip_list, ",", &saveptr);
+        while (token) {
+                /* Trim whitespace */
+                while (*token == ' ' || *token == '\t')
+                        token++;
+                char *end = token + strlen(token) - 1;
+                while (end > token && (*end == ' ' || *end == '\t'))
+                        *end-- = '\0';
+                
+                if (!strcmp(token, test_number)) {
+                        should_skip = 1;
+                        break;
+                }
+                token = strtok_r(NULL, ",", &saveptr);
+        }
+        
+        rd_free(skip_list);
+        return should_skip;
 }
 
 /**
@@ -1591,6 +1634,8 @@ static void run_tests(int argc, char **argv) {
                 }
                 if ((test_neg_flags & ~test_flags) & test->flags)
                         skip_reason = "Filtered due to negative test flags";
+                if (test_should_skip_number(testnum))
+                        skip_reason = "Skipped by test.skip.numbers configuration";
                 if (test_broker_version &&
                     (test->minver > test_broker_version ||
                      (test->maxver && test->maxver < test_broker_version))) {
@@ -2176,6 +2221,9 @@ int main(int argc, char **argv) {
         }
         if (test_k2_cluster) {
                 TEST_SAY("Test K2 Cluster: enabled (+2.0x timeout multiplier)\n");
+        }
+        if (test_skip_numbers) {
+                TEST_SAY("Test skip numbers: %s\n", test_skip_numbers);
         }
 
         {

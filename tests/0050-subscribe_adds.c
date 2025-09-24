@@ -109,7 +109,7 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
 
                 test_create_topic_if_auto_create_disabled(rk, topic[i], -1);
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
-                test_wait_topic_exists(rk, topic[i], 30000); /* 30 seconds for cloud environments */
+                test_wait_topic_exists(rk, topic[i], tmout_multip(5000)); 
 
                 test_sleep(5); 
 

@@ -633,13 +633,6 @@ dr_message_single_partition_record_fail(rd_kafka_t *rk,
  *        - variation 2: one message per batch, other messages succeed
  */
 static void test_message_single_partition_record_fail(int variation) {
-        // Skip this subtest in K2 environment - compacted topics with mixed cleanup policies
-        // cause all messages to fail with INVALID_RECORD instead of just keyless ones
-        if (test_k2_cluster) {
-                TEST_SAY("SKIPPING: test_message_single_partition_record_fail(variation=%d) - "
-                         "compacted topic behavior differs in K2 environment", variation);
-                return;
-        }
         int partition = 0;
         int r;
         rd_kafka_t *rk;

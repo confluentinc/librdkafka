@@ -55,9 +55,7 @@ static void do_test_clusterid(void) {
    * Create client with lacking protocol support.
    * K2 clusters no longer support legacy protocol configurations
    */
-  if (test_k2_cluster) {
-    Test::Say("K2 cluster: Skipping legacy client test - api.version.request=false incompatible with SASL/SSL requirements\n");
-  } else {
+  {
     Test::conf_init(&conf, NULL, 10);
     Test::conf_set(conf, "api.version.request", "false");
     Test::conf_set(conf, "broker.version.fallback", "0.9.0");
@@ -133,9 +131,7 @@ static void do_test_controllerid(void) {
    * K2 clusters no longer support legacy protocol configurations (July/August 2025)
    */
   RdKafka::Producer *p_bad = NULL;
-  if (test_k2_cluster) {
-    Test::Say("K2 cluster: Skipping legacy client test - api.version.request=false and broker.version.fallback removed in K2 security hardening\n");
-  } else {
+  {
     Test::conf_init(&conf, NULL, 10);
     Test::conf_set(conf, "api.version.request", "false");
     Test::conf_set(conf, "broker.version.fallback", "0.9.0");
@@ -169,21 +165,18 @@ static void do_test_controllerid(void) {
   /*
    * Try bad producer, should return -1
    */
-  if (!test_k2_cluster) {
-    int32_t controllerid_bad_1 = p_bad->controllerid(tmout_multip(2000));
-    if (controllerid_bad_1 != -1)
-      Test::Fail(
-          tostr() << "bad producer(w timeout): Controllerid should be -1, not "
-                  << controllerid_bad_1);
-    int32_t controllerid_bad_2 = p_bad->controllerid(0);
-    if (controllerid_bad_2 != -1)
-      Test::Fail(tostr() << "bad producer(0): Controllerid should be -1, not "
-                         << controllerid_bad_2);
-  }
+  int32_t controllerid_bad_1 = p_bad->controllerid(tmout_multip(2000));
+  if (controllerid_bad_1 != -1)
+    Test::Fail(
+        tostr() << "bad producer(w timeout): Controllerid should be -1, not "
+                << controllerid_bad_1);
+  int32_t controllerid_bad_2 = p_bad->controllerid(0);
+  if (controllerid_bad_2 != -1)
+    Test::Fail(tostr() << "bad producer(0): Controllerid should be -1, not "
+                       << controllerid_bad_2);
 
   delete p_good;
-  if (p_bad)
-    delete p_bad;
+  delete p_bad;
 }
 
 extern "C" {

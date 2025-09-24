@@ -1711,12 +1711,6 @@ do_test_CreateAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         SUB_TEST_QUICK();
 
-        if (test_k2_cluster) {
-                SUB_TEST_SKIP(
-                    "Skipping CREATE_ACLS test on cloud environments "
-                    "(ACL operations not reliable)\n");
-                return;
-        }
 
         if (version == 0)
                 pattern_type_first_topic = RD_KAFKA_RESOURCE_PATTERN_LITERAL;
@@ -1851,12 +1845,6 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                 return;
         }
 
-        if (test_k2_cluster) {
-                SUB_TEST_SKIP(
-                    "Skipping DESCRIBE_ACLS test on cloud environments "
-                    "(ACL operations not reliable)\n"); 
-                return;
-        }
 
         pattern_type_first_topic_create = RD_KAFKA_RESOURCE_PATTERN_PREFIXED;
         if (!broker_version1)
@@ -2255,12 +2243,6 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                 return;
         }
 
-        if (test_k2_cluster) {
-                SUB_TEST_SKIP(
-                    "Skipping DELETE_ACLS test on cloud environments "
-                    "(ACL propagation and consistency issues)\n");
-                return;
-        }
 
         pattern_type_first_topic_create = RD_KAFKA_RESOURCE_PATTERN_PREFIXED;
         pattern_type_delete             = RD_KAFKA_RESOURCE_PATTERN_MATCH;
@@ -5825,12 +5807,8 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DescribeConfigs(rk, mainq);
         do_test_DescribeConfigs_groups(rk, mainq);
 
-        if (!test_k2_cluster) {
-            do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
-            do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
-        } else {
-                TEST_SAY("SKIPPING: DeleteRecords tests - not supported in cloud environments\n");
-        }
+        do_test_DeleteRecords("temp queue, op timeout 600000", rk, NULL, 600000);        /* 10 minutes */
+        do_test_DeleteRecords("main queue, op timeout 300000", rk, mainq, 300000);       /* 5 minutes */
         /* List groups */
         if (rd_kafka_version() > 0x02050300) {  /* Only run if librdkafka version > 2.5.3 */
                 do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false,

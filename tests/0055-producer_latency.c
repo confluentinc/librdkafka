@@ -129,10 +129,11 @@ static int verify_latency(struct latconf *latconf) {
 
         ext_overhead *= test_timeout_multiplier;
         
-        /* K2 environment: Add significant additional overhead for cloud infrastructure */
-        if (test_k2_cluster) {
-                ext_overhead += 1000.0; /* Add 1000ms extra overhead for K2 */
+        /* Add extra overhead only for slow environments (timeout multiplier > 1) */
+        if (test_timeout_multiplier > 1.0) {
+                ext_overhead += 1000.0;
         }
+        
 
         avg = latconf->sum / (float)latconf->cnt;
 
@@ -567,12 +568,6 @@ static void test_producer_latency_first_message(int case_number) {
 }
 
 int main_0055_producer_latency_mock(int argc, char **argv) {
-        // Skip mock broker tests in K2 environment - mock brokers are PLAINTEXT-only but K2 requires SSL/SASL
-        if (test_k2_cluster) {
-                TEST_SKIP("Mock broker tests skipped in K2 environment - "
-                          "mock brokers are PLAINTEXT-only but K2 requires SSL/SASL");
-                return 0;
-        }
 
         int case_number;
         for (case_number = 0; case_number < 4; case_number++) {

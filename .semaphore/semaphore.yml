@@ -118,10 +118,12 @@ blocks:
       jobs:
         - name: 'Build configuration checks'
           commands:
-            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-            - sudo dpkg -i rapidjson-dev.deb
             - python3 -m pip install -U pip
-            - ./packaging/tools/build-configurations-checks.sh
+            - ./packaging/tools/build-configurations-checks.sh make quay.io/pypa/manylinux_2_28_x86_64:2024.07.01-1
+            - ./packaging/tools/build-configurations-checks.sh cmake quay.io/pypa/manylinux_2_28_x86_64:2024.07.01-1
+            - ./packaging/tools/build-configurations-checks.sh make alpine:3.16.9
+            - ./packaging/tools/build-configurations-checks.sh cmake alpine:3.16.9
+
         - name: 'Build and integration tests with "classic" protocol'
           commands:
             - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb

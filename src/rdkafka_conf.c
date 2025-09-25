@@ -3940,6 +3940,38 @@ char **rd_kafka_conf_kv_split(const char **input, size_t incnt, size_t *cntp) {
         return out;
 }
 
+/**
+ * @brief Get value for the config param corresponding to \p key in
+ *        \p config, using \p pairs_sep for splitting it
+ *        into key-value pairs and '=' for splitting keys and values.
+ */
+char *rd_kafka_conf_kv_get(const char *config,
+                           const char *key,
+                           const char pairs_sep) {
+        size_t i, config_pair_cnt, config_key_value_cnt;
+        char *ret = NULL;
+        char **config_key_values;
+        if (!config)
+                return NULL;
+
+        char **config_pairs =
+            rd_string_split(config, pairs_sep, rd_true, &config_pair_cnt);
+
+        config_key_values =
+            rd_kafka_conf_kv_split((const char **)config_pairs, config_pair_cnt,
+                                   &config_key_value_cnt);
+        for (i = 0; i < config_key_value_cnt / 2; i += 2) {
+                char *config_key = config_key_values[i];
+                if (!rd_strcmp(config_key, key)) {
+                        ret = rd_strdup(config_key_values[i + 1]);
+                        break;
+                }
+        }
+        rd_free(config_key_values);
+        rd_free(config_pairs);
+        return ret;
+}
+
 const char *
 rd_kafka_conf_finalize_oauthbearer_oidc_grant_type(rd_kafka_conf_t *conf) {
         switch (conf->sasl.oauthbearer.grant_type) {
@@ -4066,17 +4098,24 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
                        "`sasl.oauthbearer.method=oidc` are "
                        "mutually exclusive";
 
-        if (conf->sasl.oauthbearer.metadata_authentication.type ==
-                RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS &&
-            !conf->sasl.oauthbearer.token_endpoint_url) {
-                conf->sasl.oauthbearer.token_endpoint_url =
-                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_URL_AZURE_IMDS;
-        }
-
         if (!conf->sasl.oauthbearer.token_endpoint_url) {
-                return "`sasl.oauthbearer.token.endpoint.url` "
-                       "is mandatory when "
-                       "`sasl.oauthbearer.method=oidc` is set";
+                const char *errstr =
+                    "`sasl.oauthbearer.token.endpoint.url` "
+                    "is mandatory when "
+                    "`sasl.oauthbearer.method=oidc` is set";
+                if (conf->sasl.oauthbearer.metadata_authentication.type ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS) {
+                        char *query = rd_kafka_conf_kv_get(
+                            conf->sasl.oauthbearer_config, "query", ',');
+                        if (!query)
+                                return "`sasl.oauthbearer.token.endpoint.url` "
+                                       "is mandatory for Azure IMDS "
+                                       "authentication "
+                                       "when `query` isn't set";
+                        rd_free(query);
+                } else {
+                        return errstr;
+                }
         }
 
         if (conf->sasl.oauthbearer.metadata_authentication.type ==

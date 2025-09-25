@@ -372,7 +372,6 @@ struct rd_kafka_conf_s {
                         struct {
                                 rd_kafka_oauthbearer_metadata_authentication_type_t
                                     type;
-                                const char *query;
                         } metadata_authentication;
 
 
@@ -698,6 +697,9 @@ struct rd_kafka_topic_conf_s {
 
 
 char **rd_kafka_conf_kv_split(const char **input, size_t incnt, size_t *cntp);
+
+char *
+rd_kafka_conf_kv_get(const char *config, const char *key, const char pairs_sep);
 
 void rd_kafka_anyconf_destroy(int scope, void *conf);
 

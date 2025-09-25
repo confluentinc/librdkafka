@@ -1024,8 +1024,9 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
 
         struct curl_slist *headers = NULL;
 
-        char *token_endpoint_url = NULL;
-        char *sub                = NULL;
+        const char *token_endpoint_url_initial = NULL;
+        char *token_endpoint_url               = NULL;
+        char *sub                              = NULL;
 
         size_t extension_cnt;
         size_t extension_key_value_cnt = 0;
@@ -1034,45 +1035,39 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
 
         char **extensions            = NULL;
         char **extension_key_value   = NULL;
+        char *query                  = NULL;
         static char *headers_array[] = {"Metadata: true"};
 
         if (rd_kafka_terminating(rk))
                 return;
 
-        if (rk->rk_conf.sasl.oauthbearer_config &&
-            !rk->rk_conf.sasl.oauthbearer.metadata_authentication.query) {
-                size_t i, oauthbearer_config_cnt;
-                char **config_pairs =
-                    rd_string_split(rk->rk_conf.sasl.oauthbearer_config, ',',
-                                    rd_true, &oauthbearer_config_cnt);
-                for (i = 0; i < oauthbearer_config_cnt; i++) {
-                        char *config_pair = config_pairs[i];
-                        char *query_pos   = strstr(config_pair, "query=");
-                        if (query_pos == config_pair) {
-                                rk->rk_conf.sasl.oauthbearer
-                                    .metadata_authentication.query =
-                                    query_pos + strlen("query=");
-                                break;
-                        }
-                }
-                if (!rk->rk_conf.sasl.oauthbearer.metadata_authentication.query)
-                        rk->rk_conf.sasl.oauthbearer.metadata_authentication
-                            .query = "";
-        }
+        if (rk->rk_conf.sasl.oauthbearer_config)
+                query = rd_kafka_conf_kv_get(
+                    rk->rk_conf.sasl.oauthbearer_config, "query", ',');
+        token_endpoint_url_initial =
+            rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
+        if (!token_endpoint_url_initial)
+                token_endpoint_url_initial =
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_URL_AZURE_IMDS;
+        if (query && *query) {
+                token_endpoint_url = rd_http_get_params_append(
+                    token_endpoint_url_initial, query);
 
-        token_endpoint_url = rd_http_get_params_append(
-            rk->rk_conf.sasl.oauthbearer.token_endpoint_url,
-            rk->rk_conf.sasl.oauthbearer.metadata_authentication.query);
-        if (token_endpoint_url == NULL) {
-                rd_snprintf(
-                    set_token_errstr, sizeof(set_token_errstr),
-                    "Failed to append params \"%s\" to token endpoint "
-                    "URL \"%s\"",
-                    rk->rk_conf.sasl.oauthbearer.metadata_authentication.query,
-                    rk->rk_conf.sasl.oauthbearer.token_endpoint_url);
-                rd_kafka_log(rk, LOG_ERR, "OIDC", "%s", set_token_errstr);
-                rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
-                goto done;
+                if (token_endpoint_url == NULL) {
+                        rd_snprintf(
+                            set_token_errstr, sizeof(set_token_errstr),
+                            "Failed to append params \"%s\" to token endpoint "
+                            "URL \"%s\"",
+                            query,
+                            rk->rk_conf.sasl.oauthbearer.token_endpoint_url);
+                        rd_kafka_log(rk, LOG_ERR, "OIDC", "%s",
+                                     set_token_errstr);
+                        rd_kafka_oauthbearer_set_token_failure(
+                            rk, set_token_errstr);
+                        goto done;
+                }
+        } else {
+                token_endpoint_url = rd_strdup(token_endpoint_url_initial);
         }
 
         herr = rd_http_get_json(rk, token_endpoint_url, headers_array, 1,
@@ -1120,6 +1115,7 @@ done:
         RD_IF_FREE(extensions, rd_free);
         RD_IF_FREE(extension_key_value, rd_free);
         RD_IF_FREE(token_endpoint_url, rd_free);
+        RD_IF_FREE(query, rd_free);
 }
 
 /**

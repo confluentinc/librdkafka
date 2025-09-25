@@ -235,6 +235,9 @@
     <ClCompile Include="..\..\tests\0153-memberid.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
+    <ClCompile Include="..\..\tests\8002-rebalance-performance.c" />
+    <ClCompile Include="..\..\tests\8003-chaos-testing-consumer-group.c" />
+    <ClCompile Include="..\..\tests\8004-rebalance-performance-single-consumer.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />
     <ClCompile Include="..\..\tests\rusage.c" />

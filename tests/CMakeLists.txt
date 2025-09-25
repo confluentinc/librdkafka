@@ -145,6 +145,9 @@ set(
     0153-memberid.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
+    8002-rebalance-performance.c
+    8003-chaos-testing-consumer-group.c
+    8004-rebalance-performance-single-consumer.c
     test.c
     testcpp.cpp
     rusage.c

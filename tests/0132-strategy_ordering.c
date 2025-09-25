@@ -147,7 +147,7 @@ static void do_test_strategy_ordering(const char *assignor,
 
         /* Await assignments for all consumers */
         for (i = 0; i < _C_CNT; i++) {
-                test_consumer_wait_assignment(c[i], rd_true);
+                test_consumer_wait_assignment(c[i], rd_true, 1000);
         }
 
         if (!strcmp(expected_assignor, "range"))

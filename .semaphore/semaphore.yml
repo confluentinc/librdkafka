@@ -25,20 +25,22 @@ global_job_config:
   prologue:
     commands:
       - checkout
+      - export LIBRDKAFKA_COMMIT_HASH="librdkafka_$(git submodule status deps/librdkafka | cut -d' ' -f1)"
+      - if [[ $(command cache) ]]; then cache restore "$LIBRDKAFKA_COMMIT_HASH" ; fi
       - git submodule update --init --recursive
-      - cd deps/librdkafka
-      - git fetch origin
-      - git checkout v2.11.1
-      - cd ../../
-      - cache clear
+  epilogue:
+    commands:
+      -  if [[ $(command cache) ]]; then cache store "$LIBRDKAFKA_COMMIT_HASH" deps/librdkafka; done
 
 blocks:
   - name: "Linux amd64 (musl): Build and test"
+    run:
+      when: "change_in(['/package.json', '/lib', '/src', '/test']) AND tag !~ '^v[0-9]\\.'"
     dependencies: [ ]
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-1
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
@@ -48,6 +50,8 @@ blocks:
             - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker-alpine.sh
 
   - name: "Linux arm64 (musl): Build and test"
+    run:
+      when: "change_in(['/package.json', '/lib', '/src', '/test']) AND tag !~ '^v[0-9]\\.'"
     dependencies: [ ]
     task:
       agent:
@@ -61,12 +65,14 @@ blocks:
           commands:
               - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker-alpine.sh
 
-  - name: "Linux arm64: Build and test"
+  - name: "Linux amd64: Build and test"
+    run:
+      when: "change_in(['/package.json', '/lib', '/src', '/test']) AND tag !~ '^v[0-9]\\.'"
     dependencies: [ ]
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-arm64-1
+          type: s1-prod-ubuntu24-04-amd64-1
       jobs:
         - name: "Build from source and test"
           commands:
@@ -75,6 +81,8 @@ blocks:
             - make test
 
   - name: 'macOS arm64/m1: Build and test'
+    run:
+      when: "change_in(['/package.json', '/lib', '/src', '/test']) AND tag !~ '^v[0-9]\\.'"
     dependencies: []
     task:
       agent:
@@ -87,16 +95,20 @@ blocks:
             - npm run install-from-source
             - make test
 
-  - name: "Linux amd64: Build, test, lint, docs"
+  - name: "Linux arm64: Build, test, lint, docs"
+    skip:
+      when: "tag =~ '^v[0-9]\\.'"
     dependencies: [ ]
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-amd64-2
+          type: s1-prod-ubuntu24-04-arm64-1
       prologue:
         commands:
           - export CKJS_LINKING=dynamic
+          - if [[ $(command cache) ]]; then cache restore; fi
           - npm run install-from-source
+          - if [[ $(command cache) ]]; then cache store; fi
       jobs:
         - name: "Test"
           commands:
@@ -125,11 +137,13 @@ blocks:
             - make docs
 
   - name: "(SR) Linux amd64: test, e2e"
+    run:
+      when: "change_in(['/package.json', '/schemaregistry', '/schemaregistry-examples', '/proto']) AND tag !~ '^v[0-9]\\.'"
     dependencies: [ ]
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-1
       prologue:
         commands:
           - npm install
@@ -146,6 +160,8 @@ blocks:
             - make integtest
 
   - name: "Linux amd64: Performance"
+    run:
+      when: "change_in(['/package.json', '/lib', '/src', '/ci/tests']) AND tag !~ '^v[0-9]\\.'"
     dependencies: [ ]
     task:
       agent:
@@ -188,7 +204,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-1
       env_vars:
         - name: ARCHITECTURE
           value: "x64"
@@ -476,7 +492,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu24-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-1
       jobs:
         - name: "Tarball"
           commands:

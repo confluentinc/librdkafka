@@ -3125,8 +3125,7 @@ rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
     int line,
     rd_kafka_t *rk,
     const rd_kafka_topic_partition_list_t *expected_assignment) {
-        rd_kafka_topic_partition_list_t *assignment,
-                *expected_assignment_copy;
+        rd_kafka_topic_partition_list_t *assignment, *expected_assignment_copy;
         rd_kafka_resp_err_t err;
         int i;
         rd_bool_t ret = rd_true;
@@ -3136,11 +3135,11 @@ rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
                           line, rd_kafka_name(rk), rd_kafka_err2str(err));
 
         TEST_SAYL(4, "%s assignment (%d partition(s)):\n", rd_kafka_name(rk),
-                 assignment->cnt);
+                  assignment->cnt);
         for (i = 0; i < assignment->cnt; i++)
                 TEST_SAYL(4, " %s [%" PRId32 "]\n", assignment->elems[i].topic,
                           assignment->elems[i].partition);
-        
+
         if (assignment->cnt != expected_assignment->cnt) {
                 ret = rd_false;
                 goto done;
@@ -3149,12 +3148,13 @@ rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
         expected_assignment_copy =
             rd_kafka_topic_partition_list_copy(expected_assignment);
         rd_kafka_topic_partition_list_sort(assignment, NULL, NULL);
-        rd_kafka_topic_partition_list_sort(expected_assignment_copy, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(expected_assignment_copy, NULL,
+                                           NULL);
 
         for (i = 0; i < assignment->cnt; i++) {
                 if (strcmp(assignment->elems[i].topic,
                            expected_assignment_copy->elems[i].topic) ||
-                        assignment->elems[i].partition !=
+                    assignment->elems[i].partition !=
                         expected_assignment_copy->elems[i].partition) {
                         ret = rd_false;
                         goto done;
@@ -3185,12 +3185,12 @@ void test_consumer_wait_assignment_topic_partition_list0(
         rd_kafka_topic_partition_list_t *expected_assignment_copy;
 
         TEST_SAY("Verifying assignment\n");
-        expected_assignment_copy = 
+        expected_assignment_copy =
             rd_kafka_topic_partition_list_copy(expected_assignment);
-        rd_kafka_topic_partition_list_sort(
-                expected_assignment_copy, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(expected_assignment_copy, NULL,
+                                           NULL);
         TEST_SAYL(4, "%s expected assignment (%d partition(s)):\n",
-                 rd_kafka_name(rk), expected_assignment->cnt);
+                  rd_kafka_name(rk), expected_assignment->cnt);
         for (i = 0; i < expected_assignment_copy->cnt; i++)
                 TEST_SAYL(4, " %s [%" PRId32 "]\n",
                           expected_assignment_copy->elems[i].topic,

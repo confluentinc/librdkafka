@@ -2,7 +2,7 @@ version: v1.0
 name: 'librdkafka build and release artifact pipeline'
 agent:
   machine:
-    type: s1-prod-macos-13-5-arm64
+    type: s1-macos-15-arm64-8
 execution_time_limit:
   hours: 3
 global_job_config:
@@ -17,7 +17,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-macos-13-5-arm64
+          type: s1-macos-15-arm64-8
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
@@ -43,7 +43,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-macos-13-5-amd64
+          type: s1-macos-15-amd64-6
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-x64__lnk-all

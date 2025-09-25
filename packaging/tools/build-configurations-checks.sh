@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+
 # Disable all flags to make sure it
 # compiles correctly in all cases
 ./configure --install-deps --disable-ssl --disable-gssapi \

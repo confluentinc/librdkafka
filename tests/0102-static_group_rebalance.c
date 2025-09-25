@@ -759,7 +759,7 @@ static void do_test_static_membership_mock(
 
         TEST_SAY("Subscribing consumer 1 again\n");
         test_consumer_subscribe(consumer1, topic);
-        test_consumer_wait_assignment(consumer1, rd_false);
+        test_consumer_wait_assignment(consumer1, rd_false, 1000);
 
         next_generation_id1 = consumer_generation_id(consumer1);
         next_generation_id2 = consumer_generation_id(consumer2);

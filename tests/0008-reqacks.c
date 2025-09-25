@@ -189,5 +189,12 @@ int main_0008_reqacks(int argc, char **argv) {
                 rd_kafka_destroy(rk);
         }
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         return 0;
 }

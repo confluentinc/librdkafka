@@ -94,5 +94,12 @@ int main_0041_fetch_max_bytes(int argc, char **argv) {
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
 
+        /* Delete the topic */
+        {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         return 0;
 }

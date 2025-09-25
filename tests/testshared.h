@@ -35,6 +35,7 @@
 #ifndef _RDKAFKA_H_
 typedef struct rd_kafka_s rd_kafka_t;
 typedef struct rd_kafka_conf_s rd_kafka_conf_t;
+typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 #endif
 
 /* ANSI color codes */
@@ -436,5 +437,15 @@ void test_create_topic_if_auto_create_disabled_with_configs(rd_kafka_t *use_rk,
                                                            const char *topicname,
                                                            int partition_cnt,
                                                            const char **configs);
+
+#ifdef _RDKAFKA_H_
+rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,
+                                             rd_kafka_queue_t *useq,
+                                             char **topics,
+                                             size_t topic_cnt,
+                                             void *opaque);
+
+void test_delete_topic_simple(rd_kafka_t *rk, const char *topic_name);
+#endif
 
 #endif /* _TESTSHARED_H_ */

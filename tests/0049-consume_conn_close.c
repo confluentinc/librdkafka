@@ -156,6 +156,13 @@ int main_0049_consume_conn_close(int argc, char **argv) {
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 
+        /* Delete the topic */
+        {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         return 0;
 }
 

@@ -246,6 +246,13 @@ static void do_test_list_groups(void) {
                 free(groups[i]);
         }
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         rd_kafka_destroy(rk);
 
         SUB_TEST_PASS();

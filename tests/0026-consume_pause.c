@@ -220,6 +220,13 @@ static void consume_pause(void) {
                 rd_kafka_destroy(rk);
         }
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         rd_kafka_topic_partition_list_destroy(topics);
         rd_kafka_conf_destroy(conf);
         rd_kafka_topic_conf_destroy(tconf);
@@ -358,6 +365,12 @@ static void consume_pause_resume_after_reassign(void) {
                            exp_msg_cnt);
         test_msgver_clear(&mv);
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
@@ -446,6 +459,12 @@ static void consume_subscribe_assign_pause_resume(void) {
         test_msgver_verify("consumed", &mv, TEST_MSGVER_ALL_PART, 0, msgcnt);
         test_msgver_clear(&mv);
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
 
         test_consumer_close(rk);
 
@@ -528,6 +547,13 @@ static void consume_seek_pause_resume(void) {
 
         test_msgver_verify("consumed", &mv, TEST_MSGVER_ALL_PART, 500, 500);
         test_msgver_clear(&mv);
+
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
 
         rd_kafka_topic_partition_list_destroy(parts);
 

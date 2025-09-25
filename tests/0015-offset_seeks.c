@@ -170,5 +170,12 @@ int main_0015_offsets_seek(int argc, char **argv) {
 
         do_seek(topic, testid, msg_cnt, rd_true /*without timeout*/);
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         return 0;
 }

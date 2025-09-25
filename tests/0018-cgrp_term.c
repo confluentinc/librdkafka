@@ -327,6 +327,13 @@ static void do_test(rd_bool_t with_queue) {
                     "multiple times\n",
                     consumed_msg_cnt - msg_cnt, msg_cnt);
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         SUB_TEST_PASS();
 }
 

@@ -528,6 +528,13 @@ static void test_produce_consume(void) {
         consume_messages_with_queues(testid, topic, partition_cnt, msgcnt);
         verify_consumed_msg_check();
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         return;
 }
 

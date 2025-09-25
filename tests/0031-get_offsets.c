@@ -223,6 +223,10 @@ int main_0031_get_offsets(int argc, char **argv) {
         test_consumer_stop("get", rkt, 0);
 
         rd_kafka_topic_destroy(rkt);
+
+        /* Clean up: delete the topic */
+        test_delete_topic_simple(rk, topic);
+
         rd_kafka_destroy(rk);
         return 0;
 }

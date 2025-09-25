@@ -133,8 +133,15 @@ int main_0017_compression(int argc, char **argv) {
                 rd_kafka_destroy(rk_c);
         }
 
-        for (i = 0; codecs[i] != NULL; i++)
-                rd_free(topics[i]);
+        /* Clean up: delete all topics */
+        {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                for (i = 0; codecs[i] != NULL; i++) {
+                        test_delete_topic_simple(del_rk, topics[i]);
+                        rd_free(topics[i]);
+                }
+                rd_kafka_destroy(del_rk);
+        }
 
 
         return 0;

@@ -147,6 +147,13 @@ int main_0034_offset_reset(int argc, char **argv) {
          * Should return error. */
         do_test_reset(topic, partition, "error", msgcnt + 5, 0, 0, 0, 1);
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         return 0;
 }
 

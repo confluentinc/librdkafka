@@ -89,6 +89,13 @@ static void test_producer_partition_cnt_change(void) {
         TIMING_START(&t_destroy, "rd_kafka_destroy()");
         rd_kafka_destroy(rk);
         TIMING_STOP(&t_destroy);
+
+        /* Delete the topic */
+        {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
 }
 
 int main_0044_partition_cnt(int argc, char **argv) {

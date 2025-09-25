@@ -85,6 +85,11 @@ int main_0001_multiobj(int argc, char **argv) {
                 /* Destroy topic */
                 rd_kafka_topic_destroy(rkt);
 
+                /* Delete the actual topic from Kafka on the last iteration */
+                if (i == 4 && topic) {
+                        test_delete_topic_simple(rk, topic);
+                }
+
                 /* Destroy rdkafka instance */
                 TIMING_START(&t_destroy, "rd_kafka_destroy()");
                 rd_kafka_destroy(rk);

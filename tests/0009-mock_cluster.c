@@ -89,6 +89,10 @@ int main_0009_mock_cluster(int argc, char **argv) {
         test_consumer_poll("CONSUME", c, 0, -1, 0, msgcnt, NULL);
 
         rd_kafka_destroy(c);
+
+        /* Clean up: delete the topic before destroying producer */
+        test_delete_topic_simple(p, topic);
+
         rd_kafka_destroy(p);
 
         test_mock_cluster_destroy(mcluster);

@@ -84,6 +84,10 @@ int main_0036_partial_fetch(int argc, char **argv) {
         test_consumer_stop("CONSUME", rkt, partition);
 
         rd_kafka_topic_destroy(rkt);
+
+        /* Clean up: delete the topic */
+        test_delete_topic_simple(rk, topic);
+
         rd_kafka_destroy(rk);
 
         return 0;

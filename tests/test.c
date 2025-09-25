@@ -6910,6 +6910,34 @@ rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,
         return err;
 }
 
+/**
+ * @brief Convenience wrapper to delete a single topic
+ * 
+ * @param rk Kafka client handle
+ * @param topic_name Name of the topic to delete
+ */
+void test_delete_topic_simple(rd_kafka_t *rk, const char *topic_name) {
+        char *topics[1];
+        rd_kafka_resp_err_t err;
+        
+        if (!topic_name) {
+                TEST_SAY("Skipping topic deletion: topic_name is NULL\n");
+                return;
+        }
+        
+        topics[0] = (char *)topic_name;
+        
+        TEST_SAY("Deleting topic: %s\n", topic_name);
+        err = test_DeleteTopics_simple(rk, NULL, topics, 1, NULL);
+        
+        if (err) {
+                TEST_WARN("Failed to delete topic %s: %s\n", 
+                         topic_name, rd_kafka_err2str(err));
+        } else {
+                TEST_SAY("Successfully deleted topic: %s\n", topic_name);
+        }
+}
+
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,
                                              char **groups,

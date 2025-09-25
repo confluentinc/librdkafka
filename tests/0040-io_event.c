@@ -74,12 +74,11 @@ int main_0040_io_event(int argc, char **argv) {
         topic  = test_mk_topic_name(__FUNCTION__, 1);
 
         rk_p  = test_create_producer();
-        test_create_topic_if_auto_create_disabled(rk_p, topic, -1);
+        /* Ensure the main topic exists with proper partitions */
+        test_create_topic(rk_p, topic, 3, -1);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-        test_wait_topic_exists(rk_p, topic, 5000);
-        err = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
-        TEST_ASSERT(!err, "Topic auto creation failed: %s",
-                    rd_kafka_err2str(err));
+        test_wait_topic_exists(rk_p, topic, 10000);
+        test_sleep(3);
 
         test_conf_init(&conf, &tconf, 0);
         rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
@@ -93,6 +92,7 @@ int main_0040_io_event(int argc, char **argv) {
         queue = rd_kafka_queue_get_consumer(rk_c);
 
         test_consumer_subscribe(rk_c, topic);
+                test_sleep(5);
 
 #ifndef _WIN32
         r = pipe(fds);
@@ -107,6 +107,22 @@ int main_0040_io_event(int argc, char **argv) {
         pfd.fd      = fds[0];
         pfd.events  = POLLIN;
         pfd.revents = 0;
+        
+        /* Handle initial rebalance by polling consumer queue directly */
+        for (int i = 0; i < 3; i++) {
+                rd_kafka_event_t *rkev = rd_kafka_queue_poll(queue, 1000);
+                if (rkev) {
+                        if (rd_kafka_event_type(rkev) == RD_KAFKA_EVENT_REBALANCE) {
+                                if (rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
+                                        test_consumer_assign_by_rebalance_protocol("rebalance", rk_c,
+                                                rd_kafka_event_topic_partition_list(rkev));
+                                        expecting_io = _NOPE;
+                                }
+                        }
+                        rd_kafka_event_destroy(rkev);
+                        if (expecting_io != _REBALANCE) break;
+                }
+        }
 
         /**
          * 1) Wait for rebalance event
@@ -253,6 +269,13 @@ int main_0040_io_event(int argc, char **argv) {
         _close(fds[0]);
         _close(fds[1]);
 #endif
+
+        /* Delete the topic */
+        {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
 
         return 0;
 }

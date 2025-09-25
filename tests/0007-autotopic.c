@@ -102,8 +102,8 @@ int main_0007_autotopic(int argc, char **argv) {
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0007_autotopic", 1),
-                                 topic_conf);
+        const char *topic = test_mk_topic_name("0007_autotopic", 1);
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
@@ -130,6 +130,9 @@ int main_0007_autotopic(int argc, char **argv) {
 
         /* Destroy topic */
         rd_kafka_topic_destroy(rkt);
+
+        /* Clean up: delete the topic */
+        test_delete_topic_simple(rk, topic);
 
         /* Destroy rdkafka instance */
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));

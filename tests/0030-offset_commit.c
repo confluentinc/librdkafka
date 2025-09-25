@@ -586,6 +586,13 @@ int main_0030_offset_commit(int argc, char **argv) {
                          "current version: %s\n", rd_kafka_version_str());
         }
 
+        /* Clean up: delete the topic */
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                test_delete_topic_simple(del_rk, topic);
+                rd_kafka_destroy(del_rk);
+        }
+
         rd_free(topic);
 
         return 0;

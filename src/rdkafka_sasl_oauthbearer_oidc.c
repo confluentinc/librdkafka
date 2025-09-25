@@ -1003,8 +1003,8 @@ done:
  * @brief Implementation of Oauth/OIDC token refresh callback function
  *        for Azure IMDS,
  *        will receive the JSON response after HTTP(S) GET call to token
- * provider, then extract the jwt from the JSON response, and forward it to the
- * broker.
+ *        provider, then extract the jwt from the JSON response, and
+ *        forward it to the broker.
  */
 void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
     rd_kafka_t *rk,
@@ -1040,30 +1040,40 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
                 return;
 
         if (rk->rk_conf.sasl.oauthbearer_config &&
-            !rk->rk_conf.sasl.oauthbearer.metadata_authentication.params) {
+            !rk->rk_conf.sasl.oauthbearer.metadata_authentication.query) {
                 size_t i, oauthbearer_config_cnt;
                 char **config_pairs =
                     rd_string_split(rk->rk_conf.sasl.oauthbearer_config, ',',
                                     rd_true, &oauthbearer_config_cnt);
                 for (i = 0; i < oauthbearer_config_cnt; i++) {
                         char *config_pair = config_pairs[i];
-                        char *params_pos  = strstr(config_pair, "params=");
-                        if (params_pos == config_pair) {
+                        char *query_pos   = strstr(config_pair, "query=");
+                        if (query_pos == config_pair) {
                                 rk->rk_conf.sasl.oauthbearer
-                                    .metadata_authentication.params =
-                                    params_pos + strlen("params=");
+                                    .metadata_authentication.query =
+                                    query_pos + strlen("query=");
                                 break;
                         }
                 }
-                if (!rk->rk_conf.sasl.oauthbearer.metadata_authentication
-                         .params)
+                if (!rk->rk_conf.sasl.oauthbearer.metadata_authentication.query)
                         rk->rk_conf.sasl.oauthbearer.metadata_authentication
-                            .params = "";
+                            .query = "";
         }
 
         token_endpoint_url = rd_http_get_params_append(
             rk->rk_conf.sasl.oauthbearer.token_endpoint_url,
-            rk->rk_conf.sasl.oauthbearer.metadata_authentication.params);
+            rk->rk_conf.sasl.oauthbearer.metadata_authentication.query);
+        if (token_endpoint_url == NULL) {
+                rd_snprintf(
+                    set_token_errstr, sizeof(set_token_errstr),
+                    "Failed to append params \"%s\" to token endpoint "
+                    "URL \"%s\"",
+                    rk->rk_conf.sasl.oauthbearer.metadata_authentication.query,
+                    rk->rk_conf.sasl.oauthbearer.token_endpoint_url);
+                rd_kafka_log(rk, LOG_ERR, "OIDC", "%s", set_token_errstr);
+                rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
+                goto done;
+        }
 
         herr = rd_http_get_json(rk, token_endpoint_url, headers_array, 1,
                                 timeout_s, retries, retry_ms, &json);

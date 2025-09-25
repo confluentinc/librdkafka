@@ -424,41 +424,37 @@ static rd_kafka_conf_t *oidc_configuration_metadata_authentication(
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
                               "azure_imds");
-                test_conf_set(
-                    conf, "sasl.oauthbearer.config",
-                    "params=__metadata_authentication_type=azure_imds&"
-                    "api-version=2018-02-01&resource="
-                    "api://external_resource_id&client_id=client_id");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "api-version=2025-04-07&resource="
+                              "api://external_resource_id&client_id=client_id");
                 break;
         case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_CLIENT_ID:
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
                               "azure_imds");
-                test_conf_set(
-                    conf, "sasl.oauthbearer.config",
-                    "params=__metadata_authentication_type=azure_imds&"
-                    "api-version=2018-02-01&resource="
-                    "api://external_resource_id");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "api-version=2025-04-07&resource="
+                              "api://external_resource_id");
                 break;
         case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_RESOURCE:
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
                               "azure_imds");
-                test_conf_set(
-                    conf, "sasl.oauthbearer.config",
-                    "params=__metadata_authentication_type=azure_imds&"
-                    "api-version=2018-02-01&"
-                    "client_id=client_id");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "api-version=2025-04-07&"
+                              "client_id=client_id");
                 break;
         case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_API_VERSION:
                 test_conf_set(conf,
                               "sasl.oauthbearer.metadata.authentication.type",
                               "azure_imds");
-                test_conf_set(
-                    conf, "sasl.oauthbearer.config",
-                    "params=__metadata_authentication_type=azure_imds&"
-                    "resource="
-                    "api://external_resource_id&client_id=client_id");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "resource="
+                              "api://external_resource_id&client_id=client_id");
                 break;
         default:
                 TEST_ASSERT(rd_false,

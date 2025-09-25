@@ -372,7 +372,7 @@ struct rd_kafka_conf_s {
                         struct {
                                 rd_kafka_oauthbearer_metadata_authentication_type_t
                                     type;
-                                const char *params;
+                                const char *query;
                         } metadata_authentication;
 
 

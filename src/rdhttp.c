@@ -603,49 +603,34 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
  * @brief Append \p params to \p url, taking care of existing query parameters
  *        and hash fragments. \p params must be already URL encoded.
  *
- * @returns A newly allocated string with the appended parameters.
+ * @returns A newly allocated string with the appended parameters or NULL
+ *          on error.
  */
 char *rd_http_get_params_append(const char *url, const char *params) {
-        size_t params_len, of = 0;
-        if (!params || !*params)
-                return rd_strdup(url);
+        char *new_url;
+        CURLU *u     = curl_url();
+        CURLUcode rc = curl_url_set(u, CURLUPART_URL, url, 0);
+        if (rc != CURLUE_OK)
+                goto err;
 
-        params_len = strlen(params);
+        rc = curl_url_set(u, CURLUPART_QUERY, params, CURLU_APPENDQUERY);
+        if (rc != CURLUE_OK)
+                goto err;
 
-        char *hash_pos          = strstr(url, "#"),
-             *has_question_mark = strchr(url, '?');
-        char *separator         = "";
-        char *ret;
-        size_t insert_pos = strlen(url);
-        if (hash_pos)
-                insert_pos = hash_pos - url;
+        rc = curl_url_set(u, CURLUPART_FRAGMENT, NULL,
+                          0);  // remove hash fragment
+        if (rc != CURLUE_OK)
+                goto err;
 
-        if (has_question_mark && (url + insert_pos) < has_question_mark)
-                /* Skip question marks after URL end */
-                has_question_mark = NULL;
+        rc = curl_url_get(u, CURLUPART_URL, &new_url, 0);
+        if (rc != CURLUE_OK)
+                goto err;
 
-        if (has_question_mark &&
-            insert_pos > (size_t)(has_question_mark - url) + 1)
-                separator = "&";
-        else if (!has_question_mark)
-                separator = "?";
-
-        if (separator[0] == '&' && url[0] && url[insert_pos - 1] == '&')
-                /* Don't duplicate last & */
-                separator = "";
-
-        ret = rd_malloc(insert_pos + strlen(separator) + params_len + 1);
-        memcpy(ret, url, insert_pos);
-        of += insert_pos;
-        if (separator[0]) {
-                ret[insert_pos] = separator[0];
-                of++;
-        }
-        memcpy(ret + of, params, params_len);
-        of += params_len;
-        ret[of] = '\0';
-
-        return ret;
+        curl_url_cleanup(u);
+        return new_url;
+err:
+        curl_url_cleanup(u);
+        return NULL;
 }
 
 /**
@@ -773,17 +758,13 @@ int unittest_http_get_params_append(void) {
         rd_kafka_t *rk;
         char *res;
         RD_UT_BEGIN();
-        char *tests[] = {"",
+        char *tests[] = {"http://localhost:1234",
                          "",
-                         "",
+                         "http://localhost:1234/",
 
-                         "http://localhost:1234",
-                         "",
-                         "http://localhost:1234",
-
-                         "http://localhost:1234",
+                         "http://localhost:1234/",
                          "a=1",
-                         "http://localhost:1234?a=1",
+                         "http://localhost:1234/?a=1",
 
                          "https://localhost:1234/",
                          "a=1&b=2",
@@ -793,30 +774,31 @@ int unittest_http_get_params_append(void) {
                          "c=hi",
                          "http://mydomain.com/?a=1&c=hi",
 
-                         "https://mydomain.com?",
+                         "https://mydomain.com/?",
                          "c=hi",
-                         "https://mydomain.com?c=hi",
+                         "https://mydomain.com/?c=hi",
 
-                         "http://localhost:1234?a=1&b=2#&c=3",
+                         "http://localhost:1234/path?a=1&b=2#&c=3",
                          "c=hi",
-                         "http://localhost:1234?a=1&b=2&c=hi",
+                         "http://localhost:1234/path?a=1&b=2&c=hi",
 
                          "http://localhost:1234#?c=3",
                          "a=1",
-                         "http://localhost:1234?a=1",
+                         "http://localhost:1234/?a=1",
 
-                         "https://otherdomain.io?a=1&#c=3",
+                         "https://otherdomain.io/path?a=1&#c=3",
                          "b=2",
-                         "https://otherdomain.io?a=1&b=2",
-
-                         "",
-                         "a=2&b=3",
-                         "?a=2&b=3",
-
+                         "https://otherdomain.io/path?a=1&b=2",
                          NULL};
-        char **test   = tests;
 
-        rk = rd_calloc(1, sizeof(*rk));
+
+        res = rd_http_get_params_append("", "");
+        RD_UT_ASSERT(!res, "Expected NULL result, got: \"%s\"", res);
+        res = rd_http_get_params_append("", "a=2&b=3");
+        RD_UT_ASSERT(!res, "Expected NULL result, got: \"%s\"", res);
+
+        char **test = tests;
+        rk          = rd_calloc(1, sizeof(*rk));
         while (test[0]) {
                 res = rd_http_get_params_append(test[0], test[1]);
                 RD_UT_ASSERT(!strcmp(res, test[2]),

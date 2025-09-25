@@ -1249,23 +1249,25 @@ Currently these authentication types are supported:
 
 ###### Azure IMDS
 
-to use this method you set:
+To use this method you set:
 
-* `sasl.oauthbearer.metadata.authentication.type=azure_imds` this make that ` sasl.oauthbearer.client.id`
-and `sasl.oauthbearer.client.secret` aren't required
+* `sasl.oauthbearer.metadata.authentication.type=azure_imds` this makes it so 
+   that ` sasl.oauthbearer.client.id` and `sasl.oauthbearer.client.secret` 
+   aren't required.
 * `sasl.oauthbearer.config` is a general purpose configuration property
-  In this case it's accepts comma-separated `key=value` pairs.
-  The `params` key is required and its value is the GET query string to append
+  In this case it accepts comma-separated `key=value` pairs.
+  The `query` key is required in case `sasl.oauthbearer.token.endpoint.url` isn't
+  specified and its value is the GET query string to append
   to the token endpoint URL. Such query string contains params required by
   Azure IMDS such as `client_id` (the UAMI), `resource` for determining the
   target audience and `api-version` for the API version to be used by the endpoint
-* `sasl.oauthbearer.token.endpoint.url` (optional) is set automatically
-  when chosing `sasl.oauthbearer.metadata.authentication.type=azure_imds` but can
-  be customized
+* `sasl.oauthbearer.token.endpoint.url` (optional) is set automatically.
+  when choosing `sasl.oauthbearer.metadata.authentication.type=azure_imds` but can
+  be customized.
 
 
 _Example:_  `sasl.oauthbearer.metadata.authentication.type=azure_imds` and
-`sasl.oauthbearer.config=params=api-version=2018-02-01&resource=api://<App registration client id>&client_id=<UAMI client id>`
+`sasl.oauthbearer.config=params=api-version=2025-04-07&resource=api://<App registration client id>&client_id=<UAMI client id>`
 
 
 <a name="sparse-connections"></a>

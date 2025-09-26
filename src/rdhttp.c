@@ -269,6 +269,32 @@ static void rd_http_ssl_configure(rd_kafka_t *rk, CURL *hreq_curl) {
 }
 #endif
 
+/**
+ * @brief Check if the error returned from HTTP(S) is temporary or not.
+ *
+ * @returns If the \p error_code is temporary, return rd_true,
+ *          otherwise return rd_false.
+ *
+ * @locality Any thread.
+ * @locks None.
+ * @locks_acquired None.
+ */
+static rd_bool_t rd_http_is_failure_temporary(int error_code) {
+        switch (error_code) {
+        case 408: /**< Request timeout */
+        case 425: /**< Too early */
+        case 429: /**< Too many requests */
+        case 500: /**< Internal server error */
+        case 502: /**< Bad gateway */
+        case 503: /**< Service unavailable */
+        case 504: /**< Gateway timeout */
+                return rd_true;
+
+        default:
+                return rd_false;
+        }
+}
+
 rd_http_error_t *
 rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
         memset(hreq, 0, sizeof(*hreq));
@@ -343,36 +369,113 @@ const char *rd_http_req_get_content_type(rd_http_req_t *hreq) {
 
 /**
  * @brief Perform a blocking HTTP(S) request to \p url.
+ *        Retries the request \p retries times with linear backoff.
+ *        Interval of \p retry_ms milliseconds is used between retries.
  *
- * Returns the response (even if there's a HTTP error code returned)
- * in \p *rbufp.
+ * @param url The URL to perform the request to.
+ * @param headers_array Array of HTTP(S) headers to set, each element
+ *                      is a string in the form "key: value"
+ * @param headers_array_cnt Number of elements in \p headers_array.
+ * @param timeout_s Timeout in seconds for the request, 0 means default
+ *                  `rd_http_req_init()` timeout.
+ * @param retries Number of retries to perform on failure.
+ * @param retry_ms Milliseconds to wait between retries.
+ * @param rbufp (out) Pointer to a buffer that will be filled with the response.
+ * @param content_type (out, optional) Pointer to a string that will be filled
+ * with the content type of the response, if not NULL.
+ * @param response_code (out, optional) Pointer to an integer that will be
+ * filled with the HTTP response code, if not NULL.
  *
- * Returns NULL on success (HTTP response code < 400), or an error
- * object on transport or HTTP error - this error object must be destroyed
- * by calling rd_http_error_destroy(). In case of HTTP error the \p *rbufp
- * may be filled with the error response.
+ * @return Returns NULL on success (HTTP response code < 400), or an error
+ * object on transport or HTTP error.
+ *
+ * @remark Returned error object, when non-NULL, must be destroyed
+ *         by calling rd_http_error_destroy().
+ *
+ * @locality Any thread.
+ * @locks None.
+ * @locks_acquired None.
  */
-rd_http_error_t *
-rd_http_get(rd_kafka_t *rk, const char *url, rd_buf_t **rbufp) {
+rd_http_error_t *rd_http_get(rd_kafka_t *rk,
+                             const char *url,
+                             char **headers_array,
+                             size_t headers_array_cnt,
+                             int timeout_s,
+                             int retries,
+                             int retry_ms,
+                             rd_buf_t **rbufp,
+                             char **content_type,
+                             int *response_code) {
         rd_http_req_t hreq;
-        rd_http_error_t *herr;
+        rd_http_error_t *herr      = NULL;
+        struct curl_slist *headers = NULL;
+        char *header;
+        int i;
+        size_t len, j;
 
         *rbufp = NULL;
+        if (content_type)
+                *content_type = NULL;
+        if (response_code)
+                *response_code = -1;
 
         herr = rd_http_req_init(rk, &hreq, url);
         if (unlikely(herr != NULL))
                 return herr;
 
-        herr = rd_http_req_perform_sync(&hreq);
-        if (herr) {
-                rd_http_req_destroy(&hreq);
-                return herr;
+        for (j = 0; j < headers_array_cnt; j++) {
+                header = headers_array[j];
+                if (header && *header)
+                        headers = curl_slist_append(headers, header);
+        }
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
+        if (timeout_s > 0)
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
+
+        for (i = 0; i <= retries; i++) {
+                if (rd_kafka_terminating(rk)) {
+                        herr = rd_http_error_new(-1, "Terminating");
+                        goto done;
+                }
+
+                herr = rd_http_req_perform_sync(&hreq);
+                len  = rd_buf_len(hreq.hreq_buf);
+
+                if (!herr) {
+                        if (len > 0)
+                                break; /* Success */
+                        /* Empty response */
+                        goto done;
+                }
+
+                /* Retry if HTTP(S) request returns temporary error and there
+                 * are remaining retries, else fail. */
+                if (i == retries || !rd_http_is_failure_temporary(herr->code)) {
+                        goto done;
+                }
+
+                /* Retry */
+                rd_http_error_destroy(herr);
+                rd_usleep(retry_ms * 1000 * (i + 1), &rk->rk_terminate);
         }
 
         *rbufp        = hreq.hreq_buf;
         hreq.hreq_buf = NULL;
 
-        return NULL;
+        if (content_type) {
+                const char *ct = rd_http_req_get_content_type(&hreq);
+                if (ct && *ct)
+                        *content_type = rd_strdup(ct);
+                else
+                        *content_type = NULL;
+        }
+        if (response_code)
+                *response_code = hreq.hreq_code;
+
+done:
+        RD_IF_FREE(headers, curl_slist_free_all);
+        rd_http_req_destroy(&hreq);
+        return herr;
 }
 
 
@@ -407,31 +510,6 @@ rd_http_error_t *rd_http_parse_json(rd_http_req_t *hreq, cJSON **jsonp) {
                                          (size_t)(end - raw_json), len);
         rd_free(raw_json);
         return herr;
-}
-
-
-/**
- * @brief Check if the error returned from HTTP(S) is temporary or not.
- *
- * @returns If the \p error_code is temporary, return rd_true,
- *          otherwise return rd_false.
- *
- * @locality Any thread.
- */
-static rd_bool_t rd_http_is_failure_temporary(int error_code) {
-        switch (error_code) {
-        case 408: /**< Request timeout */
-        case 425: /**< Too early */
-        case 429: /**< Too many requests */
-        case 500: /**< Internal server error */
-        case 502: /**< Bad gateway */
-        case 503: /**< Service unavailable */
-        case 504: /**< Gateway timeout */
-                return rd_true;
-
-        default:
-                return rd_false;
-        }
 }
 
 
@@ -521,6 +599,39 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
         return herr;
 }
 
+/**
+ * @brief Append \p params to \p url, taking care of existing query parameters
+ *        and hash fragments. \p params must be already URL encoded.
+ *
+ * @returns A newly allocated string with the appended parameters or NULL
+ *          on error.
+ */
+char *rd_http_get_params_append(const char *url, const char *params) {
+        char *new_url;
+        CURLU *u     = curl_url();
+        CURLUcode rc = curl_url_set(u, CURLUPART_URL, url, 0);
+        if (rc != CURLUE_OK)
+                goto err;
+
+        rc = curl_url_set(u, CURLUPART_QUERY, params, CURLU_APPENDQUERY);
+        if (rc != CURLUE_OK)
+                goto err;
+
+        rc = curl_url_set(u, CURLUPART_FRAGMENT, NULL,
+                          0);  // remove hash fragment
+        if (rc != CURLUE_OK)
+                goto err;
+
+        rc = curl_url_get(u, CURLUPART_URL, &new_url, 0);
+        if (rc != CURLUE_OK)
+                goto err;
+
+        curl_url_cleanup(u);
+        return new_url;
+err:
+        curl_url_cleanup(u);
+        return NULL;
+}
 
 /**
  * @brief Same as rd_http_get() but requires a JSON response.
@@ -528,67 +639,51 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
  *
  * Same error semantics as rd_http_get().
  */
-rd_http_error_t *
-rd_http_get_json(rd_kafka_t *rk, const char *url, cJSON **jsonp) {
-        rd_http_req_t hreq;
+rd_http_error_t *rd_http_get_json(rd_kafka_t *rk,
+                                  const char *url,
+                                  char **headers_array,
+                                  size_t headers_array_cnt,
+                                  int timeout_s,
+                                  int retries,
+                                  int retry_ms,
+                                  cJSON **jsonp) {
         rd_http_error_t *herr;
-        rd_slice_t slice;
-        size_t len;
-        const char *content_type;
-        char *raw_json;
-        const char *end;
+        int response_code;
+        char *content_type;
+        rd_buf_t *rbuf;
+        char **headers_array_new =
+            rd_calloc(headers_array_cnt + 1, sizeof(*headers_array_new));
+        rd_http_req_t hreq;
 
         *jsonp = NULL;
 
-        herr = rd_http_req_init(rk, &hreq, url);
+        memcpy(headers_array_new, headers_array,
+               headers_array_cnt * sizeof(*headers_array_new));
+        headers_array_new[headers_array_cnt++] = "Accept: application/json";
+
+        herr = rd_http_get(rk, url, headers_array_new, headers_array_cnt,
+                           timeout_s, retries, retry_ms, &rbuf, &content_type,
+                           &response_code);
+        rd_free(headers_array_new);
+
         if (unlikely(herr != NULL))
                 return herr;
 
-        // FIXME: send Accept: json.. header?
-
-        herr = rd_http_req_perform_sync(&hreq);
-        len  = rd_buf_len(hreq.hreq_buf);
-        if (herr && len == 0) {
-                rd_http_req_destroy(&hreq);
-                return herr;
-        }
-
-        if (len == 0) {
-                /* Empty response: create empty JSON object */
-                *jsonp = cJSON_CreateObject();
-                rd_http_req_destroy(&hreq);
-                return NULL;
-        }
-
-        content_type = rd_http_req_get_content_type(&hreq);
-
         if (!content_type || rd_strncasecmp(content_type, "application/json",
                                             strlen("application/json"))) {
-                if (!herr)
-                        herr = rd_http_error_new(
-                            hreq.hreq_code, "Response is not JSON encoded: %s",
-                            content_type ? content_type : "(n/a)");
-                rd_http_req_destroy(&hreq);
+                herr = rd_http_error_new(response_code,
+                                         "Response is not JSON encoded: %s",
+                                         content_type ? content_type : "(n/a)");
+                RD_IF_FREE(rbuf, rd_buf_destroy_free);
+                RD_IF_FREE(content_type, rd_free);
                 return herr;
         }
 
-        /* cJSON requires the entire input to parse in contiguous memory. */
-        rd_slice_init_full(&slice, hreq.hreq_buf);
-        raw_json = rd_malloc(len + 1);
-        rd_slice_read(&slice, raw_json, len);
-        raw_json[len] = '\0';
-
-        /* Parse JSON */
-        end    = NULL;
-        *jsonp = cJSON_ParseWithOpts(raw_json, &end, 0);
-        if (!*jsonp && !herr)
-                herr = rd_http_error_new(hreq.hreq_code,
-                                         "Failed to parse JSON response "
-                                         "at %" PRIusz "/%" PRIusz,
-                                         (size_t)(end - raw_json), len);
-
-        rd_free(raw_json);
-        rd_http_req_destroy(&hreq);
+        hreq.hreq_buf  = rbuf;
+        hreq.hreq_code = response_code;
+        herr           = rd_http_parse_json(&hreq, jsonp);
+        RD_IF_FREE(rbuf, rd_buf_destroy_free);
+        RD_IF_FREE(content_type, rd_free);
 
         return herr;
 }
@@ -599,16 +694,7 @@ void rd_http_global_init(void) {
 }
 
 
-/**
- * @brief Unittest. Requires a (local) webserver to be set with env var
- *        RD_UT_HTTP_URL=http://localhost:1234/some-path
- *
- * This server must return a JSON object or array containing at least one
- * object on the main URL with a 2xx response code,
- * and 4xx response on $RD_UT_HTTP_URL/error (with whatever type of body).
- */
-
-int unittest_http(void) {
+int unittest_http_get(void) {
         const char *base_url = rd_getenv("RD_UT_HTTP_URL", NULL);
         char *error_url;
         size_t error_url_size;
@@ -629,7 +715,7 @@ int unittest_http(void) {
 
         /* Try the base url first, parse its JSON and extract a key-value. */
         json = NULL;
-        herr = rd_http_get_json(rk, base_url, &json);
+        herr = rd_http_get_json(rk, base_url, NULL, 0, 5, 1, 1000, &json);
         RD_UT_ASSERT(!herr, "Expected get_json(%s) to succeed, got: %s",
                      base_url, herr->errstr);
 
@@ -649,7 +735,7 @@ int unittest_http(void) {
 
         /* Try the error URL, verify error code. */
         json = NULL;
-        herr = rd_http_get_json(rk, error_url, &json);
+        herr = rd_http_get_json(rk, error_url, NULL, 0, 5, 1, 1000, &json);
         RD_UT_ASSERT(herr != NULL, "Expected get_json(%s) to fail", error_url);
         RD_UT_ASSERT(herr->code >= 400,
                      "Expected get_json(%s) error code >= "
@@ -666,4 +752,79 @@ int unittest_http(void) {
         rd_free(rk);
 
         RD_UT_PASS();
+}
+
+int unittest_http_get_params_append(void) {
+        rd_kafka_t *rk;
+        char *res;
+        RD_UT_BEGIN();
+        char *tests[] = {"http://localhost:1234",
+                         "",
+                         "http://localhost:1234/",
+
+                         "http://localhost:1234/",
+                         "a=1",
+                         "http://localhost:1234/?a=1",
+
+                         "https://localhost:1234/",
+                         "a=1&b=2",
+                         "https://localhost:1234/?a=1&b=2",
+
+                         "http://mydomain.com/?a=1",
+                         "c=hi",
+                         "http://mydomain.com/?a=1&c=hi",
+
+                         "https://mydomain.com/?",
+                         "c=hi",
+                         "https://mydomain.com/?c=hi",
+
+                         "http://localhost:1234/path?a=1&b=2#&c=3",
+                         "c=hi",
+                         "http://localhost:1234/path?a=1&b=2&c=hi",
+
+                         "http://localhost:1234#?c=3",
+                         "a=1",
+                         "http://localhost:1234/?a=1",
+
+                         "https://otherdomain.io/path?a=1&#c=3",
+                         "b=2",
+                         "https://otherdomain.io/path?a=1&b=2",
+                         NULL};
+
+
+        res = rd_http_get_params_append("", "");
+        RD_UT_ASSERT(!res, "Expected NULL result, got: \"%s\"", res);
+        res = rd_http_get_params_append("", "a=2&b=3");
+        RD_UT_ASSERT(!res, "Expected NULL result, got: \"%s\"", res);
+
+        char **test = tests;
+        rk          = rd_calloc(1, sizeof(*rk));
+        while (test[0]) {
+                res = rd_http_get_params_append(test[0], test[1]);
+                RD_UT_ASSERT(!strcmp(res, test[2]),
+                             "Expected \"%s\", got: \"%s\"", test[2], res);
+                rd_free(res);
+                test += 3;
+        }
+        rd_free(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Unittest. Requires a (local) webserver to be set with env var
+ *        RD_UT_HTTP_URL=http://localhost:1234/some-path
+ *
+ * This server must return a JSON object or array containing at least one
+ * object on the main URL with a 2xx response code,
+ * and 4xx response on $RD_UT_HTTP_URL/error (with whatever type of body).
+ */
+
+int unittest_http(void) {
+        int fails = 0;
+
+        fails += unittest_http_get();
+        fails += unittest_http_get_params_append();
+
+        return fails;
 }

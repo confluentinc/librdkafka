@@ -165,6 +165,16 @@ typedef enum {
 } rd_kafka_oauthbearer_assertion_algorithm_t;
 
 typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
+        RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS,
+} rd_kafka_oauthbearer_metadata_authentication_type_t;
+
+
+#define RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_URL_AZURE_IMDS       \
+        "http://169.254.169.254/metadata/identity/oauth2/token"
+
+
+typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_NONE,
         RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, /**< RFC2818 */
 } rd_kafka_ssl_endpoint_id_t;
@@ -359,7 +369,14 @@ struct rd_kafka_conf_s {
 
                         } assertion;
 
+                        struct {
+                                rd_kafka_oauthbearer_metadata_authentication_type_t
+                                    type;
+                        } metadata_authentication;
+
+
                         char *extensions_str;
+                        rd_bool_t builtin_token_refresh_cb;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,
                                                  const char *oauthbearer_config,
@@ -680,6 +697,9 @@ struct rd_kafka_topic_conf_s {
 
 
 char **rd_kafka_conf_kv_split(const char **input, size_t incnt, size_t *cntp);
+
+char *
+rd_kafka_conf_kv_get(const char *config, const char *key, const char pairs_sep);
 
 void rd_kafka_anyconf_destroy(int scope, void *conf);
 

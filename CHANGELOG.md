@@ -2,6 +2,8 @@
 
 librdkafka v2.12.0 is a feature release:
 
+* Support for OAUTHBEARER metadata based authentication types,
+  starting with Azure IMDS. [Introduction available](INTRODUCTION.md#oauthbearer-oidc-metadata-authentication) (#5155).
 * Fix compression types read issue in GetTelemetrySubscriptions response
   for big-endian architectures (#5183, @paravoid).
 * Fix for KIP-1102 time based re-bootstrap condition (#5177).

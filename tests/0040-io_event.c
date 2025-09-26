@@ -74,7 +74,6 @@ int main_0040_io_event(int argc, char **argv) {
         topic  = test_mk_topic_name(__FUNCTION__, 1);
 
         rk_p  = test_create_producer();
-        /* Ensure the main topic exists with proper partitions */
         test_create_topic(rk_p, topic, 3, -1);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
         test_wait_topic_exists(rk_p, topic, 10000);
@@ -92,7 +91,7 @@ int main_0040_io_event(int argc, char **argv) {
         queue = rd_kafka_queue_get_consumer(rk_c);
 
         test_consumer_subscribe(rk_c, topic);
-                test_sleep(5);
+        test_sleep(5);
 
 #ifndef _WIN32
         r = pipe(fds);

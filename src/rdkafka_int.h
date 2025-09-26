@@ -1251,7 +1251,9 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
 
 void rd_kafka_rebootstrap(rd_kafka_t *rk);
 
-void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk);
+void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk);
+
+int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk);
 
 void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk);
 

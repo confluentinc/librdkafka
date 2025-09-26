@@ -1056,6 +1056,8 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                             end_offset, end_offset_leader_epoch);
 
                 } else {
+                        rd_kafka_toppar_set_fetch_state(
+                            rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_SEEK);
                         rd_kafka_toppar_unlock(rktp);
 
                         /* Seek to the updated end offset */

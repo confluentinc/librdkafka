@@ -36,6 +36,35 @@ FAILED=0
 
 export RDKAFKA_GITVER="$(git rev-parse --short HEAD)@$(git symbolic-ref -q --short HEAD)"
 
+# Function to delete test topics using librdkafka Admin API
+cleanup_test_topics() {
+    local test_conf="test.conf"
+    local cleanup_tool="./topic_cleanup"
+    
+    # Check if cleanup tool exists
+    if [ ! -f "$cleanup_tool" ]; then
+        echo -e "${RED}Topic cleanup tool not found: $cleanup_tool${CCLR}"
+        echo "Run 'make topic_cleanup' to build it"
+        return 0
+    fi
+    
+    # Check if test.conf exists
+    if [ ! -f "$test_conf" ]; then
+        echo "No test.conf found, skipping topic cleanup"
+        return 0
+    fi
+    
+    echo -e "${CYAN}### Cleaning up test topics using librdkafka Admin API ###${CCLR}"
+    
+    # Run the cleanup tool (no arguments needed, reads test.conf directly)
+    $cleanup_tool
+    cleanup_exit_code=$?
+    
+    if [ $cleanup_exit_code -ne 0 ]; then
+        echo -e "${RED}Topic cleanup failed with exit code $cleanup_exit_code${CCLR}"
+    fi
+}
+
 # Enable valgrind suppressions for false positives
 SUPP="--suppressions=librdkafka.suppressions"
 

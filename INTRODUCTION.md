@@ -248,7 +248,7 @@ on the producer:
 
 See [STATISTICS.md](STATISTICS.md) for the full definition of metrics.
 A JSON schema for the statistics is available in
-[statistics-schema.json](src/statistics-schema.json).
+[statistics-schema.json](src/statistics_schema.json).
 
 
 <a name="compression"></a>

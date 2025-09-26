@@ -85,9 +85,6 @@ int main_0036_partial_fetch(int argc, char **argv) {
 
         rd_kafka_topic_destroy(rkt);
 
-        /* Clean up: delete the topic */
-        test_delete_topic_simple(rk, topic);
-
         rd_kafka_destroy(rk);
 
         return 0;

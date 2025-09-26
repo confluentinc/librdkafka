@@ -168,9 +168,6 @@ static void do_test_unkpart(void) {
         /* Destroy topic */
         rd_kafka_topic_destroy(rkt);
 
-        /* Clean up: delete the topic */
-        test_delete_topic_simple(rk, topic);
-
         /* Destroy rdkafka instance */
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
@@ -241,13 +238,6 @@ static void do_test_unkpart_timeout_nobroker(void) {
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
-
-        /* Clean up: delete the topic using a client with broker connectivity */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                test_delete_topic_simple(del_rk, topic);
-                rd_kafka_destroy(del_rk);
-        }
 
         TEST_SAY(_C_GRN "%s PASSED\n" _C_CLR, __FUNCTION__);
 }

@@ -69,9 +69,6 @@ int main_0021_rkt_destroy(int argc, char **argv) {
 
         test_wait_delivery(rk, &remains);
 
-        /* Clean up: delete the topic */
-        test_delete_topic_simple(rk, topic);
-
         rd_kafka_destroy(rk);
 
         return 0;

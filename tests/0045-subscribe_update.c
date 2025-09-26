@@ -296,7 +296,6 @@ static void do_test_non_exist_and_partchange(void) {
         /* Delete the topic_a */
         {
                 rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                test_delete_topic_simple(del_rk, topic_a);
                 rd_kafka_destroy(del_rk);
         }
 
@@ -383,9 +382,6 @@ static void do_test_regex(void) {
         /* Delete the topics */
         {
                 rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                test_delete_topic_simple(del_rk, topic_b);
-                test_delete_topic_simple(del_rk, topic_c);
-                test_delete_topic_simple(del_rk, topic_d);
                 rd_kafka_destroy(del_rk);
         }
 

@@ -169,13 +169,6 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 
-        /* Delete the topics */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                for (i = 0; i < TOPIC_CNT; i++)
-                        test_delete_topic_simple(del_rk, topic[i]);
-                rd_kafka_destroy(del_rk);
-        }
 
         for (i = 0; i < TOPIC_CNT; i++)
                 rd_free(topic[i]);

@@ -141,15 +141,6 @@ static void do_test_consume_batch(void) {
                 rd_kafka_topic_destroy(rkts[i]);
         }
 
-        /* Clean up: delete all topics */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                for (i = 0; i < topic_cnt; i++) {
-                        test_delete_topic_simple(del_rk, topics[i]);
-                        rd_free(topics[i]);
-                }
-                rd_kafka_destroy(del_rk);
-        }
 
         rd_kafka_queue_destroy(rkq);
 

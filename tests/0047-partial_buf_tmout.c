@@ -94,8 +94,6 @@ int main_0047_partial_buf_tmout(int argc, char **argv) {
         rd_kafka_topic_destroy(rkt);
         
         /* Delete the topic */
-        test_delete_topic_simple(rk, topic);
-        
         rd_kafka_destroy(rk);
 
         return 0;

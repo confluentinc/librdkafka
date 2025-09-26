@@ -165,9 +165,6 @@ int main_0039_event_dr(int argc, char **argv) {
         /* Destroy topic */
         rd_kafka_topic_destroy(rkt);
 
-        /* Clean up: delete the topic */
-        test_delete_topic_simple(rk, topic);
-
         /* Destroy rdkafka instance */
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);

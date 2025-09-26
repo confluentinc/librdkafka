@@ -93,7 +93,6 @@ static void test_producer_partition_cnt_change(void) {
         /* Delete the topic */
         {
                 rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                test_delete_topic_simple(del_rk, topic);
                 rd_kafka_destroy(del_rk);
         }
 }

@@ -13,6 +13,9 @@
 # Test topic names are constructed by:
 #  <prefix>_<suffix>, where default topic prefix is "rdkafkatest".
 # suffix is specified by the tests.
+# NOTE: When test.topic.prefix is set, run-test.sh will automatically
+#       clean up (delete) all topics starting with this prefix after
+#       each test completes. If no prefix is set, no cleanup occurs.
 #test.topic.prefix=bib
 
 # Make topic names random:

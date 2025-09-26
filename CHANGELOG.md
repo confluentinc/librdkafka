@@ -51,13 +51,19 @@ librdkafka v2.12.0 is a feature release:
   we start fetching from it and, in case it was truncated, fetching starts
   from last available offset of given leader epoch.
   Happens since 2.1.0 (#4931).
+  
+  * Issues: #5199
+  Fixed an issue where topic partition errors were not cleared after a successful
+  commit. Previously, a partition could retain a stale error state even though the
+  most recent commit succeeded, causing misleading error reporting. Now, successful
+  commits correctly clear the error state for the affected partitions
+  Happening since 2.4.0 (#4672).
 
 ### Producer fixes
 
 * Issues: #4627.
   Fix double free of headers in `rd_kafka_produceva` method in cases where the partition doesn't exist.
   Happening since 1.x (@blindspotbounty, #4628).
-
 
 
 # librdkafka v2.11.1

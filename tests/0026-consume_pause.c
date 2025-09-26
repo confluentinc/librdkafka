@@ -63,7 +63,8 @@ static void consume_pause(void) {
         test_conf_set(conf, "enable.partition.eof", "true");
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 
-        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 10 * 1000);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, -1,
+                                      10 * 1000);
 
         /* Produce messages */
         testid =
@@ -219,6 +220,7 @@ static void consume_pause(void) {
                 rd_kafka_destroy(rk);
         }
 
+
         rd_kafka_topic_partition_list_destroy(topics);
         rd_kafka_conf_destroy(conf);
         rd_kafka_topic_conf_destroy(tconf);
@@ -259,8 +261,10 @@ static void consume_pause_resume_after_reassign(void) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, 1,
+        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, -1,
                                       10 * 1000);
+
+        test_sleep(2);
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
@@ -355,6 +359,10 @@ static void consume_pause_resume_after_reassign(void) {
                            exp_msg_cnt);
         test_msgver_clear(&mv);
 
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                rd_kafka_destroy(del_rk);
+        }
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
@@ -419,7 +427,7 @@ static void consume_subscribe_assign_pause_resume(void) {
 
         test_conf_init(&conf, NULL, 20);
 
-        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, 1,
+        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, -1,
                                       10 * 1000);
 
         /* Produce messages */
@@ -443,6 +451,10 @@ static void consume_subscribe_assign_pause_resume(void) {
         test_msgver_verify("consumed", &mv, TEST_MSGVER_ALL_PART, 0, msgcnt);
         test_msgver_clear(&mv);
 
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                rd_kafka_destroy(del_rk);
+        }
 
         test_consumer_close(rk);
 
@@ -471,7 +483,7 @@ static void consume_seek_pause_resume(void) {
 
         test_conf_init(&conf, NULL, 20);
 
-        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, 1,
+        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, -1,
                                       10 * 1000);
 
         /* Produce messages */
@@ -525,6 +537,11 @@ static void consume_seek_pause_resume(void) {
 
         test_msgver_verify("consumed", &mv, TEST_MSGVER_ALL_PART, 500, 500);
         test_msgver_clear(&mv);
+
+        if (topic) {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                rd_kafka_destroy(del_rk);
+        }
 
         rd_kafka_topic_partition_list_destroy(parts);
 

@@ -95,6 +95,7 @@ int main_0039_event_dr(int argc, char **argv) {
         int i;
         test_timing_t t_produce, t_delivery;
         rd_kafka_queue_t *eventq;
+        const char *topic;
 
         test_conf_init(&conf, &topic_conf, 10);
 
@@ -108,7 +109,10 @@ int main_0039_event_dr(int argc, char **argv) {
 
         eventq = rd_kafka_queue_get_main(rk);
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0005", 0), topic_conf);
+        topic = test_mk_topic_name("0039", 0);
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
+
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 

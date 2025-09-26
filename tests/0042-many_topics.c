@@ -234,14 +234,25 @@ int main_0042_many_topics(int argc, char **argv) {
 
         /* Generate unique topic names */
         topics = malloc(sizeof(*topics) * topic_cnt);
-        for (i = 0; i < topic_cnt; i++)
+        for (i = 0; i < topic_cnt; i++) {
                 topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                test_create_topic_if_auto_create_disabled(NULL, topics[i], -1);
+                test_sleep(3);
+        }
 
         produce_many(topics, topic_cnt, testid);
         legacy_consume_many(topics, topic_cnt, testid);
         if (test_broker_version >= TEST_BRKVER(0, 9, 0, 0)) {
                 subscribe_consume_many(topics, topic_cnt, testid);
                 assign_consume_many(topics, topic_cnt, testid);
+        }
+
+        /* Delete all topics */
+        {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                for (i = 0; i < topic_cnt; i++) {
+                }
+                rd_kafka_destroy(del_rk);
         }
 
         for (i = 0; i < topic_cnt; i++)

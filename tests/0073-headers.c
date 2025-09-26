@@ -374,6 +374,8 @@ int main_0073_headers(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__ + 5, 1);
         const int msgcnt  = 10;
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
         do_produce(topic, msgcnt);
         do_consume(topic, msgcnt);
 

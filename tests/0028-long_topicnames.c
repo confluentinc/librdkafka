@@ -62,7 +62,7 @@ int main_0028_long_topicnames(int argc, char **argv) {
         rk_c = test_create_consumer(topic, NULL, NULL, NULL);
 
         /* Create topic */
-        test_create_topic_wait_exists(rk_c, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(rk_c, topic, 1, -1, 5000);
 
         test_consumer_subscribe(rk_c, topic);
         test_consumer_poll_no_msgs("consume.nomsgs", rk_c, 0, 5000);
@@ -74,6 +74,7 @@ int main_0028_long_topicnames(int argc, char **argv) {
 
         /* Consume messages */
         test_consume_msgs_easy(NULL, topic, testid, -1, msgcnt, NULL);
+
 
         return 0;
 }

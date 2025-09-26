@@ -60,6 +60,7 @@ int main_0041_fetch_max_bytes(int argc, char **argv) {
 
         testid = test_id_generate();
         rk     = test_create_producer();
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
         rkt    = test_create_producer_topic(rk, topic, NULL);
         test_wait_topic_exists(rk, topic, 5000);
 
@@ -92,6 +93,12 @@ int main_0041_fetch_max_bytes(int argc, char **argv) {
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
+
+        /* Delete the topic */
+        {
+                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+                rd_kafka_destroy(del_rk);
+        }
 
         return 0;
 }

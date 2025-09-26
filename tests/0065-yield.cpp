@@ -69,7 +69,6 @@ static void do_test_producer(bool do_yield) {
   std::string errstr;
   RdKafka::ErrorCode err;
   std::string topic = Test::mk_topic_name("0065_yield", 1);
-
   /*
    * Create Producer
    */
@@ -86,6 +85,8 @@ static void do_test_producer(bool do_yield) {
   if (!p)
     Test::Fail("Failed to create producer: " + errstr);
   delete conf;
+
+  test_create_topic_if_auto_create_disabled(p->c_ptr(), topic.c_str(), -1);
 
   dr.p = p;
 

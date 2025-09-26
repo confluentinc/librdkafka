@@ -129,6 +129,8 @@ int main_0034_offset_reset(int argc, char **argv) {
         const int partition = 0;
         const int msgcnt    = test_quick ? 20 : 100;
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
         /* Produce messages */
         test_produce_msgs_easy(topic, 0, partition, msgcnt);
 
@@ -144,6 +146,8 @@ int main_0034_offset_reset(int argc, char **argv) {
         /* auto.offset.reset=error: Consume messages from invalid offset:
          * Should return error. */
         do_test_reset(topic, partition, "error", msgcnt + 5, 0, 0, 0, 1);
+
+
 
         return 0;
 }

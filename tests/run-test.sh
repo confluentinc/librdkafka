@@ -134,7 +134,84 @@ EOF
 	echo -e "### $Test $TEST in $mode mode PASSED! ###"
 	echo -e "###${CCLR}"
     fi
+    
+    # Clean up topics after test completion
+    cleanup_test_topics
 done
+
+# Function to extract topic prefix from test.conf and delete matching topics
+cleanup_test_topics() {
+    local test_conf="test.conf"
+    local topic_prefix=""
+    
+    # Check if test.conf exists
+    if [ ! -f "$test_conf" ]; then
+        echo "No test.conf found, skipping topic cleanup"
+        return 0
+    fi
+    
+    # Extract topic prefix from test.conf
+    topic_prefix=$(grep "^test\.topic\.prefix=" "$test_conf" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
+    
+    # Skip cleanup if no prefix is configured
+    if [ -z "$topic_prefix" ]; then
+        echo "No test.topic.prefix configured, skipping topic cleanup"
+        return 0
+    fi
+    
+    echo -e "${CYAN}### Cleaning up topics with prefix: $topic_prefix ###${CCLR}"
+    
+    # Extract bootstrap servers from test.conf
+    local bootstrap_servers=""
+    bootstrap_servers=$(grep "^metadata\.broker\.list=" "$test_conf" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
+    
+    if [ -z "$bootstrap_servers" ]; then
+        bootstrap_servers="localhost:9092"
+        echo "Using default bootstrap servers: $bootstrap_servers"
+    fi
+    
+    # Use kafka-topics.sh to list and delete topics with the prefix
+    local kafka_topics_cmd=""
+    
+    # Try to find kafka-topics.sh in common locations
+    for path in "/usr/local/bin/kafka-topics.sh" "/opt/kafka/bin/kafka-topics.sh" "kafka-topics.sh" "kafka-topics"; do
+        if command -v "$path" >/dev/null 2>&1; then
+            kafka_topics_cmd="$path"
+            break
+        fi
+    done
+    
+    if [ -z "$kafka_topics_cmd" ]; then
+        echo -e "${RED}kafka-topics command not found, skipping topic cleanup${CCLR}"
+        return 0
+    fi
+    
+    echo "Using kafka-topics command: $kafka_topics_cmd"
+    
+    # List topics with the prefix
+    local topics_to_delete=""
+    topics_to_delete=$($kafka_topics_cmd --bootstrap-server "$bootstrap_servers" --list 2>/dev/null | grep "^$topic_prefix" || true)
+    
+    if [ -z "$topics_to_delete" ]; then
+        echo "No topics found with prefix '$topic_prefix'"
+        return 0
+    fi
+    
+    echo "Found topics to delete:"
+    echo "$topics_to_delete"
+    
+    # Delete each topic
+    echo "$topics_to_delete" | while read -r topic; do
+        if [ -n "$topic" ]; then
+            echo "Deleting topic: $topic"
+            $kafka_topics_cmd --bootstrap-server "$bootstrap_servers" --delete --topic "$topic" 2>/dev/null || {
+                echo -e "${RED}Failed to delete topic: $topic${CCLR}"
+            }
+        fi
+    done
+    
+    echo -e "${GREEN}Topic cleanup completed${CCLR}"
+}
 
 exit $FAILED
 

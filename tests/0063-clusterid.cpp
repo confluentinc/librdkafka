@@ -179,6 +179,11 @@ static void do_test_controllerid(void) {
 
 extern "C" {
 int main_0063_clusterid(int argc, char **argv) {
+  if (test_needs_auth()) {
+    Test::Skip("Legacy client tests (api.version.request=false) require PLAINTEXT but cluster uses SSL/SASL\n");
+    return 0;
+  }
+  
   do_test_clusterid();
   do_test_controllerid();
   return 0;

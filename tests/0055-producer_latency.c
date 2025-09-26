@@ -575,6 +575,12 @@ static void test_producer_latency_first_message(int case_number) {
 
 int main_0055_producer_latency_mock(int argc, char **argv) {
         int case_number;
+        
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster tests require PLAINTEXT but cluster uses SSL/SASL\n");
+                return 0;
+        }
+        
         for (case_number = 0; case_number < 4; case_number++) {
                 test_producer_latency_first_message(case_number);
         }

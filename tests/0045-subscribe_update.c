@@ -271,6 +271,8 @@ static void do_test_non_exist_and_partchange(void) {
         TEST_SAY("#1: creating topic %s\n", topic_a);
         test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
 
+        test_sleep(2);
+
         await_assignment("#1: proper", rk, queue, 1, topic_a, 2);
 
 
@@ -280,6 +282,9 @@ static void do_test_non_exist_and_partchange(void) {
          * - Verify updated assignment
          */
         test_create_partitions(rk, topic_a, 4);
+        
+        test_sleep(2);
+        
         await_revoke("#2", rk, queue);
 
         await_assignment("#2: more partitions", rk, queue, 1, topic_a, 4);
@@ -335,6 +340,8 @@ static void do_test_regex(void) {
                  topic_e);
         test_consumer_subscribe(rk, tsprintf("^%s_[bde]$", base_topic));
 
+        test_sleep(2);
+
         await_assignment("Regex: just one topic exists", rk, queue, 1, topic_b,
                          2);
 
@@ -346,6 +353,8 @@ static void do_test_regex(void) {
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
         test_create_topic_wait_exists(NULL, topic_d, 1, -1, 5000);
+
+        test_sleep(2);
 
         if (test_consumer_group_protocol_classic())
                 await_revoke("Regex: rebalance after topic creation", rk,
@@ -415,6 +424,8 @@ static void do_test_topic_remove(void) {
 
                 TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
                 test_create_topic_wait_exists(NULL, topic_g, parts_g, -1, 5000);
+                
+                test_sleep(2);
         } else {
                 TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
                 test_create_topic(NULL, topic_f, parts_f, -1);
@@ -800,15 +811,15 @@ static void do_test_resubscribe_with_regex() {
 
         TEST_SAY("Creating topic %s\n", topic1);
         test_create_topic_wait_exists(NULL, topic1, 4, -1, 5000);
+        test_sleep(5);
 
         TEST_SAY("Creating topic %s\n", topic2);
         test_create_topic_wait_exists(NULL, topic2, 4, -1, 5000);
+        test_sleep(5);
 
         TEST_SAY("Creating topic %s\n", topic_a);
         test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
-        
-        /* Allow extra time for topic_a metadata to propagate before mixed subscription test */
-        test_sleep(2);
+        test_sleep(5);
 
         test_conf_init(&conf, NULL, 60);
 
@@ -816,27 +827,37 @@ static void do_test_resubscribe_with_regex() {
         rk    = test_create_consumer(group, NULL, conf, NULL);
         queue = rd_kafka_queue_get_consumer(rk);
 
+        test_sleep(3);
+
         /* Subscribe to topic1 */
         TEST_SAY("Subscribing to %s\n", topic1);
         test_consumer_subscribe(rk, topic1);
+        
+        test_sleep(3);
+        
         /* Wait for assignment */
         await_assignment("Assignment for topic1", rk, queue, 1, topic1, 4);
 
         /* Unsubscribe from topic1 */
         TEST_SAY("Unsubscribing from %s\n", topic1);
         rd_kafka_unsubscribe(rk);
+        test_sleep(2);
         /* Wait for revocation */
         await_revoke("Revocation after unsubscribing", rk, queue);
 
         /* Subscribe to topic2 */
         TEST_SAY("Subscribing to %s\n", topic2);
         test_consumer_subscribe(rk, topic2);
+        
+        test_sleep(3);
+        
         /* Wait for assignment */
         await_assignment("Assignment for topic2", rk, queue, 1, topic2, 4);
 
         /* Unsubscribe from topic2 */
         TEST_SAY("Unsubscribing from %s\n", topic2);
         rd_kafka_unsubscribe(rk);
+        test_sleep(2);
         /* Wait for revocation */
         await_revoke("Revocation after unsubscribing", rk, queue);
 
@@ -855,6 +876,7 @@ static void do_test_resubscribe_with_regex() {
         /* Unsubscribe from regex */
         TEST_SAY("Unsubscribing from regex %s\n", topic_regex_pattern);
         rd_kafka_unsubscribe(rk);
+        test_sleep(2);
         /* Wait for revocation */
         await_revoke("Revocation after unsubscribing", rk, queue);
 
@@ -864,6 +886,8 @@ static void do_test_resubscribe_with_regex() {
         /* Subscribe to regex and topic_a literal */
         TEST_SAY("Subscribing to regex %s and topic_a\n", topic_regex_pattern);
         test_consumer_subscribe_multi(rk, 2, topic_regex_pattern, topic_a);
+        
+        test_sleep(3);
         /* Wait for assignment */
         if (test_consumer_group_protocol_classic()) {
                 await_assignment("Assignment for topic1, topic2 and topic_a",
@@ -881,6 +905,7 @@ static void do_test_resubscribe_with_regex() {
         /* Unsubscribe */
         TEST_SAY("Unsubscribing\n");
         rd_kafka_unsubscribe(rk);
+        test_sleep(2);
         await_revoke("Revocation after unsubscribing", rk, queue);
 
         /* Cleanup */

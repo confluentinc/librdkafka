@@ -118,6 +118,8 @@ static int consumer_thread(void *arg) {
     consumer_args->consumer = consumer;
     test_consumer_subscribe_multi(consumer, consumer_args->subscriptions, TOPIC_CNT);
 
+    TEST_SAY_GREEN("Consumer %d created with name %s\n", consumer_args->consumer_id, rd_kafka_name(consumer));
+
     TEST_SAY_GREEN("Consumer %d subscribed to topics\n",
            consumer_args->consumer_id);
     while(consumer_args->run && run) {
@@ -155,8 +157,8 @@ static int consumer_thread(void *arg) {
 
         rkmessage = rd_kafka_consumer_poll(consumer, 1000);
         if (rkmessage) {
-                // TEST_SAY_GREEN("Consumer %d received message with offset %ld for partition %d\n",
-                //        consumer_args->consumer_id, rkmessage->offset, rkmessage->partition);
+                TEST_SAY_GREEN("Consumer %d received message with offset %ld for partition %d\n",
+                       consumer_args->consumer_id, rkmessage->offset, rkmessage->partition);
                 TEST_ASSERT(offsets[rkmessage->partition] + 1 == rkmessage->offset,
                         "Consumer %d received message with offset %ld for partition %d, expected %ld",
                         consumer_args->consumer_id, rkmessage->offset, rkmessage->partition, offsets[rkmessage->partition]+1);

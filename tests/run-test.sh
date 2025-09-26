@@ -163,6 +163,9 @@ EOF
 	echo -e "### $Test $TEST in $mode mode PASSED! ###"
 	echo -e "###${CCLR}"
     fi
+    
+    # Clean up topics after test completion
+    cleanup_test_topics
 done
 
 exit $FAILED

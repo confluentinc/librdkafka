@@ -1,3 +1,10 @@
+
+# librdkafka v2.11.2 (unreleased)
+
+## Fixes
+
+* C++ docs: Clarify ownership of `RdKafka::Conf::dump()` return value (#5166, @aryanrahar)
+=======
 # librdkafka v2.12.0
 
 librdkafka v2.12.0 is a feature release:
@@ -57,6 +64,7 @@ librdkafka v2.12.0 is a feature release:
 * Issues: #4627.
   Fix double free of headers in `rd_kafka_produceva` method in cases where the partition doesn't exist.
   Happening since 1.x (@blindspotbounty, #4628).
+
 
 
 

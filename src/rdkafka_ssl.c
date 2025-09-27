@@ -485,7 +485,25 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                 return 0;
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
-        if (!SSL_set1_host(rktrans->rktrans_ssl, name))
+        char *token, *hostname;
+        token = strtok(name, ":");
+        int ctr = 0;
+        while (token != NULL) {
+                if (ctr >= 2) {
+                        hostname = &name;
+                        break;
+                }
+                token = strtok(NULL, ":");
+                last_char = strlen(token) - 1
+                if (last_char > 0 && token[last_char] == '.') {
+                        token[last_char] = '\0';
+                        hostname = strncat(hostname, token, last_char);
+                } else {
+                        hostname = strncat(hostname, token, strlen(token));
+                }
+                ctr += 1;
+        }
+        if (!SSL_set1_host(rktrans->rktrans_ssl, hostname))
                 goto fail;
 #elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {

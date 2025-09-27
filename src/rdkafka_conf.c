@@ -814,6 +814,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
               {RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl", _UNSUPPORTED_SSL},
               {0, NULL}}},
 
+    {_RK_GLOBAL, "ssl.tls13.ciphersuites", _RK_C_STR,
+     _RK(ssl.tls13_ciphersuites),
+     "Set of ciphersuites supported by TLSv1.3. Due to major differences "
+     "between the way that ciphersuites for TLSv1.2 and below and "
+     "ciphersuites for TLSv1.3 work, they are configured in OpenSSL "
+     "differently too. The list should contain colon separated ciphersuite "
+     "names in order of preference. See manual page for "
+     "`SSL_CTX_set_cipher_list(3)`. OpenSSL >= 1.1.0 required.",
+     _UNSUPPORTED_OPENSSL_1_1_0},
     {_RK_GLOBAL, "ssl.cipher.suites", _RK_C_STR, _RK(ssl.cipher_suites),
      "A cipher suite is a named combination of authentication, "
      "encryption, MAC and key exchange algorithm used to negotiate the "

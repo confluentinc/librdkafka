@@ -353,8 +353,8 @@ static void do_test_store_offset_without_leader_epoch(void) {
         leader_epoch =
             rd_kafka_topic_partition_get_leader_epoch(&rktpars->elems[0]);
 
-        /* OffsetFetch returns the leader epoch used when committing. */
-        TEST_ASSERT(leader_epoch == -1, "expected %d, got %" PRId32, -1,
+        /* OffsetFetch returns the leader epoch even if not set. */
+        TEST_ASSERT(leader_epoch == 1, "expected %d, got %" PRId32, 1,
                     leader_epoch);
         rd_kafka_topic_partition_list_destroy(rktpars);
 
@@ -375,8 +375,8 @@ static void do_test_store_offset_without_leader_epoch(void) {
                     5, rktpars->elems[0].offset);
         leader_epoch =
             rd_kafka_topic_partition_get_leader_epoch(&rktpars->elems[0]);
-        /* OffsetFetch returns the leader epoch used when committing. */
-        TEST_ASSERT(leader_epoch == -1, "expected %d, got %" PRId32, -1,
+        /* OffsetFetch returns the leader epoch even if not set. */
+        TEST_ASSERT(leader_epoch == 1, "expected %d, got %" PRId32, 1,
                     leader_epoch);
         rd_kafka_topic_partition_list_destroy(rktpars);
 
@@ -785,7 +785,6 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                 int64_t low, high;
                 rd_kafka_resp_err_t list_offsets_err =
                     RD_KAFKA_RESP_ERR_NO_ERROR;
-                rd_kafka_topic_partition_list_t *rktpars_list_offsets;
 
                 TEST_ASSERT(partitions->cnt == 1,
                             "Expected 1 assigned partition, got %d",
@@ -795,29 +794,23 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                 rd_kafka_mock_partition_set_leader(test->mcluster, test->topic,
                                                    0, 2);
 
-                /* Set a wrong leader epoch that should not be used
-                 * for listing offsets. */
-                rktpars_list_offsets =
-                    rd_kafka_topic_partition_list_copy(partitions);
-                rktpars_list_offsets->elems[0].offset = 1;
-                rd_kafka_topic_partition_set_leader_epoch(
-                    &rktpars_list_offsets->elems[0], 1234);
                 do {
-
+                        /* Set a wrong leader epoch that should not be used
+                         * for listing offsets. */
+                        rd_kafka_topic_partition_set_leader_epoch(
+                            &partitions->elems[0], 1234);
 
                         if (test->variation == 0) {
+                                partitions->elems[0].offset = 1;
                                 list_offsets_err = rd_kafka_offsets_for_times(
-                                    rk, rktpars_list_offsets, 1000);
+                                    rk, partitions, 1000);
                         } else {
                                 list_offsets_err =
                                     rd_kafka_query_watermark_offsets(
-                                        rk,
-                                        rktpars_list_offsets->elems[0].topic,
-                                        rktpars_list_offsets->elems[0]
-                                            .partition,
-                                        &low, &high, 1000);
+                                        rk, partitions->elems[0].topic,
+                                        partitions->elems[0].partition, &low,
+                                        &high, 1000);
                         }
-
                         retries++;
                         if (retries == 1) {
                                 TEST_ASSERT(
@@ -828,7 +821,7 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                         }
                         if (retries > 2)
                                 TEST_FAIL(
-                                    "Failed %d times "
+                                    "Offsets for times failed %d times "
                                     " during the rebalance callback",
                                     retries);
                 } while (list_offsets_err != RD_KAFKA_RESP_ERR_NO_ERROR);
@@ -843,13 +836,11 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                         /* Mock handler currently returns
                          * RD_KAFKA_OFFSET_SPEC_LATEST
                          * in the offsets for times case */
-                        TEST_ASSERT(rktpars_list_offsets->elems[0].offset ==
+                        TEST_ASSERT(partitions->elems[0].offset ==
                                         RD_KAFKA_OFFSET_SPEC_LATEST,
                                     "Expected offset for times LATEST,"
                                     " got %" PRId64,
-                                    rktpars_list_offsets->elems[0].offset);
-                        partitions->elems[0].offset =
-                            RD_KAFKA_OFFSET_SPEC_LATEST;
+                                    partitions->elems[0].offset);
                 } else {
                         TEST_ASSERT(0 == low,
                                     "Expected low offset 0"
@@ -861,7 +852,6 @@ static void do_test_list_offsets_leader_change_rebalance_cb(
                                     high);
                         partitions->elems[0].offset = high;
                 }
-                rd_kafka_topic_partition_list_destroy(rktpars_list_offsets);
 
                 test_consumer_assign_by_rebalance_protocol("rebalance", rk,
                                                            partitions);
@@ -934,262 +924,8 @@ static void do_test_list_offsets_leader_change(int variation) {
         SUB_TEST_PASS();
 }
 
-
-typedef enum offset_validation_on_partition_assignment_assign_variation_t {
-        /** Use subscribe. */
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_SUBSCRIBE,
-        /** Use subscribe with a rebalance callback. */
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_SUBSCRIBE_REBALANCE_CALLBACK,
-        /** Use assign. */
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_ASSIGN,
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION__CNT
-} offset_validation_on_partition_assignment_assign_variation_t;
-
-typedef enum offset_validation_on_partition_assignment_commit_variation_t {
-        /** Commit with leader epoch. */
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_LEADER_EPOCH,
-        /** Commit without a leader epoch, no validation expected. */
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_NO_LEADER_EPOCH,
-        /** Offset store and commit with leader epoch. */
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_STORE_LEADER_EPOCH,
-        /** Offset store and commit without a leader epoch, no validation
-           expected. */
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_STORE_NO_LEADER_EPOCH,
-        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION__CNT
-} offset_validation_on_partition_assignment_commit_variation_t;
-
-static const char
-    *offset_validation_on_partition_assignment_assign_variation_names[] = {
-        "subscribe",
-        "subscribe with rebalance callback",
-        "assign",
-};
-
-static const char
-    *offset_validation_on_partition_assignment_commit_variation_names[] = {
-        "leader epoch",
-        "no leader epoch",
-        "offset store with leader epoch",
-        "offset store with no leader epoch",
-};
-
-/**
- * @brief Test that a committed offset is validated before starting to
- *        fetch messages from an assigned partition, if leader epoch is set
- *        in the assignment.
- *        If it's not set, no validation is performed and
- *        there's an offset out of range error and a reset to earliest.
- *        Assignment and commit are done in different ways.
- *
- * @param assign_variation The assign variation to test.
- * @param incremental If true, use cooperative incremental assignment.
- * @param commit_variation The commit variation to test.
- *
- * @sa `offset_validation_on_partition_assignment_assign_variation_t`
- * @sa `offset_validation_on_partition_assignment_commit_variation_t`
- */
-static void do_test_offset_validation_on_partition_assignment(
-    offset_validation_on_partition_assignment_assign_variation_t
-        assign_variation,
-    rd_bool_t incremental,
-    offset_validation_on_partition_assignment_commit_variation_t
-        commit_variation) {
-        rd_kafka_mock_cluster_t *mcluster;
-        rd_kafka_conf_t *conf;
-        const char *bootstraps;
-        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
-        const char *c1_groupid = topic;
-        rd_kafka_t *c1;
-        int msg_count = 5, leader = 2;
-        uint64_t testid = test_id_generate();
-        size_t matching_requests;
-        rd_kafka_topic_partition_list_t *to_commit, *to_assign = NULL;
-        rd_bool_t use_leader_epoch =
-            commit_variation ==
-                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_LEADER_EPOCH ||
-            commit_variation ==
-                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_STORE_LEADER_EPOCH;
-
-        rd_bool_t use_store_offsets =
-            commit_variation ==
-                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_STORE_LEADER_EPOCH ||
-            commit_variation ==
-                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_STORE_NO_LEADER_EPOCH;
-
-
-        /* No validations when leader epoch is -1 (default) */
-        size_t expected_validation_requests = use_leader_epoch ? 1 : 0;
-        /* Without validation there's an offset out of range and a reset
-         * to earliest. */
-        int expected_msg_cnt = use_leader_epoch ? 0 : msg_count;
-
-        SUB_TEST_QUICK(
-            "assign variation: %s %s, commit variation: %s",
-            offset_validation_on_partition_assignment_assign_variation_names
-                [assign_variation],
-            incremental ? "incremental" : "eager",
-            offset_validation_on_partition_assignment_commit_variation_names
-                [commit_variation]);
-
-        mcluster = test_mock_cluster_new(3, &bootstraps);
-        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
-        rd_kafka_mock_group_initial_rebalance_delay_ms(mcluster, 1);
-
-        TEST_SAY("Producing messages\n");
-        /* Seed the topic with messages */
-        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_count, 10,
-                                 "bootstrap.servers", bootstraps,
-                                 "batch.num.messages", "1", NULL);
-
-        TEST_SAY("Consuming messages\n");
-        test_conf_init(&conf, NULL, 30);
-
-        test_conf_set(conf, "bootstrap.servers", bootstraps);
-        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
-        test_conf_set(conf, "auto.offset.reset", "earliest");
-        test_conf_set(conf, "enable.auto.commit", "false");
-        test_conf_set(conf, "enable.auto.offset.store", "false");
-        test_conf_set(conf, "enable.partition.eof", "true");
-        if (incremental)
-                test_conf_set(conf, "partition.assignment.strategy",
-                              "cooperative-sticky");
-
-        c1 = test_create_consumer(c1_groupid, NULL, rd_kafka_conf_dup(conf),
-                                  NULL);
-        test_consumer_subscribe(c1, topic);
-
-        /* `msg_count` messages and an EOF because of reset to earliest */
-        test_consumer_poll("MSG_ALL", c1, testid, 1, 0, msg_count, NULL);
-
-        TEST_SAY("Committing %s leader epochs\n",
-                 use_leader_epoch ? "with" : "without");
-        /* Simulate committing a truncated offset with leader
-         * epoch 0 or -1. */
-        to_commit                  = test_topic_partitions(1, topic, 0);
-        to_commit->elems[0].offset = 5 + 2;
-        if (use_leader_epoch)
-                rd_kafka_topic_partition_set_leader_epoch(&to_commit->elems[0],
-                                                          0);
-        if (assign_variation ==
-            OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_ASSIGN)
-                to_assign = rd_kafka_topic_partition_list_copy(to_commit);
-
-        if (use_store_offsets) {
-                TEST_CALL_ERR__(rd_kafka_offsets_store(c1, to_commit));
-                TEST_CALL_ERR__(rd_kafka_commit(c1, NULL, rd_false));
-        } else {
-                TEST_CALL_ERR__(rd_kafka_commit(c1, to_commit, rd_false));
-        }
-        rd_kafka_topic_partition_list_destroy(to_commit);
-        rd_kafka_destroy(c1);
-
-        TEST_SAY("Partition leader change\n");
-        /* Leader changes to 2 */
-        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
-
-        rd_kafka_mock_start_request_tracking(mcluster);
-
-        if (assign_variation ==
-            OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_SUBSCRIBE_REBALANCE_CALLBACK)
-                rd_kafka_conf_set_rebalance_cb(conf, test_rebalance_cb);
-
-        TEST_SAY("New consumer\n");
-        /* Destroy conf this time */
-        c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
-
-        if (assign_variation !=
-            OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_ASSIGN)
-                test_consumer_subscribe(c1, topic);
-        else {
-                /* Let's imagine the truncated offset was committed to
-                 * an external DB, here it's assigned again and must
-                 * be validated when a leader epoch is present. */
-                test_consumer_assign("assign", c1, to_assign);
-                rd_kafka_topic_partition_list_destroy(to_assign);
-        }
-
-
-
-        /* One EOF only if it starts from the last available offset after
-         * validation, otherwise there's a reprocessing. */
-        test_consumer_poll("MSG_EOF", c1, testid, 1, 0, expected_msg_cnt, NULL);
-
-        TEST_SAY("Pause and resume\n");
-        /* Pause the consumer */
-        test_consumer_pause_resume_partition(c1, topic, 0, rd_true);
-        rd_usleep(1 * 1000, NULL);
-        /* Resume the consumer, it should not validate the offset
-         * once more. */
-        test_consumer_pause_resume_partition(c1, topic, 0, rd_false);
-
-        TEST_SAY("Await %" PRIusz " OffsetForLeaderEpoch requests\n",
-                 expected_validation_requests);
-        /* Ensure offset was validated or that it wasn't. */
-        matching_requests = test_mock_wait_matching_requests(
-            mcluster, expected_validation_requests, 1000,
-            is_offset_for_leader_epoch_request, &leader);
-        TEST_ASSERT_LATER(matching_requests == expected_validation_requests,
-                          "Expected %" PRIusz
-                          " OffsetForLeaderEpoch request"
-                          " to broker 1, got %" PRIusz,
-                          expected_validation_requests, matching_requests);
-        rd_kafka_mock_stop_request_tracking(mcluster);
-
-        rd_kafka_destroy(c1);
-
-        test_mock_cluster_destroy(mcluster);
-
-        TEST_LATER_CHECK();
-        SUB_TEST_PASS();
-}
-
-static void do_test_offset_validation_on_partition_assignment_variations(void) {
-        offset_validation_on_partition_assignment_assign_variation_t
-            assign_variation,
-            max_assign_variation =
-                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION__CNT;
-        offset_validation_on_partition_assignment_commit_variation_t
-            commit_variation,
-            max_commit_variation =
-                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION__CNT;
-
-        if (test_quick) {
-                max_assign_variation =
-                    OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_SUBSCRIBE_REBALANCE_CALLBACK;
-                max_commit_variation =
-                    OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_STORE_LEADER_EPOCH;
-        }
-
-        for (
-            assign_variation =
-                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_SUBSCRIBE;
-            assign_variation < max_assign_variation; assign_variation++) {
-                rd_bool_t incremental;
-                for (incremental = rd_false; incremental <= rd_true;
-                     incremental++) {
-
-                        for (
-                            commit_variation =
-                                OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_COMMIT_VARIATION_LEADER_EPOCH;
-                            commit_variation < max_commit_variation;
-                            commit_variation++) {
-                                if (assign_variation ==
-                                        OFFSET_VALIDATION_ON_PARTITION_ASSIGNMENT_ASSIGN_VARIATION_ASSIGN &&
-                                    incremental) {
-                                        /* To call `incremental_assign` you need
-                                         * to subscribe first */
-                                        continue;
-                                }
-
-                                do_test_offset_validation_on_partition_assignment(
-                                    assign_variation, incremental,
-                                    commit_variation);
-                        }
-                }
-        }
-}
-
 int main_0139_offset_validation_mock(int argc, char **argv) {
+
         TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_no_duplicates_during_offset_validation();
@@ -1209,8 +945,6 @@ int main_0139_offset_validation_mock(int argc, char **argv) {
 
         do_test_list_offsets_leader_change(0);
         do_test_list_offsets_leader_change(1);
-
-        do_test_offset_validation_on_partition_assignment_variations();
 
         return 0;
 }

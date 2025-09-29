@@ -742,7 +742,6 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                         int32_t MaxNumOffsets;
                         rd_kafka_mock_partition_t *mpart = NULL;
                         rd_kafka_resp_err_t err          = all_err;
-                        int32_t LeaderEpoch              = -1;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
 
@@ -808,6 +807,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4) {
                                 /* Response: LeaderEpoch */
                                 const rd_kafka_mock_msgset_t *mset = NULL;
+                                int32_t leader_epoch               = -1;
                                 rd_bool_t on_follower              = rd_false;
 
                                 if (mpart) {
@@ -818,12 +818,12 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                                         if (Offset >= 0 &&
                                             (mset = rd_kafka_mock_msgset_find(
                                                  mpart, Offset, on_follower))) {
-                                                LeaderEpoch =
+                                                leader_epoch =
                                                     mset->leader_epoch;
                                         }
                                 }
 
-                                rd_kafka_buf_write_i32(resp, LeaderEpoch);
+                                rd_kafka_buf_write_i32(resp, leader_epoch);
                         }
 
                         /* Response: Partition tags */
@@ -835,7 +835,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                                      "offset %" PRId64 " (leader epoch %" PRId32
                                      ") for %s: %s",
                                      RD_KAFKAP_STR_PR(&Topic), Partition,
-                                     Offset, LeaderEpoch,
+                                     Offset, mpart ? mpart->leader_epoch : -1,
                                      rd_kafka_offset2str(Timestamp),
                                      rd_kafka_err2str(err));
                 }
@@ -930,13 +930,12 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
                                     mpart, &GroupId);
 
                         /* Response: CommittedOffset */
-                        rd_kafka_buf_write_i64(resp,
-                                               coff ? coff->pos.offset : -1);
+                        rd_kafka_buf_write_i64(resp, coff ? coff->offset : -1);
 
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 5) {
                                 /* Response: CommittedLeaderEpoch */
                                 rd_kafka_buf_write_i32(
-                                    resp, coff ? coff->pos.leader_epoch : -1);
+                                    resp, mpart ? mpart->leader_epoch : -1);
                         }
 
                         /* Response: Metadata */
@@ -953,11 +952,10 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
                                              "Topic %s [%" PRId32
                                              "] returning "
-                                             "committed offset %s"
+                                             "committed offset %" PRId64
                                              " for group %s",
                                              mtopic->name, mpart->id,
-                                             rd_kafka_fetch_pos2str(coff->pos),
-                                             coff->group);
+                                             coff->offset, coff->group);
                         else
                                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
                                              "Topic %.*s [%" PRId32
@@ -1111,7 +1109,6 @@ static int rd_kafka_mock_handle_OffsetCommit(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_mock_partition_t *mpart = NULL;
                         rd_kafka_resp_err_t err          = all_err;
                         int64_t CommittedOffset;
-                        int32_t CommittedLeaderEpoch = -1;
                         rd_kafkap_str_t Metadata;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
@@ -1129,6 +1126,7 @@ static int rd_kafka_mock_handle_OffsetCommit(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_read_i64(rkbuf, &CommittedOffset);
 
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 6) {
+                                int32_t CommittedLeaderEpoch;
                                 rd_kafka_buf_read_i32(rkbuf,
                                                       &CommittedLeaderEpoch);
 
@@ -1147,11 +1145,9 @@ static int rd_kafka_mock_handle_OffsetCommit(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_skip_tags(rkbuf);
 
                         if (!err)
-                                rd_kafka_mock_commit_offset(
-                                    mpart, &GroupId,
-                                    RD_KAFKA_FETCH_POS(CommittedOffset,
-                                                       CommittedLeaderEpoch),
-                                    &Metadata);
+                                rd_kafka_mock_commit_offset(mpart, &GroupId,
+                                                            CommittedOffset,
+                                                            &Metadata);
 
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);

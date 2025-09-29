@@ -9,6 +9,8 @@ librdkafka v2.12.0 is a feature release:
 * Fix for KIP-1102 time based re-bootstrap condition (#5177).
 * Fix for discarding the member epoch in a consumer group heartbeat response when leaving with an inflight HB (#4672).
 * Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
+* Additional KIP-320 related validation: when assigning the offset is validated
+  if leader epoch is specified (#4931).
 * Fix double free of headers in `rd_kafka_produceva` method (@blindspotbounty, #4628).
 * Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry (#5201).
 
@@ -37,6 +39,18 @@ librdkafka v2.12.0 is a feature release:
   accepted compression types causing the metrics to be sent uncompressed.
   Happening since 2.5.0. Since 2.10.1 unit tests are failing when run on
   big-endian architectures (#5183, @paravoid).
+
+### Consumer fixes
+
+* Issues: #5158.
+  Additional KIP-320 related validation: when assigning the offset is validated
+  if a leader epoch is specified. A committed offset could have been truncated
+  in case of unclean leader election and, when a different member starts
+  fetching from it on the new leader, it could get an offset out of range
+  and a subsequent offset reset. The assigned offset is now validated before
+  we start fetching from it and, in case it was truncated, fetching starts
+  from last available offset of given leader epoch.
+  Happens since 2.1.0 (#4931).
 
 ### Producer fixes
 

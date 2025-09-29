@@ -38,10 +38,10 @@
 
 #include "rdunittest.h"
 
-const char *rd_kafka_fetch_states[] = {"none",        "stopping",
-                                       "stopped",     "offset-query",
-                                       "offset-wait", "validate-epoch-wait",
-                                       "active"};
+const char *rd_kafka_fetch_states[] = {"none",          "stopping",
+                                       "stopped",       "offset-query",
+                                       "offset-wait",   "validate-epoch-wait",
+                                       "validate-seek", "active"};
 
 
 static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
@@ -2272,7 +2272,14 @@ static void rd_kafka_toppar_op(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_op0(rktp, rko, replyq);
 }
 
-
+void rd_kafka_toppar_forward_internal(rd_kafka_toppar_t *rktp,
+                                      rd_kafka_q_t *fwdq) {
+        rd_kafka_q_lock(rktp->rktp_fetchq);
+        if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
+                rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
+                                    0 /* no fwd_app */);
+        rd_kafka_q_unlock(rktp->rktp_fetchq);
+}
 
 /**
  * Start consuming partition (async operation).
@@ -2289,11 +2296,7 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_t *rktp,
                                                    rd_kafka_replyq_t replyq) {
         int32_t version;
 
-        rd_kafka_q_lock(rktp->rktp_fetchq);
-        if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
-                rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
-                                    0 /* no fwd_app */);
-        rd_kafka_q_unlock(rktp->rktp_fetchq);
+        rd_kafka_toppar_forward_internal(rktp, fwdq);
 
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);
@@ -2859,6 +2862,44 @@ void rd_kafka_topic_partition_set_current_leader_epoch(
         parpriv = rd_kafka_topic_partition_get_private(rktpar);
 
         parpriv->current_leader_epoch = current_leader_epoch;
+}
+
+/**
+ * @brief Marks the fetch position (offset + leader epoch) as validated or not.
+ * @param rktpar Partition object.
+ * @param fetch_pos_validated Whether the fetch position has been validated.
+ *
+ * @remark See KIP-320 for more information.
+ */
+void rd_kafka_topic_partition_set_fetch_pos_validated(
+    rd_kafka_topic_partition_t *rktpar,
+    rd_bool_t fetch_pos_validated) {
+        rd_kafka_topic_partition_private_t *parpriv;
+
+        /* Avoid allocating private_t if clearing the epoch */
+        if (!fetch_pos_validated || !rktpar->_private)
+                return;
+
+        parpriv = rd_kafka_topic_partition_get_private(rktpar);
+        parpriv->fetch_pos_validated = fetch_pos_validated;
+}
+
+/**
+ * @brief Gets the validation status of the fetch position (offset + leader
+ * epoch).
+ * @param rktpar Partition object.
+ * @return Whether the fetch position has been validated.
+ *
+ * @remark See KIP-320 for more information.
+ */
+rd_bool_t rd_kafka_topic_partition_get_fetch_pos_validated(
+    rd_kafka_topic_partition_t *rktpar) {
+        const rd_kafka_topic_partition_private_t *parpriv;
+
+        if (!(parpriv = rktpar->_private))
+                return rd_false;
+
+        return parpriv->fetch_pos_validated;
 }
 
 /**

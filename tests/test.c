@@ -2448,7 +2448,7 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
         test_conf_init(NULL, &topic_conf, 0);
 
         /* Make sure all replicas are in-sync after producing
-         * so that consume test wont fail - this is overriden if the user sets
+         * so that consume test won't fail - this is overridden if the user sets
          * a different value explicitly. */
         rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
                                 errstr, sizeof(errstr));

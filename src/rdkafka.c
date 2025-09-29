@@ -2984,6 +2984,10 @@ static RD_UNUSED int rd_kafka_consume_start0(rd_kafka_topic_t *rkt,
                 return -1;
         }
 
+        /*
+         * We cannot validate this offset as the legacy API doesn't
+         * provide the leader epoch.
+         */
         rd_kafka_toppar_op_fetch_start(rktp, RD_KAFKA_FETCH_POS(offset, -1),
                                        rkq, RD_KAFKA_NO_REPLYQ);
 

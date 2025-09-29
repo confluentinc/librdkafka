@@ -620,8 +620,6 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_broker_delegate(rd_kafka_toppar_t *rktp,
                                      rd_kafka_broker_t *rkb);
 
-void rd_kafka_toppar_forward_internal(rd_kafka_toppar_t *rktp,
-                                      rd_kafka_q_t *fwdq);
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_t *rktp,
                                                    rd_kafka_fetch_pos_t pos,

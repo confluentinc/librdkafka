@@ -1748,6 +1748,16 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
                                       "no previously committed offset "
                                       "available");
 
+        } else if (pos.leader_epoch >= -1) {
+                rd_kafka_toppar_set_next_fetch_position(rktp, pos);
+                rd_kafka_toppar_set_offset_validation_position(rktp, pos);
+                /* This is necessary as it only starts
+                 * validating from states ACTIVE or
+                 * VALIDATE_EPOCH_WAIT. */
+                rd_kafka_toppar_set_fetch_state(
+                    rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
+                rd_kafka_offset_validate(rktp, "validate fetch start position");
+
         } else {
                 rd_kafka_toppar_set_next_fetch_position(rktp, pos);
 
@@ -2272,14 +2282,7 @@ static void rd_kafka_toppar_op(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_op0(rktp, rko, replyq);
 }
 
-void rd_kafka_toppar_forward_internal(rd_kafka_toppar_t *rktp,
-                                      rd_kafka_q_t *fwdq) {
-        rd_kafka_q_lock(rktp->rktp_fetchq);
-        if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
-                rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
-                                    0 /* no fwd_app */);
-        rd_kafka_q_unlock(rktp->rktp_fetchq);
-}
+
 
 /**
  * Start consuming partition (async operation).
@@ -2296,7 +2299,11 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_t *rktp,
                                                    rd_kafka_replyq_t replyq) {
         int32_t version;
 
-        rd_kafka_toppar_forward_internal(rktp, fwdq);
+        rd_kafka_q_lock(rktp->rktp_fetchq);
+        if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
+                rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
+                                    0 /* no fwd_app */);
+        rd_kafka_q_unlock(rktp->rktp_fetchq);
 
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);

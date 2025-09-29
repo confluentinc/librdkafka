@@ -489,54 +489,29 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                          *
                          * Start fetcher for partition and forward partition's
                          * fetchq to consumer group's queue. */
-                        rd_kafka_fetch_pos_t pos =
-                            rd_kafka_topic_partition_get_fetch_pos(rktpar);
 
-                        /* Reset the (lib) pause flag which may have
-                         * been set by the cgrp when scheduling the
-                         * rebalance callback. */
+                        rd_kafka_dbg(rk, CGRP, "SRVPEND",
+                                     "Starting pending assigned partition "
+                                     "%s [%" PRId32 "] at %s",
+                                     rktpar->topic, rktpar->partition,
+                                     rd_kafka_fetch_pos2str(
+                                         rd_kafka_topic_partition_get_fetch_pos(
+                                             rktpar)));
+
+                        /* Reset the (lib) pause flag which may have been set by
+                         * the cgrp when scheduling the rebalance callback. */
                         rd_kafka_toppar_op_pause_resume(
                             rktp, rd_false /*resume*/,
                             RD_KAFKA_TOPPAR_F_LIB_PAUSE, RD_KAFKA_NO_REPLYQ);
 
-                        if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset) &&
-                            pos.leader_epoch != -1) {
-                                rd_kafka_dbg(
-                                    rk, CGRP, "SRVPEND",
-                                    "Validating assigned partition offset "
-                                    "%s [%" PRId32 "] at %s",
-                                    rktpar->topic, rktpar->partition,
-                                    rd_kafka_fetch_pos2str(pos));
+                        /* Start the fetcher */
+                        rktp->rktp_started = rd_true;
+                        rk->rk_consumer.assignment.started_cnt++;
 
-                                rd_kafka_toppar_forward_internal(
-                                    rktp, rk->rk_consumer.q);
-                                rd_kafka_toppar_lock(rktp);
-                                rd_kafka_toppar_set_fetch_state(
-                                    rktp,
-                                    RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
-                                rd_kafka_toppar_set_next_fetch_position(rktp,
-                                                                        pos);
-                                rd_kafka_toppar_set_offset_validation_position(
-                                    rktp, pos);
-                                rd_kafka_offset_validate(rktp, "offset fetch");
-                                rd_kafka_toppar_unlock(rktp);
-
-                        } else {
-                                rd_kafka_dbg(
-                                    rk, CGRP, "SRVPEND",
-                                    "Starting pending assigned partition "
-                                    "%s [%" PRId32 "] at %s",
-                                    rktpar->topic, rktpar->partition,
-                                    rd_kafka_fetch_pos2str(pos));
-
-                                /* Start the fetcher */
-                                rktp->rktp_started = rd_true;
-                                rk->rk_consumer.assignment.started_cnt++;
-
-                                rd_kafka_toppar_op_fetch_start(
-                                    rktp, pos, rk->rk_consumer.q,
-                                    RD_KAFKA_NO_REPLYQ);
-                        }
+                        rd_kafka_toppar_op_fetch_start(
+                            rktp,
+                            rd_kafka_topic_partition_get_fetch_pos(rktpar),
+                            rk->rk_consumer.q, RD_KAFKA_NO_REPLYQ);
 
 
                 } else if (can_query_offsets) {

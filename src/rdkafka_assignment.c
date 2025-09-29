@@ -492,15 +492,10 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                         rd_kafka_fetch_pos_t pos =
                             rd_kafka_topic_partition_get_fetch_pos(rktpar);
 
-                        /* Reset the (lib) pause flag which may have
-                         * been set by the cgrp when scheduling the
-                         * rebalance callback. */
-                        rd_kafka_toppar_op_pause_resume(
-                            rktp, rd_false /*resume*/,
-                            RD_KAFKA_TOPPAR_F_LIB_PAUSE, RD_KAFKA_NO_REPLYQ);
-
                         if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset) &&
-                            pos.leader_epoch != -1) {
+                            pos.leader_epoch != -1 &&
+                            !rd_kafka_topic_partition_get_fetch_pos_validated(
+                                rktpar)) {
                                 rd_kafka_dbg(
                                     rk, CGRP, "SRVPEND",
                                     "Validating assigned partition offset "
@@ -528,6 +523,14 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                                     "%s [%" PRId32 "] at %s",
                                     rktpar->topic, rktpar->partition,
                                     rd_kafka_fetch_pos2str(pos));
+
+                                /* Reset the (lib) pause flag which may have
+                                 * been set by the cgrp when scheduling the
+                                 * rebalance callback. */
+                                rd_kafka_toppar_op_pause_resume(
+                                    rktp, rd_false /*resume*/,
+                                    RD_KAFKA_TOPPAR_F_LIB_PAUSE,
+                                    RD_KAFKA_NO_REPLYQ);
 
                                 /* Start the fetcher */
                                 rktp->rktp_started = rd_true;

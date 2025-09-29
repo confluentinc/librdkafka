@@ -940,6 +940,7 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
         rd_kafka_toppar_lock(rktp);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_VALIDATING;
         rd_kafka_toppar_unlock(rktp);
+        rd_bool_t assignment_serve = rd_false;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 rd_kafka_toppar_destroy(rktp); /* Drop refcnt */
@@ -1084,12 +1085,28 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                            rktp->rktp_partition, end_offset,
                            end_offset_leader_epoch);
 
-                rd_kafka_toppar_set_fetch_state(rktp,
-                                                RD_KAFKA_TOPPAR_FETCH_ACTIVE);
+                if (rd_kafka_is_simple_consumer(rk) || rktp->rktp_started) {
+                        /* Already started, just set state to active */
+                        rd_kafka_toppar_set_fetch_state(
+                            rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
+                } else {
+                        rd_kafka_topic_partition_t *rktpar_pending =
+                            rd_kafka_topic_partition_list_add_copy(
+                                rk->rk_consumer.assignment.pending, rktpar);
+                        rd_kafka_topic_partition_set_from_fetch_pos(
+                            rktpar_pending, rktp->rktp_offset_validation_pos);
+                        rd_kafka_topic_partition_set_fetch_pos_validated(
+                            rktpar_pending, rd_true);
+                        /* Serve the assignment after releasing the lock
+                         * to respect lock order. */
+                        assignment_serve = rd_true;
+                }
         }
 
 done:
         rd_kafka_toppar_unlock(rktp);
+        if (assignment_serve)
+                rd_kafka_assignment_serve(rk);
 
         if (parts)
                 rd_kafka_topic_partition_list_destroy(parts);

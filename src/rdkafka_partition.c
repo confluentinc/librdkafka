@@ -2865,6 +2865,44 @@ void rd_kafka_topic_partition_set_current_leader_epoch(
 }
 
 /**
+ * @brief Marks the fetch position (offset + leader epoch) as validated or not.
+ * @param rktpar Partition object.
+ * @param fetch_pos_validated Whether the fetch position has been validated.
+ *
+ * @remark See KIP-320 for more information.
+ */
+void rd_kafka_topic_partition_set_fetch_pos_validated(
+    rd_kafka_topic_partition_t *rktpar,
+    rd_bool_t fetch_pos_validated) {
+        rd_kafka_topic_partition_private_t *parpriv;
+
+        /* Avoid allocating private_t if clearing the epoch */
+        if (!fetch_pos_validated || !rktpar->_private)
+                return;
+
+        parpriv = rd_kafka_topic_partition_get_private(rktpar);
+        parpriv->fetch_pos_validated = fetch_pos_validated;
+}
+
+/**
+ * @brief Gets the validation status of the fetch position (offset + leader
+ * epoch).
+ * @param rktpar Partition object.
+ * @return Whether the fetch position has been validated.
+ *
+ * @remark See KIP-320 for more information.
+ */
+rd_bool_t rd_kafka_topic_partition_get_fetch_pos_validated(
+    rd_kafka_topic_partition_t *rktpar) {
+        const rd_kafka_topic_partition_private_t *parpriv;
+
+        if (!(parpriv = rktpar->_private))
+                return rd_false;
+
+        return parpriv->fetch_pos_validated;
+}
+
+/**
  * @brief Set offset and leader epoch from a fetchpos.
  */
 void rd_kafka_topic_partition_set_from_fetch_pos(

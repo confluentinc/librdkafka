@@ -499,6 +499,13 @@ typedef struct rd_kafka_topic_partition_private_s {
         int32_t current_leader_epoch;
         /** Leader epoch if known, else -1. */
         int32_t leader_epoch;
+        /**
+         * Is fetch position (offset + leader_epoch) validated?
+         * This field isn't copied automatically
+         * when copying or updating the struct to avoid unintended
+         * skipped validations.
+         */
+        rd_bool_t fetch_pos_validated;
         /** Topic id. */
         rd_kafka_Uuid_t topic_id;
 } rd_kafka_topic_partition_private_t;
@@ -848,29 +855,20 @@ rd_kafka_topic_partition_get_private(rd_kafka_topic_partition_t *rktpar) {
 }
 
 
-/**
- * @returns the partition leader current epoch, if relevant and known,
- *          else -1.
- *
- * @param rktpar Partition object.
- *
- * @remark See KIP-320 for more information.
- */
 int32_t rd_kafka_topic_partition_get_current_leader_epoch(
     const rd_kafka_topic_partition_t *rktpar);
 
 
-/**
- * @brief Sets the partition leader current epoch (use -1 to clear).
- *
- * @param rktpar Partition object.
- * @param leader_epoch Partition leader current epoch, use -1 to reset.
- *
- * @remark See KIP-320 for more information.
- */
 void rd_kafka_topic_partition_set_current_leader_epoch(
     rd_kafka_topic_partition_t *rktpar,
     int32_t leader_epoch);
+
+void rd_kafka_topic_partition_set_fetch_pos_validated(
+    rd_kafka_topic_partition_t *rktpar,
+    rd_bool_t fetch_pos_validated);
+
+rd_bool_t rd_kafka_topic_partition_get_fetch_pos_validated(
+    rd_kafka_topic_partition_t *rktpar);
 
 /**
  * @returns the partition's rktp if set (no refcnt increase), else NULL.

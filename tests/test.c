@@ -526,7 +526,7 @@ struct test tests[] = {
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
-    _TEST(0139_offset_validation_mock, TEST_F_LOCAL),
+    _TEST(0139_offset_validation_mock, 0),
     _TEST(0140_commit_metadata, 0),
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
@@ -7212,9 +7212,6 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms) {
         rd_kafka_queue_t *q;
         char errstr[256];
         int64_t abs_timeout = test_clock() + ((int64_t)timeout_ms * 1000);
-
-        if (test_flags & TEST_F_LOCAL)
-                return RD_KAFKA_RESP_ERR_NO_ERROR; /* No topics to delete */
 
         rk = test_create_producer();
 

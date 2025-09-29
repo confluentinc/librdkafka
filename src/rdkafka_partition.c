@@ -38,10 +38,10 @@
 
 #include "rdunittest.h"
 
-const char *rd_kafka_fetch_states[] = {"none",        "stopping",
-                                       "stopped",     "offset-query",
-                                       "offset-wait", "validate-epoch-wait",
-                                       "active"};
+const char *rd_kafka_fetch_states[] = {"none",          "stopping",
+                                       "stopped",       "offset-query",
+                                       "offset-wait",   "validate-epoch-wait",
+                                       "validate-seek", "active"};
 
 
 static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
@@ -2272,7 +2272,14 @@ static void rd_kafka_toppar_op(rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_op0(rktp, rko, replyq);
 }
 
-
+void rd_kafka_toppar_forward_internal(rd_kafka_toppar_t *rktp,
+                                      rd_kafka_q_t *fwdq) {
+        rd_kafka_q_lock(rktp->rktp_fetchq);
+        if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
+                rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
+                                    0 /* no fwd_app */);
+        rd_kafka_q_unlock(rktp->rktp_fetchq);
+}
 
 /**
  * Start consuming partition (async operation).
@@ -2289,11 +2296,7 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_t *rktp,
                                                    rd_kafka_replyq_t replyq) {
         int32_t version;
 
-        rd_kafka_q_lock(rktp->rktp_fetchq);
-        if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
-                rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
-                                    0 /* no fwd_app */);
-        rd_kafka_q_unlock(rktp->rktp_fetchq);
+        rd_kafka_toppar_forward_internal(rktp, fwdq);
 
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);

@@ -548,7 +548,7 @@ rd_kafka_mock_committed_offset_find(const rd_kafka_mock_partition_t *mpart,
 rd_kafka_mock_committed_offset_t *
 rd_kafka_mock_commit_offset(rd_kafka_mock_partition_t *mpart,
                             const rd_kafkap_str_t *group,
-                            rd_kafka_fetch_pos_t pos,
+                            int64_t offset,
                             const rd_kafkap_str_t *metadata) {
         rd_kafka_mock_committed_offset_t *coff;
 
@@ -571,13 +571,12 @@ rd_kafka_mock_commit_offset(rd_kafka_mock_partition_t *mpart,
 
         coff->metadata = rd_kafkap_str_copy(metadata);
 
-        coff->pos = pos;
+        coff->offset = offset;
 
         rd_kafka_dbg(mpart->topic->cluster->rk, MOCK, "MOCK",
-                     "Topic %s [%" PRId32
-                     "] committing offset %s"
+                     "Topic %s [%" PRId32 "] committing offset %" PRId64
                      " for group %.*s",
-                     mpart->topic->name, mpart->id, rd_kafka_fetch_pos2str(pos),
+                     mpart->topic->name, mpart->id, offset,
                      RD_KAFKAP_STR_PR(group));
 
         return coff;

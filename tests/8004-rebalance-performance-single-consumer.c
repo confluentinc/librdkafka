@@ -27,61 +27,63 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- #include <stdatomic.h>
+#include <stdatomic.h>
 
- #include "test.h"
- /* Typical include path would be <librdkafka/rdkafka.h>, but this program
-  * is built from within the librdkafka source tree and thus differs. */
- #include "rdkafka.h" /* for Kafka driver */
- #include "rdtime.h"
+#include "test.h"
+/* Typical include path would be <librdkafka/rdkafka.h>, but this program
+ * is built from within the librdkafka source tree and thus differs. */
+#include "rdkafka.h" /* for Kafka driver */
+#include "rdtime.h"
 
 static int number_of_test_runs = 20;
-static int partition_cnt = 6;
-static int topic_cnt = 1;
+static int partition_cnt       = 6;
+static int topic_cnt           = 1;
 // static int consumer_cnt = 6;
 static atomic_int run = 0;
 
 typedef struct consumer_s {
-    int consumer_id;
+        int consumer_id;
 } consumer_t;
 
 typedef struct producer_s {
-    int producer_id;
-    char* topic;
+        int producer_id;
+        char *topic;
 } producer_t;
 
 static int producer_thread(void *arg) {
-    producer_t *producer_args = arg;
-    rd_kafka_t *rk;
-    rd_kafka_topic_t *rkt;
-    char buf[50];
-    char payload[64];
-    int i = 0;
+        producer_t *producer_args = arg;
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        char buf[50];
+        char payload[64];
+        int i = 0;
 
-    rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-    rkt = rd_kafka_topic_new(rk, producer_args->topic, NULL);
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, NULL);
+        rkt = rd_kafka_topic_new(rk, producer_args->topic, NULL);
 
-    TEST_SAY("Producer %d started for topic %s\n",
-           producer_args->producer_id, producer_args->topic);
+        TEST_SAY("Producer %d started for topic %s\n",
+                 producer_args->producer_id, producer_args->topic);
 
-    while(run) {
-            snprintf(buf, sizeof(buf), "Producer %d message %d", producer_args->producer_id, i);
-            snprintf(payload, sizeof(payload), "Payload %s", buf);
-            rd_kafka_produce(
-                rkt, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
-                payload, strlen(payload),
-                NULL, 0, NULL);
-            rd_usleep(5000, NULL); /* 5ms */
-            i++;
-            i %= 2147483643;
-    }
-    
-    rd_kafka_flush(rk, 10000); // Wait for all messages to be sent before exiting
-    rd_kafka_topic_destroy(rkt);
-    rd_kafka_destroy(rk);
-    rd_free(producer_args->topic); // Free the topic string allocated in main
+        while (run) {
+                snprintf(buf, sizeof(buf), "Producer %d message %d",
+                         producer_args->producer_id, i);
+                snprintf(payload, sizeof(payload), "Payload %s", buf);
+                rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA,
+                                 RD_KAFKA_MSG_F_COPY, payload, strlen(payload),
+                                 NULL, 0, NULL);
+                rd_usleep(5000, NULL); /* 5ms */
+                i++;
+                i %= 2147483643;
+        }
 
-    return 0;
+        rd_kafka_flush(
+            rk, 10000);  // Wait for all messages to be sent before exiting
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
+        rd_free(
+            producer_args->topic);  // Free the topic string allocated in main
+
+        return 0;
 }
 
 int do_test() {
@@ -107,7 +109,8 @@ int do_test() {
         run = 1;
 
         for (i = 0; i < topic_cnt; i++) {
-                topics[i] = test_mk_topic_name("8004_rebalance-performance-single-consumer", 1);
+                topics[i] = test_mk_topic_name(
+                    "8004_rebalance-performance-single-consumer", 1);
                 test_create_topic_wait_exists(NULL, topics[i], partition_cnt, 1,
                                               5000);
 
@@ -128,8 +131,8 @@ int do_test() {
         test_consumer_wait_assignment(consumer, rd_false, 0);
         while (test_consumer_poll_once(consumer, NULL, timeout_ms) != 1)
                 ;
-        end_time     = rd_uclock();
-        run          = 0;
+        end_time        = rd_uclock();
+        run             = 0;
         elapsed_time_ms = (end_time - start_time) / 1000;
         TEST_SAY("Rebalance took %llds and %lld ms\n", elapsed_time_ms / 1000,
                  (elapsed_time_ms % 1000));
@@ -147,14 +150,15 @@ int do_test() {
 }
 
 int main_8004_rebalance_performance_single_consumer(int argc, char **argv) {
-    int avg_rebalance_time_ms = 0;
-    int current_run = 1;
-    for (current_run = 1; current_run <= number_of_test_runs; current_run++) {
-        TEST_SAY("Starting run %d of %d\n", current_run, number_of_test_runs);
-        avg_rebalance_time_ms += do_test();
-    }
-    avg_rebalance_time_ms /= number_of_test_runs;
-    TEST_SAY("Average rebalance time: %d ms\n", avg_rebalance_time_ms);
-    return 0;
+        int avg_rebalance_time_ms = 0;
+        int current_run           = 1;
+        for (current_run = 1; current_run <= number_of_test_runs;
+             current_run++) {
+                TEST_SAY("Starting run %d of %d\n", current_run,
+                         number_of_test_runs);
+                avg_rebalance_time_ms += do_test();
+        }
+        avg_rebalance_time_ms /= number_of_test_runs;
+        TEST_SAY("Average rebalance time: %d ms\n", avg_rebalance_time_ms);
+        return 0;
 }
-

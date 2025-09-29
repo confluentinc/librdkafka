@@ -128,9 +128,7 @@ static void do_test_strategy_ordering(const char *assignor,
         test_create_topic_wait_exists(NULL, topic, _PART_CNT, -1, 5000);
 
         test_sleep(3);
-        test_create_topic(NULL, topic, _PART_CNT, -1);
 
-        /* Wait for topic metadata to propagate to avoid race conditions */
         test_wait_topic_exists(NULL, topic, tmout_multip(10000));
         test_sleep(3);
 

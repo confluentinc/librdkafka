@@ -350,8 +350,6 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, -1);
-
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
 
         test_sleep(3);

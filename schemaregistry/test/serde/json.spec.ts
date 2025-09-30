@@ -206,6 +206,75 @@ const defSchema = `
 	"type" : "object"
 }
 `
+const messageSchema = `
+	  {
+
+        "type": "object",
+        "properties": {
+            "messageType": {
+                "type": "string"
+            },
+            "version": {
+                "type": "string"
+            },
+            "payload": {
+                "type": "object",
+                "oneOf": [
+                    {
+                        "$ref": "#/$defs/authentication_request"
+                    },
+                    {
+                        "$ref": "#/$defs/authentication_status"
+                    }
+                ]
+            }
+        },
+        "required": [
+            "payload",
+            "messageType",
+            "version"
+        ],
+        "$defs": {
+            "authentication_request": {
+                "properties": {
+                    "messageId": {
+                        "type": "string",
+                        "confluent:tags": ["PII"]
+                    },
+                    "timestamp": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "requestId": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "messageId",
+                    "timestamp"
+                ]
+            },
+            "authentication_status": {
+                "properties": {
+                    "messageId": {
+                        "type": "string",
+                        "confluent:tags": ["PII"]
+                    },
+                    "authType": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "messageId",
+                    "authType"
+                ]
+            }
+        }
+    }
+`
 
 describe('JsonSerializer', () => {
   afterEach(async () => {
@@ -542,6 +611,54 @@ describe('JsonSerializer', () => {
     expect(obj2.stringField).toEqual('hi-suffix');
     expect(obj2.boolField).toEqual(obj.boolField);
     expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('cel field transform with union of refs', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: JsonSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new JsonSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITE,
+      type: 'CEL_FIELD',
+      expr: "name == 'messageId' ; value + '-suffix'"
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'JSON',
+      schema: messageSchema,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      messageType: 'authentication_request',
+      version: '1.0',
+      payload: {
+        messageId: '12345',
+        timestamp: 123456789
+      }
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: JsonDeserializerConfig = {}
+    let deser = new JsonDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.messageType).toEqual(obj.messageType);
+    expect(obj2.version).toEqual(obj.version);
+    expect(obj2.payload.messageId).toEqual('12345-suffix');
+    expect(obj2.payload.timestamp).toEqual(obj.payload.timestamp);
   })
   it('basic encryption', async () => {
     let conf: ClientConfig = {

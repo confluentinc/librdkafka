@@ -404,13 +404,15 @@ async function transformField(ctx: RuleContext, path: string, propName: string, 
   try {
     ctx.enterField(msg, fullName, propName, getType(propSchema), getInlineTags(propSchema))
     let value = msg[propName]
-    const newVal = await transform(ctx, propSchema, fullName, value, fieldTransform)
-    if (ctx.rule.kind === 'CONDITION') {
-      if (newVal === false) {
-        throw new RuleConditionError(ctx.rule)
+    if (value != null) {
+      const newVal = await transform(ctx, propSchema, fullName, value, fieldTransform)
+      if (ctx.rule.kind === 'CONDITION') {
+        if (newVal === false) {
+          throw new RuleConditionError(ctx.rule)
+        }
+      } else {
+        msg[propName] = newVal
       }
-    } else {
-      msg[propName] = newVal
     }
   } finally {
     ctx.leaveField()
@@ -453,6 +455,9 @@ function getType(schema: DereferencedJSONSchema): FieldType {
     return FieldType.NULL
   }
   if (schema.type == null) {
+    if (schema.properties != null && Object.keys(schema.properties).length > 0) {
+      return FieldType.RECORD
+    }
     return FieldType.NULL
   }
   if (Array.isArray(schema.type)) {

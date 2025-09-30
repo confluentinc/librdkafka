@@ -123,6 +123,13 @@ void do_test_OffsetFetch_stale_member_epoch_error(
         SUB_TEST_PASS();
 }
 
+/**
+ * Variations:
+ *    - TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_AUTOMATICALLY: commit
+ *          stored offsets passing NULL
+ *    - TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_MANUALLY: commit passed
+ *          offsets
+ */
 typedef enum do_test_OffsetCommit_manual_error_variation_s {
         TEST_MANUAL_COMMIT_ERROR_VARIATION_STORE_OFFSET_AUTOMATICALLY = 0,
         TEST_MANUAL_COMMIT_ERROR_VARIATION_STORE_OFFSET_MANUALLY      = 1,
@@ -134,13 +141,6 @@ typedef enum do_test_OffsetCommit_manual_error_variation_s {
  *        should return the error to the caller, even if the error
  *        is a partition level error.
  *        These errors aren't retried.
- *
- *        Variations:
- *
- *        - TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_AUTOMATICALLY: commit
- * stored offsets passing NULL
- *        - TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_MANUALLY: commit passed
- * offsets
  */
 void do_test_OffsetCommit_manual_error(
     rd_kafka_mock_cluster_t *mcluster,
@@ -211,45 +211,45 @@ void do_test_OffsetCommit_manual_error(
         SUB_TEST_PASS();
 }
 
-typedef enum do_test_auto_commit_stale_member_epoch_error_variation_t {
+/**
+ * Scenarios:
+ * during_revocation: the auto-commit is triggered by a revocation,
+ *                    otherwise it's triggered by the consumer close.
+ * session_times_out: Session times out giving UNKNOWN_MEMBER_ID, otherwise
+ *                    commit succeeds after last STALE_MEMBER_EPOCH. When
+ *                    session times out the auto-commit fails and messages
+ *                    are consumed again.
+
+ * Variations:
+ *    - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_NO_TIMEOUT:
+ *          during_revocation=false, session_times_out=false
+ *    - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_WITH_TIMEOUT:
+ *          during_revocation=false, session_times_out=true
+ *    - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_NO_TIMEOUT:
+ *          during_revocation=true, session_times_out=false
+ *    - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_WITH_TIMEOUT:
+ *          during_revocation=true, session_times_out=true
+ */
+typedef enum do_test_OffsetCommit_automatic_stale_member_epoch_error_variation_t {
         TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_NO_TIMEOUT = 0,
         TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_WITH_TIMEOUT =
             1,
         TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_NO_TIMEOUT   = 2,
         TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_WITH_TIMEOUT = 3,
         TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION__CNT,
-} test_auto_commit_stale_member_epoch_error_variation_t;
+} do_test_OffsetCommit_automatic_stale_member_epoch_error_variation_t;
 
 /**
  * @brief When a partition is revoked, with auto-commit enabled,
  *        if the RPC returns STALE_MEMBER_EPOCH for one of the
  *        partitions, it should be retried until the member is
  *        fenced.
- *
- *        Variations:
- *
- *        during_revocation: the auto-commit is triggered by a revocation,
- *                           otherwise it's triggered by the consumer close.
- *        session_times_out: Session times out giving UNKNOWN_MEMBER_ID,
- *                           otherwise commit succeeds after
- *                           last STALE_MEMBER_EPOCH.
- *                           When session times out the auto-commit fails
- *                           and messages are consumed again.
- *
- *        - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_NO_TIMEOUT:
- * during_revocation=false, session_times_out=false
- *        -
- * TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_WITH_TIMEOUT:
- * during_revocation=false, session_times_out=true
- *        - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_NO_TIMEOUT:
- * during_revocation=true, session_times_out=false
- *        - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_WITH_TIMEOUT:
- * during_revocation=true, session_times_out=true
  */
 void do_test_OffsetCommit_automatic_stale_member_epoch_error(
     rd_kafka_mock_cluster_t *mcluster,
     const char *bootstraps,
-    test_auto_commit_stale_member_epoch_error_variation_t variation) {
+    do_test_OffsetCommit_automatic_stale_member_epoch_error_variation_t
+        variation) {
         rd_kafka_t *consumer;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;

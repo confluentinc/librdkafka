@@ -3125,7 +3125,8 @@ rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
     int line,
     rd_kafka_t *rk,
     const rd_kafka_topic_partition_list_t *expected_assignment) {
-        rd_kafka_topic_partition_list_t *assignment, *expected_assignment_copy;
+        rd_kafka_topic_partition_list_t *assignment,
+            *expected_assignment_copy = NULL;
         rd_kafka_resp_err_t err;
         int i;
         rd_bool_t ret = rd_true;
@@ -3162,6 +3163,8 @@ rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
         }
 
 done:
+        RD_IF_FREE(expected_assignment_copy,
+                   rd_kafka_topic_partition_list_destroy);
         rd_kafka_topic_partition_list_destroy(assignment);
         return ret;
 }
@@ -3182,22 +3185,19 @@ void test_consumer_wait_assignment_topic_partition_list0(
         int i;
         rd_ts_t end        = test_clock() + timeout_ms * 1000;
         rd_bool_t verified = rd_false;
-        rd_kafka_topic_partition_list_t *expected_assignment_copy;
 
         TEST_SAY("Verifying assignment\n");
-        expected_assignment_copy =
-            rd_kafka_topic_partition_list_copy(expected_assignment);
         TEST_SAYL(4, "%s expected assignment (%d partition(s)):\n",
                   rd_kafka_name(rk), expected_assignment->cnt);
-        for (i = 0; i < expected_assignment_copy->cnt; i++)
+        for (i = 0; i < expected_assignment->cnt; i++)
                 TEST_SAYL(4, " %s [%" PRId32 "]\n",
-                          expected_assignment_copy->elems[i].topic,
-                          expected_assignment_copy->elems[i].partition);
+                          expected_assignment->elems[i].topic,
+                          expected_assignment->elems[i].partition);
 
         do {
                 verified =
                     test_consumer_verify_assignment_topic_partition_list0(
-                        func, line, rk, expected_assignment_copy);
+                        func, line, rk, expected_assignment);
                 if (verified)
                         break;
 

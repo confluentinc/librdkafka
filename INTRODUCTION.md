@@ -93,7 +93,7 @@ librdkafka also provides a native C++ interface.
       - [Rebalance Callback Migration](#rebalance-callback-migration)
         - [Range Assignor (Classic)](#range-assignor-classic)
         - [Incremental Assignor (Including Range in Consumer / KIP-848, Any Protocol)](#incremental-assignor-including-range-in-consumer--kip-848-any-protocol)
-      - [Online Upgrade and Downgrade](#online-upgrade-and-downgrade)
+      - [Upgrade and Downgrade](#upgrade-and-downgrade)
       - [Migration Checklist (Next-Gen Protocol / KIP-848)](#migration-checklist-next-gen-protocol--kip-848)
     - [Note on Batch consume APIs](#note-on-batch-consume-apis)
     - [Topics](#topics)
@@ -1797,7 +1797,7 @@ All KIP-848 features are supported including:
 - **Session timeout:** Classic enforced on client; KIP-848 enforced on broker
 - **Auto-commit on close:** Classic stops at client session timeout; KIP-848 retries until remote timeout
 - **Unknown topics:** KIP-848 does not return error on subscription if topic missing
-- **Online Upgrade/Downgrade:** KIP-848 supports online upgrade/downgrade from/to `classic` and `consumer` protocols
+- **Upgrade/Downgrade:** KIP-848 supports upgrade/downgrade from/to `classic` and `consumer` protocols
 
 <a name="minimal-example-config"></a>
 #### Minimal Example Config
@@ -1883,27 +1883,27 @@ static void rebalance_cb (rd_kafka_t *rk,
 - The `partitions` list contains **only partitions being added or revoked**, not the full partition list as in the classic `rd_kafka_assign()`.
 - Incremental assignors (including range) are **supported in both classic and KIP-848 protocols**, but this callback is required for KIP-848.
 
-<a name="online-upgrade-and-downgrade"></a>
-#### Online Upgrade and Downgrade
+<a name="upgrade-and-downgrade"></a>
+#### Upgrade and Downgrade
 
 - A group made up entirely of `classic` consumers runs under the classic protocol.
 - The group is **upgraded to the consumer protocol** as soon as at least one `consumer` protocol member joins.
 - The group is **downgraded back to the classic protocol** if the last `consumer` protocol member leaves while `classic` members remain.
-- Both **online upgrade** (classic → consumer) and **online downgrade** (consumer → classic) are supported.
+- Both **rolling upgrade** (classic → consumer) and **rolling downgrade** (consumer → classic) are supported.
 
 
 <a name="migration-checklist-next-gen-protocol--kip-848"></a>
 #### Migration Checklist (Next-Gen Protocol / KIP-848)
 
-- [ ] Upgrade to **librdkafka ≥ 2.12.0** (GA release)
-- [ ] Run against **Kafka brokers ≥ 4.0.0**
-- [ ] Set `group.protocol=consumer`
-- [ ] Optionally set `group.remote.assignor`; leave `NULL` for broker-controlled (default: `uniform`), valid options: `uniform` or `range`
-- [ ] Replace deprecated configs with new ones
-- [ ] Update rebalance callbacks to **incremental APIs only**
-- [ ] Review static membership handling (`group.instance.id`)
-- [ ] Ensure proper shutdown to avoid fencing issues
-- [ ] Adjust error handling for unknown topics and authorization failures
+1. Upgrade to **librdkafka ≥ 2.12.0** (GA release)
+2. Run against **Kafka brokers ≥ 4.0.0**
+3. Set `group.protocol=consumer`
+4. Optionally set `group.remote.assignor`; leave `NULL` for broker-controlled (default: `uniform`), valid options: `uniform` or `range`
+5. Replace deprecated configs with new ones
+6. Update rebalance callbacks to **incremental APIs only**
+7. Review static membership handling (`group.instance.id`)
+8. Ensure proper shutdown to avoid fencing issues
+9. Adjust error handling for unknown topics and authorization failures
 
 
 <a name="note-on-batch-consume-apis"></a>

@@ -904,7 +904,7 @@ static void do_test_subscribe_many_updates(rd_bool_t with_rebalance_cb) {
                         test_consumer_wait_assignment_topic_partition_list(
                             rk,
                             /* poll when we have a rebalance callback */
-                            with_rebalance_cb, expected_assignment, 10000);
+                            with_rebalance_cb, expected_assignment, 30000);
                         rd_kafka_topic_partition_list_destroy(
                             expected_assignment);
                 }

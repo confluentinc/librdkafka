@@ -836,6 +836,7 @@ static void do_test_subscribe_many_updates(rd_bool_t with_rebalance_cb) {
         char *topics[TOPIC_CNT] = {0};
         char *topic;
         char *group;
+        size_t i;
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         const int partition_cnt = 4;
@@ -843,12 +844,11 @@ static void do_test_subscribe_many_updates(rd_bool_t with_rebalance_cb) {
         SUB_TEST("%s", with_rebalance_cb ? "with rebalance callback"
                                          : "without rebalance callback");
 
-        RD_ARRAY_FOREACH_INDEX(
-            topic, topics, i, ({
-                    char topic_i[17];
-                    rd_snprintf(topic_i, sizeof(topic_i), "topic%" PRIusz, i);
-                    topics[i] = rd_strdup(test_mk_topic_name(topic_i, 1));
-            }));
+        RD_ARRAY_FOREACH_INDEX(topic, topics, i) {
+                char topic_i[17];
+                rd_snprintf(topic_i, sizeof(topic_i), "topic%" PRIusz, i);
+                topics[i] = rd_strdup(test_mk_topic_name(topic_i, 1));
+        };
         group = topics[0];
 
         test_conf_init(&conf, NULL, 60);
@@ -864,59 +864,57 @@ static void do_test_subscribe_many_updates(rd_bool_t with_rebalance_cb) {
          * for TOPICS_CNT topics */
         rd_sleep(1);
 
-        RD_ARRAY_FOREACH_INDEX(
-            topic, topics, i, ({
-                    const int max_subscription_size = 5;
-                    size_t j;
-                    int k;
-                    int subscription_size =
-                        RD_MIN(max_subscription_size, TOPIC_CNT - i);
-                    int expected_assignment_cnt =
-                        subscription_size * partition_cnt;
-                    rd_kafka_topic_partition_list_t *expected_assignment = NULL;
+        RD_ARRAY_FOREACH_INDEX(topic, topics, i) {
+                const int max_subscription_size = 5;
+                size_t j;
+                int k;
+                int subscription_size =
+                    RD_MIN(max_subscription_size, TOPIC_CNT - i);
+                int expected_assignment_cnt = subscription_size * partition_cnt;
+                rd_kafka_topic_partition_list_t *expected_assignment = NULL;
 
-                    rd_kafka_topic_partition_list_t *subscription =
-                        rd_kafka_topic_partition_list_new(subscription_size);
-                    rd_bool_t check_expected_assignment =
-                        (i % 5 == 0 || i == TOPIC_CNT - 1);
-                    rd_bool_t do_unsubscribe = i % 7 == 0;
+                rd_kafka_topic_partition_list_t *subscription =
+                    rd_kafka_topic_partition_list_new(subscription_size);
+                rd_bool_t check_expected_assignment =
+                    (i % 5 == 0 || i == TOPIC_CNT - 1);
+                rd_bool_t do_unsubscribe = i % 7 == 0;
 
-                    if (check_expected_assignment)
-                            expected_assignment =
-                                rd_kafka_topic_partition_list_new(
-                                    expected_assignment_cnt);
+                if (check_expected_assignment)
+                        expected_assignment = rd_kafka_topic_partition_list_new(
+                            expected_assignment_cnt);
 
-                    for (j = i; j < i + subscription_size; j++) {
-                            rd_kafka_topic_partition_list_add(
-                                subscription, topics[j], RD_KAFKA_PARTITION_UA);
-                            /* We unsubscribe every 7 iteration and
-                             * we check assignments every 5 iteration so
-                             * at 7 * 5 we unsubscribe and check that assignment
-                             * is empty. */
-                            if (check_expected_assignment && !do_unsubscribe)
-                                    for (k = 0; k < partition_cnt; k++)
-                                            rd_kafka_topic_partition_list_add(
-                                                expected_assignment, topics[j],
-                                                k);
-                    }
-                    TEST_CALL_ERR__(rd_kafka_subscribe(rk, subscription));
-                    rd_kafka_topic_partition_list_destroy(subscription);
+                for (j = i; j < i + subscription_size; j++) {
+                        rd_kafka_topic_partition_list_add(
+                            subscription, topics[j], RD_KAFKA_PARTITION_UA);
+                        /* We unsubscribe every 7 iteration and
+                         * we check assignments every 5 iteration so
+                         * at 7 * 5 we unsubscribe and check that assignment
+                         * is empty. */
+                        if (check_expected_assignment && !do_unsubscribe)
+                                for (k = 0; k < partition_cnt; k++)
+                                        rd_kafka_topic_partition_list_add(
+                                            expected_assignment, topics[j], k);
+                }
+                TEST_CALL_ERR__(rd_kafka_subscribe(rk, subscription));
+                rd_kafka_topic_partition_list_destroy(subscription);
 
-                    if (do_unsubscribe)
-                            TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
-                    if (check_expected_assignment) {
-                            test_consumer_wait_assignment_topic_partition_list(
-                                rk,
-                                /* poll when we have a rebalance callback */
-                                with_rebalance_cb, expected_assignment, 10000);
-                            rd_kafka_topic_partition_list_destroy(
-                                expected_assignment);
-                    }
-            }));
+                if (do_unsubscribe)
+                        TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
+                if (check_expected_assignment) {
+                        test_consumer_wait_assignment_topic_partition_list(
+                            rk,
+                            /* poll when we have a rebalance callback */
+                            with_rebalance_cb, expected_assignment, 10000);
+                        rd_kafka_topic_partition_list_destroy(
+                            expected_assignment);
+                }
+        };
 
         TEST_CALL_ERR__(
             test_DeleteTopics_simple(rk, NULL, topics, TOPIC_CNT, NULL));
-        RD_ARRAY_FOREACH(topic, topics, ({ rd_free(topic); }));
+        RD_ARRAY_FOREACH_INDEX(topic, topics, i) {
+                rd_free(topic);
+        };
 
         test_consumer_close(rk);
         rd_kafka_destroy(rk);

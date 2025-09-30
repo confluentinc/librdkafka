@@ -228,18 +228,11 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #define RD_SIZEOF(TYPE, MEMBER)   sizeof(((TYPE *)NULL)->MEMBER)
 #define RD_OFFSETOF(TYPE, MEMBER) ((size_t) & (((TYPE *)NULL)->MEMBER))
 /** Array foreach */
-#define RD_ARRAY_FOREACH_INDEX(ELEM, ARRAY, INDEX, BLOCK)                      \
-        do {                                                                   \
-                size_t INDEX;                                                  \
-                for ((INDEX = 0, (ELEM) = (ARRAY)[INDEX]);                     \
-                     INDEX < RD_ARRAY_SIZE(ARRAY);                             \
-                     (ELEM) = (++INDEX < RD_ARRAY_SIZE(ARRAY) ? (ARRAY)[INDEX] \
-                                                              : (ELEM)))       \
-                        BLOCK;                                                 \
-        } while (0)
-
-#define RD_ARRAY_FOREACH(ELEM, ARRAY, BLOCK)                                   \
-        RD_ARRAY_FOREACH_INDEX(ELEM, ARRAY, __i, BLOCK)
+#define RD_ARRAY_FOREACH_INDEX(ELEM, ARRAY, INDEX)                             \
+        for ((INDEX = 0, (ELEM) = (ARRAY)[INDEX]);                             \
+             INDEX < RD_ARRAY_SIZE(ARRAY);                                     \
+             (ELEM) =                                                          \
+                 (++INDEX < RD_ARRAY_SIZE(ARRAY) ? (ARRAY)[INDEX] : (ELEM)))
 
 /**
  * Returns the 'I'th array element from static sized array 'A'

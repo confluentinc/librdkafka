@@ -3187,8 +3187,6 @@ void test_consumer_wait_assignment_topic_partition_list0(
         TEST_SAY("Verifying assignment\n");
         expected_assignment_copy =
             rd_kafka_topic_partition_list_copy(expected_assignment);
-        rd_kafka_topic_partition_list_sort(expected_assignment_copy, NULL,
-                                           NULL);
         TEST_SAYL(4, "%s expected assignment (%d partition(s)):\n",
                   rd_kafka_name(rk), expected_assignment->cnt);
         for (i = 0; i < expected_assignment_copy->cnt; i++)

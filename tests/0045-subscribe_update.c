@@ -885,9 +885,8 @@ static void do_test_subscribe_many_updates(rd_bool_t with_rebalance_cb) {
 
 
                 for (j = i; j < i + subscription_size; j++) {
-                        topic = topics[j];
                         rd_kafka_topic_partition_list_add(
-                            subscription, topic, RD_KAFKA_PARTITION_UA);
+                            subscription, topics[j], RD_KAFKA_PARTITION_UA);
                         /* We unsubscribe every 7 iteration and
                          * we check assignments every 5 iteration so
                          * at 7 * 5 we unsubscribe and check that assignment

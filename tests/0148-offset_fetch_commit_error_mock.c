@@ -123,11 +123,11 @@ void do_test_OffsetFetch_stale_member_epoch_error(
         SUB_TEST_PASS();
 }
 
-typedef enum test_manual_commit_variation_s {
-        TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_AUTOMATICALLY = 0,
-        TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_MANUALLY      = 1,
-        TEST_MANUAL_COMMIT_VARIATION__CNT,
-} test_manual_commit_variation_t;
+typedef enum do_test_OffsetCommit_manual_error_variation_s {
+        TEST_MANUAL_COMMIT_ERROR_VARIATION_STORE_OFFSET_AUTOMATICALLY = 0,
+        TEST_MANUAL_COMMIT_ERROR_VARIATION_STORE_OFFSET_MANUALLY      = 1,
+        TEST_MANUAL_COMMIT_ERROR_VARIATION__CNT,
+} do_test_OffsetCommit_manual_error_variation_t;
 
 /**
  * @brief Doing a manual commits that returns error \p expected_err
@@ -146,7 +146,7 @@ void do_test_OffsetCommit_manual_error(
     rd_kafka_mock_cluster_t *mcluster,
     const char *bootstraps,
     rd_kafka_resp_err_t expected_err,
-    test_manual_commit_variation_t variation) {
+    do_test_OffsetCommit_manual_error_variation_t variation) {
         rd_kafka_t *consumer;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
@@ -184,7 +184,8 @@ void do_test_OffsetCommit_manual_error(
         rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_OffsetCommit, 1,
                                           expected_err);
 
-        if (variation == TEST_MANUAL_COMMIT_VARIATION_STORE_OFFSET_MANUALLY) {
+        if (variation ==
+            TEST_MANUAL_COMMIT_ERROR_VARIATION_STORE_OFFSET_MANUALLY) {
                 /* Variation 1: pass offsets to commit */
                 to_commit = rd_kafka_topic_partition_list_new(1);
                 rd_kafka_topic_partition_list_add(to_commit, topic, 0)->offset =
@@ -210,13 +211,14 @@ void do_test_OffsetCommit_manual_error(
         SUB_TEST_PASS();
 }
 
-typedef enum test_error_variation_case_s {
-        TEST_ERROR_VARIATION_CASE_NO_REVOKE_NO_TIMEOUT   = 0,
-        TEST_ERROR_VARIATION_CASE_NO_REVOKE_WITH_TIMEOUT = 1,
-        TEST_ERROR_VARIATION_CASE_REVOKE_NO_TIMEOUT      = 2,
-        TEST_ERROR_VARIATION_CASE_REVOKE_WITH_TIMEOUT    = 3,
-        TEST_ERROR_VARIATION_CASE__CNT,
-} test_error_variation_case_t;
+typedef enum do_test_auto_commit_stale_member_epoch_error_variation_t {
+        TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_NO_TIMEOUT = 0,
+        TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_WITH_TIMEOUT =
+            1,
+        TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_NO_TIMEOUT   = 2,
+        TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_WITH_TIMEOUT = 3,
+        TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION__CNT,
+} test_auto_commit_stale_member_epoch_error_variation_t;
 
 /**
  * @brief When a partition is revoked, with auto-commit enabled,
@@ -234,19 +236,20 @@ typedef enum test_error_variation_case_s {
  *                           When session times out the auto-commit fails
  *                           and messages are consumed again.
  *
- *        - TEST_ERROR_VARIATION_NO_REVOKE_NO_TIMEOUT: during_revocation=false,
- * session_times_out=false
- *        - TEST_ERROR_VARIATION_NO_REVOKE_WITH_TIMEOUT:
+ *        - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_NO_TIMEOUT:
+ * during_revocation=false, session_times_out=false
+ *        -
+ * TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_NO_REVOKE_WITH_TIMEOUT:
  * during_revocation=false, session_times_out=true
- *        - TEST_ERROR_VARIATION_REVOKE_NO_TIMEOUT: during_revocation=true,
- * session_times_out=false
- *        - TEST_ERROR_VARIATION_REVOKE_WITH_TIMEOUT: during_revocation=true,
- * session_times_out=true
+ *        - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_NO_TIMEOUT:
+ * during_revocation=true, session_times_out=false
+ *        - TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION_REVOKE_WITH_TIMEOUT:
+ * during_revocation=true, session_times_out=true
  */
 void do_test_OffsetCommit_automatic_stale_member_epoch_error(
     rd_kafka_mock_cluster_t *mcluster,
     const char *bootstraps,
-    test_error_variation_case_t variation) {
+    test_auto_commit_stale_member_epoch_error_variation_t variation) {
         rd_kafka_t *consumer;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
@@ -354,7 +357,7 @@ void do_test_OffsetCommit_automatic_stale_member_epoch_error(
                                    TEST_MSGVER_PER_PART, 0, msgcnt);
                 test_msgver_clear(&mv);
         } else {
-                /* No message should be consumer after the autocommit */
+                /* No message should be consumed after the autocommit */
                 test_consumer_poll_no_msgs("no messages", consumer, testid,
                                            200);
         }
@@ -393,8 +396,24 @@ static void log_cb_closing_issue(const rd_kafka_t *rk,
  * heartbeat response must update the member epoch rather than being discarded.
  * Otherwise, subsequent commit requests (which will be required for leaving)
  * may fail with a stale member epoch error.
+ *
+ * Sequence of events:
+ * 1. Consumer is subscribed to topic1 and topic2 and has received messages
+ * 2. Consumer changes subscription to only topic1, this triggers revocation of
+ *    topic2 partitions.
+ * 3. Consumer acknowledges the revocation and sends a heartbeat. The heartbeat
+ *    response is delayed (simulated by mock). Due to this, the member epoch on
+ *    the broker end is increased but the consumer has not received it yet.
+ * 4. Meanwhile, the consumer receives messages from topic1.
+ * 5. The consumer is closed, this triggers a leave group which includes an
+ *    offset commit request for the received messages.
+ * 6. This triggers a stale member epoch error since the consumer is not aware
+ *    of the increased member epoch on the broker end.
+ * 7. The stale member epoch error triggers ConsumerGroupHeartbeat request
+ *    which receives to receive the latest member epoch.
+ * 8. The offset commit is retried and succeeds.
  */
-void do_test_consumer_group_heartbeat_ack_assignment_close(
+void do_test_consumer_inflight_heartbeat_on_leave(
     rd_kafka_mock_cluster_t *mcluster,
     const char *bootstraps) {
 
@@ -432,69 +451,77 @@ void do_test_consumer_group_heartbeat_ack_assignment_close(
                                                             session_timeout_ms);
         rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 500);
 
-        // Producer Initialization
+        /* Producer Initialization */
         producer_conf = rd_kafka_conf_dup(conf);
         rd_kafka_conf_set_dr_msg_cb(producer_conf, test_dr_msg_cb);
         producer = test_create_handle(RD_KAFKA_PRODUCER, producer_conf);
 
-        // Create topic1 and produce few messages
+        /* Create topic1 and produce few messages */
         rd_kafka_mock_topic_create(mcluster, topic1, 1, 1);
         test_produce_msgs2(producer, topic1, testid, 0, 0, msgcnt, NULL, 0);
         rd_kafka_flush(producer, -1);
 
-        // Create topic2 and produce few messages
+        /* Create topic2 and produce few messages */
         rd_kafka_mock_topic_create(mcluster, topic2, 1, 1);
         test_produce_msgs2(producer, topic2, testid, 0, 0, msgcnt, NULL, 0);
         rd_kafka_flush(producer, -1);
 
-        // Consumer: subscribe to both topics
+        /* Consumer: subscribe to both topics */
         TEST_SAY("Group id: %s\n", topic1);
         consumer =
             test_create_consumer(topic1, NULL, rd_kafka_conf_dup(conf), NULL);
         test_consumer_subscribe_multi(consumer, 2, topic1, topic2);
 
-        // Poll and verify messages priduced to both topics
+        /* Poll and verify messages produced to both topics */
         test_msgver_init(&mv, testid);
         test_consumer_poll("read from both topics", consumer, testid, -1, 0,
                            2 * msgcnt, &mv);
         test_msgver_clear(&mv);
 
-        // Change subscription to only topic1 to trigger revocation
+        /* Change subscription to only topic1 to trigger revocation */
         test_consumer_subscribe(consumer, topic1);
 
-        // Set ConsumerGroupHeartbeat RTT to heartbeat_rtt_ms
+        /* Set ConsumerGroupHeartbeat RTT to heartbeat_rtt_ms */
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 2,
             RD_KAFKA_RESP_ERR_NO_ERROR, heartbeat_rtt_ms,
             RD_KAFKA_RESP_ERR_NO_ERROR, heartbeat_rtt_ms);
 
-        // Produce few more messages to topic1 so that we can trigger
-        // auto-commit later which will give stale member epoch error
+        /* Produce few more messages to topic1 so that we can trigger
+           auto-commit later which will give stale member epoch error */
         test_produce_msgs2(producer, topic1, testid, 0, 0, msgcnt, NULL, 0);
         rd_kafka_flush(producer, -1);
 
-        // Wait for log callback to trigger consumer close after second
-        // "Acknowledging target assignment"
+        /* Wait for log callback to trigger consumer close after second
+           "Acknowledging target assignment" */
         mtx_lock(&log_lock);
         while (!trigger_consumer_close)
                 cnd_timedwait_ms(&log_cnd, &log_lock, 500);
         mtx_unlock(&log_lock);
 
-        // Poll and verify the produced messages
+        /* Poll and verify the produced messages */
         test_msgver_init(&mv, testid);
         test_consumer_poll("read topic1", consumer, testid, -1, 0, msgcnt, &mv);
         test_msgver_clear(&mv);
 
-        // Close consumer and assert it closes within session_timeout_ms
+        /* Close consumer which will trigger leave group and auto-commit
+           The auto-commit will get stale member epoch error and will retry
+           after receiving the heartbeat response with the latest member
+           epoch */
         close_start = test_clock();
         test_consumer_close(consumer);
         close_end = test_clock();
 
+        /* Verify that we got exactly one stale member epoch error */
         mtx_lock(&log_lock);
         TEST_ASSERT(got_stale_member_epoch_error == 1,
                     "Expected 1 stale member epoch error, got %d",
                     got_stale_member_epoch_error);
         mtx_unlock(&log_lock);
+
+        /* Verify that the consumer closed within session timeout, if it reaches
+           session timeout which means that the member is kicked out of the
+           group. */
         TEST_ASSERT((close_end - close_start) < session_timeout_ms * 1000,
                     "Consumer did not close within 2s, took %" PRId64 " us",
                     (close_end - close_start));
@@ -517,7 +544,7 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
 
         if (test_consumer_group_protocol_classic()) {
                 TEST_SKIP(
-                    "Test not meaningful with Consumer Group 'Classic' "
+                    "Test not meaningful with 'classic' consumer group "
                     "protocol\n");
                 return 0;
         }
@@ -526,7 +553,7 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
 
         do_test_OffsetFetch_stale_member_epoch_error(mcluster, bootstraps);
 
-        for (i = 0; i < TEST_MANUAL_COMMIT_VARIATION__CNT; i++) {
+        for (i = 0; i < TEST_MANUAL_COMMIT_ERROR_VARIATION__CNT; i++) {
                 do_test_OffsetCommit_manual_error(
                     mcluster, bootstraps, RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
                     i);
@@ -535,12 +562,11 @@ int main_0148_offset_fetch_commit_error_mock(int argc, char **argv) {
                     i);
         }
 
-        for (i = 0; i < TEST_ERROR_VARIATION_CASE__CNT; i++)
+        for (i = 0; i < TEST_AUTO_COMMIT_STALE_MEMBER_EPOCH_VARIATION__CNT; i++)
                 do_test_OffsetCommit_automatic_stale_member_epoch_error(
                     mcluster, bootstraps, i);
 
-        do_test_consumer_group_heartbeat_ack_assignment_close(mcluster,
-                                                              bootstraps);
+        do_test_consumer_inflight_heartbeat_on_leave(mcluster, bootstraps);
 
         test_mock_cluster_destroy(mcluster);
 

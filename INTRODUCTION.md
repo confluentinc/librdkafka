@@ -33,9 +33,9 @@ librdkafka also provides a native C++ interface.
       - [Message timeout considerations](#message-timeout-considerations)
       - [Leader change](#leader-change)
       - [Error handling](#error-handling)
-        - [RD\_KAFKA\_RESP\_ERR\_OUT\_OF\_ORDER\_SEQUENCE\_NUMBER](#rd_kafka_resp_err_out_of_order_sequence_number)
-        - [RD\_KAFKA\_RESP\_ERR\_DUPLICATE\_SEQUENCE\_NUMBER](#rd_kafka_resp_err_duplicate_sequence_number)
-        - [RD\_KAFKA\_RESP\_ERR\_UNKNOWN\_PRODUCER\_ID](#rd_kafka_resp_err_unknown_producer_id)
+        - <a href="#rd-kafka-resp-err-out-of-order-sequence-number">RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER</a>
+        - <a href="#rd-kafka-resp-err-duplicate-sequence-number">RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER</a>
+        - <a href="#rd-kafka-resp-err-unknown-producer-id">RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID</a>
         - [Standard errors](#standard-errors)
         - [Message persistence status](#message-persistence-status)
     - [Transactional Producer](#transactional-producer)
@@ -101,8 +101,8 @@ librdkafka also provides a native C++ interface.
       - [Topic metadata propagation for newly created topics](#topic-metadata-propagation-for-newly-created-topics)
       - [Topic auto creation](#topic-auto-creation)
     - [Metadata](#metadata)
-      - [\< 0.9.3](#-093)
-      - [\> 0.9.3](#-093-1)
+      - [\< 0.9.3](#lt093)
+      - [\> 0.9.3](#gt093-1)
       - [Query reasons](#query-reasons)
       - [Caching strategy](#caching-strategy)
     - [Fatal errors](#fatal-errors)
@@ -1223,6 +1223,7 @@ To use this authentication method the client needs to be configured as follows:
 
 * `https.ca.pem` - (optional) to provide the CA certificates as a PEM string.
 
+<a name="jwt-bearer-grant-type-kip-1139">
 ##### JWT bearer grant type (KIP-1139)
 
 This KIP adds support for the `client_credentials, urn:ietf:params:oauth:grant-type:jwt-bearer`
@@ -1253,7 +1254,7 @@ either through the template or with the `claim` properties.
   it's possible to dynamically customize the JWT claims with these or to
   skip the template file and use only these properties.
 
-<a name="oauthbearer-oidc-metadata-authentication"></a>
+<a name="metadata-based-authentication"></a>
 ##### Metadata based authentication
 
 Some cloud providers added the ability to authenticate clients based on
@@ -1268,6 +1269,7 @@ some metadata based OAUTHBEARER authentication types.
 
 Currently these authentication types are supported:
 
+<a name="azure-imds">
 ###### Azure IMDS
 
 To use this method you set:
@@ -1396,40 +1398,40 @@ on the broker.
 Extensive debugging of librdkafka can be enabled by setting the
 `debug` configuration property to a CSV string of debug contexts:
 
-Debug context | Type     | Description
---------------|----------|----------------------
-generic       | *        | General client instance level debugging. Includes initialization and termination debugging.
-broker        | *        | Broker and connection state debugging.
-topic         | *        | Topic and partition state debugging. Includes leader changes.
-metadata      | *        | Cluster and topic metadata retrieval debugging.
-feature       | *        | Kafka protocol feature support as negotiated with the broker.
-queue         | producer | Message queue debugging.
-msg           | *        | Message debugging. Includes information about batching, compression, sizes, etc.
-protocol      | *        | Kafka protocol request/response debugging. Includes latency (rtt) printouts.
-cgrp          | consumer | Low-level consumer group state debugging.
-security      | *        | Security and authentication debugging.
-fetch         | consumer | Consumer message fetch debugging. Includes decision when and why messages are fetched.
-interceptor   | *        | Interceptor interface debugging.
-plugin        | *        | Plugin loading debugging.
-consumer      | consumer | High-level consumer debugging.
-admin         | admin    | Admin API debugging.
-eos           | producer | Idempotent Producer debugging.
-mock          | *        | Mock cluster functionality debugging.
-assignor      | consumer | Detailed consumer group partition assignor debugging.
-conf          | *        | Display set configuration properties on startup.
-all           | *        | All of the above.
+| Debug context | Type     | Description                                                                                 |
+| ------------- | -------- | ------------------------------------------------------------------------------------------- |
+| generic       | *        | General client instance level debugging. Includes initialization and termination debugging. |
+| broker        | *        | Broker and connection state debugging.                                                      |
+| topic         | *        | Topic and partition state debugging. Includes leader changes.                               |
+| metadata      | *        | Cluster and topic metadata retrieval debugging.                                             |
+| feature       | *        | Kafka protocol feature support as negotiated with the broker.                               |
+| queue         | producer | Message queue debugging.                                                                    |
+| msg           | *        | Message debugging. Includes information about batching, compression, sizes, etc.            |
+| protocol      | *        | Kafka protocol request/response debugging. Includes latency (rtt) printouts.                |
+| cgrp          | consumer | Low-level consumer group state debugging.                                                   |
+| security      | *        | Security and authentication debugging.                                                      |
+| fetch         | consumer | Consumer message fetch debugging. Includes decision when and why messages are fetched.      |
+| interceptor   | *        | Interceptor interface debugging.                                                            |
+| plugin        | *        | Plugin loading debugging.                                                                   |
+| consumer      | consumer | High-level consumer debugging.                                                              |
+| admin         | admin    | Admin API debugging.                                                                        |
+| eos           | producer | Idempotent Producer debugging.                                                              |
+| mock          | *        | Mock cluster functionality debugging.                                                       |
+| assignor      | consumer | Detailed consumer group partition assignor debugging.                                       |
+| conf          | *        | Display set configuration properties on startup.                                            |
+| all           | *        | All of the above.                                                                           |
 
 
 Suggested debugging settings for troubleshooting:
 
-Problem space          | Type     | Debug setting
------------------------|----------|-------------------
-Producer not delivering messages to broker | producer | `broker,topic,msg`
-Consumer not fetching messages | consumer | Start with `consumer`, or use `cgrp,fetch` for detailed information.
-Consumer starts reading at unexpected offset | consumer | `consumer` or `cgrp,fetch`
-Authentication or connectivity issues | * | `broker,auth`
-Protocol handling or latency | * | `broker,protocol`
-Topic leader and state | * | `topic,metadata`
+| Problem space                                | Type     | Debug setting                                                        |
+| -------------------------------------------- | -------- | -------------------------------------------------------------------- |
+| Producer not delivering messages to broker   | producer | `broker,topic,msg`                                                   |
+| Consumer not fetching messages               | consumer | Start with `consumer`, or use `cgrp,fetch` for detailed information. |
+| Consumer starts reading at unexpected offset | consumer | `consumer` or `cgrp,fetch`                                           |
+| Authentication or connectivity issues        | *        | `broker,auth`                                                        |
+| Protocol handling or latency                 | *        | `broker,protocol`                                                    |
+| Topic leader and state                       | *        | `topic,metadata`                                                     |
 
 
 
@@ -1694,13 +1696,13 @@ the original fatal error code and reason.
 
 To read more about static group membership, see [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances).
 
-<a name="next-generation-of-the-consumer-group-protocol-kip-848"></a>
+<a name="next-generation-consumer-group-protocol-kip-848"></a>
 ### Next Generation Consumer Group Protocol (KIP-848)
 
 Starting with **librdkafka 2.12.0** (GA release), the next generation consumer group rebalance protocol defined in **[KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)** is **production-ready**.
 
+<a name="overview"></a>
 #### Overview
-
 - **What changed:**
   The **Group Leader role** (consumer member) is removed. Assignments are calculated by the **Group Coordinator (broker)** and distributed via **heartbeats**.
 
@@ -1712,6 +1714,7 @@ Starting with **librdkafka 2.12.0** (GA release), the next generation consumer g
   - `group.protocol=consumer`
   - `group.remote.assignor=<assignor>` (optional; broker-controlled if `NULL`; default broker assignor is **`uniform`**)
 
+<a name="available-features"></a>
 #### Available Features
 
 All KIP-848 features are supported including:
@@ -1724,19 +1727,22 @@ All KIP-848 features are supported including:
 - Upgrade from `classic` protocol or downgrade from `consumer` protocol
 - AdminClient changes as per KIP
 
+<a name="contract-changes"></a>
 #### Contract Changes
 
+<a name="client-configuration-changes"></a>
 ##### Client Configuration changes
 
-| Classic Protocol (Deprecated Configs in KIP-848) | KIP-848 / Next-Gen Replacement |
-|---------------------------------------------|--------------------------------|
-| `partition.assignment.strategy`             | `group.remote.assignor` |
-| `session.timeout.ms`                        | Broker config: `group.consumer.session.timeout.ms` |
-| `heartbeat.interval.ms`                     | Broker config: `group.consumer.heartbeat.interval.ms` |
-| `group.protocol.type`                       | Not used in the new protocol |
+| Classic Protocol (Deprecated Configs in KIP-848) | KIP-848 / Next-Gen Replacement                        |
+| ------------------------------------------------ | ----------------------------------------------------- |
+| `partition.assignment.strategy`                  | `group.remote.assignor`                               |
+| `session.timeout.ms`                             | Broker config: `group.consumer.session.timeout.ms`    |
+| `heartbeat.interval.ms`                          | Broker config: `group.consumer.heartbeat.interval.ms` |
+| `group.protocol.type`                            | Not used in the new protocol                          |
 
 **Note:** The properties listed under “Classic Protocol (Deprecated Configs in KIP-848)” are **no longer used** when using the KIP-848 consumer protocol.
 
+<a name="rebalance-callback-changes"></a>
 ##### Rebalance Callback Changes
 
 - Protocol is **fully incremental**.
@@ -1747,6 +1753,7 @@ All KIP-848 features are supported including:
 - **Important:** The `partitions` parameter passed to `rd_kafka_incremental_assign` or `rd_kafka_incremental_unassign` contains only an **incremental list of partitions**—those being added or revoked—rather than the full partition list returned by `rd_kafka_assign(rk, partitions)` in the **range assignor of the classic protocol**, which was the default.
 - All assignors are **sticky**, including `range` (which wasn’t sticky before).
 
+<a name="static-group-membership"></a>
 ##### Static Group Membership
 
 - Duplicate `group.instance.id` handling:
@@ -1756,6 +1763,7 @@ All KIP-848 features are supported including:
   - Ensure only **one active instance per `group.instance.id`**.
   - Consumers must shut down cleanly to avoid blocking replacements until session timeout expires.
 
+<a name="session-timeout--fetching"></a>
 ##### Session Timeout & Fetching
 
 - **Session timeout is broker-controlled**:
@@ -1763,6 +1771,7 @@ All KIP-848 features are supported including:
   - Consumer is fenced once a heartbeat response is received from the Coordinator.
 - In the classic protocol, the client stopped fetching when session timeout expired.
 
+<a name="closing--auto-commit"></a>
 ##### Closing / Auto-Commit
 
 - On `close()` or unsubscribe with auto-commit enabled:
@@ -1770,6 +1779,7 @@ All KIP-848 features are supported including:
   - Currently uses the **default remote session timeout**.
   - Future **KIP-1092** will allow custom commit timeouts.
 
+<a name="error-handling-changes"></a>
 ##### Error Handling Changes
 
 - `UNKNOWN_TOPIC_OR_PART` (**subscription case**):
@@ -1777,6 +1787,7 @@ All KIP-848 features are supported including:
 - `TOPIC_AUTHORIZATION_FAILED`:
   - Reported once per heartbeat or subscription change, even if only one topic is unauthorized.
 
+<a name="summary-of-key-differences-classic-vs-next-gen"></a>
 ##### Summary of Key Differences (Classic vs Next-Gen)
 
 - **Assignment:** Classic protocol calculated by **Group Leader (consumer)**; KIP-848 calculated by **Group Coordinator (broker)**
@@ -1788,8 +1799,10 @@ All KIP-848 features are supported including:
 - **Unknown topics:** KIP-848 does not return error on subscription if topic missing
 - **Online Upgrade/Downgrade:** KIP-848 supports online upgrade/downgrade from/to `classic` and `consumer` protocols
 
+<a name="minimal-example-config"></a>
 #### Minimal Example Config
 
+<a name="classic-protocol"></a>
 ##### Classic Protocol
 ```properties
 # Optional; default is 'classic'
@@ -1800,6 +1813,7 @@ session.timeout.ms=45000
 heartbeat.interval.ms=15000
 ```
 
+<a name="next-gen-protocol--kip-848"></a>
 ##### Next-Gen Protocol / KIP-848
 ```properties
 group.protocol=consumer
@@ -1814,8 +1828,10 @@ group.protocol=consumer
 #   group.consumer.heartbeat.interval.ms
 ```
 
+<a name="rebalance-callback-migration"></a>
 #### Rebalance Callback Migration
 
+<a name="range-assignor-classic"></a>
 ##### Range Assignor (Classic)
 ```c
 /* Rebalance callback for range assignor (classic) */
@@ -1839,6 +1855,7 @@ static void rebalance_cb (rd_kafka_t *rk,
 }
 ```
 
+<a name="incremental-assignor-including-range-in-consumer--kip-848-any-protocol"></a>
 ##### Incremental Assignor (Including Range in Consumer / KIP-848, Any Protocol)
 
 ```c
@@ -1866,6 +1883,7 @@ static void rebalance_cb (rd_kafka_t *rk,
 - The `partitions` list contains **only partitions being added or revoked**, not the full partition list as in the classic `rd_kafka_assign()`.
 - Incremental assignors (including range) are **supported in both classic and KIP-848 protocols**, but this callback is required for KIP-848.
 
+<a name="online-upgrade-and-downgrade"></a>
 #### Online Upgrade and Downgrade
 
 - A group made up entirely of `classic` consumers runs under the classic protocol.
@@ -1874,6 +1892,7 @@ static void rebalance_cb (rd_kafka_t *rk,
 - Both **online upgrade** (classic → consumer) and **online downgrade** (consumer → classic) are supported.
 
 
+<a name="migration-checklist-next-gen-protocol--kip-848"></a>
 #### Migration Checklist (Next-Gen Protocol / KIP-848)
 
 - [ ] Upgrade to **librdkafka ≥ 2.12.0** (GA release)
@@ -1885,8 +1904,6 @@ static void rebalance_cb (rd_kafka_t *rk,
 - [ ] Review static membership handling (`group.instance.id`)
 - [ ] Ensure proper shutdown to avoid fencing issues
 - [ ] Adjust error handling for unknown topics and authorization failures
-
-
 
 
 <a name="note-on-batch-consume-apis"></a>
@@ -2220,7 +2237,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 
 
 | KIP                                                                      | Kafka release               | Status                                                                                        |
-|--------------------------------------------------------------------------|-----------------------------|-----------------------------------------------------------------------------------------------|
+| ------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------- |
 | KIP-1 - Stop accepting request.required.acks > 1                         | 0.9.0.0                     | Not enforced on client (due to backwards compat with brokers  <0.8.3)                         |
 | KIP-4 - Metadata protocol changes                                        | 0.9.0.0, 0.10.0.0, 0.10.1.0 | Supported                                                                                     |
 | KIP-8 - Producer flush()                                                 | 0.9.0.0                     | Supported                                                                                     |
@@ -2351,49 +2368,49 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 release of librdkafka.
 
 
-| ApiKey  | Request name                  | Kafka max  | librdkafka max |
-| ------- | ----------------------------- | ---------- | -------------- |
-| 0       | Produce                       | 12         | 10             |
-| 1       | Fetch                         | 17         | 16             |
-| 2       | ListOffsets                   | 10         | 7              |
-| 3       | Metadata                      | 13         | 13             |
-| 8       | OffsetCommit                  | 9          | 9              |
-| 9       | OffsetFetch                   | 9          | 9              |
-| 10      | FindCoordinator               | 6          | 2              |
-| 11      | JoinGroup                     | 9          | 5              |
-| 12      | Heartbeat                     | 4          | 3              |
-| 13      | LeaveGroup                    | 5          | 1              |
-| 14      | SyncGroup                     | 5          | 3              |
-| 15      | DescribeGroups                | 6          | 4              |
-| 16      | ListGroups                    | 5          | 4              |
-| 17      | SaslHandshake                 | 1          | 1              |
-| 18      | ApiVersions                   | 4          | 3              |
-| 19      | CreateTopics                  | 7          | 4              |
-| 20      | DeleteTopics                  | 6          | 1              |
-| 21      | DeleteRecords                 | 2          | 1              |
-| 22      | InitProducerId                | 5          | 4              |
-| 23      | OffsetForLeaderEpoch          | 4          | 2              |
-| 24      | AddPartitionsToTxn            | 5          | 0              |
-| 25      | AddOffsetsToTxn               | 4          | 0              |
-| 26      | EndTxn                        | 5          | 1              |
-| 28      | TxnOffsetCommit               | 5          | 3              |
-| 29      | DescribeAcls                  | 3          | 1              |
-| 30      | CreateAcls                    | 3          | 1              |
-| 31      | DeleteAcls                    | 3          | 1              |
-| 32      | DescribeConfigs               | 4          | 1              |
-| 33      | AlterConfigs                  | 2          | 2              |
-| 36      | SaslAuthenticate              | 2          | 1              |
-| 37      | CreatePartitions              | 3          | 0              |
-| 42      | DeleteGroups                  | 2          | 1              |
-| 43      | ElectLeaders                  | 2          | 2              |
-| 44      | IncrementalAlterConfigs       | 1          | 1              |
-| 47      | OffsetDelete                  | 0          | 0              |
-| 50      | DescribeUserScramCredentials  | 0          | 0              |
-| 51      | AlterUserScramCredentials     | 0          | 0              |
-| 68      | ConsumerGroupHeartbeat        | 1          | 1              |
-| 69      | ConsumerGroupDescribe         | 1          | 0              |
-| 71      | GetTelemetrySubscriptions     | 0          | 0              |
-| 72      | PushTelemetry                 | 0          | 0              |
+| ApiKey | Request name                 | Kafka max | librdkafka max |
+| ------ | ---------------------------- | --------- | -------------- |
+| 0      | Produce                      | 12        | 10             |
+| 1      | Fetch                        | 17        | 16             |
+| 2      | ListOffsets                  | 10        | 7              |
+| 3      | Metadata                     | 13        | 13             |
+| 8      | OffsetCommit                 | 9         | 9              |
+| 9      | OffsetFetch                  | 9         | 9              |
+| 10     | FindCoordinator              | 6         | 2              |
+| 11     | JoinGroup                    | 9         | 5              |
+| 12     | Heartbeat                    | 4         | 3              |
+| 13     | LeaveGroup                   | 5         | 1              |
+| 14     | SyncGroup                    | 5         | 3              |
+| 15     | DescribeGroups               | 6         | 4              |
+| 16     | ListGroups                   | 5         | 4              |
+| 17     | SaslHandshake                | 1         | 1              |
+| 18     | ApiVersions                  | 4         | 3              |
+| 19     | CreateTopics                 | 7         | 4              |
+| 20     | DeleteTopics                 | 6         | 1              |
+| 21     | DeleteRecords                | 2         | 1              |
+| 22     | InitProducerId               | 5         | 4              |
+| 23     | OffsetForLeaderEpoch         | 4         | 2              |
+| 24     | AddPartitionsToTxn           | 5         | 0              |
+| 25     | AddOffsetsToTxn              | 4         | 0              |
+| 26     | EndTxn                       | 5         | 1              |
+| 28     | TxnOffsetCommit              | 5         | 3              |
+| 29     | DescribeAcls                 | 3         | 1              |
+| 30     | CreateAcls                   | 3         | 1              |
+| 31     | DeleteAcls                   | 3         | 1              |
+| 32     | DescribeConfigs              | 4         | 1              |
+| 33     | AlterConfigs                 | 2         | 2              |
+| 36     | SaslAuthenticate             | 2         | 1              |
+| 37     | CreatePartitions             | 3         | 0              |
+| 42     | DeleteGroups                 | 2         | 1              |
+| 43     | ElectLeaders                 | 2         | 2              |
+| 44     | IncrementalAlterConfigs      | 1         | 1              |
+| 47     | OffsetDelete                 | 0         | 0              |
+| 50     | DescribeUserScramCredentials | 0         | 0              |
+| 51     | AlterUserScramCredentials    | 0         | 0              |
+| 68     | ConsumerGroupHeartbeat       | 1         | 1              |
+| 69     | ConsumerGroupDescribe        | 1         | 0              |
+| 71     | GetTelemetrySubscriptions    | 0         | 0              |
+| 72     | PushTelemetry                | 0         | 0              |
 
 <a name="recommendations-for-language-binding-developers"></a>
 # Recommendations for language binding developers

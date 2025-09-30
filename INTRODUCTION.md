@@ -93,6 +93,7 @@ librdkafka also provides a native C++ interface.
       - [Rebalance Callback Migration](#rebalance-callback-migration)
         - [Range Assignor (Classic)](#range-assignor-classic)
         - [Incremental Assignor (Including Range in Consumer / KIP-848, Any Protocol)](#incremental-assignor-including-range-in-consumer--kip-848-any-protocol)
+      - [Online Upgrade and Downgrade](#online-upgrade-and-downgrade)
       - [Migration Checklist (Next-Gen Protocol / KIP-848)](#migration-checklist-next-gen-protocol--kip-848)
     - [Note on Batch consume APIs](#note-on-batch-consume-apis)
     - [Topics](#topics)
@@ -1700,28 +1701,28 @@ Starting with **librdkafka 2.12.0** (GA release), the next generation consumer g
 
 #### Overview
 
-- **What changed:**  
+- **What changed:**
   The **Group Leader role** (consumer member) is removed. Assignments are calculated by the **Group Coordinator (broker)** and distributed via **heartbeats**.
 
-- **Requirements:**  
-  - Broker version **4.0.0+**  
+- **Requirements:**
+  - Broker version **4.0.0+**
   - librdkafka version **2.12.0+**: GA (production-ready)
 
-- **Enablement (client-side):**  
-  - `group.protocol=consumer`  
-  - `group.remote.assignor=<assignor>` (optional; broker-controlled if `NULL`; default broker assignor is **`uniform`**)  
+- **Enablement (client-side):**
+  - `group.protocol=consumer`
+  - `group.remote.assignor=<assignor>` (optional; broker-controlled if `NULL`; default broker assignor is **`uniform`**)
 
 #### Available Features
 
 All KIP-848 features are supported including:
 
-- Subscription to one or more topics, including **regular expression (regex) subscriptions**  
-- Rebalance callbacks (**incremental only**)  
-- Static group membership  
-- Configurable remote assignor  
-- Enforced max poll interval  
-- Offline upgrade from empty consumer groups with committed offsets  
-- AdminClient changes as per KIP  
+- Subscription to one or more topics, including **regular expression (regex) subscriptions**
+- Rebalance callbacks (**incremental only**)
+- Static group membership
+- Configurable remote assignor
+- Enforced max poll interval
+- Upgrade from `classic` protocol or downgrade from `consumer` protocol
+- AdminClient changes as per KIP
 
 #### Contract Changes
 
@@ -1734,62 +1735,58 @@ All KIP-848 features are supported including:
 | `heartbeat.interval.ms`                     | Broker config: `group.consumer.heartbeat.interval.ms` |
 | `group.protocol.type`                       | Not used in the new protocol |
 
-**Note:** The properties listed under “Classic Protocol (Deprecated Configs in KIP-848)” are **no longer used** when using the KIP-848 consumer protocol.  
-
----
+**Note:** The properties listed under “Classic Protocol (Deprecated Configs in KIP-848)” are **no longer used** when using the KIP-848 consumer protocol.
 
 ##### Rebalance Callback Changes
 
-- Protocol is **fully incremental**.  
-- **Inside the rebalance callback**, you **must use**:  
-  - `rd_kafka_incremental_assign(rk, partitions)` to assign partitions  
-  - `rd_kafka_incremental_unassign(rk, partitions)` to revoke partitions  
-- **Do not** use `rd_kafka_assign()` or other assignment APIs in KIP-848.  
-- **Important:** The `partitions` parameter passed to `rd_kafka_incremental_assign` or `rd_kafka_incremental_unassign` contains only an **incremental list of partitions**—those being added or revoked—rather than the full partition list returned by `rd_kafka_assign(rk, partitions)` in the **range assignor of the classic protocol**, which was the default.  
-- All assignors are **sticky**, including `range` (which wasn’t sticky before).  
+- Protocol is **fully incremental**.
+- **Inside the rebalance callback**, you **must use**:
+  - `rd_kafka_incremental_assign(rk, partitions)` to assign partitions
+  - `rd_kafka_incremental_unassign(rk, partitions)` to revoke partitions
+- **Do not** use `rd_kafka_assign()` or other assignment APIs in KIP-848.
+- **Important:** The `partitions` parameter passed to `rd_kafka_incremental_assign` or `rd_kafka_incremental_unassign` contains only an **incremental list of partitions**—those being added or revoked—rather than the full partition list returned by `rd_kafka_assign(rk, partitions)` in the **range assignor of the classic protocol**, which was the default.
+- All assignors are **sticky**, including `range` (which wasn’t sticky before).
 
 ##### Static Group Membership
 
-- Duplicate `group.instance.id` handling:  
-  - **Newly joining member** is fenced with **UNRELEASED_INSTANCE_ID (fatal)**.  
-  - (Classic protocol fenced the **existing** member instead.)  
-- Implications:  
-  - Ensure only **one active instance per `group.instance.id`**.  
+- Duplicate `group.instance.id` handling:
+  - **Newly joining member** is fenced with **UNRELEASED_INSTANCE_ID (fatal)**.
+  - (Classic protocol fenced the **existing** member instead.)
+- Implications:
+  - Ensure only **one active instance per `group.instance.id`**.
   - Consumers must shut down cleanly to avoid blocking replacements until session timeout expires.
 
 ##### Session Timeout & Fetching
 
-- **Session timeout is broker-controlled**:  
-  - If the Coordinator is unreachable, a consumer **continues fetching messages** but cannot commit offsets.  
-  - Consumer is fenced once a heartbeat response is received from the Coordinator.  
+- **Session timeout is broker-controlled**:
+  - If the Coordinator is unreachable, a consumer **continues fetching messages** but cannot commit offsets.
+  - Consumer is fenced once a heartbeat response is received from the Coordinator.
 - In the classic protocol, the client stopped fetching when session timeout expired.
 
 ##### Closing / Auto-Commit
 
-- On `close()` or unsubscribe with auto-commit enabled:  
-  - Member retries committing offsets until a timeout expires.  
-  - Currently uses the **default remote session timeout**.  
+- On `close()` or unsubscribe with auto-commit enabled:
+  - Member retries committing offsets until a timeout expires.
+  - Currently uses the **default remote session timeout**.
   - Future **KIP-1092** will allow custom commit timeouts.
 
 ##### Error Handling Changes
 
-- `UNKNOWN_TOPIC_OR_PART` (**subscription case**):  
-  - No longer returned if a topic is missing in the **local cache** when subscribing; the subscription proceeds.  
-- `TOPIC_AUTHORIZATION_FAILED`:  
-  - Reported once per heartbeat or subscription change, even if only one topic is unauthorized.  
+- `UNKNOWN_TOPIC_OR_PART` (**subscription case**):
+  - No longer returned if a topic is missing in the **local cache** when subscribing; the subscription proceeds.
+- `TOPIC_AUTHORIZATION_FAILED`:
+  - Reported once per heartbeat or subscription change, even if only one topic is unauthorized.
 
 ##### Summary of Key Differences (Classic vs Next-Gen)
 
-- **Assignment:** Classic protocol calculated by **Group Leader (consumer)**; KIP-848 calculated by **Group Coordinator (broker)**  
-- **Assignors:** Classic range assignor was **not sticky**; KIP-848 assignors are **sticky**, including range  
-- **Deprecated configs:** Classic client configs are replaced by `group.remote.assignor` and broker-controlled session/heartbeat configs  
-- **Static membership fencing:** KIP-848 fences **new member** on duplicate `group.instance.id`  
-- **Session timeout:** Classic enforced on client; KIP-848 enforced on broker  
-- **Auto-commit on close:** Classic stops at client session timeout; KIP-848 retries until remote timeout  
-- **Unknown topics:** KIP-848 does not return error on subscription if topic missing  
-- **Upgrade:** KIP-848 supports offline upgrade from empty consumer groups  
-
----
+- **Assignment:** Classic protocol calculated by **Group Leader (consumer)**; KIP-848 calculated by **Group Coordinator (broker)**
+- **Assignors:** Classic range assignor was **not sticky**; KIP-848 assignors are **sticky**, including range
+- **Deprecated configs:** Classic client configs are replaced by `group.remote.assignor` and broker-controlled session/heartbeat configs
+- **Static membership fencing:** KIP-848 fences **new member** on duplicate `group.instance.id`
+- **Session timeout:** Classic enforced on client; KIP-848 enforced on broker
+- **Auto-commit on close:** Classic stops at client session timeout; KIP-848 retries until remote timeout
+- **Unknown topics:** KIP-848 does not return error on subscription if topic missing
+- **Online Upgrade/Downgrade:** KIP-848 supports online upgrade/downgrade from/to `classic` and `consumer` protocols
 
 #### Minimal Example Config
 
@@ -1798,7 +1795,7 @@ All KIP-848 features are supported including:
 # Optional; default is 'classic'
 group.protocol=classic
 
-partition.assignment.strategy=range,roundrobin,sticky
+partition.assignment.strategy=<range,roundrobin,sticky>
 session.timeout.ms=45000
 heartbeat.interval.ms=15000
 ```
@@ -1809,8 +1806,8 @@ group.protocol=consumer
 
 # Optional: select a remote assignor
 # Valid options currently: 'uniform' or 'range'
-# If NULL, broker chooses the assignor (default: 'uniform')
-group.remote.assignor
+#   group.remote.assignor=<uniform,range>
+# If unset(NULL), broker chooses the assignor (default: 'uniform')
 
 # Session & heartbeat now controlled by broker:
 #   group.consumer.session.timeout.ms
@@ -1865,23 +1862,29 @@ static void rebalance_cb (rd_kafka_t *rk,
     }
 }
 ```
-**Note:**  
-- The `partitions` list contains **only partitions being added or revoked**, not the full partition list as in the classic `rd_kafka_assign()`.  
-- Incremental assignors (including range) are **supported in both classic and KIP-848 protocols**, but this callback is required for KIP-848.  
+**Note:**
+- The `partitions` list contains **only partitions being added or revoked**, not the full partition list as in the classic `rd_kafka_assign()`.
+- Incremental assignors (including range) are **supported in both classic and KIP-848 protocols**, but this callback is required for KIP-848.
 
----
+#### Online Upgrade and Downgrade
+
+- A group made up entirely of `classic` consumers runs under the classic protocol.
+- The group is **upgraded to the consumer protocol** as soon as at least one `consumer` protocol member joins.
+- The group is **downgraded back to the classic protocol** if the last `consumer` protocol member leaves while `classic` members remain.
+- Both **online upgrade** (classic → consumer) and **online downgrade** (consumer → classic) are supported.
+
 
 #### Migration Checklist (Next-Gen Protocol / KIP-848)
 
-- [ ] Upgrade to **librdkafka ≥ 2.12.0** (GA release)  
-- [ ] Run against **Kafka brokers ≥ 4.0.0**  
-- [ ] Set `group.protocol=consumer`  
-- [ ] Optionally set `group.remote.assignor`; leave `NULL` for broker-controlled (default: `uniform`), valid options: `uniform` or `range`  
-- [ ] Replace deprecated configs with new ones  
-- [ ] Update rebalance callbacks to **incremental APIs only**  
-- [ ] Review static membership handling (`group.instance.id`)  
-- [ ] Ensure proper shutdown to avoid fencing issues  
-- [ ] Adjust error handling for unknown topics and authorization failures  
+- [ ] Upgrade to **librdkafka ≥ 2.12.0** (GA release)
+- [ ] Run against **Kafka brokers ≥ 4.0.0**
+- [ ] Set `group.protocol=consumer`
+- [ ] Optionally set `group.remote.assignor`; leave `NULL` for broker-controlled (default: `uniform`), valid options: `uniform` or `range`
+- [ ] Replace deprecated configs with new ones
+- [ ] Update rebalance callbacks to **incremental APIs only**
+- [ ] Review static membership handling (`group.instance.id`)
+- [ ] Ensure proper shutdown to avoid fencing issues
+- [ ] Adjust error handling for unknown topics and authorization failures
 
 
 
@@ -1963,6 +1966,8 @@ the client and then deleted, in this case the topic will immediately
 be marked as non-existent and remain non-existent until a topic
 metadata refresh sees the topic again (after the topic has been
 re-created).
+
+**Note**: `RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC*` during a `subscribe()` call occurs **only with the classic protocol**. With the next-gen `consumer` protocol (KIP-848), subscription proceeds even if the topic is not yet in the local cache (e.g., it may be created later).
 
 
 <a name="topic-auto-creation"></a>

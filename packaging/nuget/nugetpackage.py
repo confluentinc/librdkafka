@@ -101,17 +101,6 @@ class NugetPackage (Package):
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-x64/native/alpine-librdkafka.so'),
 
-        # Common Win runtime
-        Mapping({'arch': 'x64',
-                 'plat': 'win'},
-                'msvcr140.zip',
-                'vcruntime140.dll',
-                'runtimes/win-x64/native/vcruntime140.dll'),
-        Mapping({'arch': 'x64',
-                 'plat': 'win'},
-                'msvcr140.zip',
-                'msvcp140.dll', 'runtimes/win-x64/native/msvcp140.dll'),
-
         # matches x64 librdkafka.redist.zip
         Mapping({'arch': 'x64',
                  'plat': 'win'},

@@ -80,6 +80,15 @@ typedef SSIZE_T ssize_t;
 #define RD_EXPORT
 #endif
 
+#ifndef _WIN32
+#include <netdb.h>
+#else
+#define WIN32_MEAN_AND_LEAN
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <ws2tcpip.h>
+#endif
+
 /**@endcond*/
 
 extern "C" {
@@ -1172,6 +1181,72 @@ class RD_EXPORT SocketCb {
 
 
 /**
+ * @brief \b Portability: ResolveCb callback class
+ *
+ */
+class RD_EXPORT ResolveCb {
+ public:
+  /**
+   * @brief Set address resolution callback.
+   *
+   * The callback is responsible for resolving the hostname \p node and the
+   * service \p service into a list of socket addresses as \c getaddrinfo(3)
+   * would. The \p hints and \p res parameters function as they do for
+   * \c getaddrinfo(3). The callback's \p opaque argument is the opaque set with
+   * rd_kafka_conf_set_opaque().
+   *
+   * If the callback is invoked with a NULL \p node, \p service, and \p hints,
+   * the callback should instead free the addrinfo struct specified in \p res.
+   * In this case the callback must succeed; the return value will not be
+   * checked by the caller.
+   *
+   * The callback's return value is interpreted as the return value of \p
+   * \c getaddrinfo(3).
+   *
+   * @remark The callback will be called from an internal librdkafka thread.
+   */
+  virtual int resolve_cb(const char *node,
+                         const char *service,
+                         const struct addrinfo *hints,
+                         struct addrinfo **res) = 0;
+
+  virtual ~ResolveCb() {
+  }
+};
+
+
+/**
+ * @brief \b Portability: ConnectCb callback class
+ *
+ */
+class RD_EXPORT ConnectCb {
+ public:
+  /**
+   * @brief Set connect callback.
+   *
+   * The connect callback is responsible for connecting socket \p sockfd
+   * to peer address \p addr.
+   * The \p id field contains the broker identifier.
+   *
+   * \p connect_cb shall return 0 on success (socket connected) or an error
+   * number (errno) on error.
+   *
+   * The callback's \p opaque argument is the opaque set with
+   * rd_kafka_conf_set_opaque().
+   *
+   * @remark The callback will be called from an internal librdkafka thread.
+   */
+  virtual int connect_cb(int sockfd,
+                         const struct sockaddr *addr,
+                         int addrlen,
+                         const char *id) = 0;
+
+  virtual ~ConnectCb() {
+  }
+};
+
+
+/**
  * @brief \b Portability: OpenCb callback class
  *
  */
@@ -1301,6 +1376,16 @@ class RD_EXPORT Conf {
                                SocketCb *socket_cb,
                                std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"resolve_cb\" */
+  virtual Conf::ConfResult set(const std::string &name,
+                               ResolveCb *resolve_cb,
+                               std::string &errstr) = 0;
+
+  /** @brief Use with \p name = \c \"connect_cb\" */
+  virtual Conf::ConfResult set(const std::string &name,
+                               ConnectCb *connect_cb,
+                               std::string &errstr) = 0;
+
   /** @brief Use with \p name = \c \"open_cb\" */
   virtual Conf::ConfResult set(const std::string &name,
                                OpenCb *open_cb,
@@ -1416,6 +1501,16 @@ class RD_EXPORT Conf {
    *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p socket_cb. */
   virtual Conf::ConfResult get(SocketCb *&socket_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p resolve_cb. */
+  virtual Conf::ConfResult get(ResolveCb *&resolve_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p connect_cb. */
+  virtual Conf::ConfResult get(ConnectCb *&connect_cb) const = 0;
 
   /** @brief Query single configuration value
    *  @returns CONF_OK if the property was set previously set and
